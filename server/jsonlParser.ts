@@ -1,6 +1,25 @@
-import { readdir, stat, open } from 'node:fs/promises'
+import { readdir, stat, open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+
+export interface TokenUsageData {
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+}
+
+export interface SessionMeta {
+  inputTokens: number
+  outputTokens: number
+  linesAdded: number
+  linesRemoved: number
+  filesModified: number
+  gitCommits: number
+  toolErrors: number
+  usesMcp: boolean
+  firstPrompt: string | null
+}
 
 export interface SessionData {
   sessionId: string
@@ -11,6 +30,12 @@ export interface SessionData {
   lastTools: string[]
   tasks: { id: string; subject: string; status: string }[]
   subagents: SubAgentData[]
+  tokenUsage: TokenUsageData
+  model: string | null
+  codeVersion: string | null
+  conversationTurns: number
+  toolCounts: Record<string, number>
+  meta: SessionMeta | null
 }
 
 export interface SubAgentData {
@@ -22,7 +47,9 @@ export interface SubAgentData {
 }
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects')
-const TAIL_BYTES = 16384 // read last 16KB
+const SESSION_META_DIR = join(homedir(), '.claude', 'usage-data', 'session-meta')
+const TAIL_BYTES = 32768 // read last 32KB
+const HEAD_BYTES = 8192  // read first 8KB for model/version
 
 function encodePath(absolutePath: string): string {
   // Claude Code encodes both / and _ as -
@@ -37,6 +64,19 @@ async function tailRead(filePath: string): Promise<string> {
     const readSize = Math.min(TAIL_BYTES, size)
     const buffer = Buffer.alloc(readSize)
     await handle.read(buffer, 0, readSize, size - readSize)
+    return buffer.toString('utf-8')
+  } finally {
+    await handle.close()
+  }
+}
+
+async function headRead(filePath: string): Promise<string> {
+  const handle = await open(filePath, 'r')
+  try {
+    const fileStat = await handle.stat()
+    const readSize = Math.min(HEAD_BYTES, fileStat.size)
+    const buffer = Buffer.alloc(readSize)
+    await handle.read(buffer, 0, readSize, 0)
     return buffer.toString('utf-8')
   } finally {
     await handle.close()
@@ -60,23 +100,57 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
   let sessionId = ''
   let entrypoint: SessionData['entrypoint'] = 'unknown'
   let currentAction: string | null = null
+  let model: string | null = null
+  let codeVersion: string | null = null
+  let conversationTurns = 0
   const lastTools: string[] = []
   const tasks: SessionData['tasks'] = []
+  const toolCounts: Record<string, number> = {}
+  const tokenUsage: TokenUsageData = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+  }
 
   for (const entry of entries) {
     if (entry.sessionId) sessionId = entry.sessionId
+    if (entry.version) codeVersion = entry.version
     if (entry.entrypoint) {
       entrypoint = entry.entrypoint === 'cli' ? 'cli'
         : entry.entrypoint === 'desktop' ? 'desktop'
         : 'unknown'
     }
 
-    // Extract tool uses from assistant messages
-    if (entry.type === 'assistant' && entry.message?.content) {
-      const content = entry.message.content
+    // Count user turns
+    if (entry.type === 'user') {
+      conversationTurns++
+    }
+
+    // Extract data from assistant messages
+    if (entry.type === 'assistant') {
+      // Token usage from message.usage
+      const usage = entry.message?.usage
+      if (usage) {
+        tokenUsage.inputTokens += usage.input_tokens || 0
+        tokenUsage.outputTokens += usage.output_tokens || 0
+        tokenUsage.cacheCreationTokens += usage.cache_creation_input_tokens || 0
+        tokenUsage.cacheReadTokens += usage.cache_read_input_tokens || 0
+      }
+
+      // Model info
+      if (entry.message?.model) {
+        model = entry.message.model
+      }
+
+      // Tool uses
+      const content = entry.message?.content
       if (Array.isArray(content)) {
         for (const block of content) {
           if (block.type === 'tool_use' && block.name) {
+            // Track tool counts
+            toolCounts[block.name] = (toolCounts[block.name] || 0) + 1
+
             if (!lastTools.includes(block.name)) {
               lastTools.push(block.name)
               if (lastTools.length > 10) lastTools.shift()
@@ -88,15 +162,8 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
               currentAction = text.substring(0, 100)
             }
           }
-        }
-      }
-    }
 
-    // Extract task updates
-    if (entry.type === 'assistant' && entry.message?.content) {
-      const content = entry.message.content
-      if (Array.isArray(content)) {
-        for (const block of content) {
+          // Task tracking
           if (block.type === 'tool_use' && block.name === 'TaskCreate' && block.input) {
             tasks.push({
               id: block.id || String(tasks.length + 1),
@@ -115,7 +182,31 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
     }
   }
 
-  return { sessionId, entrypoint, currentAction, lastTools, tasks }
+  return {
+    sessionId, entrypoint, currentAction, lastTools, tasks,
+    tokenUsage, model, codeVersion, conversationTurns, toolCounts,
+  }
+}
+
+async function readSessionMeta(sessionId: string): Promise<SessionMeta | null> {
+  try {
+    const metaPath = join(SESSION_META_DIR, `${sessionId}.json`)
+    const raw = await readFile(metaPath, 'utf-8')
+    const data = JSON.parse(raw)
+    return {
+      inputTokens: data.input_tokens || 0,
+      outputTokens: data.output_tokens || 0,
+      linesAdded: data.lines_added || 0,
+      linesRemoved: data.lines_removed || 0,
+      filesModified: data.files_modified || 0,
+      gitCommits: data.git_commits || 0,
+      toolErrors: data.tool_errors || 0,
+      usesMcp: data.uses_mcp || false,
+      firstPrompt: data.first_prompt || null,
+    }
+  } catch {
+    return null
+  }
 }
 
 export async function findSessionForProject(cwd: string): Promise<SessionData | null> {
@@ -152,20 +243,47 @@ export async function findSessionForProject(cwd: string): Promise<SessionData | 
   const parsed = parseJsonlLines(raw)
   const info = extractSessionInfo(parsed)
 
+  // If model/version not found in tail, check head of file
+  if (!info.model || !info.codeVersion) {
+    const headRaw = await headRead(sessionFilePath)
+    const headParsed = parseJsonlLines(headRaw)
+    for (const entry of headParsed) {
+      if (!info.model && entry.message?.model) info.model = entry.message.model
+      if (!info.codeVersion && entry.version) info.codeVersion = entry.version
+      if (info.model && info.codeVersion) break
+    }
+  }
+
   // Find subagents
   const sessionId = newestFile.name.replace('.jsonl', '')
   const subagentDir = join(projectDir, sessionId, 'subagents')
   const subagents = await findSubagents(subagentDir)
+
+  // Read aggregated session metadata (has full token counts, git stats, etc.)
+  const meta = await readSessionMeta(sessionId)
+
+  // Use session-meta token counts if available (they cover the full session, not just last 16KB)
+  const tokenUsage = info.tokenUsage || { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 }
+  if (meta && (meta.inputTokens > tokenUsage.inputTokens || meta.outputTokens > tokenUsage.outputTokens)) {
+    tokenUsage.inputTokens = meta.inputTokens
+    tokenUsage.outputTokens = meta.outputTokens
+  }
 
   return {
     sessionId: info.sessionId || sessionId,
     projectPath: cwd,
     entrypoint: info.entrypoint || 'unknown',
     lastActivity: newestFile.mtime.toISOString(),
-    currentAction: info.currentAction,
+    currentAction: info.currentAction ?? null,
     lastTools: info.lastTools || [],
     tasks: info.tasks || [],
     subagents,
+    tokenUsage,
+    model: info.model || null,
+    codeVersion: info.codeVersion || null,
+    conversationTurns: info.conversationTurns || 0,
+    toolCounts: info.toolCounts || {},
+    meta,
   }
 }
 

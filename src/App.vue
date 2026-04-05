@@ -3,6 +3,8 @@
     <header class="app-header">
       <h1>Claude Agent Overview</h1>
       <span class="agent-count">{{ agents.length }} agent{{ agents.length !== 1 ? 's' : '' }}</span>
+      <span class="header-stat" v-if="totalCost > 0">${{ totalCost.toFixed(2) }}</span>
+      <span class="header-stat" v-if="totalTokens > 0">{{ formatTokens(totalTokens) }} tokens</span>
     </header>
     <main>
       <p v-if="isLoading" class="loading">Loading agents...</p>
@@ -21,11 +23,24 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useAgents } from './composables/useAgents'
 import AgentTable from './components/AgentTable.vue'
 import AgentDetail from './components/AgentDetail.vue'
 
 const { agents, selectedAgent, isLoading, error, selectAgent } = useAgents()
+
+const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
+const totalTokens = computed(() => agents.value.reduce((sum, a) => {
+  const u = a.tokenUsage
+  return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
+}, 0))
+
+function formatTokens(n: number): string {
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`
+  return `${(n / 1_000_000).toFixed(1)}M`
+}
 </script>
 
 <style>
@@ -74,6 +89,15 @@ body {
   background: var(--bg-secondary);
   padding: 2px 10px;
   border-radius: 12px;
+}
+
+.header-stat {
+  font-size: 12px;
+  color: var(--accent-green);
+  background: var(--bg-secondary);
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-family: monospace;
 }
 
 .loading, .error {

@@ -6,6 +6,9 @@
           <th>Status</th>
           <th>Project</th>
           <th>Current Action</th>
+          <th>Model</th>
+          <th>Tokens</th>
+          <th>Cost</th>
           <th>Uptime</th>
           <th>PID</th>
           <th></th>

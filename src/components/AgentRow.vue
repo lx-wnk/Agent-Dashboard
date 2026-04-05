@@ -5,6 +5,9 @@
     </td>
     <td class="col-project">{{ agent.projectName }}</td>
     <td class="col-action">{{ agent.currentAction || '—' }}</td>
+    <td class="col-model">{{ shortModel(agent.model) }}</td>
+    <td class="col-tokens">{{ formatTokens(agent.tokenUsage.inputTokens + agent.tokenUsage.outputTokens) }}</td>
+    <td class="col-cost">{{ formatCost(agent.costEstimate) }}</td>
     <td class="col-uptime">{{ formatUptime(agent.uptime) }}</td>
     <td class="col-pid">{{ agent.pid }}</td>
     <td class="col-toggle">
@@ -39,6 +42,26 @@ function formatUptime(seconds: number): string {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
   return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
 }
+
+function shortModel(model: string | null): string {
+  if (!model) return '—'
+  return model
+    .replace('claude-', '')
+    .replace(/-\d+$/, m => ' ' + m.slice(1))
+}
+
+function formatTokens(total: number): string {
+  if (total === 0) return '—'
+  if (total < 1000) return String(total)
+  if (total < 1_000_000) return `${(total / 1000).toFixed(1)}k`
+  return `${(total / 1_000_000).toFixed(2)}M`
+}
+
+function formatCost(cost: number): string {
+  if (cost === 0) return '—'
+  if (cost < 0.01) return '<$0.01'
+  return `$${cost.toFixed(2)}`
+}
 </script>
 
 <style scoped>
@@ -59,7 +82,10 @@ function formatUptime(seconds: number): string {
 
 .col-status { width: 100px; }
 .col-project { color: var(--text-primary); font-weight: 500; }
-.col-action { color: var(--text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-action { color: var(--text-secondary); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-model { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.col-tokens { color: var(--text-muted); font-family: monospace; font-size: 12px; white-space: nowrap; }
+.col-cost { color: var(--accent-green); font-family: monospace; font-size: 12px; white-space: nowrap; }
 .col-uptime { color: var(--text-muted); width: 80px; }
 .col-pid { color: var(--text-muted); width: 70px; font-family: monospace; font-size: 12px; }
 .col-toggle { width: 50px; text-align: center; }

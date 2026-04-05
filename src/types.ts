@@ -1,3 +1,22 @@
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+}
+
+export interface SessionMeta {
+  inputTokens: number
+  outputTokens: number
+  linesAdded: number
+  linesRemoved: number
+  filesModified: number
+  gitCommits: number
+  toolErrors: number
+  usesMcp: boolean
+  firstPrompt: string | null
+}
+
 export interface Agent {
   pid: number
   sessionId: string
@@ -12,6 +31,13 @@ export interface Agent {
   lastTools: string[]
   tasks: TaskInfo[]
   subagents: SubAgent[]
+  tokenUsage: TokenUsage
+  costEstimate: number
+  model: string | null
+  codeVersion: string | null
+  conversationTurns: number
+  toolCounts: Record<string, number>
+  meta: SessionMeta | null
 }
 
 export interface SubAgent {
