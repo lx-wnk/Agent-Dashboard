@@ -44,7 +44,7 @@ function findClaudePid(): number {
 }
 
 // ─── Config ──────────────────────────────────────────────
-const DASHBOARD_PORT = 13120
+const DASHBOARD_PORT = parseInt(process.env.DASHBOARD_PORT || '13120', 10)
 const DISCOVERY_DIR = join(homedir(), '.claude', 'dashboard-channel')
 const PARENT_PID = findClaudePid()
 const TOKEN = randomBytes(16).toString('hex')
@@ -164,11 +164,22 @@ function readBody(req: import('node:http').IncomingMessage): Promise<string> {
   })
 }
 
+const ALLOWED_ORIGINS = [
+  `http://localhost:${DASHBOARD_PORT}`,
+  `http://127.0.0.1:${DASHBOARD_PORT}`,
+]
+
+function getAllowedOrigin(req: import('node:http').IncomingMessage): string {
+  const origin = req.headers.origin || ''
+  if (ALLOWED_ORIGINS.includes(origin)) return origin
+  return ALLOWED_ORIGINS[0]
+}
+
 const httpServer = createServer(async (req, res) => {
   // CORS preflight
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getAllowedOrigin(req),
       'Access-Control-Allow-Methods': 'POST, GET',
       'Access-Control-Allow-Headers': 'Content-Type',
     })

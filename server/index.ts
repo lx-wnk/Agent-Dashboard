@@ -13,8 +13,8 @@ import { getSessions } from './sessionScanner.js'
 
 // SECURITY: This server exposes session data (prompts, tool outputs, file paths).
 // Always bind to 127.0.0.1 — never expose to the network.
-const PORT = 13120
-const ALLOWED_MODELS = new Set(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', ''])
+const PORT = parseInt(process.env.DASHBOARD_PORT || '13120', 10)
+const ALLOWED_MODELS = new Set(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', '']) // empty string = "Auto" (no --model flag)
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const SPAWN_STORE_MAX_AGE_MS = 60 * 60 * 1000 // 1 hour
 const DISCOVERY_DIR = join(homedir(), '.claude', 'dashboard-channel')
@@ -176,7 +176,6 @@ async function start() {
         cwd,
         detached: true,
         stdio: ['ignore', 'ignore', 'pipe'],  // capture stderr
-        env: { ...process.env },
       })
 
       const pid = child.pid ?? 0
