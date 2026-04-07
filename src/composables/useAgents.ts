@@ -17,12 +17,10 @@ async function fetchAgents() {
     agents.value = data
     error.value = null
 
-    // Keep selected agent in sync across refreshes
+    // Keep selected agent in sync across refreshes (clear if agent is gone)
     if (selectedAgent.value) {
       const updated = data.find(a => a.sessionId === selectedAgent.value!.sessionId)
-      if (updated) {
-        selectedAgent.value = updated
-      }
+      selectedAgent.value = updated ?? null
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Unknown error'

@@ -1,25 +1,10 @@
 import { readdir, stat, open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import type { TokenUsage, SessionMeta } from '../src/types.js'
 
-export interface TokenUsageData {
-  inputTokens: number
-  outputTokens: number
-  cacheCreationTokens: number
-  cacheReadTokens: number
-}
-
-export interface SessionMeta {
-  inputTokens: number
-  outputTokens: number
-  linesAdded: number
-  linesRemoved: number
-  filesModified: number
-  gitCommits: number
-  toolErrors: number
-  usesMcp: boolean
-  firstPrompt: string | null
-}
+export type TokenUsageData = TokenUsage
+export type { SessionMeta }
 
 export interface SessionData {
   sessionId: string
@@ -155,11 +140,11 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
               lastTools.push(block.name)
               if (lastTools.length > 10) lastTools.shift()
             }
-            currentAction = `${block.name}${block.input?.command ? `: ${String(block.input.command).substring(0, 60)}` : ''}`
+            currentAction = `${block.name}${block.input?.command ? `: ${String(block.input.command).substring(0, 120)}` : ''}`
           } else if (block.type === 'text' && block.text) {
             const text = block.text.trim()
-            if (text.length > 0 && text.length < 200) {
-              currentAction = text.substring(0, 100)
+            if (text.length > 0) {
+              currentAction = text.substring(0, 300)
             }
           }
 
@@ -223,15 +208,13 @@ export async function findSessionForProject(cwd: string): Promise<SessionData | 
 
   // Find newest .jsonl file in this project directory
   const entries = await readdir(projectDir, { withFileTypes: true })
-  const jsonlFiles: { name: string; mtime: Date }[] = []
-
-  for (const entry of entries) {
-    if (entry.isFile() && entry.name.endsWith('.jsonl')) {
-      const filePath = join(projectDir, entry.name)
-      const s = await stat(filePath)
-      jsonlFiles.push({ name: entry.name, mtime: s.mtime })
-    }
-  }
+  const jsonlEntries = entries.filter(e => e.isFile() && e.name.endsWith('.jsonl'))
+  const jsonlFiles = await Promise.all(
+    jsonlEntries.map(async e => {
+      const s = await stat(join(projectDir, e.name))
+      return { name: e.name, mtime: s.mtime }
+    })
+  )
 
   if (jsonlFiles.length === 0) return null
 
