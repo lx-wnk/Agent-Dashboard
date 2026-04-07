@@ -86,7 +86,7 @@ interface SessionInfo {
   isRunning: boolean
 }
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean; homeDir: string }>()
 const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
 
 const sessions = ref<SessionInfo[]>([])
@@ -126,11 +126,8 @@ function shortModel(model: string): string {
 }
 
 function shortenPath(path: string): string {
-  const home = '/Users/'
-  if (path.startsWith(home)) {
-    const rest = path.slice(home.length)
-    const slashIdx = rest.indexOf('/')
-    return slashIdx >= 0 ? '~' + rest.slice(slashIdx) : '~'
+  if (props.homeDir && path.startsWith(props.homeDir)) {
+    return '~' + path.slice(props.homeDir.length)
   }
   return path
 }

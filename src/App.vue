@@ -34,6 +34,7 @@
     />
     <SessionList
       :open="showSessions"
+      :home-dir="homeDir"
       @close="showSessions = false"
       @spawned="onAgentSpawned"
     />
@@ -54,9 +55,13 @@ const { agents, selectedAgent, isLoading, error, selectAgent } = useAgents()
 const showSpawnDialog = ref(false)
 const showSessions = ref(false)
 const scriptPath = ref('')
+const homeDir = ref('')
 const copied = ref(false)
 
-fetch('/api/config').then(r => r.json()).then(d => { scriptPath.value = d.scriptPath }).catch(() => {})
+fetch('/api/config').then(r => r.json()).then(d => {
+  scriptPath.value = d.scriptPath
+  homeDir.value = d.homedir
+}).catch(() => {})
 
 function copyScript() {
   navigator.clipboard.writeText(scriptPath.value)

@@ -26,12 +26,10 @@ const MAX_SESSIONS = 100
  * Decode an encoded project directory name back to an absolute path.
  *
  * Claude Code encodes paths by replacing `/` and `_` with `-`, which is
- * ambiguous on decode. We use a macOS-specific heuristic: paths start with
- * `/Users/`, so the encoded form starts with `-Users-`. We restore the
- * leading `/` and replace remaining `-` with `/`, then check whether each
- * reconstructed segment exists. This won't be perfect for every edge case
- * (e.g. directory names that originally contained `-`), but it gives a
- * reasonable human-readable project path most of the time.
+ * ambiguous on decode. We restore the leading `/` and replace remaining
+ * `-` with `/`. This won't be perfect for every edge case (e.g. directory
+ * names that originally contained `-`), but it gives a reasonable
+ * human-readable project path most of the time.
  */
 function decodeProjectDir(encoded: string): string {
   // On macOS, paths look like -Users-username-code-project
