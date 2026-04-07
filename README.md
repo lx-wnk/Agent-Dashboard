@@ -141,6 +141,7 @@ No separate build, lint, or test scripts. The single `dev` command runs the full
 - Node.js 20+
 - Claude Code installed and running (at least one agent process for the dashboard to display)
 - For channel control: agents started with `--mcp-config with the dashboard-channel server`
+- **Platform:** macOS is fully supported. Linux: process scanning and disk work, but CPU monitoring (`top`) uses macOS-specific flags and will show 0%. Windows: not supported (requires `ps`, `lsof`, `top`, `df`).
 
 ### Key Conventions
 

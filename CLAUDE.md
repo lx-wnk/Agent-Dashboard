@@ -41,3 +41,4 @@ No separate build, lint, or test scripts are configured. The single dev command 
 - No database — all data sourced from Claude Code's filesystem and running processes
 - Subagents discovered from `~/.claude/projects/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses a `MODEL_PRICING` lookup table in `agentMerger.ts`
+- **Platform:** macOS only. `server/systemMonitor.ts` uses macOS-specific `top` flags; process scanning relies on `ps` and `lsof` (Unix-only). Linux/Windows are unsupported.
