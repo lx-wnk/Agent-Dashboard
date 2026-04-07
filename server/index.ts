@@ -1,5 +1,4 @@
 import express from 'express'
-import { createServer as createViteServer } from 'vite'
 import { createServer as createHttpServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, realpathSync } from 'node:fs'
@@ -383,18 +382,30 @@ async function start() {
     }
   })
 
-  // ─── HTTP server (shared with Vite HMR WebSocket) ──────
+  // ─── HTTP server ───────────────────────────────────────
 
   const httpServer = createHttpServer(app)
+  const isProd = process.env.NODE_ENV === 'production'
 
-  const vite = await createViteServer({
-    server: { middlewareMode: true, hmr: { server: httpServer } },
-    appType: 'spa',
-  })
-  app.use(vite.middlewares)
+  if (isProd) {
+    const distPath = join(import.meta.dirname, '..', 'dist')
+    app.use(express.static(distPath))
+    // SPA fallback: serve index.html for all non-API routes
+    app.get('*', (_req, res) => {
+      res.sendFile(join(distPath, 'index.html'))
+    })
+  } else {
+    const { createServer: createViteServer } = await import('vite')
+    const vite = await createViteServer({
+      server: { middlewareMode: true, hmr: { server: httpServer } },
+      appType: 'spa',
+    })
+    app.use(vite.middlewares)
+  }
 
   httpServer.listen(PORT, '127.0.0.1', () => {
-    console.log(`Claude Agent Overview running at http://localhost:${PORT}`)
+    const mode = isProd ? 'production' : 'development'
+    console.log(`Claude Agent Overview (${mode}) running at http://localhost:${PORT}`)
   })
 }
 
