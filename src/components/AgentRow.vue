@@ -3,7 +3,10 @@
     <td class="col-status">
       <StatusBadge :status="agent.status" />
     </td>
-    <td class="col-project">{{ agent.projectName }}</td>
+    <td class="col-project">
+      {{ agent.projectName }}
+      <span v-if="agent.channelAvailable" class="channel-badge" title="Channel active">CH</span>
+    </td>
     <td class="col-action">{{ agent.currentAction || '—' }}</td>
     <td class="col-model">{{ shortModel(agent.model) }}</td>
     <td class="col-tokens">{{ formatTokens(agent.tokenUsage.inputTokens + agent.tokenUsage.outputTokens) }}</td>
@@ -24,6 +27,7 @@
 
 <script setup lang="ts">
 import type { Agent } from '../types'
+import { formatTokens, formatCost, formatUptime } from '../utils/format'
 import StatusBadge from './StatusBadge.vue'
 
 defineProps<{
@@ -36,31 +40,11 @@ defineEmits<{
   'toggle-subagents': []
 }>()
 
-function formatUptime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
-  return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
-}
-
 function shortModel(model: string | null): string {
   if (!model) return '—'
   return model
     .replace('claude-', '')
     .replace(/-\d+$/, m => ' ' + m.slice(1))
-}
-
-function formatTokens(total: number): string {
-  if (total === 0) return '—'
-  if (total < 1000) return String(total)
-  if (total < 1_000_000) return `${(total / 1000).toFixed(1)}k`
-  return `${(total / 1_000_000).toFixed(2)}M`
-}
-
-function formatCost(cost: number): string {
-  if (cost === 0) return '—'
-  if (cost < 0.01) return '<$0.01'
-  return `$${cost.toFixed(2)}`
 }
 </script>
 
@@ -103,5 +87,18 @@ function formatCost(cost: number): string {
 .toggle-btn:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
+}
+
+.channel-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--accent-green);
+  border: 1px solid var(--accent-green);
+  border-radius: 3px;
+  vertical-align: middle;
+  letter-spacing: 0.5px;
 }
 </style>

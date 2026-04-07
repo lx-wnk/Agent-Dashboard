@@ -8,7 +8,7 @@
       {{ subagent.type === 'unknown' ? subagent.id.substring(0, 16) : subagent.type }}
     </td>
     <td class="col-action">{{ subagent.currentAction || '—' }}</td>
-    <td colspan="2"></td>
+    <td colspan="5"></td>
   </tr>
 </template>
 

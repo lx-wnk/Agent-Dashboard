@@ -38,6 +38,12 @@ export interface Agent {
   conversationTurns: number
   toolCounts: Record<string, number>
   meta: SessionMeta | null
+  channelAvailable: boolean
+}
+
+export interface ChannelReply {
+  message: string
+  timestamp: string
 }
 
 export interface SubAgent {

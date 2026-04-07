@@ -15,6 +15,13 @@
         </header>
 
         <div class="detail-body">
+          <section class="current-action-section" v-if="agent.currentAction">
+            <div class="current-action-badge">
+              <span class="pulse-dot"></span>
+              <span class="action-text">{{ agent.currentAction }}</span>
+            </div>
+          </section>
+
           <section class="section">
             <h4>Path</h4>
             <code class="path">{{ agent.projectPath }}</code>
@@ -53,10 +60,10 @@
               <div class="bar-segment cache-create" :style="{ width: pct(agent.tokenUsage.cacheCreationTokens) }"></div>
             </div>
             <div class="token-legend">
-              <span class="legend-item"><span class="dot input"></span>Input {{ formatNum(agent.tokenUsage.inputTokens) }}</span>
-              <span class="legend-item"><span class="dot output"></span>Output {{ formatNum(agent.tokenUsage.outputTokens) }}</span>
-              <span class="legend-item"><span class="dot cache-read"></span>Cache Read {{ formatNum(agent.tokenUsage.cacheReadTokens) }}</span>
-              <span class="legend-item"><span class="dot cache-create"></span>Cache Write {{ formatNum(agent.tokenUsage.cacheCreationTokens) }}</span>
+              <span class="legend-item"><span class="dot input"></span>Input {{ formatTokens(agent.tokenUsage.inputTokens) }}</span>
+              <span class="legend-item"><span class="dot output"></span>Output {{ formatTokens(agent.tokenUsage.outputTokens) }}</span>
+              <span class="legend-item"><span class="dot cache-read"></span>Cache Read {{ formatTokens(agent.tokenUsage.cacheReadTokens) }}</span>
+              <span class="legend-item"><span class="dot cache-create"></span>Cache Write {{ formatTokens(agent.tokenUsage.cacheCreationTokens) }}</span>
             </div>
           </section>
 
@@ -87,9 +94,8 @@
             <p class="first-prompt">{{ agent.meta.firstPrompt }}</p>
           </section>
 
-          <section class="section" v-if="agent.currentAction">
-            <h4>Current Action</h4>
-            <p class="current-action">{{ agent.currentAction }}</p>
+          <section class="section" v-if="agent">
+            <ChannelPanel :agent="agent" />
           </section>
 
           <section class="section">
@@ -125,10 +131,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Agent } from '../types'
+import { formatTokens, formatCost } from '../utils/format'
 import StatusBadge from './StatusBadge.vue'
 import ToolTimeline from './ToolTimeline.vue'
 import TaskList from './TaskList.vue'
 import SubAgentList from './SubAgentList.vue'
+import ChannelPanel from './ChannelPanel.vue'
 
 const props = defineProps<{
   agent: Agent | null
@@ -155,18 +163,6 @@ const topTools = computed(() => {
 function pct(value: number): string {
   if (totalTokens.value === 0) return '0%'
   return (value / totalTokens.value * 100).toFixed(1) + '%'
-}
-
-function formatNum(n: number): string {
-  if (n < 1000) return String(n)
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`
-  return `${(n / 1_000_000).toFixed(2)}M`
-}
-
-function formatCost(cost: number): string {
-  if (cost === 0) return '—'
-  if (cost < 0.01) return '<$0.01'
-  return `$${cost.toFixed(2)}`
 }
 </script>
 
@@ -275,10 +271,41 @@ function formatCost(cost: number): string {
   border-radius: 4px;
 }
 
-.current-action {
+
+.current-action-section {
+  margin-bottom: 16px;
+}
+
+.current-action-badge {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  flex-shrink: 0;
+  margin-top: 4px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(74, 222, 128, 0); }
+}
+
+.action-text {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   line-height: 1.4;
+  word-break: break-word;
 }
 
 /* Stats grid */

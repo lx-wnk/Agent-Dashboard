@@ -40,24 +40,25 @@ export async function scanProcesses(): Promise<ProcessInfo[]> {
     return comm.endsWith('/claude') || comm === 'claude'
   })
 
-  const processes: ProcessInfo[] = []
-
-  for (const line of claudeLines) {
+  const parsed = claudeLines.map(line => {
     const parts = line.trim().split(/\s+/)
-    const pid = parseInt(parts[0], 10)
-    const etime = parts[1]
-    const command = parts.slice(2).join(' ')
+    return {
+      pid: parseInt(parts[0], 10),
+      etime: parts[1],
+      command: parts.slice(2).join(' '),
+    }
+  })
 
-    const cwd = await getCwd(pid)
-    if (!cwd || cwd === '/') continue // skip processes without a real cwd
+  const withCwd = await Promise.all(
+    parsed.map(async p => ({ ...p, cwd: await getCwd(p.pid) }))
+  )
 
-    processes.push({
-      pid,
-      cwd,
-      uptime: parseElapsedTime(etime),
-      command,
-    })
-  }
-
-  return processes
+  return withCwd
+    .filter(p => p.cwd && p.cwd !== '/')
+    .map(p => ({
+      pid: p.pid,
+      cwd: p.cwd!,
+      uptime: parseElapsedTime(p.etime),
+      command: p.command,
+    }))
 }
