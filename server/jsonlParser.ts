@@ -55,7 +55,7 @@ async function tailRead(filePath: string): Promise<string> {
   }
 }
 
-async function headRead(filePath: string): Promise<string> {
+export async function headRead(filePath: string): Promise<string> {
   const handle = await open(filePath, 'r')
   try {
     const fileStat = await handle.stat()
@@ -68,7 +68,7 @@ async function headRead(filePath: string): Promise<string> {
   }
 }
 
-function parseJsonlLines(raw: string): any[] {
+export function parseJsonlLines(raw: string): any[] {
   const lines = raw.split('\n').filter(l => l.trim())
   const parsed: any[] = []
   for (const line of lines) {

@@ -1,8 +1,9 @@
-import { readdir, stat, open, readFile } from 'node:fs/promises'
+import { readdir, stat, readFile } from 'node:fs/promises'
 import { join, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { scanProcesses } from './processScanner.js'
 import { estimateCost } from './pricing.js'
+import { headRead, parseJsonlLines } from './jsonlParser.js'
 
 export interface SessionInfo {
   sessionId: string
@@ -19,7 +20,6 @@ export interface SessionInfo {
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects')
 const SESSION_META_DIR = join(homedir(), '.claude', 'usage-data', 'session-meta')
-const HEAD_BYTES = 8192
 const MAX_SESSIONS = 100
 
 /**
@@ -42,32 +42,6 @@ function decodeProjectDir(encoded: string): string {
 
 function encodePath(absolutePath: string): string {
   return absolutePath.replace(/[/_]/g, '-')
-}
-
-async function headRead(filePath: string): Promise<string> {
-  const handle = await open(filePath, 'r')
-  try {
-    const fileStat = await handle.stat()
-    const readSize = Math.min(HEAD_BYTES, fileStat.size)
-    const buffer = Buffer.alloc(readSize)
-    await handle.read(buffer, 0, readSize, 0)
-    return buffer.toString('utf-8')
-  } finally {
-    await handle.close()
-  }
-}
-
-function parseJsonlLines(raw: string): any[] {
-  const lines = raw.split('\n').filter(l => l.trim())
-  const parsed: any[] = []
-  for (const line of lines) {
-    try {
-      parsed.push(JSON.parse(line))
-    } catch {
-      // partial line, skip
-    }
-  }
-  return parsed
 }
 
 interface HeadInfo {
