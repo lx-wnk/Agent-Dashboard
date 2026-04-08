@@ -1,5 +1,5 @@
-import { ref, computed, onUnmounted, watch } from 'vue'
 import type { Agent } from '../types'
+import { computed, onUnmounted, ref, watch } from 'vue'
 
 type ViewMode = 'list' | 'cards'
 
@@ -19,7 +19,8 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null
 async function fetchAgents() {
   try {
     const res = await fetch('/api/agents')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
     const data: Agent[] = await res.json()
     agents.value = data
     error.value = null
@@ -28,39 +29,44 @@ async function fetchAgents() {
       const updated = data.find(a => a.sessionId === selectedAgent.value!.sessionId)
       selectedAgent.value = updated ?? null
     }
-  } catch (e) {
+  }
+  catch (e) {
     error.value = e instanceof Error ? e.message : 'Unknown error'
-  } finally {
+  }
+  finally {
     isLoading.value = false
   }
 }
 
 const filteredAgents = computed(() => {
   const q = debouncedQuery.value.toLowerCase().trim()
-  if (!q) return agents.value
+  if (!q)
+    return agents.value
   return agents.value.filter(a =>
-    a.projectName.toLowerCase().includes(q) ||
-    a.projectPath.toLowerCase().includes(q) ||
-    (a.lastOutput?.toLowerCase().includes(q) ?? false) ||
-    a.sessionId.toLowerCase().includes(q) ||
-    (a.currentAction?.toLowerCase().includes(q) ?? false)
+    a.projectName.toLowerCase().includes(q)
+    || a.projectPath.toLowerCase().includes(q)
+    || (a.lastOutput?.toLowerCase().includes(q) ?? false)
+    || a.sessionId.toLowerCase().includes(q)
+    || (a.currentAction?.toLowerCase().includes(q) ?? false),
   )
 })
 
 // Debounce search query
 watch(searchQuery, (q) => {
-  if (debounceTimer) clearTimeout(debounceTimer)
+  if (debounceTimer)
+    clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => {
     debouncedQuery.value = q
   }, 200)
 })
 
 // Persist viewMode to localStorage
-watch(viewMode, (v) => localStorage.setItem('agent-view-mode', v))
+watch(viewMode, v => localStorage.setItem('agent-view-mode', v))
 
 function startPolling() {
   subscriberCount++
-  if (intervalId) return
+  if (intervalId)
+    return
   fetchAgents()
   intervalId = setInterval(fetchAgents, 3000)
 }

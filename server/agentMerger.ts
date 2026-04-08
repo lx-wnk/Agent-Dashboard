@@ -1,19 +1,19 @@
-import type { ProcessInfo } from './processScanner.js'
-import type { SessionData } from './jsonlParser.js'
 import type { Agent, TokenUsage } from '../src/types.js'
-import { findSessionForProject } from './jsonlParser.js'
-import { scanProcesses } from './processScanner.js'
 import { basename } from 'node:path'
 import { getChannelMap } from './channelDiscovery.js'
+import { findSessionForProject } from './jsonlParser.js'
 import { estimateCost } from './pricing.js'
+import { scanProcesses } from './processScanner.js'
 
-const ACTIVE_THRESHOLD = 30_000    // 30s
-const IDLE_THRESHOLD = 300_000     // 5min
+const ACTIVE_THRESHOLD = 30_000 // 30s
+const IDLE_THRESHOLD = 300_000 // 5min
 
 function calculateStatus(lastActivity: string): Agent['status'] {
   const age = Date.now() - new Date(lastActivity).getTime()
-  if (age < ACTIVE_THRESHOLD) return 'active'
-  if (age < IDLE_THRESHOLD) return 'waiting'
+  if (age < ACTIVE_THRESHOLD)
+    return 'active'
+  if (age < IDLE_THRESHOLD)
+    return 'waiting'
   return 'idle'
 }
 
@@ -21,7 +21,7 @@ export async function getAgents(): Promise<Agent[]> {
   const processes = await scanProcesses()
 
   const sessions = await Promise.all(
-    processes.map(proc => findSessionForProject(proc.cwd))
+    processes.map(proc => findSessionForProject(proc.cwd)),
   )
 
   const agents: Agent[] = processes.map((proc, i) => {
@@ -48,7 +48,7 @@ export async function getAgents(): Promise<Agent[]> {
       tasks: (session?.tasks || []) as Agent['tasks'],
       subagents: (session?.subagents || []).map(sa => ({
         ...sa,
-        type: sa.type.length > 60 ? sa.type.substring(0, 60) + '...' : sa.type,
+        type: sa.type.length > 60 ? `${sa.type.substring(0, 60)}...` : sa.type,
       })),
       tokenUsage,
       costEstimate: estimateCost(session?.tokenUsage || tokenUsage, session?.model || null),
@@ -67,7 +67,8 @@ export async function getAgents(): Promise<Agent[]> {
   for (const agent of agents) {
     if (channelMap.has(agent.pid)) {
       agent.channelAvailable = true
-    } else {
+    }
+    else {
       // Fallback: match by cwd if PID-based matching failed
       for (const [, info] of channelMap) {
         if (info.cwd && info.cwd === agent.cwd) {
@@ -82,7 +83,8 @@ export async function getAgents(): Promise<Agent[]> {
   agents.sort((a, b) => {
     const statusOrder = { active: 0, waiting: 1, idle: 2 }
     const diff = statusOrder[a.status] - statusOrder[b.status]
-    if (diff !== 0) return diff
+    if (diff !== 0)
+      return diff
     return b.uptime - a.uptime
   })
 

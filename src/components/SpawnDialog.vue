@@ -1,109 +1,5 @@
-<template>
-  <Transition name="dialog">
-    <div
-      v-if="open"
-      class="spawn-backdrop"
-      @click.self="emit('close')"
-      @keydown.escape="emit('close')"
-    >
-      <div class="spawn-modal">
-        <header class="modal-header">
-          <h2>New Agent</h2>
-          <button class="close-btn" @click="emit('close')">&times;</button>
-        </header>
-
-        <form class="modal-body" @submit.prevent>
-          <div class="field">
-            <label class="field-label" for="spawn-prompt">Prompt</label>
-            <textarea
-              id="spawn-prompt"
-              v-model="prompt"
-              class="field-input"
-              rows="4"
-              required
-              placeholder="What should the agent do?"
-            ></textarea>
-          </div>
-
-          <div class="field">
-            <label class="field-label" for="spawn-cwd">Working Directory</label>
-            <input
-              id="spawn-cwd"
-              v-model="cwd"
-              class="field-input"
-              type="text"
-              required
-              placeholder="/path/to/project"
-            />
-          </div>
-
-          <div class="field">
-            <label class="field-label" for="spawn-model">Model</label>
-            <select id="spawn-model" v-model="model" class="field-input">
-              <option value="">Auto</option>
-              <option value="claude-opus-4-6">claude-opus-4-6</option>
-              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
-              <option value="claude-haiku-4-5">claude-haiku-4-5</option>
-            </select>
-          </div>
-
-          <div class="field">
-            <label class="field-label" for="spawn-system">System Prompt</label>
-            <textarea
-              id="spawn-system"
-              v-model="systemPrompt"
-              class="field-input"
-              rows="2"
-              placeholder="Custom system instructions (optional)"
-            ></textarea>
-          </div>
-
-          <div class="field-checkbox">
-            <input
-              id="spawn-channel"
-              v-model="enableChannel"
-              type="checkbox"
-            />
-            <label for="spawn-channel">Enable dashboard control channel</label>
-          </div>
-
-          <div class="field-checkbox">
-            <input
-              id="spawn-yolo"
-              v-model="skipPermissions"
-              type="checkbox"
-            />
-            <label for="spawn-yolo">Skip permission prompts <span class="yolo-hint">(--dangerously-skip-permissions)</span></label>
-          </div>
-
-          <p v-if="spawnStatusMsg" class="status-msg">{{ spawnStatusMsg }}</p>
-          <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
-        </form>
-
-        <footer class="modal-footer">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            @click="emit('close')"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="isSpawning || !prompt.trim() || !cwd.trim()"
-            @click="handleSpawn"
-          >
-            {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
-          </button>
-        </footer>
-      </div>
-    </div>
-  </Transition>
-</template>
-
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
@@ -152,35 +48,41 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
   }
   try {
     const res = await fetch(`/api/agents/spawn/${pid}/status`)
-    if (!res.ok) return
+    if (!res.ok)
+      return
 
     const data = await res.json()
 
     if (data.status === 'running') {
       spawnStatusMsg.value = `Agent PID ${pid} running...`
-      statusPollTimer = setTimeout(() => pollSpawnStatus(pid, attempts + 1), 2000)
-    } else if (data.status === 'exited' && data.exitCode !== 0) {
+      statusPollTimer = setTimeout(pollSpawnStatus, 2000, pid, attempts + 1)
+    }
+    else if (data.status === 'exited' && data.exitCode !== 0) {
       const stderr = data.stderr?.trim()
-      errorMsg.value = `Agent exited with code ${data.exitCode}${stderr ? ': ' + stderr.slice(-300) : ''}`
+      errorMsg.value = `Agent exited with code ${data.exitCode}${stderr ? `: ${stderr.slice(-300)}` : ''}`
       spawnStatusMsg.value = ''
       isSpawning.value = false
-    } else if (data.status === 'error') {
+    }
+    else if (data.status === 'error') {
       errorMsg.value = data.stderr?.trim() || 'Spawn error'
       spawnStatusMsg.value = ''
       isSpawning.value = false
-    } else {
+    }
+    else {
       // exited with code 0 = success
       spawnStatusMsg.value = ''
       stopStatusPoll()
     }
-  } catch {
+  }
+  catch {
     // Network error, keep polling
-    statusPollTimer = setTimeout(() => pollSpawnStatus(pid, attempts + 1), 2000)
+    statusPollTimer = setTimeout(pollSpawnStatus, 2000, pid, attempts + 1)
   }
 }
 
 async function handleSpawn() {
-  if (isSpawning.value || !prompt.value.trim() || !cwd.value.trim()) return
+  if (isSpawning.value || !prompt.value.trim() || !cwd.value.trim())
+    return
 
   isSpawning.value = true
   errorMsg.value = ''
@@ -192,8 +94,10 @@ async function handleSpawn() {
     enableChannel: enableChannel.value,
     skipPermissions: skipPermissions.value,
   }
-  if (model.value) body.model = model.value
-  if (systemPrompt.value.trim()) body.systemPrompt = systemPrompt.value.trim()
+  if (model.value)
+    body.model = model.value
+  if (systemPrompt.value.trim())
+    body.systemPrompt = systemPrompt.value.trim()
 
   try {
     const res = await fetch('/api/agents/spawn', {
@@ -222,7 +126,8 @@ async function handleSpawn() {
         emit('close')
       }
     }, 3000)
-  } catch (err: unknown) {
+  }
+  catch (err: unknown) {
     errorMsg.value = err instanceof Error ? err.message : 'Failed to spawn agent'
     isSpawning.value = false
   }
@@ -241,6 +146,124 @@ watch(() => props.open, (isOpen) => {
 
 onUnmounted(() => stopStatusPoll())
 </script>
+
+<template>
+  <Transition name="dialog">
+    <div
+      v-if="open"
+      class="spawn-backdrop"
+      @click.self="emit('close')"
+      @keydown.escape="emit('close')"
+    >
+      <div class="spawn-modal">
+        <header class="modal-header">
+          <h2>New Agent</h2>
+          <button class="close-btn" @click="emit('close')">
+            &times;
+          </button>
+        </header>
+
+        <form class="modal-body" @submit.prevent>
+          <div class="field">
+            <label class="field-label" for="spawn-prompt">Prompt</label>
+            <textarea
+              id="spawn-prompt"
+              v-model="prompt"
+              class="field-input"
+              rows="4"
+              required
+              placeholder="What should the agent do?"
+            />
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="spawn-cwd">Working Directory</label>
+            <input
+              id="spawn-cwd"
+              v-model="cwd"
+              class="field-input"
+              type="text"
+              required
+              placeholder="/path/to/project"
+            >
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="spawn-model">Model</label>
+            <select id="spawn-model" v-model="model" class="field-input">
+              <option value="">
+                Auto
+              </option>
+              <option value="claude-opus-4-6">
+                claude-opus-4-6
+              </option>
+              <option value="claude-sonnet-4-6">
+                claude-sonnet-4-6
+              </option>
+              <option value="claude-haiku-4-5">
+                claude-haiku-4-5
+              </option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="spawn-system">System Prompt</label>
+            <textarea
+              id="spawn-system"
+              v-model="systemPrompt"
+              class="field-input"
+              rows="2"
+              placeholder="Custom system instructions (optional)"
+            />
+          </div>
+
+          <div class="field-checkbox">
+            <input
+              id="spawn-channel"
+              v-model="enableChannel"
+              type="checkbox"
+            >
+            <label for="spawn-channel">Enable dashboard control channel</label>
+          </div>
+
+          <div class="field-checkbox">
+            <input
+              id="spawn-yolo"
+              v-model="skipPermissions"
+              type="checkbox"
+            >
+            <label for="spawn-yolo">Skip permission prompts <span class="yolo-hint">(--dangerously-skip-permissions)</span></label>
+          </div>
+
+          <p v-if="spawnStatusMsg" class="status-msg">
+            {{ spawnStatusMsg }}
+          </p>
+          <p v-if="errorMsg" class="error-msg">
+            {{ errorMsg }}
+          </p>
+        </form>
+
+        <footer class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="emit('close')"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="isSpawning || !prompt.trim() || !cwd.trim()"
+            @click="handleSpawn"
+          >
+            {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  </Transition>
+</template>
 
 <style scoped>
 .spawn-backdrop {

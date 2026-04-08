@@ -1,10 +1,12 @@
-import { readdir, readFile, unlink } from 'node:fs/promises'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { execFile } from 'node:child_process'
+import { readdir, readFile, unlink } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import process from 'node:process'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
+const WHITESPACE_RE = /\s+/
 const DISCOVERY_DIR = join(homedir(), '.claude', 'dashboard-channel')
 
 interface DiscoveryEntry {
@@ -26,7 +28,8 @@ function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true
-  } catch {
+  }
+  catch {
     return false
   }
 }
@@ -43,19 +46,23 @@ async function findClaudeAncestor(startPid: number): Promise<number | null> {
       // ps -p <pid> -o ppid=,comm= outputs the ppid and comm of <pid>
       const { stdout } = await execFileAsync('ps', ['-p', String(currentPid), '-o', 'ppid=,comm='])
       const trimmed = stdout.trim()
-      if (!trimmed) return null
+      if (!trimmed)
+        return null
 
-      const parts = trimmed.split(/\s+/)
-      const ppid = parseInt(parts[0], 10)
+      const parts = trimmed.split(WHITESPACE_RE)
+      const ppid = Number.parseInt(parts[0], 10)
       const comm = parts.slice(1).join(' ')
 
-      if (isNaN(ppid) || ppid <= 1) return null
+      if (Number.isNaN(ppid) || ppid <= 1)
+        return null
 
       // comm belongs to currentPid, so return currentPid when it matches
-      if (comm.endsWith('/claude') || comm === 'claude') return currentPid
+      if (comm.endsWith('/claude') || comm === 'claude')
+        return currentPid
 
       currentPid = ppid
-    } catch {
+    }
+    catch {
       return null
     }
   }
@@ -68,7 +75,8 @@ export async function getChannelMap(): Promise<Map<number, ChannelInfo>> {
   let files: string[]
   try {
     files = (await readdir(DISCOVERY_DIR)).filter(f => f.endsWith('.json'))
-  } catch {
+  }
+  catch {
     return result
   }
 
@@ -92,12 +100,14 @@ export async function getChannelMap(): Promise<Map<number, ChannelInfo>> {
       const claudePid = await findClaudeAncestor(entry.parentPid)
       if (claudePid !== null) {
         result.set(claudePid, info)
-      } else {
+      }
+      else {
         // Fallback: use the parentPid directly (works if claude spawns
         // the MCP server without an intermediate wrapper)
         result.set(entry.parentPid, info)
       }
-    } catch {
+    }
+    catch {
       // Malformed file, skip
     }
   }))

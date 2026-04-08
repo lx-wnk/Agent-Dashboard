@@ -1,42 +1,93 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import AgentCardGrid from './components/AgentCardGrid.vue'
+import AgentModal from './components/AgentModal.vue'
+import AgentTable from './components/AgentTable.vue'
+import ResourceBar from './components/ResourceBar.vue'
+import SessionList from './components/SessionList.vue'
+import SpawnDialog from './components/SpawnDialog.vue'
+import { useAgents } from './composables/useAgents'
+import { formatTokens, totalTokenCount } from './utils/format'
+
+const { agents, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
+const showSpawnDialog = ref(false)
+const showSessions = ref(false)
+const scriptPath = ref('')
+const homeDir = ref('')
+const copied = ref(false)
+
+fetch('/api/config').then(r => r.json()).then((d) => {
+  scriptPath.value = d.scriptPath
+  homeDir.value = d.homedir
+}).catch(() => {})
+
+function copyScript() {
+  navigator.clipboard.writeText(scriptPath.value)
+  copied.value = true
+  setTimeout(() => {
+    copied.value = false
+  }, 2000)
+}
+
+function onAgentSpawned(_pid: number) {
+  // Agent will appear in the next polling cycle (~3s)
+}
+
+const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
+const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
+</script>
+
 <template>
   <div class="app">
     <header class="app-header">
       <h1>Claude Agent Overview</h1>
       <span class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
-      <span class="header-stat" v-if="totalCost > 0">${{ totalCost.toFixed(2) }}</span>
-      <span class="header-stat" v-if="totalTokens > 0">{{ formatTokens(totalTokens) }} tokens</span>
+      <span v-if="totalCost > 0" class="header-stat">${{ totalCost.toFixed(2) }}</span>
+      <span v-if="totalTokens > 0" class="header-stat">{{ formatTokens(totalTokens) }} tokens</span>
       <input
         v-model="searchQuery"
         class="header-search"
         type="text"
         placeholder="Search agents..."
-      />
+      >
       <div class="view-toggle">
         <button
           class="toggle-btn"
           :class="{ active: viewMode === 'list' }"
-          @click="viewMode = 'list'"
           title="List view"
-        >≡</button>
+          @click="viewMode = 'list'"
+        >
+          ≡
+        </button>
         <button
           class="toggle-btn"
           :class="{ active: viewMode === 'cards' }"
-          @click="viewMode = 'cards'"
           title="Card view"
-        >⊞</button>
+          @click="viewMode = 'cards'"
+        >
+          ⊞
+        </button>
       </div>
-      <button class="sessions-btn" @click="showSessions = true">Sessions</button>
-      <button class="spawn-btn" @click="showSpawnDialog = true">+ New Agent</button>
+      <button class="sessions-btn" @click="showSessions = true">
+        Sessions
+      </button>
+      <button class="spawn-btn" @click="showSpawnDialog = true">
+        + New Agent
+      </button>
     </header>
     <ResourceBar />
-    <div class="script-banner" v-if="scriptPath">
+    <div v-if="scriptPath" class="script-banner">
       <span class="script-label">Channel script:</span>
-      <code class="script-path" @click="copyScript" :title="copied ? 'Copied!' : 'Click to copy'">{{ scriptPath }}</code>
+      <code class="script-path" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript">{{ scriptPath }}</code>
       <span v-if="copied" class="copied-hint">Copied!</span>
     </div>
     <main>
-      <p v-if="isLoading" class="loading">Loading agents...</p>
-      <p v-else-if="error" class="error">Error: {{ error }}</p>
+      <p v-if="isLoading" class="loading">
+        Loading agents...
+      </p>
+      <p v-else-if="error" class="error">
+        Error: {{ error }}
+      </p>
       <AgentTable
         v-else-if="viewMode === 'list'"
         :agents="filteredAgents"
@@ -65,43 +116,6 @@
     />
   </div>
 </template>
-
-<script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useAgents } from './composables/useAgents'
-import { formatTokens, totalTokenCount } from './utils/format'
-import AgentTable from './components/AgentTable.vue'
-import AgentCardGrid from './components/AgentCardGrid.vue'
-import AgentModal from './components/AgentModal.vue'
-import SpawnDialog from './components/SpawnDialog.vue'
-import SessionList from './components/SessionList.vue'
-import ResourceBar from './components/ResourceBar.vue'
-
-const { agents, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
-const showSpawnDialog = ref(false)
-const showSessions = ref(false)
-const scriptPath = ref('')
-const homeDir = ref('')
-const copied = ref(false)
-
-fetch('/api/config').then(r => r.json()).then(d => {
-  scriptPath.value = d.scriptPath
-  homeDir.value = d.homedir
-}).catch(() => {})
-
-function copyScript() {
-  navigator.clipboard.writeText(scriptPath.value)
-  copied.value = true
-  setTimeout(() => { copied.value = false }, 2000)
-}
-
-function onAgentSpawned(_pid: number) {
-  // Agent will appear in the next polling cycle (~3s)
-}
-
-const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
-const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
-</script>
 
 <style>
 :root {
