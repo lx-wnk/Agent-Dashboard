@@ -8,9 +8,8 @@ const selectedAgent = ref<Agent | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
-const viewMode = ref<ViewMode>(
-  (localStorage.getItem('agent-view-mode') as ViewMode) || 'list'
-)
+const stored = localStorage.getItem('agent-view-mode')
+const viewMode = ref<ViewMode>(stored === 'list' || stored === 'cards' ? stored : 'list')
 
 let intervalId: ReturnType<typeof setInterval> | null = null
 let subscriberCount = 0

@@ -68,7 +68,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import type { Agent, OutputMessage } from '../types'
-import { formatTokens, formatCost, formatUptime } from '../utils/format'
+import { formatTokens, formatCost, formatUptime, shortModel } from '../utils/format'
+import { useAgentPrompt } from '../composables/useAgentPrompt'
 import StatusBadge from './StatusBadge.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
@@ -78,21 +79,14 @@ const outputMessages = ref<OutputMessage[]>([])
 const isLoadingOutput = ref(false)
 const outputEl = ref<HTMLElement | null>(null)
 const promptEl = ref<HTMLTextAreaElement | null>(null)
-const promptInput = ref('')
-const isSending = ref(false)
-const sendStatus = ref<'sent' | 'error' | null>(null)
-const sendError = ref('')
+
+const { promptInput, isSending, sendStatus, sendError, handleSend: sendPrompt } = useAgentPrompt(() => props.agent)
 
 const totalTokens = computed(() => {
   if (!props.agent) return 0
   const u = props.agent.tokenUsage
   return u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
 })
-
-function shortModel(model: string | null): string {
-  if (!model) return '—'
-  return model.replace('claude-', '').replace(/-\d+$/, m => ' ' + m.slice(1))
-}
 
 async function fetchOutput(sessionId: string) {
   isLoadingOutput.value = true
@@ -141,43 +135,11 @@ watch(() => props.agent, (agent) => {
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 async function handleSend() {
-  const msg = promptInput.value.trim()
-  if (!msg || isSending.value || !props.agent) return
-
-  isSending.value = true
-  sendStatus.value = null
-
-  try {
-    if (props.agent.channelAvailable && props.agent.status !== 'idle') {
-      const res = await fetch(`/api/agents/${props.agent.sessionId}/message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error || 'Send failed')
-    } else {
-      const res = await fetch('/api/agents/spawn', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: msg,
-          cwd: props.agent.cwd,
-          resumeSessionId: props.agent.sessionId,
-        }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error || 'Resume failed')
-    }
-    sendStatus.value = 'sent'
-    promptInput.value = ''
-    if (props.agent) {
-      setTimeout(() => fetchOutput(props.agent!.sessionId), 2000)
-    }
-  } catch (err) {
-    sendStatus.value = 'error'
-    sendError.value = err instanceof Error ? err.message : 'Failed'
-  } finally {
-    isSending.value = false
-    setTimeout(() => { sendStatus.value = null }, 3000)
+  await sendPrompt()
+  if (props.agent && sendStatus.value === 'sent') {
+    setTimeout(() => {
+      if (props.agent) fetchOutput(props.agent.sessionId)
+    }, 2000)
   }
 }
 </script>

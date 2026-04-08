@@ -17,3 +17,8 @@ export function formatUptime(seconds: number): string {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
   return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
 }
+
+export function shortModel(model: string | null): string {
+  if (!model) return '—'
+  return model.replace('claude-', '').replace(/-\d+$/, m => ' ' + m.slice(1))
+}
