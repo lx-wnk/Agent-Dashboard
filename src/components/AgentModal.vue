@@ -110,9 +110,12 @@ async function fetchOutput(sessionId: string) {
     const data = await res.json()
     outputMessages.value = data.messages
     await nextTick()
-    if (outputEl.value) {
-      outputEl.value.scrollTop = outputEl.value.scrollHeight
-    }
+    // Wait for browser layout after v-for render
+    requestAnimationFrame(() => {
+      if (outputEl.value) {
+        outputEl.value.scrollTop = outputEl.value.scrollHeight
+      }
+    })
   } catch {
     outputMessages.value = []
   } finally {
