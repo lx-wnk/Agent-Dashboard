@@ -353,6 +353,16 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
   const messages: OutputMessage[] = []
 
   for (const entry of entries) {
+    // Handle tool results (separate entry type)
+    if (entry.type === 'result' && entry.result) {
+      messages.push({
+        role: 'tool_result',
+        content: typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result).substring(0, 1000),
+        timestamp: entry.timestamp,
+      })
+      continue
+    }
+
     if (entry.type !== 'assistant' || !entry.message?.content) continue
     if (!Array.isArray(entry.message.content)) continue
 
@@ -373,14 +383,6 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
           filePath,
         })
       }
-    }
-
-    if (entry.type === 'result' && entry.result) {
-      messages.push({
-        role: 'tool_result',
-        content: typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result).substring(0, 1000),
-        timestamp: entry.timestamp,
-      })
     }
   }
 

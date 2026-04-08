@@ -245,6 +245,10 @@ async function start() {
   app.get('/api/agents/:sessionId/output', async (req, res) => {
     try {
       const { sessionId } = req.params
+      if (!UUID_RE.test(sessionId)) {
+        res.status(400).json({ error: 'Invalid sessionId format' })
+        return
+      }
       const lastOnly = req.query.last === '1'
       const messages = await parseFullSession(sessionId, lastOnly)
       res.json({ messages })
