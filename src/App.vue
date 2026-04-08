@@ -2,9 +2,29 @@
   <div class="app">
     <header class="app-header">
       <h1>Claude Agent Overview</h1>
-      <span class="agent-count">{{ agents.length }} agent{{ agents.length !== 1 ? 's' : '' }}</span>
+      <span class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
       <span class="header-stat" v-if="totalCost > 0">${{ totalCost.toFixed(2) }}</span>
       <span class="header-stat" v-if="totalTokens > 0">{{ formatTokens(totalTokens) }} tokens</span>
+      <input
+        v-model="searchQuery"
+        class="header-search"
+        type="text"
+        placeholder="Search agents..."
+      />
+      <div class="view-toggle">
+        <button
+          class="toggle-btn"
+          :class="{ active: viewMode === 'list' }"
+          @click="viewMode = 'list'"
+          title="List view"
+        >≡</button>
+        <button
+          class="toggle-btn"
+          :class="{ active: viewMode === 'cards' }"
+          @click="viewMode = 'cards'"
+          title="Card view"
+        >⊞</button>
+      </div>
       <button class="sessions-btn" @click="showSessions = true">Sessions</button>
       <button class="spawn-btn" @click="showSpawnDialog = true">+ New Agent</button>
     </header>
@@ -18,12 +38,17 @@
       <p v-if="isLoading" class="loading">Loading agents...</p>
       <p v-else-if="error" class="error">Error: {{ error }}</p>
       <AgentTable
+        v-else-if="viewMode === 'list'"
+        :agents="filteredAgents"
+        @select="selectAgent"
+      />
+      <AgentCardGrid
         v-else
-        :agents="agents"
+        :agents="filteredAgents"
         @select="selectAgent"
       />
     </main>
-    <AgentDetail
+    <AgentModal
       :agent="selectedAgent"
       @close="selectAgent(null)"
     />
@@ -46,12 +71,13 @@ import { computed, ref } from 'vue'
 import { useAgents } from './composables/useAgents'
 import { formatTokens } from './utils/format'
 import AgentTable from './components/AgentTable.vue'
-import AgentDetail from './components/AgentDetail.vue'
+import AgentCardGrid from './components/AgentCardGrid.vue'
+import AgentModal from './components/AgentModal.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SessionList from './components/SessionList.vue'
 import ResourceBar from './components/ResourceBar.vue'
 
-const { agents, selectedAgent, isLoading, error, selectAgent } = useAgents()
+const { agents, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
 const showSpawnDialog = ref(false)
 const showSessions = ref(false)
 const scriptPath = ref('')
@@ -138,7 +164,6 @@ body {
 }
 
 .sessions-btn {
-  margin-left: auto;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   border: none;
@@ -172,6 +197,48 @@ body {
 
 .spawn-btn:hover {
   filter: brightness(1.1);
+}
+
+.header-search {
+  margin-left: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: inherit;
+  width: 200px;
+  transition: border-color 0.15s, width 0.2s;
+}
+.header-search::placeholder { color: var(--text-muted); }
+.header-search:focus {
+  outline: none;
+  border-color: #3b82f6;
+  width: 260px;
+}
+
+.view-toggle {
+  display: flex;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.toggle-btn.active {
+  background: #3b82f6;
+  color: white;
+}
+.toggle-btn:not(.active):hover {
+  color: var(--text-primary);
 }
 
 .loading, .error {
