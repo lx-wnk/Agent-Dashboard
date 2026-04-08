@@ -369,7 +369,7 @@ select.field-input option {
 .yolo-hint {
   font-size: 10px;
   color: var(--text-muted);
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .status-msg {
@@ -381,7 +381,7 @@ select.field-input option {
 
 .error-msg {
   font-size: 12px;
-  color: #f87171;
+  color: var(--accent-red);
   margin-top: 4px;
   line-height: 1.4;
   white-space: pre-wrap;

@@ -9,7 +9,7 @@
     </td>
     <td class="col-action">{{ agent.currentAction || '—' }}</td>
     <td class="col-model">{{ shortModel(agent.model) }}</td>
-    <td class="col-tokens">{{ formatTokens(agent.tokenUsage.inputTokens + agent.tokenUsage.outputTokens) }}</td>
+    <td class="col-tokens">{{ formatTokens(totalTokenCount(agent.tokenUsage)) }}</td>
     <td class="col-cost">{{ formatCost(agent.costEstimate) }}</td>
     <td class="col-uptime">{{ formatUptime(agent.uptime) }}</td>
     <td class="col-pid">{{ agent.pid }}</td>
@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import type { Agent } from '../types'
-import { formatTokens, formatCost, formatUptime } from '../utils/format'
+import { formatTokens, formatCost, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import StatusBadge from './StatusBadge.vue'
 
 defineProps<{
@@ -40,12 +40,6 @@ defineEmits<{
   'toggle-subagents': []
 }>()
 
-function shortModel(model: string | null): string {
-  if (!model) return '—'
-  return model
-    .replace('claude-', '')
-    .replace(/-\d+$/, m => ' ' + m.slice(1))
-}
 </script>
 
 <style scoped>
@@ -68,10 +62,10 @@ function shortModel(model: string | null): string {
 .col-project { color: var(--text-primary); font-weight: 500; }
 .col-action { color: var(--text-secondary); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .col-model { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
-.col-tokens { color: var(--text-muted); font-family: monospace; font-size: 12px; white-space: nowrap; }
-.col-cost { color: var(--accent-green); font-family: monospace; font-size: 12px; white-space: nowrap; }
+.col-tokens { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+.col-cost { color: var(--accent-green); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
 .col-uptime { color: var(--text-muted); width: 80px; }
-.col-pid { color: var(--text-muted); width: 70px; font-family: monospace; font-size: 12px; }
+.col-pid { color: var(--text-muted); width: 70px; font-family: var(--font-mono); font-size: 12px; }
 .col-toggle { width: 50px; text-align: center; }
 
 .toggle-btn {

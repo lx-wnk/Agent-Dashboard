@@ -39,6 +39,7 @@ export interface Agent {
   toolCounts: Record<string, number>
   meta: SessionMeta | null
   channelAvailable: boolean
+  lastOutput: string | null
 }
 
 export interface ChannelReply {
@@ -58,4 +59,12 @@ export interface TaskInfo {
   id: string
   subject: string
   status: 'pending' | 'in_progress' | 'completed'
+}
+
+export interface OutputMessage {
+  role: 'assistant' | 'tool_call' | 'tool_result'
+  content: string
+  timestamp?: string
+  toolName?: string
+  filePath?: string
 }
