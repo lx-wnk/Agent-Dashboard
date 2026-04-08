@@ -1,10 +1,16 @@
-import { ref, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted, watch } from 'vue'
 import type { Agent } from '../types'
+
+type ViewMode = 'list' | 'cards'
 
 const agents = ref<Agent[]>([])
 const selectedAgent = ref<Agent | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
+const searchQuery = ref('')
+const viewMode = ref<ViewMode>(
+  (localStorage.getItem('agent-view-mode') as ViewMode) || 'list'
+)
 
 let intervalId: ReturnType<typeof setInterval> | null = null
 let subscriberCount = 0
@@ -17,7 +23,6 @@ async function fetchAgents() {
     agents.value = data
     error.value = null
 
-    // Keep selected agent in sync across refreshes (clear if agent is gone)
     if (selectedAgent.value) {
       const updated = data.find(a => a.sessionId === selectedAgent.value!.sessionId)
       selectedAgent.value = updated ?? null
@@ -29,10 +34,24 @@ async function fetchAgents() {
   }
 }
 
+const filteredAgents = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim()
+  if (!q) return agents.value
+  return agents.value.filter(a =>
+    a.projectName.toLowerCase().includes(q) ||
+    a.projectPath.toLowerCase().includes(q) ||
+    (a.lastOutput?.toLowerCase().includes(q) ?? false) ||
+    a.sessionId.toLowerCase().includes(q) ||
+    (a.currentAction?.toLowerCase().includes(q) ?? false)
+  )
+})
+
+// Persist viewMode to localStorage
+watch(viewMode, (v) => localStorage.setItem('agent-view-mode', v))
+
 function startPolling() {
   subscriberCount++
   if (intervalId) return
-
   fetchAgents()
   intervalId = setInterval(fetchAgents, 3000)
 }
@@ -56,9 +75,12 @@ export function useAgents() {
 
   return {
     agents,
+    filteredAgents,
     selectedAgent,
     isLoading,
     error,
+    searchQuery,
+    viewMode,
     selectAgent,
   }
 }
