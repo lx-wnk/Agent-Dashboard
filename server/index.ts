@@ -259,8 +259,13 @@ async function start() {
 
   // Send a message to a running agent via its channel
   app.post('/api/agents/:sessionId/message', async (req, res) => {
+    if (rejectCrossOrigin(req, res)) return
     try {
       const { sessionId } = req.params
+      if (!UUID_RE.test(sessionId)) {
+        res.status(400).json({ error: 'Invalid sessionId format' })
+        return
+      }
       const { message } = req.body
 
       if (!message || typeof message !== 'string') {
@@ -366,6 +371,10 @@ async function start() {
   app.get('/api/agents/:sessionId/replies', async (req, res) => {
     try {
       const { sessionId } = req.params
+      if (!UUID_RE.test(sessionId)) {
+        res.status(400).json({ error: 'Invalid sessionId format' })
+        return
+      }
       const since = req.query.since as string | undefined
 
       const agents = await getAgents()

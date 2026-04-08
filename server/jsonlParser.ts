@@ -348,7 +348,28 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
 
   if (!sessionFilePath) return []
 
-  const raw = await readFile(sessionFilePath, 'utf-8')
+  // Check file size and cap reads to avoid loading 100MB+ files into memory
+  const fileStats = await stat(sessionFilePath)
+  const MAX_READ_BYTES = 10 * 1024 * 1024 // 10MB cap
+
+  let raw: string
+  if (lastOnly) {
+    // For last message only, tail read is sufficient
+    raw = await tailRead(sessionFilePath)
+  } else if (fileStats.size <= MAX_READ_BYTES) {
+    raw = await readFile(sessionFilePath, 'utf-8')
+  } else {
+    // For large files, read last 10MB
+    const handle = await open(sessionFilePath, 'r')
+    try {
+      const buffer = Buffer.alloc(MAX_READ_BYTES)
+      await handle.read(buffer, 0, MAX_READ_BYTES, fileStats.size - MAX_READ_BYTES)
+      raw = buffer.toString('utf-8')
+    } finally {
+      await handle.close()
+    }
+  }
+
   const entries = parseJsonlLines(raw)
   const messages: OutputMessage[] = []
 
