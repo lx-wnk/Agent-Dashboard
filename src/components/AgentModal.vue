@@ -37,6 +37,17 @@
           <div v-else class="output-empty">No output available for this session.</div>
         </div>
 
+        <div class="modal-details" v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0">
+          <details>
+            <summary class="details-summary">Agent Details (Tasks, Tools, Subagents)</summary>
+            <div class="details-content">
+              <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
+              <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
+              <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
+            </div>
+          </details>
+        </div>
+
         <div class="modal-prompt">
           <span class="prompt-cursor">❯</span>
           <textarea
@@ -71,6 +82,9 @@ import type { Agent, OutputMessage } from '../types'
 import { formatTokens, formatCost, formatUptime, shortModel } from '../utils/format'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
 import StatusBadge from './StatusBadge.vue'
+import ToolTimeline from './ToolTimeline.vue'
+import TaskList from './TaskList.vue'
+import SubAgentList from './SubAgentList.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
 const emit = defineEmits<{ close: [] }>()
@@ -271,6 +285,26 @@ async function handleSend() {
 .modal-send-status { font-size: 11px; padding: 0 16px 8px; }
 .modal-send-status.sent { color: var(--accent-green); }
 .modal-send-status.error { color: #f87171; }
+.modal-details {
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.details-summary {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.details-summary:hover { color: var(--text-secondary); }
+.details-content {
+  padding: 8px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
 .modal-enter-active, .modal-leave-active { transition: opacity 0.2s; }
 .modal-enter-active .modal-window, .modal-leave-active .modal-window { transition: transform 0.2s; }
 .modal-enter-from, .modal-leave-to { opacity: 0; }
