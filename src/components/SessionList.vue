@@ -304,7 +304,7 @@ watch(() => props.open, (isOpen) => {
   display: block;
   font-size: 11px;
   color: var(--text-muted);
-  font-family: monospace;
+  font-family: var(--font-mono);
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -312,7 +312,7 @@ watch(() => props.open, (isOpen) => {
 }
 
 .session-id-tag {
-  font-family: monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0;
 }
 
@@ -398,7 +398,7 @@ watch(() => props.open, (isOpen) => {
   margin-top: 4px;
 }
 
-.resume-status.error { color: #f87171; }
+.resume-status.error { color: var(--accent-red); }
 
 /* Dialog transition */
 .dialog-enter-active,

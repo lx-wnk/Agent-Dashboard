@@ -1,3 +1,9 @@
+import type { TokenUsage } from '../types'
+
+export function totalTokenCount(usage: TokenUsage): number {
+  return usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheCreationTokens
+}
+
 export function formatTokens(n: number): string {
   if (n === 0) return '—'
   if (n < 1000) return String(n)

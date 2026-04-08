@@ -40,7 +40,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Agent } from '../types'
-import { formatTokens, formatCost, formatUptime, shortModel } from '../utils/format'
+import { formatTokens, formatCost, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
 import StatusBadge from './StatusBadge.vue'
 
@@ -49,10 +49,7 @@ defineEmits<{ select: [agent: Agent] }>()
 
 const { promptInput, isSending, sendStatus, sendError, handleSend } = useAgentPrompt(() => props.agent)
 
-const totalTokens = computed(() => {
-  const u = props.agent.tokenUsage
-  return u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
-})
+const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 </script>
 
 <style scoped>
@@ -103,7 +100,7 @@ const totalTokens = computed(() => {
   max-height: 120px;
   overflow: hidden;
   position: relative;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
 }
 .card-output::after {
   content: '';
@@ -127,7 +124,7 @@ const totalTokens = computed(() => {
   gap: 6px;
 }
 .prompt-cursor {
-  color: #3b82f6;
+  color: var(--accent-blue);
   font-size: 13px;
   flex-shrink: 0;
 }
@@ -137,13 +134,13 @@ const totalTokens = computed(() => {
   border: none;
   color: var(--text-primary);
   font-size: 13px;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
   outline: none;
 }
 .prompt-input::placeholder { color: var(--text-muted); }
 .prompt-input:disabled { opacity: 0.5; }
 .prompt-send {
-  background: #3b82f6;
+  background: var(--accent-blue);
   color: white;
   border: none;
   border-radius: 4px;
@@ -160,5 +157,5 @@ const totalTokens = computed(() => {
   padding: 2px 12px 6px;
 }
 .card-send-status.sent { color: var(--accent-green); }
-.card-send-status.error { color: #f87171; }
+.card-send-status.error { color: var(--accent-red); }
 </style>

@@ -111,11 +111,11 @@ onUnmounted(() => {
 
 .res-fill.ok { background: var(--accent-green); }
 .res-fill.warn { background: var(--accent-yellow); }
-.res-fill.critical { background: #f87171; }
+.res-fill.critical { background: var(--accent-red); }
 
 .res-pct {
   font-size: 11px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   width: 28px;
   text-align: right;
@@ -123,7 +123,7 @@ onUnmounted(() => {
 
 .res-value {
   font-size: 11px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
 }
 </style>

@@ -79,7 +79,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import type { Agent, OutputMessage } from '../types'
-import { formatTokens, formatCost, formatUptime, shortModel } from '../utils/format'
+import { formatTokens, formatCost, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
 import StatusBadge from './StatusBadge.vue'
 import ToolTimeline from './ToolTimeline.vue'
@@ -96,11 +96,7 @@ const promptEl = ref<HTMLTextAreaElement | null>(null)
 
 const { promptInput, isSending, sendStatus, sendError, handleSend: sendPrompt } = useAgentPrompt(() => props.agent)
 
-const totalTokens = computed(() => {
-  if (!props.agent) return 0
-  const u = props.agent.tokenUsage
-  return u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
-})
+const totalTokens = computed(() => props.agent ? totalTokenCount(props.agent.tokenUsage) : 0)
 
 async function fetchOutput(sessionId: string) {
   isLoadingOutput.value = true
@@ -153,11 +149,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 async function handleSend() {
   await sendPrompt()
-  if (props.agent && sendStatus.value === 'sent') {
-    setTimeout(() => {
-      if (props.agent) fetchOutput(props.agent.sessionId)
-    }, 2000)
-  }
 }
 </script>
 
@@ -214,7 +205,7 @@ async function handleSend() {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -258,14 +249,14 @@ async function handleSend() {
   gap: 8px;
   flex-shrink: 0;
 }
-.prompt-cursor { color: #3b82f6; font-size: 14px; flex-shrink: 0; }
+.prompt-cursor { color: var(--accent-blue); font-size: 14px; flex-shrink: 0; }
 .prompt-textarea {
   flex: 1;
   background: none;
   border: none;
   color: var(--text-primary);
   font-size: 13px;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
   outline: none;
   resize: none;
   line-height: 1.4;
@@ -273,7 +264,7 @@ async function handleSend() {
 .prompt-textarea::placeholder { color: var(--text-muted); }
 .prompt-textarea:disabled { opacity: 0.5; }
 .prompt-send {
-  background: #3b82f6;
+  background: var(--accent-blue);
   color: white;
   border: none;
   border-radius: 4px;
@@ -287,7 +278,7 @@ async function handleSend() {
 .prompt-send:not(:disabled):hover { filter: brightness(1.15); }
 .modal-send-status { font-size: 11px; padding: 0 16px 8px; }
 .modal-send-status.sent { color: var(--accent-green); }
-.modal-send-status.error { color: #f87171; }
+.modal-send-status.error { color: var(--accent-red); }
 .modal-details {
   border-top: 1px solid var(--border);
   flex-shrink: 0;

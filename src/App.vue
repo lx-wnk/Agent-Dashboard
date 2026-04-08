@@ -69,7 +69,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useAgents } from './composables/useAgents'
-import { formatTokens } from './utils/format'
+import { formatTokens, totalTokenCount } from './utils/format'
 import AgentTable from './components/AgentTable.vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
@@ -100,10 +100,7 @@ function onAgentSpawned(_pid: number) {
 }
 
 const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
-const totalTokens = computed(() => agents.value.reduce((sum, a) => {
-  const u = a.tokenUsage
-  return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
-}, 0))
+const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
 </script>
 
 <style>
@@ -117,7 +114,10 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => {
   --accent-green: #4ade80;
   --accent-yellow: #facc15;
   --accent-gray: #64748b;
+  --accent-blue: #3b82f6;
+  --accent-red: #f87171;
   --border: #1e293b;
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
 }
 
 * {
@@ -160,7 +160,7 @@ body {
   background: var(--bg-secondary);
   padding: 2px 10px;
   border-radius: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .sessions-btn {
@@ -214,7 +214,7 @@ body {
 .header-search::placeholder { color: var(--text-muted); }
 .header-search:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: var(--accent-blue);
   width: 260px;
 }
 
@@ -234,7 +234,7 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 .toggle-btn.active {
-  background: #3b82f6;
+  background: var(--accent-blue);
   color: white;
 }
 .toggle-btn:not(.active):hover {
@@ -263,7 +263,7 @@ body {
 }
 
 .script-path {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-secondary);
   background: var(--bg-primary);
