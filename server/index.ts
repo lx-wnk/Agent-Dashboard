@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { getAgents } from './agentMerger.js'
+import { parseFullSession } from './jsonlParser.js'
 import { getChannelMap } from './channelDiscovery.js'
 import { getSystemInfo } from './systemMonitor.js'
 import { getSessions } from './sessionScanner.js'
@@ -239,6 +240,17 @@ async function start() {
       return
     }
     res.json(status)
+  })
+
+  app.get('/api/agents/:sessionId/output', async (req, res) => {
+    try {
+      const { sessionId } = req.params
+      const lastOnly = req.query.last === '1'
+      const messages = await parseFullSession(sessionId, lastOnly)
+      res.json({ messages })
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to read session output' })
+    }
   })
 
   // Send a message to a running agent via its channel
