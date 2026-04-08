@@ -1,7 +1,7 @@
 import { readdir, stat, open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import type { TokenUsage, SessionMeta } from '../src/types.js'
+import type { TokenUsage, SessionMeta, OutputMessage } from '../src/types.js'
 
 export type TokenUsageData = TokenUsage
 export type { SessionMeta }
@@ -20,6 +20,7 @@ export interface SessionData {
   codeVersion: string | null
   conversationTurns: number
   toolCounts: Record<string, number>
+  lastOutput: string | null
   meta: SessionMeta | null
 }
 
@@ -91,6 +92,7 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
   const lastTools: string[] = []
   const tasks: SessionData['tasks'] = []
   const toolCounts: Record<string, number> = {}
+  let lastOutput: string | null = null
   const tokenUsage: TokenUsageData = {
     inputTokens: 0,
     outputTokens: 0,
@@ -145,6 +147,7 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
             const text = block.text.trim()
             if (text.length > 0) {
               currentAction = text.substring(0, 300)
+              lastOutput = text.substring(0, 500)
             }
           }
 
@@ -169,7 +172,7 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
 
   return {
     sessionId, entrypoint, currentAction, lastTools, tasks,
-    tokenUsage, model, codeVersion, conversationTurns, toolCounts,
+    tokenUsage, model, codeVersion, conversationTurns, toolCounts, lastOutput,
   }
 }
 
@@ -258,6 +261,7 @@ export async function findSessionForProject(cwd: string): Promise<SessionData | 
     entrypoint: info.entrypoint || 'unknown',
     lastActivity: newestFile.mtime.toISOString(),
     currentAction: info.currentAction ?? null,
+    lastOutput: info.lastOutput ?? null,
     lastTools: info.lastTools || [],
     tasks: info.tasks || [],
     subagents,
@@ -324,4 +328,89 @@ async function findSubagents(subagentDir: string): Promise<SubAgentData[]> {
   }
 
   return subagents
+}
+
+export async function parseFullSession(sessionId: string, lastOnly: boolean = false): Promise<OutputMessage[]> {
+  const projectDirs = await readdir(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
+  let sessionFilePath: string | null = null
+
+  for (const dir of projectDirs) {
+    if (!dir.isDirectory()) continue
+    const candidate = join(CLAUDE_PROJECTS_DIR, dir.name, `${sessionId}.jsonl`)
+    try {
+      await stat(candidate)
+      sessionFilePath = candidate
+      break
+    } catch {
+      continue
+    }
+  }
+
+  if (!sessionFilePath) return []
+
+  // Check file size and cap reads to avoid loading 100MB+ files into memory
+  const fileStats = await stat(sessionFilePath)
+  const MAX_READ_BYTES = 10 * 1024 * 1024 // 10MB cap
+
+  let raw: string
+  if (lastOnly) {
+    // For last message only, tail read is sufficient
+    raw = await tailRead(sessionFilePath)
+  } else if (fileStats.size <= MAX_READ_BYTES) {
+    raw = await readFile(sessionFilePath, 'utf-8')
+  } else {
+    // For large files, read last 10MB
+    const handle = await open(sessionFilePath, 'r')
+    try {
+      const buffer = Buffer.alloc(MAX_READ_BYTES)
+      await handle.read(buffer, 0, MAX_READ_BYTES, fileStats.size - MAX_READ_BYTES)
+      raw = buffer.toString('utf-8')
+    } finally {
+      await handle.close()
+    }
+  }
+
+  const entries = parseJsonlLines(raw)
+  const messages: OutputMessage[] = []
+
+  for (const entry of entries) {
+    // Handle tool results (separate entry type)
+    if (entry.type === 'result' && entry.result) {
+      messages.push({
+        role: 'tool_result',
+        content: typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result).substring(0, 1000),
+        timestamp: entry.timestamp,
+      })
+      continue
+    }
+
+    if (entry.type !== 'assistant' || !entry.message?.content) continue
+    if (!Array.isArray(entry.message.content)) continue
+
+    for (const block of entry.message.content) {
+      if (block.type === 'text' && block.text?.trim()) {
+        messages.push({
+          role: 'assistant',
+          content: block.text.trim(),
+          timestamp: entry.timestamp,
+        })
+      } else if (block.type === 'tool_use' && block.name) {
+        const filePath = block.input?.file_path || block.input?.path || undefined
+        messages.push({
+          role: 'tool_call',
+          content: block.name,
+          timestamp: entry.timestamp,
+          toolName: block.name,
+          filePath,
+        })
+      }
+    }
+  }
+
+  if (lastOnly) {
+    const lastAssistant = messages.filter(m => m.role === 'assistant').pop()
+    return lastAssistant ? [lastAssistant] : []
+  }
+
+  return messages
 }

@@ -48,7 +48,7 @@ h4 {
 }
 
 .subagent-id {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-secondary);
 }

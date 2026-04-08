@@ -23,12 +23,18 @@ No separate build, lint, or test scripts are configured. The single dev command 
 - `server/agentMerger.ts` — Matches PIDs to session data, calculates costs via `MODEL_PRICING`, determines status
 
 **Frontend** (Vue 3 + TypeScript SPA in `src/`):
-- `src/composables/useAgents.ts` — Polls `/api/agents` every 3 seconds
-- `src/App.vue` — Root: header stats + agent table + off-canvas detail panel
-- `src/components/AgentRow.vue` / `SubAgentRow.vue` — Table rows (subagents indented under parent)
-- `src/components/AgentDetail.vue` — Detail panel with token bars, tool histogram, tasks, subagents
+- `src/composables/useAgents.ts` — Polls `/api/agents` every 3 seconds; manages view mode (list/cards) with localStorage persistence and search query state
+- `src/composables/useAgentPrompt.ts` — Shared composable for sending prompts to agents (via channel or spawn/resume)
+- `src/App.vue` — Root: header stats + view toggle (list/cards) + search bar + agent list or card grid + modal
+- `src/components/AgentRow.vue` / `SubAgentRow.vue` — Table rows for list view (subagents indented under parent)
+- `src/components/AgentCard.vue` — Card view tile with status, output preview, and inline prompt input
+- `src/components/AgentCardGrid.vue` — Responsive grid wrapper for AgentCard tiles
+- `src/components/AgentModal.vue` — Full session modal with output transcript, agent details (ToolTimeline, TaskList, SubAgentList), and prompt input
+- `src/components/ToolTimeline.vue` — Recent tool pills; expects `:tools` (string[])
+- `src/components/TaskList.vue` — Task list with status icons; expects `:tasks` (TaskInfo[])
+- `src/components/SubAgentList.vue` — Subagent cards; expects `:subagents` (SubAgent[])
 - `src/types.ts` — All shared TypeScript interfaces (`Agent`, `TokenUsage`, `SessionMeta`, etc.)
-- `src/utils/format.ts` — Token, cost, and uptime formatting utilities
+- `src/utils/format.ts` — Token, cost, uptime, and model name formatting utilities (including `shortModel`)
 
 **Data flow:** Browser polls `/api/agents` → Express scans processes (`ps`/`lsof`) → matches PIDs to `~/.claude/projects/{encoded_path}/{sessionId}.jsonl` → tail-reads JSONL + reads `~/.claude/usage-data/session-meta/{sessionId}.json` → merges, calculates cost/status → returns `Agent[]`.
 

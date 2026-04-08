@@ -34,6 +34,6 @@ h4 {
   border-radius: 4px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 </style>

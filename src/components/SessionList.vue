@@ -72,6 +72,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { shortModel } from '../utils/format'
 
 interface SessionInfo {
   sessionId: string
@@ -121,9 +122,6 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString()
 }
 
-function shortModel(model: string): string {
-  return model.replace('claude-', '').replace(/-\d+$/, '')
-}
 
 function shortenPath(path: string): string {
   if (props.homeDir && path.startsWith(props.homeDir)) {
@@ -304,7 +302,7 @@ watch(() => props.open, (isOpen) => {
   display: block;
   font-size: 11px;
   color: var(--text-muted);
-  font-family: monospace;
+  font-family: var(--font-mono);
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -312,7 +310,7 @@ watch(() => props.open, (isOpen) => {
 }
 
 .session-id-tag {
-  font-family: monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0;
 }
 
@@ -398,7 +396,7 @@ watch(() => props.open, (isOpen) => {
   margin-top: 4px;
 }
 
-.resume-status.error { color: #f87171; }
+.resume-status.error { color: var(--accent-red); }
 
 /* Dialog transition */
 .dialog-enter-active,
