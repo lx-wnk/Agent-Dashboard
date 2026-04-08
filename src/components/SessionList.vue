@@ -72,6 +72,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { shortModel } from '../utils/format'
 
 interface SessionInfo {
   sessionId: string
@@ -121,9 +122,6 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString()
 }
 
-function shortModel(model: string): string {
-  return model.replace('claude-', '').replace(/-\d+$/, '')
-}
 
 function shortenPath(path: string): string {
   if (props.homeDir && path.startsWith(props.homeDir)) {

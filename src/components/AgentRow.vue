@@ -9,7 +9,7 @@
     </td>
     <td class="col-action">{{ agent.currentAction || '—' }}</td>
     <td class="col-model">{{ shortModel(agent.model) }}</td>
-    <td class="col-tokens">{{ formatTokens(agent.tokenUsage.inputTokens + agent.tokenUsage.outputTokens) }}</td>
+    <td class="col-tokens">{{ formatTokens(totalTokenCount(agent.tokenUsage)) }}</td>
     <td class="col-cost">{{ formatCost(agent.costEstimate) }}</td>
     <td class="col-uptime">{{ formatUptime(agent.uptime) }}</td>
     <td class="col-pid">{{ agent.pid }}</td>
@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import type { Agent } from '../types'
-import { formatTokens, formatCost, formatUptime } from '../utils/format'
+import { formatTokens, formatCost, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import StatusBadge from './StatusBadge.vue'
 
 defineProps<{
@@ -40,12 +40,6 @@ defineEmits<{
   'toggle-subagents': []
 }>()
 
-function shortModel(model: string | null): string {
-  if (!model) return '—'
-  return model
-    .replace('claude-', '')
-    .replace(/-\d+$/, m => ' ' + m.slice(1))
-}
 </script>
 
 <style scoped>
