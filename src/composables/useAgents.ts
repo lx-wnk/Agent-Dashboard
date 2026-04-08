@@ -8,11 +8,13 @@ const selectedAgent = ref<Agent | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
+const debouncedQuery = ref('')
 const stored = localStorage.getItem('agent-view-mode')
 const viewMode = ref<ViewMode>(stored === 'list' || stored === 'cards' ? stored : 'list')
 
 let intervalId: ReturnType<typeof setInterval> | null = null
 let subscriberCount = 0
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 async function fetchAgents() {
   try {
@@ -34,7 +36,7 @@ async function fetchAgents() {
 }
 
 const filteredAgents = computed(() => {
-  const q = searchQuery.value.toLowerCase().trim()
+  const q = debouncedQuery.value.toLowerCase().trim()
   if (!q) return agents.value
   return agents.value.filter(a =>
     a.projectName.toLowerCase().includes(q) ||
@@ -43,6 +45,14 @@ const filteredAgents = computed(() => {
     a.sessionId.toLowerCase().includes(q) ||
     (a.currentAction?.toLowerCase().includes(q) ?? false)
   )
+})
+
+// Debounce search query
+watch(searchQuery, (q) => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    debouncedQuery.value = q
+  }, 200)
 })
 
 // Persist viewMode to localStorage
