@@ -8,7 +8,7 @@ import { scanProcesses } from './processScanner.js'
 const ACTIVE_THRESHOLD = 30_000 // 30s
 const IDLE_THRESHOLD = 300_000 // 5min
 
-function calculateStatus(lastActivity: string): Agent['status'] {
+export function calculateStatus(lastActivity: string): Agent['status'] {
   const age = Date.now() - new Date(lastActivity).getTime()
   if (age < ACTIVE_THRESHOLD)
     return 'active'

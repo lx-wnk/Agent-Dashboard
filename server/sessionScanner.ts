@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
-import { headRead, parseJsonlLines } from './jsonlParser.js'
+import { encodePath, headRead, parseJsonlLines } from './jsonlParser.js'
 import { estimateCost } from './pricing.js'
 import { scanProcesses } from './processScanner.js'
 
@@ -31,17 +31,13 @@ const MAX_SESSIONS = 100
  * names that originally contained `-`), but it gives a reasonable
  * human-readable project path most of the time.
  */
-function decodeProjectDir(encoded: string): string {
+export function decodeProjectDir(encoded: string): string {
   // On macOS, paths look like -Users-username-code-project
   // Restore leading `/` and try to rebuild the path
   if (encoded.startsWith('-')) {
     return `/${encoded.slice(1).replace(/-/g, '/')}`
   }
   return encoded
-}
-
-function encodePath(absolutePath: string): string {
-  return absolutePath.replace(/[/_]/g, '-')
 }
 
 interface HeadInfo {

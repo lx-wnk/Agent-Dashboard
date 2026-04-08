@@ -38,7 +38,7 @@ const SESSION_META_DIR = join(homedir(), '.claude', 'usage-data', 'session-meta'
 const TAIL_BYTES = 32768 // read last 32KB
 const HEAD_BYTES = 8192 // read first 8KB for model/version
 
-function encodePath(absolutePath: string): string {
+export function encodePath(absolutePath: string): string {
   // Claude Code encodes both / and _ as -
   return absolutePath.replace(/[/_]/g, '-')
 }
@@ -86,7 +86,7 @@ export function parseJsonlLines(raw: string): any[] {
   return parsed
 }
 
-function extractSessionInfo(entries: any[]): Partial<SessionData> {
+export function extractSessionInfo(entries: any[]): Partial<SessionData> {
   let sessionId = ''
   let entrypoint: SessionData['entrypoint'] = 'unknown'
   let currentAction: string | null = null

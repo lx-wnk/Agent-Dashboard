@@ -13,7 +13,7 @@ export interface ProcessInfo {
   command: string
 }
 
-function parseElapsedTime(etime: string): number {
+export function parseElapsedTime(etime: string): number {
   // Format: [[dd-]hh:]mm:ss
   const parts = etime.trim().replace(/-/g, ':').split(':').reverse()
   const seconds = Number.parseInt(parts[0] || '0', 10)
