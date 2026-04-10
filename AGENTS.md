@@ -6,24 +6,28 @@
 
 **claude-agent-overview** | Vue 3 + Express 5 + TypeScript | No Docker (native Node)
 
-## Shared Configuration
-
-@.agent-context/agent-startup.md
-
 ## Context Architecture
 
-| Layer | File                                     | Content                         |
-| ----- | ---------------------------------------- | ------------------------------- |
-| 0     | @.agent-context/layer0-agent-workflow.md | Agent Workflow (shared)         |
-| 1     | @.agent-context/layer1-bootstrap.md      | Project identity, tech stack    |
-| 2     | @.agent-context/layer2-project-core.md   | Dev principles + critical rules |
-| 3     | @.agent-context/layer3-guidebook.md      | Task routing, skills, memory    |
+| Layer | File                                      | Content                         |
+| ----- | ----------------------------------------- | ------------------------------- |
+| 0     | `.agent-context/layer0-agent-workflow.md`   | Agent Workflow (shared)         |
+| 1     | `.agent-context/layer1-bootstrap.md`        | Project identity, tech stack    |
+| 2     | `.agent-context/layer2-project-core.md`     | Dev principles + critical rules |
+| 3     | `.agent-context/layer3-guidebook.md`        | Task routing, skills, memory    |
+
+@.agent-context/agent-startup.md
+@.agent-context/layer0-agent-workflow.md
+@.agent-context/layer1-bootstrap.md
+@.agent-context/layer2-project-core.md
+@.agent-context/layer3-guidebook.md
 
 ## Quick Rules (Always Apply)
 
-- Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data)
-- macOS only — process scanning uses `ps`/`lsof`, system monitor uses macOS-specific `top` flags
-- No database — all data from Claude Code's filesystem + running processes
+> Details in `.agent-context/layer2-project-core.md`
+
+- Server binds to `127.0.0.1` only (reads sensitive session data)
+- macOS only — `ps`/`lsof` for process scanning
+- No database — all data from filesystem + running processes
 - Single dev command: `npm run dev` (Express + Vite on port 13120)
 
 ## Compaction Preservation

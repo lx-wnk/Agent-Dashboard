@@ -4,12 +4,12 @@
 
 ## Development Principles
 
-> Shared base: @.agent-context/base-principles.md
+@.agent-context/base-principles.md
 
 ## Critical Rules
 
 - Server MUST bind to `127.0.0.1` — never `0.0.0.0` (reads sensitive Claude session data)
-- Subagents discovered from `~/.claude/projects/{sessionId}/subagents/*.jsonl`
+- Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Agent status thresholds: active < 30s, waiting < 5min, idle > 5min (since last activity)
 
 ## Testing Strategy
