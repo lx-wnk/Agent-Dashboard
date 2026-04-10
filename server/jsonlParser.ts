@@ -1,7 +1,8 @@
-import { readdir, stat, open, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import type { OutputMessage, SessionMeta, TokenUsage } from '../src/types.js'
+import { Buffer } from 'node:buffer'
+import { open, readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import type { TokenUsage, SessionMeta, OutputMessage } from '../src/types.js'
+import { join } from 'node:path'
 
 export type TokenUsageData = TokenUsage
 export type { SessionMeta }
@@ -13,7 +14,7 @@ export interface SessionData {
   lastActivity: string
   currentAction: string | null
   lastTools: string[]
-  tasks: { id: string; subject: string; status: string }[]
+  tasks: { id: string, subject: string, status: string }[]
   subagents: SubAgentData[]
   tokenUsage: TokenUsageData
   model: string | null
@@ -35,9 +36,9 @@ export interface SubAgentData {
 const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects')
 const SESSION_META_DIR = join(homedir(), '.claude', 'usage-data', 'session-meta')
 const TAIL_BYTES = 32768 // read last 32KB
-const HEAD_BYTES = 8192  // read first 8KB for model/version
+const HEAD_BYTES = 8192 // read first 8KB for model/version
 
-function encodePath(absolutePath: string): string {
+export function encodePath(absolutePath: string): string {
   // Claude Code encodes both / and _ as -
   return absolutePath.replace(/[/_]/g, '-')
 }
@@ -51,7 +52,8 @@ async function tailRead(filePath: string): Promise<string> {
     const buffer = Buffer.alloc(readSize)
     await handle.read(buffer, 0, readSize, size - readSize)
     return buffer.toString('utf-8')
-  } finally {
+  }
+  finally {
     await handle.close()
   }
 }
@@ -64,7 +66,8 @@ export async function headRead(filePath: string): Promise<string> {
     const buffer = Buffer.alloc(readSize)
     await handle.read(buffer, 0, readSize, 0)
     return buffer.toString('utf-8')
-  } finally {
+  }
+  finally {
     await handle.close()
   }
 }
@@ -75,14 +78,15 @@ export function parseJsonlLines(raw: string): any[] {
   for (const line of lines) {
     try {
       parsed.push(JSON.parse(line))
-    } catch {
+    }
+    catch {
       // partial first line from tail-read, skip
     }
   }
   return parsed
 }
 
-function extractSessionInfo(entries: any[]): Partial<SessionData> {
+export function extractSessionInfo(entries: any[]): Partial<SessionData> {
   let sessionId = ''
   let entrypoint: SessionData['entrypoint'] = 'unknown'
   let currentAction: string | null = null
@@ -101,12 +105,16 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
   }
 
   for (const entry of entries) {
-    if (entry.sessionId) sessionId = entry.sessionId
-    if (entry.version) codeVersion = entry.version
+    if (entry.sessionId)
+      sessionId = entry.sessionId
+    if (entry.version)
+      codeVersion = entry.version
     if (entry.entrypoint) {
-      entrypoint = entry.entrypoint === 'cli' ? 'cli'
-        : entry.entrypoint === 'desktop' ? 'desktop'
-        : 'unknown'
+      entrypoint = entry.entrypoint === 'cli'
+        ? 'cli'
+        : entry.entrypoint === 'desktop'
+          ? 'desktop'
+          : 'unknown'
     }
 
     // Count user turns
@@ -140,10 +148,12 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
 
             if (!lastTools.includes(block.name)) {
               lastTools.push(block.name)
-              if (lastTools.length > 10) lastTools.shift()
+              if (lastTools.length > 10)
+                lastTools.shift()
             }
             currentAction = `${block.name}${block.input?.command ? `: ${String(block.input.command).substring(0, 120)}` : ''}`
-          } else if (block.type === 'text' && block.text) {
+          }
+          else if (block.type === 'text' && block.text) {
             const text = block.text.trim()
             if (text.length > 0) {
               currentAction = text.substring(0, 300)
@@ -171,8 +181,17 @@ function extractSessionInfo(entries: any[]): Partial<SessionData> {
   }
 
   return {
-    sessionId, entrypoint, currentAction, lastTools, tasks,
-    tokenUsage, model, codeVersion, conversationTurns, toolCounts, lastOutput,
+    sessionId,
+    entrypoint,
+    currentAction,
+    lastTools,
+    tasks,
+    tokenUsage,
+    model,
+    codeVersion,
+    conversationTurns,
+    toolCounts,
+    lastOutput,
   }
 }
 
@@ -192,7 +211,8 @@ async function readSessionMeta(sessionId: string): Promise<SessionMeta | null> {
       usesMcp: data.uses_mcp || false,
       firstPrompt: data.first_prompt || null,
     }
-  } catch {
+  }
+  catch {
     return null
   }
 }
@@ -204,22 +224,25 @@ export async function findSessionForProject(cwd: string): Promise<SessionData | 
   let dirStat
   try {
     dirStat = await stat(projectDir)
-  } catch {
+  }
+  catch {
     return null
   }
-  if (!dirStat.isDirectory()) return null
+  if (!dirStat.isDirectory())
+    return null
 
   // Find newest .jsonl file in this project directory
   const entries = await readdir(projectDir, { withFileTypes: true })
   const jsonlEntries = entries.filter(e => e.isFile() && e.name.endsWith('.jsonl'))
   const jsonlFiles = await Promise.all(
-    jsonlEntries.map(async e => {
+    jsonlEntries.map(async (e) => {
       const s = await stat(join(projectDir, e.name))
       return { name: e.name, mtime: s.mtime }
-    })
+    }),
   )
 
-  if (jsonlFiles.length === 0) return null
+  if (jsonlFiles.length === 0)
+    return null
 
   jsonlFiles.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
   const newestFile = jsonlFiles[0]
@@ -234,9 +257,12 @@ export async function findSessionForProject(cwd: string): Promise<SessionData | 
     const headRaw = await headRead(sessionFilePath)
     const headParsed = parseJsonlLines(headRaw)
     for (const entry of headParsed) {
-      if (!info.model && entry.message?.model) info.model = entry.message.model
-      if (!info.codeVersion && entry.version) info.codeVersion = entry.version
-      if (info.model && info.codeVersion) break
+      if (!info.model && entry.message?.model)
+        info.model = entry.message.model
+      if (!info.codeVersion && entry.version)
+        info.codeVersion = entry.version
+      if (info.model && info.codeVersion)
+        break
     }
   }
 
@@ -278,13 +304,15 @@ async function findSubagents(subagentDir: string): Promise<SubAgentData[]> {
   let entries
   try {
     entries = await readdir(subagentDir, { withFileTypes: true })
-  } catch {
+  }
+  catch {
     return []
   }
 
   const subagents: SubAgentData[] = []
   for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue
+    if (!entry.isFile() || !entry.name.endsWith('.jsonl'))
+      continue
 
     const filePath = join(subagentDir, entry.name)
     const s = await stat(filePath)
@@ -335,18 +363,21 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
   let sessionFilePath: string | null = null
 
   for (const dir of projectDirs) {
-    if (!dir.isDirectory()) continue
+    if (!dir.isDirectory())
+      continue
     const candidate = join(CLAUDE_PROJECTS_DIR, dir.name, `${sessionId}.jsonl`)
     try {
       await stat(candidate)
       sessionFilePath = candidate
       break
-    } catch {
+    }
+    catch {
       continue
     }
   }
 
-  if (!sessionFilePath) return []
+  if (!sessionFilePath)
+    return []
 
   // Check file size and cap reads to avoid loading 100MB+ files into memory
   const fileStats = await stat(sessionFilePath)
@@ -356,16 +387,19 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
   if (lastOnly) {
     // For last message only, tail read is sufficient
     raw = await tailRead(sessionFilePath)
-  } else if (fileStats.size <= MAX_READ_BYTES) {
+  }
+  else if (fileStats.size <= MAX_READ_BYTES) {
     raw = await readFile(sessionFilePath, 'utf-8')
-  } else {
+  }
+  else {
     // For large files, read last 10MB
     const handle = await open(sessionFilePath, 'r')
     try {
       const buffer = Buffer.alloc(MAX_READ_BYTES)
       await handle.read(buffer, 0, MAX_READ_BYTES, fileStats.size - MAX_READ_BYTES)
       raw = buffer.toString('utf-8')
-    } finally {
+    }
+    finally {
       await handle.close()
     }
   }
@@ -384,8 +418,10 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
       continue
     }
 
-    if (entry.type !== 'assistant' || !entry.message?.content) continue
-    if (!Array.isArray(entry.message.content)) continue
+    if (entry.type !== 'assistant' || !entry.message?.content)
+      continue
+    if (!Array.isArray(entry.message.content))
+      continue
 
     for (const block of entry.message.content) {
       if (block.type === 'text' && block.text?.trim()) {
@@ -394,7 +430,8 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
           content: block.text.trim(),
           timestamp: entry.timestamp,
         })
-      } else if (block.type === 'tool_use' && block.name) {
+      }
+      else if (block.type === 'tool_use' && block.name) {
         const filePath = block.input?.file_path || block.input?.path || undefined
         messages.push({
           role: 'tool_call',

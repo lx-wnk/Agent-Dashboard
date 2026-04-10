@@ -1,90 +1,12 @@
-<template>
-  <Transition name="modal">
-    <div v-if="agent" class="modal-backdrop" @click.self="emit('close')">
-      <div class="modal-window">
-        <div class="modal-titlebar">
-          <div class="modal-title-left">
-            <StatusBadge :status="agent.status" />
-            <span class="modal-project">{{ agent.projectName }}</span>
-            <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
-          </div>
-          <div class="modal-title-right">
-            <button class="modal-close" @click="emit('close')">✕</button>
-          </div>
-        </div>
-
-        <div class="modal-output" ref="outputEl">
-          <div v-if="isLoadingOutput" class="output-loading">Loading session output...</div>
-          <template v-else-if="outputMessages.length > 0">
-            <div
-              v-for="(msg, i) in outputMessages"
-              :key="i"
-              class="output-msg"
-              :class="msg.role"
-            >
-              <template v-if="msg.role === 'assistant'">{{ msg.content }}</template>
-              <template v-else-if="msg.role === 'tool_call'">
-                <span class="tool-divider">── Tool: {{ msg.toolName }}<template v-if="msg.filePath"> {{ msg.filePath }}</template> ──</span>
-              </template>
-              <template v-else-if="msg.role === 'tool_result'">
-                <details class="tool-result-details">
-                  <summary>Result (click to expand)</summary>
-                  <pre class="tool-result-content">{{ msg.content }}</pre>
-                </details>
-              </template>
-            </div>
-          </template>
-          <div v-else class="output-empty">No output available for this session.</div>
-        </div>
-
-        <div class="modal-details" v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0">
-          <details>
-            <summary class="details-summary">Agent Details (Tasks, Tools, Subagents)</summary>
-            <div class="details-content">
-              <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
-              <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
-              <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
-            </div>
-          </details>
-        </div>
-
-        <div class="modal-prompt">
-          <span class="prompt-cursor">❯</span>
-          <textarea
-            v-model="promptInput"
-            class="prompt-textarea"
-            rows="1"
-            placeholder="Enter prompt..."
-            @keydown.ctrl.enter.prevent="handleSend"
-            @keydown.meta.enter.prevent="handleSend"
-            :disabled="isSending"
-            ref="promptEl"
-          ></textarea>
-          <button
-            class="prompt-send"
-            :disabled="isSending || promptInput.trim().length === 0"
-            @click="handleSend"
-          >
-            {{ isSending ? '...' : '↵' }}
-          </button>
-        </div>
-        <p v-if="sendStatus" class="modal-send-status" :class="sendStatus">
-          {{ sendStatus === 'sent' ? 'Sent' : sendError }}
-        </p>
-      </div>
-    </div>
-  </Transition>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import type { Agent, OutputMessage } from '../types'
-import { formatTokens, formatCost, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
+import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import StatusBadge from './StatusBadge.vue'
-import ToolTimeline from './ToolTimeline.vue'
-import TaskList from './TaskList.vue'
 import SubAgentList from './SubAgentList.vue'
+import TaskList from './TaskList.vue'
+import ToolTimeline from './ToolTimeline.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
 const emit = defineEmits<{ close: [] }>()
@@ -102,7 +24,8 @@ async function fetchOutput(sessionId: string) {
   isLoadingOutput.value = true
   try {
     const res = await fetch(`/api/agents/${sessionId}/output`)
-    if (!res.ok) throw new Error('Failed to fetch')
+    if (!res.ok)
+      throw new Error('Failed to fetch')
     const data = await res.json()
     outputMessages.value = data.messages
     await nextTick()
@@ -112,9 +35,11 @@ async function fetchOutput(sessionId: string) {
         outputEl.value.scrollTop = outputEl.value.scrollHeight
       }
     })
-  } catch {
+  }
+  catch {
     outputMessages.value = []
-  } finally {
+  }
+  finally {
     isLoadingOutput.value = false
   }
 }
@@ -124,7 +49,8 @@ watch(() => props.agent?.sessionId, (sessionId) => {
   if (sessionId) {
     fetchOutput(sessionId)
     nextTick(() => promptEl.value?.focus())
-  } else {
+  }
+  else {
     outputMessages.value = []
   }
 })
@@ -140,7 +66,8 @@ function onKeydown(e: KeyboardEvent) {
 watch(() => props.agent, (agent) => {
   if (agent) {
     window.addEventListener('keydown', onKeydown)
-  } else {
+  }
+  else {
     window.removeEventListener('keydown', onKeydown)
   }
 }, { immediate: true })
@@ -151,6 +78,94 @@ async function handleSend() {
   await sendPrompt()
 }
 </script>
+
+<template>
+  <Transition name="modal">
+    <div v-if="agent" class="modal-backdrop" @click.self="emit('close')">
+      <div class="modal-window">
+        <div class="modal-titlebar">
+          <div class="modal-title-left">
+            <StatusBadge :status="agent.status" />
+            <span class="modal-project">{{ agent.projectName }}</span>
+            <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
+          </div>
+          <div class="modal-title-right">
+            <button class="modal-close" @click="emit('close')">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div ref="outputEl" class="modal-output">
+          <div v-if="isLoadingOutput" class="output-loading">
+            Loading session output...
+          </div>
+          <template v-else-if="outputMessages.length > 0">
+            <div
+              v-for="(msg, i) in outputMessages"
+              :key="i"
+              class="output-msg"
+              :class="msg.role"
+            >
+              <template v-if="msg.role === 'assistant'">
+                {{ msg.content }}
+              </template>
+              <template v-else-if="msg.role === 'tool_call'">
+                <span class="tool-divider">── Tool: {{ msg.toolName }}<template v-if="msg.filePath"> {{ msg.filePath }}</template> ──</span>
+              </template>
+              <template v-else-if="msg.role === 'tool_result'">
+                <details class="tool-result-details">
+                  <summary>Result (click to expand)</summary>
+                  <pre class="tool-result-content">{{ msg.content }}</pre>
+                </details>
+              </template>
+            </div>
+          </template>
+          <div v-else class="output-empty">
+            No output available for this session.
+          </div>
+        </div>
+
+        <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="modal-details">
+          <details>
+            <summary class="details-summary">
+              Agent Details (Tasks, Tools, Subagents)
+            </summary>
+            <div class="details-content">
+              <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
+              <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
+              <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
+            </div>
+          </details>
+        </div>
+
+        <div class="modal-prompt">
+          <span class="prompt-cursor">❯</span>
+          <textarea
+            ref="promptEl"
+            v-model="promptInput"
+            class="prompt-textarea"
+            rows="1"
+            placeholder="Enter prompt..."
+            :disabled="isSending"
+            @keydown.ctrl.enter.prevent="handleSend"
+            @keydown.meta.enter.prevent="handleSend"
+          />
+          <button
+            class="prompt-send"
+            :disabled="isSending || promptInput.trim().length === 0"
+            @click="handleSend"
+          >
+            {{ isSending ? '...' : '↵' }}
+          </button>
+        </div>
+        <p v-if="sendStatus" class="modal-send-status" :class="sendStatus">
+          {{ sendStatus === 'sent' ? 'Sent' : sendError }}
+        </p>
+      </div>
+    </div>
+  </Transition>
+</template>
 
 <style scoped>
 .modal-backdrop {

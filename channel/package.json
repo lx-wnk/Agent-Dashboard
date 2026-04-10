@@ -1,7 +1,7 @@
 {
   "name": "dashboard-channel",
-  "version": "0.1.0",
   "type": "module",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "start": "node --import tsx/esm dashboard-channel.ts"
@@ -10,8 +10,8 @@
     "@modelcontextprotocol/sdk": "^1.12.1"
   },
   "devDependencies": {
+    "@types/node": "^22.15.2",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
-    "@types/node": "^22.15.2"
+    "typescript": "^5.8.3"
   }
 }

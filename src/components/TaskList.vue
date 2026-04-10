@@ -1,15 +1,3 @@
-<template>
-  <div class="task-list" v-if="tasks.length > 0">
-    <h4>Tasks</h4>
-    <ul>
-      <li v-for="task in tasks" :key="task.id" class="task-item">
-        <span class="task-icon">{{ statusIcon(task.status) }}</span>
-        <span class="task-subject">{{ task.subject }}</span>
-      </li>
-    </ul>
-  </div>
-</template>
-
 <script setup lang="ts">
 import type { TaskInfo } from '../types'
 
@@ -25,6 +13,18 @@ function statusIcon(status: string): string {
   }
 }
 </script>
+
+<template>
+  <div v-if="tasks.length > 0" class="task-list">
+    <h4>Tasks</h4>
+    <ul>
+      <li v-for="task in tasks" :key="task.id" class="task-item">
+        <span class="task-icon">{{ statusIcon(task.status) }}</span>
+        <span class="task-subject">{{ task.subject }}</span>
+      </li>
+    </ul>
+  </div>
+</template>
 
 <style scoped>
 h4 {

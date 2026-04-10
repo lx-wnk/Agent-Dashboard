@@ -1,17 +1,17 @@
+<script setup lang="ts">
+defineProps<{
+  tools: string[]
+}>()
+</script>
+
 <template>
-  <div class="tool-timeline" v-if="tools.length > 0">
+  <div v-if="tools.length > 0" class="tool-timeline">
     <h4>Recent Tools</h4>
     <div class="tools">
       <span v-for="tool in tools" :key="tool" class="tool-tag">{{ tool }}</span>
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-defineProps<{
-  tools: string[]
-}>()
-</script>
 
 <style scoped>
 h4 {

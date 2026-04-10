@@ -1,3 +1,12 @@
+<script setup lang="ts">
+import type { SubAgent } from '../types'
+import StatusBadge from './StatusBadge.vue'
+
+defineProps<{
+  subagent: SubAgent
+}>()
+</script>
+
 <template>
   <tr class="subagent-row">
     <td class="col-status">
@@ -7,19 +16,12 @@
       <span class="indent">↳</span>
       {{ subagent.type === 'unknown' ? subagent.id.substring(0, 16) : subagent.type }}
     </td>
-    <td class="col-action">{{ subagent.currentAction || '—' }}</td>
-    <td colspan="5"></td>
+    <td class="col-action">
+      {{ subagent.currentAction || '—' }}
+    </td>
+    <td colspan="5" />
   </tr>
 </template>
-
-<script setup lang="ts">
-import type { SubAgent } from '../types'
-import StatusBadge from './StatusBadge.vue'
-
-defineProps<{
-  subagent: SubAgent
-}>()
-</script>
 
 <style scoped>
 .subagent-row td {

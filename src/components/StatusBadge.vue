@@ -1,15 +1,15 @@
-<template>
-  <span class="status-badge" :class="status">
-    <span class="dot"></span>
-    <span class="label">{{ status }}</span>
-  </span>
-</template>
-
 <script setup lang="ts">
 defineProps<{
   status: 'active' | 'waiting' | 'idle' | 'completed'
 }>()
 </script>
+
+<template>
+  <span class="status-badge" :class="status">
+    <span class="dot" />
+    <span class="label">{{ status }}</span>
+  </span>
+</template>
 
 <style scoped>
 .status-badge {

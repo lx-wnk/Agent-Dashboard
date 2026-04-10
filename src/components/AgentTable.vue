@@ -1,3 +1,29 @@
+<script setup lang="ts">
+import type { Agent } from '../types'
+import { ref } from 'vue'
+import AgentRow from './AgentRow.vue'
+import SubAgentRow from './SubAgentRow.vue'
+
+defineProps<{
+  agents: Agent[]
+}>()
+
+defineEmits<{
+  select: [agent: Agent]
+}>()
+
+const expandedPids = ref(new Set<number>())
+
+function toggleSubagents(pid: number) {
+  if (expandedPids.value.has(pid)) {
+    expandedPids.value.delete(pid)
+  }
+  else {
+    expandedPids.value.add(pid)
+  }
+}
+</script>
+
 <template>
   <div class="table-container">
     <table class="agent-table">
@@ -11,7 +37,7 @@
           <th>Cost</th>
           <th>Uptime</th>
           <th>PID</th>
-          <th></th>
+          <th />
         </tr>
       </thead>
       <tbody>
@@ -37,31 +63,6 @@
     </p>
   </div>
 </template>
-
-<script setup lang="ts">
-import { ref } from 'vue'
-import type { Agent } from '../types'
-import AgentRow from './AgentRow.vue'
-import SubAgentRow from './SubAgentRow.vue'
-
-defineProps<{
-  agents: Agent[]
-}>()
-
-defineEmits<{
-  select: [agent: Agent]
-}>()
-
-const expandedPids = ref(new Set<number>())
-
-function toggleSubagents(pid: number) {
-  if (expandedPids.value.has(pid)) {
-    expandedPids.value.delete(pid)
-  } else {
-    expandedPids.value.add(pid)
-  }
-}
-</script>
 
 <style scoped>
 .table-container {
