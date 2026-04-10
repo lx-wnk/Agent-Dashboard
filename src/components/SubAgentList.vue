@@ -1,21 +1,3 @@
-<template>
-  <div class="subagent-list" v-if="subagents.length > 0">
-    <h4>Subagents ({{ subagents.length }})</h4>
-    <div v-for="sa in subagents" :key="sa.id" class="subagent-item">
-      <div class="subagent-header">
-        <StatusBadge :status="sa.status" />
-        <span class="subagent-id">{{ sa.id.substring(0, 16) }}</span>
-      </div>
-      <div class="subagent-meta" v-if="sa.type !== 'unknown'">
-        {{ sa.type }}
-      </div>
-      <div class="subagent-action" v-if="sa.currentAction">
-        Last tool: {{ sa.currentAction }}
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import type { SubAgent } from '../types'
 import StatusBadge from './StatusBadge.vue'
@@ -24,6 +6,24 @@ defineProps<{
   subagents: SubAgent[]
 }>()
 </script>
+
+<template>
+  <div v-if="subagents.length > 0" class="subagent-list">
+    <h4>Subagents ({{ subagents.length }})</h4>
+    <div v-for="sa in subagents" :key="sa.id" class="subagent-item">
+      <div class="subagent-header">
+        <StatusBadge :status="sa.status" />
+        <span class="subagent-id">{{ sa.id.substring(0, 16) }}</span>
+      </div>
+      <div v-if="sa.type !== 'unknown'" class="subagent-meta">
+        {{ sa.type }}
+      </div>
+      <div v-if="sa.currentAction" class="subagent-action">
+        Last tool: {{ sa.currentAction }}
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 h4 {

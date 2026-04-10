@@ -1,19 +1,22 @@
-import express from 'express'
-import { createServer as createHttpServer } from 'node:http'
+import type { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { createServer as createHttpServer } from 'node:http'
 import { homedir } from 'node:os'
+import { join } from 'node:path'
+import process from 'node:process'
+import { consola } from 'consola'
+import express from 'express'
 import { getAgents } from './agentMerger.js'
-import { parseFullSession } from './jsonlParser.js'
 import { getChannelMap } from './channelDiscovery.js'
-import { getSystemInfo } from './systemMonitor.js'
+import { parseFullSession } from './jsonlParser.js'
 import { getSessions } from './sessionScanner.js'
+import { getSystemInfo } from './systemMonitor.js'
 
 // SECURITY: This server exposes session data (prompts, tool outputs, file paths).
 // Always bind to 127.0.0.1 — never expose to the network.
-const PORT = parseInt(process.env.DASHBOARD_PORT || '13120', 10)
+const PORT = Number.parseInt(process.env.DASHBOARD_PORT || '13120', 10)
 const ALLOWED_MODELS = new Set(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', '']) // empty string = "Auto" (no --model flag)
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const SPAWN_STORE_MAX_AGE_MS = 60 * 60 * 1000 // 1 hour
@@ -40,7 +43,7 @@ const spawnStore = new Map<number, SpawnStatus>()
 const spawnTimestamps: number[] = []
 
 // In-memory reply store: parentPid → replies (ring buffer)
-const replyStore = new Map<number, Array<{ message: string; timestamp: string }>>()
+const replyStore = new Map<number, Array<{ message: string, timestamp: string }>>()
 
 function storeReply(pid: number, message: string, timestamp: string) {
   let replies = replyStore.get(pid)
@@ -68,7 +71,7 @@ async function start() {
     const home = homedir()
     const scriptAbsolute = join(import.meta.dirname, '..', 'scripts', 'claude-with-channel.sh')
     const scriptPath = scriptAbsolute.startsWith(home)
-      ? '~' + scriptAbsolute.slice(home.length)
+      ? `~${scriptAbsolute.slice(home.length)}`
       : scriptAbsolute
     res.json({ scriptPath, homedir: home })
   })
@@ -77,7 +80,8 @@ async function start() {
     try {
       const agents = await getAgents()
       res.json(agents)
-    } catch (err) {
+    }
+    catch (err) {
       console.error('Error fetching agents:', err)
       res.status(500).json({ error: 'Failed to fetch agents' })
     }
@@ -87,7 +91,8 @@ async function start() {
     try {
       const sessions = await getSessions()
       res.json(sessions)
-    } catch (err) {
+    }
+    catch (err) {
       console.error('Error fetching sessions:', err)
       res.status(500).json({ error: 'Failed to fetch sessions' })
     }
@@ -98,16 +103,19 @@ async function start() {
     const origin = req.headers.origin || ''
     const referer = req.headers.referer || ''
     // Allow requests with no origin (non-browser clients like curl)
-    if (!origin && !referer) return false
-    const allowed = (s: string) => s.includes('localhost:' + PORT) || s.includes('127.0.0.1:' + PORT)
-    if (allowed(origin) || allowed(referer)) return false
+    if (!origin && !referer)
+      return false
+    const allowed = (s: string) => s.includes(`localhost:${PORT}`) || s.includes(`127.0.0.1:${PORT}`)
+    if (allowed(origin) || allowed(referer))
+      return false
     res.status(403).json({ error: 'Cross-origin request blocked' })
     return true
   }
 
   // Spawn a new Claude agent process
   app.post('/api/agents/spawn', (req, res) => {
-    if (rejectCrossOrigin(req, res)) return
+    if (rejectCrossOrigin(req, res))
+      return
 
     // Rate limit: max 5 spawn requests per minute (sliding window)
     const now = Date.now()
@@ -175,7 +183,7 @@ async function start() {
       const child = spawn('claude', args, {
         cwd,
         detached: true,
-        stdio: ['ignore', 'ignore', 'pipe'],  // capture stderr
+        stdio: ['ignore', 'ignore', 'pipe'], // capture stderr
       })
 
       const pid = child.pid ?? 0
@@ -201,7 +209,7 @@ async function start() {
       child.on('exit', (code) => {
         status.status = 'exited'
         status.exitCode = code
-        console.log(`[spawn] PID ${pid} exited with code ${code}`)
+        consola.info(`[spawn] PID ${pid} exited with code ${code}`)
         if (status.stderr) {
           console.error(`[spawn] PID ${pid} stderr:\n${status.stderr}`)
         }
@@ -221,7 +229,8 @@ async function start() {
 
       child.unref()
       res.json({ ok: true, pid })
-    } catch (err) {
+    }
+    catch (err) {
       console.error('Error spawning agent:', err)
       res.status(500).json({ error: 'Internal error' })
     }
@@ -229,8 +238,8 @@ async function start() {
 
   // Get status of a spawned agent
   app.get('/api/agents/spawn/:pid/status', (req, res) => {
-    const pid = parseInt(req.params.pid, 10)
-    if (isNaN(pid) || String(pid) !== req.params.pid) {
+    const pid = Number.parseInt(req.params.pid, 10)
+    if (Number.isNaN(pid) || String(pid) !== req.params.pid) {
       res.status(400).json({ error: 'Invalid PID' })
       return
     }
@@ -252,14 +261,16 @@ async function start() {
       const lastOnly = req.query.last === '1'
       const messages = await parseFullSession(sessionId, lastOnly)
       res.json({ messages })
-    } catch (err) {
+    }
+    catch {
       res.status(500).json({ error: 'Failed to read session output' })
     }
   })
 
   // Send a message to a running agent via its channel
   app.post('/api/agents/:sessionId/message', async (req, res) => {
-    if (rejectCrossOrigin(req, res)) return
+    if (rejectCrossOrigin(req, res))
+      return
     try {
       const { sessionId } = req.params
       if (!UUID_RE.test(sessionId)) {
@@ -314,15 +325,18 @@ async function start() {
 
         const data = await response.json()
         res.status(response.status).json(data)
-      } catch (err) {
+      }
+      catch (err) {
         clearTimeout(timeout)
         if ((err as Error).name === 'AbortError') {
           res.status(504).json({ error: 'Channel request timed out' })
-        } else {
+        }
+        else {
           res.status(502).json({ error: `Channel unreachable: ${(err as Error).message}` })
         }
       }
-    } catch (err) {
+    }
+    catch (err) {
       console.error('Error sending message:', err)
       res.status(500).json({ error: 'Internal error' })
     }
@@ -354,14 +368,16 @@ async function start() {
           res.status(403).json({ error: 'Invalid token' })
           return
         }
-      } catch {
+      }
+      catch {
         res.status(403).json({ error: 'Invalid token' })
         return
       }
 
       storeReply(parentPid, message, timestamp)
       res.json({ ok: true })
-    } catch (err) {
+    }
+    catch (err) {
       console.error('Error handling channel reply:', err)
       res.status(500).json({ error: 'Internal error' })
     }
@@ -391,7 +407,8 @@ async function start() {
       }
 
       res.json({ replies })
-    } catch (err) {
+    }
+    catch (err) {
       console.error('Error fetching replies:', err)
       res.status(500).json({ error: 'Internal error' })
     }
@@ -401,7 +418,8 @@ async function start() {
     try {
       const info = await getSystemInfo()
       res.json(info)
-    } catch (err) {
+    }
+    catch (err) {
       console.error('Error fetching system info:', err)
       res.status(500).json({ error: 'Failed to fetch system info' })
     }
@@ -419,7 +437,8 @@ async function start() {
     app.get('*', (_req, res) => {
       res.sendFile(join(distPath, 'index.html'))
     })
-  } else {
+  }
+  else {
     const { createServer: createViteServer } = await import('vite')
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: { server: httpServer } },
@@ -430,7 +449,7 @@ async function start() {
 
   httpServer.listen(PORT, '127.0.0.1', () => {
     const mode = isProd ? 'production' : 'development'
-    console.log(`Claude Agent Overview (${mode}) running at http://localhost:${PORT}`)
+    consola.info(`Claude Agent Overview (${mode}) running at http://localhost:${PORT}`)
   })
 }
 

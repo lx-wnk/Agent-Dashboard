@@ -1,3 +1,18 @@
+<script setup lang="ts">
+import type { Agent } from '../types'
+import { computed } from 'vue'
+import { useAgentPrompt } from '../composables/useAgentPrompt'
+import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import StatusBadge from './StatusBadge.vue'
+
+const props = defineProps<{ agent: Agent }>()
+defineEmits<{ select: [agent: Agent] }>()
+
+const { promptInput, isSending, sendStatus, sendError, handleSend } = useAgentPrompt(() => props.agent)
+
+const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
+</script>
+
 <template>
   <div class="agent-card" @click="$emit('select', agent)">
     <div class="card-titlebar">
@@ -11,7 +26,9 @@
       </div>
     </div>
     <div class="card-output">
-      <template v-if="agent.lastOutput">{{ agent.lastOutput }}</template>
+      <template v-if="agent.lastOutput">
+        {{ agent.lastOutput }}
+      </template>
       <span v-else class="card-no-output">No output yet</span>
     </div>
     <div class="card-prompt" @click.stop>
@@ -20,9 +37,9 @@
         v-model="promptInput"
         class="prompt-input"
         placeholder="Enter prompt..."
-        @keydown.enter.prevent="handleSend"
         :disabled="isSending"
-      />
+        @keydown.enter.prevent="handleSend"
+      >
       <button
         class="prompt-send"
         :disabled="isSending || promptInput.trim().length === 0"
@@ -36,21 +53,6 @@
     </p>
   </div>
 </template>
-
-<script setup lang="ts">
-import { computed } from 'vue'
-import type { Agent } from '../types'
-import { formatTokens, formatCost, formatUptime, shortModel, totalTokenCount } from '../utils/format'
-import { useAgentPrompt } from '../composables/useAgentPrompt'
-import StatusBadge from './StatusBadge.vue'
-
-const props = defineProps<{ agent: Agent }>()
-defineEmits<{ select: [agent: Agent] }>()
-
-const { promptInput, isSending, sendStatus, sendError, handleSend } = useAgentPrompt(() => props.agent)
-
-const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
-</script>
 
 <style scoped>
 .agent-card {

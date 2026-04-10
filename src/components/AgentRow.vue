@@ -1,33 +1,6 @@
-<template>
-  <tr class="agent-row" @click="$emit('select', agent)">
-    <td class="col-status">
-      <StatusBadge :status="agent.status" />
-    </td>
-    <td class="col-project">
-      {{ agent.projectName }}
-      <span v-if="agent.channelAvailable" class="channel-badge" title="Channel active">CH</span>
-    </td>
-    <td class="col-action">{{ agent.currentAction || '—' }}</td>
-    <td class="col-model">{{ shortModel(agent.model) }}</td>
-    <td class="col-tokens">{{ formatTokens(totalTokenCount(agent.tokenUsage)) }}</td>
-    <td class="col-cost">{{ formatCost(agent.costEstimate) }}</td>
-    <td class="col-uptime">{{ formatUptime(agent.uptime) }}</td>
-    <td class="col-pid">{{ agent.pid }}</td>
-    <td class="col-toggle">
-      <button
-        v-if="agent.subagents.length > 0"
-        class="toggle-btn"
-        @click.stop="$emit('toggle-subagents')"
-      >
-        {{ expanded ? '▼' : '▶' }} {{ agent.subagents.length }}
-      </button>
-    </td>
-  </tr>
-</template>
-
 <script setup lang="ts">
 import type { Agent } from '../types'
-import { formatTokens, formatCost, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import StatusBadge from './StatusBadge.vue'
 
 defineProps<{
@@ -37,10 +10,48 @@ defineProps<{
 
 defineEmits<{
   select: [agent: Agent]
-  'toggle-subagents': []
+  toggleSubagents: []
 }>()
-
 </script>
+
+<template>
+  <tr class="agent-row" @click="$emit('select', agent)">
+    <td class="col-status">
+      <StatusBadge :status="agent.status" />
+    </td>
+    <td class="col-project">
+      {{ agent.projectName }}
+      <span v-if="agent.channelAvailable" class="channel-badge" title="Channel active">CH</span>
+    </td>
+    <td class="col-action">
+      {{ agent.currentAction || '—' }}
+    </td>
+    <td class="col-model">
+      {{ shortModel(agent.model) }}
+    </td>
+    <td class="col-tokens">
+      {{ formatTokens(totalTokenCount(agent.tokenUsage)) }}
+    </td>
+    <td class="col-cost">
+      {{ formatCost(agent.costEstimate) }}
+    </td>
+    <td class="col-uptime">
+      {{ formatUptime(agent.uptime) }}
+    </td>
+    <td class="col-pid">
+      {{ agent.pid }}
+    </td>
+    <td class="col-toggle">
+      <button
+        v-if="agent.subagents.length > 0"
+        class="toggle-btn"
+        @click.stop="$emit('toggleSubagents')"
+      >
+        {{ expanded ? '▼' : '▶' }} {{ agent.subagents.length }}
+      </button>
+    </td>
+  </tr>
+</template>
 
 <style scoped>
 .agent-row {

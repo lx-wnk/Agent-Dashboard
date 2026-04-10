@@ -1,3 +1,126 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { shortModel } from '../utils/format'
+
+interface SessionInfo {
+  sessionId: string
+  projectPath: string
+  projectName: string
+  lastModified: string
+  model: string | null
+  firstPrompt: string | null
+  totalInputTokens: number
+  totalOutputTokens: number
+  costEstimate: number
+  isRunning: boolean
+}
+
+const props = defineProps<{ open: boolean, homeDir: string }>()
+const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
+
+const sessions = ref<SessionInfo[]>([])
+const isLoading = ref(false)
+const search = ref('')
+const resumePrompts = ref<Record<string, string>>({})
+const spawning = ref<string | null>(null)
+const resumeMsg = ref<Record<string, string>>({})
+const resumeError = ref<Record<string, boolean>>({})
+
+const filtered = computed(() => {
+  const q = search.value.toLowerCase()
+  // Exclude currently running sessions — they don't need resuming
+  const inactive = sessions.value.filter(s => !s.isRunning)
+  if (!q)
+    return inactive
+  return inactive.filter(s =>
+    s.projectName.toLowerCase().includes(q)
+    || s.projectPath.toLowerCase().includes(q)
+    || (s.firstPrompt && s.firstPrompt.toLowerCase().includes(q)),
+  )
+})
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffH = diffMs / 3600000
+
+  if (diffH < 1)
+    return `${Math.round(diffMs / 60000)}m ago`
+  if (diffH < 24)
+    return `${Math.round(diffH)}h ago`
+  if (diffH < 168)
+    return `${Math.round(diffH / 24)}d ago`
+  return d.toLocaleDateString()
+}
+
+function shortenPath(path: string): string {
+  if (props.homeDir && path.startsWith(props.homeDir)) {
+    return `~${path.slice(props.homeDir.length)}`
+  }
+  return path
+}
+
+async function resumeSession(s: SessionInfo) {
+  const prompt = resumePrompts.value[s.sessionId]?.trim()
+  if (!prompt || spawning.value)
+    return
+
+  spawning.value = s.sessionId
+  resumeMsg.value[s.sessionId] = ''
+  resumeError.value[s.sessionId] = false
+
+  try {
+    const res = await fetch('/api/agents/spawn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        cwd: s.projectPath,
+        resumeSessionId: s.sessionId,
+        enableChannel: true,
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok)
+      throw new Error(data.error || 'Spawn failed')
+
+    resumeMsg.value[s.sessionId] = `PID ${data.pid} spawned`
+    resumePrompts.value[s.sessionId] = ''
+    emit('spawned', data.pid)
+    setTimeout(() => {
+      resumeMsg.value[s.sessionId] = ''
+    }, 4000)
+  }
+  catch (err: unknown) {
+    resumeError.value[s.sessionId] = true
+    resumeMsg.value[s.sessionId] = err instanceof Error ? err.message : 'Failed'
+    setTimeout(() => {
+      resumeMsg.value[s.sessionId] = ''
+    }, 4000)
+  }
+  finally {
+    spawning.value = null
+  }
+}
+
+async function loadSessions() {
+  isLoading.value = true
+  try {
+    const res = await fetch('/api/sessions')
+    if (res.ok)
+      sessions.value = await res.json()
+  }
+  catch { /* ignore */ }
+  isLoading.value = false
+}
+
+watch(() => props.open, (isOpen) => {
+  if (isOpen)
+    loadSessions()
+})
+</script>
+
 <template>
   <Transition name="dialog">
     <div
@@ -9,7 +132,9 @@
       <div class="sessions-modal">
         <header class="modal-header">
           <h2>Past Sessions</h2>
-          <button class="close-btn" @click="emit('close')">&times;</button>
+          <button class="close-btn" @click="emit('close')">
+            &times;
+          </button>
         </header>
 
         <div class="modal-body">
@@ -19,11 +144,15 @@
               class="search-input"
               type="text"
               placeholder="Filter by project or prompt..."
-            />
+            >
           </div>
 
-          <p v-if="isLoading" class="status-msg">Loading sessions...</p>
-          <p v-else-if="filtered.length === 0" class="status-msg">No sessions found.</p>
+          <p v-if="isLoading" class="status-msg">
+            Loading sessions...
+          </p>
+          <p v-else-if="filtered.length === 0" class="status-msg">
+            No sessions found.
+          </p>
 
           <div v-else class="session-list">
             <div
@@ -37,7 +166,9 @@
                 <span class="session-date">{{ formatDate(s.lastModified) }}</span>
               </div>
               <code class="session-path">{{ shortenPath(s.projectPath) }}</code>
-              <p v-if="s.firstPrompt" class="session-prompt">{{ s.firstPrompt }}</p>
+              <p v-if="s.firstPrompt" class="session-prompt">
+                {{ s.firstPrompt }}
+              </p>
               <div class="session-meta">
                 <span v-if="s.model" class="meta-tag model">{{ shortModel(s.model) }}</span>
                 <span v-if="s.costEstimate > 0" class="meta-tag cost">${{ s.costEstimate.toFixed(2) }}</span>
@@ -50,7 +181,7 @@
                   type="text"
                   placeholder="Follow-up prompt..."
                   @keydown.enter="resumeSession(s)"
-                />
+                >
                 <button
                   class="resume-btn"
                   :disabled="!resumePrompts[s.sessionId]?.trim() || spawning === s.sessionId"
@@ -69,115 +200,6 @@
     </div>
   </Transition>
 </template>
-
-<script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { shortModel } from '../utils/format'
-
-interface SessionInfo {
-  sessionId: string
-  projectPath: string
-  projectName: string
-  lastModified: string
-  model: string | null
-  firstPrompt: string | null
-  totalInputTokens: number
-  totalOutputTokens: number
-  costEstimate: number
-  isRunning: boolean
-}
-
-const props = defineProps<{ open: boolean; homeDir: string }>()
-const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
-
-const sessions = ref<SessionInfo[]>([])
-const isLoading = ref(false)
-const search = ref('')
-const resumePrompts = ref<Record<string, string>>({})
-const spawning = ref<string | null>(null)
-const resumeMsg = ref<Record<string, string>>({})
-const resumeError = ref<Record<string, boolean>>({})
-
-const filtered = computed(() => {
-  const q = search.value.toLowerCase()
-  // Exclude currently running sessions — they don't need resuming
-  const inactive = sessions.value.filter(s => !s.isRunning)
-  if (!q) return inactive
-  return inactive.filter(s =>
-    s.projectName.toLowerCase().includes(q) ||
-    s.projectPath.toLowerCase().includes(q) ||
-    (s.firstPrompt && s.firstPrompt.toLowerCase().includes(q))
-  )
-})
-
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  const now = new Date()
-  const diffMs = now.getTime() - d.getTime()
-  const diffH = diffMs / 3600000
-
-  if (diffH < 1) return `${Math.round(diffMs / 60000)}m ago`
-  if (diffH < 24) return `${Math.round(diffH)}h ago`
-  if (diffH < 168) return `${Math.round(diffH / 24)}d ago`
-  return d.toLocaleDateString()
-}
-
-
-function shortenPath(path: string): string {
-  if (props.homeDir && path.startsWith(props.homeDir)) {
-    return '~' + path.slice(props.homeDir.length)
-  }
-  return path
-}
-
-async function resumeSession(s: SessionInfo) {
-  const prompt = resumePrompts.value[s.sessionId]?.trim()
-  if (!prompt || spawning.value) return
-
-  spawning.value = s.sessionId
-  resumeMsg.value[s.sessionId] = ''
-  resumeError.value[s.sessionId] = false
-
-  try {
-    const res = await fetch('/api/agents/spawn', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        cwd: s.projectPath,
-        resumeSessionId: s.sessionId,
-        enableChannel: true,
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Spawn failed')
-
-    resumeMsg.value[s.sessionId] = `PID ${data.pid} spawned`
-    resumePrompts.value[s.sessionId] = ''
-    emit('spawned', data.pid)
-    setTimeout(() => { resumeMsg.value[s.sessionId] = '' }, 4000)
-  } catch (err: unknown) {
-    resumeError.value[s.sessionId] = true
-    resumeMsg.value[s.sessionId] = err instanceof Error ? err.message : 'Failed'
-    setTimeout(() => { resumeMsg.value[s.sessionId] = '' }, 4000)
-  } finally {
-    spawning.value = null
-  }
-}
-
-async function loadSessions() {
-  isLoading.value = true
-  try {
-    const res = await fetch('/api/sessions')
-    if (res.ok) sessions.value = await res.json()
-  } catch { /* ignore */ }
-  isLoading.value = false
-}
-
-watch(() => props.open, (isOpen) => {
-  if (isOpen) loadSessions()
-})
-</script>
 
 <style scoped>
 .sessions-backdrop {

@@ -1,21 +1,21 @@
-import { readdir, stat, readFile } from 'node:fs/promises'
-import { join, basename } from 'node:path'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { scanProcesses } from './processScanner.js'
+import { basename, join } from 'node:path'
+import { encodePath, headRead, parseJsonlLines } from './jsonlParser.js'
 import { estimateCost } from './pricing.js'
-import { headRead, parseJsonlLines } from './jsonlParser.js'
+import { scanProcesses } from './processScanner.js'
 
 export interface SessionInfo {
   sessionId: string
-  projectPath: string       // decoded from directory name
-  projectName: string       // basename of projectPath
-  lastModified: string      // ISO timestamp
+  projectPath: string // decoded from directory name
+  projectName: string // basename of projectPath
+  lastModified: string // ISO timestamp
   model: string | null
   firstPrompt: string | null
   totalInputTokens: number
   totalOutputTokens: number
   costEstimate: number
-  isRunning: boolean        // true if a matching PID is currently alive
+  isRunning: boolean // true if a matching PID is currently alive
 }
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects')
@@ -31,17 +31,13 @@ const MAX_SESSIONS = 100
  * names that originally contained `-`), but it gives a reasonable
  * human-readable project path most of the time.
  */
-function decodeProjectDir(encoded: string): string {
+export function decodeProjectDir(encoded: string): string {
   // On macOS, paths look like -Users-username-code-project
   // Restore leading `/` and try to rebuild the path
   if (encoded.startsWith('-')) {
-    return '/' + encoded.slice(1).replace(/-/g, '/')
+    return `/${encoded.slice(1).replace(/-/g, '/')}`
   }
   return encoded
-}
-
-function encodePath(absolutePath: string): string {
-  return absolutePath.replace(/[/_]/g, '-')
 }
 
 interface HeadInfo {
@@ -60,7 +56,8 @@ function extractHeadInfo(entries: any[]): HeadInfo {
     if (!cwd && entry.cwd) {
       cwd = entry.cwd
     }
-    if (model && cwd) break
+    if (model && cwd)
+      break
   }
 
   return { model, cwd }
@@ -84,7 +81,8 @@ async function readSessionMeta(sessionId: string): Promise<SessionMetaRaw | null
       firstPrompt: data.first_prompt || null,
       model: data.model || null,
     }
-  } catch {
+  }
+  catch {
     return null
   }
 }
@@ -104,7 +102,8 @@ export async function getSessions(): Promise<SessionInfo[]> {
     projectDirs = entries
       .filter(e => e.isDirectory())
       .map(e => e.name)
-  } catch {
+  }
+  catch {
     return []
   }
 
@@ -127,15 +126,17 @@ export async function getSessions(): Promise<SessionInfo[]> {
                 projectDirEncoded: dirName,
                 mtime: s.mtime,
               })
-            } catch {
+            }
+            catch {
               // stat failed, skip
             }
-          })
+          }),
         )
-      } catch {
+      }
+      catch {
         // readdir failed, skip
       }
-    })
+    }),
   )
 
   // 3. Sort by mtime descending, limit to MAX_SESSIONS
@@ -147,7 +148,8 @@ export async function getSessions(): Promise<SessionInfo[]> {
   try {
     const processes = await scanProcesses()
     runningCwds = new Set(processes.map(p => encodePath(p.cwd)))
-  } catch {
+  }
+  catch {
     runningCwds = new Set()
   }
 
@@ -163,7 +165,8 @@ export async function getSessions(): Promise<SessionInfo[]> {
         const headRaw = await headRead(entry.filePath)
         const headParsed = parseJsonlLines(headRaw)
         headInfo = extractHeadInfo(headParsed)
-      } catch {
+      }
+      catch {
         // head-read failed, proceed with nulls
       }
 
@@ -188,7 +191,7 @@ export async function getSessions(): Promise<SessionInfo[]> {
         costEstimate: estimateCost({ inputTokens, outputTokens }, model),
         isRunning: runningCwds.has(entry.projectDirEncoded),
       }
-    })
+    }),
   )
 
   return sessions

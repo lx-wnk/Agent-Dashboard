@@ -1,3 +1,11 @@
+import { Buffer } from 'node:buffer'
+import { execFileSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import process from 'node:process'
 /**
  * Dashboard Channel MCP Server
  *
@@ -12,15 +20,11 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
-  ListToolsRequestSchema,
   CallToolRequestSchema,
+  ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
-import { createServer } from 'node:http'
-import { writeFileSync, mkdirSync, unlinkSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
-import { randomBytes } from 'node:crypto'
+
+const PS_LINE_RE = /^\s*(\d+)\s+(\S.*)$/
 
 /**
  * Walk up the process tree to find the `claude` CLI process PID.
@@ -32,19 +36,23 @@ function findClaudePid(): number {
   try {
     for (let i = 0; i < 5; i++) {
       const out = execFileSync('ps', ['-o', 'ppid=,comm=', '-p', String(pid)], { encoding: 'utf-8' }).trim()
-      const match = out.match(/^\s*(\d+)\s+(.+)$/)
-      if (!match) break
+      const match = out.match(PS_LINE_RE)
+      if (!match)
+        break
       const comm = match[2]
-      if (comm.endsWith('/claude') || comm === 'claude') return pid
-      pid = parseInt(match[1], 10)
-      if (pid <= 1) break
+      if (comm.endsWith('/claude') || comm === 'claude')
+        return pid
+      pid = Number.parseInt(match[1], 10)
+      if (pid <= 1)
+        break
     }
-  } catch { /* fallback to direct parent */ }
+  }
+  catch { /* fallback to direct parent */ }
   return process.ppid
 }
 
 // ─── Config ──────────────────────────────────────────────
-const DASHBOARD_PORT = parseInt(process.env.DASHBOARD_PORT || '13120', 10)
+const DASHBOARD_PORT = Number.parseInt(process.env.DASHBOARD_PORT || '13120', 10)
 const DISCOVERY_DIR = join(homedir(), '.claude', 'dashboard-channel')
 const PARENT_PID = findClaudePid()
 const TOKEN = randomBytes(16).toString('hex')
@@ -129,7 +137,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${TOKEN}`,
+          'Authorization': `Bearer ${TOKEN}`,
         },
         body: JSON.stringify({
           parentPid: PARENT_PID,
@@ -143,7 +151,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
 
       return { content: [{ type: 'text', text: 'Reply sent to dashboard.' }] }
-    } catch (err) {
+    }
+    catch (err) {
       return {
         content: [{ type: 'text', text: `Could not reach dashboard: ${(err as Error).message}` }],
       }
@@ -158,7 +167,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 function readBody(req: import('node:http').IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on('data', (c) => chunks.push(c))
+    req.on('data', c => chunks.push(c))
     req.on('end', () => resolve(Buffer.concat(chunks).toString()))
     req.on('error', reject)
   })
@@ -171,7 +180,8 @@ const ALLOWED_ORIGINS = [
 
 function getAllowedOrigin(req: import('node:http').IncomingMessage): string {
   const origin = req.headers.origin || ''
-  if (ALLOWED_ORIGINS.includes(origin)) return origin
+  if (ALLOWED_ORIGINS.includes(origin))
+    return origin
   return ALLOWED_ORIGINS[0]
 }
 
@@ -218,7 +228,8 @@ const httpServer = createServer(async (req, res) => {
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true }))
-    } catch (err) {
+    }
+    catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: (err as Error).message }))
     }
@@ -251,14 +262,21 @@ function cleanup() {
   if (discoveryPath) {
     try {
       unlinkSync(discoveryPath)
-    } catch {
+    }
+    catch {
       // File may already be gone
     }
   }
 }
 
-process.on('SIGTERM', () => { cleanup(); process.exit(0) })
-process.on('SIGINT', () => { cleanup(); process.exit(0) })
+process.on('SIGTERM', () => {
+  cleanup()
+  process.exit(0)
+})
+process.on('SIGINT', () => {
+  cleanup()
+  process.exit(0)
+})
 process.on('exit', cleanup)
 
 // ─── Startup ─────────────────────────────────────────────

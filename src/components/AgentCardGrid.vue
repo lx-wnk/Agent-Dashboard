@@ -1,3 +1,11 @@
+<script setup lang="ts">
+import type { Agent } from '../types'
+import AgentCard from './AgentCard.vue'
+
+defineProps<{ agents: Agent[] }>()
+defineEmits<{ select: [agent: Agent] }>()
+</script>
+
 <template>
   <div class="card-grid">
     <AgentCard
@@ -11,14 +19,6 @@
     </p>
   </div>
 </template>
-
-<script setup lang="ts">
-import type { Agent } from '../types'
-import AgentCard from './AgentCard.vue'
-
-defineProps<{ agents: Agent[] }>()
-defineEmits<{ select: [agent: Agent] }>()
-</script>
 
 <style scoped>
 .card-grid {
