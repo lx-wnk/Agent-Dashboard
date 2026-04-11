@@ -490,6 +490,16 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
       continue
     }
 
+    // Handle standalone tool results (older JSONL format)
+    if (entry.type === 'result' && entry.result) {
+      messages.push({
+        role: 'tool_result',
+        content: (typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result)).substring(0, 1000),
+        timestamp: entry.timestamp,
+      })
+      continue
+    }
+
     if (!entry.message?.content)
       continue
 
@@ -559,14 +569,14 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
             taskId: block.id, // temporary — resolved to real ID when tool_result arrives
           })
         }
-        else if (block.name === 'TaskUpdate') {
-          const realId = block.input?.taskId || ''
+        else if (block.name === 'TaskUpdate' && block.input?.taskId) {
+          const realId = block.input.taskId
           const subject = taskSubjects.get(realId) || 'Task'
           messages.push({
             role: 'task',
             content: subject,
             timestamp: entry.timestamp,
-            taskStatus: block.input?.status || 'in_progress',
+            taskStatus: block.input.status || 'in_progress',
             taskId: realId,
           })
         }

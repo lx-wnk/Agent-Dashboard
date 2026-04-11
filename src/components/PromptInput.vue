@@ -73,7 +73,9 @@ function onKeydown(e: KeyboardEvent) {
     }
     else if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
       e.preventDefault()
-      selectSuggestion(slashSuggestions.value[selectedIndex.value])
+      const cmd = slashSuggestions.value[selectedIndex.value]
+      if (cmd)
+        selectSuggestion(cmd)
     }
     else if (e.key === 'Escape') {
       e.preventDefault()
