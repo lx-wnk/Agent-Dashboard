@@ -16,7 +16,7 @@ CHANNEL_TSX="$SCRIPT_DIR/channel/node_modules/.bin/tsx"
 CHANNEL_SCRIPT="$SCRIPT_DIR/channel/dashboard-channel.ts"
 
 if [ ! -f "$CHANNEL_TSX" ]; then
-  echo "Error: tsx not found. Run 'cd $SCRIPT_DIR/channel && npm install' first." >&2
+  echo "Error: tsx not found. Run 'pnpm install' in the project root first." >&2
   exit 1
 fi
 

@@ -15,12 +15,11 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 ## Quick Start
 
 ```bash
-# Install dependencies
-npm install
-cd channel && npm install && cd ..
+# Install dependencies (pnpm workspace — installs root + channel/)
+pnpm install
 
 # Start dashboard (Express + Vite on port 13120)
-npm run dev
+pnpm dev
 ```
 
 Open [http://localhost:13120](http://localhost:13120) — running Claude Code agents appear automatically.
@@ -161,7 +160,7 @@ done
 ## Development
 
 ```bash
-npm run dev    # Express + Vite with hot reload on :13120
+pnpm dev    # Express + Vite with hot reload on :13120
 ```
 
 No separate build, lint, or test scripts. The single `dev` command runs the full stack. The Vite dev server runs as Express middleware with HMR enabled.

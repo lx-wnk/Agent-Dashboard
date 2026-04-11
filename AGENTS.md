@@ -26,9 +26,9 @@
 > Details in `.agent-context/layer2-project-core.md`
 
 - Server binds to `127.0.0.1` only (reads sensitive session data)
-- macOS only — `ps`/`lsof` for process scanning
+- macOS and Linux — `ps`/`lsof` on macOS, `/proc` on Linux for process scanning
 - No database — all data from filesystem + running processes
-- Single dev command: `npm run dev` (Express + Vite on port 13120)
+- Single dev command: `pnpm dev` (Express + Vite on port 13120)
 
 ## Compaction Preservation
 
