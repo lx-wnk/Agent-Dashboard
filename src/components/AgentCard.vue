@@ -18,6 +18,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
     class="agent-card"
     tabindex="0"
     role="button"
+    :aria-label="`Open details for ${agent.projectName}`"
     @click="$emit('select', agent)"
     @keydown.enter="$emit('select', agent)"
     @keydown.space.prevent="$emit('select', agent)"
@@ -38,7 +39,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
       </template>
       <span v-else class="card-no-output">No output yet</span>
     </div>
-    <div v-if="!agent.machine" class="card-prompt" @click.stop @keydown.stop>
+    <div v-if="!agent.machine" class="card-prompt" @click.stop @keydown.enter.stop @keydown.space.stop>
       <span class="prompt-cursor">❯</span>
       <input
         v-model="promptInput"
@@ -76,7 +77,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 }
 .agent-card:focus-visible {
   outline: 2px solid var(--accent-blue);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 .card-titlebar {
   background: var(--bg-secondary);
