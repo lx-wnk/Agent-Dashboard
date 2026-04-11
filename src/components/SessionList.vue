@@ -16,7 +16,7 @@ interface SessionInfo {
 }
 
 const props = defineProps<{ open: boolean, homeDir: string }>()
-const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
+const emit = defineEmits<{ close: [] }>()
 
 const sessions = ref<SessionInfo[]>([])
 const isLoading = ref(false)
@@ -87,7 +87,6 @@ async function resumeSession(s: SessionInfo) {
 
     resumeMsg.value[s.sessionId] = `PID ${data.pid} spawned`
     resumePrompts.value[s.sessionId] = ''
-    emit('spawned', data.pid)
     setTimeout(() => {
       resumeMsg.value[s.sessionId] = ''
     }, 4000)

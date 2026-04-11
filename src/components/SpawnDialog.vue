@@ -2,7 +2,7 @@
 import { onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
+const emit = defineEmits<{ close: [] }>()
 
 const prompt = ref('')
 const cwd = ref('')
@@ -118,7 +118,6 @@ async function handleSpawn() {
 
     const data = await res.json()
     const pid = data.pid as number
-    emit('spawned', pid)
 
     // Keep dialog open and poll for early exit errors
     spawnStatusMsg.value = `Agent PID ${pid} spawned, verifying...`
@@ -149,7 +148,13 @@ watch(() => props.open, (isOpen) => {
   }
 })
 
-onUnmounted(() => stopStatusPoll())
+onUnmounted(() => {
+  stopStatusPoll()
+  if (autoCloseTimer) {
+    clearTimeout(autoCloseTimer)
+    autoCloseTimer = null
+  }
+})
 </script>
 
 <template>

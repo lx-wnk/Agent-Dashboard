@@ -108,7 +108,10 @@ watch(searchQuery, (q) => {
 })
 
 // Persist viewMode to localStorage
-watch(viewMode, v => localStorage.setItem('agent-view-mode', v))
+watch(viewMode, (v) => {
+  if (typeof localStorage !== 'undefined')
+    localStorage.setItem('agent-view-mode', v)
+})
 
 function startPolling() {
   if (intervalId)
