@@ -3,13 +3,16 @@ import { computed, ref } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
+import CostTrend from './components/CostTrend.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import { useAgents } from './composables/useAgents'
+import { useTheme } from './composables/useTheme'
 import { formatTokens, totalTokenCount } from './utils/format'
 
 const { agents, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
+const { theme, toggleTheme } = useTheme()
 const showSpawnDialog = ref(false)
 const showSessions = ref(false)
 const scriptPath = ref('')
@@ -68,6 +71,9 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
           ⊞
         </button>
       </div>
+      <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
+        {{ theme === 'dark' ? '☀' : '☾' }}
+      </button>
       <button class="sessions-btn" @click="showSessions = true">
         Sessions
       </button>
@@ -76,6 +82,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       </button>
     </header>
     <ResourceBar />
+    <CostTrend />
     <div v-if="scriptPath" class="script-banner">
       <span class="script-label">Channel script:</span>
       <code class="script-path" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript">{{ scriptPath }}</code>
@@ -134,6 +141,21 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
   --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
 }
 
+[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #e2e8f0;
+  --bg-tertiary: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent-green: #16a34a;
+  --accent-yellow: #ca8a04;
+  --accent-gray: #94a3b8;
+  --accent-blue: #2563eb;
+  --accent-red: #dc2626;
+  --border: #cbd5e1;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -175,6 +197,22 @@ body {
   padding: 2px 10px;
   border-radius: 12px;
   font-family: var(--font-mono);
+}
+
+.theme-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  transition: filter 0.15s;
+}
+
+.theme-btn:hover {
+  filter: brightness(1.2);
 }
 
 .sessions-btn {

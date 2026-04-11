@@ -1,10 +1,13 @@
 import { execFile } from 'node:child_process'
+import { readlink } from 'node:fs/promises'
+import { platform } from 'node:os'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
 const LSOF_PATH_RE = /\nn(.+)/
 const WHITESPACE_RE = /\s+/
+const IS_LINUX = platform() === 'linux'
 
 export interface ProcessInfo {
   pid: number
@@ -23,10 +26,18 @@ export function parseElapsedTime(etime: string): number {
   return days * 86400 + hours * 3600 + minutes * 60 + seconds
 }
 
-async function getCwd(pid: number): Promise<string | null> {
+async function getCwdLinux(pid: number): Promise<string | null> {
+  try {
+    return await readlink(`/proc/${pid}/cwd`)
+  }
+  catch {
+    return null
+  }
+}
+
+async function getCwdMac(pid: number): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync('lsof', ['-a', '-d', 'cwd', '-p', String(pid), '-Fn'])
-    // Output format: p<PID>\nfcwd\nn<path>
     const match = stdout.match(LSOF_PATH_RE)
     return match ? match[1] : null
   }
@@ -34,6 +45,8 @@ async function getCwd(pid: number): Promise<string | null> {
     return null
   }
 }
+
+const getCwd = IS_LINUX ? getCwdLinux : getCwdMac
 
 export async function scanProcesses(): Promise<ProcessInfo[]> {
   const { stdout } = await execFileAsync('ps', ['-eo', 'pid,etime,comm'])

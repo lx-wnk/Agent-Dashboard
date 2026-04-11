@@ -13,3 +13,4 @@ dist/
 # Agent skills (installed from skills-lock.json)
 .claude/skills/
 .agents/skills/
+.claude/worktrees/
