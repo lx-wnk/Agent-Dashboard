@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { useAgentPrompt } from '../composables/useAgentPrompt'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import MachineBadge from './MachineBadge.vue'
+import PromptInput from './PromptInput.vue'
 import StatusBadge from './StatusBadge.vue'
 import SubAgentList from './SubAgentList.vue'
 import TaskList from './TaskList.vue'
@@ -15,9 +15,7 @@ const emit = defineEmits<{ close: [] }>()
 const outputMessages = ref<OutputMessage[]>([])
 const isLoadingOutput = ref(false)
 const outputEl = ref<HTMLElement | null>(null)
-const promptEl = ref<HTMLTextAreaElement | null>(null)
-
-const { promptInput, isSending, sendStatus, sendError, handleSend: sendPrompt } = useAgentPrompt(() => props.agent)
+const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
 
 const totalTokens = computed(() => props.agent ? totalTokenCount(props.agent.tokenUsage) : 0)
 
@@ -88,7 +86,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
   if (sessionId && !props.agent?.machine) {
     fetchOutput(sessionId)
     startRefresh()
-    nextTick(() => promptEl.value?.focus())
+    nextTick(() => promptInputRef.value?.focus())
   }
   else {
     outputMessages.value = []
@@ -122,10 +120,6 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   stopRefresh()
 })
-
-async function handleSend() {
-  await sendPrompt()
-}
 </script>
 
 <template>
@@ -192,29 +186,7 @@ async function handleSend() {
           </details>
         </div>
 
-        <div v-if="!agent.machine" class="modal-prompt">
-          <span class="prompt-cursor">❯</span>
-          <textarea
-            ref="promptEl"
-            v-model="promptInput"
-            class="prompt-textarea"
-            rows="1"
-            placeholder="Enter prompt..."
-            :disabled="isSending"
-            @keydown.ctrl.enter.prevent="handleSend"
-            @keydown.meta.enter.prevent="handleSend"
-          />
-          <button
-            class="prompt-send"
-            :disabled="isSending || promptInput.trim().length === 0"
-            @click="handleSend"
-          >
-            {{ isSending ? '...' : '↵' }}
-          </button>
-        </div>
-        <p v-if="sendStatus && !agent.machine" class="modal-send-status" :class="sendStatus">
-          {{ sendStatus === 'sent' ? 'Sent' : sendError }}
-        </p>
+        <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" />
       </div>
     </div>
   </Transition>
@@ -309,44 +281,6 @@ async function handleSend() {
   white-space: pre-wrap;
   word-break: break-word;
 }
-.modal-prompt {
-  border-top: 1px solid var(--border);
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.prompt-cursor { color: var(--accent-blue); font-size: 14px; flex-shrink: 0; }
-.prompt-textarea {
-  flex: 1;
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: var(--font-mono);
-  outline: none;
-  resize: none;
-  line-height: 1.4;
-}
-.prompt-textarea::placeholder { color: var(--text-muted); }
-.prompt-textarea:disabled { opacity: 0.5; }
-.prompt-send {
-  background: var(--accent-blue);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 14px;
-  font-size: 14px;
-  font-weight: bold;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.prompt-send:disabled { opacity: 0.4; cursor: not-allowed; }
-.prompt-send:not(:disabled):hover { filter: brightness(1.15); }
-.modal-send-status { font-size: 11px; padding: 0 16px 8px; }
-.modal-send-status.sent { color: var(--accent-green); }
-.modal-send-status.error { color: var(--accent-red); }
 .modal-details {
   border-top: 1px solid var(--border);
   flex-shrink: 0;

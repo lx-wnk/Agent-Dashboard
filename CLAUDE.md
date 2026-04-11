@@ -21,6 +21,7 @@ npm run typecheck  # vue-tsc type checking
 
 **Backend** (Express + Node CLI tools in `server/`):
 - `server/platform.ts` — Shared `IS_LINUX` constant for platform detection
+- `server/paths.ts` — Shared path constants (`CLAUDE_PROJECTS_DIR`, `SESSION_META_DIR`, `DISCOVERY_DIR`, `WHITESPACE_RE`)
 - `server/index.ts` — Express server with `/api/agents` REST + `/api/agents/stream` SSE endpoint, integrates Vite dev middleware
 - `server/processScanner.ts` — Uses `ps` and `lsof` to find running `/claude` processes and their working directories
 - `server/jsonlParser.ts` — Tail-reads last 32KB of JSONL session files, extracts tokens, model, tools, tasks

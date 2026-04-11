@@ -2,12 +2,12 @@ import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { cpus, freemem, loadavg, totalmem, uptime } from 'node:os'
 import { promisify } from 'node:util'
-import { IS_LINUX } from './platform'
+import { WHITESPACE_RE } from './paths.js'
+import { IS_LINUX } from './platform.js'
 
 const execFileAsync = promisify(execFile)
 
 const CPU_IDLE_RE = /([\d.]+)%\s*idle/
-const WHITESPACE_RE = /\s+/
 
 export interface SystemInfo {
   cpu: {

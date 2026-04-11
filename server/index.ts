@@ -10,8 +10,9 @@ import { consola } from 'consola'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
-import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
 import { parseFullSession } from './jsonlParser.js'
+import { DISCOVERY_DIR } from './paths.js'
+import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
 import { getSessions } from './sessionScanner.js'
 import { getSystemInfo } from './systemMonitor.js'
 
@@ -21,7 +22,6 @@ const PORT = Number.parseInt(process.env.DASHBOARD_PORT || '13120', 10)
 const ALLOWED_MODELS = new Set(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', '']) // empty string = "Auto" (no --model flag)
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const SPAWN_STORE_MAX_AGE_MS = 60 * 60 * 1000 // 1 hour
-const DISCOVERY_DIR = join(homedir(), '.claude', 'dashboard-channel')
 const MAX_REPLIES_PER_PID = 50
 const MAX_STDERR_BYTES = 4096
 const CHANNEL_DIR = join(import.meta.dirname, '..', 'channel')
@@ -127,7 +127,9 @@ async function start() {
       return
     sseBroadcastId = setInterval(async () => {
       try {
-        const agents = await getAgents()
+        const localAgents = await getAgents()
+        const remoteUrls = getRemoteUrls()
+        const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
 
         // Record cost trend point
         const totalCost = agents.reduce((sum, a) => sum + a.costEstimate, 0)
@@ -184,7 +186,15 @@ async function start() {
     // Allow requests with no origin (non-browser clients like curl)
     if (!origin && !referer)
       return false
-    const allowed = (s: string) => s.includes(`localhost:${PORT}`) || s.includes(`127.0.0.1:${PORT}`)
+    const allowed = (s: string) => {
+      try {
+        const url = new URL(s)
+        return (url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.port === String(PORT)
+      }
+      catch {
+        return false
+      }
+    }
     if (allowed(origin) || allowed(referer))
       return false
     res.status(403).json({ error: 'Cross-origin request blocked' })

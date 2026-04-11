@@ -8,7 +8,7 @@ defineProps<{
   <div v-if="tools.length > 0" class="tool-timeline">
     <h4>Recent Tools</h4>
     <div class="tools">
-      <span v-for="tool in tools" :key="tool" class="tool-tag">{{ tool }}</span>
+      <span v-for="(tool, i) in tools" :key="`${i}-${tool}`" class="tool-tag">{{ tool }}</span>
     </div>
   </div>
 </template>

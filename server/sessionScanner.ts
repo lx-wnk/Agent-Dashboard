@@ -1,7 +1,7 @@
-import { readdir, readFile, stat } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { readdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { encodePath, headRead, parseJsonlLines } from './jsonlParser.js'
+import { encodePath, headRead, parseJsonlLines, readSessionMeta } from './jsonlParser.js'
+import { CLAUDE_PROJECTS_DIR } from './paths.js'
 import { estimateCost } from './pricing.js'
 import { scanProcesses } from './processScanner.js'
 
@@ -18,8 +18,6 @@ export interface SessionInfo {
   isRunning: boolean // true if a matching PID is currently alive
 }
 
-const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects')
-const SESSION_META_DIR = join(homedir(), '.claude', 'usage-data', 'session-meta')
 const MAX_SESSIONS = 100
 
 /**
@@ -61,30 +59,6 @@ function extractHeadInfo(entries: any[]): HeadInfo {
   }
 
   return { model, cwd }
-}
-
-interface SessionMetaRaw {
-  inputTokens: number
-  outputTokens: number
-  firstPrompt: string | null
-  model: string | null
-}
-
-async function readSessionMeta(sessionId: string): Promise<SessionMetaRaw | null> {
-  try {
-    const metaPath = join(SESSION_META_DIR, `${sessionId}.json`)
-    const raw = await readFile(metaPath, 'utf-8')
-    const data = JSON.parse(raw)
-    return {
-      inputTokens: data.input_tokens || 0,
-      outputTokens: data.output_tokens || 0,
-      firstPrompt: data.first_prompt || null,
-      model: data.model || null,
-    }
-  }
-  catch {
-    return null
-  }
 }
 
 interface JsonlFileEntry {
@@ -170,8 +144,8 @@ export async function getSessions(): Promise<SessionInfo[]> {
         // head-read failed, proceed with nulls
       }
 
-      // Determine model: prefer head-read, fall back to session-meta
-      const model = headInfo.model || meta?.model || null
+      // Determine model from head-read of JSONL
+      const model = headInfo.model || null
 
       // Determine project path: prefer cwd from JSONL, fall back to decoded dir name
       const projectPath = headInfo.cwd || decodeProjectDir(entry.projectDirEncoded)
@@ -188,7 +162,7 @@ export async function getSessions(): Promise<SessionInfo[]> {
         firstPrompt: meta?.firstPrompt || null,
         totalInputTokens: inputTokens,
         totalOutputTokens: outputTokens,
-        costEstimate: estimateCost({ inputTokens, outputTokens }, model),
+        costEstimate: estimateCost({ inputTokens, outputTokens, cacheCreationTokens: 0, cacheReadTokens: 0 }, model),
         isRunning: runningCwds.has(entry.projectDirEncoded),
       }
     }),
