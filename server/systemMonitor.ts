@@ -1,13 +1,13 @@
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
-import { cpus, freemem, loadavg, platform, totalmem, uptime } from 'node:os'
+import { cpus, freemem, loadavg, totalmem, uptime } from 'node:os'
 import { promisify } from 'node:util'
+import { IS_LINUX } from './platform'
 
 const execFileAsync = promisify(execFile)
 
 const CPU_IDLE_RE = /([\d.]+)%\s*idle/
 const WHITESPACE_RE = /\s+/
-const IS_LINUX = platform() === 'linux'
 
 export interface SystemInfo {
   cpu: {

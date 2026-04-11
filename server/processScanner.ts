@@ -1,13 +1,12 @@
 import { execFile } from 'node:child_process'
 import { readlink } from 'node:fs/promises'
-import { platform } from 'node:os'
 import { promisify } from 'node:util'
+import { IS_LINUX } from './platform'
 
 const execFileAsync = promisify(execFile)
 
 const LSOF_PATH_RE = /\nn(.+)/
 const WHITESPACE_RE = /\s+/
-const IS_LINUX = platform() === 'linux'
 
 export interface ProcessInfo {
   pid: number
