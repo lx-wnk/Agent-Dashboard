@@ -3,6 +3,7 @@ import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import MachineBadge from './MachineBadge.vue'
 import StatusBadge from './StatusBadge.vue'
 import SubAgentList from './SubAgentList.vue'
 import TaskList from './TaskList.vue'
@@ -135,7 +136,7 @@ async function handleSend() {
           <div class="modal-title-left">
             <StatusBadge :status="agent.status" />
             <span class="modal-project">{{ agent.projectName }}</span>
-            <span v-if="agent.machine" class="modal-machine">{{ agent.machine }}</span>
+            <MachineBadge v-if="agent.machine" :machine="agent.machine" />
             <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
           </div>
           <div class="modal-title-right">
@@ -257,14 +258,6 @@ async function handleSend() {
   min-width: 0;
 }
 .modal-project { font-weight: 600; font-size: 14px; }
-.modal-machine {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--accent-blue);
-  border: 1px solid var(--accent-blue);
-  border-radius: 3px;
-  padding: 0 5px;
-}
 .modal-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .modal-close {
   background: none;

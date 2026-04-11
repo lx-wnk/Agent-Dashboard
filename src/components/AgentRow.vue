@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import MachineBadge from './MachineBadge.vue'
 import StatusBadge from './StatusBadge.vue'
 
 defineProps<{
@@ -30,7 +31,7 @@ defineEmits<{
     <td class="col-project">
       {{ agent.projectName }}
       <span v-if="agent.channelAvailable" class="channel-badge" title="Channel active">CH</span>
-      <span v-if="agent.machine" class="machine-badge" :title="`Machine: ${agent.machine}`">{{ agent.machine }}</span>
+      <MachineBadge v-if="agent.machine" :machine="agent.machine" />
     </td>
     <td class="col-action">
       {{ agent.currentAction || '—' }}
@@ -121,20 +122,4 @@ defineEmits<{
   letter-spacing: 0.5px;
 }
 
-.machine-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 4px;
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--accent-blue);
-  border: 1px solid var(--accent-blue);
-  border-radius: 3px;
-  vertical-align: middle;
-  letter-spacing: 0.5px;
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 </style>
