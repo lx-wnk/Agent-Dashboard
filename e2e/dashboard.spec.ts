@@ -8,7 +8,7 @@ import { expect, test } from '@playwright/test'
 async function waitForAgentsLoaded(page: import('@playwright/test').Page) {
   // Either the table or the card-grid must appear, OR the empty-state message.
   await page.waitForSelector(
-    '.agent-table, .card-grid, .empty, text=No running Claude agents found.',
+    '.agent-table, .card-grid, .kanban-board, .board-empty, .empty, text=No running Claude agents found.',
     { timeout: 8000 },
   )
 }
@@ -102,6 +102,25 @@ test('card view persists after page reload', async ({ page }) => {
   await page.reload()
   await waitForAgentsLoaded(page)
   await expect(page.locator('.card-grid')).toBeVisible()
+  await expect(page.locator('.agent-table')).not.toBeVisible()
+})
+
+// ---------------------------------------------------------------------------
+// Test — Kanban view toggle
+// ---------------------------------------------------------------------------
+test('view toggle switches to kanban view', async ({ page }) => {
+  await page.goto('/')
+  await waitForAgentsLoaded(page)
+
+  // Ensure list view first
+  await page.locator('.toggle-btn').nth(0).click()
+  await expect(page.locator('.agent-table')).toBeVisible()
+
+  // Click kanban toggle (third .toggle-btn)
+  await page.locator('.toggle-btn').nth(2).click()
+
+  // Kanban board or empty state must appear; table must disappear
+  await expect(page.locator('.kanban-board, .board-empty')).toBeVisible()
   await expect(page.locator('.agent-table')).not.toBeVisible()
 })
 

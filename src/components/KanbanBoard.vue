@@ -16,7 +16,15 @@ interface KanbanCard {
   agent: Agent
 }
 
-const columns = computed(() => {
+interface ColumnDef {
+  key: string
+  title: string
+  icon: string
+  iconClass: string
+  cards: KanbanCard[]
+}
+
+const columns = computed<ColumnDef[]>(() => {
   const pending: KanbanCard[] = []
   const inProgress: KanbanCard[] = []
   const completed: KanbanCard[] = []
@@ -34,101 +42,58 @@ const columns = computed(() => {
         case 'completed':
           completed.push(card)
           break
+        default:
+          // Unknown status: treat as pending
+          pending.push(card)
+          break
       }
     }
   }
 
-  return { pending, inProgress, completed }
+  return [
+    { key: 'pending', title: 'Pending', icon: '○', iconClass: 'pending-icon', cards: pending },
+    { key: 'inProgress', title: 'In Progress', icon: '●', iconClass: 'progress-icon', cards: inProgress },
+    { key: 'completed', title: 'Completed', icon: '✓', iconClass: 'completed-icon', cards: completed },
+  ]
 })
 
 const totalTasks = computed(() =>
-  columns.value.pending.length
-  + columns.value.inProgress.length
-  + columns.value.completed.length,
+  columns.value.reduce((sum, col) => sum + col.cards.length, 0),
 )
 </script>
 
 <template>
-  <div class="kanban-board">
-    <div class="kanban-column">
+  <div v-if="totalTasks > 0" class="kanban-board">
+    <div v-for="col in columns" :key="col.key" class="kanban-column">
       <div class="column-header">
-        <span class="column-icon pending-icon">○</span>
-        <span class="column-title">Pending</span>
-        <span class="column-count">{{ columns.pending.length }}</span>
+        <span class="column-icon" :class="col.iconClass">{{ col.icon }}</span>
+        <span class="column-title">{{ col.title }}</span>
+        <span class="column-count">{{ col.cards.length }}</span>
       </div>
       <div class="column-body">
         <div
-          v-for="card in columns.pending"
+          v-for="card in col.cards"
           :key="`${card.agent.sessionId}-${card.task.id}`"
           class="kanban-card"
           @click="$emit('select', card.agent)"
         >
-          <div class="card-subject">{{ card.task.subject }}</div>
+          <div class="card-subject">
+            {{ card.task.subject }}
+          </div>
           <div class="card-footer">
             <span class="card-project">{{ card.agent.projectName }}</span>
             <StatusBadge :status="card.agent.status" />
           </div>
         </div>
-        <div v-if="columns.pending.length === 0" class="column-empty">
+        <div v-if="col.cards.length === 0" class="column-empty">
           No tasks
         </div>
       </div>
     </div>
-
-    <div class="kanban-column">
-      <div class="column-header">
-        <span class="column-icon progress-icon">●</span>
-        <span class="column-title">In Progress</span>
-        <span class="column-count">{{ columns.inProgress.length }}</span>
-      </div>
-      <div class="column-body">
-        <div
-          v-for="card in columns.inProgress"
-          :key="`${card.agent.sessionId}-${card.task.id}`"
-          class="kanban-card"
-          @click="$emit('select', card.agent)"
-        >
-          <div class="card-subject">{{ card.task.subject }}</div>
-          <div class="card-footer">
-            <span class="card-project">{{ card.agent.projectName }}</span>
-            <StatusBadge :status="card.agent.status" />
-          </div>
-        </div>
-        <div v-if="columns.inProgress.length === 0" class="column-empty">
-          No tasks
-        </div>
-      </div>
-    </div>
-
-    <div class="kanban-column">
-      <div class="column-header">
-        <span class="column-icon completed-icon">✓</span>
-        <span class="column-title">Completed</span>
-        <span class="column-count">{{ columns.completed.length }}</span>
-      </div>
-      <div class="column-body">
-        <div
-          v-for="card in columns.completed"
-          :key="`${card.agent.sessionId}-${card.task.id}`"
-          class="kanban-card"
-          @click="$emit('select', card.agent)"
-        >
-          <div class="card-subject">{{ card.task.subject }}</div>
-          <div class="card-footer">
-            <span class="card-project">{{ card.agent.projectName }}</span>
-            <StatusBadge :status="card.agent.status" />
-          </div>
-        </div>
-        <div v-if="columns.completed.length === 0" class="column-empty">
-          No tasks
-        </div>
-      </div>
-    </div>
-
-    <p v-if="totalTasks === 0" class="board-empty">
-      No tasks found across agents.
-    </p>
   </div>
+  <p v-else class="board-empty">
+    No tasks found across agents.
+  </p>
 </template>
 
 <style scoped>
@@ -136,7 +101,6 @@ const totalTasks = computed(() =>
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
-  position: relative;
 }
 
 @media (min-width: 768px) {
@@ -152,6 +116,7 @@ const totalTasks = computed(() =>
   display: flex;
   flex-direction: column;
   min-height: 200px;
+  max-height: calc(100vh - 250px);
 }
 
 .column-header {
@@ -205,6 +170,7 @@ const totalTasks = computed(() =>
   flex-direction: column;
   gap: 8px;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -256,7 +222,6 @@ const totalTasks = computed(() =>
 }
 
 .board-empty {
-  grid-column: 1 / -1;
   text-align: center;
   padding: 48px;
   color: var(--text-muted);
