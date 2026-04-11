@@ -39,7 +39,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
       </template>
       <span v-else class="card-no-output">No output yet</span>
     </div>
-    <div v-if="!agent.machine" class="card-prompt" @click.stop>
+    <div v-if="!agent.machine" class="card-prompt" @click.stop @keydown.stop>
       <span class="prompt-cursor">❯</span>
       <input
         v-model="promptInput"
