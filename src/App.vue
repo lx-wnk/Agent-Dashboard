@@ -94,7 +94,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
     <CostTrend :trend="costTrend" />
     <div v-if="scriptPath" class="script-banner">
       <span class="script-label">Channel script:</span>
-      <code class="script-path" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript">{{ scriptPath }}</code>
+      <code class="script-path" tabindex="0" role="button" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript" @keydown.enter="copyScript" @keydown.space.prevent="copyScript">{{ scriptPath }}</code>
       <span v-if="copied" class="copied-hint">Copied!</span>
     </div>
     <main>
@@ -342,6 +342,11 @@ body {
 
 .script-path:hover {
   color: var(--accent-green);
+}
+
+.script-path:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 
 .copied-hint {
