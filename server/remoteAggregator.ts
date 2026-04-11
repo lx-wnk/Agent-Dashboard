@@ -19,9 +19,12 @@ export function getRemoteUrls(): string[] {
         const parsed = new URL(u)
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
           return false
-        // Warn if URL points to localhost (potential self-fetch loop)
-        if ((parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') && parsed.port === String(process.env.DASHBOARD_PORT || '13120'))
-          consola.warn(`[remotes] ${u} points to this dashboard instance — may cause duplicate agents`)
+        // Filter out self-referencing URLs to prevent fetch loops
+        const selfHosts = ['localhost', '127.0.0.1', '[::1]', '0.0.0.0']
+        if (selfHosts.includes(parsed.hostname) && parsed.port === String(process.env.DASHBOARD_PORT || '13120')) {
+          consola.warn(`[remotes] Skipping ${u} — points to this dashboard instance`)
+          return false
+        }
         return true
       }
       catch {

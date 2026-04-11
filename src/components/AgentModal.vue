@@ -84,7 +84,6 @@ function stopRefresh() {
 
 // Fetch output when agent changes
 watch(() => props.agent?.sessionId, (sessionId) => {
-  stopRefresh()
   if (sessionId && !props.agent?.machine) {
     fetchOutput(sessionId)
     startRefresh()
