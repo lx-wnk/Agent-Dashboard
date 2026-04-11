@@ -83,7 +83,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
         class="issue-btn"
         href="https://github.com/lx-wnk/Agent-Dashboard/issues/new/choose"
         target="_blank"
-        rel="noopener"
+        rel="noopener noreferrer"
         title="Report a bug or request a feature"
       >Issue</a>
       <button class="sessions-btn" @click="showSessions = true">
@@ -247,6 +247,11 @@ body {
 .issue-btn:hover {
   color: var(--text-primary);
   filter: brightness(1.15);
+}
+
+.issue-btn:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 
 .sessions-btn {
