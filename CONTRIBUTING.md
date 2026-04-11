@@ -16,7 +16,7 @@ pnpm install
 pnpm dev
 ```
 
-**Prerequisites:** Node.js 20+, pnpm, at least one running Claude Code agent for the dashboard to display.
+**Prerequisites:** Node.js 22+, pnpm, at least one running Claude Code agent for the dashboard to display.
 
 **Platform:** macOS fully supported, Linux mostly supported (CPU monitoring uses `/proc/stat`), Windows not supported.
 
