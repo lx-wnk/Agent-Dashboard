@@ -40,6 +40,7 @@ export interface Agent {
   meta: SessionMeta | null
   channelAvailable: boolean
   lastOutput: string | null
+  machine?: string
 }
 
 export interface ChannelReply {

@@ -3,6 +3,7 @@ import type { Agent } from '../types'
 import { computed } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import MachineBadge from './MachineBadge.vue'
 import StatusBadge from './StatusBadge.vue'
 
 const props = defineProps<{ agent: Agent }>()
@@ -28,6 +29,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
         <StatusBadge :status="agent.status" />
         <span class="card-project">{{ agent.projectName }}</span>
         <span class="card-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }}</span>
+        <MachineBadge v-if="agent.machine" :machine="agent.machine" />
       </div>
       <div class="card-title-right">
         <span class="card-meta">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
@@ -56,7 +58,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
         {{ isSending ? '...' : '↵' }}
       </button>
     </div>
-    <p v-if="sendStatus" class="card-send-status" :class="sendStatus">
+    <p v-if="sendStatus && !agent.machine" class="card-send-status" :class="sendStatus">
       {{ sendStatus === 'sent' ? 'Sent' : sendError }}
     </p>
   </div>
@@ -172,4 +174,5 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 }
 .card-send-status.sent { color: var(--accent-green); }
 .card-send-status.error { color: var(--accent-red); }
+
 </style>

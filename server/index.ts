@@ -10,6 +10,7 @@ import { consola } from 'consola'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
+import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
 import { parseFullSession } from './jsonlParser.js'
 import { getSessions } from './sessionScanner.js'
 import { getSystemInfo } from './systemMonitor.js'
@@ -76,9 +77,16 @@ async function start() {
     res.json({ scriptPath, homedir: home })
   })
 
-  app.get('/api/agents', async (_req, res) => {
+  app.get('/api/agents', async (req, res) => {
     try {
-      const agents = await getAgents()
+      const localAgents = await getAgents()
+      // If this request comes from another dashboard (X-Dashboard-Origin), return local-only to prevent chains
+      if (isRemoteFetch(req.headers)) {
+        res.json(localAgents)
+        return
+      }
+      const remoteUrls = getRemoteUrls()
+      const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
       res.json(agents)
     }
     catch (err) {

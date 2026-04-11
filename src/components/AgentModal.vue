@@ -3,6 +3,7 @@ import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import MachineBadge from './MachineBadge.vue'
 import StatusBadge from './StatusBadge.vue'
 import SubAgentList from './SubAgentList.vue'
 import TaskList from './TaskList.vue'
@@ -84,8 +85,7 @@ function stopRefresh() {
 
 // Fetch output when agent changes
 watch(() => props.agent?.sessionId, (sessionId) => {
-  stopRefresh()
-  if (sessionId) {
+  if (sessionId && !props.agent?.machine) {
     fetchOutput(sessionId)
     startRefresh()
     nextTick(() => promptEl.value?.focus())
@@ -136,6 +136,7 @@ async function handleSend() {
           <div class="modal-title-left">
             <StatusBadge :status="agent.status" />
             <span class="modal-project">{{ agent.projectName }}</span>
+            <MachineBadge v-if="agent.machine" :machine="agent.machine" />
             <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
           </div>
           <div class="modal-title-right">
@@ -146,7 +147,10 @@ async function handleSend() {
         </div>
 
         <div ref="outputEl" class="modal-output">
-          <div v-if="isLoadingOutput" class="output-loading">
+          <div v-if="agent.machine" class="output-empty">
+            Session output is not available for remote agents.
+          </div>
+          <div v-else-if="isLoadingOutput" class="output-loading">
             Loading session output...
           </div>
           <template v-else-if="outputMessages.length > 0">
@@ -188,7 +192,7 @@ async function handleSend() {
           </details>
         </div>
 
-        <div class="modal-prompt">
+        <div v-if="!agent.machine" class="modal-prompt">
           <span class="prompt-cursor">❯</span>
           <textarea
             ref="promptEl"
@@ -208,7 +212,7 @@ async function handleSend() {
             {{ isSending ? '...' : '↵' }}
           </button>
         </div>
-        <p v-if="sendStatus" class="modal-send-status" :class="sendStatus">
+        <p v-if="sendStatus && !agent.machine" class="modal-send-status" :class="sendStatus">
           {{ sendStatus === 'sent' ? 'Sent' : sendError }}
         </p>
       </div>
