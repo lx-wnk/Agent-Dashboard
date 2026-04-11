@@ -82,7 +82,8 @@ const filteredAgents = computed(() => {
     || a.projectPath.toLowerCase().includes(q)
     || (a.lastOutput?.toLowerCase().includes(q) ?? false)
     || a.sessionId.toLowerCase().includes(q)
-    || (a.currentAction?.toLowerCase().includes(q) ?? false),
+    || (a.currentAction?.toLowerCase().includes(q) ?? false)
+    || (a.machine?.toLowerCase().includes(q) ?? false),
   )
 })
 
