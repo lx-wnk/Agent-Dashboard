@@ -40,6 +40,7 @@ export interface Agent {
   meta: SessionMeta | null
   channelAvailable: boolean
   lastOutput: string | null
+  lastBtw: { message: string, response: string | null } | null
   machine?: string
 }
 
@@ -63,9 +64,13 @@ export interface TaskInfo {
 }
 
 export interface OutputMessage {
-  role: 'assistant' | 'tool_call' | 'tool_result'
+  role: 'assistant' | 'tool_call' | 'tool_result' | 'human' | 'channel_reply' | 'task' | 'subagent'
   content: string
   timestamp?: string
   toolName?: string
   filePath?: string
+  taskStatus?: 'pending' | 'in_progress' | 'completed'
+  taskId?: string
+  subagentType?: string
+  queued?: boolean
 }

@@ -58,6 +58,7 @@ export async function getAgents(): Promise<Agent[]> {
       toolCounts: session?.toolCounts || {},
       meta: session?.meta || null,
       lastOutput: session?.lastOutput ?? null,
+      lastBtw: session?.lastBtw ?? null,
       channelAvailable: false, // set after channel discovery below
     }
   })

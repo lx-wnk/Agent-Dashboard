@@ -39,6 +39,11 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
       </template>
       <span v-else class="card-no-output">No output yet</span>
     </div>
+    <div v-if="agent.lastBtw" class="card-btw" @click.stop>
+      <div class="btw-question">{{ agent.lastBtw.message }}</div>
+      <div v-if="agent.lastBtw.response" class="btw-response">{{ agent.lastBtw.response }}</div>
+      <div v-else class="btw-pending">...</div>
+    </div>
     <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" @click.stop @keydown.enter.stop @keydown.space.stop />
   </div>
 </template>
@@ -92,7 +97,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-secondary);
-  max-height: 120px;
+  height: 150px;
   overflow: hidden;
   position: relative;
   font-family: var(--font-mono);
@@ -112,4 +117,39 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
   font-style: italic;
 }
 
+/* /btw exchange */
+.card-btw {
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+.btw-question {
+  color: var(--text-muted);
+  border-left: 2px solid rgba(234, 179, 8, 0.6);
+  padding-left: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.btw-response {
+  color: var(--text-secondary);
+  border-left: 2px solid rgba(234, 179, 8, 0.6);
+  padding-left: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.btw-pending {
+  color: var(--text-muted);
+  padding-left: 10px;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
 </style>
