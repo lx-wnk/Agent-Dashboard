@@ -27,10 +27,10 @@ npm run typecheck  # vue-tsc type checking
 - `server/agentMerger.ts` — Matches PIDs to session data, calculates costs via `estimateCost` (from `pricing.ts`), determines status
 
 **Frontend** (Vue 3 + TypeScript SPA in `src/`):
-- `src/composables/useAgents.ts` — SSE-first real-time updates via `/api/agents/stream` with polling fallback; manages view mode (list/cards) with localStorage persistence and search query state
+- `src/composables/useAgents.ts` — SSE-first real-time updates via `/api/agents/stream` with polling fallback; manages view mode (list/cards/kanban) with localStorage persistence and search query state
 - `src/composables/useAgentPrompt.ts` — Shared composable for sending prompts to agents (via channel or spawn/resume)
 - `src/composables/useTheme.ts` — Dark/light theme composable with OS preference detection and localStorage persistence
-- `src/App.vue` — Root: header stats + view toggle (list/cards) + search bar + agent list or card grid + modal
+- `src/App.vue` — Root: header stats + view toggle (list/cards/kanban) + search bar + agent list or card grid or kanban + modal
 - `src/components/AgentRow.vue` / `SubAgentRow.vue` — Table rows for list view (subagents indented under parent)
 - `src/components/AgentCard.vue` — Card view tile with status, output preview, and inline prompt input
 - `src/components/AgentCardGrid.vue` — Responsive grid wrapper for AgentCard tiles
@@ -38,6 +38,7 @@ npm run typecheck  # vue-tsc type checking
 - `src/components/ToolTimeline.vue` — Recent tool pills; expects `:tools` (string[])
 - `src/components/TaskList.vue` — Task list with status icons; expects `:tasks` (TaskInfo[])
 - `src/components/SubAgentList.vue` — Subagent cards; expects `:subagents` (SubAgent[])
+- `src/components/KanbanBoard.vue` — Kanban board aggregating tasks across agents into status columns (pending/in-progress/completed)
 - `src/types.ts` — All shared TypeScript interfaces (`Agent`, `TokenUsage`, `SessionMeta`, etc.)
 - `src/utils/format.ts` — Token, cost, uptime, and model name formatting utilities (including `shortModel`)
 
