@@ -10,6 +10,7 @@ import { consola } from 'consola'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
+import { aggregateAgents, getRemoteUrls } from './remoteAggregator.js'
 import { parseFullSession } from './jsonlParser.js'
 import { getSessions } from './sessionScanner.js'
 import { getSystemInfo } from './systemMonitor.js'
@@ -78,7 +79,9 @@ async function start() {
 
   app.get('/api/agents', async (_req, res) => {
     try {
-      const agents = await getAgents()
+      const localAgents = await getAgents()
+      const remoteUrls = getRemoteUrls()
+      const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
       res.json(agents)
     }
     catch (err) {

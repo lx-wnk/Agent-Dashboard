@@ -85,7 +85,7 @@ function stopRefresh() {
 // Fetch output when agent changes
 watch(() => props.agent?.sessionId, (sessionId) => {
   stopRefresh()
-  if (sessionId) {
+  if (sessionId && !props.agent?.machine) {
     fetchOutput(sessionId)
     startRefresh()
     nextTick(() => promptEl.value?.focus())
@@ -136,6 +136,7 @@ async function handleSend() {
           <div class="modal-title-left">
             <StatusBadge :status="agent.status" />
             <span class="modal-project">{{ agent.projectName }}</span>
+            <span v-if="agent.machine" class="modal-machine">{{ agent.machine }}</span>
             <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
           </div>
           <div class="modal-title-right">
@@ -146,7 +147,10 @@ async function handleSend() {
         </div>
 
         <div ref="outputEl" class="modal-output">
-          <div v-if="isLoadingOutput" class="output-loading">
+          <div v-if="agent.machine" class="output-empty">
+            Session output is not available for remote agents.
+          </div>
+          <div v-else-if="isLoadingOutput" class="output-loading">
             Loading session output...
           </div>
           <template v-else-if="outputMessages.length > 0">
@@ -188,7 +192,7 @@ async function handleSend() {
           </details>
         </div>
 
-        <div class="modal-prompt">
+        <div v-if="!agent.machine" class="modal-prompt">
           <span class="prompt-cursor">❯</span>
           <textarea
             ref="promptEl"
@@ -208,7 +212,7 @@ async function handleSend() {
             {{ isSending ? '...' : '↵' }}
           </button>
         </div>
-        <p v-if="sendStatus" class="modal-send-status" :class="sendStatus">
+        <p v-if="sendStatus && !agent.machine" class="modal-send-status" :class="sendStatus">
           {{ sendStatus === 'sent' ? 'Sent' : sendError }}
         </p>
       </div>
@@ -254,6 +258,14 @@ async function handleSend() {
   min-width: 0;
 }
 .modal-project { font-weight: 600; font-size: 14px; }
+.modal-machine {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
+  border-radius: 3px;
+  padding: 0 5px;
+}
 .modal-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .modal-close {
   background: none;

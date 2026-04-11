@@ -28,6 +28,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
         <StatusBadge :status="agent.status" />
         <span class="card-project">{{ agent.projectName }}</span>
         <span class="card-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }}</span>
+        <span v-if="agent.machine" class="machine-badge" :title="`Machine: ${agent.machine}`">{{ agent.machine }}</span>
       </div>
       <div class="card-title-right">
         <span class="card-meta">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
@@ -56,7 +57,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
         {{ isSending ? '...' : '↵' }}
       </button>
     </div>
-    <p v-if="sendStatus" class="card-send-status" :class="sendStatus">
+    <p v-if="sendStatus && !agent.machine" class="card-send-status" :class="sendStatus">
       {{ sendStatus === 'sent' ? 'Sent' : sendError }}
     </p>
   </div>
@@ -172,4 +173,17 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 }
 .card-send-status.sent { color: var(--accent-green); }
 .card-send-status.error { color: var(--accent-red); }
+
+.machine-badge {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
+  border-radius: 3px;
+  padding: 0 4px;
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 </style>
