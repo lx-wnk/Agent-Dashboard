@@ -1,7 +1,7 @@
 import type { Agent } from '../types'
 import { computed, onUnmounted, ref, watch } from 'vue'
 
-type ViewMode = 'list' | 'cards'
+type ViewMode = 'list' | 'cards' | 'kanban'
 
 const agents = ref<Agent[]>([])
 const selectedAgent = ref<Agent | null>(null)
@@ -10,7 +10,7 @@ const error = ref<string | null>(null)
 const searchQuery = ref('')
 const debouncedQuery = ref('')
 const stored = localStorage.getItem('agent-view-mode')
-const viewMode = ref<ViewMode>(stored === 'list' || stored === 'cards' ? stored : 'list')
+const viewMode = ref<ViewMode>(stored === 'list' || stored === 'cards' || stored === 'kanban' ? stored : 'list')
 
 let eventSource: EventSource | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null
