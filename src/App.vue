@@ -4,6 +4,7 @@ import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import CostTrend from './components/CostTrend.vue'
+import KanbanBoard from './components/KanbanBoard.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
@@ -70,6 +71,14 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
         >
           ⊞
         </button>
+        <button
+          class="toggle-btn"
+          :class="{ active: viewMode === 'kanban' }"
+          title="Kanban view"
+          @click="viewMode = 'kanban'"
+        >
+          ▦
+        </button>
       </div>
       <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
         {{ theme === 'dark' ? '☀' : '☾' }}
@@ -97,6 +106,11 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       </p>
       <AgentTable
         v-else-if="viewMode === 'list'"
+        :agents="filteredAgents"
+        @select="selectAgent"
+      />
+      <KanbanBoard
+        v-else-if="viewMode === 'kanban'"
         :agents="filteredAgents"
         @select="selectAgent"
       />
