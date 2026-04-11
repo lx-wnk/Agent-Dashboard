@@ -134,6 +134,8 @@ Spawned agents run detached — they survive dashboard restarts and appear in th
 - Channel replies are authenticated via per-agent Bearer tokens
 - Discovery files are validated for process liveness (stale files are cleaned up)
 - Markdown output sanitized via DOMPurify before `v-html` rendering
+- Spawn rate-limited to 5 requests/minute
+- **`skipPermissions` option:** The spawn dialog offers a "skip permission prompts" checkbox that passes `--dangerously-skip-permissions` to Claude Code. This bypasses all safety confirmations (file writes, deletions, shell commands). The UI shows a warning and requires double-click confirmation. Use only in isolated environments or with trusted prompts.
 
 ## Agent Skills
 

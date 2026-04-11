@@ -10,6 +10,7 @@ const model = ref('')
 const systemPrompt = ref('')
 const enableChannel = ref(true)
 const skipPermissions = ref(false)
+const skipPermissionsConfirmed = ref(false)
 const isSpawning = ref(false)
 const errorMsg = ref('')
 const spawnStatusMsg = ref('')
@@ -32,6 +33,7 @@ function resetForm() {
   systemPrompt.value = ''
   enableChannel.value = true
   skipPermissions.value = false
+  skipPermissionsConfirmed.value = false
   isSpawning.value = false
   errorMsg.value = ''
   spawnStatusMsg.value = ''
@@ -88,6 +90,12 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
 async function handleSpawn() {
   if (isSpawning.value || !prompt.value.trim() || !cwd.value.trim())
     return
+
+  // Require explicit confirmation for skip-permissions
+  if (skipPermissions.value && !skipPermissionsConfirmed.value) {
+    skipPermissionsConfirmed.value = true
+    return
+  }
 
   isSpawning.value = true
   errorMsg.value = ''
@@ -241,8 +249,17 @@ onUnmounted(() => {
               id="spawn-yolo"
               v-model="skipPermissions"
               type="checkbox"
+              @change="skipPermissionsConfirmed = false"
             >
             <label for="spawn-yolo">Skip permission prompts <span class="yolo-hint">(--dangerously-skip-permissions)</span></label>
+          </div>
+
+          <div v-if="skipPermissions" class="danger-warning">
+            The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
+          </div>
+
+          <div v-if="skipPermissionsConfirmed" class="danger-confirm">
+            Click "Spawn Agent" again to confirm.
           </div>
 
           <p v-if="spawnStatusMsg" class="status-msg">
@@ -403,6 +420,24 @@ select.field-input option {
   font-size: 10px;
   color: var(--text-muted);
   font-family: var(--font-mono);
+}
+
+.danger-warning {
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgb(234, 179, 8);
+  margin-bottom: 12px;
+}
+
+.danger-confirm {
+  font-size: 12px;
+  color: var(--accent-red);
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
 .status-msg {
