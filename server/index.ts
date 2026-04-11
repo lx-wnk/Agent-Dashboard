@@ -80,7 +80,8 @@ async function start() {
   app.get('/api/agents', async (_req, res) => {
     try {
       const localAgents = await getAgents()
-      const agents = getRemoteUrls().length > 0 ? await aggregateAgents(localAgents) : localAgents
+      const remoteUrls = getRemoteUrls()
+      const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
       res.json(agents)
     }
     catch (err) {

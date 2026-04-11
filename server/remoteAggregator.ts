@@ -11,19 +11,25 @@ export function getRemoteUrls(): string[] {
   const env = process.env.DASHBOARD_REMOTES
   if (!env)
     return []
-  return env.split(',')
+  const urls = env.split(',')
     .map(u => u.trim())
     .filter(Boolean)
     .filter((u) => {
       try {
         const parsed = new URL(u)
-        return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+          return false
+        // Warn if URL points to localhost (potential self-fetch loop)
+        if ((parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') && parsed.port === String(process.env.DASHBOARD_PORT || '13120'))
+          consola.warn(`[remotes] ${u} points to this dashboard instance — may cause duplicate agents`)
+        return true
       }
       catch {
         consola.warn(`[remotes] Ignoring invalid URL: ${u}`)
         return false
       }
     })
+  return [...new Set(urls)]
 }
 
 async function fetchRemoteAgents(url: string): Promise<(Agent & { machine: string })[]> {
@@ -53,8 +59,7 @@ async function fetchRemoteAgents(url: string): Promise<(Agent & { machine: strin
   }
 }
 
-export async function aggregateAgents(localAgents: Agent[]): Promise<Agent[]> {
-  const remoteUrls = getRemoteUrls()
+export async function aggregateAgents(localAgents: Agent[], remoteUrls: string[]): Promise<Agent[]> {
   if (remoteUrls.length === 0)
     return localAgents
 
