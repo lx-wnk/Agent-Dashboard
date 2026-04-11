@@ -88,14 +88,14 @@ function toggleSubagents(pid: number) {
     <table class="agent-table">
       <thead>
         <tr>
-          <th class="sortable" @click="toggleSort('status')">Status{{ sortIndicator('status') }}</th>
-          <th class="sortable" @click="toggleSort('projectName')">Project{{ sortIndicator('projectName') }}</th>
-          <th class="sortable" @click="toggleSort('currentAction')">Current Action{{ sortIndicator('currentAction') }}</th>
-          <th class="sortable" @click="toggleSort('model')">Model{{ sortIndicator('model') }}</th>
-          <th class="sortable" @click="toggleSort('tokens')">Tokens{{ sortIndicator('tokens') }}</th>
-          <th class="sortable" @click="toggleSort('costEstimate')">Cost{{ sortIndicator('costEstimate') }}</th>
-          <th class="sortable" @click="toggleSort('uptime')">Uptime{{ sortIndicator('uptime') }}</th>
-          <th class="sortable" @click="toggleSort('pid')">PID{{ sortIndicator('pid') }}</th>
+          <th class="sortable" tabindex="0" @click="toggleSort('status')" @keydown.enter="toggleSort('status')" @keydown.space.prevent="toggleSort('status')">Status{{ sortIndicator('status') }}</th>
+          <th class="sortable" tabindex="0" @click="toggleSort('projectName')" @keydown.enter="toggleSort('projectName')" @keydown.space.prevent="toggleSort('projectName')">Project{{ sortIndicator('projectName') }}</th>
+          <th class="sortable" tabindex="0" @click="toggleSort('currentAction')" @keydown.enter="toggleSort('currentAction')" @keydown.space.prevent="toggleSort('currentAction')">Current Action{{ sortIndicator('currentAction') }}</th>
+          <th class="sortable" tabindex="0" @click="toggleSort('model')" @keydown.enter="toggleSort('model')" @keydown.space.prevent="toggleSort('model')">Model{{ sortIndicator('model') }}</th>
+          <th class="sortable" tabindex="0" @click="toggleSort('tokens')" @keydown.enter="toggleSort('tokens')" @keydown.space.prevent="toggleSort('tokens')">Tokens{{ sortIndicator('tokens') }}</th>
+          <th class="sortable" tabindex="0" @click="toggleSort('costEstimate')" @keydown.enter="toggleSort('costEstimate')" @keydown.space.prevent="toggleSort('costEstimate')">Cost{{ sortIndicator('costEstimate') }}</th>
+          <th class="sortable" tabindex="0" @click="toggleSort('uptime')" @keydown.enter="toggleSort('uptime')" @keydown.space.prevent="toggleSort('uptime')">Uptime{{ sortIndicator('uptime') }}</th>
+          <th class="sortable" tabindex="0" @click="toggleSort('pid')" @keydown.enter="toggleSort('pid')" @keydown.space.prevent="toggleSort('pid')">PID{{ sortIndicator('pid') }}</th>
           <th />
         </tr>
       </thead>
@@ -156,6 +156,11 @@ function toggleSubagents(pid: number) {
 
 .agent-table th.sortable:hover {
   color: var(--text-secondary);
+}
+
+.agent-table th.sortable:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
 }
 
 .empty {

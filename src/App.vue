@@ -125,8 +125,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
 </template>
 
 <style>
-:root,
-[data-theme="dark"] {
+:root {
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
   --bg-tertiary: #334155;
@@ -202,6 +201,7 @@ body {
 
 .theme-btn {
   background: var(--bg-tertiary);
+  color: var(--text-primary);
   border: none;
   border-radius: 6px;
   padding: 6px 10px;

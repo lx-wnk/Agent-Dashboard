@@ -100,8 +100,10 @@ async function start() {
     res.flushHeaders()
 
     sseClients.add(res)
+    startSSEBroadcast()
     _req.on('close', () => {
       sseClients.delete(res)
+      stopSSEBroadcast()
     })
   })
 
@@ -113,32 +115,44 @@ async function start() {
     res.json(costTrend)
   })
 
-  // Push agent data to all SSE clients every 3 seconds
-  setInterval(async () => {
-    try {
-      const agents = await getAgents()
+  // SSE broadcast + cost trend recording: only scan processes when clients are connected
+  let sseBroadcastId: ReturnType<typeof setInterval> | null = null
 
-      // Record cost trend point
-      const totalCost = agents.reduce((sum, a) => sum + a.costEstimate, 0)
-      const totalTokens = agents.reduce((sum, a) => {
-        const u = a.tokenUsage
-        return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
-      }, 0)
-      costTrend.push({ t: Date.now(), cost: totalCost, tokens: totalTokens })
-      if (costTrend.length > MAX_TREND_POINTS) {
-        costTrend.shift()
-      }
+  function startSSEBroadcast() {
+    if (sseBroadcastId)
+      return
+    sseBroadcastId = setInterval(async () => {
+      try {
+        const agents = await getAgents()
 
-      if (sseClients.size === 0) return
-      const data = `data: ${JSON.stringify(agents)}\n\n`
-      for (const client of sseClients) {
-        client.write(data)
+        // Record cost trend point
+        const totalCost = agents.reduce((sum, a) => sum + a.costEstimate, 0)
+        const totalTokens = agents.reduce((sum, a) => {
+          const u = a.tokenUsage
+          return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
+        }, 0)
+        costTrend.push({ t: Date.now(), cost: totalCost, tokens: totalTokens })
+        if (costTrend.length > MAX_TREND_POINTS) {
+          costTrend.shift()
+        }
+
+        const data = `data: ${JSON.stringify(agents)}\n\n`
+        for (const client of sseClients) {
+          client.write(data)
+        }
       }
+      catch (err) {
+        console.error('SSE broadcast error:', err)
+      }
+    }, 3000)
+  }
+
+  function stopSSEBroadcast() {
+    if (sseBroadcastId && sseClients.size === 0) {
+      clearInterval(sseBroadcastId)
+      sseBroadcastId = null
     }
-    catch (err) {
-      console.error('SSE broadcast error:', err)
-    }
-  }, 3000)
+  }
 
   app.get('/api/sessions', async (_req, res) => {
     try {

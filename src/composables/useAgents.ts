@@ -14,6 +14,7 @@ const viewMode = ref<ViewMode>(stored === 'list' || stored === 'cards' ? stored 
 
 let eventSource: EventSource | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null
+let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
 let subscriberCount = 0
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -52,9 +53,16 @@ function startSSE() {
   }
 
   eventSource.onerror = () => {
-    // SSE failed — fall back to polling
-    stopSSE()
-    startPolling()
+    if (eventSource?.readyState === EventSource.CLOSED) {
+      // Permanent failure — fall back to polling, retry SSE after 30s
+      stopSSE()
+      startPolling()
+      sseRetryTimer = setTimeout(() => {
+        stopPolling()
+        startSSE()
+      }, 30000)
+    }
+    // Transient error — EventSource reconnects automatically
   }
 }
 
@@ -119,6 +127,10 @@ function stopDataStream() {
   if (subscriberCount <= 0) {
     stopSSE()
     stopPolling()
+    if (sseRetryTimer) {
+      clearTimeout(sseRetryTimer)
+      sseRetryTimer = null
+    }
     subscriberCount = 0
   }
 }
