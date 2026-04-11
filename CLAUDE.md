@@ -50,4 +50,4 @@ npm run typecheck  # vue-tsc type checking
 - No database — all data sourced from Claude Code's filesystem and running processes
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
-- **Platform:** macOS only. `server/systemMonitor.ts` uses macOS-specific `top` flags; process scanning relies on `ps` and `lsof` (Unix-only). Linux/Windows are unsupported.
+- **Platform:** macOS and Linux. `server/systemMonitor.ts` uses `top` on macOS and `/proc/stat` on Linux for CPU; `server/processScanner.ts` uses `lsof` on macOS and `/proc/<pid>/cwd` on Linux. Windows is unsupported.

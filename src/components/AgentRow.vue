@@ -15,7 +15,14 @@ defineEmits<{
 </script>
 
 <template>
-  <tr class="agent-row" @click="$emit('select', agent)">
+  <tr
+    class="agent-row"
+    tabindex="0"
+    role="row"
+    @click="$emit('select', agent)"
+    @keydown.enter="$emit('select', agent)"
+    @keydown.space.prevent="$emit('select', agent)"
+  >
     <td class="col-status">
       <StatusBadge :status="agent.status" />
     </td>
@@ -61,6 +68,11 @@ defineEmits<{
 
 .agent-row:hover {
   background: var(--bg-secondary);
+}
+
+.agent-row:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
 }
 
 .agent-row td {
