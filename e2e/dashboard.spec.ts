@@ -125,6 +125,24 @@ test('view toggle switches to kanban view', async ({ page }) => {
 })
 
 // ---------------------------------------------------------------------------
+// Test — Kanban view persists after reload
+// ---------------------------------------------------------------------------
+test('kanban view persists after page reload', async ({ page }) => {
+  await page.goto('/')
+  await waitForAgentsLoaded(page)
+
+  // Switch to kanban view
+  await page.locator('.toggle-btn').nth(2).click()
+  await expect(page.locator('.kanban-board, .board-empty')).toBeVisible()
+
+  // Reload and verify persistence
+  await page.reload()
+  await waitForAgentsLoaded(page)
+  await expect(page.locator('.kanban-board, .board-empty')).toBeVisible()
+  await expect(page.locator('.agent-table')).not.toBeVisible()
+})
+
+// ---------------------------------------------------------------------------
 // Test 7 — Search filters agents
 // ---------------------------------------------------------------------------
 test('typing in search input filters the agent list', async ({ page }) => {
