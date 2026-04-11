@@ -6,11 +6,12 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 
 ## Features
 
-- **Live agent table** — all running Claude Code processes with status, model, tokens, cost, uptime
-- **Detail panel** — token usage breakdown, tool histogram, task list, subagents, session metadata
-- **Channel control** — send follow-up instructions to running agents via MCP Channels
+- **Live agent monitoring** — all running Claude Code processes with status, model, tokens, cost, uptime (list, card, and kanban views)
+- **Chat-style session view** — full conversation transcript with markdown rendering, collapsible tool groups, inline task checklists, sub-agent badges
+- **Channel control** — send follow-up instructions and /btw interrupts to running agents via MCP Channels
 - **Agent spawning** — start new Claude agents with custom prompts, models, and system prompts from the UI
-- **Auto-refresh** — 3-second polling, no manual refresh needed
+- **Multi-machine support** — aggregate agents from remote machines via `DASHBOARD_REMOTES`
+- **SSE streaming** — real-time updates via Server-Sent Events with polling fallback
 
 ## Quick Start
 
@@ -50,32 +51,39 @@ Browser (Vue 3 SPA)         Express Backend (:13120)        Claude Code Agents
 ### Directory Structure
 
 ```
-├── server/                  # Express backend
-│   ├── index.ts             # API server + Vite middleware
-│   ├── processScanner.ts    # Finds Claude processes via ps/lsof
-│   ├── jsonlParser.ts       # Reads JSONL session logs
-│   ├── agentMerger.ts       # Merges process + session data, cost calc
-│   └── channelDiscovery.ts  # Reads channel discovery files
-├── src/                     # Vue 3 frontend
-│   ├── App.vue              # Root: header stats, table, panels
+├── server/                    # Express backend
+│   ├── index.ts               # API server + SSE + Vite middleware
+│   ├── processScanner.ts      # Finds Claude processes via ps/lsof
+│   ├── jsonlParser.ts         # Reads JSONL session logs
+│   ├── agentMerger.ts         # Merges process + session data, cost calc
+│   ├── pricing.ts             # MODEL_PRICING lookup table
+│   ├── channelDiscovery.ts    # Reads channel discovery files
+│   ├── remoteAggregator.ts    # Multi-machine agent aggregation
+│   └── systemMonitor.ts       # CPU/disk monitoring (macOS + Linux)
+├── src/                       # Vue 3 frontend
+│   ├── App.vue                # Root: header stats, view toggle, search
 │   ├── components/
-│   │   ├── AgentTable.vue   # Sortable agent table
-│   │   ├── AgentRow.vue     # Table row per agent
-│   │   ├── SubAgentRow.vue  # Indented subagent rows
-│   │   ├── AgentDetail.vue  # Off-canvas detail panel
-│   │   ├── ChannelPanel.vue # Send messages to agents
-│   │   ├── SpawnDialog.vue  # Spawn new agents modal
-│   │   ├── ToolTimeline.vue # Recent tool calls timeline
-│   │   ├── TaskList.vue     # Agent task tracker
-│   │   └── SubAgentList.vue # Subagent list in detail panel
+│   │   ├── AgentTable.vue     # Sortable agent table (list view)
+│   │   ├── AgentRow.vue       # Table row per agent
+│   │   ├── SubAgentRow.vue    # Indented subagent rows
+│   │   ├── AgentCard.vue      # Card view tile with output preview
+│   │   ├── AgentCardGrid.vue  # Responsive grid for cards
+│   │   ├── AgentModal.vue     # Chat-style session modal
+│   │   ├── KanbanBoard.vue    # Kanban board (tasks across agents)
+│   │   ├── SpawnDialog.vue    # Spawn new agents modal
+│   │   ├── PromptInput.vue    # Prompt input with slash autocomplete
+│   │   ├── ToolTimeline.vue   # Recent tool calls timeline
+│   │   ├── TaskList.vue       # Agent task tracker
+│   │   └── SubAgentList.vue   # Subagent list in detail panel
 │   ├── composables/
-│   │   ├── useAgents.ts     # Polls /api/agents every 3s
-│   │   └── useChannel.ts    # Channel message send + reply polling
-│   ├── types.ts             # Shared TypeScript interfaces
-│   └── utils/format.ts      # Token, cost, uptime formatters
-└── channel/                 # MCP Channel server (separate package)
-    ├── dashboard-channel.ts # Standalone MCP server for agent control
-    └── package.json         # @modelcontextprotocol/sdk dependency
+│   │   ├── useAgents.ts       # SSE + polling for agent data
+│   │   ├── useAgentPrompt.ts  # Send prompts to agents
+│   │   └── useTheme.ts        # Dark/light theme with OS detection
+│   ├── types.ts               # Shared TypeScript interfaces
+│   └── utils/format.ts        # Token, cost, uptime formatters
+└── channel/                   # MCP Channel server (separate package)
+    ├── dashboard-channel.ts   # Standalone MCP server for agent control
+    └── package.json           # @modelcontextprotocol/sdk dependency
 ```
 
 ## Controlling Running Agents
@@ -125,7 +133,7 @@ Spawned agents run detached — they survive dashboard restarts and appear in th
 - Server binds to `127.0.0.1` only — never exposed to the network
 - Channel replies are authenticated via per-agent Bearer tokens
 - Discovery files are validated for process liveness (stale files are cleaned up)
-- All user-generated content rendered with `v-text` (no `v-html`) to prevent XSS
+- Markdown output sanitized via DOMPurify before `v-html` rendering
 
 ## Agent Skills
 
@@ -163,7 +171,14 @@ done
 pnpm dev    # Express + Vite with hot reload on :13120
 ```
 
-No separate build, lint, or test scripts. The single `dev` command runs the full stack. The Vite dev server runs as Express middleware with HMR enabled.
+```bash
+pnpm dev           # Express + Vite with hot reload on :13120
+pnpm build         # Production build via Vite
+pnpm lint          # ESLint check
+pnpm test          # Vitest unit tests
+pnpm test:e2e      # Playwright E2E tests
+pnpm typecheck     # vue-tsc type checking
+```
 
 ### Prerequisites
 

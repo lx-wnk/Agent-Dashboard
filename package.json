@@ -3,6 +3,14 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
+  "description": "Real-time monitoring and control dashboard for locally running Claude Code agents",
+  "author": "Alexander Wink",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lx-wnk/Agent-Dashboard.git"
+  },
+  "homepage": "https://github.com/lx-wnk/Agent-Dashboard",
   "scripts": {
     "dev": "tsx watch --env-file=.env server/index.ts",
     "build": "vite build",
