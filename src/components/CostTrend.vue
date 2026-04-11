@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { formatTokens } from '../utils/format'
 
 interface TrendPoint {
@@ -19,8 +19,18 @@ async function fetchTrend() {
   catch { /* ignore */ }
 }
 
-// Fetch historical trend data once on mount (no polling — server records trends via SSE broadcast)
-onMounted(fetchTrend)
+// Fetch trend data on mount and refresh every 30s to keep sparkline up to date
+let refreshId: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  fetchTrend()
+  refreshId = setInterval(fetchTrend, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshId)
+    clearInterval(refreshId)
+})
 
 // Take last 60 points (3 minutes of data) for the sparkline
 const sparkData = computed(() => {

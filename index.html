@@ -6,6 +6,13 @@
   <title>Claude Agent Overview</title>
 </head>
 <body>
+  <script>
+    // Apply theme before first paint to prevent FOUC for light-mode users
+    (function() {
+      var t = localStorage.getItem('agent-theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <div id="app"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
