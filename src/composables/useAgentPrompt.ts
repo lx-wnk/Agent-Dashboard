@@ -1,7 +1,9 @@
-import type { Agent } from '../types'
+import type { Agent, OutputMessage } from '../types'
 import { ref } from 'vue'
 
-export function useAgentPrompt(getAgent: () => Agent | null) {
+export type OnMessageSent = (msg: OutputMessage) => void
+
+export function useAgentPrompt(getAgent: () => Agent | null, onMessageSent?: OnMessageSent) {
   const promptInput = ref('')
   const isSending = ref(false)
   const sendStatus = ref<'sent' | 'error' | null>(null)
@@ -44,6 +46,11 @@ export function useAgentPrompt(getAgent: () => Agent | null) {
         }
       }
       sendStatus.value = 'sent'
+      onMessageSent?.({
+        role: 'human',
+        content: msg,
+        timestamp: new Date().toISOString(),
+      })
       promptInput.value = ''
     }
     catch (err) {
