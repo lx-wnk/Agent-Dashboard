@@ -1,40 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed } from 'vue'
+import type { TrendPoint } from '../composables/useAgents'
 import { formatTokens } from '../utils/format'
 
-interface TrendPoint {
-  t: number
-  cost: number
-  tokens: number
-}
-
-const trend = ref<TrendPoint[]>([])
-
-async function fetchTrend() {
-  try {
-    const res = await fetch('/api/trends')
-    if (res.ok)
-      trend.value = await res.json()
-  }
-  catch { /* ignore */ }
-}
-
-// Fetch trend data on mount and refresh every 30s to keep sparkline up to date
-let refreshId: ReturnType<typeof setInterval> | null = null
-
-onMounted(() => {
-  fetchTrend()
-  refreshId = setInterval(fetchTrend, 30000)
-})
-
-onUnmounted(() => {
-  if (refreshId)
-    clearInterval(refreshId)
-})
+const props = defineProps<{ trend: TrendPoint[] }>()
 
 // Take last 60 points (3 minutes of data) for the sparkline
 const sparkData = computed(() => {
-  const points = trend.value.slice(-60)
+  const points = props.trend.slice(-60)
   if (points.length < 2)
     return []
   return points
@@ -46,7 +19,7 @@ const maxCost = computed(() => {
 })
 
 const costDelta = computed(() => {
-  const pts = trend.value
+  const pts = props.trend
   if (pts.length < 2)
     return null
   const recent = pts[pts.length - 1].cost
@@ -55,7 +28,7 @@ const costDelta = computed(() => {
 })
 
 const tokenDelta = computed(() => {
-  const pts = trend.value
+  const pts = props.trend
   if (pts.length < 2)
     return null
   const recent = pts[pts.length - 1].tokens

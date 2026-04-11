@@ -11,7 +11,7 @@ import { useAgents } from './composables/useAgents'
 import { useTheme } from './composables/useTheme'
 import { formatTokens, totalTokenCount } from './utils/format'
 
-const { agents, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
+const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
 const { theme, toggleTheme } = useTheme()
 const showSpawnDialog = ref(false)
 const showSessions = ref(false)
@@ -82,7 +82,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       </button>
     </header>
     <ResourceBar />
-    <CostTrend />
+    <CostTrend :trend="costTrend" />
     <div v-if="scriptPath" class="script-banner">
       <span class="script-label">Channel script:</span>
       <code class="script-path" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript">{{ scriptPath }}</code>

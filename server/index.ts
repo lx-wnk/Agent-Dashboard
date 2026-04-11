@@ -107,13 +107,9 @@ async function start() {
     })
   })
 
-  // Cost trend history: timestamp + total cost snapshots (ring buffer, 1h at 3s interval = 1200 entries)
+  // Cost trend history: ring buffer, 1h at 3s interval = 1200 entries
   const MAX_TREND_POINTS = 1200
   const costTrend: Array<{ t: number, cost: number, tokens: number }> = []
-
-  app.get('/api/trends', (_req, res) => {
-    res.json(costTrend)
-  })
 
   // SSE broadcast + cost trend recording: only scan processes when clients are connected
   let sseBroadcastId: ReturnType<typeof setInterval> | null = null
@@ -136,7 +132,9 @@ async function start() {
           costTrend.shift()
         }
 
-        const data = `data: ${JSON.stringify(agents)}\n\n`
+        // Send agents + trend data in a single SSE event
+        const payload = JSON.stringify({ agents, trend: costTrend.slice(-60) })
+        const data = `data: ${payload}\n\n`
         for (const client of sseClients) {
           try {
             if (!client.writableEnded)

@@ -1,9 +1,16 @@
 import type { Agent } from '../types'
 import { computed, onUnmounted, ref, watch } from 'vue'
 
+export interface TrendPoint {
+  t: number
+  cost: number
+  tokens: number
+}
+
 type ViewMode = 'list' | 'cards'
 
 const agents = ref<Agent[]>([])
+const costTrend = ref<TrendPoint[]>([])
 const selectedAgent = ref<Agent | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
@@ -18,8 +25,10 @@ let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
 let subscriberCount = 0
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-function handleAgentData(data: Agent[]) {
+function handleAgentData(data: Agent[], trend?: TrendPoint[]) {
   agents.value = data
+  if (trend)
+    costTrend.value = trend
   error.value = null
   isLoading.value = false
 
@@ -43,11 +52,13 @@ async function fetchAgents() {
 }
 
 function startSSE() {
+  if (subscriberCount <= 0) return
   eventSource = new EventSource('/api/agents/stream')
 
   eventSource.onmessage = (event) => {
     try {
-      handleAgentData(JSON.parse(event.data))
+      const payload = JSON.parse(event.data)
+      handleAgentData(payload.agents, payload.trend)
     }
     catch { /* ignore parse errors */ }
   }
@@ -145,6 +156,7 @@ export function useAgents() {
 
   return {
     agents,
+    costTrend,
     filteredAgents,
     selectedAgent,
     isLoading,
