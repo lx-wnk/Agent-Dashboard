@@ -128,6 +128,36 @@ Spawned agents run detached — they survive dashboard restarts and appear in th
 - Discovery files are validated for process liveness (stale files are cleaned up)
 - All user-generated content rendered with `v-text` (no `v-html`) to prevent XSS
 
+## Agent Skills
+
+Project-specific AI agent skills are tracked in `skills-lock.json`. The actual skill files are not committed — install them locally after cloning.
+
+### Install for Claude Code
+
+```bash
+cat skills-lock.json | jq -r '.skills[] | "\(.source) .claude/skills/\(.name)/SKILL.md"' | while read url dest; do
+  mkdir -p "$(dirname "$dest")" && curl -sL "$url" -o "$dest"
+done
+```
+
+### Install for other agents (Copilot, Cursor, etc.)
+
+```bash
+cat skills-lock.json | jq -r '.skills[] | "\(.source) .agents/skills/\(.name)/SKILL.md"' | while read url dest; do
+  mkdir -p "$(dirname "$dest")" && curl -sL "$url" -o "$dest"
+done
+```
+
+### Current skills
+
+| Skill | Description |
+|-------|-------------|
+| `vue` | Vue 3 Composition API, script setup, reactivity |
+| `vitest` | Vitest unit testing with Jest-compatible API |
+| `vite` | Vite build tool configuration and plugin API |
+| `vueuse-functions` | VueUse composables for Vue features |
+| `playwright-best-practices` | Playwright E2E testing patterns |
+
 ## Development
 
 ```bash
