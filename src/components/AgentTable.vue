@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { totalTokenCount } from '../utils/format'
 import AgentRow from './AgentRow.vue'
 import SubAgentRow from './SubAgentRow.vue'
 
-defineProps<{
+type SortField = 'status' | 'projectName' | 'currentAction' | 'model' | 'tokens' | 'costEstimate' | 'uptime' | 'pid'
+type SortDir = 'asc' | 'desc'
+
+const STATUS_ORDER: Record<string, number> = { active: 0, waiting: 1, idle: 2 }
+
+const props = defineProps<{
   agents: Agent[]
 }>()
 
@@ -13,6 +19,59 @@ defineEmits<{
 }>()
 
 const expandedPids = ref(new Set<number>())
+const sortField = ref<SortField>('status')
+const sortDir = ref<SortDir>('asc')
+
+function toggleSort(field: SortField) {
+  if (sortField.value === field) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  }
+  else {
+    sortField.value = field
+    sortDir.value = field === 'costEstimate' || field === 'tokens' || field === 'uptime' ? 'desc' : 'asc'
+  }
+}
+
+function sortIndicator(field: SortField): string {
+  if (sortField.value !== field) return ''
+  return sortDir.value === 'asc' ? ' ▲' : ' ▼'
+}
+
+const sortedAgents = computed(() => {
+  const list = [...props.agents]
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  list.sort((a, b) => {
+    let cmp = 0
+    switch (sortField.value) {
+      case 'status':
+        cmp = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
+        break
+      case 'projectName':
+        cmp = a.projectName.localeCompare(b.projectName)
+        break
+      case 'currentAction':
+        cmp = (a.currentAction ?? '').localeCompare(b.currentAction ?? '')
+        break
+      case 'model':
+        cmp = (a.model ?? '').localeCompare(b.model ?? '')
+        break
+      case 'tokens':
+        cmp = totalTokenCount(a.tokenUsage) - totalTokenCount(b.tokenUsage)
+        break
+      case 'costEstimate':
+        cmp = a.costEstimate - b.costEstimate
+        break
+      case 'uptime':
+        cmp = a.uptime - b.uptime
+        break
+      case 'pid':
+        cmp = a.pid - b.pid
+        break
+    }
+    return cmp * dir
+  })
+  return list
+})
 
 function toggleSubagents(pid: number) {
   if (expandedPids.value.has(pid)) {
@@ -29,19 +88,19 @@ function toggleSubagents(pid: number) {
     <table class="agent-table">
       <thead>
         <tr>
-          <th>Status</th>
-          <th>Project</th>
-          <th>Current Action</th>
-          <th>Model</th>
-          <th>Tokens</th>
-          <th>Cost</th>
-          <th>Uptime</th>
-          <th>PID</th>
+          <th class="sortable" @click="toggleSort('status')">Status{{ sortIndicator('status') }}</th>
+          <th class="sortable" @click="toggleSort('projectName')">Project{{ sortIndicator('projectName') }}</th>
+          <th class="sortable" @click="toggleSort('currentAction')">Current Action{{ sortIndicator('currentAction') }}</th>
+          <th class="sortable" @click="toggleSort('model')">Model{{ sortIndicator('model') }}</th>
+          <th class="sortable" @click="toggleSort('tokens')">Tokens{{ sortIndicator('tokens') }}</th>
+          <th class="sortable" @click="toggleSort('costEstimate')">Cost{{ sortIndicator('costEstimate') }}</th>
+          <th class="sortable" @click="toggleSort('uptime')">Uptime{{ sortIndicator('uptime') }}</th>
+          <th class="sortable" @click="toggleSort('pid')">PID{{ sortIndicator('pid') }}</th>
           <th />
         </tr>
       </thead>
       <tbody>
-        <template v-for="agent in agents" :key="agent.pid">
+        <template v-for="agent in sortedAgents" :key="agent.pid">
           <AgentRow
             :agent="agent"
             :expanded="expandedPids.has(agent.pid)"
@@ -87,6 +146,16 @@ function toggleSubagents(pid: number) {
   position: sticky;
   top: 0;
   z-index: 1;
+}
+
+.agent-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.agent-table th.sortable:hover {
+  color: var(--text-secondary);
 }
 
 .empty {
