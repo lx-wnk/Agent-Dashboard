@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in contributing to Claude Agent Overview!
+Thanks for your interest in contributing to Agent Dashboard!
 
 ## Setup
 

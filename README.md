@@ -45,7 +45,7 @@ Browser (Vue 3 SPA)         Express Backend (:13120)        Claude Code Agents
 1. **Process scanning** — `ps aux` + `lsof` find running `/claude` processes and their working directories
 2. **Session matching** — PIDs are matched to JSONL session files in `~/.claude/projects/`
 3. **Log parsing** — tail-reads last 32KB of each session file for tokens, tools, tasks, model info
-4. **Cost estimation** — `MODEL_PRICING` table in `agentMerger.ts` calculates API-equivalent costs
+4. **Cost estimation** — `MODEL_PRICING` table in `pricing.ts` calculates API-equivalent costs
 5. **Status classification** — active (< 30s), waiting (< 5min), idle (> 5min) since last activity
 
 ### Directory Structure
@@ -168,10 +168,6 @@ done
 | `playwright-best-practices` | Playwright E2E testing patterns |
 
 ## Development
-
-```bash
-pnpm dev    # Express + Vite with hot reload on :13120
-```
 
 ```bash
 pnpm dev           # Express + Vite with hot reload on :13120
