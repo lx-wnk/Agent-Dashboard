@@ -40,9 +40,15 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
       <span v-else class="card-no-output">No output yet</span>
     </div>
     <div v-if="agent.lastBtw" class="card-btw" @click.stop>
-      <div class="btw-question">{{ agent.lastBtw.message }}</div>
-      <div v-if="agent.lastBtw.response" class="btw-response">{{ agent.lastBtw.response }}</div>
-      <div v-else class="btw-pending">...</div>
+      <div class="btw-question">
+        {{ agent.lastBtw.message }}
+      </div>
+      <div v-if="agent.lastBtw.response" class="btw-response">
+        {{ agent.lastBtw.response }}
+      </div>
+      <div v-else class="btw-pending">
+        ...
+      </div>
     </div>
     <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" @click.stop @keydown.enter.stop @keydown.space.stop />
   </div>
