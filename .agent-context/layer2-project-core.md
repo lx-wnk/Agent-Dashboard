@@ -14,8 +14,8 @@
 
 ## Testing Strategy
 
-- **Unit:** Vitest — `npm test` / `npm run test:watch`
-- **E2E:** Playwright — `npm run test:e2e` (auto-starts dev server on port 13120)
+- **Unit:** Vitest — `pnpm test` / `pnpm test:watch`
+- **E2E:** Playwright — `pnpm test:e2e` (auto-starts dev server on port 13120)
 
 ## Commit Convention
 
