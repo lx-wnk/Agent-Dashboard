@@ -14,7 +14,14 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 </script>
 
 <template>
-  <div class="agent-card" @click="$emit('select', agent)">
+  <div
+    class="agent-card"
+    tabindex="0"
+    role="button"
+    @click="$emit('select', agent)"
+    @keydown.enter="$emit('select', agent)"
+    @keydown.space.prevent="$emit('select', agent)"
+  >
     <div class="card-titlebar">
       <div class="card-title-left">
         <StatusBadge :status="agent.status" />
@@ -66,6 +73,10 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 .agent-card:hover {
   border-color: var(--bg-tertiary);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+.agent-card:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 .card-titlebar {
   background: var(--bg-secondary);

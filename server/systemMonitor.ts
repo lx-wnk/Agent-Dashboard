@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
 import { cpus, freemem, loadavg, totalmem, uptime } from 'node:os'
 import { promisify } from 'node:util'
+import { IS_LINUX } from './platform'
 
 const execFileAsync = promisify(execFile)
 
@@ -30,7 +32,42 @@ export interface SystemInfo {
   uptime: number
 }
 
-async function getCpuUsage(): Promise<number> {
+// Previous /proc/stat snapshot for delta-based CPU calculation on Linux
+let prevCpuIdle = 0
+let prevCpuTotal = 0
+
+async function getCpuUsageLinux(): Promise<number> {
+  try {
+    const stat = await readFile('/proc/stat', 'utf-8')
+    const cpuLine = stat.split('\n').find(l => l.startsWith('cpu '))
+    if (!cpuLine)
+      return 0
+    // cpu  user nice system idle iowait irq softirq steal
+    const parts = cpuLine.trim().split(WHITESPACE_RE).slice(1).map(Number)
+    const idle = parts[3] + (parts[4] || 0) // idle + iowait
+    const total = parts.reduce((a, b) => a + b, 0)
+
+    if (prevCpuTotal === 0) {
+      prevCpuIdle = idle
+      prevCpuTotal = total
+      return 0
+    }
+
+    const deltaIdle = idle - prevCpuIdle
+    const deltaTotal = total - prevCpuTotal
+    prevCpuIdle = idle
+    prevCpuTotal = total
+
+    if (deltaTotal === 0)
+      return 0
+    return Math.round((1 - deltaIdle / deltaTotal) * 10000) / 100
+  }
+  catch {
+    return 0
+  }
+}
+
+async function getCpuUsageMac(): Promise<number> {
   try {
     const { stdout } = await execFileAsync('top', ['-l', '1', '-n', '0', '-s', '0'])
     const cpuLine = stdout.split('\n').find(line => line.startsWith('CPU usage:'))
@@ -51,8 +88,6 @@ async function getCpuUsage(): Promise<number> {
 async function getDiskUsage(): Promise<SystemInfo['disk']> {
   const { stdout } = await execFileAsync('df', ['-k', '/'])
   const lines = stdout.trim().split('\n')
-  // Header: Filesystem 1024-blocks Used Available Capacity ...
-  // Data line follows
   const parts = lines[1].trim().split(WHITESPACE_RE)
 
   const totalKb = Number.parseInt(parts[1], 10)
@@ -70,6 +105,7 @@ async function getDiskUsage(): Promise<SystemInfo['disk']> {
 }
 
 export async function getSystemInfo(): Promise<SystemInfo> {
+  const getCpuUsage = IS_LINUX ? getCpuUsageLinux : getCpuUsageMac
   const [cpuUsage, disk] = await Promise.all([getCpuUsage(), getDiskUsage()])
 
   const totalMem = totalmem()
