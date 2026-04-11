@@ -85,7 +85,7 @@ function stopRefresh() {
 // Fetch output when agent changes
 watch(() => props.agent?.sessionId, (sessionId) => {
   stopRefresh()
-  if (sessionId) {
+  if (sessionId && !props.agent?.machine) {
     fetchOutput(sessionId)
     startRefresh()
     nextTick(() => promptEl.value?.focus())
@@ -147,7 +147,10 @@ async function handleSend() {
         </div>
 
         <div ref="outputEl" class="modal-output">
-          <div v-if="isLoadingOutput" class="output-loading">
+          <div v-if="agent.machine" class="output-empty">
+            Session output is not available for remote agents.
+          </div>
+          <div v-else-if="isLoadingOutput" class="output-loading">
             Loading session output...
           </div>
           <template v-else-if="outputMessages.length > 0">
@@ -209,7 +212,7 @@ async function handleSend() {
             {{ isSending ? '...' : '↵' }}
           </button>
         </div>
-        <p v-if="sendStatus" class="modal-send-status" :class="sendStatus">
+        <p v-if="sendStatus && !agent.machine" class="modal-send-status" :class="sendStatus">
           {{ sendStatus === 'sent' ? 'Sent' : sendError }}
         </p>
       </div>
