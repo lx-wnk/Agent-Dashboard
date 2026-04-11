@@ -18,7 +18,7 @@ defineEmits<{
   <tr
     class="agent-row"
     tabindex="0"
-    role="row"
+    :aria-label="`Open details for ${agent.projectName}`"
     @click="$emit('select', agent)"
     @keydown.enter="$emit('select', agent)"
     @keydown.space.prevent="$emit('select', agent)"
