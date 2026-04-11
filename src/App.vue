@@ -79,6 +79,13 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
         {{ theme === 'dark' ? '☀' : '☾' }}
       </button>
+      <a
+        class="issue-btn"
+        href="https://github.com/lx-wnk/Agent-Dashboard/issues/new/choose"
+        target="_blank"
+        rel="noopener"
+        title="Report a bug or request a feature"
+      >Issue</a>
       <button class="sessions-btn" @click="showSessions = true">
         Sessions
       </button>
@@ -221,6 +228,25 @@ body {
 
 .theme-btn:hover {
   filter: brightness(1.2);
+}
+
+.issue-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.issue-btn:hover {
+  color: var(--text-primary);
+  filter: brightness(1.15);
 }
 
 .sessions-btn {
