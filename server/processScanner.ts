@@ -1,12 +1,12 @@
 import { execFile } from 'node:child_process'
 import { readlink } from 'node:fs/promises'
 import { promisify } from 'node:util'
-import { IS_LINUX } from './platform'
+import { WHITESPACE_RE } from './paths.js'
+import { IS_LINUX } from './platform.js'
 
 const execFileAsync = promisify(execFile)
 
 const LSOF_PATH_RE = /\nn(.+)/
-const WHITESPACE_RE = /\s+/
 
 export interface ProcessInfo {
   pid: number

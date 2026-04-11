@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
 import { computed } from 'vue'
-import { useAgentPrompt } from '../composables/useAgentPrompt'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import MachineBadge from './MachineBadge.vue'
+import PromptInput from './PromptInput.vue'
 import StatusBadge from './StatusBadge.vue'
 
 const props = defineProps<{ agent: Agent }>()
 defineEmits<{ select: [agent: Agent] }>()
-
-const { promptInput, isSending, sendStatus, sendError, handleSend } = useAgentPrompt(() => props.agent)
 
 const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 </script>
@@ -41,26 +39,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
       </template>
       <span v-else class="card-no-output">No output yet</span>
     </div>
-    <div v-if="!agent.machine" class="card-prompt" @click.stop @keydown.enter.stop @keydown.space.stop>
-      <span class="prompt-cursor">❯</span>
-      <input
-        v-model="promptInput"
-        class="prompt-input"
-        placeholder="Enter prompt..."
-        :disabled="isSending"
-        @keydown.enter.prevent="handleSend"
-      >
-      <button
-        class="prompt-send"
-        :disabled="isSending || promptInput.trim().length === 0"
-        @click="handleSend"
-      >
-        {{ isSending ? '...' : '↵' }}
-      </button>
-    </div>
-    <p v-if="sendStatus && !agent.machine" class="card-send-status" :class="sendStatus">
-      {{ sendStatus === 'sent' ? 'Sent' : sendError }}
-    </p>
+    <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" @click.stop @keydown.enter.stop @keydown.space.stop />
   </div>
 </template>
 
@@ -132,47 +111,5 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
   color: var(--text-muted);
   font-style: italic;
 }
-.card-prompt {
-  border-top: 1px solid var(--border);
-  padding: 8px 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.prompt-cursor {
-  color: var(--accent-blue);
-  font-size: 13px;
-  flex-shrink: 0;
-}
-.prompt-input {
-  flex: 1;
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: var(--font-mono);
-  outline: none;
-}
-.prompt-input::placeholder { color: var(--text-muted); }
-.prompt-input:disabled { opacity: 0.5; }
-.prompt-send {
-  background: var(--accent-blue);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 4px 10px;
-  font-size: 13px;
-  font-weight: bold;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.prompt-send:disabled { opacity: 0.4; cursor: not-allowed; }
-.prompt-send:not(:disabled):hover { filter: brightness(1.15); }
-.card-send-status {
-  font-size: 11px;
-  padding: 2px 12px 6px;
-}
-.card-send-status.sent { color: var(--accent-green); }
-.card-send-status.error { color: var(--accent-red); }
 
 </style>

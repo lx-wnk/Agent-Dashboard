@@ -33,10 +33,6 @@ function copyScript() {
   }, 2000)
 }
 
-function onAgentSpawned(_pid: number) {
-  // Agent will appear in the next polling cycle (~3s)
-}
-
 const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
 const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
 </script>
@@ -127,13 +123,11 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
     <SpawnDialog
       :open="showSpawnDialog"
       @close="showSpawnDialog = false"
-      @spawned="onAgentSpawned"
     />
     <SessionList
       :open="showSessions"
       :home-dir="homeDir"
       @close="showSessions = false"
-      @spawned="onAgentSpawned"
     />
   </div>
 </template>

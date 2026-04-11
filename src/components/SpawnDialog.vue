@@ -2,7 +2,7 @@
 import { onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
+const emit = defineEmits<{ close: [] }>()
 
 const prompt = ref('')
 const cwd = ref('')
@@ -16,6 +16,7 @@ const spawnStatusMsg = ref('')
 
 let errorTimer: ReturnType<typeof setTimeout> | null = null
 let statusPollTimer: ReturnType<typeof setTimeout> | null = null
+let autoCloseTimer: ReturnType<typeof setTimeout> | null = null
 
 function stopStatusPoll() {
   if (statusPollTimer) {
@@ -38,6 +39,10 @@ function resetForm() {
   if (errorTimer) {
     clearTimeout(errorTimer)
     errorTimer = null
+  }
+  if (autoCloseTimer) {
+    clearTimeout(autoCloseTimer)
+    autoCloseTimer = null
   }
 }
 
@@ -113,14 +118,13 @@ async function handleSpawn() {
 
     const data = await res.json()
     const pid = data.pid as number
-    emit('spawned', pid)
 
     // Keep dialog open and poll for early exit errors
     spawnStatusMsg.value = `Agent PID ${pid} spawned, verifying...`
     pollSpawnStatus(pid)
 
     // Auto-close after 3s if still running (no early error)
-    setTimeout(() => {
+    autoCloseTimer = setTimeout(() => {
       if (isSpawning.value && !errorMsg.value) {
         resetForm()
         emit('close')
@@ -144,7 +148,13 @@ watch(() => props.open, (isOpen) => {
   }
 })
 
-onUnmounted(() => stopStatusPoll())
+onUnmounted(() => {
+  stopStatusPoll()
+  if (autoCloseTimer) {
+    clearTimeout(autoCloseTimer)
+    autoCloseTimer = null
+  }
+})
 </script>
 
 <template>

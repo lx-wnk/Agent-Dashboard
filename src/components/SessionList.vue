@@ -16,7 +16,7 @@ interface SessionInfo {
 }
 
 const props = defineProps<{ open: boolean, homeDir: string }>()
-const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
+const emit = defineEmits<{ close: [] }>()
 
 const sessions = ref<SessionInfo[]>([])
 const isLoading = ref(false)
@@ -87,7 +87,6 @@ async function resumeSession(s: SessionInfo) {
 
     resumeMsg.value[s.sessionId] = `PID ${data.pid} spawned`
     resumePrompts.value[s.sessionId] = ''
-    emit('spawned', data.pid)
     setTimeout(() => {
       resumeMsg.value[s.sessionId] = ''
     }, 4000)
@@ -159,7 +158,6 @@ watch(() => props.open, (isOpen) => {
               v-for="s in filtered"
               :key="s.sessionId"
               class="session-card"
-              :class="{ running: s.isRunning }"
             >
               <div class="session-top">
                 <span class="session-project">{{ s.projectName }}</span>
@@ -298,10 +296,6 @@ watch(() => props.open, (isOpen) => {
   border: 1px solid transparent;
 }
 
-.session-card.running {
-  border-color: rgba(74, 222, 128, 0.2);
-}
-
 .session-top {
   display: flex;
   justify-content: space-between;
@@ -364,8 +358,6 @@ watch(() => props.open, (isOpen) => {
 }
 
 .meta-tag.cost { color: var(--accent-green); }
-.meta-tag.running-badge { color: var(--accent-green); background: rgba(74, 222, 128, 0.1); }
-
 .session-actions {
   display: flex;
   gap: 6px;

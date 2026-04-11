@@ -1,8 +1,8 @@
 import type { OutputMessage, SessionMeta, TokenUsage } from '../src/types.js'
 import { Buffer } from 'node:buffer'
 import { open, readdir, readFile, stat } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { CLAUDE_PROJECTS_DIR, SESSION_META_DIR } from './paths.js'
 
 export type TokenUsageData = TokenUsage
 export type { SessionMeta }
@@ -33,8 +33,6 @@ export interface SubAgentData {
   sessionFile: string
 }
 
-const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects')
-const SESSION_META_DIR = join(homedir(), '.claude', 'usage-data', 'session-meta')
 const TAIL_BYTES = 32768 // read last 32KB
 const HEAD_BYTES = 8192 // read first 8KB for model/version
 
@@ -146,11 +144,12 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
             // Track tool counts
             toolCounts[block.name] = (toolCounts[block.name] || 0) + 1
 
-            if (!lastTools.includes(block.name)) {
-              lastTools.push(block.name)
-              if (lastTools.length > 10)
-                lastTools.shift()
-            }
+            const idx = lastTools.indexOf(block.name)
+            if (idx !== -1)
+              lastTools.splice(idx, 1)
+            lastTools.push(block.name)
+            if (lastTools.length > 10)
+              lastTools.shift()
             currentAction = `${block.name}${block.input?.command ? `: ${String(block.input.command).substring(0, 120)}` : ''}`
           }
           else if (block.type === 'text' && block.text) {
@@ -195,7 +194,7 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
   }
 }
 
-async function readSessionMeta(sessionId: string): Promise<SessionMeta | null> {
+export async function readSessionMeta(sessionId: string): Promise<SessionMeta | null> {
   try {
     const metaPath = join(SESSION_META_DIR, `${sessionId}.json`)
     const raw = await readFile(metaPath, 'utf-8')
