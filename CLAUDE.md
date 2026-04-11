@@ -20,14 +20,16 @@ npm run typecheck  # vue-tsc type checking
 ## Architecture
 
 **Backend** (Express + Node CLI tools in `server/`):
-- `server/index.ts` — Express server with `/api/agents` endpoint, integrates Vite dev middleware
+- `server/platform.ts` — Shared `IS_LINUX` constant for platform detection
+- `server/index.ts` — Express server with `/api/agents` REST + `/api/agents/stream` SSE endpoint, integrates Vite dev middleware
 - `server/processScanner.ts` — Uses `ps` and `lsof` to find running `/claude` processes and their working directories
 - `server/jsonlParser.ts` — Tail-reads last 32KB of JSONL session files, extracts tokens, model, tools, tasks
 - `server/agentMerger.ts` — Matches PIDs to session data, calculates costs via `estimateCost` (from `pricing.ts`), determines status
 
 **Frontend** (Vue 3 + TypeScript SPA in `src/`):
-- `src/composables/useAgents.ts` — Polls `/api/agents` every 3 seconds; manages view mode (list/cards) with localStorage persistence and search query state
+- `src/composables/useAgents.ts` — SSE-first real-time updates via `/api/agents/stream` with polling fallback; manages view mode (list/cards) with localStorage persistence and search query state
 - `src/composables/useAgentPrompt.ts` — Shared composable for sending prompts to agents (via channel or spawn/resume)
+- `src/composables/useTheme.ts` — Dark/light theme composable with OS preference detection and localStorage persistence
 - `src/App.vue` — Root: header stats + view toggle (list/cards) + search bar + agent list or card grid + modal
 - `src/components/AgentRow.vue` / `SubAgentRow.vue` — Table rows for list view (subagents indented under parent)
 - `src/components/AgentCard.vue` — Card view tile with status, output preview, and inline prompt input
@@ -39,7 +41,7 @@ npm run typecheck  # vue-tsc type checking
 - `src/types.ts` — All shared TypeScript interfaces (`Agent`, `TokenUsage`, `SessionMeta`, etc.)
 - `src/utils/format.ts` — Token, cost, uptime, and model name formatting utilities (including `shortModel`)
 
-**Data flow:** Browser polls `/api/agents` → Express scans processes (`ps`/`lsof`) → matches PIDs to `~/.claude/projects/{encoded_path}/{sessionId}.jsonl` → tail-reads JSONL + reads `~/.claude/usage-data/session-meta/{sessionId}.json` → merges, calculates cost/status → returns `Agent[]`.
+**Data flow:** Browser connects to `/api/agents/stream` (SSE) with polling fallback → Express scans processes (`ps`/`lsof`) → matches PIDs to `~/.claude/projects/{encoded_path}/{sessionId}.jsonl` → tail-reads JSONL + reads `~/.claude/usage-data/session-meta/{sessionId}.json` → merges, calculates cost/status → broadcasts `Agent[]` to SSE clients.
 
 **Agent status thresholds:** active < 30s, waiting < 5min, idle > 5min (since last activity).
 
@@ -50,4 +52,4 @@ npm run typecheck  # vue-tsc type checking
 - No database — all data sourced from Claude Code's filesystem and running processes
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
-- **Platform:** macOS only. `server/systemMonitor.ts` uses macOS-specific `top` flags; process scanning relies on `ps` and `lsof` (Unix-only). Linux/Windows are unsupported.
+- **Platform:** macOS and Linux. `server/systemMonitor.ts` uses `top` on macOS and `/proc/stat` on Linux for CPU; `server/processScanner.ts` uses `lsof` on macOS and `/proc/<pid>/cwd` on Linux. Windows is unsupported.

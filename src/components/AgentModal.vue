@@ -20,6 +20,16 @@ const { promptInput, isSending, sendStatus, sendError, handleSend: sendPrompt } 
 
 const totalTokens = computed(() => props.agent ? totalTokenCount(props.agent.tokenUsage) : 0)
 
+let refreshInterval: ReturnType<typeof setInterval> | null = null
+
+function scrollToBottom() {
+  requestAnimationFrame(() => {
+    if (outputEl.value) {
+      outputEl.value.scrollTop = outputEl.value.scrollHeight
+    }
+  })
+}
+
 async function fetchOutput(sessionId: string) {
   isLoadingOutput.value = true
   try {
@@ -29,12 +39,7 @@ async function fetchOutput(sessionId: string) {
     const data = await res.json()
     outputMessages.value = data.messages
     await nextTick()
-    // Wait for browser layout after v-for render
-    requestAnimationFrame(() => {
-      if (outputEl.value) {
-        outputEl.value.scrollTop = outputEl.value.scrollHeight
-      }
-    })
+    scrollToBottom()
   }
   catch {
     outputMessages.value = []
@@ -44,15 +49,56 @@ async function fetchOutput(sessionId: string) {
   }
 }
 
+async function refreshOutput() {
+  const agent = props.agent
+  if (!agent || agent.status === 'idle')
+    return
+  try {
+    const res = await fetch(`/api/agents/${agent.sessionId}/output`)
+    if (!res.ok)
+      return
+    const data = await res.json()
+    const newMessages: OutputMessage[] = data.messages
+    if (newMessages.length > outputMessages.value.length) {
+      outputMessages.value = newMessages
+      await nextTick()
+      scrollToBottom()
+    }
+  }
+  catch { /* ignore refresh errors */ }
+}
+
+function startRefresh() {
+  stopRefresh()
+  if (props.agent && props.agent.status !== 'idle') {
+    refreshInterval = setInterval(refreshOutput, 5000)
+  }
+}
+
+function stopRefresh() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+    refreshInterval = null
+  }
+}
+
 // Fetch output when agent changes
 watch(() => props.agent?.sessionId, (sessionId) => {
+  stopRefresh()
   if (sessionId) {
     fetchOutput(sessionId)
+    startRefresh()
     nextTick(() => promptEl.value?.focus())
   }
   else {
     outputMessages.value = []
   }
+})
+
+// Restart refresh when agent status changes
+watch(() => props.agent?.status, () => {
+  if (props.agent)
+    startRefresh()
 })
 
 // Close on Escape
@@ -72,7 +118,10 @@ watch(() => props.agent, (agent) => {
   }
 }, { immediate: true })
 
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  stopRefresh()
+})
 
 async function handleSend() {
   await sendPrompt()

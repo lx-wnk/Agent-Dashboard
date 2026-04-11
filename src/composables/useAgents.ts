@@ -1,9 +1,16 @@
 import type { Agent } from '../types'
 import { computed, onUnmounted, ref, watch } from 'vue'
 
+export interface TrendPoint {
+  t: number
+  cost: number
+  tokens: number
+}
+
 type ViewMode = 'list' | 'cards'
 
 const agents = ref<Agent[]>([])
+const costTrend = ref<TrendPoint[]>([])
 const selectedAgent = ref<Agent | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
@@ -12,29 +19,68 @@ const debouncedQuery = ref('')
 const stored = localStorage.getItem('agent-view-mode')
 const viewMode = ref<ViewMode>(stored === 'list' || stored === 'cards' ? stored : 'list')
 
+let eventSource: EventSource | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null
+let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
 let subscriberCount = 0
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+function handleAgentData(data: Agent[], trend?: TrendPoint[]) {
+  agents.value = data
+  if (trend)
+    costTrend.value = trend
+  error.value = null
+  isLoading.value = false
+
+  if (selectedAgent.value) {
+    const updated = data.find(a => a.sessionId === selectedAgent.value!.sessionId)
+    selectedAgent.value = updated ?? null
+  }
+}
 
 async function fetchAgents() {
   try {
     const res = await fetch('/api/agents')
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
-    const data: Agent[] = await res.json()
-    agents.value = data
-    error.value = null
-
-    if (selectedAgent.value) {
-      const updated = data.find(a => a.sessionId === selectedAgent.value!.sessionId)
-      selectedAgent.value = updated ?? null
-    }
+    handleAgentData(await res.json())
   }
   catch (e) {
     error.value = e instanceof Error ? e.message : 'Unknown error'
-  }
-  finally {
     isLoading.value = false
+  }
+}
+
+function startSSE() {
+  if (subscriberCount <= 0) return
+  eventSource = new EventSource('/api/agents/stream')
+
+  eventSource.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data)
+      handleAgentData(payload.agents, payload.trend)
+    }
+    catch { /* ignore parse errors */ }
+  }
+
+  eventSource.onerror = () => {
+    if (eventSource?.readyState === EventSource.CLOSED) {
+      // Permanent failure — fall back to polling, retry SSE after 30s
+      stopSSE()
+      startPolling()
+      sseRetryTimer = setTimeout(() => {
+        stopPolling()
+        startSSE()
+      }, 30000)
+    }
+    // Transient error — EventSource reconnects automatically
+  }
+}
+
+function stopSSE() {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
   }
 }
 
@@ -64,7 +110,6 @@ watch(searchQuery, (q) => {
 watch(viewMode, v => localStorage.setItem('agent-view-mode', v))
 
 function startPolling() {
-  subscriberCount++
   if (intervalId)
     return
   fetchAgents()
@@ -72,17 +117,38 @@ function startPolling() {
 }
 
 function stopPolling() {
-  subscriberCount--
-  if (subscriberCount <= 0 && intervalId) {
+  if (intervalId) {
     clearInterval(intervalId)
     intervalId = null
+  }
+}
+
+function startDataStream() {
+  subscriberCount++
+  if (subscriberCount > 1)
+    return
+
+  // Try SSE first, with an initial fetch for immediate data
+  fetchAgents()
+  startSSE()
+}
+
+function stopDataStream() {
+  subscriberCount--
+  if (subscriberCount <= 0) {
+    stopSSE()
+    stopPolling()
+    if (sseRetryTimer) {
+      clearTimeout(sseRetryTimer)
+      sseRetryTimer = null
+    }
     subscriberCount = 0
   }
 }
 
 export function useAgents() {
-  startPolling()
-  onUnmounted(stopPolling)
+  startDataStream()
+  onUnmounted(stopDataStream)
 
   function selectAgent(agent: Agent | null) {
     selectedAgent.value = agent
@@ -90,6 +156,7 @@ export function useAgents() {
 
   return {
     agents,
+    costTrend,
     filteredAgents,
     selectedAgent,
     isLoading,
