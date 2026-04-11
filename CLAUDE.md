@@ -46,7 +46,7 @@ npm run typecheck  # vue-tsc type checking
 ## Key Conventions
 
 - Path alias: `@/*` maps to `./src/*` (configured in tsconfig.json and vite.config.ts)
-- Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data)
+- Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data). **Multi-machine mode** (`DASHBOARD_REMOTES` env var) requires remote instances to be network-accessible; use a VPN or SSH tunnel — never bind to `0.0.0.0` on an untrusted network.
 - No database — all data sourced from Claude Code's filesystem and running processes
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
