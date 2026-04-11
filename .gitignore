@@ -9,3 +9,7 @@ dist/
 
 
 /docs/superpowers/*
+
+# Agent skills (installed from skills-lock.json)
+.claude/skills/
+.agents/skills/

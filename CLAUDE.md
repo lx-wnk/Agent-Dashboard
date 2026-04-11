@@ -10,9 +10,12 @@ A real-time monitoring dashboard for locally running Claude Code agents. It read
 
 ```bash
 npm run dev        # Starts Express (port 13120) + Vite SPA middleware with hot reload
+npm run build      # Production build via Vite
+npm run lint       # ESLint check
+npm run test       # Vitest unit tests (single run)
+npm run test:e2e   # Playwright E2E tests
+npm run typecheck  # vue-tsc type checking
 ```
-
-No separate build, lint, or test scripts are configured. The single dev command runs the full stack.
 
 ## Architecture
 
@@ -20,7 +23,7 @@ No separate build, lint, or test scripts are configured. The single dev command 
 - `server/index.ts` — Express server with `/api/agents` endpoint, integrates Vite dev middleware
 - `server/processScanner.ts` — Uses `ps` and `lsof` to find running `/claude` processes and their working directories
 - `server/jsonlParser.ts` — Tail-reads last 32KB of JSONL session files, extracts tokens, model, tools, tasks
-- `server/agentMerger.ts` — Matches PIDs to session data, calculates costs via `MODEL_PRICING`, determines status
+- `server/agentMerger.ts` — Matches PIDs to session data, calculates costs via `estimateCost` (from `pricing.ts`), determines status
 
 **Frontend** (Vue 3 + TypeScript SPA in `src/`):
 - `src/composables/useAgents.ts` — Polls `/api/agents` every 3 seconds; manages view mode (list/cards) with localStorage persistence and search query state
@@ -45,6 +48,6 @@ No separate build, lint, or test scripts are configured. The single dev command 
 - Path alias: `@/*` maps to `./src/*` (configured in tsconfig.json and vite.config.ts)
 - Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data)
 - No database — all data sourced from Claude Code's filesystem and running processes
-- Subagents discovered from `~/.claude/projects/{sessionId}/subagents/*.jsonl`
-- Cost estimation uses a `MODEL_PRICING` lookup table in `agentMerger.ts`
+- Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
+- Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
 - **Platform:** macOS only. `server/systemMonitor.ts` uses macOS-specific `top` flags; process scanning relies on `ps` and `lsof` (Unix-only). Linux/Windows are unsupported.
