@@ -77,12 +77,10 @@ async function start() {
     res.json({ scriptPath, homedir: home })
   })
 
-  const hasRemotes = getRemoteUrls().length > 0
-
   app.get('/api/agents', async (_req, res) => {
     try {
       const localAgents = await getAgents()
-      const agents = hasRemotes ? await aggregateAgents(localAgents) : localAgents
+      const agents = getRemoteUrls().length > 0 ? await aggregateAgents(localAgents) : localAgents
       res.json(agents)
     }
     catch (err) {
