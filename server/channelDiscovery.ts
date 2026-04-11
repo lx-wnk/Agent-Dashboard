@@ -1,13 +1,11 @@
 import { execFile } from 'node:child_process'
 import { readdir, readFile, unlink } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { promisify } from 'node:util'
+import { DISCOVERY_DIR, WHITESPACE_RE } from './paths.js'
 
 const execFileAsync = promisify(execFile)
-const WHITESPACE_RE = /\s+/
-const DISCOVERY_DIR = join(homedir(), '.claude', 'dashboard-channel')
 
 interface DiscoveryEntry {
   port: number

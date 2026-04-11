@@ -23,8 +23,10 @@ export function useAgentPrompt(getAgent: () => Agent | null) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: msg }),
         })
-        if (!res.ok)
-          throw new Error((await res.json()).error || 'Send failed')
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || `Send failed (${res.status})`)
+        }
       }
       else {
         const res = await fetch('/api/agents/spawn', {
@@ -36,8 +38,10 @@ export function useAgentPrompt(getAgent: () => Agent | null) {
             resumeSessionId: agent.sessionId,
           }),
         })
-        if (!res.ok)
-          throw new Error((await res.json()).error || 'Resume failed')
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || `Resume failed (${res.status})`)
+        }
       }
       sendStatus.value = 'sent'
       promptInput.value = ''

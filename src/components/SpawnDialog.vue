@@ -16,6 +16,7 @@ const spawnStatusMsg = ref('')
 
 let errorTimer: ReturnType<typeof setTimeout> | null = null
 let statusPollTimer: ReturnType<typeof setTimeout> | null = null
+let autoCloseTimer: ReturnType<typeof setTimeout> | null = null
 
 function stopStatusPoll() {
   if (statusPollTimer) {
@@ -38,6 +39,10 @@ function resetForm() {
   if (errorTimer) {
     clearTimeout(errorTimer)
     errorTimer = null
+  }
+  if (autoCloseTimer) {
+    clearTimeout(autoCloseTimer)
+    autoCloseTimer = null
   }
 }
 
@@ -120,7 +125,7 @@ async function handleSpawn() {
     pollSpawnStatus(pid)
 
     // Auto-close after 3s if still running (no early error)
-    setTimeout(() => {
+    autoCloseTimer = setTimeout(() => {
       if (isSpawning.value && !errorMsg.value) {
         resetForm()
         emit('close')

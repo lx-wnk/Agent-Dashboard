@@ -1,3 +1,5 @@
+import type { TokenUsage } from '../src/types.js'
+
 // Pricing per 1M tokens (USD) — Claude Code Pro/Max users pay via subscription,
 // but we estimate API-equivalent cost for visibility
 export const MODEL_PRICING: Record<string, { input: number, output: number, cacheRead: number, cacheCreate: number }> = {
@@ -10,14 +12,7 @@ export const MODEL_PRICING: Record<string, { input: number, output: number, cach
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6'
 
-export interface TokenCounts {
-  inputTokens: number
-  outputTokens: number
-  cacheReadTokens?: number
-  cacheCreationTokens?: number
-}
-
-export function estimateCost(usage: TokenCounts, model: string | null): number {
+export function estimateCost(usage: Partial<TokenUsage> & Pick<TokenUsage, 'inputTokens' | 'outputTokens'>, model: string | null): number {
   const pricing = (model && MODEL_PRICING[model]) || MODEL_PRICING[DEFAULT_MODEL]
   const m = 1_000_000
   return (

@@ -29,7 +29,7 @@ defineProps<{
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   color: var(--text-muted);
-  background: rgba(30, 41, 59, 0.3);
+  background: var(--bg-secondary);
 }
 
 .indent {

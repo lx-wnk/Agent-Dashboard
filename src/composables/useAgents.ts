@@ -16,7 +16,7 @@ const isLoading = ref(true)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
 const debouncedQuery = ref('')
-const stored = localStorage.getItem('agent-view-mode')
+const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('agent-view-mode') : null
 const viewMode = ref<ViewMode>(stored === 'list' || stored === 'cards' || stored === 'kanban' ? stored : 'list')
 
 let eventSource: EventSource | null = null
