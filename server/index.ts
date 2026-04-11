@@ -138,7 +138,13 @@ async function start() {
 
         const data = `data: ${JSON.stringify(agents)}\n\n`
         for (const client of sseClients) {
-          client.write(data)
+          try {
+            if (!client.writableEnded)
+              client.write(data)
+          }
+          catch {
+            sseClients.delete(client)
+          }
         }
       }
       catch (err) {
