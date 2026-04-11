@@ -17,7 +17,9 @@
   },
   "dependencies": {
     "consola": "^3.4.2",
+    "dompurify": "^3.3.3",
     "express": "^5.1.0",
+    "marked": "^18.0.0",
     "vue": "^3.5.13"
   },
   "packageManager": "pnpm@10.33.0",

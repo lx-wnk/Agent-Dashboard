@@ -22,6 +22,7 @@ export interface SessionData {
   conversationTurns: number
   toolCounts: Record<string, number>
   lastOutput: string | null
+  lastBtw: { message: string, response: string | null } | null
   meta: SessionMeta | null
 }
 
@@ -95,6 +96,9 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
   const tasks: SessionData['tasks'] = []
   const toolCounts: Record<string, number> = {}
   let lastOutput: string | null = null
+  let lastBtw: SessionData['lastBtw'] = null
+  let pendingBtwMessage: string | null = null
+  const taskToolUseIds = new Map<string, number>() // tool_use block.id → tasks[] index
   const tokenUsage: TokenUsageData = {
     inputTokens: 0,
     outputTokens: 0,
@@ -115,13 +119,45 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
           : 'unknown'
     }
 
-    // Count user turns
+    // Track queued_command (btw) attachments
+    if (entry.type === 'attachment' && entry.attachment?.type === 'queued_command') {
+      const parts = extractTextParts(entry.attachment.prompt)
+      if (parts.length > 0)
+        pendingBtwMessage = parts.join('\n')
+    }
+
+    // Count user turns and resolve TaskCreate tool_results
     if (entry.type === 'user') {
       conversationTurns++
+      if (Array.isArray(entry.message?.content)) {
+        for (const block of entry.message.content) {
+          if (block.type === 'tool_result' && block.tool_use_id && taskToolUseIds.has(block.tool_use_id)) {
+            const realId = (typeof block.content === 'string' ? block.content : '').trim()
+            if (realId) {
+              const idx = taskToolUseIds.get(block.tool_use_id)!
+              tasks[idx].id = realId
+            }
+          }
+        }
+      }
     }
 
     // Extract data from assistant messages
     if (entry.type === 'assistant') {
+      // Capture btw response if we have a pending btw message
+      if (pendingBtwMessage) {
+        let btwResponse: string | null = null
+        const content = entry.message?.content
+        if (Array.isArray(content)) {
+          const firstText = content.find((b: any) => b.type === 'text' && b.text?.trim())
+          if (firstText) {
+            btwResponse = firstText.text.trim().substring(0, 500)
+          }
+        }
+        lastBtw = { message: pendingBtwMessage, response: btwResponse }
+        pendingBtwMessage = null
+      }
+
       // Token usage from message.usage
       const usage = entry.message?.usage
       if (usage) {
@@ -162,6 +198,7 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
 
           // Task tracking
           if (block.type === 'tool_use' && block.name === 'TaskCreate' && block.input) {
+            taskToolUseIds.set(block.id, tasks.length)
             tasks.push({
               id: block.id || String(tasks.length + 1),
               subject: block.input.subject || 'Unknown',
@@ -191,6 +228,9 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
     conversationTurns,
     toolCounts,
     lastOutput,
+    lastBtw: pendingBtwMessage
+      ? { message: pendingBtwMessage, response: null }
+      : lastBtw,
   }
 }
 
@@ -287,6 +327,7 @@ export async function findSessionForProject(cwd: string): Promise<SessionData | 
     lastActivity: newestFile.mtime.toISOString(),
     currentAction: info.currentAction ?? null,
     lastOutput: info.lastOutput ?? null,
+    lastBtw: info.lastBtw ?? null,
     lastTools: info.lastTools || [],
     tasks: info.tasks || [],
     subagents,
@@ -357,6 +398,31 @@ async function findSubagents(subagentDir: string): Promise<SubAgentData[]> {
   return subagents
 }
 
+/**
+ * Extract cleaned text parts from a string-or-array prompt/content field.
+ * Strips system tags and filters out image references.
+ */
+function extractTextParts(content: unknown): string[] {
+  if (typeof content === 'string') {
+    const text = stripSystemTags(content).trim()
+    return (text && !text.startsWith('[Image: source:')) ? [text] : []
+  }
+  if (!Array.isArray(content))
+    return []
+  return content
+    .filter((b: any) => b.type === 'text' && b.text)
+    .map((b: any) => stripSystemTags(b.text).trim())
+    .filter((t: string) => t && !t.startsWith('[Image: source:'))
+}
+
+function stripSystemTags(text: string): string {
+  // Remove XML-style system tags and their content (e.g. <system-reminder>...</system-reminder>)
+  let cleaned = text.replace(/<(system-reminder|local-command-caveat|command-name|command-message|command-args|local-command-stdout)[^>]*>[\s\S]*?<\/\1>/gi, '')
+  // Remove any remaining self-closing system tags
+  cleaned = cleaned.replace(/<(system-reminder|local-command-caveat|command-name|command-message|command-args|local-command-stdout)[^/]*\/>/gi, '')
+  return cleaned.trim()
+}
+
 export async function parseFullSession(sessionId: string, lastOnly: boolean = false): Promise<OutputMessage[]> {
   const projectDirs = await readdir(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
   let sessionFilePath: string | null = null
@@ -405,19 +471,79 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
 
   const entries = parseJsonlLines(raw)
   const messages: OutputMessage[] = []
+  // Task ID resolution: tool_use block.id (toolu_*) → real task ID (numeric "1","2",...)
+  const taskCreateIndices = new Map<string, number>() // tool_use_id → message index
+  const taskSubjects = new Map<string, string>() // tool_use_id → subject
 
   for (const entry of entries) {
-    // Handle tool results (separate entry type)
+    // Handle queued commands (messages sent while agent is working)
+    // These have no message.content — check before the guard below
+    if (entry.type === 'attachment' && entry.attachment?.type === 'queued_command') {
+      for (const text of extractTextParts(entry.attachment.prompt)) {
+        messages.push({
+          role: 'human',
+          content: text,
+          timestamp: entry.timestamp,
+          queued: true,
+        })
+      }
+      continue
+    }
+
+    // Handle standalone tool results (older JSONL format)
     if (entry.type === 'result' && entry.result) {
       messages.push({
         role: 'tool_result',
-        content: typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result).substring(0, 1000),
+        content: (typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result)).substring(0, 1000),
         timestamp: entry.timestamp,
       })
       continue
     }
 
-    if (entry.type !== 'assistant' || !entry.message?.content)
+    if (!entry.message?.content)
+      continue
+
+    // Handle user entries
+    if (entry.type === 'user' && entry.message.role === 'user') {
+      // Extract human text (works for both string and array content)
+      for (const text of extractTextParts(entry.message.content)) {
+        messages.push({
+          role: 'human',
+          content: text,
+          timestamp: entry.timestamp,
+        })
+      }
+      // Extract tool results from array content
+      if (Array.isArray(entry.message.content)) {
+        for (const block of entry.message.content) {
+          if (block.type === 'tool_result' && block.content) {
+            const content = typeof block.content === 'string'
+              ? block.content
+              : JSON.stringify(block.content)
+            // Resolve TaskCreate tool_use_id → real task ID
+            if (block.tool_use_id && taskCreateIndices.has(block.tool_use_id)) {
+              const realId = content.trim()
+              if (realId) {
+                const idx = taskCreateIndices.get(block.tool_use_id)!
+                messages[idx].taskId = realId
+                const subject = taskSubjects.get(block.tool_use_id)
+                if (subject)
+                  taskSubjects.set(realId, subject)
+              }
+            }
+            messages.push({
+              role: 'tool_result',
+              content: content.substring(0, 1000),
+              timestamp: entry.timestamp,
+            })
+          }
+        }
+      }
+      continue
+    }
+
+    // Handle assistant entries
+    if (entry.type !== 'assistant')
       continue
     if (!Array.isArray(entry.message.content))
       continue
@@ -431,14 +557,47 @@ export async function parseFullSession(sessionId: string, lastOnly: boolean = fa
         })
       }
       else if (block.type === 'tool_use' && block.name) {
-        const filePath = block.input?.file_path || block.input?.path || undefined
-        messages.push({
-          role: 'tool_call',
-          content: block.name,
-          timestamp: entry.timestamp,
-          toolName: block.name,
-          filePath,
-        })
+        if (block.name === 'TaskCreate') {
+          const subject = block.input?.subject || block.input?.description || 'Task'
+          taskCreateIndices.set(block.id, messages.length)
+          taskSubjects.set(block.id, subject)
+          messages.push({
+            role: 'task',
+            content: subject,
+            timestamp: entry.timestamp,
+            taskStatus: 'pending',
+            taskId: block.id, // temporary — resolved to real ID when tool_result arrives
+          })
+        }
+        else if (block.name === 'TaskUpdate' && block.input?.taskId) {
+          const realId = block.input.taskId
+          const subject = taskSubjects.get(realId) || 'Task'
+          messages.push({
+            role: 'task',
+            content: subject,
+            timestamp: entry.timestamp,
+            taskStatus: block.input.status || 'in_progress',
+            taskId: realId,
+          })
+        }
+        else if (block.name === 'Agent') {
+          messages.push({
+            role: 'subagent',
+            content: block.input?.description || 'Sub-agent',
+            timestamp: entry.timestamp,
+            subagentType: block.input?.subagent_type || 'general',
+          })
+        }
+        else {
+          const filePath = block.input?.file_path || block.input?.path || undefined
+          messages.push({
+            role: 'tool_call',
+            content: block.name,
+            timestamp: entry.timestamp,
+            toolName: block.name,
+            filePath,
+          })
+        }
       }
     }
   }
