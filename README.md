@@ -28,25 +28,30 @@ Open [http://localhost:13120](http://localhost:13120) — running Claude Code ag
 ## Architecture
 
 ```
-Browser (Vue 3 SPA)         Express Backend (:13120)        Claude Code Agents
-┌─────────────────┐        ┌─────────────────────┐        ┌─────────────────┐
-│ Agent Table     │──poll──▶│ GET /api/agents     │──scan──▶│ ps / lsof       │
-│ Detail Panel    │        │                     │──read──▶│ ~/.claude/      │
-│ Channel Panel   │──send──▶│ POST /agents/:id/msg│──proxy─▶│ JSONL logs      │
-│ Spawn Dialog    │──spawn─▶│ POST /agents/spawn  │         │                 │
-└─────────────────┘        └─────────────────────┘        └─────────────────┘
-                                    ▲
-                           Channel MCP Server
-                           (per agent, random port)
++------------------------+      +----------------------------+      +-------------------+
+|  Browser (Vue 3 SPA)   |      |  Express Backend (:13120)  |      | Claude Code Agents|
++------------------------+      +----------------------------+      +-------------------+
+| List / Cards / Kanban  | <--- | GET  /api/agents/stream    | ---> | ps / lsof         |
+| Agent Modal (chat)     |      |      (SSE + polling fb)    |      | ~/.claude/        |
+| Prompt Input           | ---> | POST /agents/:id/message   |      | JSONL logs        |
+| Spawn Dialog           | ---> | POST /agents/spawn         |      |                   |
++------------------------+      +----------------------------+      +-------------------+
+                                            |
+                                            v
+                                +----------------------------+
+                                |    Channel MCP Server      |
+                                |  (per agent, random port)  |
+                                +----------------------------+
 ```
 
 ### Data Flow
 
-1. **Process scanning** — `ps aux` + `lsof` find running `/claude` processes and their working directories
-2. **Session matching** — PIDs are matched to JSONL session files in `~/.claude/projects/`
-3. **Log parsing** — tail-reads last 32KB of each session file for tokens, tools, tasks, model info
+1. **Process scanning** — `ps aux` + `lsof` (macOS) or `/proc/<pid>/cwd` (Linux) find running `claude` processes and their working directories
+2. **Session matching** — PIDs are matched to JSONL session files in `~/.claude/projects/{encoded_path}/`
+3. **Log parsing** — tail-reads last 32KB of each session file for tokens, tools, tasks, model info; full session read on modal open
 4. **Cost estimation** — `MODEL_PRICING` table in `pricing.ts` calculates API-equivalent costs
 5. **Status classification** — active (< 30s), waiting (< 5min), idle (> 5min) since last activity
+6. **Real-time updates** — browser subscribes to `/api/agents/stream` (SSE) with polling fallback
 
 ### Directory Structure
 
@@ -122,10 +127,16 @@ Spawned agents run detached — they survive dashboard restarts and appear in th
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/api/config` | Dashboard configuration (remotes, hostname) |
 | `GET` | `/api/agents` | List all running agents with full metadata |
-| `POST` | `/api/agents/spawn` | Spawn a new Claude agent process |
+| `GET` | `/api/agents/stream` | Server-Sent Events stream of agent updates |
+| `GET` | `/api/agents/:sessionId/output` | Full parsed session transcript |
+| `GET` | `/api/agents/:sessionId/replies` | Channel replies (supports `?since=` filter) |
 | `POST` | `/api/agents/:sessionId/message` | Send instruction to agent via channel |
-| `GET` | `/api/agents/:sessionId/replies` | Get agent replies (supports `?since=` filter) |
+| `POST` | `/api/agents/spawn` | Spawn a new Claude agent process |
+| `GET` | `/api/agents/spawn/:pid/status` | Check spawn status and captured stderr |
+| `GET` | `/api/sessions` | List resumable session files |
+| `GET` | `/api/system` | CPU, memory, and disk usage |
 | `POST` | `/api/channel-reply` | Internal: receives replies from channel servers |
 
 ## Security
