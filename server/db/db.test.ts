@@ -123,6 +123,57 @@ describe('tasksRepo', () => {
     expect(getTaskById(task.id)).toBeNull()
     expect(listStageRunsForTask(task.id)).toHaveLength(0)
   })
+
+  it('cascades delete to permissions, permission_requests, and audit_log', () => {
+    const task = createTask({ slug: 'casc', title: 'Cascade', cwd: '/c' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    createTaskPermission({
+      taskId: task.id,
+      tool: 'Bash',
+      granted: true,
+      preApproved: true,
+    })
+    createPermissionRequest({ stageRunId: run.id, tool: 'WebFetch' })
+    appendAudit({ taskId: task.id, actor: 'user', action: 'created' })
+
+    expect(listTaskPermissions(task.id)).toHaveLength(1)
+    expect(listPendingPermissionRequests(run.id)).toHaveLength(1)
+    expect(listAuditForTask(task.id).length).toBeGreaterThan(0)
+
+    deleteTask(task.id)
+
+    expect(listTaskPermissions(task.id)).toHaveLength(0)
+    expect(listPendingPermissionRequests(run.id)).toHaveLength(0)
+    expect(listAuditForTask(task.id)).toHaveLength(0)
+  })
+
+  it('sets parent_task_id to null when parent is deleted (follow-up tasks)', () => {
+    const parent = createTask({ slug: 'par', title: 'P', cwd: '/p' })
+    const child = createTask({
+      slug: 'chi',
+      title: 'C',
+      cwd: '/p',
+      parentTaskId: parent.id,
+    })
+    expect(child.parentTaskId).toBe(parent.id)
+
+    deleteTask(parent.id)
+
+    const refreshedChild = getTaskById(child.id)
+    expect(refreshedChild).not.toBeNull()
+    expect(refreshedChild?.parentTaskId).toBeNull()
+  })
+
+  it('rejects invalid current_stage via CHECK constraint', () => {
+    const task = createTask({ slug: 'chk', title: 'CHK', cwd: '/chk' })
+    expect(() => updateTask(task.id, { currentStage: 'bogus' as 'backlog' })).toThrow()
+  })
+
+  it('rejects invalid stage_run status via CHECK constraint', () => {
+    const task = createTask({ slug: 'chk2', title: 'CHK2', cwd: '/chk2' })
+    const run = createStageRun({ taskId: task.id, stage: 'planning' })
+    expect(() => updateStageRun(run.id, { status: 'bogus' as 'running' })).toThrow()
+  })
 })
 
 describe('stageRunsRepo', () => {

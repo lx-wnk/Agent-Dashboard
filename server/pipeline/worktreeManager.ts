@@ -31,8 +31,14 @@ export async function createWorktree(opts: WorktreeOptions): Promise<string> {
   await mkdir(WORKTREE_ROOT, { recursive: true })
   const path = join(WORKTREE_ROOT, opts.slug)
 
-  if (existsSync(path))
-    throw new Error(`Worktree path already exists: ${path}`)
+  // Adoption path: if a worktree already exists at this path AND is
+  // registered in git worktree list, adopt it (orphan recovery after crash).
+  if (existsSync(path)) {
+    const isRegistered = await isRegisteredWorktree(opts.cwd, path)
+    if (isRegistered)
+      return path
+    throw new Error(`Path exists but is not a registered git worktree: ${path}`)
+  }
 
   const args = ['-C', opts.cwd, 'worktree', 'add', path]
   if (opts.branch)
@@ -42,13 +48,59 @@ export async function createWorktree(opts: WorktreeOptions): Promise<string> {
 }
 
 /**
- * Remove a previously created worktree. Uses --force to delete even if
- * there are uncommitted changes (caller is responsible for preserving them).
+ * Check whether a given path is tracked in `git worktree list` for the
+ * given source repo.
  */
-export async function removeWorktree(cwd: string, worktreePath: string): Promise<void> {
+async function isRegisteredWorktree(cwd: string, targetPath: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', cwd, 'worktree', 'list', '--porcelain'])
+    const lines = stdout.split('\n')
+    for (const line of lines) {
+      if (line.startsWith('worktree ') && line.slice('worktree '.length).trim() === targetPath)
+        return true
+    }
+  }
+  catch {
+    /* ignore */
+  }
+  return false
+}
+
+/**
+ * Remove a previously created worktree. By default refuses to delete a
+ * worktree with uncommitted changes. Pass `{ force: true }` to override —
+ * the caller must acknowledge that user changes will be lost.
+ */
+export async function removeWorktree(
+  cwd: string,
+  worktreePath: string,
+  opts: { force?: boolean } = {},
+): Promise<void> {
   if (!existsSync(worktreePath))
     return
-  await execFileAsync('git', ['-C', cwd, 'worktree', 'remove', '--force', worktreePath])
+
+  if (!opts.force && await hasUncommittedChanges(worktreePath)) {
+    throw new Error(
+      `Refusing to remove worktree with uncommitted changes: ${worktreePath}. Pass { force: true } to override.`,
+    )
+  }
+
+  const args = ['-C', cwd, 'worktree', 'remove']
+  if (opts.force)
+    args.push('--force')
+  args.push(worktreePath)
+  await execFileAsync('git', args)
+}
+
+async function hasUncommittedChanges(worktreePath: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', worktreePath, 'status', '--porcelain'])
+    return stdout.trim().length > 0
+  }
+  catch {
+    // If we can't determine state, assume dirty to err on the safe side.
+    return true
+  }
 }
 
 /**

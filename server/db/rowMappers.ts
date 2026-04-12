@@ -85,13 +85,15 @@ export interface NotificationPreferenceRow {
   enabled: number
 }
 
-function parseJson<T>(value: string | null): T | null {
+function parseJson<T>(value: string | null, rowId?: string): T | null {
   if (!value)
     return null
   try {
     return JSON.parse(value) as T
   }
-  catch {
+  catch (err) {
+    // Log corruption so it's diagnosable instead of silently dropping data
+    console.warn(`[rowMappers] parseJson failed for row ${rowId ?? '(unknown)'}:`, (err as Error).message)
     return null
   }
 }
@@ -114,7 +116,7 @@ export function rowToTask(row: TaskRow): PipelineTask {
     stageTimeoutSeconds: row.stage_timeout_seconds,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
+    metadata: parseJson<Record<string, unknown>>(row.metadata, row.id),
   }
 }
 
@@ -130,7 +132,7 @@ export function rowToStageRun(row: StageRunRow): StageRun {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     iteration: row.iteration,
-    output: parseJson<Record<string, unknown>>(row.output),
+    output: parseJson<Record<string, unknown>>(row.output, row.id),
     tokensUsed: row.tokens_used,
     costCents: row.cost_cents,
   }
@@ -170,7 +172,7 @@ export function rowToAuditEntry(row: AuditRow): AuditEntry {
     actor: row.actor as AuditEntry['actor'],
     action: row.action,
     timestamp: row.timestamp,
-    details: parseJson<Record<string, unknown>>(row.details),
+    details: parseJson<Record<string, unknown>>(row.details, row.id),
   }
 }
 
