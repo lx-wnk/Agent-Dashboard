@@ -232,13 +232,18 @@ async function start() {
       // REST and orchestrator-driven notification paths produce identical
       // payloads.
       const task = getTaskById(taskId)
+      // If the task was deleted between the orchestrator firing and this
+      // callback running, skip the notification — matches the REST path
+      // which also early-returns on !task.
+      if (!task)
+        return
       dispatcher
         .dispatch({
           eventType: 'on_hold',
-          title: task ? `Task "${task.title}" needs permission` : 'Agent requested permission',
+          title: `Task "${task.title}" needs permission`,
           body: `Agent requests ${request.tool}${request.pattern ? ` (${request.pattern})` : ''}${request.reason ? `\nReason: ${request.reason}` : ''}`,
           taskId,
-          taskSlug: task?.slug ?? taskId,
+          taskSlug: task.slug,
           severity: 'warning',
         })
         .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))

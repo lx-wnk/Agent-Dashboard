@@ -246,8 +246,12 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       allowed.costBudgetCents = body.costBudgetCents
     if (typeof body.stageTimeoutSeconds === 'number')
       allowed.stageTimeoutSeconds = body.stageTimeoutSeconds
-    if (body.metadata === null || (typeof body.metadata === 'object' && body.metadata !== null))
+    if (
+      body.metadata === null
+      || (typeof body.metadata === 'object' && body.metadata !== null && !Array.isArray(body.metadata))
+    ) {
       allowed.metadata = body.metadata
+    }
 
     const updated = updateTask(req.params.id, allowed)
     deps.broadcastTaskEvent({ type: 'task_updated', taskId: req.params.id, payload: updated })
