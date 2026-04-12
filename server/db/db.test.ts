@@ -323,3 +323,70 @@ describe('notificationConfigRepo', () => {
     expect(getPipelineConfigNumber('missing', 7)).toBe(7)
   })
 })
+
+describe('legacy DB migration', () => {
+  // This suite intentionally sidesteps the global beforeEach (which
+  // initializes a fresh schema). It simulates a pre-existing dashboard
+  // database that was created before silver_bullet/priority landed, and
+  // verifies the runtime migration in client.ts can open it without
+  // blowing up on the picker-index creation.
+  it('migrates a legacy tasks table without silver_bullet/priority columns', async () => {
+    closeDb()
+    const legacyDir = mkdtempSync(join(tmpdir(), 'dashboard-db-legacy-'))
+    const legacyPath = join(legacyDir, 'legacy.db')
+
+    const Database = (await import('better-sqlite3')).default
+    const legacy = new Database(legacyPath)
+    // Seed a minimal pre-migration tasks schema — the columns that
+    // existed BEFORE this branch landed. CHECK constraints intentionally
+    // omitted to match older schema variants.
+    legacy.prepare(`
+      CREATE TABLE tasks (
+        id TEXT PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        cwd TEXT NOT NULL,
+        worktree_path TEXT,
+        source_branch TEXT,
+        target_branch TEXT,
+        current_stage TEXT NOT NULL,
+        parent_task_id TEXT,
+        max_iterations INTEGER NOT NULL DEFAULT 20,
+        token_budget INTEGER,
+        cost_budget_cents INTEGER,
+        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        metadata TEXT
+      )
+    `).run()
+    legacy.prepare(`
+      INSERT INTO tasks (id, slug, title, cwd, current_stage, created_at, updated_at)
+      VALUES ('legacy-1', 'legacy', 'Legacy task', '/x', 'backlog', '2026-01-01', '2026-01-01')
+    `).run()
+    legacy.close()
+
+    process.env.DASHBOARD_DB_PATH = legacyPath
+    // Opening the db must not throw — this is the exact failure path
+    // that broke the live dashboard when the picker index was defined
+    // in schema.sql (before the ALTER TABLE ran).
+    const db = getDb()
+
+    // The legacy row is still there with default values for the new cols.
+    const row = db.prepare(`SELECT silver_bullet, priority FROM tasks WHERE id = 'legacy-1'`).get() as {
+      silver_bullet: number
+      priority: string
+    }
+    expect(row.silver_bullet).toBe(0)
+    expect(row.priority).toBe('medium')
+
+    // The picker index must exist now — created by the runtime migration
+    // after the ALTER TABLE added the referenced columns.
+    const indexes = db.prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='tasks'`).all() as Array<{ name: string }>
+    expect(indexes.some(i => i.name === 'idx_tasks_picker')).toBe(true)
+
+    closeDb()
+    rmSync(legacyDir, { recursive: true, force: true })
+  })
+})

@@ -1,5 +1,5 @@
 import type { Database } from 'better-sqlite3'
-import type { PipelineStage, PipelineTask } from '../../src/types.js'
+import type { PipelineStage, PipelineTask, TaskPriority } from '../../src/types.js'
 import type { TaskRow } from './rowMappers.js'
 import { randomUUID } from 'node:crypto'
 import { getDb } from './client.js'
@@ -19,6 +19,8 @@ export interface CreateTaskInput {
   costBudgetCents?: number | null
   stageTimeoutSeconds?: number
   metadata?: Record<string, unknown> | null
+  silverBullet?: boolean
+  priority?: TaskPriority
 }
 
 export interface UpdateTaskInput {
@@ -31,13 +33,29 @@ export interface UpdateTaskInput {
   costBudgetCents?: number | null
   stageTimeoutSeconds?: number
   metadata?: Record<string, unknown> | null
+  silverBullet?: boolean
+  priority?: TaskPriority
 }
 
 function nowIso(): string {
   return new Date().toISOString()
 }
 
+const VALID_PRIORITIES: readonly TaskPriority[] = ['high', 'medium', 'low']
+
+/**
+ * Application-layer enum guard for the `priority` column. SQLite ALTER
+ * TABLE ADD COLUMN cannot attach a CHECK constraint, so existing DBs
+ * migrated via client.ts runtime migration have no DB-level enforcement.
+ * This guard keeps behavior consistent regardless of DB vintage.
+ */
+function assertValidPriority(p: TaskPriority | undefined): void {
+  if (p !== undefined && !VALID_PRIORITIES.includes(p))
+    throw new Error(`invalid priority: ${String(p)} (expected one of ${VALID_PRIORITIES.join('|')})`)
+}
+
 export function createTask(input: CreateTaskInput, db: Database = getDb()): PipelineTask {
+  assertValidPriority(input.priority)
   const id = randomUUID()
   const now = nowIso()
   db.prepare(`
@@ -45,12 +63,12 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
       id, slug, title, description, cwd, worktree_path,
       source_branch, target_branch, current_stage, parent_task_id,
       max_iterations, token_budget, cost_budget_cents, stage_timeout_seconds,
-      created_at, updated_at, metadata
+      created_at, updated_at, metadata, silver_bullet, priority
     ) VALUES (
       @id, @slug, @title, @description, @cwd, @worktree_path,
       @source_branch, @target_branch, 'backlog', @parent_task_id,
       @max_iterations, @token_budget, @cost_budget_cents, @stage_timeout_seconds,
-      @created_at, @updated_at, @metadata
+      @created_at, @updated_at, @metadata, @silver_bullet, @priority
     )
   `).run({
     id,
@@ -69,6 +87,8 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
     created_at: now,
     updated_at: now,
     metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+    silver_bullet: input.silverBullet ? 1 : 0,
+    priority: input.priority ?? 'medium',
   })
 
   return getTaskById(id, db)!
@@ -96,7 +116,24 @@ export function listTasksByStage(stage: PipelineStage, db: Database = getDb()): 
   return rows.map(rowToTask)
 }
 
+/**
+ * List tasks eligible for runner pickup: excludes terminal (done/failed/
+ * cancelled) and orchestrator-paused (on_hold, approval1, approval2) stages.
+ * The orchestrator further filters by latest_stage_run.status to drop tasks
+ * currently being driven (status='running') or waiting on user action.
+ */
+export function listPickableTasks(db: Database = getDb()): PipelineTask[] {
+  const rows = db
+    .prepare(`
+      SELECT * FROM tasks
+      WHERE current_stage NOT IN ('done','failed','cancelled','on_hold','approval1','approval2')
+    `)
+    .all() as TaskRow[]
+  return rows.map(rowToTask)
+}
+
 export function updateTask(id: string, input: UpdateTaskInput, db: Database = getDb()): PipelineTask | null {
+  assertValidPriority(input.priority)
   const existing = getTaskById(id, db)
   if (!existing)
     return null
@@ -139,6 +176,14 @@ export function updateTask(id: string, input: UpdateTaskInput, db: Database = ge
   if (input.metadata !== undefined) {
     updates.push('metadata = @metadata')
     params.metadata = input.metadata ? JSON.stringify(input.metadata) : null
+  }
+  if (input.silverBullet !== undefined) {
+    updates.push('silver_bullet = @silver_bullet')
+    params.silver_bullet = input.silverBullet ? 1 : 0
+  }
+  if (input.priority !== undefined) {
+    updates.push('priority = @priority')
+    params.priority = input.priority
   }
 
   if (updates.length === 0)

@@ -40,6 +40,18 @@ function runMigrations(connection: DatabaseType): void {
   const schema = readFileSync(schemaPath, 'utf-8')
   connection.exec(schema)
 
+  // Runtime ALTER for DBs created before silver_bullet/priority landed.
+  // schema.sql uses CREATE TABLE IF NOT EXISTS which does not add new
+  // columns to an existing table, so we probe pragma and ALTER on the fly.
+  const taskCols = connection.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>
+  const hasCol = (name: string) => taskCols.some(c => c.name === name)
+  if (!hasCol('silver_bullet'))
+    connection.prepare('ALTER TABLE tasks ADD COLUMN silver_bullet INTEGER NOT NULL DEFAULT 0').run()
+  if (!hasCol('priority'))
+    connection.prepare(`ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium'`).run()
+  // Picker index (idempotent).
+  connection.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_picker ON tasks(silver_bullet DESC, priority, created_at)').run()
+
   const version = connection
     .prepare('SELECT MAX(version) as v FROM schema_version')
     .get() as { v: number | null }

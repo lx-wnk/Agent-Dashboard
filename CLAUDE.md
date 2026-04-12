@@ -100,7 +100,9 @@ The same pattern applies inside `StageContext` (`server/pipeline/types.ts`): sta
 
 - New stage transition? Add it to `StageTransition` in `server/pipeline/types.ts`, then handle it in `PipelineOrchestrator.applyTransition`. Wrap DB writes in `db.transaction()`.
 - New side effect (metrics, tracing, a new channel)? Add an optional callback to `OrchestratorOptions`, wire it in `server/index.ts`. Do **not** import the side-effect module from inside `pipeline/`.
-- New real stage handler that spawns a Claude agent? See `server/pipeline/agentSpawner.ts` and `stagePrompts.ts` — they are scaffolding ready to wire. Replace the stub in `stageHandlers.ts` with a real handler that uses them.
+- New agent-driven stage handler? Use the `createAgentStage(stage, buildPrompt)` factory in `server/pipeline/stageHandlers.ts`. Add a `PromptBuilder` adapter that reads from `StageContext` and delegates to the matching builder in `stagePrompts.ts`. Register it in `handlersByStage`. Spawn, feedback-prefix injection (from `priorIterationOutput`), and `async_running` return are handled by the factory. Then add a per-stage schema validator in `completionDetector.validateStageOutput` so the orchestrator's retry-then-escalate loop recognizes malformed output.
+- Custom completion routing (e.g. a stage that loops back to an earlier stage on a specific output flag, like selbstreview → umsetzung on `passed:false`)? Edit `PipelineOrchestrator.decideCompletedTransition` and return a `next` transition. If you need to mutate `task.metadata` as part of the transition, pass it via `taskMetadataPatch` on the `next` variant so the write lands inside `applyTransition`'s SQLite transaction — never perform bare `updateTask` calls in the completion path.
+- New runner-picker priority tier? Update `comparePickOrder` in `orchestrator.ts` AND the `project_task_pipeline_runner_model` memory, in that order. The memory captures user intent; code changes must stay consistent with it.
 
 ## Key Conventions
 

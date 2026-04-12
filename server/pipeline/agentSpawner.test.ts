@@ -22,6 +22,8 @@ function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
     createdAt: '2026-04-12T10:00:00Z',
     updatedAt: '2026-04-12T10:00:00Z',
     metadata: null,
+    silverBullet: false,
+    priority: 'medium',
     ...overrides,
   }
 }

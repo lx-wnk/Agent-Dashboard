@@ -42,7 +42,7 @@ export function encodePath(absolutePath: string): string {
   return absolutePath.replace(/[/_]/g, '-')
 }
 
-async function tailRead(filePath: string): Promise<string> {
+export async function tailRead(filePath: string): Promise<string> {
   const handle = await open(filePath, 'r')
   try {
     const fileStat = await handle.stat()

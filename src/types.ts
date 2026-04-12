@@ -100,6 +100,8 @@ export type StageRunStatus
     | 'done'
     | 'failed'
 
+export type TaskPriority = 'high' | 'medium' | 'low'
+
 export interface PipelineTask {
   id: string
   slug: string
@@ -118,6 +120,13 @@ export interface PipelineTask {
   createdAt: string
   updatedAt: string
   metadata: Record<string, unknown> | null
+  /**
+   * Jump-the-queue flag — silver-bullet tasks win the picker against all
+   *  other ordering criteria. Set at creation, editable later.
+   */
+  silverBullet: boolean
+  /** Soft priority used after silver-bullet and stage-furthest-first. */
+  priority: TaskPriority
   // Computed at read time by the API — not stored in DB.
   // True when the latest stage_run is paused waiting for user input,
   // regardless of what currentStage is.

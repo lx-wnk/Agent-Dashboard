@@ -20,6 +20,13 @@ export interface PromptBundle {
 
 const SHARED_CONTEXT = `You are an agent working inside a structured task pipeline. A human orchestrator will review your output at specific stages. Be concise, actionable, and honest about uncertainty. When you produce structured output, wrap it in a fenced \`\`\`json ... \`\`\` block for the orchestrator to parse.`
 
+export function refinementPrompt(task: PipelineTask, prevOutput: unknown): PromptBundle {
+  return {
+    systemPrompt: SHARED_CONTEXT,
+    userPrompt: `## Task: ${task.title}\n\n${task.description || '(no description provided)'}\n\n## Feasibility Report From Pruefung\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`\n\n## Your Job: Refine\n\nRewrite the task into a crisp, unambiguous specification. Resolve the risks and blockers the feasibility report raised. Produce a refined title, a clarified description, and explicit success criteria.\n\nRespond with a \`\`\`json\`\`\` block: {"refinedTitle": string, "refinedDescription": string, "successCriteria": string[], "assumptions": string[], "outOfScope": string[]}.`,
+  }
+}
+
 export function pruefungPrompt(task: PipelineTask): PromptBundle {
   return {
     systemPrompt: SHARED_CONTEXT,

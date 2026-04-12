@@ -133,7 +133,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     if (deps.rejectCrossOrigin(req, res))
       return
 
-    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree } = req.body ?? {}
+    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree, silverBullet, priority } = req.body ?? {}
 
     if (!slug || typeof slug !== 'string' || !SLUG_RE.test(slug)) {
       res.status(400).json({ error: 'slug must match [a-z0-9][a-z0-9-]{0,63}' })
@@ -149,6 +149,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     if (getTaskBySlug(slug)) {
       res.status(409).json({ error: 'slug already exists' })
+      return
+    }
+    if (priority !== undefined && priority !== 'high' && priority !== 'medium' && priority !== 'low') {
+      res.status(400).json({ error: 'priority must be one of high|medium|low' })
       return
     }
 
@@ -189,6 +193,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         costBudgetCents: typeof costBudgetCents === 'number' ? costBudgetCents : null,
         stageTimeoutSeconds: typeof stageTimeoutSeconds === 'number' ? stageTimeoutSeconds : undefined,
         metadata: typeof metadata === 'object' && metadata !== null ? metadata : null,
+        silverBullet: silverBullet === true,
+        priority: (priority === 'high' || priority === 'medium' || priority === 'low') ? priority : undefined,
       })
       deps.broadcastTaskEvent({ type: 'task_created', taskId: task.id, payload: enrichTask(task) })
       res.status(201).json(enrichTask(task))
@@ -252,6 +258,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     ) {
       allowed.metadata = body.metadata
     }
+    if (typeof body.silverBullet === 'boolean')
+      allowed.silverBullet = body.silverBullet
+    if (body.priority === 'high' || body.priority === 'medium' || body.priority === 'low')
+      allowed.priority = body.priority
 
     const updated = updateTask(req.params.id, allowed)
     deps.broadcastTaskEvent({ type: 'task_updated', taskId: req.params.id, payload: updated })

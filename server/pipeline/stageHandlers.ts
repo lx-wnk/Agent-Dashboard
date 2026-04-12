@@ -1,22 +1,140 @@
+/**
+ * Real stage handlers: every agent-driven stage spawns a detached Claude
+ * via agentSpawner and returns an `async_running` transition carrying the
+ * PID. The orchestrator's driver loop later finalizes the stage via
+ * completionDetector and applies the appropriate next/iterate/wait_user
+ * transition.
+ *
+ * Agent-less stages (backlog, approval1, approval2) produce their
+ * transitions inline without spawning — they exist only as bookkeeping
+ * gates in the pipeline.
+ */
 import type { PipelineStage } from '../../src/types.js'
+import type { SpawnAgentOptions, SpawnResult } from './agentSpawner.js'
+import type { PromptBundle } from './stagePrompts.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
-import { STAGE_ORDER } from './types.js'
+import { listStageRunsForTask } from '../db/stageRunsRepo.js'
+import { spawnStageAgent } from './agentSpawner.js'
+import {
+  finalisierungPrompt,
+  planningPrompt,
+  pruefungPrompt,
+  refinementPrompt,
+  selbstreviewPrompt,
+  umsetzungPrompt,
+  umsetzungskonzeptPrompt,
+} from './stagePrompts.js'
+
+export type SpawnFn = (opts: SpawnAgentOptions) => SpawnResult
+export type PromptBuilder = (ctx: StageContext) => PromptBundle
 
 /**
- * Phase 2 note: Stage handlers are stubbed here so the orchestrator and
- * state-machine logic can be developed and tested without real agents.
- * Phase 4 will replace each body with a concrete spawn/analyse/record flow.
+ * Upper bound on the rejected-output JSON embedded in the retry prompt.
+ *  Large umsetzung outputs could otherwise blow the model's context window
+ *  on the retry — exactly the failure mode that caused the first rejection.
+ *  The error message plus the schema description already convey the shape
+ *  expected; the rejected payload is only there for concrete reference.
  */
+const REJECTED_OUTPUT_PREVIEW_CHARS = 2000
 
-function simpleAgentStage(stage: PipelineStage): StageHandler {
+/**
+ * Prepend a correction block to a stage's user prompt when the previous
+ * iteration's output was schema-rejected. Keeps the validator's error
+ * message front-and-centre so the agent can self-correct.
+ */
+function buildFeedbackPrefix(priorOutput: Record<string, unknown> | null): string {
+  if (!priorOutput || typeof priorOutput.validation_error !== 'string')
+    return ''
+  const rejected = priorOutput.rejected_output
+  let rejectedBlock = ''
+  if (rejected) {
+    const full = JSON.stringify(rejected, null, 2)
+    const truncated = full.length > REJECTED_OUTPUT_PREVIEW_CHARS
+      ? `${full.slice(0, REJECTED_OUTPUT_PREVIEW_CHARS)}\n… (truncated, ${full.length - REJECTED_OUTPUT_PREVIEW_CHARS} chars elided)`
+      : full
+    rejectedBlock = `\n\nYour previous response was:\n\`\`\`json\n${truncated}\n\`\`\``
+  }
+  return `## CORRECTION REQUIRED\n\nYour previous attempt was rejected with: **${priorOutput.validation_error}**.${rejectedBlock}\n\nStick EXACTLY to the schema described below. Do not add or rename fields.\n\n---\n\n`
+}
+
+/**
+ * Generic factory for an agent-driven stage. Given a stage id and a
+ * prompt builder that reads from the StageContext, produces a handler
+ * that spawns, records audit, and returns async_running.
+ *
+ * The spawn function is injected so tests can assert the spawn call shape
+ * without actually launching a real Claude process.
+ */
+export function createAgentStage(
+  stage: PipelineStage,
+  buildPrompt: PromptBuilder,
+  spawn: SpawnFn = spawnStageAgent,
+): StageHandler {
   return {
     stage,
     requiresAgent: true,
     async execute(ctx: StageContext): Promise<StageTransition> {
-      ctx.recordAudit(`${stage}_started`)
-      return { kind: 'next', toStage: autoNext(stage), output: { stub: stage } }
+      const bundle = buildPrompt(ctx)
+      const feedback = buildFeedbackPrefix(ctx.priorIterationOutput)
+      const result = spawn({
+        task: ctx.task,
+        stageRun: ctx.stageRun,
+        systemPrompt: bundle.systemPrompt,
+        prompt: feedback + bundle.userPrompt,
+        permissions: ctx.permissions,
+      })
+      ctx.recordAudit(`${stage}_spawned`, {
+        pid: result.pid,
+        iteration: ctx.stageRun.iteration,
+        hasFeedback: feedback.length > 0,
+      })
+      return { kind: 'async_running', pid: result.pid }
     },
   }
+}
+
+// ───── Prompt adapters — bridge `stagePrompts.ts` to the PromptBuilder shape.
+// Each adapter reads what it needs from the context (task, previousOutput,
+// task metadata for the umsetzung feedback loop) and delegates to the
+// corresponding builder in stagePrompts.ts.
+
+const pruefungBuilder: PromptBuilder = ctx => pruefungPrompt(ctx.task)
+
+const refinementBuilder: PromptBuilder = ctx => refinementPrompt(ctx.task, ctx.previousOutput)
+
+const planningBuilder: PromptBuilder = ctx => planningPrompt(ctx.task, ctx.previousOutput)
+
+const umsetzungskonzeptBuilder: PromptBuilder = ctx =>
+  umsetzungskonzeptPrompt(ctx.task, ctx.previousOutput)
+
+/**
+ * Umsetzung reads optional `review_feedback` from task.metadata — the
+ * orchestrator writes it there when a selbstreview iteration rejects the
+ * prior implementation. First-run tasks see an empty feedback string.
+ */
+const umsetzungBuilder: PromptBuilder = (ctx) => {
+  const feedback = typeof ctx.task.metadata?.review_feedback === 'string'
+    ? ctx.task.metadata.review_feedback as string
+    : undefined
+  return umsetzungPrompt(ctx.task, ctx.previousOutput, feedback)
+}
+
+const selbstreviewBuilder: PromptBuilder = ctx =>
+  selbstreviewPrompt(ctx.task, ctx.previousOutput)
+
+const finalisierungBuilder: PromptBuilder = ctx =>
+  finalisierungPrompt(ctx.task, listStageRunsForTask(ctx.task.id))
+
+// ───── Agent-less stages: handlers that transition synchronously without
+// spawning a process. These are the pipeline's plumbing gates.
+
+export const backlogHandler: StageHandler = {
+  stage: 'backlog',
+  requiresAgent: false,
+  async execute(ctx: StageContext): Promise<StageTransition> {
+    ctx.recordAudit('backlog_entered')
+    return { kind: 'next', toStage: 'pruefung' }
+  },
 }
 
 function approvalStage(stage: PipelineStage, reason: string): StageHandler {
@@ -30,57 +148,25 @@ function approvalStage(stage: PipelineStage, reason: string): StageHandler {
   }
 }
 
-function autoNext(stage: PipelineStage): PipelineStage {
-  const idx = STAGE_ORDER.indexOf(stage)
-  return idx >= 0 && idx < STAGE_ORDER.length - 1 ? STAGE_ORDER[idx + 1] : 'done'
-}
+// ───── Real agent stages.
 
-export const backlogHandler: StageHandler = {
-  stage: 'backlog',
-  requiresAgent: false,
-  async execute(ctx: StageContext): Promise<StageTransition> {
-    ctx.recordAudit('backlog_entered')
-    return { kind: 'next', toStage: 'pruefung' }
-  },
-}
-
-export const pruefungHandler = simpleAgentStage('pruefung')
-export const refinementHandler = simpleAgentStage('refinement')
-export const planningHandler = simpleAgentStage('planning')
+export const pruefungHandler = createAgentStage('pruefung', pruefungBuilder)
+export const refinementHandler = createAgentStage('refinement', refinementBuilder)
+export const planningHandler = createAgentStage('planning', planningBuilder)
 export const approval1Handler = approvalStage('approval1', 'Bitte Plan freigeben')
-export const umsetzungskonzeptHandler = simpleAgentStage('umsetzungskonzept')
+export const umsetzungskonzeptHandler = createAgentStage('umsetzungskonzept', umsetzungskonzeptBuilder)
 export const approval2Handler = approvalStage(
   'approval2',
   'Bitte Umsetzungskonzept + Tool-Permissions freigeben',
 )
+export const umsetzungHandler = createAgentStage('umsetzung', umsetzungBuilder)
+export const selbstreviewHandler = createAgentStage('selbstreview', selbstreviewBuilder)
+export const finalisierungHandler = createAgentStage('finalisierung', finalisierungBuilder)
 
-// Umsetzung has an iterate-until-review-passes loop in Phase 4
-export const umsetzungHandler: StageHandler = {
-  stage: 'umsetzung',
-  requiresAgent: true,
-  async execute(ctx: StageContext): Promise<StageTransition> {
-    ctx.recordAudit('umsetzung_started')
-    return { kind: 'next', toStage: 'selbstreview', output: { stub: 'umsetzung' } }
-  },
-}
-
-export const selbstreviewHandler: StageHandler = {
-  stage: 'selbstreview',
-  requiresAgent: true,
-  async execute(ctx: StageContext): Promise<StageTransition> {
-    ctx.recordAudit('selbstreview_started')
-    // Phase 2 stub: always pass
-    return { kind: 'next', toStage: 'finalisierung', output: { passed: true } }
-  },
-}
-
-export const finalisierungHandler: StageHandler = {
-  stage: 'finalisierung',
-  requiresAgent: true,
-  async execute(ctx: StageContext): Promise<StageTransition> {
-    ctx.recordAudit('finalisierung_started')
-    return { kind: 'done', output: { summary: 'Task completed (Phase 2 stub)' } }
-  },
+// ───── Backwards-compatible named factory for the pruefung handler.
+// Tests that predate the generic factory import this directly.
+export function createPruefungHandler(spawn: SpawnFn = spawnStageAgent): StageHandler {
+  return createAgentStage('pruefung', pruefungBuilder, spawn)
 }
 
 export const handlersByStage: Record<string, StageHandler> = {

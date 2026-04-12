@@ -14,6 +14,8 @@ const targetBranch = ref('')
 const useWorktree = ref(true)
 const maxIterations = ref(20)
 const tokenBudget = ref<number | null>(null)
+const silverBullet = ref(false)
+const priority = ref<'high' | 'medium' | 'low'>('medium')
 const errorMsg = ref('')
 const isCreating = ref(false)
 
@@ -33,6 +35,8 @@ function resetForm() {
   useWorktree.value = true
   maxIterations.value = 20
   tokenBudget.value = null
+  silverBullet.value = false
+  priority.value = 'medium'
   errorMsg.value = ''
 }
 
@@ -70,6 +74,8 @@ async function handleCreate() {
       useWorktree: useWorktree.value,
       maxIterations: maxIterations.value,
       tokenBudget: tokenBudget.value ?? undefined,
+      silverBullet: silverBullet.value,
+      priority: priority.value,
     })
     resetForm()
     emit('close')
@@ -182,6 +188,35 @@ async function handleCreate() {
 
           <div class="field-row">
             <div class="field">
+              <label for="task-priority" class="field-label">Priority</label>
+              <select
+                id="task-priority"
+                v-model="priority"
+                class="field-input"
+              >
+                <option value="high">
+                  High
+                </option>
+                <option value="medium">
+                  Medium
+                </option>
+                <option value="low">
+                  Low
+                </option>
+              </select>
+            </div>
+            <div class="field-checkbox silver-bullet">
+              <input
+                id="task-silver"
+                v-model="silverBullet"
+                type="checkbox"
+              >
+              <label for="task-silver">Silver bullet (jump the queue)</label>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
               <label for="task-iter" class="field-label">Max Iterations</label>
               <input
                 id="task-iter"
@@ -289,6 +324,7 @@ async function handleCreate() {
 .field-checkbox { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
 .field-checkbox label { font-size: 13px; color: var(--text-secondary); cursor: pointer; }
 .field-checkbox input[type="checkbox"] { accent-color: var(--accent-blue); cursor: pointer; }
+.silver-bullet { flex: 1; align-self: center; margin-bottom: 0; }
 .error-msg { color: var(--accent-red); font-size: 12px; line-height: 1.4; }
 .modal-footer {
   display: flex;

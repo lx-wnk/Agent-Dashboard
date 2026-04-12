@@ -97,6 +97,8 @@ export interface CreateTaskInput {
   maxIterations?: number
   tokenBudget?: number
   parentTaskId?: string
+  silverBullet?: boolean
+  priority?: 'high' | 'medium' | 'low'
 }
 
 export async function createTask(input: CreateTaskInput): Promise<PipelineTask> {
@@ -114,6 +116,8 @@ export async function createTask(input: CreateTaskInput): Promise<PipelineTask> 
       maxIterations: input.maxIterations,
       tokenBudget: input.tokenBudget,
       parentTaskId: input.parentTaskId,
+      silverBullet: input.silverBullet,
+      priority: input.priority,
     }),
   })
   if (!res.ok) {

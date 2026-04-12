@@ -32,11 +32,17 @@ CREATE TABLE IF NOT EXISTS tasks (
   stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  metadata TEXT -- JSON: screenshots, custom fields
+  metadata TEXT, -- JSON: screenshots, custom fields, review_feedback
+  silver_bullet INTEGER NOT NULL DEFAULT 0, -- 0|1: jump-the-queue flag
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('high','medium','low'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks(current_stage);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
+-- Note: idx_tasks_picker (silver_bullet, priority, created_at) is created
+-- in the runtime migration in server/db/client.ts AFTER the ALTER TABLE
+-- statements that add those columns to legacy databases. Creating it here
+-- would fail on a pre-existing DB before the columns exist.
 
 -- Stage runs: one row per stage execution (iterations create multiple rows)
 CREATE TABLE IF NOT EXISTS stage_runs (

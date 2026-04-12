@@ -7,6 +7,7 @@ import type {
   StageRun,
   StageRunStatus,
   TaskPermission,
+  TaskPriority,
 } from '../../src/types.js'
 
 // Row types reflect the SQLite schema exactly (snake_case, JSON as strings, bools as ints).
@@ -29,6 +30,8 @@ export interface TaskRow {
   created_at: string
   updated_at: string
   metadata: string | null
+  silver_bullet: number
+  priority: string
 }
 
 export interface StageRunRow {
@@ -117,6 +120,8 @@ export function rowToTask(row: TaskRow): PipelineTask {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     metadata: parseJson<Record<string, unknown>>(row.metadata, row.id),
+    silverBullet: row.silver_bullet === 1,
+    priority: (row.priority as TaskPriority) ?? 'medium',
   }
 }
 

@@ -93,6 +93,27 @@ export function getLatestStageRunForTask(taskId: string, db: Database = getDb())
   return row ? rowToStageRun(row) : null
 }
 
+/**
+ * Fetch a specific iteration of a stage_run by (task, stage, iteration).
+ * Used by the orchestrator to surface the prior iteration's output as
+ * validation feedback when retrying a schema-failed stage.
+ */
+export function getStageRunByIteration(
+  taskId: string,
+  stage: PipelineStage,
+  iteration: number,
+  db: Database = getDb(),
+): StageRun | null {
+  const row = db
+    .prepare(`
+      SELECT * FROM stage_runs
+      WHERE task_id = ? AND stage = ? AND iteration = ?
+      LIMIT 1
+    `)
+    .get(taskId, stage, iteration) as StageRunRow | undefined
+  return row ? rowToStageRun(row) : null
+}
+
 export function findStageRunBySessionId(sessionId: string, db: Database = getDb()): StageRun | null {
   const row = db
     .prepare('SELECT * FROM stage_runs WHERE session_id = ? LIMIT 1')
