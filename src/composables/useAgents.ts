@@ -7,7 +7,7 @@ export interface TrendPoint {
   tokens: number
 }
 
-type ViewMode = 'list' | 'cards' | 'kanban'
+type ViewMode = 'list' | 'cards' | 'kanban' | 'pipeline'
 
 const agents = ref<Agent[]>([])
 const costTrend = ref<TrendPoint[]>([])
@@ -17,7 +17,9 @@ const error = ref<string | null>(null)
 const searchQuery = ref('')
 const debouncedQuery = ref('')
 const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('agent-view-mode') : null
-const viewMode = ref<ViewMode>(stored === 'list' || stored === 'cards' || stored === 'kanban' ? stored : 'list')
+const viewMode = ref<ViewMode>(
+  stored === 'list' || stored === 'cards' || stored === 'kanban' || stored === 'pipeline' ? stored : 'list',
+)
 
 let eventSource: EventSource | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null

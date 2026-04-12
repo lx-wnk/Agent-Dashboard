@@ -3,18 +3,26 @@ import { computed, ref } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
+import BacklogForm from './components/BacklogForm.vue'
 import CostTrend from './components/CostTrend.vue'
 import KanbanBoard from './components/KanbanBoard.vue'
+import PipelineBoard from './components/PipelineBoard.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
+import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
+import { useRole } from './composables/useRole'
+import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { formatTokens, totalTokenCount } from './utils/format'
 
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
 const { theme, toggleTheme } = useTheme()
+const { role, toggleRole } = useRole()
+const { tasks, selectedTask, selectTask } = useTasks()
 const showSpawnDialog = ref(false)
+const showBacklog = ref(false)
 const showSessions = ref(false)
 const scriptPath = ref('')
 const homeDir = ref('')
@@ -41,7 +49,8 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
   <div class="app">
     <header class="app-header">
       <h1>Claude Agent Overview</h1>
-      <span class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
+      <span v-if="viewMode !== 'pipeline'" class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
+      <span v-else class="agent-count">{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span v-if="totalCost > 0" class="header-stat">${{ totalCost.toFixed(2) }}</span>
       <span v-if="totalTokens > 0" class="header-stat">{{ formatTokens(totalTokens) }} tokens</span>
       <input
@@ -75,7 +84,24 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
         >
           ▦
         </button>
+        <button
+          class="toggle-btn"
+          :class="{ active: viewMode === 'pipeline' }"
+          title="Task pipeline"
+          @click="viewMode = 'pipeline'"
+        >
+          ⇉
+        </button>
       </div>
+      <button
+        v-if="viewMode === 'pipeline'"
+        class="role-btn"
+        :class="`role-${role}`"
+        :title="`Switch to ${role === 'requester' ? 'reviewer' : 'requester'} mode`"
+        @click="toggleRole"
+      >
+        {{ role }}
+      </button>
       <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
         {{ theme === 'dark' ? '☀' : '☾' }}
       </button>
@@ -89,7 +115,14 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <button class="sessions-btn" @click="showSessions = true">
         Sessions
       </button>
-      <button class="spawn-btn" @click="showSpawnDialog = true">
+      <button
+        v-if="viewMode === 'pipeline'"
+        class="spawn-btn"
+        @click="showBacklog = true"
+      >
+        + New Task
+      </button>
+      <button v-else class="spawn-btn" @click="showSpawnDialog = true">
         + New Agent
       </button>
     </header>
@@ -117,6 +150,10 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
         :agents="filteredAgents"
         @select="selectAgent"
       />
+      <PipelineBoard
+        v-else-if="viewMode === 'pipeline'"
+        @select="selectTask"
+      />
       <AgentCardGrid
         v-else
         :agents="filteredAgents"
@@ -127,9 +164,17 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       :agent="selectedAgent"
       @close="selectAgent(null)"
     />
+    <TaskModal
+      :task="selectedTask"
+      @close="selectTask(null)"
+    />
     <SpawnDialog
       :open="showSpawnDialog"
       @close="showSpawnDialog = false"
+    />
+    <BacklogForm
+      :open="showBacklog"
+      @close="showBacklog = false"
     />
     <SessionList
       :open="showSessions"
@@ -331,6 +376,22 @@ body {
 .toggle-btn:not(.active):hover {
   color: var(--text-primary);
 }
+
+.role-btn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: inherit;
+}
+.role-btn.role-requester { color: var(--accent-blue); border-color: var(--accent-blue); }
+.role-btn.role-reviewer { color: var(--accent-green); border-color: var(--accent-green); }
+.role-btn:hover { filter: brightness(1.2); }
 
 .loading, .error {
   text-align: center;
