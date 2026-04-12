@@ -29,7 +29,7 @@ import {
   updateTask,
 } from '../db/tasksRepo.js'
 import { recommendParallelism } from '../pipeline/resourceRecommender.js'
-import { createWorktree } from '../pipeline/worktreeManager.js'
+import { createWorktree, removeWorktree } from '../pipeline/worktreeManager.js'
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
@@ -79,11 +79,16 @@ const USER_WAIT_STAGES = new Set<PipelineStage>(['on_hold', 'approval1', 'approv
 /**
  * Decorate a task with live stage_run status so the frontend can show
  * `awaiting_user` / `on_hold` state on the board without refetching per task.
+ *
+ * IMPORTANT: stage_run status only contributes to `needsUser` when the latest
+ * run belongs to the task's CURRENT stage. Otherwise a stale awaiting_user
+ * run from a prior stage would incorrectly flag an advanced task.
  */
 function enrichTask(task: PipelineTask): PipelineTask {
   const latest = getLatestStageRunForTask(task.id)
-  const latestStatus = latest?.status ?? null
-  const currentIteration = latest?.iteration ?? 0
+  const latestBelongsToCurrent = latest?.stage === task.currentStage
+  const latestStatus = latestBelongsToCurrent ? (latest?.status ?? null) : null
+  const currentIteration = latestBelongsToCurrent ? (latest?.iteration ?? 0) : 0
   const needsUser
     = USER_WAIT_STAGES.has(task.currentStage)
       || latestStatus === 'awaiting_user'
@@ -146,27 +151,29 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       return
     }
 
-    try {
-      let initialWorktreePath: string | null = typeof worktreePath === 'string' ? worktreePath : null
+    let initialWorktreePath: string | null = typeof worktreePath === 'string' ? worktreePath : null
+    let weCreatedWorktree = false
 
-      // useWorktree=true triggers real git worktree creation. Default is
-      // off (caller must opt-in or provide an explicit worktreePath).
-      if (useWorktree === true && !initialWorktreePath) {
-        try {
-          initialWorktreePath = await createWorktree({
-            cwd,
-            slug,
-            branch: typeof sourceBranch === 'string' ? sourceBranch : null,
-          })
-        }
-        catch (err) {
-          res.status(400).json({
-            error: `worktree creation failed: ${(err as Error).message}`,
-          })
-          return
-        }
+    // useWorktree=true triggers real git worktree creation. Default is
+    // off (caller must opt-in or provide an explicit worktreePath).
+    if (useWorktree === true && !initialWorktreePath) {
+      try {
+        initialWorktreePath = await createWorktree({
+          cwd,
+          slug,
+          branch: typeof sourceBranch === 'string' ? sourceBranch : null,
+        })
+        weCreatedWorktree = true
       }
+      catch (err) {
+        res.status(400).json({
+          error: `worktree creation failed: ${(err as Error).message}`,
+        })
+        return
+      }
+    }
 
+    try {
       const task = createTask({
         slug,
         title,
@@ -186,6 +193,16 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(201).json(enrichTask(task))
     }
     catch (err) {
+      // Rollback: if we created the worktree but DB insert failed, remove
+      // the orphaned worktree so the slug is reusable on retry.
+      if (weCreatedWorktree && initialWorktreePath) {
+        try {
+          await removeWorktree(cwd, initialWorktreePath, { force: true })
+        }
+        catch {
+          /* best-effort rollback; leave the orphan if cleanup itself fails */
+        }
+      }
       res.status(500).json({ error: (err as Error).message })
     }
   })

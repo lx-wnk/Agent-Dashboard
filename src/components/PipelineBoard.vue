@@ -11,6 +11,9 @@ const { tasksByStageMap } = useTasks()
 interface ColumnDef {
   id: string
   label: string
+  // Empty for the virtual "needs-you" column which filters tasks across
+  // all stages by their needsUser flag. Agent-group columns list the
+  // specific stages they include.
   stages: PipelineStage[]
   group: 'needs-you' | 'active' | 'terminal'
   hint?: string
@@ -18,12 +21,13 @@ interface ColumnDef {
 
 // Consolidated 8 swimlanes. "Needs You" gathers every stage where the user
 // must act before progress can continue (approvals + runtime permission
-// requests). Agent-driven stages are grouped into phases.
+// requests + mid-stage awaiting_user). Agent-driven stages are grouped
+// into phases.
 const COLUMNS: ColumnDef[] = [
   {
     id: 'needs-you',
     label: 'Needs You',
-    stages: ['on_hold', 'approval1', 'approval2'],
+    stages: [], // virtual column: filters by needsUser flag (see tasksForColumn)
     group: 'needs-you',
     hint: 'User action required',
   },

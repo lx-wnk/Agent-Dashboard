@@ -269,6 +269,58 @@ describe('pipeline config', () => {
   })
 })
 
+describe('task enrichment (needsUser)', () => {
+  it('flags needsUser=true for tasks in approval1 stage regardless of runs', async () => {
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'ap',
+      title: 'AP',
+      cwd: '/ap',
+    })
+    await api('PATCH', `/tasks/${t.id}`, { currentStage: 'approval1' })
+    const { data } = await api<{ needsUser: boolean }>('GET', `/tasks/${t.id}`)
+    expect(data.needsUser).toBe(true)
+  })
+
+  it('flags needsUser=true when current stage run is awaiting_user', async () => {
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'au',
+      title: 'AU',
+      cwd: '/au',
+    })
+    await api('PATCH', `/tasks/${t.id}`, { currentStage: 'umsetzung' })
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: t.id, stage: 'umsetzung' })
+    updateStageRun(run.id, { status: 'awaiting_user', startedAt: new Date().toISOString() })
+
+    const { data } = await api<{ needsUser: boolean }>('GET', `/tasks/${t.id}`)
+    expect(data.needsUser).toBe(true)
+  })
+
+  it('does NOT flag needsUser when stale awaiting_user belongs to a prior stage', async () => {
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'stale',
+      title: 'Stale',
+      cwd: '/stale',
+    })
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+
+    // Task was paused at umsetzung with awaiting_user at some past point
+    const oldRun = createStageRun({ taskId: t.id, stage: 'umsetzung' })
+    updateStageRun(oldRun.id, { status: 'awaiting_user', startedAt: '2026-04-11T10:00:00Z' })
+
+    // Then it advanced to backlog (unusual but this is the stale-run scenario)
+    // and the new stage has no stage_run yet
+    await api('PATCH', `/tasks/${t.id}`, { currentStage: 'pruefung' })
+
+    const { data } = await api<{ needsUser: boolean, latestStageRunStatus: string | null }>(
+      'GET',
+      `/tasks/${t.id}`,
+    )
+    expect(data.needsUser).toBe(false)
+    expect(data.latestStageRunStatus).toBeNull()
+  })
+})
+
 describe('notification endpoints', () => {
   it('sets and lists notification preferences', async () => {
     await api('PUT', '/notifications/preferences/on_hold', {

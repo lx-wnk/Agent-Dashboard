@@ -84,6 +84,11 @@ export class PipelineOrchestrator {
    * via a promise-chain lock: each call atomically reads the current lock
    * and chains the next runProgressTaskLocked onto it, so concurrent
    * callers line up deterministically instead of racing for the lock slot.
+   *
+   * CORRECTNESS WARNING: the get/chain/set sequence must remain synchronous
+   * (no awaits between Map.get and Map.set). If you insert an await here,
+   * two concurrent callers can read the same `prev`, each build a new
+   * chain head, and parallel execution returns. Keep this block atomic.
    */
   async progressTask(taskId: string): Promise<StageRun | null> {
     const prev = this.taskLocks.get(taskId) ?? Promise.resolve(null)
