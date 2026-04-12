@@ -6,11 +6,12 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 
 ## Features
 
-- **Live agent table** — all running Claude Code processes with status, model, tokens, cost, uptime
-- **Detail panel** — token usage breakdown, tool histogram, task list, subagents, session metadata
-- **Channel control** — send follow-up instructions to running agents via MCP Channels
+- **Live agent monitoring** — all running Claude Code processes with status, model, tokens, cost, uptime (list, card, and kanban views)
+- **Chat-style session view** — full conversation transcript with markdown rendering, collapsible tool groups, inline task checklists, sub-agent badges
+- **Channel control** — send follow-up instructions and /btw interrupts to running agents via MCP Channels
 - **Agent spawning** — start new Claude agents with custom prompts, models, and system prompts from the UI
-- **Auto-refresh** — 3-second polling, no manual refresh needed
+- **Multi-machine support** — aggregate agents from remote machines via `DASHBOARD_REMOTES`
+- **SSE streaming** — real-time updates via Server-Sent Events with polling fallback
 
 ## Quick Start
 
@@ -27,55 +28,67 @@ Open [http://localhost:13120](http://localhost:13120) — running Claude Code ag
 ## Architecture
 
 ```
-Browser (Vue 3 SPA)         Express Backend (:13120)        Claude Code Agents
-┌─────────────────┐        ┌─────────────────────┐        ┌─────────────────┐
-│ Agent Table     │──poll──▶│ GET /api/agents     │──scan──▶│ ps / lsof       │
-│ Detail Panel    │        │                     │──read──▶│ ~/.claude/      │
-│ Channel Panel   │──send──▶│ POST /agents/:id/msg│──proxy─▶│ JSONL logs      │
-│ Spawn Dialog    │──spawn─▶│ POST /agents/spawn  │         │                 │
-└─────────────────┘        └─────────────────────┘        └─────────────────┘
-                                    ▲
-                           Channel MCP Server
-                           (per agent, random port)
++------------------------+      +----------------------------+      +-------------------+
+|  Browser (Vue 3 SPA)   |      |  Express Backend (:13120)  |      | Claude Code Agents|
++------------------------+      +----------------------------+      +-------------------+
+| List / Cards / Kanban  | <--- | GET  /api/agents/stream    | ---> | ps / lsof         |
+| Agent Modal (chat)     |      |      (SSE + polling fb)    |      | ~/.claude/        |
+| Prompt Input           | ---> | POST /agents/:id/message   |      | JSONL logs        |
+| Spawn Dialog           | ---> | POST /agents/spawn         |      |                   |
++------------------------+      +----------------------------+      +-------------------+
+                                            |
+                                            v
+                                +----------------------------+
+                                |    Channel MCP Server      |
+                                |  (per agent, random port)  |
+                                +----------------------------+
 ```
 
 ### Data Flow
 
-1. **Process scanning** — `ps aux` + `lsof` find running `/claude` processes and their working directories
-2. **Session matching** — PIDs are matched to JSONL session files in `~/.claude/projects/`
-3. **Log parsing** — tail-reads last 32KB of each session file for tokens, tools, tasks, model info
-4. **Cost estimation** — `MODEL_PRICING` table in `agentMerger.ts` calculates API-equivalent costs
+1. **Process scanning** — `ps aux` + `lsof` (macOS) or `/proc/<pid>/cwd` (Linux) find running `claude` processes and their working directories
+2. **Session matching** — PIDs are matched to JSONL session files in `~/.claude/projects/{encoded_path}/`
+3. **Log parsing** — tail-reads last 32KB of each session file for tokens, tools, tasks, model info; full session read on modal open
+4. **Cost estimation** — `MODEL_PRICING` table in `pricing.ts` calculates API-equivalent costs
 5. **Status classification** — active (< 30s), waiting (< 5min), idle (> 5min) since last activity
+6. **Real-time updates** — browser subscribes to `/api/agents/stream` (SSE) with polling fallback
 
 ### Directory Structure
 
 ```
-├── server/                  # Express backend
-│   ├── index.ts             # API server + Vite middleware
-│   ├── processScanner.ts    # Finds Claude processes via ps/lsof
-│   ├── jsonlParser.ts       # Reads JSONL session logs
-│   ├── agentMerger.ts       # Merges process + session data, cost calc
-│   └── channelDiscovery.ts  # Reads channel discovery files
-├── src/                     # Vue 3 frontend
-│   ├── App.vue              # Root: header stats, table, panels
+├── server/                    # Express backend
+│   ├── index.ts               # API server + SSE + Vite middleware
+│   ├── processScanner.ts      # Finds Claude processes via ps/lsof
+│   ├── jsonlParser.ts         # Reads JSONL session logs
+│   ├── agentMerger.ts         # Merges process + session data, cost calc
+│   ├── pricing.ts             # MODEL_PRICING lookup table
+│   ├── channelDiscovery.ts    # Reads channel discovery files
+│   ├── remoteAggregator.ts    # Multi-machine agent aggregation
+│   └── systemMonitor.ts       # CPU/disk monitoring (macOS + Linux)
+├── src/                       # Vue 3 frontend
+│   ├── App.vue                # Root: header stats, view toggle, search
 │   ├── components/
-│   │   ├── AgentTable.vue   # Sortable agent table
-│   │   ├── AgentRow.vue     # Table row per agent
-│   │   ├── SubAgentRow.vue  # Indented subagent rows
-│   │   ├── AgentDetail.vue  # Off-canvas detail panel
-│   │   ├── ChannelPanel.vue # Send messages to agents
-│   │   ├── SpawnDialog.vue  # Spawn new agents modal
-│   │   ├── ToolTimeline.vue # Recent tool calls timeline
-│   │   ├── TaskList.vue     # Agent task tracker
-│   │   └── SubAgentList.vue # Subagent list in detail panel
+│   │   ├── AgentTable.vue     # Sortable agent table (list view)
+│   │   ├── AgentRow.vue       # Table row per agent
+│   │   ├── SubAgentRow.vue    # Indented subagent rows
+│   │   ├── AgentCard.vue      # Card view tile with output preview
+│   │   ├── AgentCardGrid.vue  # Responsive grid for cards
+│   │   ├── AgentModal.vue     # Chat-style session modal
+│   │   ├── KanbanBoard.vue    # Kanban board (tasks across agents)
+│   │   ├── SpawnDialog.vue    # Spawn new agents modal
+│   │   ├── PromptInput.vue    # Prompt input with slash autocomplete
+│   │   ├── ToolTimeline.vue   # Recent tool calls timeline
+│   │   ├── TaskList.vue       # Agent task tracker
+│   │   └── SubAgentList.vue   # Subagent list in detail panel
 │   ├── composables/
-│   │   ├── useAgents.ts     # Polls /api/agents every 3s
-│   │   └── useChannel.ts    # Channel message send + reply polling
-│   ├── types.ts             # Shared TypeScript interfaces
-│   └── utils/format.ts      # Token, cost, uptime formatters
-└── channel/                 # MCP Channel server (separate package)
-    ├── dashboard-channel.ts # Standalone MCP server for agent control
-    └── package.json         # @modelcontextprotocol/sdk dependency
+│   │   ├── useAgents.ts       # SSE + polling for agent data
+│   │   ├── useAgentPrompt.ts  # Send prompts to agents
+│   │   └── useTheme.ts        # Dark/light theme with OS detection
+│   ├── types.ts               # Shared TypeScript interfaces
+│   └── utils/format.ts        # Token, cost, uptime formatters
+└── channel/                   # MCP Channel server (separate package)
+    ├── dashboard-channel.ts   # Standalone MCP server for agent control
+    └── package.json           # @modelcontextprotocol/sdk dependency
 ```
 
 ## Controlling Running Agents
@@ -114,10 +127,16 @@ Spawned agents run detached — they survive dashboard restarts and appear in th
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/api/config` | Dashboard configuration (remotes, hostname) |
 | `GET` | `/api/agents` | List all running agents with full metadata |
-| `POST` | `/api/agents/spawn` | Spawn a new Claude agent process |
+| `GET` | `/api/agents/stream` | Server-Sent Events stream of agent updates |
+| `GET` | `/api/agents/:sessionId/output` | Full parsed session transcript |
+| `GET` | `/api/agents/:sessionId/replies` | Channel replies (supports `?since=` filter) |
 | `POST` | `/api/agents/:sessionId/message` | Send instruction to agent via channel |
-| `GET` | `/api/agents/:sessionId/replies` | Get agent replies (supports `?since=` filter) |
+| `POST` | `/api/agents/spawn` | Spawn a new Claude agent process |
+| `GET` | `/api/agents/spawn/:pid/status` | Check spawn status and captured stderr |
+| `GET` | `/api/sessions` | List resumable session files |
+| `GET` | `/api/system` | CPU, memory, and disk usage |
 | `POST` | `/api/channel-reply` | Internal: receives replies from channel servers |
 
 ## Security
@@ -125,7 +144,9 @@ Spawned agents run detached — they survive dashboard restarts and appear in th
 - Server binds to `127.0.0.1` only — never exposed to the network
 - Channel replies are authenticated via per-agent Bearer tokens
 - Discovery files are validated for process liveness (stale files are cleaned up)
-- All user-generated content rendered with `v-text` (no `v-html`) to prevent XSS
+- Markdown output sanitized via DOMPurify before `v-html` rendering
+- Spawn rate-limited to 5 requests/minute
+- **`skipPermissions` option:** The spawn dialog offers a "skip permission prompts" checkbox that passes `--dangerously-skip-permissions` to Claude Code. This bypasses all safety confirmations (file writes, deletions, shell commands). The UI shows a warning and requires double-click confirmation. Use only in isolated environments or with trusted prompts.
 
 ## Agent Skills
 
@@ -160,14 +181,17 @@ done
 ## Development
 
 ```bash
-pnpm dev    # Express + Vite with hot reload on :13120
+pnpm dev           # Express + Vite with hot reload on :13120
+pnpm build         # Production build via Vite
+pnpm lint          # ESLint check
+pnpm test          # Vitest unit tests
+pnpm test:e2e      # Playwright E2E tests
+pnpm typecheck     # vue-tsc type checking
 ```
-
-No separate build, lint, or test scripts. The single `dev` command runs the full stack. The Vite dev server runs as Express middleware with HMR enabled.
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - Claude Code installed and running (at least one agent process for the dashboard to display)
 - For channel control: agents started with `--mcp-config with the dashboard-channel server`
 - **Platform:** macOS is fully supported. Linux: process scanning and disk work, but CPU monitoring (`top`) uses macOS-specific flags and will show 0%. Windows: not supported (requires `ps`, `lsof`, `top`, `df`).

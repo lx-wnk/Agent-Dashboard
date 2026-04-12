@@ -6,7 +6,8 @@ const theme = ref<Theme>('dark')
 let initialized = false
 
 function initTheme() {
-  if (initialized) return
+  if (initialized)
+    return
   initialized = true
   const stored = localStorage.getItem('agent-theme')
   const resolved: Theme = stored === 'light' || stored === 'dark'

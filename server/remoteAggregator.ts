@@ -1,8 +1,9 @@
+import type { Agent } from '../src/types.js'
+
 import { hostname } from 'node:os'
+import process from 'node:process'
 
 import { consola } from 'consola'
-
-import type { Agent } from '../src/types.js'
 
 const REMOTE_TIMEOUT_MS = 5000
 const MAX_RESPONSE_BYTES = 1_048_576 // 1MB
@@ -40,7 +41,8 @@ export function getRemoteUrls(): string[] {
 }
 
 function validateAgent(obj: unknown): obj is Agent {
-  if (typeof obj !== 'object' || obj === null) return false
+  if (typeof obj !== 'object' || obj === null)
+    return false
   const a = obj as Record<string, unknown>
   return typeof a.pid === 'number'
     && typeof a.sessionId === 'string' && UUID_RE.test(a.sessionId)

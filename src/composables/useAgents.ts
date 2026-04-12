@@ -52,7 +52,8 @@ async function fetchAgents() {
 }
 
 function startSSE() {
-  if (subscriberCount <= 0) return
+  if (subscriberCount <= 0)
+    return
   eventSource = new EventSource('/api/agents/stream')
 
   eventSource.onmessage = (event) => {

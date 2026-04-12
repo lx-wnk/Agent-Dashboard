@@ -121,5 +121,4 @@ defineEmits<{
   vertical-align: middle;
   letter-spacing: 0.5px;
 }
-
 </style>

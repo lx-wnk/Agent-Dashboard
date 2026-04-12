@@ -8,8 +8,6 @@ import SubAgentRow from './SubAgentRow.vue'
 type SortField = 'status' | 'projectName' | 'currentAction' | 'model' | 'tokens' | 'costEstimate' | 'uptime' | 'pid'
 type SortDir = 'asc' | 'desc'
 
-const STATUS_ORDER: Record<string, number> = { active: 0, waiting: 1, idle: 2 }
-
 const props = defineProps<{
   agents: Agent[]
 }>()
@@ -17,6 +15,8 @@ const props = defineProps<{
 defineEmits<{
   select: [agent: Agent]
 }>()
+
+const STATUS_ORDER: Record<string, number> = { active: 0, waiting: 1, idle: 2 }
 
 const expandedPids = ref(new Set<number>())
 const sortField = ref<SortField>('status')
@@ -33,7 +33,8 @@ function toggleSort(field: SortField) {
 }
 
 function sortIndicator(field: SortField): string {
-  if (sortField.value !== field) return ''
+  if (sortField.value !== field)
+    return ''
   return sortDir.value === 'asc' ? ' ▲' : ' ▼'
 }
 
@@ -88,14 +89,30 @@ function toggleSubagents(pid: number) {
     <table class="agent-table">
       <thead>
         <tr>
-          <th class="sortable" tabindex="0" @click="toggleSort('status')" @keydown.enter="toggleSort('status')" @keydown.space.prevent="toggleSort('status')">Status{{ sortIndicator('status') }}</th>
-          <th class="sortable" tabindex="0" @click="toggleSort('projectName')" @keydown.enter="toggleSort('projectName')" @keydown.space.prevent="toggleSort('projectName')">Project{{ sortIndicator('projectName') }}</th>
-          <th class="sortable" tabindex="0" @click="toggleSort('currentAction')" @keydown.enter="toggleSort('currentAction')" @keydown.space.prevent="toggleSort('currentAction')">Current Action{{ sortIndicator('currentAction') }}</th>
-          <th class="sortable" tabindex="0" @click="toggleSort('model')" @keydown.enter="toggleSort('model')" @keydown.space.prevent="toggleSort('model')">Model{{ sortIndicator('model') }}</th>
-          <th class="sortable" tabindex="0" @click="toggleSort('tokens')" @keydown.enter="toggleSort('tokens')" @keydown.space.prevent="toggleSort('tokens')">Tokens{{ sortIndicator('tokens') }}</th>
-          <th class="sortable" tabindex="0" @click="toggleSort('costEstimate')" @keydown.enter="toggleSort('costEstimate')" @keydown.space.prevent="toggleSort('costEstimate')">Cost{{ sortIndicator('costEstimate') }}</th>
-          <th class="sortable" tabindex="0" @click="toggleSort('uptime')" @keydown.enter="toggleSort('uptime')" @keydown.space.prevent="toggleSort('uptime')">Uptime{{ sortIndicator('uptime') }}</th>
-          <th class="sortable" tabindex="0" @click="toggleSort('pid')" @keydown.enter="toggleSort('pid')" @keydown.space.prevent="toggleSort('pid')">PID{{ sortIndicator('pid') }}</th>
+          <th class="sortable" tabindex="0" @click="toggleSort('status')" @keydown.enter="toggleSort('status')" @keydown.space.prevent="toggleSort('status')">
+            Status{{ sortIndicator('status') }}
+          </th>
+          <th class="sortable" tabindex="0" @click="toggleSort('projectName')" @keydown.enter="toggleSort('projectName')" @keydown.space.prevent="toggleSort('projectName')">
+            Project{{ sortIndicator('projectName') }}
+          </th>
+          <th class="sortable" tabindex="0" @click="toggleSort('currentAction')" @keydown.enter="toggleSort('currentAction')" @keydown.space.prevent="toggleSort('currentAction')">
+            Current Action{{ sortIndicator('currentAction') }}
+          </th>
+          <th class="sortable" tabindex="0" @click="toggleSort('model')" @keydown.enter="toggleSort('model')" @keydown.space.prevent="toggleSort('model')">
+            Model{{ sortIndicator('model') }}
+          </th>
+          <th class="sortable" tabindex="0" @click="toggleSort('tokens')" @keydown.enter="toggleSort('tokens')" @keydown.space.prevent="toggleSort('tokens')">
+            Tokens{{ sortIndicator('tokens') }}
+          </th>
+          <th class="sortable" tabindex="0" @click="toggleSort('costEstimate')" @keydown.enter="toggleSort('costEstimate')" @keydown.space.prevent="toggleSort('costEstimate')">
+            Cost{{ sortIndicator('costEstimate') }}
+          </th>
+          <th class="sortable" tabindex="0" @click="toggleSort('uptime')" @keydown.enter="toggleSort('uptime')" @keydown.space.prevent="toggleSort('uptime')">
+            Uptime{{ sortIndicator('uptime') }}
+          </th>
+          <th class="sortable" tabindex="0" @click="toggleSort('pid')" @keydown.enter="toggleSort('pid')" @keydown.space.prevent="toggleSort('pid')">
+            PID{{ sortIndicator('pid') }}
+          </th>
           <th />
         </tr>
       </thead>
