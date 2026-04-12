@@ -1,5 +1,6 @@
 import type express from 'express'
 import type { NotificationEventType, PipelineStage } from '../../src/types.js'
+import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { Router } from 'express'
 import { listAuditForTask } from '../db/auditRepo.js'
@@ -23,6 +24,7 @@ import {
   listTasksByStage,
   updateTask,
 } from '../db/tasksRepo.js'
+import { recommendParallelism } from '../pipeline/resourceRecommender.js'
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
@@ -30,6 +32,7 @@ export interface TaskRouterDeps {
   rejectCrossOrigin: RejectCrossOrigin
   orchestrator: PipelineOrchestrator
   broadcastTaskEvent: (event: TaskEvent) => void
+  dispatcher?: Dispatcher
 }
 
 export interface TaskEvent {
@@ -297,6 +300,22 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       reason: typeof reason === 'string' ? reason : null,
     })
     deps.broadcastTaskEvent({ type: 'permission_request', taskId: run.taskId, payload: reqRow })
+
+    // Fire-and-forget notification for ON HOLD state
+    if (deps.dispatcher) {
+      const task = getTaskById(run.taskId)
+      if (task) {
+        void deps.dispatcher.dispatch({
+          eventType: 'on_hold',
+          title: `Task "${task.title}" needs permission`,
+          body: `Agent requests ${tool}${pattern ? ` (${pattern})` : ''}${reason ? `\nReason: ${reason}` : ''}`,
+          taskId: task.id,
+          taskSlug: task.slug,
+          severity: 'warning',
+        })
+      }
+    }
+
     res.status(201).json(reqRow)
   })
 
@@ -341,6 +360,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json({
       maxParallelOrchestrators: getPipelineConfigNumber('maxParallelOrchestrators', 3),
     })
+  })
+
+  router.get('/pipeline/recommendation', (_req, res) => {
+    res.json(recommendParallelism())
   })
 
   router.put('/pipeline/config', (req, res) => {

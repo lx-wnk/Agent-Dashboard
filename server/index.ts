@@ -12,6 +12,7 @@ import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
 import { parseFullSession } from './jsonlParser.js'
+import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
 import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
@@ -215,6 +216,16 @@ async function start() {
   const orchestrator = new PipelineOrchestrator()
   orchestrator.start()
 
+  // Browser notifications are pushed through the task SSE stream.
+  setSseBroadcaster((payload) => {
+    broadcastTaskEvent({
+      type: 'stage_run_updated', // reuse event channel for notifications
+      taskId: payload.taskId,
+      payload: { notification: payload },
+    })
+  })
+  const dispatcher = createDispatcher()
+
   // CSRF protection for mutation endpoints
   function rejectCrossOrigin(req: express.Request, res: express.Response): boolean {
     const origin = req.headers.origin || ''
@@ -242,6 +253,7 @@ async function start() {
     rejectCrossOrigin,
     orchestrator,
     broadcastTaskEvent,
+    dispatcher,
   }))
 
   // Spawn a new Claude agent process
