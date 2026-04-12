@@ -51,7 +51,22 @@ pnpm typecheck     # vue-tsc type checking
 
 ## Task Pipeline Architecture
 
-The Task Pipeline subsystem (`server/db/`, `server/pipeline/`, `server/routes/taskRoutes.ts`, `server/notifications/`) follows a strict layered architecture with callback-based decoupling. See [ADR-0001](docs/architecture/adr/0001-sqlite-for-task-pipeline.md) for why SQLite was added.
+The Task Pipeline subsystem (`server/db/`, `server/pipeline/`, `server/routes/taskRoutes.ts`, `server/notifications/`) follows a strict layered architecture with callback-based decoupling. See [ADR-0001](docs/architecture/adr/0001-sqlite-for-task-pipeline.md) for why SQLite was added and [ADR-0002](docs/architecture/adr/0002-runner-slot-priority-model.md) for the runner-slot priority model used by the driver loop.
+
+**Key pipeline modules** (`server/pipeline/`):
+
+- `orchestrator.ts` — state machine, `tick()` driver loop, `progressTask()` per-task lock, completion finalization, priority-based runner-slot picker (`pickNextTasksForFreeSlots`).
+- `stageHandlers.ts` — `createAgentStage(stage, buildPrompt)` factory that produces real handlers spawning detached Claude processes. `backlogHandler` and `approvalStage` are the only agent-less handlers.
+- `stagePrompts.ts` — per-stage `{ systemPrompt, userPrompt }` builders. Each user prompt ends with a `` ```json `` block defining the output schema contract.
+- `agentSpawner.ts` — detached `claude` CLI spawn, writes `.claude/settings.json` with pre-approved tool allow-list, injects dashboard-channel MCP.
+- `completionDetector.ts` — converts a dead PID + session JSONL into a next/retry/fail decision. Strict per-stage schema validators (`validateStageOutput`) with injectable deps for tests.
+- `sessionOutputReader.ts` — reads the last assistant turn from a session JSONL, extracts the `` ```json `` block, falls back to newest-by-mtime session discovery when the stage_run has no `session_id` yet.
+- `sessionManager.ts` — `isPidAlive` (with EPERM handling), recovery decisions on orchestrator restart.
+- `types.ts` — `StageTransition` union (incl. `async_running`, `taskMetadataPatch` on `next`), `StageContext` with injected `recordAudit` / `requestPermission` side-effects.
+
+**Runner slots:** `maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `umsetzung`. Agent-less stages (backlog, approval1/2) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → createdAt) and the sticky-run invariant.
+
+**Schema validation + retry:** every agent-driven stage's output is validated against a strict per-stage schema in `validateStageOutput`. A schema mismatch on the first iteration → `iterate` with the validation error and the rejected payload fed back into the next prompt; a second failure → `wait_user`. Hard failures (no session, no parseable JSON) → `fail` immediately without retry. This strategy is also documented in the private `feedback_llm_output_validation` memory.
 
 **Layer direction (no upward imports):**
 
