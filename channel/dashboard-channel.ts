@@ -125,6 +125,33 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['message'],
       },
     },
+    {
+      name: 'request_permission',
+      description:
+        'Ask the dashboard user to grant permission for a tool you need but is not in your pre-approved allowlist. The current task will be moved to ON HOLD until the user grants or denies. Use when you discover mid-task that you need a tool like Bash(git push *), WebFetch, or Write outside the worktree.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          stageRunId: {
+            type: 'string',
+            description: 'The current stage_run id (injected by orchestrator via environment variable DASHBOARD_STAGE_RUN_ID)',
+          },
+          tool: {
+            type: 'string',
+            description: 'The tool name you want to use (e.g. "Bash", "WebFetch")',
+          },
+          pattern: {
+            type: 'string',
+            description: 'Optional pattern (e.g. "git push origin main") — omit for full tool access',
+          },
+          reason: {
+            type: 'string',
+            description: 'Why you need this tool. Be specific — this is what the user sees in the ON HOLD notification.',
+          },
+        },
+        required: ['tool', 'reason'],
+      },
+    },
   ],
 }))
 
@@ -151,6 +178,47 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
 
       return { content: [{ type: 'text', text: 'Reply sent to dashboard.' }] }
+    }
+    catch (err) {
+      return {
+        content: [{ type: 'text', text: `Could not reach dashboard: ${(err as Error).message}` }],
+      }
+    }
+  }
+
+  if (req.params.name === 'request_permission') {
+    const args = req.params.arguments as { stageRunId?: string, tool: string, pattern?: string, reason: string }
+    const stageRunId = args.stageRunId || process.env.DASHBOARD_STAGE_RUN_ID
+    if (!stageRunId) {
+      return {
+        content: [
+          { type: 'text', text: 'No stageRunId provided — cannot request permission. Task is not orchestrator-managed.' },
+        ],
+      }
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/permission-requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${TOKEN}`,
+        },
+        body: JSON.stringify({
+          stageRunId,
+          tool: args.tool,
+          pattern: args.pattern ?? null,
+          reason: args.reason,
+        }),
+      })
+      if (!res.ok) {
+        return { content: [{ type: 'text', text: `Permission request failed: ${res.status}` }] }
+      }
+      return {
+        content: [{
+          type: 'text',
+          text: `Permission request for ${args.tool} sent. Task is now ON HOLD — wait for user response via dashboard notification.`,
+        }],
+      }
     }
     catch (err) {
       return {

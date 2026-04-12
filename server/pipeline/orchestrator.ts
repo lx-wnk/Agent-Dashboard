@@ -294,6 +294,25 @@ export class PipelineOrchestrator {
           }, db)
           return { updatedRunId: stageRun.id, newRunId: null }
         }
+
+        case 'async_running': {
+          // The handler spawned an agent that will report completion
+          // asynchronously via the channel or JSONL session. Keep the
+          // stage_run in 'running' status with the PID so the poller
+          // (or explicit completion callback) can finalize it later.
+          updateStageRun(stageRun.id, {
+            status: 'running',
+            pid: transition.pid,
+            output: transition.output ?? null,
+          }, db)
+          appendAudit({
+            taskId: task.id,
+            actor: 'orchestrator',
+            action: 'agent_spawned',
+            details: { pid: transition.pid, stage: stageRun.stage },
+          }, db)
+          return { updatedRunId: stageRun.id, newRunId: null }
+        }
       }
     })
 

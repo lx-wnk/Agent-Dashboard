@@ -7,6 +7,7 @@ export type StageTransition
     | { kind: 'on_hold', permissionRequestId: string, output?: Record<string, unknown> }
     | { kind: 'done', output?: Record<string, unknown> }
     | { kind: 'fail', error: string, output?: Record<string, unknown> }
+    | { kind: 'async_running', pid: number, output?: Record<string, unknown> }
 
 export interface StageContext {
   task: PipelineTask
