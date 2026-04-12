@@ -1,0 +1,118 @@
+-- Task Pipeline Schema v1
+-- See plan: ~/.claude/plans/distributed-hatching-waffle.md
+
+PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+
+-- Schema version tracking for future migrations
+CREATE TABLE IF NOT EXISTS schema_version (
+  version INTEGER PRIMARY KEY,
+  applied_at TEXT NOT NULL
+);
+
+-- Main task entity
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  cwd TEXT NOT NULL,
+  worktree_path TEXT,
+  source_branch TEXT,
+  target_branch TEXT,
+  current_stage TEXT NOT NULL,
+  parent_task_id TEXT REFERENCES tasks(id),
+  max_iterations INTEGER NOT NULL DEFAULT 20,
+  token_budget INTEGER,
+  cost_budget_cents INTEGER,
+  stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  metadata TEXT -- JSON: screenshots, custom fields
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks(current_stage);
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
+
+-- Stage runs: one row per stage execution (iterations create multiple rows)
+CREATE TABLE IF NOT EXISTS stage_runs (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  stage TEXT NOT NULL,
+  session_id TEXT,
+  session_name TEXT,
+  pid INTEGER,
+  status TEXT NOT NULL, -- pending|running|awaiting_user|on_hold|done|failed
+  started_at TEXT,
+  ended_at TEXT,
+  iteration INTEGER NOT NULL DEFAULT 0,
+  output TEXT, -- JSON: stage result
+  tokens_used INTEGER NOT NULL DEFAULT 0,
+  cost_cents INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_stage_runs_task ON stage_runs(task_id);
+CREATE INDEX IF NOT EXISTS idx_stage_runs_status ON stage_runs(status);
+CREATE INDEX IF NOT EXISTS idx_stage_runs_session ON stage_runs(session_id);
+
+-- Task-scoped permissions (both pre-approved and runtime-granted)
+CREATE TABLE IF NOT EXISTS task_permissions (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  tool TEXT NOT NULL,
+  pattern TEXT, -- null = all usages of this tool
+  granted INTEGER NOT NULL, -- 0 or 1 (SQLite bool)
+  pre_approved INTEGER NOT NULL, -- 0 or 1
+  requested_at TEXT NOT NULL,
+  decided_at TEXT,
+  decided_by TEXT -- 'user' | 'auto'
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_permissions_task ON task_permissions(task_id);
+
+-- Runtime permission requests (agent asked mid-stage)
+CREATE TABLE IF NOT EXISTS permission_requests (
+  id TEXT PRIMARY KEY,
+  stage_run_id TEXT NOT NULL REFERENCES stage_runs(id) ON DELETE CASCADE,
+  tool TEXT NOT NULL,
+  pattern TEXT,
+  reason TEXT,
+  requested_at TEXT NOT NULL,
+  resolved_at TEXT,
+  outcome TEXT -- 'granted' | 'denied' | 'timeout'
+);
+
+CREATE INDEX IF NOT EXISTS idx_permission_requests_stage ON permission_requests(stage_run_id);
+CREATE INDEX IF NOT EXISTS idx_permission_requests_outcome ON permission_requests(outcome);
+
+-- Audit log for all task-related events
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  actor TEXT NOT NULL, -- user|agent|orchestrator|system
+  action TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  details TEXT -- JSON
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_task ON audit_log(task_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+
+-- Notification preferences per event type (channels is JSON array)
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  event_type TEXT PRIMARY KEY, -- on_hold|approval_needed|completed|failed|budget_exceeded|iteration_warning
+  channels TEXT NOT NULL, -- JSON array: ["email","webhook","browser","system"]
+  enabled INTEGER NOT NULL DEFAULT 1
+);
+
+-- Key-value config for notification adapters (SMTP host, webhook URL, etc.)
+CREATE TABLE IF NOT EXISTS notification_config (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
+-- Pipeline global config (max parallel, etc.)
+CREATE TABLE IF NOT EXISTS pipeline_config (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
