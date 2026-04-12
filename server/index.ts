@@ -11,6 +11,7 @@ import { consola } from 'consola'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
+import { getTaskById } from './db/tasksRepo.js'
 import { parseFullSession } from './jsonlParser.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
@@ -226,14 +227,21 @@ async function start() {
   const orchestrator = new PipelineOrchestrator({
     onPermissionRequest: (taskId, request) => {
       broadcastTaskEvent({ type: 'permission_request', taskId, payload: request })
-      void dispatcher.dispatch({
-        eventType: 'on_hold',
-        title: 'Agent requested permission',
-        body: `Tool ${request.tool}${request.pattern ? ` (${request.pattern})` : ''}${request.reason ? `\n${request.reason}` : ''}`,
-        taskId,
-        taskSlug: taskId, // slug lookup would require another query
-        severity: 'warning',
-      })
+      // Look up the task for a meaningful notification title. The lookup
+      // is a single synchronous SQLite read — cheap, and ensures both the
+      // REST and orchestrator-driven notification paths produce identical
+      // payloads.
+      const task = getTaskById(taskId)
+      dispatcher
+        .dispatch({
+          eventType: 'on_hold',
+          title: task ? `Task "${task.title}" needs permission` : 'Agent requested permission',
+          body: `Agent requests ${request.tool}${request.pattern ? ` (${request.pattern})` : ''}${request.reason ? `\nReason: ${request.reason}` : ''}`,
+          taskId,
+          taskSlug: task?.slug ?? taskId,
+          severity: 'warning',
+        })
+        .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
     },
   })
   orchestrator.start()

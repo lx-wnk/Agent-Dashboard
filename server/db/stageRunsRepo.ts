@@ -74,13 +74,20 @@ export function getLatestStageRun(
  * this matters when an `iterate` transition has just inserted a new pending
  * row — the new iter N+1 has `started_at = NULL` but should still outrank
  * the old iter N row whose started_at is set.
+ *
+ * Uses `(started_at IS NULL)` instead of `NULLS LAST` for portability
+ * across all SQLite versions (NULLS LAST requires ≥3.30).
  */
 export function getLatestStageRunForTask(taskId: string, db: Database = getDb()): StageRun | null {
   const row = db
     .prepare(`
       SELECT * FROM stage_runs
       WHERE task_id = ?
-      ORDER BY iteration DESC, started_at DESC NULLS LAST, rowid DESC LIMIT 1
+      ORDER BY iteration DESC,
+               (started_at IS NULL),
+               started_at DESC,
+               rowid DESC
+      LIMIT 1
     `)
     .get(taskId) as StageRunRow | undefined
   return row ? rowToStageRun(row) : null

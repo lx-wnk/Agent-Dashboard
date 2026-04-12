@@ -220,13 +220,36 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       return
     }
     const body = req.body ?? {}
-    // Validate currentStage against the enum to prevent arbitrary writes
-    // that would otherwise bypass the state machine.
-    if (body.currentStage !== undefined && !VALID_STAGES.has(body.currentStage as PipelineStage)) {
-      res.status(400).json({ error: 'Invalid currentStage' })
+
+    // Clients must NOT write currentStage directly — stage transitions go
+    // through /progress, /approve, /cancel so the state machine and
+    // notifications stay consistent.
+    if (body.currentStage !== undefined) {
+      res.status(400).json({
+        error: 'currentStage cannot be set via PATCH — use /progress, /approve, or /cancel',
+      })
       return
     }
-    const updated = updateTask(req.params.id, body)
+
+    // Whitelist the fields clients are allowed to update. Anything else
+    // (cwd, parentTaskId, worktreePath, etc.) is intentionally off-limits.
+    const allowed: Record<string, unknown> = {}
+    if (typeof body.title === 'string')
+      allowed.title = body.title
+    if (body.description === null || typeof body.description === 'string')
+      allowed.description = body.description
+    if (typeof body.maxIterations === 'number')
+      allowed.maxIterations = body.maxIterations
+    if (body.tokenBudget === null || typeof body.tokenBudget === 'number')
+      allowed.tokenBudget = body.tokenBudget
+    if (body.costBudgetCents === null || typeof body.costBudgetCents === 'number')
+      allowed.costBudgetCents = body.costBudgetCents
+    if (typeof body.stageTimeoutSeconds === 'number')
+      allowed.stageTimeoutSeconds = body.stageTimeoutSeconds
+    if (body.metadata === null || (typeof body.metadata === 'object' && body.metadata !== null))
+      allowed.metadata = body.metadata
+
+    const updated = updateTask(req.params.id, allowed)
     deps.broadcastTaskEvent({ type: 'task_updated', taskId: req.params.id, payload: updated })
     res.json(updated)
   })
@@ -245,7 +268,12 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'Task not found' })
       return
     }
-    // Best-effort worktree cleanup — log failures but don't fail the delete.
+    // Broadcast + respond first so the UI updates immediately. Worktree
+    // cleanup happens after — a stale directory is a cleanup concern, not
+    // a UX concern, and `git worktree remove` can block on lock files.
+    deps.broadcastTaskEvent({ type: 'task_deleted', taskId: req.params.id })
+    res.status(204).end()
+
     if (task.worktreePath) {
       try {
         await removeWorktree(task.cwd, task.worktreePath, { force: true })
@@ -257,8 +285,6 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         )
       }
     }
-    deps.broadcastTaskEvent({ type: 'task_deleted', taskId: req.params.id })
-    res.status(204).end()
   })
 
   // ─── Stage progression & approvals ────────────────
@@ -394,18 +420,21 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     })
     deps.broadcastTaskEvent({ type: 'permission_request', taskId: run.taskId, payload: reqRow })
 
-    // Fire-and-forget notification for ON HOLD state
+    // Fire-and-forget notification for ON HOLD state — catch rejections so
+    // an adapter failure never becomes an unhandled promise rejection.
     if (deps.dispatcher) {
       const task = getTaskById(run.taskId)
       if (task) {
-        void deps.dispatcher.dispatch({
-          eventType: 'on_hold',
-          title: `Task "${task.title}" needs permission`,
-          body: `Agent requests ${tool}${pattern ? ` (${pattern})` : ''}${reason ? `\nReason: ${reason}` : ''}`,
-          taskId: task.id,
-          taskSlug: task.slug,
-          severity: 'warning',
-        })
+        deps.dispatcher
+          .dispatch({
+            eventType: 'on_hold',
+            title: `Task "${task.title}" needs permission`,
+            body: `Agent requests ${tool}${pattern ? ` (${pattern})` : ''}${reason ? `\nReason: ${reason}` : ''}`,
+            taskId: task.id,
+            taskSlug: task.slug,
+            severity: 'warning',
+          })
+          .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
       }
     }
 

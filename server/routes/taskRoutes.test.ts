@@ -8,8 +8,18 @@ import process from 'node:process'
 import expressLib from 'express'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDb, getDb } from '../db/client.js'
+import { updateTask } from '../db/tasksRepo.js'
 import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { createTaskRouter } from './taskRoutes.js'
+
+/**
+ * Test helper — bypasses PATCH's stage-write block which exists for
+ * client-facing safety. Tests need to put a task into a specific stage
+ * to exercise downstream logic.
+ */
+function forceStage(id: string, stage: Parameters<typeof updateTask>[1]['currentStage']) {
+  updateTask(id, { currentStage: stage })
+}
 
 let tmpDir: string
 let server: ReturnType<express.Express['listen']>
@@ -102,7 +112,7 @@ describe('gET /api/tasks', () => {
       title: 'B',
       cwd: '/b',
     })
-    await api('PATCH', `/tasks/${b.id}`, { currentStage: 'umsetzung' })
+    forceStage(b.id, 'umsetzung')
 
     const all = await api<unknown[]>('GET', '/tasks')
     expect(all.data).toHaveLength(2)
@@ -112,6 +122,53 @@ describe('gET /api/tasks', () => {
 
     const invalid = await api('GET', '/tasks?stage=nope')
     expect(invalid.status).toBe(400)
+  })
+})
+
+describe('pATCH /api/tasks', () => {
+  it('rejects currentStage writes — must use /progress or /approve', async () => {
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'px',
+      title: 'PX',
+      cwd: '/px',
+    })
+    const { status, data } = await api<{ error: string }>(
+      'PATCH',
+      `/tasks/${t.id}`,
+      { currentStage: 'done' },
+    )
+    expect(status).toBe(400)
+    expect(data.error).toContain('currentStage cannot be set')
+  })
+
+  it('accepts whitelisted field updates', async () => {
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'pw',
+      title: 'PW',
+      cwd: '/pw',
+    })
+    const { status, data } = await api<{ title: string, tokenBudget: number | null }>(
+      'PATCH',
+      `/tasks/${t.id}`,
+      { title: 'New Title', tokenBudget: 100000 },
+    )
+    expect(status).toBe(200)
+    expect(data.title).toBe('New Title')
+    expect(data.tokenBudget).toBe(100000)
+  })
+
+  it('ignores non-whitelisted fields like cwd', async () => {
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'pc',
+      title: 'PC',
+      cwd: '/pc',
+    })
+    const { data } = await api<{ cwd: string }>(
+      'PATCH',
+      `/tasks/${t.id}`,
+      { cwd: '/hijacked' },
+    )
+    expect(data.cwd).toBe('/pc')
   })
 })
 
@@ -140,7 +197,7 @@ describe('pOST /api/tasks/:id/approve', () => {
       title: 'A',
       cwd: '/a',
     })
-    await api('PATCH', `/tasks/${task.id}`, { currentStage: 'approval1' })
+    forceStage(task.id, 'approval1')
 
     const { status, data } = await api<{ currentStage: string }>(
       'POST',
@@ -276,7 +333,7 @@ describe('task enrichment (needsUser)', () => {
       title: 'AP',
       cwd: '/ap',
     })
-    await api('PATCH', `/tasks/${t.id}`, { currentStage: 'approval1' })
+    forceStage(t.id, 'approval1')
     const { data } = await api<{ needsUser: boolean }>('GET', `/tasks/${t.id}`)
     expect(data.needsUser).toBe(true)
   })
@@ -287,7 +344,7 @@ describe('task enrichment (needsUser)', () => {
       title: 'AU',
       cwd: '/au',
     })
-    await api('PATCH', `/tasks/${t.id}`, { currentStage: 'umsetzung' })
+    forceStage(t.id, 'umsetzung')
     const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
     const run = createStageRun({ taskId: t.id, stage: 'umsetzung' })
     updateStageRun(run.id, { status: 'awaiting_user', startedAt: new Date().toISOString() })
@@ -305,7 +362,7 @@ describe('task enrichment (needsUser)', () => {
       title: 'ITR',
       cwd: '/itr',
     })
-    await api('PATCH', `/tasks/${t.id}`, { currentStage: 'umsetzung' })
+    forceStage(t.id, 'umsetzung')
     const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
 
     // Old iteration 0 paused at awaiting_user
@@ -340,7 +397,7 @@ describe('task enrichment (needsUser)', () => {
 
     // Then it advanced to backlog (unusual but this is the stale-run scenario)
     // and the new stage has no stage_run yet
-    await api('PATCH', `/tasks/${t.id}`, { currentStage: 'pruefung' })
+    forceStage(t.id, 'pruefung')
 
     const { data } = await api<{ needsUser: boolean, latestStageRunStatus: string | null }>(
       'GET',

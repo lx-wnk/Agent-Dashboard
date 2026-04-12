@@ -39,11 +39,11 @@ export const systemAdapter: NotificationAdapter = {
 }
 
 function sanitizeForAppleScript(input: string): string {
-  // Remove backslashes (escape char), double quotes (string delimiter),
-  // control characters including CR/LF (AppleScript statement separators),
-  // and cap length to prevent unbounded growth.
-  return input
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\\"\u0000-\u001F\u007F]/g, ' ')
-    .slice(0, 300)
+  // 1. Slice first so the regex scan is bounded by the cap, not the input size.
+  // 2. Strip backslashes (escape char), double quotes (string delimiter),
+  //    control characters C0 + C1 (AppleScript statement separators),
+  //    Unicode line/paragraph separators U+2028/U+2029, and DEL (U+007F).
+  // eslint-disable-next-line no-control-regex
+  const DANGEROUS = /[\\"\u0000-\u001F\u007F\u0080-\u009F\u2028\u2029]/g
+  return input.slice(0, 300).replace(DANGEROUS, ' ')
 }
