@@ -66,6 +66,22 @@ export function getLatestStageRun(
   return row ? rowToStageRun(row) : null
 }
 
+/**
+ * Get the most recently started stage_run for a task, regardless of stage.
+ * Used for board enrichment to reflect awaiting_user/on_hold status even
+ * when task.current_stage hasn't moved.
+ */
+export function getLatestStageRunForTask(taskId: string, db: Database = getDb()): StageRun | null {
+  const row = db
+    .prepare(`
+      SELECT * FROM stage_runs
+      WHERE task_id = ?
+      ORDER BY started_at DESC NULLS LAST, iteration DESC LIMIT 1
+    `)
+    .get(taskId) as StageRunRow | undefined
+  return row ? rowToStageRun(row) : null
+}
+
 export function findStageRunBySessionId(sessionId: string, db: Database = getDb()): StageRun | null {
   const row = db
     .prepare('SELECT * FROM stage_runs WHERE session_id = ? LIMIT 1')

@@ -58,7 +58,7 @@ function stageLabel(stage: PipelineStage): string {
       <span v-if="task.sourceBranch" class="meta-chip">{{ task.sourceBranch }}</span>
       <span v-if="task.parentTaskId" class="meta-chip" title="Follow-up task">↳</span>
       <span v-if="task.currentStage === 'umsetzung'" class="meta-chip iter">
-        iter {{ task.maxIterations }}
+        max iter {{ task.maxIterations }}
       </span>
     </div>
   </div>

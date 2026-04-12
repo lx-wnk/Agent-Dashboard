@@ -118,6 +118,12 @@ export interface PipelineTask {
   createdAt: string
   updatedAt: string
   metadata: Record<string, unknown> | null
+  // Computed at read time by the API — not stored in DB.
+  // True when the latest stage_run is paused waiting for user input,
+  // regardless of what currentStage is.
+  needsUser?: boolean
+  latestStageRunStatus?: StageRunStatus | null
+  currentIteration?: number
 }
 
 export interface StageRun {

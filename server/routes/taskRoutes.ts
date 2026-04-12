@@ -1,5 +1,5 @@
 import type express from 'express'
-import type { NotificationEventType, PipelineStage } from '../../src/types.js'
+import type { NotificationEventType, PipelineStage, PipelineTask } from '../../src/types.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { Router } from 'express'
@@ -14,7 +14,11 @@ import {
   listTaskPermissions,
   resolvePermissionRequest,
 } from '../db/permissionsRepo.js'
-import { getStageRunById, listStageRunsForTask } from '../db/stageRunsRepo.js'
+import {
+  getLatestStageRunForTask,
+  getStageRunById,
+  listStageRunsForTask,
+} from '../db/stageRunsRepo.js'
 import {
   createTask,
   deleteTask,
@@ -25,6 +29,7 @@ import {
   updateTask,
 } from '../db/tasksRepo.js'
 import { recommendParallelism } from '../pipeline/resourceRecommender.js'
+import { createWorktree } from '../pipeline/worktreeManager.js'
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
@@ -69,6 +74,28 @@ const VALID_EVENT_TYPES = new Set<NotificationEventType>([
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
+const USER_WAIT_STAGES = new Set<PipelineStage>(['on_hold', 'approval1', 'approval2'])
+
+/**
+ * Decorate a task with live stage_run status so the frontend can show
+ * `awaiting_user` / `on_hold` state on the board without refetching per task.
+ */
+function enrichTask(task: PipelineTask): PipelineTask {
+  const latest = getLatestStageRunForTask(task.id)
+  const latestStatus = latest?.status ?? null
+  const currentIteration = latest?.iteration ?? 0
+  const needsUser
+    = USER_WAIT_STAGES.has(task.currentStage)
+      || latestStatus === 'awaiting_user'
+      || latestStatus === 'on_hold'
+  return {
+    ...task,
+    needsUser,
+    latestStageRunStatus: latestStatus,
+    currentIteration,
+  }
+}
+
 export function createTaskRouter(deps: TaskRouterDeps): Router {
   const router = Router()
 
@@ -81,10 +108,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         res.status(400).json({ error: 'Invalid stage' })
         return
       }
-      res.json(listTasksByStage(stage as PipelineStage))
+      res.json(listTasksByStage(stage as PipelineStage).map(enrichTask))
       return
     }
-    res.json(listTasks())
+    res.json(listTasks().map(enrichTask))
   })
 
   router.get('/tasks/:id', (req, res) => {
@@ -93,14 +120,14 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'Task not found' })
       return
     }
-    res.json(task)
+    res.json(enrichTask(task))
   })
 
-  router.post('/tasks', (req, res) => {
+  router.post('/tasks', async (req, res) => {
     if (deps.rejectCrossOrigin(req, res))
       return
 
-    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata } = req.body ?? {}
+    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree } = req.body ?? {}
 
     if (!slug || typeof slug !== 'string' || !SLUG_RE.test(slug)) {
       res.status(400).json({ error: 'slug must match [a-z0-9][a-z0-9-]{0,63}' })
@@ -120,12 +147,32 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
 
     try {
+      let initialWorktreePath: string | null = typeof worktreePath === 'string' ? worktreePath : null
+
+      // useWorktree=true triggers real git worktree creation. Default is
+      // off (caller must opt-in or provide an explicit worktreePath).
+      if (useWorktree === true && !initialWorktreePath) {
+        try {
+          initialWorktreePath = await createWorktree({
+            cwd,
+            slug,
+            branch: typeof sourceBranch === 'string' ? sourceBranch : null,
+          })
+        }
+        catch (err) {
+          res.status(400).json({
+            error: `worktree creation failed: ${(err as Error).message}`,
+          })
+          return
+        }
+      }
+
       const task = createTask({
         slug,
         title,
         description: typeof description === 'string' ? description : null,
         cwd,
-        worktreePath: typeof worktreePath === 'string' ? worktreePath : null,
+        worktreePath: initialWorktreePath,
         sourceBranch: typeof sourceBranch === 'string' ? sourceBranch : null,
         targetBranch: typeof targetBranch === 'string' ? targetBranch : null,
         parentTaskId: typeof parentTaskId === 'string' ? parentTaskId : null,
@@ -135,8 +182,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         stageTimeoutSeconds: typeof stageTimeoutSeconds === 'number' ? stageTimeoutSeconds : undefined,
         metadata: typeof metadata === 'object' && metadata !== null ? metadata : null,
       })
-      deps.broadcastTaskEvent({ type: 'task_created', taskId: task.id, payload: task })
-      res.status(201).json(task)
+      deps.broadcastTaskEvent({ type: 'task_created', taskId: task.id, payload: enrichTask(task) })
+      res.status(201).json(enrichTask(task))
     }
     catch (err) {
       res.status(500).json({ error: (err as Error).message })

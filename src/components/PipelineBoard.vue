@@ -52,10 +52,27 @@ const COLUMNS: ColumnDef[] = [
 ]
 
 function tasksForColumn(col: ColumnDef): PipelineTask[] {
+  if (col.id === 'needs-you') {
+    // Any task flagged needsUser — including ones whose current_stage is
+    // an agent stage but whose latest stage_run is awaiting_user/on_hold.
+    const all: PipelineTask[] = []
+    for (const stageTasks of Object.values(tasksByStageMap.value)) {
+      for (const task of stageTasks || []) {
+        if (task.needsUser)
+          all.push(task)
+      }
+    }
+    return all
+  }
+  // Normal stage-based columns exclude needsUser tasks so they don't
+  // appear in two columns at once.
   const all: PipelineTask[] = []
   for (const stage of col.stages) {
     const rows = tasksByStageMap.value[stage] || []
-    all.push(...rows)
+    for (const task of rows) {
+      if (!task.needsUser)
+        all.push(task)
+    }
   }
   return all
 }

@@ -81,20 +81,22 @@ export class PipelineOrchestrator {
 
   /**
    * Public API: advance a task from its current stage. Serialized per task
-   * via an in-memory lock to avoid concurrent writes.
+   * via a promise-chain lock: each call atomically reads the current lock
+   * and chains the next runProgressTaskLocked onto it, so concurrent
+   * callers line up deterministically instead of racing for the lock slot.
    */
   async progressTask(taskId: string): Promise<StageRun | null> {
-    const existing = this.taskLocks.get(taskId)
-    if (existing)
-      await existing.catch(() => { /* ignore previous failure */ })
-
-    const promise = this.runProgressTaskLocked(taskId)
-    this.taskLocks.set(taskId, promise)
+    const prev = this.taskLocks.get(taskId) ?? Promise.resolve(null)
+    const next = prev
+      .catch(() => null)
+      .then(() => this.runProgressTaskLocked(taskId))
+    this.taskLocks.set(taskId, next)
     try {
-      return await promise
+      return await next
     }
     finally {
-      if (this.taskLocks.get(taskId) === promise)
+      // Only clear the slot if no newer call has already chained on top.
+      if (this.taskLocks.get(taskId) === next)
         this.taskLocks.delete(taskId)
     }
   }

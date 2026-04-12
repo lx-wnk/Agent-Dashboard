@@ -230,37 +230,40 @@ describe('pipelineOrchestrator.start recovery', () => {
 })
 
 describe('pipelineOrchestrator concurrency', () => {
-  it('serializes concurrent progressTask calls for the same task', async () => {
+  it('serializes concurrent progressTask calls even when they all hit the same handler', async () => {
     const task = createTask({ slug: 'cc', title: 'CC', cwd: '/cc' })
+    const { updateTask } = await import('../db/tasksRepo.js')
+    updateTask(task.id, { currentStage: 'umsetzung' })
 
     let activeHandlers = 0
     let peak = 0
     let totalInvocations = 0
-    orchestrator.setHandler('backlog', {
-      stage: 'backlog',
-      requiresAgent: false,
+    // Handler stays on 'umsetzung' by returning wait_user so the task
+    // doesn't advance between calls — forcing the lock to be the only
+    // thing preventing parallel execution.
+    orchestrator.setHandler('umsetzung', {
+      stage: 'umsetzung',
+      requiresAgent: true,
       async execute() {
         activeHandlers++
         peak = Math.max(peak, activeHandlers)
         totalInvocations++
-        await new Promise(r => setTimeout(r, 10))
+        await new Promise(r => setTimeout(r, 15))
         activeHandlers--
-        return { kind: 'next', toStage: 'pruefung' }
+        return { kind: 'wait_user', reason: 'test' }
       },
     })
 
-    // Fire three concurrent calls.
-    const results = await Promise.all([
+    // Fire five concurrent calls — if the lock is broken, peak will jump.
+    await Promise.all([
+      orchestrator.progressTask(task.id),
+      orchestrator.progressTask(task.id),
       orchestrator.progressTask(task.id),
       orchestrator.progressTask(task.id),
       orchestrator.progressTask(task.id),
     ])
 
     expect(peak).toBe(1) // handler never ran in parallel
-    expect(totalInvocations).toBeGreaterThanOrEqual(1)
-    // Task has advanced past backlog (stub handlers will carry it forward
-    // but the key guarantee is the serialization, not the final stage)
-    expect(getTaskById(task.id)?.currentStage).not.toBe('backlog')
-    expect(results.filter(r => r !== null).length).toBeGreaterThanOrEqual(1)
+    expect(totalInvocations).toBe(5) // every call actually ran
   })
 })

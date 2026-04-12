@@ -110,10 +110,10 @@ export async function createTask(input: CreateTaskInput): Promise<PipelineTask> 
       cwd: input.cwd,
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
+      useWorktree: input.useWorktree,
       maxIterations: input.maxIterations,
       tokenBudget: input.tokenBudget,
       parentTaskId: input.parentTaskId,
-      metadata: input.useWorktree === false ? { useWorktree: false } : null,
     }),
   })
   if (!res.ok) {
