@@ -1,9 +1,17 @@
-import type { PipelineTask, StageRun } from '../../src/types.js'
-
 /**
- * Stage prompts: build the system prompt + user prompt for each agent-driven
- * pipeline stage. Keeps prompt engineering isolated from the orchestrator.
+ * PHASE 4 SCAFFOLDING — not wired to any stage handler yet.
+ *
+ * Prompt builders for each agent-driven pipeline stage. Each function
+ * returns a `{ systemPrompt, userPrompt }` bundle consumed by
+ * `agentSpawner.spawnStageAgent`. Keeps prompt engineering isolated from
+ * the orchestrator so prompts can evolve independently.
+ *
+ * When a real stage handler lands, it will import the corresponding
+ * builder here and pass the result to spawnStageAgent. The JSON-block
+ * instruction at the end of each userPrompt is the contract between the
+ * prompt and the orchestrator's output parser (yet to be written).
  */
+import type { PipelineTask, StageRun } from '../../src/types.js'
 
 export interface PromptBundle {
   systemPrompt: string

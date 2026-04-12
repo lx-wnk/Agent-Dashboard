@@ -1,3 +1,17 @@
+/**
+ * PHASE 4 SCAFFOLDING — not wired to any stage handler yet.
+ *
+ * This module will be called by future real stage handlers (replacing
+ * the stubs in stageHandlers.ts) to spawn the Claude agent that performs
+ * the stage work. See the implementation plan at
+ * ~/.claude/plans/distributed-hatching-waffle.md — "Phase 4: Agent Integration".
+ *
+ * The API surface is considered stable — tests in agentSpawner.test.ts
+ * lock the signature so the eventual handler migration is mechanical.
+ * When wiring: replace a stub handler body in stageHandlers.ts with a
+ * call to spawnStageAgent and return a `{ kind: 'async_running' }`
+ * transition.
+ */
 import type { ChildProcess } from 'node:child_process'
 import type { PipelineTask, StageRun, TaskPermission } from '../../src/types.js'
 import { spawn } from 'node:child_process'
@@ -28,16 +42,55 @@ export interface SpawnResult {
 }
 
 /**
- * Write a .claude/settings.json into the worktree (or cwd) with the
- * pre-approved tool permissions converted to Claude Code allowlist format.
+ * Convert TaskPermission rows into the Claude Code `permissions.allow`
+ * array format. Denied permissions are filtered out. Pure function —
+ * exported for testing.
  */
-function writeSettingsFile(cwd: string, permissions: TaskPermission[]): string | null {
+export function buildAllowList(permissions: TaskPermission[]): string[] {
   const allow: string[] = []
   for (const p of permissions) {
     if (!p.granted)
       continue
     allow.push(p.pattern ? `${p.tool}(${p.pattern})` : p.tool)
   }
+  return allow
+}
+
+/**
+ * Build the argv for `claude` given the spawn options. Pure function —
+ * exported for testing without mocking child_process.
+ */
+export function buildSpawnArgs(opts: SpawnAgentOptions): string[] {
+  const args: string[] = []
+  if (opts.resumeSessionId)
+    args.push('--resume', opts.resumeSessionId)
+  args.push('-p', opts.prompt)
+  if (opts.model)
+    args.push('--model', opts.model)
+  if (opts.systemPrompt)
+    args.push('--system-prompt', opts.systemPrompt.slice(0, 10000))
+  return args
+}
+
+/**
+ * Build the env block that agents receive — injects stage_run and task
+ * IDs so the channel's request_permission tool can post back to the
+ * right task. Pure function — exported for testing.
+ */
+export function buildSpawnEnv(opts: SpawnAgentOptions): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    DASHBOARD_STAGE_RUN_ID: opts.stageRun.id,
+    DASHBOARD_TASK_ID: opts.task.id,
+  }
+}
+
+/**
+ * Write a .claude/settings.json into the worktree (or cwd) with the
+ * pre-approved tool permissions converted to Claude Code allowlist format.
+ */
+function writeSettingsFile(cwd: string, permissions: TaskPermission[]): string | null {
+  const allow = buildAllowList(permissions)
   if (allow.length === 0)
     return null
 
@@ -58,14 +111,7 @@ export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
   const cwd = opts.task.worktreePath || opts.task.cwd
   const settingsPath = writeSettingsFile(cwd, opts.permissions)
 
-  const args: string[] = []
-  if (opts.resumeSessionId)
-    args.push('--resume', opts.resumeSessionId)
-  args.push('-p', opts.prompt)
-  if (opts.model)
-    args.push('--model', opts.model)
-  if (opts.systemPrompt)
-    args.push('--system-prompt', opts.systemPrompt.slice(0, 10000))
+  const args = buildSpawnArgs(opts)
 
   if (opts.enableChannel !== false) {
     const mcpConfig = JSON.stringify({
@@ -83,11 +129,7 @@ export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
     cwd,
     detached: true,
     stdio: ['ignore', 'ignore', 'pipe'],
-    env: {
-      ...process.env,
-      DASHBOARD_STAGE_RUN_ID: opts.stageRun.id,
-      DASHBOARD_TASK_ID: opts.task.id,
-    },
+    env: buildSpawnEnv(opts),
   })
 
   // CRITICAL: drain stderr so the OS pipe buffer (typically 64 KB) cannot

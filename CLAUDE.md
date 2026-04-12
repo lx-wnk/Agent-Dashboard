@@ -49,11 +49,64 @@ pnpm typecheck     # vue-tsc type checking
 
 **Agent status thresholds:** active < 30s, waiting < 5min, idle > 5min (since last activity).
 
+## Task Pipeline Architecture
+
+The Task Pipeline subsystem (`server/db/`, `server/pipeline/`, `server/routes/taskRoutes.ts`, `server/notifications/`) follows a strict layered architecture with callback-based decoupling. See [ADR-0001](docs/architecture/adr/0001-sqlite-for-task-pipeline.md) for why SQLite was added.
+
+**Layer direction (no upward imports):**
+
+```
+server/index.ts  ← composition root (only place that constructs concrete instances)
+     │
+     ├── creates Dispatcher
+     ├── creates PipelineOrchestrator (with onPermissionRequest callback)
+     └── creates TaskRouter (with TaskRouterDeps)
+              │
+              ▼
+        routes/taskRoutes.ts
+              │ (type-only deps)
+              ▼
+        pipeline/*  ──────────►  db/*
+              │
+              └─► (NO import of notifications/)
+```
+
+**Layering rules:**
+
+1. `db/*` — imports only `node:*`, `better-sqlite3`, sibling db files, and type-only from `src/types.ts`. Never imports pipeline/notifications/routes.
+2. `pipeline/*` — imports `db/*` and `src/types.ts` only. Never imports `notifications/` or `routes/`.
+3. `notifications/*` — imports `db/notificationConfigRepo` and `src/types.ts` only. Adapters are private to `dispatcher.ts`.
+4. `routes/taskRoutes.ts` — receives `PipelineOrchestrator` and `Dispatcher` as type-only dependencies via `TaskRouterDeps`; runtime instances are injected from `server/index.ts`.
+5. `server/index.ts` is the **only** file that instantiates concrete services. It is the composition root.
+
+**Why `pipeline/` does not import `notifications/`:**
+
+The orchestrator must stay agnostic of how users get notified — otherwise unit-testing the state machine would require mocking every adapter, and adding a new notification channel would force a pipeline change. Instead, the orchestrator exposes an `onPermissionRequest` callback on its constructor:
+
+```ts
+const orchestrator = new PipelineOrchestrator({
+  onPermissionRequest: (taskId, request) => {
+    broadcastTaskEvent({ type: 'permission_request', taskId, payload: request })
+    void dispatcher.dispatch({ eventType: 'on_hold', /* ...payload */ })
+  },
+})
+```
+
+`server/index.ts` wires this callback to both the SSE broadcast and the notification dispatcher. The orchestrator itself never knows SSE or the dispatcher exists. Tests can pass a spy callback to verify the orchestrator emits the right events without touching the real notification stack.
+
+The same pattern applies inside `StageContext` (`server/pipeline/types.ts`): stage handlers receive `recordAudit` and `requestPermission` as injected functions, not as direct DB or module references.
+
+**When modifying the pipeline:**
+
+- New stage transition? Add it to `StageTransition` in `server/pipeline/types.ts`, then handle it in `PipelineOrchestrator.applyTransition`. Wrap DB writes in `db.transaction()`.
+- New side effect (metrics, tracing, a new channel)? Add an optional callback to `OrchestratorOptions`, wire it in `server/index.ts`. Do **not** import the side-effect module from inside `pipeline/`.
+- New real stage handler that spawns a Claude agent? See `server/pipeline/agentSpawner.ts` and `stagePrompts.ts` — they are scaffolding ready to wire. Replace the stub in `stageHandlers.ts` with a real handler that uses them.
+
 ## Key Conventions
 
 - Path alias: `@/*` maps to `./src/*` (configured in tsconfig.json and vite.config.ts)
 - Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data). **Multi-machine mode** (`DASHBOARD_REMOTES` env var) requires remote instances to be network-accessible; use a VPN or SSH tunnel — never bind to `0.0.0.0` on an untrusted network.
-- No database — all data sourced from Claude Code's filesystem and running processes
+- **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (see ADR-0001). The scope boundary is strict — do not mix.
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
 - **Platform:** macOS and Linux. `server/systemMonitor.ts` uses `top` on macOS and `/proc/stat` on Linux for CPU; `server/processScanner.ts` uses `lsof` on macOS and `/proc/<pid>/cwd` on Linux. Windows is unsupported.
