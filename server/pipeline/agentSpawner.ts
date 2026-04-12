@@ -1,16 +1,16 @@
 /**
- * PHASE 4 SCAFFOLDING — not wired to any stage handler yet.
+ * Spawns a detached Claude CLI process for an agent-driven pipeline
+ * stage. Called by the generic `createAgentStage` factory in
+ * stageHandlers.ts — each real agent-stage handler invokes
+ * `spawnStageAgent` and returns `{ kind: 'async_running', pid }` so
+ * the orchestrator's driver loop can later finalize the stage via
+ * completionDetector when the PID exits.
  *
- * This module will be called by future real stage handlers (replacing
- * the stubs in stageHandlers.ts) to spawn the Claude agent that performs
- * the stage work. See the implementation plan at
- * ~/.claude/plans/distributed-hatching-waffle.md — "Phase 4: Agent Integration".
- *
- * The API surface is considered stable — tests in agentSpawner.test.ts
- * lock the signature so the eventual handler migration is mechanical.
- * When wiring: replace a stub handler body in stageHandlers.ts with a
- * call to spawnStageAgent and return a `{ kind: 'async_running' }`
- * transition.
+ * Side effects: writes `.claude/settings.json` into the task's cwd or
+ * worktree (containing pre-approved tool allow-list), injects the
+ * dashboard-channel MCP config when enabled, and sets
+ * `DASHBOARD_STAGE_RUN_ID` / `DASHBOARD_TASK_ID` env vars so the
+ * channel's permission-request tool can post back to the right run.
  */
 import type { ChildProcess } from 'node:child_process'
 import type { PipelineTask, StageRun, TaskPermission } from '../../src/types.js'

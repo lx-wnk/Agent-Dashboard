@@ -133,10 +133,14 @@ export function listPickableTasks(db: Database = getDb()): PipelineTask[] {
 }
 
 export function updateTask(id: string, input: UpdateTaskInput, db: Database = getDb()): PipelineTask | null {
-  assertValidPriority(input.priority)
   const existing = getTaskById(id, db)
   if (!existing)
     return null
+  // Validate AFTER the existence check so that an invalid-priority call
+  // against a non-existent task returns null (→ route layer 404), not
+  // throws (→ route layer 500). Route handlers validate priority before
+  // reaching here; this guard is a defensive backstop for internal callers.
+  assertValidPriority(input.priority)
 
   const updates: string[] = []
   const params: Record<string, unknown> = { id, updated_at: nowIso() }

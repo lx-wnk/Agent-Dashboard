@@ -1,15 +1,14 @@
 /**
- * PHASE 4 SCAFFOLDING — not wired to any stage handler yet.
+ * Per-stage prompt builders consumed by `createAgentStage` in
+ * stageHandlers.ts. Each function returns a `{ systemPrompt, userPrompt }`
+ * bundle that the agent spawner passes to the Claude CLI. Keeping prompt
+ * engineering isolated from the orchestrator lets prompts evolve without
+ * touching the state machine.
  *
- * Prompt builders for each agent-driven pipeline stage. Each function
- * returns a `{ systemPrompt, userPrompt }` bundle consumed by
- * `agentSpawner.spawnStageAgent`. Keeps prompt engineering isolated from
- * the orchestrator so prompts can evolve independently.
- *
- * When a real stage handler lands, it will import the corresponding
- * builder here and pass the result to spawnStageAgent. The JSON-block
- * instruction at the end of each userPrompt is the contract between the
- * prompt and the orchestrator's output parser (yet to be written).
+ * Contract: every userPrompt ends with a `\`\`\`json\`\`\`` fenced block
+ * describing the expected output schema. The orchestrator's
+ * completionDetector parses that block and runs `validateStageOutput`
+ * against it — keep the schema description and the validator in sync.
  */
 import type { PipelineTask, StageRun } from '../../src/types.js'
 

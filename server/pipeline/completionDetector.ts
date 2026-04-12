@@ -64,7 +64,7 @@ export function validateStageOutput(
     case 'finalisierung':
       return validateFinalisierung(output)
     default:
-      // Stages without a structured schema (backlog, approvals, refinement,
+      // Stages without a structured schema (backlog, approvals,
       // umsetzung) just need to be a parseable object. No further checks.
       return { ok: true }
   }

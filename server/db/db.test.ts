@@ -330,9 +330,26 @@ describe('legacy DB migration', () => {
   // database that was created before silver_bullet/priority landed, and
   // verifies the runtime migration in client.ts can open it without
   // blowing up on the picker-index creation.
+
+  // Track the legacy dir across the test body and teardown so that even
+  // if an assertion throws mid-test, the env var is reset and the temp
+  // directory is cleaned — otherwise the outer afterEach's `getDb()`
+  // call on the NEXT test would open a stale legacy path and poison
+  // downstream test files with a schemaless database.
+  let legacyDir: string | null = null
+
+  afterEach(() => {
+    closeDb()
+    delete process.env.DASHBOARD_DB_PATH
+    if (legacyDir) {
+      rmSync(legacyDir, { recursive: true, force: true })
+      legacyDir = null
+    }
+  })
+
   it('migrates a legacy tasks table without silver_bullet/priority columns', async () => {
     closeDb()
-    const legacyDir = mkdtempSync(join(tmpdir(), 'dashboard-db-legacy-'))
+    legacyDir = mkdtempSync(join(tmpdir(), 'dashboard-db-legacy-'))
     const legacyPath = join(legacyDir, 'legacy.db')
 
     const Database = (await import('better-sqlite3')).default
@@ -385,8 +402,7 @@ describe('legacy DB migration', () => {
     // after the ALTER TABLE added the referenced columns.
     const indexes = db.prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='tasks'`).all() as Array<{ name: string }>
     expect(indexes.some(i => i.name === 'idx_tasks_picker')).toBe(true)
-
-    closeDb()
-    rmSync(legacyDir, { recursive: true, force: true })
+    // Cleanup handled by the describe-local afterEach — do NOT close
+    // or rm here, or a thrown assertion above would bypass teardown.
   })
 })
