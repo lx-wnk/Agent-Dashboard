@@ -1,4 +1,5 @@
 import type { Buffer } from 'node:buffer'
+import type { TaskEvent } from './routes/taskRoutes.js'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -12,7 +13,9 @@ import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
 import { parseFullSession } from './jsonlParser.js'
 import { DISCOVERY_DIR } from './paths.js'
+import { PipelineOrchestrator } from './pipeline/orchestrator.js'
 import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
+import { createTaskRouter } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
 import { getSystemInfo } from './systemMonitor.js'
 
@@ -179,6 +182,39 @@ async function start() {
     }
   })
 
+  // ─── Task Pipeline SSE + Router ────────────────
+
+  const taskSseClients = new Set<express.Response>()
+  function broadcastTaskEvent(event: TaskEvent) {
+    const data = `data: ${JSON.stringify(event)}\n\n`
+    for (const client of taskSseClients) {
+      try {
+        if (!client.writableEnded)
+          client.write(data)
+      }
+      catch {
+        taskSseClients.delete(client)
+      }
+    }
+  }
+
+  app.get('/api/tasks/stream', (_req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    res.flushHeaders()
+    taskSseClients.add(res)
+    _req.on('close', () => {
+      taskSseClients.delete(res)
+    })
+  })
+
+  const orchestrator = new PipelineOrchestrator()
+  orchestrator.start()
+
   // CSRF protection for mutation endpoints
   function rejectCrossOrigin(req: express.Request, res: express.Response): boolean {
     const origin = req.headers.origin || ''
@@ -200,6 +236,13 @@ async function start() {
     res.status(403).json({ error: 'Cross-origin request blocked' })
     return true
   }
+
+  // Task pipeline routes (must come after rejectCrossOrigin definition)
+  app.use('/api', createTaskRouter({
+    rejectCrossOrigin,
+    orchestrator,
+    broadcastTaskEvent,
+  }))
 
   // Spawn a new Claude agent process
   app.post('/api/agents/spawn', (req, res) => {
