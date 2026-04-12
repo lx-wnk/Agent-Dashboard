@@ -1,11 +1,32 @@
 <script setup lang="ts">
-import type { PipelineTask } from '../types'
+import type { PipelineStage, PipelineTask } from '../types'
 
 defineProps<{ task: PipelineTask }>()
 defineEmits<{ select: [task: PipelineTask] }>()
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+const STAGE_LABELS: Record<PipelineStage, string> = {
+  backlog: 'Backlog',
+  pruefung: 'Prüfung',
+  refinement: 'Refinement',
+  planning: 'Planung',
+  approval1: 'Freigabe 1',
+  umsetzungskonzept: 'Konzept',
+  approval2: 'Freigabe 2',
+  umsetzung: 'Umsetzung',
+  selbstreview: 'Selbstreview',
+  finalisierung: 'Finalisierung',
+  done: 'Done',
+  on_hold: 'Permission',
+  cancelled: 'Cancelled',
+  failed: 'Failed',
+}
+
+function stageLabel(stage: PipelineStage): string {
+  return STAGE_LABELS[stage] || stage
 }
 </script>
 
@@ -30,6 +51,9 @@ function shortDate(iso: string): string {
       {{ task.description }}
     </div>
     <div class="task-meta">
+      <span class="meta-chip stage" :class="`stage-${task.currentStage}`">
+        {{ stageLabel(task.currentStage) }}
+      </span>
       <span v-if="task.worktreePath" class="meta-chip" title="Has worktree">WT</span>
       <span v-if="task.sourceBranch" class="meta-chip">{{ task.sourceBranch }}</span>
       <span v-if="task.parentTaskId" class="meta-chip" title="Follow-up task">↳</span>
@@ -115,5 +139,33 @@ function shortDate(iso: string): string {
 }
 .meta-chip.iter {
   color: var(--accent-yellow);
+}
+.meta-chip.stage {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.meta-chip.stage.stage-on_hold,
+.meta-chip.stage.stage-approval1,
+.meta-chip.stage.stage-approval2 {
+  background: rgba(234, 179, 8, 0.15);
+  color: rgb(234, 179, 8);
+  border-color: rgba(234, 179, 8, 0.4);
+}
+.meta-chip.stage.stage-umsetzung {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+.meta-chip.stage.stage-done {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--accent-green);
+  border-color: var(--accent-green);
+}
+.meta-chip.stage.stage-failed,
+.meta-chip.stage.stage-cancelled {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--accent-red);
+  border-color: var(--accent-red);
 }
 </style>
