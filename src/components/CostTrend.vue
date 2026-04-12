@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { TrendPoint } from '../composables/useAgents'
+import { computed } from 'vue'
 import { formatTokens } from '../utils/format'
 
 const props = defineProps<{ trend: TrendPoint[] }>()
