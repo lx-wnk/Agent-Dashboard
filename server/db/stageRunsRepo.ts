@@ -67,16 +67,20 @@ export function getLatestStageRun(
 }
 
 /**
- * Get the most recently started stage_run for a task, regardless of stage.
- * Used for board enrichment to reflect awaiting_user/on_hold status even
- * when task.current_stage hasn't moved.
+ * Get the most recently created stage_run for a task, regardless of stage.
+ * Used for board enrichment to reflect awaiting_user/on_hold status.
+ *
+ * Ordering priority (highest iteration first, then most recently started):
+ * this matters when an `iterate` transition has just inserted a new pending
+ * row — the new iter N+1 has `started_at = NULL` but should still outrank
+ * the old iter N row whose started_at is set.
  */
 export function getLatestStageRunForTask(taskId: string, db: Database = getDb()): StageRun | null {
   const row = db
     .prepare(`
       SELECT * FROM stage_runs
       WHERE task_id = ?
-      ORDER BY started_at DESC NULLS LAST, iteration DESC LIMIT 1
+      ORDER BY iteration DESC, started_at DESC NULLS LAST, rowid DESC LIMIT 1
     `)
     .get(taskId) as StageRunRow | undefined
   return row ? rowToStageRun(row) : null

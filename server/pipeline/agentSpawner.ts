@@ -89,6 +89,13 @@ export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
       DASHBOARD_TASK_ID: opts.task.id,
     },
   })
+
+  // CRITICAL: drain stderr so the OS pipe buffer (typically 64 KB) cannot
+  // fill and block a long-running detached agent. We don't store it here —
+  // the dashboard's existing spawnStore path is responsible for buffering.
+  child.stderr?.on('data', () => { /* drain */ })
+  child.stderr?.on('error', () => { /* child exit may trigger EPIPE */ })
+
   child.unref()
 
   return {

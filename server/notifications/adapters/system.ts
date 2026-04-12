@@ -23,14 +23,27 @@ export const systemAdapter: NotificationAdapter = {
     const body = payload.body
 
     if (IS_LINUX) {
+      // notify-send receives args via execFile — no shell, no injection risk.
       await execFileAsync('notify-send', [title, body])
       return
     }
 
-    // macOS — use osascript. Strings must be escaped for AppleScript.
-    const escapedTitle = title.replace(/"/g, '\\"')
-    const escapedBody = body.replace(/"/g, '\\"')
-    const script = `display notification "${escapedBody}" with title "${escapedTitle}"`
-    await execFileAsync('osascript', ['-e', script])
+    // macOS — strip control characters, backslashes, and double quotes so
+    // user-controlled task titles cannot break out of the AppleScript
+    // string literal or inject new AppleScript statements.
+    await execFileAsync('osascript', [
+      '-e',
+      `display notification "${sanitizeForAppleScript(body)}" with title "${sanitizeForAppleScript(title)}"`,
+    ])
   },
+}
+
+function sanitizeForAppleScript(input: string): string {
+  // Remove backslashes (escape char), double quotes (string delimiter),
+  // control characters including CR/LF (AppleScript statement separators),
+  // and cap length to prevent unbounded growth.
+  return input
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\\"\u0000-\u001F\u007F]/g, ' ')
+    .slice(0, 300)
 }

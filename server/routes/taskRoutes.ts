@@ -2,6 +2,7 @@ import type express from 'express'
 import type { NotificationEventType, PipelineStage, PipelineTask } from '../../src/types.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
+import { consola } from 'consola'
 import { Router } from 'express'
 import { listAuditForTask } from '../db/auditRepo.js'
 import { getAllConfig, getPipelineConfigNumber, listPreferences, setConfig, setPipelineConfig, setPreference } from '../db/notificationConfigRepo.js'
@@ -199,8 +200,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         try {
           await removeWorktree(cwd, initialWorktreePath, { force: true })
         }
-        catch {
-          /* best-effort rollback; leave the orphan if cleanup itself fails */
+        catch (cleanupErr) {
+          consola.warn(
+            `[taskRoutes] worktree rollback failed for ${initialWorktreePath}:`,
+            (cleanupErr as Error).message,
+          )
         }
       }
       res.status(500).json({ error: (err as Error).message })
@@ -215,18 +219,43 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'Task not found' })
       return
     }
-    const updated = updateTask(req.params.id, req.body ?? {})
+    const body = req.body ?? {}
+    // Validate currentStage against the enum to prevent arbitrary writes
+    // that would otherwise bypass the state machine.
+    if (body.currentStage !== undefined && !VALID_STAGES.has(body.currentStage as PipelineStage)) {
+      res.status(400).json({ error: 'Invalid currentStage' })
+      return
+    }
+    const updated = updateTask(req.params.id, body)
     deps.broadcastTaskEvent({ type: 'task_updated', taskId: req.params.id, payload: updated })
     res.json(updated)
   })
 
-  router.delete('/tasks/:id', (req, res) => {
+  router.delete('/tasks/:id', async (req, res) => {
     if (deps.rejectCrossOrigin(req, res))
       return
+    // Fetch first so we know the worktree path for cleanup.
+    const task = getTaskById(req.params.id)
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
     const ok = deleteTask(req.params.id)
     if (!ok) {
       res.status(404).json({ error: 'Task not found' })
       return
+    }
+    // Best-effort worktree cleanup — log failures but don't fail the delete.
+    if (task.worktreePath) {
+      try {
+        await removeWorktree(task.cwd, task.worktreePath, { force: true })
+      }
+      catch (err) {
+        consola.warn(
+          `[taskRoutes] worktree cleanup on delete failed for ${task.worktreePath}:`,
+          (err as Error).message,
+        )
+      }
     }
     deps.broadcastTaskEvent({ type: 'task_deleted', taskId: req.params.id })
     res.status(204).end()

@@ -21,14 +21,41 @@ const POLL_INTERVAL_MS = 2000
 const MAX_PARALLEL_KEY = 'maxParallelOrchestrators'
 const DEFAULT_MAX_PARALLEL = 3
 
+/**
+ * Callback invoked when a stage handler creates a runtime permission request.
+ * Injected by the server so the orchestrator stays decoupled from SSE / the
+ * notification dispatcher.
+ */
+export type PermissionRequestNotifier = (
+  taskId: string,
+  request: { id: string, tool: string, pattern: string | null, reason: string | null },
+) => void
+
+export interface OrchestratorOptions {
+  pollIntervalMs?: number
+  onPermissionRequest?: PermissionRequestNotifier
+}
+
 export class PipelineOrchestrator {
   private timer: ReturnType<typeof setInterval> | null = null
   private processing = false
   private handlerOverrides: Map<PipelineStage, StageHandler> = new Map()
   // Per-task locks prevent concurrent progressTask calls for the same task.
   private taskLocks: Map<string, Promise<unknown>> = new Map()
+  private readonly pollIntervalMs: number
+  private readonly onPermissionRequest: PermissionRequestNotifier | null
 
-  constructor(private readonly pollIntervalMs = POLL_INTERVAL_MS) {}
+  constructor(options: OrchestratorOptions | number = {}) {
+    // Backwards-compatible: constructor used to accept a plain pollIntervalMs.
+    if (typeof options === 'number') {
+      this.pollIntervalMs = options
+      this.onPermissionRequest = null
+    }
+    else {
+      this.pollIntervalMs = options.pollIntervalMs ?? POLL_INTERVAL_MS
+      this.onPermissionRequest = options.onPermissionRequest ?? null
+    }
+  }
 
   start(): void {
     if (this.timer)
@@ -161,7 +188,16 @@ export class PipelineOrchestrator {
         appendAudit({ taskId: task.id, actor: 'orchestrator', action, details: details ?? null })
       },
       requestPermission: (tool, pattern, reason) => {
-        return createPermissionRequest({ stageRunId: stageRun.id, tool, pattern, reason })
+        const req = createPermissionRequest({ stageRunId: stageRun.id, tool, pattern, reason })
+        // Broadcast so the UI / dispatcher sees the pause immediately,
+        // matching the behavior of the REST /permission-requests endpoint.
+        this.onPermissionRequest?.(task.id, {
+          id: req.id,
+          tool: req.tool,
+          pattern: req.pattern,
+          reason: req.reason,
+        })
+        return req
       },
     }
   }

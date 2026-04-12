@@ -213,9 +213,6 @@ async function start() {
     })
   })
 
-  const orchestrator = new PipelineOrchestrator()
-  orchestrator.start()
-
   // Browser notifications are pushed through the task SSE stream.
   setSseBroadcaster((payload) => {
     broadcastTaskEvent({
@@ -225,6 +222,21 @@ async function start() {
     })
   })
   const dispatcher = createDispatcher()
+
+  const orchestrator = new PipelineOrchestrator({
+    onPermissionRequest: (taskId, request) => {
+      broadcastTaskEvent({ type: 'permission_request', taskId, payload: request })
+      void dispatcher.dispatch({
+        eventType: 'on_hold',
+        title: 'Agent requested permission',
+        body: `Tool ${request.tool}${request.pattern ? ` (${request.pattern})` : ''}${request.reason ? `\n${request.reason}` : ''}`,
+        taskId,
+        taskSlug: taskId, // slug lookup would require another query
+        severity: 'warning',
+      })
+    },
+  })
+  orchestrator.start()
 
   // CSRF protection for mutation endpoints
   function rejectCrossOrigin(req: express.Request, res: express.Response): boolean {

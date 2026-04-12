@@ -296,6 +296,36 @@ describe('task enrichment (needsUser)', () => {
     expect(data.needsUser).toBe(true)
   })
 
+  it('does NOT flag needsUser when a newer iteration supersedes an awaiting_user run', async () => {
+    // Regression: after an iterate transition, the new pending stage_run has
+    // null started_at while the old awaiting_user run has it set. Ordering
+    // must prioritize iteration DESC so the new run wins.
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'itr',
+      title: 'ITR',
+      cwd: '/itr',
+    })
+    await api('PATCH', `/tasks/${t.id}`, { currentStage: 'umsetzung' })
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+
+    // Old iteration 0 paused at awaiting_user
+    const oldRun = createStageRun({ taskId: t.id, stage: 'umsetzung', iteration: 0 })
+    updateStageRun(oldRun.id, {
+      status: 'awaiting_user',
+      startedAt: '2026-04-11T10:00:00Z',
+    })
+
+    // New iteration 1 just enqueued — no started_at yet
+    createStageRun({ taskId: t.id, stage: 'umsetzung', iteration: 1 })
+
+    const { data } = await api<{ needsUser: boolean, currentIteration: number }>(
+      'GET',
+      `/tasks/${t.id}`,
+    )
+    expect(data.needsUser).toBe(false)
+    expect(data.currentIteration).toBe(1)
+  })
+
   it('does NOT flag needsUser when stale awaiting_user belongs to a prior stage', async () => {
     const { data: t } = await api<{ id: string }>('POST', '/tasks', {
       slug: 'stale',
