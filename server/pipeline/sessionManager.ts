@@ -13,6 +13,12 @@ export function buildSessionName(task: PipelineTask, stage: PipelineStage, itera
 /**
  * Check whether a given PID is still alive (without sending a real signal).
  * Returns false if the process has exited or PID is null.
+ *
+ * EPERM handling: process.kill(pid, 0) throws EPERM when the PID exists but
+ * is owned by a different user. We treat this as "alive" to avoid wrongly
+ * restarting a foreign process on top of it. A PID-reuse race (same PID, now
+ * a foreign process) would then be misclassified as alive — the recovery
+ * path gates further on session_id existence to recover safely.
  */
 export function isPidAlive(pid: number | null): boolean {
   if (pid === null || pid <= 0)
@@ -21,7 +27,9 @@ export function isPidAlive(pid: number | null): boolean {
     process.kill(pid, 0)
     return true
   }
-  catch {
+  catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EPERM')
+      return true
     return false
   }
 }

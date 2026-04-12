@@ -1,5 +1,6 @@
 import type { PipelineStage } from '../../src/types.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
+import { STAGE_ORDER } from './types.js'
 
 /**
  * Phase 2 note: Stage handlers are stubbed here so the orchestrator and
@@ -30,21 +31,8 @@ function approvalStage(stage: PipelineStage, reason: string): StageHandler {
 }
 
 function autoNext(stage: PipelineStage): PipelineStage {
-  const order: PipelineStage[] = [
-    'backlog',
-    'pruefung',
-    'refinement',
-    'planning',
-    'approval1',
-    'umsetzungskonzept',
-    'approval2',
-    'umsetzung',
-    'selbstreview',
-    'finalisierung',
-    'done',
-  ]
-  const idx = order.indexOf(stage)
-  return idx >= 0 && idx < order.length - 1 ? order[idx + 1] : 'done'
+  const idx = STAGE_ORDER.indexOf(stage)
+  return idx >= 0 && idx < STAGE_ORDER.length - 1 ? STAGE_ORDER[idx + 1] : 'done'
 }
 
 export const backlogHandler: StageHandler = {

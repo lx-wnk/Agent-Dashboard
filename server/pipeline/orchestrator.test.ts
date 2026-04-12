@@ -204,19 +204,63 @@ describe('pipelineOrchestrator.progressTask', () => {
 })
 
 describe('pipelineOrchestrator.start recovery', () => {
-  it('logs a recovery decision for each running stage_run', async () => {
+  it('logs a recovery decision and flips dead running runs to pending/failed', async () => {
     const task = createTask({ slug: 'rec', title: 'REC', cwd: '/rec' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
-    updateStageRun(run.id, { status: 'running', sessionId: 'sess-1', pid: 999999 })
+
+    // Dead PID + session_id → should become 'pending' (resume path)
+    const run1 = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    updateStageRun(run1.id, { status: 'running', sessionId: 'sess-1', pid: 2147483647 })
+
+    // Dead PID + no session → should become 'failed'
+    const run2 = createStageRun({ taskId: task.id, stage: 'selbstreview' })
+    updateStageRun(run2.id, { status: 'running', pid: 2147483647 })
 
     const o = new PipelineOrchestrator(10000)
     o.start()
 
+    const refreshedRun1 = getLatestStageRun(task.id, 'umsetzung')
+    const refreshedRun2 = getLatestStageRun(task.id, 'selbstreview')
+    expect(refreshedRun1?.status).toBe('pending')
+    expect(refreshedRun2?.status).toBe('failed')
+
     const audit = listAuditForTask(task.id)
-    const recovery = audit.find(a => a.action === 'recovery_decision')
-    expect(recovery).toBeTruthy()
-    const details = recovery?.details as Record<string, unknown>
-    expect(['alive', 'resume', 'restart']).toContain(details.decision)
+    expect(audit.filter(a => a.action === 'recovery_decision')).toHaveLength(2)
     o.stop()
+  })
+})
+
+describe('pipelineOrchestrator concurrency', () => {
+  it('serializes concurrent progressTask calls for the same task', async () => {
+    const task = createTask({ slug: 'cc', title: 'CC', cwd: '/cc' })
+
+    let activeHandlers = 0
+    let peak = 0
+    let totalInvocations = 0
+    orchestrator.setHandler('backlog', {
+      stage: 'backlog',
+      requiresAgent: false,
+      async execute() {
+        activeHandlers++
+        peak = Math.max(peak, activeHandlers)
+        totalInvocations++
+        await new Promise(r => setTimeout(r, 10))
+        activeHandlers--
+        return { kind: 'next', toStage: 'pruefung' }
+      },
+    })
+
+    // Fire three concurrent calls.
+    const results = await Promise.all([
+      orchestrator.progressTask(task.id),
+      orchestrator.progressTask(task.id),
+      orchestrator.progressTask(task.id),
+    ])
+
+    expect(peak).toBe(1) // handler never ran in parallel
+    expect(totalInvocations).toBeGreaterThanOrEqual(1)
+    // Task has advanced past backlog (stub handlers will carry it forward
+    // but the key guarantee is the serialization, not the final stage)
+    expect(getTaskById(task.id)?.currentStage).not.toBe('backlog')
+    expect(results.filter(r => r !== null).length).toBeGreaterThanOrEqual(1)
   })
 })

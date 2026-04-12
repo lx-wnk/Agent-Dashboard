@@ -9,6 +9,8 @@ const execFileAsync = promisify(execFile)
 
 export const WORKTREE_ROOT = join(homedir(), '.claude', 'dashboard-worktrees')
 
+const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
+
 export interface WorktreeOptions {
   cwd: string
   slug: string
@@ -21,6 +23,8 @@ export interface WorktreeOptions {
  * Returns the absolute worktree path.
  */
 export async function createWorktree(opts: WorktreeOptions): Promise<string> {
+  if (!SAFE_SLUG_RE.test(opts.slug))
+    throw new Error(`Invalid worktree slug: ${opts.slug}`)
   if (!(await isGitRepo(opts.cwd)))
     throw new Error(`${opts.cwd} is not a git repository — cannot create worktree`)
 

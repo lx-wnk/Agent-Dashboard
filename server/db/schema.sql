@@ -20,8 +20,12 @@ CREATE TABLE IF NOT EXISTS tasks (
   worktree_path TEXT,
   source_branch TEXT,
   target_branch TEXT,
-  current_stage TEXT NOT NULL,
-  parent_task_id TEXT REFERENCES tasks(id),
+  current_stage TEXT NOT NULL CHECK (current_stage IN (
+    'backlog','pruefung','refinement','planning','approval1',
+    'umsetzungskonzept','approval2','umsetzung','selbstreview',
+    'finalisierung','done','on_hold','cancelled','failed'
+  )),
+  parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
   max_iterations INTEGER NOT NULL DEFAULT 20,
   token_budget INTEGER,
   cost_budget_cents INTEGER,
@@ -38,11 +42,17 @@ CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
 CREATE TABLE IF NOT EXISTS stage_runs (
   id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  stage TEXT NOT NULL,
+  stage TEXT NOT NULL CHECK (stage IN (
+    'backlog','pruefung','refinement','planning','approval1',
+    'umsetzungskonzept','approval2','umsetzung','selbstreview',
+    'finalisierung','done','on_hold','cancelled','failed'
+  )),
   session_id TEXT,
   session_name TEXT,
   pid INTEGER,
-  status TEXT NOT NULL, -- pending|running|awaiting_user|on_hold|done|failed
+  status TEXT NOT NULL CHECK (status IN (
+    'pending','running','awaiting_user','on_hold','done','failed'
+  )),
   started_at TEXT,
   ended_at TEXT,
   iteration INTEGER NOT NULL DEFAULT 0,
@@ -54,6 +64,8 @@ CREATE TABLE IF NOT EXISTS stage_runs (
 CREATE INDEX IF NOT EXISTS idx_stage_runs_task ON stage_runs(task_id);
 CREATE INDEX IF NOT EXISTS idx_stage_runs_status ON stage_runs(status);
 CREATE INDEX IF NOT EXISTS idx_stage_runs_session ON stage_runs(session_id);
+-- Composite index for getLatestStageRun hot path (task_id, stage, iteration DESC)
+CREATE INDEX IF NOT EXISTS idx_stage_runs_latest ON stage_runs(task_id, stage, iteration DESC);
 
 -- Task-scoped permissions (both pre-approved and runtime-granted)
 CREATE TABLE IF NOT EXISTS task_permissions (

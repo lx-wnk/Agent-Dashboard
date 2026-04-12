@@ -1,17 +1,21 @@
 import type { PipelineStage, PipelineTask, StageRun } from '../../src/types.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
+import { consola } from 'consola'
 import { appendAudit } from '../db/auditRepo.js'
+import { getDb } from '../db/client.js'
 import { getPipelineConfigNumber } from '../db/notificationConfigRepo.js'
 import { createPermissionRequest, listTaskPermissions } from '../db/permissionsRepo.js'
 import {
   createStageRun,
   getLatestStageRun,
+  getStageRunById,
   listRunningStageRuns,
   updateStageRun,
 } from '../db/stageRunsRepo.js'
 import { getTaskById, updateTask } from '../db/tasksRepo.js'
 import { buildSessionName, decideRecovery } from './sessionManager.js'
 import { getHandlerForStage } from './stageHandlers.js'
+import { STAGE_ORDER } from './types.js'
 
 const POLL_INTERVAL_MS = 2000
 const MAX_PARALLEL_KEY = 'maxParallelOrchestrators'
@@ -21,6 +25,8 @@ export class PipelineOrchestrator {
   private timer: ReturnType<typeof setInterval> | null = null
   private processing = false
   private handlerOverrides: Map<PipelineStage, StageHandler> = new Map()
+  // Per-task locks prevent concurrent progressTask calls for the same task.
+  private taskLocks: Map<string, Promise<unknown>> = new Map()
 
   constructor(private readonly pollIntervalMs = POLL_INTERVAL_MS) {}
 
@@ -28,7 +34,10 @@ export class PipelineOrchestrator {
     if (this.timer)
       return
     this.recoverRunningStageRuns()
-    this.timer = setInterval(() => this.tick().catch(() => { /* swallow */ }), this.pollIntervalMs)
+    this.timer = setInterval(
+      () => this.tick().catch(err => consola.error('[orchestrator] tick error:', err)),
+      this.pollIntervalMs,
+    )
   }
 
   stop(): void {
@@ -71,11 +80,26 @@ export class PipelineOrchestrator {
   }
 
   /**
-   * Public API: advance a task from its current stage. Creates a new
-   * stage_run and invokes the handler. Honors the parallel-orchestrator cap
-   * when entering the `umsetzung` stage.
+   * Public API: advance a task from its current stage. Serialized per task
+   * via an in-memory lock to avoid concurrent writes.
    */
   async progressTask(taskId: string): Promise<StageRun | null> {
+    const existing = this.taskLocks.get(taskId)
+    if (existing)
+      await existing.catch(() => { /* ignore previous failure */ })
+
+    const promise = this.runProgressTaskLocked(taskId)
+    this.taskLocks.set(taskId, promise)
+    try {
+      return await promise
+    }
+    finally {
+      if (this.taskLocks.get(taskId) === promise)
+        this.taskLocks.delete(taskId)
+    }
+  }
+
+  private async runProgressTaskLocked(taskId: string): Promise<StageRun | null> {
     const task = getTaskById(taskId)
     if (!task)
       return null
@@ -137,22 +161,10 @@ export class PipelineOrchestrator {
 
   private getPreviousStageOutput(task: PipelineTask): Record<string, unknown> | null {
     // Walk back one stage in the canonical order to find the last done run.
-    const order = [
-      'backlog',
-      'pruefung',
-      'refinement',
-      'planning',
-      'approval1',
-      'umsetzungskonzept',
-      'approval2',
-      'umsetzung',
-      'selbstreview',
-      'finalisierung',
-    ] as const
-    const idx = order.indexOf(task.currentStage as typeof order[number])
+    const idx = STAGE_ORDER.indexOf(task.currentStage)
     if (idx <= 0)
       return null
-    const prev = getLatestStageRun(task.id, order[idx - 1])
+    const prev = getLatestStageRun(task.id, STAGE_ORDER[idx - 1])
     return prev?.output ?? null
   }
 
@@ -170,97 +182,125 @@ export class PipelineOrchestrator {
     })
   }
 
+  /**
+   * Apply a stage transition atomically. Wraps all DB writes in a single
+   * SQLite transaction so a crash can't leave the task + stage_run in a
+   * split-brain state.
+   */
   private applyTransition(
     task: PipelineTask,
     stageRun: StageRun,
     transition: StageTransition,
   ): StageRun {
+    const db = getDb()
     const now = new Date().toISOString()
-    switch (transition.kind) {
-      case 'next': {
-        updateStageRun(stageRun.id, { status: 'done', endedAt: now, output: transition.output ?? null })
-        updateTask(task.id, { currentStage: transition.toStage })
-        appendAudit({
-          taskId: task.id,
-          actor: 'orchestrator',
-          action: 'stage_transition',
-          details: { from: task.currentStage, to: transition.toStage },
-        })
-        return getLatestStageRun(task.id, stageRun.stage)!
-      }
 
-      case 'wait_user': {
-        updateStageRun(stageRun.id, {
-          status: 'awaiting_user',
-          output: transition.output ?? null,
-        })
-        appendAudit({
-          taskId: task.id,
-          actor: 'orchestrator',
-          action: 'awaiting_user',
-          details: { reason: transition.reason },
-        })
-        return getLatestStageRun(task.id, stageRun.stage)!
-      }
-
-      case 'iterate': {
-        updateStageRun(stageRun.id, { status: 'done', endedAt: now, output: transition.output ?? null })
-        const maxIter = task.maxIterations
-        if (stageRun.iteration + 1 >= maxIter) {
-          updateTask(task.id, { currentStage: 'failed' })
+    const txn = db.transaction(() => {
+      switch (transition.kind) {
+        case 'next': {
+          updateStageRun(stageRun.id, {
+            status: 'done',
+            endedAt: now,
+            output: transition.output ?? null,
+          }, db)
+          updateTask(task.id, { currentStage: transition.toStage }, db)
           appendAudit({
             taskId: task.id,
             actor: 'orchestrator',
-            action: 'iteration_limit_reached',
-            details: { maxIter, lastIteration: stageRun.iteration },
-          })
-          return getLatestStageRun(task.id, stageRun.stage)!
+            action: 'stage_transition',
+            details: { from: task.currentStage, to: transition.toStage },
+          }, db)
+          return { updatedRunId: stageRun.id, newRunId: null }
         }
-        // Schedule new iteration in the same stage
-        createStageRun({
-          taskId: task.id,
-          stage: stageRun.stage,
-          iteration: stageRun.iteration + 1,
-          sessionName: buildSessionName(task, stageRun.stage, stageRun.iteration + 1),
-        })
-        return getLatestStageRun(task.id, stageRun.stage)!
-      }
 
-      case 'on_hold': {
-        updateStageRun(stageRun.id, { status: 'on_hold', output: transition.output ?? null })
-        updateTask(task.id, { currentStage: 'on_hold' })
-        appendAudit({
-          taskId: task.id,
-          actor: 'orchestrator',
-          action: 'moved_on_hold',
-          details: { permissionRequestId: transition.permissionRequestId },
-        })
-        return getLatestStageRun(task.id, stageRun.stage)!
-      }
+        case 'wait_user': {
+          updateStageRun(stageRun.id, {
+            status: 'awaiting_user',
+            output: transition.output ?? null,
+          }, db)
+          appendAudit({
+            taskId: task.id,
+            actor: 'orchestrator',
+            action: 'awaiting_user',
+            details: { reason: transition.reason },
+          }, db)
+          return { updatedRunId: stageRun.id, newRunId: null }
+        }
 
-      case 'done': {
-        updateStageRun(stageRun.id, { status: 'done', endedAt: now, output: transition.output ?? null })
-        updateTask(task.id, { currentStage: 'done' })
-        appendAudit({ taskId: task.id, actor: 'orchestrator', action: 'task_done' })
-        return getLatestStageRun(task.id, stageRun.stage)!
-      }
+        case 'iterate': {
+          updateStageRun(stageRun.id, {
+            status: 'done',
+            endedAt: now,
+            output: transition.output ?? null,
+          }, db)
+          const maxIter = task.maxIterations
+          if (stageRun.iteration + 1 >= maxIter) {
+            updateTask(task.id, { currentStage: 'failed' }, db)
+            appendAudit({
+              taskId: task.id,
+              actor: 'orchestrator',
+              action: 'iteration_limit_reached',
+              details: { maxIter, lastIteration: stageRun.iteration },
+            }, db)
+            return { updatedRunId: stageRun.id, newRunId: null }
+          }
+          const newRun = createStageRun({
+            taskId: task.id,
+            stage: stageRun.stage,
+            iteration: stageRun.iteration + 1,
+            sessionName: buildSessionName(task, stageRun.stage, stageRun.iteration + 1),
+          }, db)
+          return { updatedRunId: stageRun.id, newRunId: newRun.id }
+        }
 
-      case 'fail': {
-        updateStageRun(stageRun.id, {
-          status: 'failed',
-          endedAt: now,
-          output: { ...(transition.output ?? {}), error: transition.error },
-        })
-        updateTask(task.id, { currentStage: 'failed' })
-        appendAudit({
-          taskId: task.id,
-          actor: 'orchestrator',
-          action: 'task_failed',
-          details: { error: transition.error },
-        })
-        return getLatestStageRun(task.id, stageRun.stage)!
+        case 'on_hold': {
+          updateStageRun(stageRun.id, {
+            status: 'on_hold',
+            output: transition.output ?? null,
+          }, db)
+          updateTask(task.id, { currentStage: 'on_hold' }, db)
+          appendAudit({
+            taskId: task.id,
+            actor: 'orchestrator',
+            action: 'moved_on_hold',
+            details: { permissionRequestId: transition.permissionRequestId },
+          }, db)
+          return { updatedRunId: stageRun.id, newRunId: null }
+        }
+
+        case 'done': {
+          updateStageRun(stageRun.id, {
+            status: 'done',
+            endedAt: now,
+            output: transition.output ?? null,
+          }, db)
+          updateTask(task.id, { currentStage: 'done' }, db)
+          appendAudit({ taskId: task.id, actor: 'orchestrator', action: 'task_done' }, db)
+          return { updatedRunId: stageRun.id, newRunId: null }
+        }
+
+        case 'fail': {
+          updateStageRun(stageRun.id, {
+            status: 'failed',
+            endedAt: now,
+            output: { ...(transition.output ?? {}), error: transition.error },
+          }, db)
+          updateTask(task.id, { currentStage: 'failed' }, db)
+          appendAudit({
+            taskId: task.id,
+            actor: 'orchestrator',
+            action: 'task_failed',
+            details: { error: transition.error },
+          }, db)
+          return { updatedRunId: stageRun.id, newRunId: null }
+        }
       }
-    }
+    })
+
+    const { updatedRunId, newRunId } = txn() as { updatedRunId: string, newRunId: string | null }
+    // Return the run that the caller expects to inspect (the updated one for
+    // most transitions, or the new iteration for `iterate`).
+    return getStageRunById(newRunId ?? updatedRunId)!
   }
 
   private async progressPendingTasks(): Promise<void> {
@@ -269,6 +309,11 @@ export class PipelineOrchestrator {
     // is driven from the API (progressTask / resumeFromUser).
   }
 
+  /**
+   * After a restart, any stage_run with status='running' whose PID is dead
+   * must be flipped to 'pending' (for resume) or 'failed' (no session/PID)
+   * to avoid permanently blocking the umsetzung slot cap.
+   */
   private recoverRunningStageRuns(): void {
     const running = listRunningStageRuns()
     for (const run of running) {
@@ -284,6 +329,20 @@ export class PipelineOrchestrator {
           reason: decision.reason,
         },
       })
+      if (decision.kind === 'alive')
+        continue
+      if (decision.kind === 'resume') {
+        updateStageRun(run.id, { status: 'pending', pid: null })
+      }
+      else {
+        // restart: no PID, no session — mark the run as failed so the task
+        // can be retried fresh without a zombie stage_run blocking slots.
+        updateStageRun(run.id, {
+          status: 'failed',
+          endedAt: new Date().toISOString(),
+          output: { error: 'orchestrator crashed before completion; no session to resume' },
+        })
+      }
     }
   }
 
