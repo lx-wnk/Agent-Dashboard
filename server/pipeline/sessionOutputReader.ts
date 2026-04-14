@@ -6,13 +6,34 @@
  * the agent to wrap its final answer in a ```json ... ``` fenced block.
  * This module locates that block in the last assistant turn and parses it.
  */
-import { readdir, stat } from 'node:fs/promises'
+import { readdir, realpath, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { encodePath, parseJsonlLines, tailRead } from '../jsonlParser.js'
 import { CLAUDE_PROJECTS_DIR } from '../paths.js'
 
 const JSON_BLOCK_RE = /```json\b([\s\S]*?)```/i
 const JSONL_SUFFIX_RE = /\.jsonl$/
+
+/**
+ * Claude CLI resolves symlinks before encoding the cwd into
+ * `~/.claude/projects/{encoded}`. If we encode the raw (symlink) path
+ * while Claude CLI encodes the realpath, Dashboard and CLI look at two
+ * different project directories and lookup silently fails. This helper
+ * is the single source of truth for the directory we should look in.
+ *
+ * Falls back to the un-resolved path if `realpath` throws — typical in
+ * tests where the directory does not exist on disk.
+ */
+export async function resolvedProjectDir(cwd: string): Promise<string> {
+  let resolved = cwd
+  try {
+    resolved = await realpath(cwd)
+  }
+  catch {
+    // path may not exist (tests, deleted worktree) — fall through
+  }
+  return join(CLAUDE_PROJECTS_DIR, encodePath(resolved))
+}
 
 export interface JsonlEntry {
   type?: string
@@ -27,8 +48,8 @@ export interface JsonlEntry {
  * absolute path, or null if the file does not exist yet.
  */
 export async function resolveSessionFile(cwd: string, sessionId: string): Promise<string | null> {
-  const encoded = encodePath(cwd)
-  const path = join(CLAUDE_PROJECTS_DIR, encoded, `${sessionId}.jsonl`)
+  const projectDir = await resolvedProjectDir(cwd)
+  const path = join(projectDir, `${sessionId}.jsonl`)
   try {
     await stat(path)
     return path
@@ -91,8 +112,7 @@ export async function findNewestSessionId(
   cwd: string,
   afterIso: string | null,
 ): Promise<string | null> {
-  const encoded = encodePath(cwd)
-  const projectDir = join(CLAUDE_PROJECTS_DIR, encoded)
+  const projectDir = await resolvedProjectDir(cwd)
 
   let entries
   try {
@@ -131,29 +151,43 @@ export async function findNewestSessionId(
 
 /**
  * Top-level helper: resolve file → tail read → parse lines → find last
- * assistant text → extract JSON block. Returns null on any failure along
- * the chain.
+ * assistant text → extract JSON block.
+ *
+ * Returns a struct so callers can distinguish three outcomes:
+ * - `{ output: {...}, rawText }`  — JSON block found and parsed
+ * - `{ output: null, rawText: string }` — agent wrote prose but no parseable
+ *   JSON block (typically: permission wall, tool refusal, user-directed
+ *   prose response). The raw text is surfaced in the stage_run failure
+ *   output so the user can see what the agent actually said instead of a
+ *   mechanical "no parseable json output" message.
+ * - `{ output: null, rawText: null }` — no session, no assistant turn,
+ *   nothing to show. Hard failure with no additional context.
  */
+export interface StageOutputRead {
+  output: Record<string, unknown> | null
+  rawText: string | null
+}
+
 export async function readLastStageJsonOutput(
   cwd: string,
   sessionId: string,
-): Promise<Record<string, unknown> | null> {
+): Promise<StageOutputRead> {
   const filePath = await resolveSessionFile(cwd, sessionId)
   if (!filePath)
-    return null
+    return { output: null, rawText: null }
 
   let raw: string
   try {
     raw = await tailRead(filePath)
   }
   catch {
-    return null
+    return { output: null, rawText: null }
   }
 
   const entries = parseJsonlLines(raw) as JsonlEntry[]
   const text = lastAssistantText(entries)
   if (!text)
-    return null
+    return { output: null, rawText: null }
 
-  return extractJsonBlock(text)
+  return { output: extractJsonBlock(text), rawText: text }
 }

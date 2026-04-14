@@ -10,24 +10,36 @@
  * inspects `stageRun.iteration` to choose between `iterate` and `wait_user`.
  */
 import type { PipelineStage, StageRun } from '../../src/types.js'
+import type { StageOutputRead } from './sessionOutputReader.js'
 import { attachSessionId, isPidAlive } from './sessionManager.js'
-import { findNewestSessionId, readLastStageJsonOutput } from './sessionOutputReader.js'
+import { findNewestSessionId, readLastStageJsonOutput, resolvedProjectDir } from './sessionOutputReader.js'
+
+const AGENT_MESSAGE_MAX_CHARS = 2000
 
 export interface CompletionResult {
   kind: 'still_running' | 'completed' | 'failed'
   /**
-   * Present on 'completed' and on 'failed' when the failure is a schema
-   *  rejection rather than a spawn/exit failure — distinguishes validation
-   *  drift (retryable) from hard crashes (not retryable).
+   * Present on 'completed' always, and on 'failed' either (a) when the
+   * agent's JSON payload parsed but the schema was rejected (retryable)
+   * or (b) when the agent wrote prose but no JSON block (not retryable,
+   * but the prose is surfaced in `output.agentMessage` for the UI).
    */
   output?: Record<string, unknown>
   /** Present on 'failed' — human-readable reason. */
   error?: string
+  /**
+   * True when the failure is a schema rejection of a parsed JSON payload —
+   * the orchestrator can meaningfully retry with a `validation_error`
+   * feedback loop. False (or absent) for hard failures like missing
+   * session, missing JSON block, or prose-only agent output: retrying
+   * would just re-run into the same wall.
+   */
+  retryable?: boolean
 }
 
 export interface DetectCompletionDeps {
   isPidAlive?: (pid: number | null) => boolean
-  readOutput?: (cwd: string, sessionId: string) => Promise<Record<string, unknown> | null>
+  readOutput?: (cwd: string, sessionId: string) => Promise<StageOutputRead>
   findSessionId?: (cwd: string, afterIso: string | null) => Promise<string | null>
   persistSessionId?: (stageRunId: string, sessionId: string) => void
   validate?: (stage: PipelineStage, output: Record<string, unknown>) => ValidationResult
@@ -176,16 +188,42 @@ export async function detectCompletion(
       persist(stageRun.id, sessionId)
   }
 
-  if (!sessionId)
-    return { kind: 'failed', error: 'agent exited without producing a session file' }
+  if (!sessionId) {
+    const searchedDir = await resolvedProjectDir(cwd)
+    return {
+      kind: 'failed',
+      error: `no session JSONL found in ${searchedDir} after ${stageRun.startedAt} (cwd=${cwd})`,
+    }
+  }
 
-  const output = await read(cwd, sessionId)
-  if (!output)
+  const { output, rawText } = await read(cwd, sessionId)
+  if (!output) {
+    // Hard fail. If the agent wrote prose (typical: permission wall,
+    // refusal, or plain forgot the ```json block), surface the tail so
+    // the user sees in the modal what the agent actually said, instead
+    // of the mechanical error-only payload.
+    if (rawText) {
+      const trimmed = rawText.length > AGENT_MESSAGE_MAX_CHARS
+        ? `${rawText.slice(-AGENT_MESSAGE_MAX_CHARS)}`
+        : rawText
+      return {
+        kind: 'failed',
+        error: 'agent did not produce a ```json output block',
+        output: { agentMessage: trimmed },
+      }
+    }
     return { kind: 'failed', error: 'no parseable json output in session tail' }
+  }
 
   const validation = validate(stageRun.stage, output)
-  if (!validation.ok)
-    return { kind: 'failed', error: validation.error ?? 'output validation failed', output }
+  if (!validation.ok) {
+    return {
+      kind: 'failed',
+      error: validation.error ?? 'output validation failed',
+      output,
+      retryable: true,
+    }
+  }
 
   return { kind: 'completed', output }
 }

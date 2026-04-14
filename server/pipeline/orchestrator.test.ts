@@ -90,15 +90,66 @@ describe('pipelineOrchestrator.progressTask', () => {
 
     await orchestrator.progressTask(task.id)
 
+    // `failed` is a stage_run status now, not a task stage. The task stays
+    // on its original stage so the frontend can surface it in "Needs You"
+    // with Retry + Analyze actions.
     const t = getTaskById(task.id)
-    expect(t?.currentStage).toBe('failed')
+    expect(t?.currentStage).toBe('backlog')
     const run = getLatestStageRun(task.id, 'backlog')
     expect(run?.status).toBe('failed')
     const output = run?.output as Record<string, unknown> | null
     expect(output?.error).toBe('boom')
   })
 
-  it('iterates up to max_iterations then fails', async () => {
+  it('fires onStageFailed callback when a stage_run flips to failed', async () => {
+    const events: Array<{ taskId: string, stage: string, iteration: number, error: string }> = []
+    const orch = new PipelineOrchestrator({
+      onStageFailed: (taskId, info) => {
+        events.push({ taskId, stage: info.stage, iteration: info.iteration, error: info.error })
+      },
+    })
+    const task = createTask({ slug: 'cb', title: 'CB', cwd: '/cb' })
+    orch.setHandler('backlog', {
+      stage: 'backlog',
+      requiresAgent: false,
+      async execute() {
+        throw new Error('boom')
+      },
+    })
+
+    await orch.progressTask(task.id)
+
+    expect(events).toHaveLength(1)
+    expect(events[0].taskId).toBe(task.id)
+    expect(events[0].stage).toBe('backlog')
+    expect(events[0].iteration).toBe(0)
+    expect(events[0].error).toBe('boom')
+  })
+
+  it('keeps failed tasks out of the auto-picker (require explicit retry)', async () => {
+    const orch = new PipelineOrchestrator()
+    const task = createTask({ slug: 'np', title: 'NP', cwd: '/np' })
+    orch.setHandler('backlog', {
+      stage: 'backlog',
+      requiresAgent: false,
+      async execute() {
+        throw new Error('boom')
+      },
+    })
+    await orch.progressTask(task.id)
+
+    // Task stays on backlog with a failed run. A fresh tick must NOT
+    // auto-retry it — the runner picker excludes tasks whose latest
+    // stage_run is 'failed'. We verify this by counting backlog runs
+    // after a tick: still exactly 1 (the failed one).
+    await orch.tick()
+
+    const runs = listStageRunsForTask(task.id).filter(r => r.stage === 'backlog')
+    expect(runs).toHaveLength(1)
+    expect(runs[0].status).toBe('failed')
+  })
+
+  it('iterates up to max_iterations then marks the latest run failed (task stays on stage)', async () => {
     const task = createTask({ slug: 'it', title: 'IT', cwd: '/it', maxIterations: 3 })
     const { updateTask } = await import('../db/tasksRepo.js')
     updateTask(task.id, { currentStage: 'umsetzung' })
@@ -111,11 +162,16 @@ describe('pipelineOrchestrator.progressTask', () => {
     for (let i = 0; i < 3; i++)
       await orchestrator.progressTask(task.id)
 
+    // Task does NOT flip to `failed`. Instead the latest stage_run is
+    // marked failed so the UI can offer Retry/Analyze without a schema
+    // migration or a terminal "failed" pseudo-stage.
     const updated = getTaskById(task.id)
-    expect(updated?.currentStage).toBe('failed')
+    expect(updated?.currentStage).toBe('umsetzung')
 
     const runs = listStageRunsForTask(task.id).filter(r => r.stage === 'umsetzung')
     expect(runs.length).toBeGreaterThanOrEqual(3)
+    const latest = runs[runs.length - 1]
+    expect(latest.status).toBe('failed')
   })
 
   it('moves to on_hold and sets task stage to on_hold', async () => {
@@ -289,6 +345,7 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
       kind: 'failed',
       error: 'missing required field: recommendation',
       output: { wellDefined: true },
+      retryable: true,
     }))
 
     await orchestrator.tick()
@@ -317,6 +374,7 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
       kind: 'failed',
       error: 'missing required field: recommendation',
       output: { wellDefined: true },
+      retryable: true,
     }))
 
     await orchestrator.tick()
@@ -432,7 +490,8 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     await orchestrator.tick()
     await new Promise(r => setImmediate(r))
 
-    expect(getTaskById(task.id)?.currentStage).toBe('failed')
+    // Task stays on `pruefung`; the stage_run carries the failure.
+    expect(getTaskById(task.id)?.currentStage).toBe('pruefung')
     const updatedRun = getLatestStageRun(task.id, 'pruefung')
     expect(updatedRun?.status).toBe('failed')
   })

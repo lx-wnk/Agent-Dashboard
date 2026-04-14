@@ -13,6 +13,7 @@ import type { PipelineStage } from '../../src/types.js'
 import type { SpawnAgentOptions, SpawnResult } from './agentSpawner.js'
 import type { PromptBundle } from './stagePrompts.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
+import { listUnresolvedFeedbackForStage } from '../db/feedbackRepo.js'
 import { listStageRunsForTask } from '../db/stageRunsRepo.js'
 import { spawnStageAgent } from './agentSpawner.js'
 import {
@@ -102,10 +103,15 @@ const pruefungBuilder: PromptBuilder = ctx => pruefungPrompt(ctx.task)
 
 const refinementBuilder: PromptBuilder = ctx => refinementPrompt(ctx.task, ctx.previousOutput)
 
-const planningBuilder: PromptBuilder = ctx => planningPrompt(ctx.task, ctx.previousOutput)
+const planningBuilder: PromptBuilder = (ctx) => {
+  const userFeedback = listUnresolvedFeedbackForStage(ctx.task.id, 'planning')
+  return planningPrompt(ctx.task, ctx.previousOutput, userFeedback)
+}
 
-const umsetzungskonzeptBuilder: PromptBuilder = ctx =>
-  umsetzungskonzeptPrompt(ctx.task, ctx.previousOutput)
+const umsetzungskonzeptBuilder: PromptBuilder = (ctx) => {
+  const userFeedback = listUnresolvedFeedbackForStage(ctx.task.id, 'umsetzungskonzept')
+  return umsetzungskonzeptPrompt(ctx.task, ctx.previousOutput, userFeedback)
+}
 
 /**
  * Umsetzung reads optional `review_feedback` from task.metadata — the

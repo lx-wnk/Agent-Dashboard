@@ -117,16 +117,17 @@ export function listTasksByStage(stage: PipelineStage, db: Database = getDb()): 
 }
 
 /**
- * List tasks eligible for runner pickup: excludes terminal (done/failed/
- * cancelled) and orchestrator-paused (on_hold, approval1, approval2) stages.
- * The orchestrator further filters by latest_stage_run.status to drop tasks
- * currently being driven (status='running') or waiting on user action.
+ * List tasks eligible for runner pickup: excludes terminal (done/cancelled)
+ * and orchestrator-paused (on_hold, approval1, approval2) stages. Tasks with
+ * a failed latest stage_run are filtered separately by the orchestrator
+ * (pickNextTasksForFreeSlots) — they stay on their stage but require
+ * explicit user-triggered retry via POST /tasks/:id/retry.
  */
 export function listPickableTasks(db: Database = getDb()): PipelineTask[] {
   const rows = db
     .prepare(`
       SELECT * FROM tasks
-      WHERE current_stage NOT IN ('done','failed','cancelled','on_hold','approval1','approval2')
+      WHERE current_stage NOT IN ('done','cancelled','on_hold','approval1','approval2')
     `)
     .all() as TaskRow[]
   return rows.map(rowToTask)

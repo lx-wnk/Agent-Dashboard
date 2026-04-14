@@ -3,6 +3,7 @@ import type { StageContext, StageHandler, StageTransition } from './types.js'
 import { consola } from 'consola'
 import { appendAudit } from '../db/auditRepo.js'
 import { getDb } from '../db/client.js'
+import { resolveFeedbackForStage } from '../db/feedbackRepo.js'
 import { getPipelineConfigNumber } from '../db/notificationConfigRepo.js'
 import { createPermissionRequest, listTaskPermissions } from '../db/permissionsRepo.js'
 import {
@@ -33,9 +34,36 @@ export type PermissionRequestNotifier = (
   request: { id: string, tool: string, pattern: string | null, reason: string | null },
 ) => void
 
+/**
+ * Callback invoked when a stage run flips to `failed`. Injected by the server
+ * so the orchestrator stays decoupled from the SSE broadcast and the
+ * notification dispatcher (same decoupling pattern as onPermissionRequest).
+ *
+ * The stage_run row is passed so callers can include `stage`, `iteration`
+ * and `sessionId` in their notification — useful for the "analyze" side
+ * session which needs a pointer to the failed JSONL.
+ */
+export type StageFailedNotifier = (
+  taskId: string,
+  info: { stageRunId: string, stage: PipelineStage, iteration: number, error: string },
+) => void
+
+/**
+ * Called after every successful applyTransition. The server wires this
+ * to broadcastTaskEvent so the kanban reflects stage advances, iterate
+ * spawns, wait_user, on_hold, done — i.e. every healthy state change,
+ * not just the failure path covered by onStageFailed.
+ */
+export type TaskChangedNotifier = (
+  taskId: string,
+  info: { transitionKind: string },
+) => void
+
 export interface OrchestratorOptions {
   pollIntervalMs?: number
   onPermissionRequest?: PermissionRequestNotifier
+  onStageFailed?: StageFailedNotifier
+  onTaskChanged?: TaskChangedNotifier
 }
 
 export class PipelineOrchestrator {
@@ -52,16 +80,22 @@ export class PipelineOrchestrator {
   private taskLocks: Map<string, Promise<unknown>> = new Map()
   private readonly pollIntervalMs: number
   private readonly onPermissionRequest: PermissionRequestNotifier | null
+  private readonly onStageFailed: StageFailedNotifier | null
+  private readonly onTaskChanged: TaskChangedNotifier | null
 
   constructor(options: OrchestratorOptions | number = {}) {
     // Backwards-compatible: constructor used to accept a plain pollIntervalMs.
     if (typeof options === 'number') {
       this.pollIntervalMs = options
       this.onPermissionRequest = null
+      this.onStageFailed = null
+      this.onTaskChanged = null
     }
     else {
       this.pollIntervalMs = options.pollIntervalMs ?? POLL_INTERVAL_MS
       this.onPermissionRequest = options.onPermissionRequest ?? null
+      this.onStageFailed = options.onStageFailed ?? null
+      this.onTaskChanged = options.onTaskChanged ?? null
     }
   }
 
@@ -282,6 +316,11 @@ export class PipelineOrchestrator {
           if (transition.taskMetadataPatch !== undefined)
             patch.metadata = transition.taskMetadataPatch
           updateTask(task.id, patch, db)
+          // Resolve any user feedback that was pending on this stage —
+          // a successful next-transition means the agent has produced a
+          // fresh artifact that supersedes the prior reviewed output.
+          if (stageRun.stage === 'planning' || stageRun.stage === 'umsetzungskonzept')
+            resolveFeedbackForStage(task.id, stageRun.stage, stageRun.id, db)
           appendAudit({
             taskId: task.id,
             actor: 'orchestrator',
@@ -313,7 +352,17 @@ export class PipelineOrchestrator {
           }, db)
           const maxIter = task.maxIterations
           if (stageRun.iteration + 1 >= maxIter) {
-            updateTask(task.id, { currentStage: 'failed' }, db)
+            // Flip the *stage_run* to failed but leave task.currentStage
+            // where it is. The frontend's needsUser predicate surfaces the
+            // failed run in the "Needs You" column so the user can retry
+            // or launch an analysis session.
+            updateStageRun(stageRun.id, {
+              status: 'failed',
+              output: {
+                ...(transition.output ?? {}),
+                error: `iteration limit reached (${maxIter})`,
+              },
+            }, db)
             appendAudit({
               taskId: task.id,
               actor: 'orchestrator',
@@ -363,12 +412,16 @@ export class PipelineOrchestrator {
             endedAt: now,
             output: { ...(transition.output ?? {}), error: transition.error },
           }, db)
-          updateTask(task.id, { currentStage: 'failed' }, db)
+          // Do NOT touch task.currentStage — the task stays on the stage
+          // where the run failed. The frontend derives "needs user"
+          // from the latest stage_run status, not from the task stage,
+          // so this single status flip surfaces the task in the Needs
+          // You column and unlocks the retry/analyze buttons.
           appendAudit({
             taskId: task.id,
             actor: 'orchestrator',
-            action: 'task_failed',
-            details: { error: transition.error },
+            action: 'stage_failed',
+            details: { stage: stageRun.stage, iteration: stageRun.iteration, error: transition.error },
           }, db)
           return { updatedRunId: stageRun.id, newRunId: null }
         }
@@ -397,7 +450,36 @@ export class PipelineOrchestrator {
     const { updatedRunId, newRunId } = txn() as { updatedRunId: string, newRunId: string | null }
     // Return the run that the caller expects to inspect (the updated one for
     // most transitions, or the new iteration for `iterate`).
-    return getStageRunById(newRunId ?? updatedRunId)!
+    const resultRun = getStageRunById(newRunId ?? updatedRunId)!
+
+    // Fire onTaskChanged for every transition so SSE listeners see the
+    // happy path too — `next`, `wait_user`, `iterate`, `on_hold`, `done`,
+    // `async_running`, `fail`. Without this callback the kanban only
+    // updates on permission requests and failures, missing healthy
+    // stage transitions like planning→approval1.
+    this.onTaskChanged?.(task.id, { transitionKind: transition.kind })
+
+    // Fire the onStageFailed callback AFTER the transaction commits so
+    // listeners see a consistent DB state. Covers both the explicit
+    // `fail` transition and the iteration-limit branch of `iterate`.
+    if (this.onStageFailed) {
+      const becameFailed
+        = transition.kind === 'fail'
+          || (transition.kind === 'iterate' && stageRun.iteration + 1 >= task.maxIterations)
+      if (becameFailed) {
+        const errorMsg = transition.kind === 'fail'
+          ? transition.error
+          : `iteration limit reached (${task.maxIterations})`
+        this.onStageFailed(task.id, {
+          stageRunId: stageRun.id,
+          stage: stageRun.stage,
+          iteration: stageRun.iteration,
+          error: errorMsg,
+        })
+      }
+    }
+
+    return resultRun
   }
 
   /**
@@ -457,11 +539,17 @@ export class PipelineOrchestrator {
       }
 
       // result.kind === 'failed': distinguish schema rejection (retryable)
-      // from hard failure (no output). Only the retryable branch carries
-      // `result.output` — the parsed-but-invalid payload.
-      const isSchemaRejection = result.output !== undefined
-      if (!isSchemaRejection) {
-        this.applyTransition(task, fresh, { kind: 'fail', error: result.error ?? 'unknown failure' })
+      // from hard failure (prose-only, missing session, etc.). The
+      // completionDetector marks retryable schema rejections explicitly;
+      // everything else is a hard fail even if `output` carries a prose
+      // snippet for display. The hard-fail branch still forwards that
+      // snippet so the modal shows what the agent actually said.
+      if (!result.retryable) {
+        this.applyTransition(task, fresh, {
+          kind: 'fail',
+          error: result.error ?? 'unknown failure',
+          output: result.output,
+        })
         continue
       }
 
@@ -549,14 +637,17 @@ export class PipelineOrchestrator {
       return
 
     // Exclude: tasks already driving an agent (in busyTaskIds) and tasks
-    // whose latest stage_run is awaiting_user. The latter is needed
-    // because wait_user does NOT change currentStage, so a task in
-    // e.g. 'pruefung' with an awaiting_user latest run must be skipped.
+    // whose latest stage_run is in a user-blocking state:
+    //   - `awaiting_user` — wait_user does NOT change currentStage, so a
+    //     task with an awaiting_user run on its current stage must sit.
+    //   - `failed` — the stage ran and died; the user must explicitly
+    //     hit Retry or Analyze. Auto-picking would burn tokens in an
+    //     infinite loop until iteration budget hits zero.
     const readyToProgress = listPickableTasks().filter((t) => {
       if (busyTaskIds.has(t.id))
         return false
       const latest = getLatestStageRun(t.id, t.currentStage)
-      return latest?.status !== 'awaiting_user'
+      return latest?.status !== 'awaiting_user' && latest?.status !== 'failed'
     })
 
     readyToProgress.sort(comparePickOrder)
@@ -621,7 +712,7 @@ export class PipelineOrchestrator {
 }
 
 function isTerminal(stage: PipelineStage): boolean {
-  return stage === 'done' || stage === 'failed' || stage === 'cancelled'
+  return stage === 'done' || stage === 'cancelled'
 }
 
 function nextStageOrDone(stage: PipelineStage): PipelineStage {

@@ -17,7 +17,7 @@ import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
 import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
-import { createTaskRouter } from './routes/taskRoutes.js'
+import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
 import { getSystemInfo } from './systemMonitor.js'
 
@@ -245,6 +245,36 @@ async function start() {
           taskId,
           taskSlug: task.slug,
           severity: 'warning',
+        })
+        .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
+    },
+    onTaskChanged: (taskId, info) => {
+      // Fired by the orchestrator after every successful applyTransition.
+      // Push the latest enriched task row so kanban clients see stage
+      // advances, iterations, on_hold/awaiting_user, and done — not just
+      // failures. enrichTask adds latestStageRunStatus + needsUser, which
+      // the kanban cards bind to for their status chip.
+      const task = getTaskById(taskId)
+      if (task)
+        broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
+      else
+        broadcastTaskEvent({ type: 'stage_run_updated', taskId, payload: info })
+    },
+    onStageFailed: (taskId, info) => {
+      // Push a task_updated event so the SSE clients re-fetch and see
+      // the new needsUser flag (derived from latestStageRunStatus='failed').
+      broadcastTaskEvent({ type: 'stage_run_updated', taskId, payload: info })
+      const task = getTaskById(taskId)
+      if (!task)
+        return
+      dispatcher
+        .dispatch({
+          eventType: 'failed',
+          title: `Task "${task.title}" stage failed`,
+          body: `Stage ${info.stage} (iter ${info.iteration}) failed:\n${info.error}`,
+          taskId,
+          taskSlug: task.slug,
+          severity: 'error',
         })
         .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
     },

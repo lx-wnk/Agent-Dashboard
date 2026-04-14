@@ -67,26 +67,32 @@ export function getLatestStageRun(
 }
 
 /**
- * Get the most recently created stage_run for a task, regardless of stage.
- * Used for board enrichment to reflect awaiting_user/on_hold status.
+ * Get the most recent stage_run for a task, scoped to its **current stage**.
+ * Used by `enrichTask`, retry, and analyze endpoints — all of which need
+ * "the run the user is currently looking at", not whichever row has the
+ * globally highest iteration.
  *
- * Ordering priority (highest iteration first, then most recently started):
- * this matters when an `iterate` transition has just inserted a new pending
- * row — the new iter N+1 has `started_at = NULL` but should still outrank
- * the old iter N row whose started_at is set.
+ * The earlier cross-stage version sorted `iteration DESC` first, which
+ * broke tasks whose current stage has iter 0 but whose history contains
+ * iter 1 runs on earlier stages (e.g. umsetzungskonzept iter 1 done →
+ * umsetzung iter 0 failed): the failed current-stage run was hidden behind
+ * the older done row, and the Retry button disappeared.
  *
+ * Pending iterate-rows (started_at = NULL) on the current stage still win
+ * the tiebreaker so a freshly-inserted iter N+1 outranks the old iter N.
  * Uses `(started_at IS NULL)` instead of `NULLS LAST` for portability
  * across all SQLite versions (NULLS LAST requires ≥3.30).
  */
 export function getLatestStageRunForTask(taskId: string, db: Database = getDb()): StageRun | null {
   const row = db
     .prepare(`
-      SELECT * FROM stage_runs
-      WHERE task_id = ?
-      ORDER BY iteration DESC,
-               (started_at IS NULL),
-               started_at DESC,
-               rowid DESC
+      SELECT sr.* FROM stage_runs sr
+      INNER JOIN tasks t ON t.id = sr.task_id AND sr.stage = t.current_stage
+      WHERE sr.task_id = ?
+      ORDER BY sr.iteration DESC,
+               (sr.started_at IS NULL) DESC,
+               sr.started_at DESC,
+               sr.rowid DESC
       LIMIT 1
     `)
     .get(taskId) as StageRunRow | undefined

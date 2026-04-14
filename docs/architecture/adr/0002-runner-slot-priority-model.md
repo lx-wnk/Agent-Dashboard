@@ -68,9 +68,15 @@ When a free slot exists, the driver loop picks from the pool of
 
 A task is pickable iff:
 
-- `current_stage NOT IN ('done','failed','cancelled','on_hold','approval1','approval2')`
+- `current_stage NOT IN ('done','cancelled','on_hold','approval1','approval2')`
 - **AND** it has no `stage_run` currently in `status='running'`
-- **AND** its latest `stage_run` is not in `status='awaiting_user'`
+- **AND** its latest `stage_run` is not in `status='awaiting_user'` or `status='failed'`
+
+Note: `failed` is a **stage_run status**, not a task stage. A task whose
+latest run is failed stays on its current stage and is surfaced in the
+frontend "Needs You" column. Auto-pickup is blocked via the
+`status='failed'` filter so the runner never loops on a broken stage —
+the user must trigger `POST /tasks/:id/retry` explicitly.
 
 This means:
 

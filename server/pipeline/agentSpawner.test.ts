@@ -122,6 +122,13 @@ describe('buildSpawnArgs', () => {
     expect(args).not.toContain('--resume')
   })
 
+  it('always forces --permission-mode default to prevent plan-mode drift', () => {
+    const args = buildSpawnArgs(baseOpts)
+    const idx = args.indexOf('--permission-mode')
+    expect(idx).toBeGreaterThanOrEqual(0)
+    expect(args[idx + 1]).toBe('default')
+  })
+
   it('includes --model when set', () => {
     const args = buildSpawnArgs({ ...baseOpts, model: 'claude-opus-4-6' })
     const idx = args.indexOf('--model')

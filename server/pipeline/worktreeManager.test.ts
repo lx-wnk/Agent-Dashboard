@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
+import process from 'node:process'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { currentBranch, isGitRepo, removeWorktree } from './worktreeManager.js'
+import { createWorktree, currentBranch, isGitRepo, removeWorktree, resolveWorktreeRoot } from './worktreeManager.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -69,5 +70,63 @@ describe('currentBranch', () => {
 describe('removeWorktree', () => {
   it('is a no-op when the worktree path does not exist', async () => {
     await expect(removeWorktree(repoDir, join(tmpDir, 'missing'))).resolves.toBeUndefined()
+  })
+})
+
+describe('resolveWorktreeRoot', () => {
+  const originalEnv = process.env.DASHBOARD_WORKTREE_ROOT
+
+  afterEach(() => {
+    if (originalEnv === undefined)
+      delete process.env.DASHBOARD_WORKTREE_ROOT
+    else
+      process.env.DASHBOARD_WORKTREE_ROOT = originalEnv
+  })
+
+  it('defaults to <repo>-worktrees next to the source repo', () => {
+    const cwd = '/Users/me/code/my-repo'
+    expect(resolveWorktreeRoot(cwd)).toBe('/Users/me/code/my-repo-worktrees')
+  })
+
+  it('honors DASHBOARD_WORKTREE_ROOT when set', () => {
+    process.env.DASHBOARD_WORKTREE_ROOT = '/opt/worktrees'
+    expect(resolveWorktreeRoot('/Users/me/code/my-repo')).toBe('/opt/worktrees')
+  })
+
+  it('ignores an empty DASHBOARD_WORKTREE_ROOT', () => {
+    process.env.DASHBOARD_WORKTREE_ROOT = '   '
+    expect(resolveWorktreeRoot('/a/b/c')).toBe('/a/b/c-worktrees')
+  })
+})
+
+describe('createWorktree', () => {
+  it('creates a worktree at <repo>-worktrees/<slug> by default', async () => {
+    const path = await createWorktree({ cwd: repoDir, slug: 'feat-one' })
+    const expectedRoot = join(dirname(repoDir), `${basename(repoDir)}-worktrees`)
+    expect(path).toBe(join(expectedRoot, 'feat-one'))
+    expect(existsSync(path)).toBe(true)
+    // Must not land inside the old ~/.claude/ root.
+    expect(path.includes('.claude/dashboard-worktrees')).toBe(false)
+    // Cleanup: remove the worktree so the repoDir rm in afterEach works cleanly.
+    await removeWorktree(repoDir, path, { force: true })
+  })
+
+  it('honors DASHBOARD_WORKTREE_ROOT when set', async () => {
+    const customRoot = mkdtempSync(join(tmpdir(), 'custom-worktrees-'))
+    const original = process.env.DASHBOARD_WORKTREE_ROOT
+    process.env.DASHBOARD_WORKTREE_ROOT = customRoot
+    try {
+      const path = await createWorktree({ cwd: repoDir, slug: 'feat-two' })
+      expect(path).toBe(join(customRoot, 'feat-two'))
+      expect(existsSync(path)).toBe(true)
+      await removeWorktree(repoDir, path, { force: true })
+    }
+    finally {
+      if (original === undefined)
+        delete process.env.DASHBOARD_WORKTREE_ROOT
+      else
+        process.env.DASHBOARD_WORKTREE_ROOT = original
+      rmSync(customRoot, { recursive: true, force: true })
+    }
   })
 })

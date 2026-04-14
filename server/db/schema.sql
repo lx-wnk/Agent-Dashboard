@@ -20,10 +20,13 @@ CREATE TABLE IF NOT EXISTS tasks (
   worktree_path TEXT,
   source_branch TEXT,
   target_branch TEXT,
+  -- `failed` is intentionally NOT a valid task stage. Failure lives on
+  -- stage_runs.status — the task stays on the stage where the run died
+  -- so the UI can surface retry/analyze actions on the same stage.
   current_stage TEXT NOT NULL CHECK (current_stage IN (
     'backlog','pruefung','refinement','planning','approval1',
     'umsetzungskonzept','approval2','umsetzung','selbstreview',
-    'finalisierung','done','on_hold','cancelled','failed'
+    'finalisierung','done','on_hold','cancelled'
   )),
   parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
   max_iterations INTEGER NOT NULL DEFAULT 20,
@@ -51,7 +54,7 @@ CREATE TABLE IF NOT EXISTS stage_runs (
   stage TEXT NOT NULL CHECK (stage IN (
     'backlog','pruefung','refinement','planning','approval1',
     'umsetzungskonzept','approval2','umsetzung','selbstreview',
-    'finalisierung','done','on_hold','cancelled','failed'
+    'finalisierung','done','on_hold','cancelled'
   )),
   session_id TEXT,
   session_name TEXT,
@@ -134,3 +137,29 @@ CREATE TABLE IF NOT EXISTS pipeline_config (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- User-authored feedback on approval-gated artifacts (planning,
+-- umsetzungskonzept). A row is created when the user clicks
+-- "Änderungen anfordern" on an approval gate; the task regresses to
+-- the reviewed stage and the prompt builder for that stage consumes
+-- all unresolved rows as a feedback prefix. A row is marked resolved
+-- when a subsequent stage_run on the reviewed stage transitions to a
+-- successful `next` state.
+--
+-- `iteration` is a separate counter from `stage_runs.iteration`
+-- (ADR: R2 — user-feedback cycles are decoupled from schema-retry
+-- cycles so the max_iterations budget doesn't starve human review).
+CREATE TABLE IF NOT EXISTS task_feedback (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  stage TEXT NOT NULL CHECK (stage IN ('planning','umsetzungskonzept')),
+  stage_run_id TEXT REFERENCES stage_runs(id) ON DELETE SET NULL,
+  iteration INTEGER NOT NULL,
+  feedback TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  resolved_by_stage_run_id TEXT REFERENCES stage_runs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_feedback_task_stage ON task_feedback(task_id, stage);
+CREATE INDEX IF NOT EXISTS idx_task_feedback_unresolved ON task_feedback(task_id, stage, resolved_at);

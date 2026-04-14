@@ -1,10 +1,14 @@
 import type express from 'express'
-import type { NotificationEventType, PipelineStage, PipelineTask } from '../../src/types.js'
+import type { NotificationEventType, PipelineStage, PipelineTask, StageRunStatus } from '../../src/types.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { consola } from 'consola'
 import { Router } from 'express'
-import { listAuditForTask } from '../db/auditRepo.js'
+import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
+import {
+  createFeedback,
+  listFeedbackForTask,
+} from '../db/feedbackRepo.js'
 import { getAllConfig, getPipelineConfigNumber, listPreferences, setConfig, setPipelineConfig, setPreference } from '../db/notificationConfigRepo.js'
 import {
   createPermissionRequest,
@@ -16,6 +20,7 @@ import {
   resolvePermissionRequest,
 } from '../db/permissionsRepo.js'
 import {
+  getLatestStageRun,
   getLatestStageRunForTask,
   getStageRunById,
   listStageRunsForTask,
@@ -29,7 +34,9 @@ import {
   listTasksByStage,
   updateTask,
 } from '../db/tasksRepo.js'
+import { spawnAnalysisAgent } from '../pipeline/analysisSpawner.js'
 import { recommendParallelism } from '../pipeline/resourceRecommender.js'
+import { resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
 import { createWorktree, removeWorktree } from '../pipeline/worktreeManager.js'
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
@@ -61,7 +68,6 @@ const VALID_STAGES = new Set<PipelineStage>([
   'done',
   'on_hold',
   'cancelled',
-  'failed',
 ])
 
 const VALID_EVENT_TYPES = new Set<NotificationEventType>([
@@ -85,25 +91,57 @@ const USER_WAIT_STAGES = new Set<PipelineStage>(['on_hold', 'approval1', 'approv
  * run belongs to the task's CURRENT stage. Otherwise a stale awaiting_user
  * run from a prior stage would incorrectly flag an advanced task.
  */
-function enrichTask(task: PipelineTask): PipelineTask {
+export function enrichTask(task: PipelineTask): PipelineTask {
   const latest = getLatestStageRunForTask(task.id)
   const latestBelongsToCurrent = latest?.stage === task.currentStage
-  const latestStatus = latestBelongsToCurrent ? (latest?.status ?? null) : null
+  // Agent-less wait-gates (approval1/approval2) never produce a stage_run,
+  // so the guard above would null out their status. Surface `awaiting_user`
+  // so the card's run-status chip reflects the gate state.
+  const syntheticGateStatus: StageRunStatus | null
+    = (task.currentStage === 'approval1' || task.currentStage === 'approval2')
+      ? 'awaiting_user'
+      : null
+  const latestStatus = latestBelongsToCurrent
+    ? (latest?.status ?? null)
+    : syntheticGateStatus
   const currentIteration = latestBelongsToCurrent ? (latest?.iteration ?? 0) : 0
   const needsUser
     = USER_WAIT_STAGES.has(task.currentStage)
       || latestStatus === 'awaiting_user'
       || latestStatus === 'on_hold'
+      // `failed` is now a stage_run status, not a task lifecycle state:
+      // the task stays on its current stage and the UI surfaces it in
+      // the Needs You column with Retry + Analyze actions.
+      || latestStatus === 'failed'
+  // Live session surfacing: the modal's "follow along" pane needs the
+  // session_id of whichever stage_run the user would most like to watch.
+  // Prefer a currently-running run on the current stage; otherwise fall
+  // back to the most-recent run that has a session_id attached so the
+  // pane still shows the last-seen transcript between runs.
+  const activeSessionId = latest?.sessionId ?? null
+  const activePid = latest?.status === 'running' ? (latest?.pid ?? null) : null
   return {
     ...task,
     needsUser,
     latestStageRunStatus: latestStatus,
     currentIteration,
+    activeSessionId,
+    activePid,
   }
 }
 
 export function createTaskRouter(deps: TaskRouterDeps): Router {
   const router = Router()
+
+  // Convenience: broadcast a task_updated with a freshly enriched payload.
+  // Plain getTaskById() returns un-enriched rows missing latestStageRunStatus
+  // and needsUser — the kanban then drops the run-status chip on every event.
+  function broadcastEnrichedUpdate(taskId: string): void {
+    const task = getTaskById(taskId)
+    if (!task)
+      return
+    deps.broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
+  }
 
   // ─── Tasks CRUD ────────────────
 
@@ -264,7 +302,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       allowed.priority = body.priority
 
     const updated = updateTask(req.params.id, allowed)
-    deps.broadcastTaskEvent({ type: 'task_updated', taskId: req.params.id, payload: updated })
+    broadcastEnrichedUpdate(req.params.id)
     res.json(updated)
   })
 
@@ -312,7 +350,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       return
     }
     const task = getTaskById(req.params.id)
-    deps.broadcastTaskEvent({ type: 'task_updated', taskId: req.params.id, payload: task })
+    broadcastEnrichedUpdate(req.params.id)
     res.json({ task, stageRun: run })
   })
 
@@ -324,8 +362,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'Task not found' })
       return
     }
-    // Approve just advances the task past an awaiting_user state.
-    // Determine the next stage from current:
+    // Approve advances the task past an awaiting_user gate.
     const nextMap: Record<string, PipelineStage> = {
       approval1: 'umsetzungskonzept',
       approval2: 'umsetzung',
@@ -335,10 +372,122 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(409).json({ error: `Task in stage ${task.currentStage} cannot be approved` })
       return
     }
+
+    // approval2 → umsetzung: bulk-grant the tool permissions the agent
+    // declared in its umsetzungskonzept output. This converts the agent's
+    // own planning ("I will need Bash(npm run *) and Write") into pre-approved
+    // entries that writeSettingsFile picks up when spawning the umsetzung
+    // agent — so the agent doesn't hit an interactive permission wall.
+    //
+    // Deduplication: skip any (tool, pattern) pair that is already granted
+    // so a double-click or re-approve doesn't create ghost rows.
+    if (task.currentStage === 'approval2') {
+      const konzeptRun = getLatestStageRun(task.id, 'umsetzungskonzept')
+      const rawRequests = (konzeptRun?.output as Record<string, unknown> | null)?.toolRequests
+      if (Array.isArray(rawRequests)) {
+        const existing = listTaskPermissions(task.id)
+        for (const req of rawRequests) {
+          if (typeof req !== 'object' || req === null)
+            continue
+          const r = req as Record<string, unknown>
+          const tool = typeof r.tool === 'string' ? r.tool.trim() : null
+          const pattern = typeof r.pattern === 'string' && r.pattern.trim() ? r.pattern.trim() : null
+          if (!tool)
+            continue
+          const alreadyGranted = existing.some(p => p.tool === tool && (p.pattern ?? null) === pattern && p.granted)
+          if (alreadyGranted)
+            continue
+          createTaskPermission({ taskId: task.id, tool, pattern, granted: true, preApproved: true, decidedBy: 'user' })
+        }
+        appendAudit({
+          taskId: task.id,
+          actor: 'user',
+          action: 'bulk_granted_tool_permissions',
+          details: { source: 'umsetzungskonzept_toolRequests', count: rawRequests.length },
+        })
+      }
+    }
+
     updateTask(req.params.id, { currentStage: next })
     const updated = getTaskById(req.params.id)
-    deps.broadcastTaskEvent({ type: 'task_updated', taskId: req.params.id, payload: updated })
+    broadcastEnrichedUpdate(req.params.id)
     res.json(updated)
+  })
+
+  // ─── Request changes on an approval gate ────────────────
+  //
+  // The user rejected the artifact under review (plan or umsetzungskonzept)
+  // and supplied feedback text. We:
+  //   1. store the feedback in task_feedback (linked to the latest done
+  //      stage_run on the reviewed stage for audit)
+  //   2. regress task.currentStage to the reviewed stage so the
+  //      orchestrator's tick() spawns a fresh iteration
+  //   3. write an audit entry
+  // The orchestrator's next applyTransition on that stage will mark all
+  // unresolved feedback as resolved via resolveFeedbackForStage.
+  router.post('/tasks/:id/request-changes', (req, res) => {
+    if (deps.rejectCrossOrigin(req, res))
+      return
+    const task = getTaskById(req.params.id)
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const stageMap: Record<string, 'planning' | 'umsetzungskonzept'> = {
+      approval1: 'planning',
+      approval2: 'umsetzungskonzept',
+    }
+    const regressionStage = stageMap[task.currentStage]
+    if (!regressionStage) {
+      res.status(409).json({ error: `Task in stage ${task.currentStage} cannot receive change requests` })
+      return
+    }
+    const body = (req.body ?? {}) as { feedback?: unknown }
+    const feedbackText = typeof body.feedback === 'string' ? body.feedback.trim() : ''
+    if (feedbackText.length === 0) {
+      res.status(400).json({ error: 'feedback is required' })
+      return
+    }
+    if (feedbackText.length > 4000) {
+      res.status(400).json({ error: 'feedback too long (max 4000 chars)' })
+      return
+    }
+    // Link the feedback to the stage_run whose output was rejected, so
+    // the audit trail can answer "which plan did the user push back on?"
+    const priorRuns = listStageRunsForTask(task.id)
+      .filter(r => r.stage === regressionStage && r.status === 'done')
+    const priorRun = priorRuns.length > 0 ? priorRuns[priorRuns.length - 1] : null
+
+    const feedbackRow = createFeedback({
+      taskId: task.id,
+      stage: regressionStage,
+      stageRunId: priorRun?.id ?? null,
+      feedback: feedbackText,
+    })
+    updateTask(req.params.id, { currentStage: regressionStage })
+    appendAudit({
+      taskId: task.id,
+      actor: 'user',
+      action: 'request_changes',
+      details: {
+        fromStage: task.currentStage,
+        toStage: regressionStage,
+        feedbackId: feedbackRow.id,
+        iteration: feedbackRow.iteration,
+      },
+    })
+    const updated = getTaskById(req.params.id)
+    broadcastEnrichedUpdate(req.params.id)
+    res.json({ task: updated, feedback: feedbackRow })
+  })
+
+  router.get('/tasks/:id/feedback', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    res.json(listFeedbackForTask(req.params.id))
   })
 
   router.post('/tasks/:id/cancel', (req, res) => {
@@ -351,8 +500,105 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     updateTask(req.params.id, { currentStage: 'cancelled' })
     const updated = getTaskById(req.params.id)
-    deps.broadcastTaskEvent({ type: 'task_updated', taskId: req.params.id, payload: updated })
+    broadcastEnrichedUpdate(req.params.id)
     res.json(updated)
+  })
+
+  // ─── Retry a failed stage ────────────────
+  //
+  // Creates a fresh iteration of the task's current stage. Only valid
+  // when the latest stage_run on that stage is `failed`. The orchestrator's
+  // `ensureStageRun` already creates a new iteration when the latest run
+  // is non-pending/non-running, so this endpoint just validates intent,
+  // writes an audit trail, and defers to `progressTask`.
+  router.post('/tasks/:id/retry', async (req, res) => {
+    if (deps.rejectCrossOrigin(req, res))
+      return
+    const task = getTaskById(req.params.id)
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const latest = getLatestStageRunForTask(req.params.id)
+    if (!latest || latest.stage !== task.currentStage || latest.status !== 'failed') {
+      res.status(409).json({ error: 'Task has no failed stage run to retry on its current stage' })
+      return
+    }
+    appendAudit({
+      taskId: task.id,
+      actor: 'user',
+      action: 'retry_requested',
+      details: { stage: latest.stage, iteration: latest.iteration },
+    })
+    const run = await deps.orchestrator.progressTask(task.id)
+    if (!run) {
+      res.status(409).json({ error: 'Task could not progress (slot full, no handler, or terminal)' })
+      return
+    }
+    const updated = getTaskById(task.id)
+    broadcastEnrichedUpdate(task.id)
+    res.json({ task: updated, stageRun: run })
+  })
+
+  // ─── Launch an ad-hoc analysis session ────────────────
+  //
+  // Spawns an independent Claude CLI session in the task's worktree with
+  // a pre-built prompt containing task identity, failure details, and
+  // pointers to the last session JSONLs. The session is NOT tracked as a
+  // stage_run — it shows up in the dashboard's normal agent-monitoring
+  // view via processScanner finding a `claude` PID in the task's cwd.
+  router.post('/tasks/:id/analyze', async (req, res) => {
+    if (deps.rejectCrossOrigin(req, res))
+      return
+    const task = getTaskById(req.params.id)
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const latest = getLatestStageRunForTask(req.params.id)
+    if (!latest) {
+      res.status(409).json({ error: 'Task has no stage runs to analyze' })
+      return
+    }
+
+    // Gather the error summary and pointers to the JSONLs on disk. Both
+    // go through resolvedProjectDir so the paths match what Claude CLI
+    // actually wrote (realpath-resolved, dot/underscore/slash encoded).
+    const cwd = task.worktreePath || task.cwd
+    const projectDir = await resolvedProjectDir(cwd)
+    const sessionLogPaths: string[] = []
+    const runs = listStageRunsForTask(req.params.id)
+    for (const r of runs) {
+      if (r.sessionId)
+        sessionLogPaths.push(`${projectDir}/${r.sessionId}.jsonl`)
+    }
+
+    const errorSummary = (() => {
+      const out = latest.output as Record<string, unknown> | null
+      if (out && typeof out.error === 'string')
+        return `latest stage_run (${latest.stage} iter ${latest.iteration}) failed with: ${out.error}`
+      return `latest stage_run (${latest.stage} iter ${latest.iteration}) status: ${latest.status}`
+    })()
+
+    try {
+      const result = spawnAnalysisAgent({
+        task,
+        failedRun: latest,
+        errorSummary,
+        sessionLogPaths,
+      })
+      appendAudit({
+        taskId: task.id,
+        actor: 'user',
+        action: 'analysis_session_spawned',
+        details: { pid: result.pid, cwd: result.cwd },
+      })
+      res.status(202).json({ pid: result.pid, cwd: result.cwd })
+    }
+    catch (err) {
+      consola.error('[taskRoutes] analysis spawn failed:', err)
+      res.status(500).json({ error: (err as Error).message })
+    }
   })
 
   // ─── Task stage runs & audit ────────────────
@@ -484,8 +730,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       }
       // Try to resume the task
       await deps.orchestrator.resumeFromUser(run.taskId)
-      const task = getTaskById(run.taskId)
-      deps.broadcastTaskEvent({ type: 'task_updated', taskId: run.taskId, payload: task })
+      broadcastEnrichedUpdate(run.taskId)
     }
     res.json(resolved)
   })

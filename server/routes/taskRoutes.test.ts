@@ -207,6 +207,68 @@ describe('pOST /api/tasks/:id/approve', () => {
     expect(data.currentStage).toBe('umsetzungskonzept')
   })
 
+  it('advances approval2 → umsetzung and bulk-grants toolRequests from umsetzungskonzept', async () => {
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'app2',
+      title: 'A2',
+      cwd: '/a2',
+    })
+    forceStage(task.id, 'approval2')
+
+    // Seed a done umsetzungskonzept run with toolRequests in its output.
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzungskonzept' })
+    updateStageRun(run.id, {
+      status: 'done',
+      startedAt: new Date().toISOString(),
+      output: {
+        steps: [],
+        toolRequests: [
+          { tool: 'Write', pattern: null, reason: 'create files' },
+          { tool: 'Bash', pattern: 'npm run *', reason: 'run npm scripts' },
+        ],
+      },
+    })
+
+    const { status, data } = await api<{ currentStage: string }>(
+      'POST',
+      `/tasks/${task.id}/approve`,
+    )
+    expect(status).toBe(200)
+    expect(data.currentStage).toBe('umsetzung')
+
+    const { listTaskPermissions } = await import('../db/permissionsRepo.js')
+    const perms = listTaskPermissions(task.id)
+    expect(perms.some(p => p.tool === 'Write' && p.pattern === null && p.granted)).toBe(true)
+    expect(perms.some(p => p.tool === 'Bash' && p.pattern === 'npm run *' && p.granted)).toBe(true)
+  })
+
+  it('does not create duplicate permissions on double-approve', async () => {
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'dup',
+      title: 'Dup',
+      cwd: '/dup',
+    })
+    forceStage(task.id, 'approval2')
+
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzungskonzept' })
+    updateStageRun(run.id, {
+      status: 'done',
+      startedAt: new Date().toISOString(),
+      output: { steps: [], toolRequests: [{ tool: 'Read', pattern: null }] },
+    })
+
+    await api('POST', `/tasks/${task.id}/approve`)
+    // Force back to approval2 to simulate double-click scenario.
+    forceStage(task.id, 'approval2')
+    await api('POST', `/tasks/${task.id}/approve`)
+
+    const { listTaskPermissions } = await import('../db/permissionsRepo.js')
+    const perms = listTaskPermissions(task.id).filter(p => p.tool === 'Read' && p.granted)
+    expect(perms.length).toBe(1)
+  })
+
   it('rejects approval when not in an approval stage', async () => {
     const { data: task } = await api<{ id: string }>('POST', '/tasks', {
       slug: 'nope',

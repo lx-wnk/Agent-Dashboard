@@ -1,4 +1,4 @@
-import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskPermission } from '../types'
+import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskFeedback, TaskPermission } from '../types'
 import { computed, onUnmounted, ref } from 'vue'
 
 const tasks = ref<PipelineTask[]>([])
@@ -7,7 +7,13 @@ const isLoading = ref(true)
 const error = ref<string | null>(null)
 
 let eventSource: EventSource | null = null
+let pollTimer: ReturnType<typeof setInterval> | null = null
 let subscriberCount = 0
+
+// Safety-net poll cadence. SSE is the primary live channel; this catches
+// missed events from short SSE drops (HMR restarts, network blips) and
+// any backend code path that mutates tasks without broadcasting.
+const FALLBACK_POLL_MS = 60_000
 
 export interface TaskEvent {
   type: 'task_created' | 'task_updated' | 'task_deleted' | 'stage_run_updated' | 'permission_request'
@@ -52,6 +58,21 @@ function stopSSE() {
   if (eventSource) {
     eventSource.close()
     eventSource = null
+  }
+}
+
+function startPolling() {
+  if (pollTimer)
+    return
+  pollTimer = setInterval(() => {
+    void fetchTasks()
+  }, FALLBACK_POLL_MS)
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
   }
 }
 
@@ -151,6 +172,54 @@ export async function cancelTask(taskId: string): Promise<void> {
   }
 }
 
+/**
+ * Retry the task's current stage after a failed stage_run. The backend
+ * creates a fresh iteration of the same stage and lets the orchestrator
+ * pick it up. Only valid when latestStageRunStatus === 'failed'.
+ */
+export async function retryTask(taskId: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/retry`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(err.error || 'Failed to retry task')
+  }
+}
+
+/**
+ * Spawn an independent analysis side-session for the task. The session
+ * is a normal `claude` CLI process launched in the task's worktree with
+ * a rich prompt containing task identity + failure details + pointers to
+ * the last session JSONLs. Returns the PID so the UI can link to it in
+ * the agent-monitoring view.
+ */
+export async function analyzeTask(taskId: string): Promise<{ pid: number, cwd: string }> {
+  const res = await fetch(`/api/tasks/${taskId}/analyze`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(err.error || 'Failed to start analysis session')
+  }
+  return await res.json() as { pid: number, cwd: string }
+}
+
+export async function requestChanges(taskId: string, feedback: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/request-changes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feedback }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(err.error || 'Failed to request changes')
+  }
+}
+
+export async function fetchTaskFeedback(taskId: string): Promise<TaskFeedback[]> {
+  const res = await fetch(`/api/tasks/${taskId}/feedback`)
+  if (!res.ok)
+    return []
+  return await res.json() as TaskFeedback[]
+}
+
 export async function fetchStageRuns(taskId: string): Promise<StageRun[]> {
   const res = await fetch(`/api/tasks/${taskId}/stage-runs`)
   if (!res.ok)
@@ -163,6 +232,23 @@ export async function fetchTaskPermissions(taskId: string): Promise<TaskPermissi
   if (!res.ok)
     return []
   return await res.json() as TaskPermission[]
+}
+
+export async function grantTaskPermission(
+  taskId: string,
+  tool: string,
+  pattern: string | null,
+): Promise<TaskPermission> {
+  const res = await fetch(`/api/tasks/${taskId}/permissions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool, pattern, granted: true, preApproved: true }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(err.error || 'Failed to grant permission')
+  }
+  return await res.json() as TaskPermission
 }
 
 export async function fetchPendingPermissionRequests(taskId: string): Promise<PermissionRequest[]> {
@@ -189,12 +275,15 @@ export function useTasks() {
   if (subscriberCount === 1) {
     void fetchTasks()
     startSSE()
+    startPolling()
   }
 
   onUnmounted(() => {
     subscriberCount--
-    if (subscriberCount === 0)
+    if (subscriberCount === 0) {
       stopSSE()
+      stopPolling()
+    }
   })
 
   function selectTask(task: PipelineTask | null) {

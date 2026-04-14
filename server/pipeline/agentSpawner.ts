@@ -65,6 +65,11 @@ export function buildSpawnArgs(opts: SpawnAgentOptions): string[] {
   if (opts.resumeSessionId)
     args.push('--resume', opts.resumeSessionId)
   args.push('-p', opts.prompt)
+  // Force exec mode. Pipeline spawns must never inherit plan-mode from
+  // user settings / hooks / session state — ExitPlanMode requires
+  // interactive confirmation which headless workers cannot supply, so a
+  // drifted plan-mode run simply dies without writing its JSON block.
+  args.push('--permission-mode', 'default')
   if (opts.model)
     args.push('--model', opts.model)
   if (opts.systemPrompt)

@@ -34,23 +34,26 @@ const COLUMNS: ColumnDef[] = [
   { id: 'backlog', label: 'Backlog', stages: ['backlog'], group: 'active' },
   {
     id: 'analysis',
-    label: 'Analyse',
+    label: 'Analysis',
     stages: ['pruefung', 'refinement', 'planning'],
     group: 'active',
   },
-  { id: 'konzept', label: 'Konzept', stages: ['umsetzungskonzept'], group: 'active' },
+  { id: 'konzept', label: 'Concept', stages: ['umsetzungskonzept'], group: 'active' },
   {
     id: 'umsetzung',
-    label: 'Umsetzung',
+    label: 'Implementation',
     stages: ['umsetzung', 'selbstreview'],
     group: 'active',
   },
-  { id: 'finalisierung', label: 'Abschluss', stages: ['finalisierung'], group: 'active' },
+  { id: 'finalisierung', label: 'Completion', stages: ['finalisierung'], group: 'active' },
   { id: 'done', label: 'Done', stages: ['done'], group: 'terminal' },
+  // `failed` is no longer a terminal task stage — failed tasks stay on
+  // their current stage and appear in "Needs You" via the needsUser flag.
+  // Only explicitly cancelled tasks land here now.
   {
-    id: 'terminated',
-    label: 'Terminated',
-    stages: ['failed', 'cancelled'],
+    id: 'cancelled',
+    label: 'Cancelled',
+    stages: ['cancelled'],
     group: 'terminal',
   },
 ]

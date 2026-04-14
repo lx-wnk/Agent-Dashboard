@@ -2,12 +2,34 @@ import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
+import process from 'node:process'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
-export const WORKTREE_ROOT = join(homedir(), '.claude', 'dashboard-worktrees')
+/**
+ * Legacy worktree root from before the per-repo default. Still searched as
+ * a fallback when adopting pre-existing worktrees so older tasks keep
+ * working after the move.
+ */
+export const LEGACY_WORKTREE_ROOT = join(homedir(), '.claude', 'dashboard-worktrees')
+
+/**
+ * Resolve the worktree root for a given source repo.
+ *
+ * Precedence:
+ * 1. `DASHBOARD_WORKTREE_ROOT` env var — absolute path, applied to all repos.
+ * 2. Sibling default `<repo-parent>/<repo-name>-worktrees` — next to the
+ *    source repo, out of `.claude/` so Claude CLI does not gate edits
+ *    behind "sensitive file" prompts that detached agents cannot answer.
+ */
+export function resolveWorktreeRoot(cwd: string): string {
+  const envRoot = process.env.DASHBOARD_WORKTREE_ROOT
+  if (envRoot && envRoot.trim().length > 0)
+    return envRoot.trim()
+  return join(dirname(cwd), `${basename(cwd)}-worktrees`)
+}
 
 const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
@@ -18,9 +40,10 @@ export interface WorktreeOptions {
 }
 
 /**
- * Create a git worktree for a task under {WORKTREE_ROOT}/{slug}.
- * Falls back to the source cwd if the repo is not a git repository.
- * Returns the absolute worktree path.
+ * Create a git worktree for a task under the resolved worktree root.
+ * Returns the absolute worktree path. Adopts an already-existing worktree
+ * at the target path (or at the legacy `~/.claude/dashboard-worktrees/`
+ * location) if it is registered with git, so older tasks survive the move.
  */
 export async function createWorktree(opts: WorktreeOptions): Promise<string> {
   if (!SAFE_SLUG_RE.test(opts.slug))
@@ -28,8 +51,18 @@ export async function createWorktree(opts: WorktreeOptions): Promise<string> {
   if (!(await isGitRepo(opts.cwd)))
     throw new Error(`${opts.cwd} is not a git repository — cannot create worktree`)
 
-  await mkdir(WORKTREE_ROOT, { recursive: true })
-  const path = join(WORKTREE_ROOT, opts.slug)
+  const root = resolveWorktreeRoot(opts.cwd)
+  await mkdir(root, { recursive: true })
+  const path = join(root, opts.slug)
+
+  // Legacy adoption: a task that ran under the old ~/.claude/dashboard-worktrees
+  // root should keep running there instead of forcing a second worktree
+  // for the same slug. Only applies when the new path doesn't exist yet.
+  if (!existsSync(path)) {
+    const legacyPath = join(LEGACY_WORKTREE_ROOT, opts.slug)
+    if (existsSync(legacyPath) && await isRegisteredWorktree(opts.cwd, legacyPath))
+      return legacyPath
+  }
 
   // Adoption path: if a worktree already exists at this path AND is
   // registered in git worktree list, adopt it (orphan recovery after crash).

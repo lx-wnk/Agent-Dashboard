@@ -38,8 +38,11 @@ const TAIL_BYTES = 32768 // read last 32KB
 const HEAD_BYTES = 8192 // read first 8KB for model/version
 
 export function encodePath(absolutePath: string): string {
-  // Claude Code encodes both / and _ as -
-  return absolutePath.replace(/[/_]/g, '-')
+  // Claude Code encodes /, ., and _ all as -. The dot is load-bearing:
+  // `.claude` inside a realpath becomes `--claude` (the leading / and the
+  // dot each map to -). Dropping the dot from the character class makes
+  // the dashboard look in a directory that does not exist on disk.
+  return absolutePath.replace(/[/._]/g, '-')
 }
 
 export async function tailRead(filePath: string): Promise<string> {

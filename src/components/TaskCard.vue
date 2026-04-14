@@ -1,11 +1,24 @@
 <script setup lang="ts">
-import type { PipelineStage, PipelineTask } from '../types'
+import type { PipelineStage, PipelineTask, StageRunStatus } from '../types'
 
 defineProps<{ task: PipelineTask }>()
 defineEmits<{ select: [task: PipelineTask] }>()
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+const RUN_STATUS_LABELS: Record<StageRunStatus, string> = {
+  pending: 'Pending',
+  running: 'Running',
+  awaiting_user: 'Waiting',
+  on_hold: 'On Hold',
+  done: 'Done',
+  failed: 'Failed',
+}
+
+function runStatusLabel(status: StageRunStatus): string {
+  return RUN_STATUS_LABELS[status] ?? status
 }
 
 const STAGE_LABELS: Record<PipelineStage, string> = {
@@ -22,7 +35,6 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
   done: 'Done',
   on_hold: 'Permission',
   cancelled: 'Cancelled',
-  failed: 'Failed',
 }
 
 function stageLabel(stage: PipelineStage): string {
@@ -53,6 +65,14 @@ function stageLabel(stage: PipelineStage): string {
     <div class="task-meta">
       <span class="meta-chip stage" :class="`stage-${task.currentStage}`">
         {{ stageLabel(task.currentStage) }}
+      </span>
+      <span
+        v-if="task.latestStageRunStatus"
+        class="meta-chip run-status"
+        :class="`run-${task.latestStageRunStatus}`"
+        :title="`Latest stage run: ${runStatusLabel(task.latestStageRunStatus)}`"
+      >
+        {{ runStatusLabel(task.latestStageRunStatus) }}
       </span>
       <span v-if="task.worktreePath" class="meta-chip" title="Has worktree">WT</span>
       <span v-if="task.sourceBranch" class="meta-chip">{{ task.sourceBranch }}</span>
@@ -162,10 +182,40 @@ function stageLabel(stage: PipelineStage): string {
   color: var(--accent-green);
   border-color: var(--accent-green);
 }
-.meta-chip.stage.stage-failed,
 .meta-chip.stage.stage-cancelled {
   background: rgba(248, 113, 113, 0.15);
   color: var(--accent-red);
   border-color: var(--accent-red);
+}
+.meta-chip.run-status {
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+.meta-chip.run-status.run-running {
+  background: rgba(59, 130, 246, 0.18);
+  color: var(--accent-blue);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+.meta-chip.run-status.run-pending {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+.meta-chip.run-status.run-awaiting_user,
+.meta-chip.run-status.run-on_hold {
+  background: rgba(234, 179, 8, 0.18);
+  color: rgb(234, 179, 8);
+  border-color: rgba(234, 179, 8, 0.5);
+}
+.meta-chip.run-status.run-done {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--accent-green);
+  border-color: rgba(74, 222, 128, 0.5);
+}
+.meta-chip.run-status.run-failed {
+  background: rgba(248, 113, 113, 0.18);
+  color: var(--accent-red);
+  border-color: rgba(248, 113, 113, 0.5);
 }
 </style>

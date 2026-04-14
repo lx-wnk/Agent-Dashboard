@@ -5,21 +5,18 @@ import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import BacklogForm from './components/BacklogForm.vue'
 import CostTrend from './components/CostTrend.vue'
-import KanbanBoard from './components/KanbanBoard.vue'
 import PipelineBoard from './components/PipelineBoard.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
-import { useRole } from './composables/useRole'
 import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { formatTokens, totalTokenCount } from './utils/format'
 
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
 const { theme, toggleTheme } = useTheme()
-const { role, toggleRole } = useRole()
 const { tasks, selectedTask, selectTask } = useTasks()
 const showSpawnDialog = ref(false)
 const showBacklog = ref(false)
@@ -57,51 +54,26 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
         v-model="searchQuery"
         class="header-search"
         type="text"
-        placeholder="Search agents..."
+        :placeholder="viewMode === 'pipeline' ? 'Search tasks...' : 'Search agents...'"
       >
       <div class="view-toggle">
         <button
           class="toggle-btn"
-          :class="{ active: viewMode === 'list' }"
-          title="List view"
-          @click="viewMode = 'list'"
+          :class="{ active: viewMode !== 'pipeline' }"
+          title="Agent monitoring dashboard"
+          @click="viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
         >
-          ≡
-        </button>
-        <button
-          class="toggle-btn"
-          :class="{ active: viewMode === 'cards' }"
-          title="Card view"
-          @click="viewMode = 'cards'"
-        >
-          ⊞
-        </button>
-        <button
-          class="toggle-btn"
-          :class="{ active: viewMode === 'kanban' }"
-          title="Kanban view"
-          @click="viewMode = 'kanban'"
-        >
-          ▦
+          Dashboard
         </button>
         <button
           class="toggle-btn"
           :class="{ active: viewMode === 'pipeline' }"
-          title="Task pipeline"
+          title="Task pipeline kanban"
           @click="viewMode = 'pipeline'"
         >
-          ⇉
+          Kanban
         </button>
       </div>
-      <button
-        v-if="viewMode === 'pipeline'"
-        class="role-btn"
-        :class="`role-${role}`"
-        :title="`Switch to ${role === 'requester' ? 'reviewer' : 'requester'} mode`"
-        @click="toggleRole"
-      >
-        {{ role }}
-      </button>
       <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
         {{ theme === 'dark' ? '☀' : '☾' }}
       </button>
@@ -133,6 +105,24 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <code class="script-path" tabindex="0" role="button" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript" @keydown.enter="copyScript" @keydown.space.prevent="copyScript">{{ scriptPath }}</code>
       <span v-if="copied" class="copied-hint">Copied!</span>
     </div>
+    <div v-if="viewMode !== 'pipeline'" class="sub-toolbar">
+      <button
+        class="sub-toggle-btn"
+        :class="{ active: viewMode === 'cards' }"
+        title="Card view"
+        @click="viewMode = 'cards'"
+      >
+        ⊞ Cards
+      </button>
+      <button
+        class="sub-toggle-btn"
+        :class="{ active: viewMode === 'list' }"
+        title="List view"
+        @click="viewMode = 'list'"
+      >
+        ≡ List
+      </button>
+    </div>
     <main>
       <p v-if="isLoading" class="loading">
         Loading agents...
@@ -142,11 +132,6 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       </p>
       <AgentTable
         v-else-if="viewMode === 'list'"
-        :agents="filteredAgents"
-        @select="selectAgent"
-      />
-      <KanbanBoard
-        v-else-if="viewMode === 'kanban'"
         :agents="filteredAgents"
         @select="selectAgent"
       />
@@ -364,10 +349,12 @@ body {
   background: none;
   border: none;
   color: var(--text-muted);
-  padding: 6px 10px;
-  font-size: 14px;
+  padding: 6px 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
 }
 .toggle-btn.active {
   background: var(--accent-blue);
@@ -377,21 +364,32 @@ body {
   color: var(--text-primary);
 }
 
-.role-btn {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-family: inherit;
+.sub-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
 }
-.role-btn.role-requester { color: var(--accent-blue); border-color: var(--accent-blue); }
-.role-btn.role-reviewer { color: var(--accent-green); border-color: var(--accent-green); }
-.role-btn:hover { filter: brightness(1.2); }
+.sub-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.sub-toggle-btn.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.sub-toggle-btn:not(.active):hover {
+  color: var(--text-secondary);
+}
 
 .loading, .error {
   text-align: center;
