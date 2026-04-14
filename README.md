@@ -91,6 +91,25 @@ Open [http://localhost:13120](http://localhost:13120) — running Claude Code ag
     └── package.json           # @modelcontextprotocol/sdk dependency
 ```
 
+## Task Pipeline
+
+An agentic task pipeline runs multi-stage work items through Claude Code automatically. Tasks progress through 11 stages (backlog → prüfung → refinement → planning → approval → umsetzungskonzept → approval → umsetzung → selbstreview → finalisierung → done), with human approval gates at `approval1` and `approval2`.
+
+**Key characteristics:**
+- Each agent-driven stage spawns a detached `claude` CLI process in an isolated git worktree
+- LLM output is validated against a per-stage JSON schema; one auto-retry with feedback injection before escalating to the user
+- Up to 3 tasks run in parallel (configurable via `maxParallelOrchestrators` in the pipeline DB config)
+- Notifications (email, webhook, browser, system) dispatched on hold/failure events
+
+**Environment variables:**
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `DASHBOARD_DB_PATH` | `~/.claude/dashboard-tasks.db` | SQLite database for pipeline state |
+| `DASHBOARD_WORKTREE_ROOT` | `~/.claude/dashboard-worktrees` | Root for per-task git worktrees |
+
+See [ADR-0001](docs/architecture/adr/0001-sqlite-for-task-pipeline.md) (SQLite rationale) and [ADR-0002](docs/architecture/adr/0002-runner-slot-priority-model.md) (runner-slot priority model).
+
 ## Controlling Running Agents
 
 The dashboard can send instructions to agents that were started with the Channel MCP server. Agents spawned from the dashboard get this automatically. For manually started agents:

@@ -45,6 +45,16 @@ pnpm typecheck     # vue-tsc type checking
 - `src/types.ts` — All shared TypeScript interfaces (`Agent`, `TokenUsage`, `SessionMeta`, etc.)
 - `src/utils/format.ts` — Token, cost, uptime, and model name formatting utilities (including `shortModel`)
 
+**Pipeline UI** (`src/components/` + `src/composables/`):
+- `src/components/PipelineBoard.vue` — kanban-style task pipeline board
+- `src/components/TaskCard.vue` — task card with status chip and run-status badge
+- `src/components/TaskModal.vue` — full task detail: stage output, chat stream, feedback, permissions
+- `src/components/StageOutputView.vue` — renders per-stage LLM output with expand/collapse
+- `src/components/AgentChatStream.vue` — live SSE-streamed agent message view
+- `src/components/BacklogForm.vue` — task creation / backlog entry form
+- `src/composables/useTasks.ts` — SSE-first task list state with 60s polling fallback
+- `src/composables/useRole.ts` — role-based access control composable
+
 **Data flow:** Browser connects to `/api/agents/stream` (SSE) with polling fallback → Express scans processes (`ps`/`lsof`) → matches PIDs to `~/.claude/projects/{encoded_path}/{sessionId}.jsonl` → tail-reads JSONL + reads `~/.claude/usage-data/session-meta/{sessionId}.json` → merges, calculates cost/status → broadcasts `Agent[]` to SSE clients.
 
 **Agent status thresholds:** active < 30s, waiting < 5min, idle > 5min (since last activity).
@@ -62,7 +72,16 @@ The Task Pipeline subsystem (`server/db/`, `server/pipeline/`, `server/routes/ta
 - `completionDetector.ts` — converts a dead PID + session JSONL into a next/retry/fail decision. Strict per-stage schema validators (`validateStageOutput`) with injectable deps for tests.
 - `sessionOutputReader.ts` — reads the last assistant turn from a session JSONL, extracts the `` ```json `` block, falls back to newest-by-mtime session discovery when the stage_run has no `session_id` yet.
 - `sessionManager.ts` — `isPidAlive` (with EPERM handling), recovery decisions on orchestrator restart.
+- `analysisSpawner.ts` — spawns detached analysis agents (distinct from stage agents) for pre-pipeline analysis tasks.
+- `worktreeManager.ts` — creates and removes per-task git worktrees for isolated stage execution; root path via `DASHBOARD_WORKTREE_ROOT`.
+- `resourceRecommender.ts` — recommends parallelism cap based on available CPU/memory; consulted when setting `maxParallelOrchestrators`.
 - `types.ts` — `StageTransition` union (incl. `async_running`, `taskMetadataPatch` on `next`), `StageContext` with injected `recordAudit` / `requestPermission` side-effects.
+
+**Notifications** (`server/notifications/`):
+- `dispatcher.ts` — event-driven dispatcher; registered callbacks come from `server/index.ts` only (never imported by `pipeline/`).
+- `adapters/email.ts`, `adapters/webhook.ts`, `adapters/browser.ts`, `adapters/system.ts` — pluggable adapters, wired exclusively in `server/index.ts`.
+
+**Channel bridge** (`channel/dashboard-channel.ts`) — MCP server injected into every spawned stage agent. Reads `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` env vars and forwards permission requests back to the orchestrator's `onPermissionRequest` callback via the dashboard API. Enables the two-way permission gate without any pipeline-to-notification dependency.
 
 **Runner slots:** `maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `umsetzung`. Agent-less stages (backlog, approval1/2) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → createdAt) and the sticky-run invariant.
 
@@ -124,7 +143,8 @@ The same pattern applies inside `StageContext` (`server/pipeline/types.ts`): sta
 
 - Path alias: `@/*` maps to `./src/*` (configured in tsconfig.json and vite.config.ts)
 - Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data). **Multi-machine mode** (`DASHBOARD_REMOTES` env var) requires remote instances to be network-accessible; use a VPN or SSH tunnel — never bind to `0.0.0.0` on an untrusted network.
-- **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (see ADR-0001). The scope boundary is strict — do not mix.
+- **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (override via `DASHBOARD_DB_PATH`; see ADR-0001). The scope boundary is strict — do not mix.
+- **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge).
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
 - **Platform:** macOS and Linux. `server/systemMonitor.ts` uses `top` on macOS and `/proc/stat` on Linux for CPU; `server/processScanner.ts` uses `lsof` on macOS and `/proc/<pid>/cwd` on Linux. Windows is unsupported.
