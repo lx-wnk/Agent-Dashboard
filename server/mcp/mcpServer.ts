@@ -265,7 +265,7 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
       }
 
       updateTask(id, { currentStage: next })
-      return { content: [{ type: 'text' as const, text: JSON.stringify(getTaskById(id)) }] }
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id) }) }] }
     },
   )
 
@@ -303,7 +303,7 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
         action: 'request_changes',
         details: { fromStage: task.currentStage, toStage: regressionStage, feedbackId: feedbackRow.id },
       })
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id), feedback: feedbackRow }) }] }
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id) }) }] }
     },
   )
 
@@ -320,7 +320,7 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
         mcpError(`Task is already ${task.currentStage}`)
       updateTask(id, { currentStage: 'cancelled' })
       appendAudit({ taskId: id, actor: 'user', action: 'cancelled' })
-      return { content: [{ type: 'text' as const, text: JSON.stringify(getTaskById(id)) }] }
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id) }) }] }
     },
   )
 

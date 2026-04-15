@@ -17,6 +17,7 @@ import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
 import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
+import { createMcpRouter } from './mcp/mcpRouter.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
 import { getSystemInfo } from './systemMonitor.js'
@@ -309,6 +310,14 @@ async function start() {
     orchestrator,
     broadcastTaskEvent,
     dispatcher,
+  }))
+
+  // MCP endpoint — stateless, bearer-token authenticated, mounted before
+  // the Vite catch-all so POST /api/mcp is never swallowed by the SPA.
+  app.use('/api', createMcpRouter(orchestrator, (taskId) => {
+    const task = getTaskById(taskId)
+    if (task)
+      broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
   }))
 
   // Spawn a new Claude agent process
