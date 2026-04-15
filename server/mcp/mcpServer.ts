@@ -1,13 +1,12 @@
 import type { McpScope, PipelineStage } from '../../src/types.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { createHash, randomBytes } from 'node:crypto'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import { createApiKey, getApiKeyById, listApiKeys, revokeApiKey } from '../db/apiKeysRepo.js'
+import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import { createFeedback } from '../db/feedbackRepo.js'
 import {
-  createPermissionRequest as _createPermissionRequest,
   createTaskPermission,
   getPermissionRequestById,
   listPendingPermissionRequests,
@@ -41,9 +40,19 @@ function requireScope(scopes: Set<McpScope>, needed: McpScope): void {
 }
 
 const VALID_STAGES = new Set<string>([
-  'backlog', 'pruefung', 'refinement', 'planning', 'approval1',
-  'umsetzungskonzept', 'approval2', 'umsetzung', 'selbstreview',
-  'finalisierung', 'done', 'on_hold', 'cancelled',
+  'backlog',
+  'pruefung',
+  'refinement',
+  'planning',
+  'approval1',
+  'umsetzungskonzept',
+  'approval2',
+  'umsetzung',
+  'selbstreview',
+  'finalisierung',
+  'done',
+  'on_hold',
+  'cancelled',
 ])
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -73,7 +82,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     async ({ id_or_slug }) => {
       requireScope(scopes, 'tasks:read')
       const task = getTaskById(id_or_slug) ?? getTaskBySlug(id_or_slug)
-      if (!task) mcpError(`Task not found: ${id_or_slug}`)
+      if (!task)
+        mcpError(`Task not found: ${id_or_slug}`)
       return { content: [{ type: 'text' as const, text: JSON.stringify(task) }] }
     },
   )
@@ -84,7 +94,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     { task_id: z.string() },
     async ({ task_id }) => {
       requireScope(scopes, 'tasks:read')
-      if (!getTaskById(task_id)) mcpError(`Task not found: ${task_id}`)
+      if (!getTaskById(task_id))
+        mcpError(`Task not found: ${task_id}`)
       return { content: [{ type: 'text' as const, text: JSON.stringify(listStageRunsForTask(task_id)) }] }
     },
   )
@@ -95,7 +106,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     { task_id: z.string() },
     async ({ task_id }) => {
       requireScope(scopes, 'tasks:read')
-      if (!getTaskById(task_id)) mcpError(`Task not found: ${task_id}`)
+      if (!getTaskById(task_id))
+        mcpError(`Task not found: ${task_id}`)
       return { content: [{ type: 'text' as const, text: JSON.stringify(listAuditForTask(task_id)) }] }
     },
   )
@@ -133,8 +145,10 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     },
     async (args) => {
       requireScope(scopes, 'tasks:write')
-      if (!SLUG_RE.test(args.slug)) mcpError('slug must match [a-z0-9][a-z0-9-]{0,63}')
-      if (getTaskBySlug(args.slug)) mcpError(`slug already exists: ${args.slug}`)
+      if (!SLUG_RE.test(args.slug))
+        mcpError('slug must match [a-z0-9][a-z0-9-]{0,63}')
+      if (getTaskBySlug(args.slug))
+        mcpError(`slug already exists: ${args.slug}`)
       const task = createTask({
         slug: args.slug,
         title: args.title,
@@ -170,7 +184,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     async ({ id, ...fields }) => {
       requireScope(scopes, 'tasks:write')
       const task = updateTask(id, fields)
-      if (!task) mcpError(`Task not found: ${id}`)
+      if (!task)
+        mcpError(`Task not found: ${id}`)
       return { content: [{ type: 'text' as const, text: JSON.stringify(task) }] }
     },
   )
@@ -182,7 +197,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     async ({ id }) => {
       requireScope(scopes, 'tasks:write')
       const ok = deleteTask(id)
-      if (!ok) mcpError(`Task not found: ${id}`)
+      if (!ok)
+        mcpError(`Task not found: ${id}`)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ success: true }) }] }
     },
   )
@@ -196,7 +212,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     async ({ id }) => {
       requireScope(scopes, 'pipeline:control')
       const stageRun = await orchestrator.progressTask(id)
-      if (!stageRun) mcpError('Task cannot progress (terminal, not found, or no free runner slot)')
+      if (!stageRun)
+        mcpError('Task cannot progress (terminal, not found, or no free runner slot)')
       const task = getTaskById(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ task, stageRun }) }] }
     },
@@ -209,13 +226,15 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     async ({ id }) => {
       requireScope(scopes, 'pipeline:control')
       const task = getTaskById(id)
-      if (!task) mcpError(`Task not found: ${id}`)
+      if (!task)
+        mcpError(`Task not found: ${id}`)
       const nextMap: Partial<Record<PipelineStage, PipelineStage>> = {
         approval1: 'umsetzungskonzept',
         approval2: 'umsetzung',
       }
       const next = nextMap[task.currentStage]
-      if (!next) mcpError(`Task in stage ${task.currentStage} cannot be approved`)
+      if (!next)
+        mcpError(`Task in stage ${task.currentStage} cannot be approved`)
 
       // approval2: bulk-grant tool permissions declared in umsetzungskonzept output
       if (task.currentStage === 'approval2') {
@@ -224,13 +243,16 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
         if (Array.isArray(rawRequests)) {
           const existing = listTaskPermissions(task.id)
           for (const req of rawRequests) {
-            if (typeof req !== 'object' || req === null) continue
+            if (typeof req !== 'object' || req === null)
+              continue
             const r = req as Record<string, unknown>
             const tool = typeof r.tool === 'string' ? r.tool.trim() : null
             const pattern = typeof r.pattern === 'string' && r.pattern.trim() ? r.pattern.trim() : null
-            if (!tool) continue
+            if (!tool)
+              continue
             const alreadyGranted = existing.some(p => p.tool === tool && (p.pattern ?? null) === pattern && p.granted)
-            if (alreadyGranted) continue
+            if (alreadyGranted)
+              continue
             createTaskPermission({ taskId: task.id, tool, pattern, granted: true, preApproved: true, decidedBy: 'user' })
           }
           appendAudit({
@@ -254,13 +276,15 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     async ({ id, feedback }) => {
       requireScope(scopes, 'pipeline:control')
       const task = getTaskById(id)
-      if (!task) mcpError(`Task not found: ${id}`)
+      if (!task)
+        mcpError(`Task not found: ${id}`)
       const stageMap: Partial<Record<PipelineStage, 'planning' | 'umsetzungskonzept'>> = {
         approval1: 'planning',
         approval2: 'umsetzungskonzept',
       }
       const regressionStage = stageMap[task.currentStage]
-      if (!regressionStage) mcpError(`Task in stage ${task.currentStage} cannot receive change requests`)
+      if (!regressionStage)
+        mcpError(`Task in stage ${task.currentStage} cannot receive change requests`)
 
       const priorRun = listStageRunsForTask(task.id)
         .filter(r => r.stage === regressionStage && r.status === 'done')
@@ -290,7 +314,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     async ({ id }) => {
       requireScope(scopes, 'pipeline:control')
       const task = getTaskById(id)
-      if (!task) mcpError(`Task not found: ${id}`)
+      if (!task)
+        mcpError(`Task not found: ${id}`)
       if (task.currentStage === 'done' || task.currentStage === 'cancelled')
         mcpError(`Task is already ${task.currentStage}`)
       updateTask(id, { currentStage: 'cancelled' })
@@ -305,9 +330,11 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     { id: z.string() },
     async ({ id }) => {
       requireScope(scopes, 'pipeline:control')
-      if (!getTaskById(id)) mcpError(`Task not found: ${id}`)
+      if (!getTaskById(id))
+        mcpError(`Task not found: ${id}`)
       const stageRun = await orchestrator.progressTask(id)
-      if (!stageRun) mcpError('Task cannot be retried (check stage run status or runner slots)')
+      if (!stageRun)
+        mcpError('Task cannot be retried (check stage run status or runner slots)')
       return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id), stageRun }) }] }
     },
   )
@@ -318,7 +345,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     { task_id: z.string(), tool: z.string(), pattern: z.string().optional() },
     async ({ task_id, tool, pattern }) => {
       requireScope(scopes, 'pipeline:control')
-      if (!getTaskById(task_id)) mcpError(`Task not found: ${task_id}`)
+      if (!getTaskById(task_id))
+        mcpError(`Task not found: ${task_id}`)
       const perm = createTaskPermission({
         taskId: task_id,
         tool,
@@ -338,7 +366,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     async ({ request_id, outcome }) => {
       requireScope(scopes, 'pipeline:control')
       const req = getPermissionRequestById(request_id)
-      if (!req) mcpError(`Permission request not found: ${request_id}`)
+      if (!req)
+        mcpError(`Permission request not found: ${request_id}`)
       const resolved = resolvePermissionRequest(request_id, outcome)
       if (outcome === 'granted') {
         const run = getStageRunById(req.stageRunId)
@@ -391,7 +420,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     { id: z.string() },
     async ({ id }) => {
       requireScope(scopes, 'keys:manage')
-      if (!getApiKeyById(id)) mcpError(`API key not found: ${id}`)
+      if (!getApiKeyById(id))
+        mcpError(`API key not found: ${id}`)
       revokeApiKey(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ success: true }) }] }
     },
