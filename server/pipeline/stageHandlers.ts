@@ -85,7 +85,7 @@ export function createAgentStage(
       // agent can authenticate against the dashboard's /api/mcp endpoint.
       const rawToken = `mcp_${randomBytes(16).toString('hex')}`
       const keyHash = createHash('sha256').update(rawToken).digest('hex')
-      upsertStageRunApiKey({
+      void upsertStageRunApiKey({
         name: `stage-run:${ctx.stageRun.id}`,
         keyHash,
         scopes: ['tasks:read', 'pipeline:control'],
