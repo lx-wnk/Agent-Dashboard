@@ -222,3 +222,16 @@ export interface NotificationPreference {
   channels: NotificationChannel[]
   enabled: boolean
 }
+
+// MCP API Key types
+export type McpScope = 'tasks:read' | 'tasks:write' | 'pipeline:control' | 'keys:manage'
+
+export interface ApiKey {
+  id: string
+  name: string
+  // key_hash is intentionally absent — never send the hash over the wire
+  scopes: McpScope[]
+  active: boolean
+  createdAt: string
+  lastUsedAt: string | null
+}
