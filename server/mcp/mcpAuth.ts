@@ -3,7 +3,10 @@ import type { NextFunction, Request, Response } from 'express'
 import { createHash } from 'node:crypto'
 import { getApiKeyByHash, touchApiKey } from '../db/apiKeysRepo.js'
 
-// Which scope each MCP tool requires
+// Documentation of the scope each MCP tool requires.
+// NOTE: This map is NOT wired into runtime enforcement — each tool handler
+// calls requireScope() directly. Keep this map in sync with mcpServer.ts
+// for auditing and tests; a drift here indicates a real mismatch to investigate.
 export const TOOL_SCOPE_MAP: Record<string, McpScope> = {
   // tasks:read
   list_tasks: 'tasks:read',
