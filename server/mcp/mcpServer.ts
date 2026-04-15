@@ -15,6 +15,7 @@ import {
 } from '../db/permissionsRepo.js'
 import {
   getLatestStageRun,
+  getLatestStageRunForTask,
   getStageRunById,
   listStageRunsForTask,
 } from '../db/stageRunsRepo.js'
@@ -57,7 +58,11 @@ const VALID_STAGES = new Set<string>([
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
-export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<McpScope>): McpServer {
+export function buildMcpServer(
+  orchestrator: PipelineOrchestrator,
+  scopes: Set<McpScope>,
+  broadcast: (taskId: string) => void,
+): McpServer {
   const server = new McpServer({ name: 'dashboard-tasks', version: '1.0.0' })
 
   // ─── tasks:read ───────────────────────────────────────────────
@@ -118,6 +123,8 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     { task_id: z.string() },
     async ({ task_id }) => {
       requireScope(scopes, 'tasks:read')
+      if (!getTaskById(task_id))
+        mcpError(`Task not found: ${task_id}`)
       const runs = listStageRunsForTask(task_id)
       const requests = runs.flatMap(r => listPendingPermissionRequests(r.id))
       return { content: [{ type: 'text' as const, text: JSON.stringify(requests) }] }
@@ -163,6 +170,7 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
         tokenBudget: args.tokenBudget ?? null,
         costBudgetCents: args.costBudgetCents ?? null,
       })
+      broadcast(task.id)
       return { content: [{ type: 'text' as const, text: JSON.stringify(task) }] }
     },
   )
@@ -186,6 +194,7 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
       const task = updateTask(id, fields)
       if (!task)
         mcpError(`Task not found: ${id}`)
+      broadcast(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify(task) }] }
     },
   )
@@ -214,6 +223,7 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
       const stageRun = await orchestrator.progressTask(id)
       if (!stageRun)
         mcpError('Task cannot progress (terminal, not found, or no free runner slot)')
+      broadcast(id)
       const task = getTaskById(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ task, stageRun }) }] }
     },
@@ -265,6 +275,7 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
       }
 
       updateTask(id, { currentStage: next })
+      broadcast(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id) }) }] }
     },
   )
@@ -301,8 +312,9 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
         taskId: task.id,
         actor: 'user',
         action: 'request_changes',
-        details: { fromStage: task.currentStage, toStage: regressionStage, feedbackId: feedbackRow.id },
+        details: { fromStage: task.currentStage, toStage: regressionStage, feedbackId: feedbackRow.id, iteration: feedbackRow.iteration },
       })
+      broadcast(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id) }) }] }
     },
   )
@@ -320,6 +332,7 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
         mcpError(`Task is already ${task.currentStage}`)
       updateTask(id, { currentStage: 'cancelled' })
       appendAudit({ taskId: id, actor: 'user', action: 'cancelled' })
+      broadcast(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id) }) }] }
     },
   )
@@ -330,11 +343,22 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
     { id: z.string() },
     async ({ id }) => {
       requireScope(scopes, 'pipeline:control')
-      if (!getTaskById(id))
+      const task = getTaskById(id)
+      if (!task)
         mcpError(`Task not found: ${id}`)
+      const latest = getLatestStageRunForTask(id)
+      if (!latest || latest.stage !== task.currentStage || latest.status !== 'failed')
+        mcpError('Task has no failed stage run to retry on its current stage')
+      appendAudit({
+        taskId: id,
+        actor: 'user',
+        action: 'retry_requested',
+        details: { stage: latest.stage, iteration: latest.iteration },
+      })
       const stageRun = await orchestrator.progressTask(id)
       if (!stageRun)
-        mcpError('Task cannot be retried (check stage run status or runner slots)')
+        mcpError('Task could not progress (slot full, no handler, or terminal)')
+      broadcast(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id), stageRun }) }] }
     },
   )
@@ -380,6 +404,7 @@ export function buildMcpServer(orchestrator: PipelineOrchestrator, scopes: Set<M
             preApproved: false,
           })
           await orchestrator.resumeFromUser(run.taskId)
+          broadcast(run.taskId)
         }
       }
       return { content: [{ type: 'text' as const, text: JSON.stringify(resolved) }] }
