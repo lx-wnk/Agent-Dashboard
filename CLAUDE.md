@@ -139,12 +139,32 @@ The same pattern applies inside `StageContext` (`server/pipeline/types.ts`): sta
 - New runner-picker priority tier? Update `comparePickOrder` in `orchestrator.ts` AND the `project_task_pipeline_runner_model` memory, in that order. The memory captures user intent; code changes must stay consistent with it.
 - **SSE event coverage for new transitions / mutation paths:** the kanban relies on `onTaskChanged` (fires after every successful `applyTransition`) plus the route-level `broadcastEnrichedUpdate(taskId)` helper in `server/routes/taskRoutes.ts`. Both must produce **enriched** payloads (via `enrichTask`), otherwise the cards lose `latestStageRunStatus` / `needsUser` and the run-status chip vanishes. When you add a new mutation endpoint, call `broadcastEnrichedUpdate(taskId)` — never raw `broadcastTaskEvent({ payload: getTaskById(...) })`. When you add a new transition kind to `applyTransition`, the existing `onTaskChanged` call covers it automatically. A 60s polling fallback in `useTasks.ts` is a safety net only — don't rely on it for primary updates.
 
+## MCP Endpoint
+
+A stateless StreamableHTTP MCP server at `POST /api/mcp` — each request is self-contained (no server-side session map).
+
+**Authentication:** Bearer token (`Authorization: Bearer mcp_<hex>`). Tokens are never stored — only their SHA-256 hash lives in the `api_keys` SQLite table. Clients must also send `Accept: application/json, text/event-stream`.
+
+**Scope model:** `tasks:read` | `tasks:write` | `pipeline:control` | `keys:manage`. Higher scopes imply lower ones (`keys:manage` → all; `tasks:write` → `tasks:read`). Each MCP tool checks its required scope at call time and returns an MCP error if insufficient.
+
+**Key files:**
+- `server/db/apiKeysRepo.ts` — CRUD for `api_keys` table (SHA-256 hashed tokens, `upsertStageRunApiKey` for iterate re-key)
+- `server/mcp/mcpAuth.ts` — `mcpAuthMiddleware` (hash lookup + scope resolution), `TOOL_SCOPE_MAP`
+- `server/mcp/mcpServer.ts` — `buildMcpServer(orchestrator, scopes, broadcast)` — all tool registrations
+- `server/mcp/mcpRouter.ts` — `createMcpRouter` — thin Express router that creates a transport per request
+- `server/routes/apiKeyRoutes.ts` — REST CRUD for API keys (`GET/POST/DELETE /api/settings/api-keys`)
+- `src/components/ApiKeySettings.vue` — UI for creating/revoking keys
+
+**Layering:** `server/mcp/*` imports `db/*` and `pipeline/orchestrator.ts` (type-only) only. Never imports `notifications/` or `routes/`.
+
+**Pipeline env vars injected into spawned stage agents:** `DASHBOARD_MCP_TOKEN` (stage-scoped bearer token), `DASHBOARD_MCP_URL` (e.g. `http://127.0.0.1:13120/api/mcp`). These allow stage agents to call back into the dashboard MCP endpoint.
+
 ## Key Conventions
 
 - Path alias: `@/*` maps to `./src/*` (configured in tsconfig.json and vite.config.ts)
 - Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data). **Multi-machine mode** (`DASHBOARD_REMOTES` env var) requires remote instances to be network-accessible; use a VPN or SSH tunnel — never bind to `0.0.0.0` on an untrusted network.
 - **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (override via `DASHBOARD_DB_PATH`; see ADR-0001). The scope boundary is strict — do not mix.
-- **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge).
+- **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge), `DASHBOARD_MCP_TOKEN` + `DASHBOARD_MCP_URL` (injected for MCP callback access).
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
 - **Platform:** macOS and Linux. `server/systemMonitor.ts` uses `top` on macOS and `/proc/stat` on Linux for CPU; `server/processScanner.ts` uses `lsof` on macOS and `/proc/<pid>/cwd` on Linux. Windows is unsupported.
