@@ -324,6 +324,21 @@ describe('notificationConfigRepo', () => {
   })
 })
 
+describe('api_keys table', () => {
+  it('has the expected columns after migration', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(api_keys)').all() as Array<{ name: string }>
+    const names = cols.map(c => c.name)
+    expect(names).toContain('id')
+    expect(names).toContain('name')
+    expect(names).toContain('key_hash')
+    expect(names).toContain('scopes')
+    expect(names).toContain('active')
+    expect(names).toContain('created_at')
+    expect(names).toContain('last_used_at')
+  })
+})
+
 describe('legacy DB migration', () => {
   // This suite intentionally sidesteps the global beforeEach (which
   // initializes a fresh schema). It simulates a pre-existing dashboard

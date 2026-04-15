@@ -25,6 +25,7 @@
     "fix": "eslint . --fix && vue-tsc --noEmit && vitest run"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.8.0",
     "consola": "^3.4.2",
     "dompurify": "^3.3.3",
