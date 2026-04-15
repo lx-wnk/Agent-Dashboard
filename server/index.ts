@@ -18,6 +18,7 @@ import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
 import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
+import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
 import { getSystemInfo } from './systemMonitor.js'
@@ -303,6 +304,9 @@ async function start() {
     res.status(403).json({ error: 'Cross-origin request blocked' })
     return true
   }
+
+  // API key management routes (browser-facing, CSRF-guarded, no bearer token required)
+  app.use('/api', createApiKeyRouter({ rejectCrossOrigin }))
 
   // Task pipeline routes (must come after rejectCrossOrigin definition)
   app.use('/api', createTaskRouter({
