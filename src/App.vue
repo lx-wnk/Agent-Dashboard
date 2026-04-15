@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
+import ApiKeySettings from './components/ApiKeySettings.vue'
 import BacklogForm from './components/BacklogForm.vue'
 import CostTrend from './components/CostTrend.vue'
 import PipelineBoard from './components/PipelineBoard.vue'
@@ -21,6 +22,7 @@ const { tasks, selectedTask, selectTask } = useTasks()
 const showSpawnDialog = ref(false)
 const showBacklog = ref(false)
 const showSessions = ref(false)
+const showSettings = ref(false)
 const scriptPath = ref('')
 const homeDir = ref('')
 const copied = ref(false)
@@ -46,11 +48,12 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
   <div class="app">
     <header class="app-header">
       <h1>Claude Agent Overview</h1>
-      <span v-if="viewMode !== 'pipeline'" class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
-      <span v-else class="agent-count">{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
+      <span v-if="!showSettings && viewMode !== 'pipeline'" class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
+      <span v-else-if="!showSettings" class="agent-count">{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span v-if="totalCost > 0" class="header-stat">${{ totalCost.toFixed(2) }}</span>
       <span v-if="totalTokens > 0" class="header-stat">{{ formatTokens(totalTokens) }} tokens</span>
       <input
+        v-if="!showSettings"
         v-model="searchQuery"
         class="header-search"
         type="text"
@@ -59,19 +62,27 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <div class="view-toggle">
         <button
           class="toggle-btn"
-          :class="{ active: viewMode !== 'pipeline' }"
+          :class="{ active: !showSettings && viewMode !== 'pipeline' }"
           title="Agent monitoring dashboard"
-          @click="viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
+          @click="showSettings = false; viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
         >
           Dashboard
         </button>
         <button
           class="toggle-btn"
-          :class="{ active: viewMode === 'pipeline' }"
+          :class="{ active: !showSettings && viewMode === 'pipeline' }"
           title="Task pipeline kanban"
-          @click="viewMode = 'pipeline'"
+          @click="showSettings = false; viewMode = 'pipeline'"
         >
           Kanban
+        </button>
+        <button
+          class="toggle-btn"
+          :class="{ active: showSettings }"
+          title="Settings"
+          @click="showSettings = true"
+        >
+          Settings
         </button>
       </div>
       <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
@@ -105,7 +116,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <code class="script-path" tabindex="0" role="button" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript" @keydown.enter="copyScript" @keydown.space.prevent="copyScript">{{ scriptPath }}</code>
       <span v-if="copied" class="copied-hint">Copied!</span>
     </div>
-    <div v-if="viewMode !== 'pipeline'" class="sub-toolbar">
+    <div v-if="!showSettings && viewMode !== 'pipeline'" class="sub-toolbar">
       <button
         class="sub-toggle-btn"
         :class="{ active: viewMode === 'cards' }"
@@ -124,26 +135,29 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       </button>
     </div>
     <main>
-      <p v-if="isLoading" class="loading">
-        Loading agents...
-      </p>
-      <p v-else-if="error" class="error">
-        Error: {{ error }}
-      </p>
-      <AgentTable
-        v-else-if="viewMode === 'list'"
-        :agents="filteredAgents"
-        @select="selectAgent"
-      />
-      <PipelineBoard
-        v-else-if="viewMode === 'pipeline'"
-        @select="selectTask"
-      />
-      <AgentCardGrid
-        v-else
-        :agents="filteredAgents"
-        @select="selectAgent"
-      />
+      <ApiKeySettings v-if="showSettings" />
+      <template v-else>
+        <p v-if="isLoading" class="loading">
+          Loading agents...
+        </p>
+        <p v-else-if="error" class="error">
+          Error: {{ error }}
+        </p>
+        <AgentTable
+          v-else-if="viewMode === 'list'"
+          :agents="filteredAgents"
+          @select="selectAgent"
+        />
+        <PipelineBoard
+          v-else-if="viewMode === 'pipeline'"
+          @select="selectTask"
+        />
+        <AgentCardGrid
+          v-else
+          :agents="filteredAgents"
+          @select="selectAgent"
+        />
+      </template>
     </main>
     <AgentModal
       :agent="selectedAgent"
