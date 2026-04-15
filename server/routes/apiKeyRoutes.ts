@@ -28,7 +28,7 @@ export function createApiKeyRouter(deps: ApiKeyRouterDeps): Router {
   router.post('/settings/api-keys', (req, res) => {
     if (deps.rejectCrossOrigin(req, res))
       return
-    const { name, scopes } = req.body as { name?: string; scopes?: McpScope[] }
+    const { name, scopes } = req.body as { name?: string, scopes?: McpScope[] }
 
     if (!name || typeof name !== 'string' || !name.trim())
       return void res.status(400).json({ error: 'name is required' })
@@ -42,8 +42,15 @@ export function createApiKeyRouter(deps: ApiKeyRouterDeps): Router {
 
     const token = `mcp_${randomBytes(16).toString('hex')}`
     const keyHash = createHash('sha256').update(token).digest('hex')
-    const key = createApiKey({ name: name.trim(), keyHash, scopes })
-    res.status(201).json({ key, token })
+    try {
+      const key = createApiKey({ name: name.trim(), keyHash, scopes })
+      res.status(201).json({ key, token })
+    }
+    catch (err) {
+      if ((err as Error).message?.includes('UNIQUE constraint'))
+        return void res.status(409).json({ error: 'An API key with this name already exists' })
+      throw err
+    }
   })
 
   // DELETE /api/settings/api-keys/:id

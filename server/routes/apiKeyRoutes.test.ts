@@ -49,7 +49,7 @@ async function api<T = unknown>(method: string, path: string, body?: unknown): P
   return { status: res.status, data }
 }
 
-describe('GET /api/settings/api-keys', () => {
+describe('gET /api/settings/api-keys', () => {
   it('returns 200 with an array (empty when no keys exist)', async () => {
     const { status, data } = await api<unknown[]>('GET', '/settings/api-keys')
     expect(status).toBe(200)
@@ -57,7 +57,7 @@ describe('GET /api/settings/api-keys', () => {
   })
 })
 
-describe('POST /api/settings/api-keys', () => {
+describe('pOST /api/settings/api-keys', () => {
   it('creates a key and returns 201 with key + token', async () => {
     const { status, data } = await api<{ key: { id: string, name: string }, token: string }>(
       'POST',
@@ -100,9 +100,20 @@ describe('POST /api/settings/api-keys', () => {
     expect(status).toBe(400)
     expect(data.error).toMatch(/invalid scope/i)
   })
+
+  it('returns 409 when name already exists', async () => {
+    await api('POST', '/settings/api-keys', { name: 'Dup', scopes: ['tasks:read'] })
+    const { status, data } = await api<{ error: string }>(
+      'POST',
+      '/settings/api-keys',
+      { name: 'Dup', scopes: ['tasks:write'] },
+    )
+    expect(status).toBe(409)
+    expect(data.error).toMatch(/already exists/i)
+  })
 })
 
-describe('DELETE /api/settings/api-keys/:id', () => {
+describe('dELETE /api/settings/api-keys/:id', () => {
   it('revokes an existing key and returns 204', async () => {
     // Create a key first
     const { data: created } = await api<{ key: { id: string } }>(
