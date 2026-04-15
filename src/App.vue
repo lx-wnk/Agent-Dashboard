@@ -3,18 +3,23 @@ import { computed, ref } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
+import BacklogForm from './components/BacklogForm.vue'
 import CostTrend from './components/CostTrend.vue'
-import KanbanBoard from './components/KanbanBoard.vue'
+import PipelineBoard from './components/PipelineBoard.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
+import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
+import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { formatTokens, totalTokenCount } from './utils/format'
 
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
 const { theme, toggleTheme } = useTheme()
+const { tasks, selectedTask, selectTask } = useTasks()
 const showSpawnDialog = ref(false)
+const showBacklog = ref(false)
 const showSessions = ref(false)
 const scriptPath = ref('')
 const homeDir = ref('')
@@ -41,39 +46,32 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
   <div class="app">
     <header class="app-header">
       <h1>Claude Agent Overview</h1>
-      <span class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
+      <span v-if="viewMode !== 'pipeline'" class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
+      <span v-else class="agent-count">{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span v-if="totalCost > 0" class="header-stat">${{ totalCost.toFixed(2) }}</span>
       <span v-if="totalTokens > 0" class="header-stat">{{ formatTokens(totalTokens) }} tokens</span>
       <input
         v-model="searchQuery"
         class="header-search"
         type="text"
-        placeholder="Search agents..."
+        :placeholder="viewMode === 'pipeline' ? 'Search tasks...' : 'Search agents...'"
       >
       <div class="view-toggle">
         <button
           class="toggle-btn"
-          :class="{ active: viewMode === 'list' }"
-          title="List view"
-          @click="viewMode = 'list'"
+          :class="{ active: viewMode !== 'pipeline' }"
+          title="Agent monitoring dashboard"
+          @click="viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
         >
-          ≡
+          Dashboard
         </button>
         <button
           class="toggle-btn"
-          :class="{ active: viewMode === 'cards' }"
-          title="Card view"
-          @click="viewMode = 'cards'"
+          :class="{ active: viewMode === 'pipeline' }"
+          title="Task pipeline kanban"
+          @click="viewMode = 'pipeline'"
         >
-          ⊞
-        </button>
-        <button
-          class="toggle-btn"
-          :class="{ active: viewMode === 'kanban' }"
-          title="Kanban view"
-          @click="viewMode = 'kanban'"
-        >
-          ▦
+          Kanban
         </button>
       </div>
       <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
@@ -89,7 +87,14 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <button class="sessions-btn" @click="showSessions = true">
         Sessions
       </button>
-      <button class="spawn-btn" @click="showSpawnDialog = true">
+      <button
+        v-if="viewMode === 'pipeline'"
+        class="spawn-btn"
+        @click="showBacklog = true"
+      >
+        + New Task
+      </button>
+      <button v-else class="spawn-btn" @click="showSpawnDialog = true">
         + New Agent
       </button>
     </header>
@@ -99,6 +104,24 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <span class="script-label">Channel script:</span>
       <code class="script-path" tabindex="0" role="button" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript" @keydown.enter="copyScript" @keydown.space.prevent="copyScript">{{ scriptPath }}</code>
       <span v-if="copied" class="copied-hint">Copied!</span>
+    </div>
+    <div v-if="viewMode !== 'pipeline'" class="sub-toolbar">
+      <button
+        class="sub-toggle-btn"
+        :class="{ active: viewMode === 'cards' }"
+        title="Card view"
+        @click="viewMode = 'cards'"
+      >
+        ⊞ Cards
+      </button>
+      <button
+        class="sub-toggle-btn"
+        :class="{ active: viewMode === 'list' }"
+        title="List view"
+        @click="viewMode = 'list'"
+      >
+        ≡ List
+      </button>
     </div>
     <main>
       <p v-if="isLoading" class="loading">
@@ -112,10 +135,9 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
         :agents="filteredAgents"
         @select="selectAgent"
       />
-      <KanbanBoard
-        v-else-if="viewMode === 'kanban'"
-        :agents="filteredAgents"
-        @select="selectAgent"
+      <PipelineBoard
+        v-else-if="viewMode === 'pipeline'"
+        @select="selectTask"
       />
       <AgentCardGrid
         v-else
@@ -127,9 +149,17 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       :agent="selectedAgent"
       @close="selectAgent(null)"
     />
+    <TaskModal
+      :task="selectedTask"
+      @close="selectTask(null)"
+    />
     <SpawnDialog
       :open="showSpawnDialog"
       @close="showSpawnDialog = false"
+    />
+    <BacklogForm
+      :open="showBacklog"
+      @close="showBacklog = false"
     />
     <SessionList
       :open="showSessions"
@@ -319,10 +349,12 @@ body {
   background: none;
   border: none;
   color: var(--text-muted);
-  padding: 6px 10px;
-  font-size: 14px;
+  padding: 6px 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
 }
 .toggle-btn.active {
   background: var(--accent-blue);
@@ -330,6 +362,33 @@ body {
 }
 .toggle-btn:not(.active):hover {
   color: var(--text-primary);
+}
+
+.sub-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.sub-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.sub-toggle-btn.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.sub-toggle-btn:not(.active):hover {
+  color: var(--text-secondary);
 }
 
 .loading, .error {

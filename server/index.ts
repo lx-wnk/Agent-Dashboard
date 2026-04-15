@@ -1,4 +1,5 @@
 import type { Buffer } from 'node:buffer'
+import type { TaskEvent } from './routes/taskRoutes.js'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -10,9 +11,13 @@ import { consola } from 'consola'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
+import { getTaskById } from './db/tasksRepo.js'
 import { parseFullSession } from './jsonlParser.js'
+import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
+import { PipelineOrchestrator } from './pipeline/orchestrator.js'
 import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
+import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
 import { getSystemInfo } from './systemMonitor.js'
 
@@ -179,6 +184,103 @@ async function start() {
     }
   })
 
+  // ─── Task Pipeline SSE + Router ────────────────
+
+  const taskSseClients = new Set<express.Response>()
+  function broadcastTaskEvent(event: TaskEvent) {
+    const data = `data: ${JSON.stringify(event)}\n\n`
+    for (const client of taskSseClients) {
+      try {
+        if (!client.writableEnded)
+          client.write(data)
+      }
+      catch {
+        taskSseClients.delete(client)
+      }
+    }
+  }
+
+  app.get('/api/tasks/stream', (_req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    res.flushHeaders()
+    taskSseClients.add(res)
+    _req.on('close', () => {
+      taskSseClients.delete(res)
+    })
+  })
+
+  // Browser notifications are pushed through the task SSE stream.
+  setSseBroadcaster((payload) => {
+    broadcastTaskEvent({
+      type: 'stage_run_updated', // reuse event channel for notifications
+      taskId: payload.taskId,
+      payload: { notification: payload },
+    })
+  })
+  const dispatcher = createDispatcher()
+
+  const orchestrator = new PipelineOrchestrator({
+    onPermissionRequest: (taskId, request) => {
+      broadcastTaskEvent({ type: 'permission_request', taskId, payload: request })
+      // Look up the task for a meaningful notification title. The lookup
+      // is a single synchronous SQLite read — cheap, and ensures both the
+      // REST and orchestrator-driven notification paths produce identical
+      // payloads.
+      const task = getTaskById(taskId)
+      // If the task was deleted between the orchestrator firing and this
+      // callback running, skip the notification — matches the REST path
+      // which also early-returns on !task.
+      if (!task)
+        return
+      dispatcher
+        .dispatch({
+          eventType: 'on_hold',
+          title: `Task "${task.title}" needs permission`,
+          body: `Agent requests ${request.tool}${request.pattern ? ` (${request.pattern})` : ''}${request.reason ? `\nReason: ${request.reason}` : ''}`,
+          taskId,
+          taskSlug: task.slug,
+          severity: 'warning',
+        })
+        .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
+    },
+    onTaskChanged: (taskId, info) => {
+      // Fired by the orchestrator after every successful applyTransition.
+      // Push the latest enriched task row so kanban clients see stage
+      // advances, iterations, on_hold/awaiting_user, and done — not just
+      // failures. enrichTask adds latestStageRunStatus + needsUser, which
+      // the kanban cards bind to for their status chip.
+      const task = getTaskById(taskId)
+      if (task)
+        broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
+      else
+        broadcastTaskEvent({ type: 'stage_run_updated', taskId, payload: info })
+    },
+    onStageFailed: (taskId, info) => {
+      // Push a task_updated event so the SSE clients re-fetch and see
+      // the new needsUser flag (derived from latestStageRunStatus='failed').
+      broadcastTaskEvent({ type: 'stage_run_updated', taskId, payload: info })
+      const task = getTaskById(taskId)
+      if (!task)
+        return
+      dispatcher
+        .dispatch({
+          eventType: 'failed',
+          title: `Task "${task.title}" stage failed`,
+          body: `Stage ${info.stage} (iter ${info.iteration}) failed:\n${info.error}`,
+          taskId,
+          taskSlug: task.slug,
+          severity: 'error',
+        })
+        .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
+    },
+  })
+  orchestrator.start()
+
   // CSRF protection for mutation endpoints
   function rejectCrossOrigin(req: express.Request, res: express.Response): boolean {
     const origin = req.headers.origin || ''
@@ -200,6 +302,14 @@ async function start() {
     res.status(403).json({ error: 'Cross-origin request blocked' })
     return true
   }
+
+  // Task pipeline routes (must come after rejectCrossOrigin definition)
+  app.use('/api', createTaskRouter({
+    rejectCrossOrigin,
+    orchestrator,
+    broadcastTaskEvent,
+    dispatcher,
+  }))
 
   // Spawn a new Claude agent process
   app.post('/api/agents/spawn', (req, res) => {

@@ -25,17 +25,21 @@
     "fix": "eslint . --fix && vue-tsc --noEmit && vitest run"
   },
   "dependencies": {
+    "better-sqlite3": "^12.8.0",
     "consola": "^3.4.2",
     "dompurify": "^3.3.3",
     "express": "^5.1.0",
     "marked": "^18.0.0",
+    "nodemailer": "^8.0.5",
     "vue": "^3.5.13"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^8.1.0",
     "@playwright/test": "^1.59.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.2",
     "@types/node": "^22.15.2",
+    "@types/nodemailer": "^8.0.0",
     "@vitejs/plugin-vue": "^5.2.3",
     "@vue/test-utils": "^2.4.6",
     "eslint": "^10.2.0",

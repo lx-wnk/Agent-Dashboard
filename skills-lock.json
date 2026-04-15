@@ -1,34 +1,40 @@
 {
-  "skills": [
-    {
-      "name": "vue",
-      "source": "https://raw.githubusercontent.com/antfu/skills/main/skills/vue/SKILL.md",
-      "description": "Vue 3 Composition API, script setup, reactivity system",
-      "author": "Anthony Fu"
+  "version": 1,
+  "skills": {
+    "agent-context-init": {
+      "source": "lx-wnk/skills",
+      "sourceType": "github",
+      "computedHash": "62a74ce6ca0c7c96c0337b9675cdcb7845313329aca9a9108a0c51bf7fead042"
     },
-    {
-      "name": "vitest",
-      "source": "https://raw.githubusercontent.com/antfu/skills/main/skills/vitest/SKILL.md",
-      "description": "Vitest unit testing with Jest-compatible API",
-      "author": "Anthony Fu"
+    "agent-context-update": {
+      "source": "lx-wnk/skills",
+      "sourceType": "github",
+      "computedHash": "19bd4f5659e1fab0aea1d960896351d6266ece553ea65dfbd43e594e0ee98190"
     },
-    {
-      "name": "vite",
-      "source": "https://raw.githubusercontent.com/antfu/skills/main/skills/vite/SKILL.md",
-      "description": "Vite build tool configuration and plugin API",
-      "author": "Anthony Fu"
+    "architecture-design": {
+      "source": "lx-wnk/skills",
+      "sourceType": "github",
+      "computedHash": "c78759ef3b9fb4acc390eadc2b7f8a9562709800e4d53c1a4e0e02c132170ebb"
     },
-    {
-      "name": "vueuse-functions",
-      "source": "https://raw.githubusercontent.com/antfu/skills/main/skills/vueuse-functions/SKILL.md",
-      "description": "VueUse composables for concise, maintainable Vue features",
-      "author": "SerKo"
+    "architecture-review": {
+      "source": "lx-wnk/skills",
+      "sourceType": "github",
+      "computedHash": "648e915351408c1cf248478bb83a54e7c2034522529c1f294fe6aea665b3c7e0"
     },
-    {
-      "name": "playwright-best-practices",
-      "source": "https://raw.githubusercontent.com/currents-dev/playwright-best-practices-skill/main/SKILL.md",
-      "description": "Playwright E2E testing patterns, Page Object Model, CI/CD",
-      "author": "currents.dev"
+    "component-design": {
+      "source": "lx-wnk/skills",
+      "sourceType": "github",
+      "computedHash": "021859ebfa16257de5988c8afb2bedb1208480a8e403557147541072aa18fb22"
+    },
+    "component-review": {
+      "source": "lx-wnk/skills",
+      "sourceType": "github",
+      "computedHash": "f6542bb25c0182dc34bd1b69008d7f1673f9df5e39ac67ff01ce452f302a193d"
+    },
+    "review-and-fix": {
+      "source": "lx-wnk/skills",
+      "sourceType": "github",
+      "computedHash": "441d0366ea13369316cc13936bee68d6b192f2164c238266c13868f72db4ad5b"
     }
-  ]
+  }
 }

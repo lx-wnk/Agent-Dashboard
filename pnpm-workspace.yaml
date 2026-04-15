@@ -6,4 +6,5 @@ packages:
   - .
   - channel
 onlyBuiltDependencies:
+  - better-sqlite3
   - esbuild

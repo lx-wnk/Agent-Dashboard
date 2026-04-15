@@ -69,6 +69,16 @@ describe('encodePath', () => {
   it('handles path with consecutive underscores', () => {
     expect(encodePath('/foo__bar')).toBe('-foo--bar')
   })
+
+  it('converts dots to dashes (Claude CLI encoding)', () => {
+    // Observed from ~/.claude/projects: `/.claude/` becomes `--claude-`
+    // because both the leading slash AND the dot each map to -.
+    expect(encodePath('/home/.claude/worktrees/x')).toBe('-home--claude-worktrees-x')
+  })
+
+  it('handles paths with dotted segments in the middle', () => {
+    expect(encodePath('/Users/alex/dot-files/home/.claude/x')).toBe('-Users-alex-dot-files-home--claude-x')
+  })
 })
 
 describe('extractSessionInfo', () => {
