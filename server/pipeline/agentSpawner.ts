@@ -32,6 +32,10 @@ export interface SpawnAgentOptions {
   permissions: TaskPermission[]
   enableChannel?: boolean
   resumeSessionId?: string | null
+  /** Short-lived MCP token for this stage run (raw `mcp_<hex>` value). */
+  mcpToken?: string
+  /** MCP endpoint URL, e.g. "http://127.0.0.1:13120/api/mcp". */
+  mcpUrl?: string
 }
 
 export interface SpawnResult {
@@ -83,11 +87,16 @@ export function buildSpawnArgs(opts: SpawnAgentOptions): string[] {
  * right task. Pure function — exported for testing.
  */
 export function buildSpawnEnv(opts: SpawnAgentOptions): NodeJS.ProcessEnv {
-  return {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     DASHBOARD_STAGE_RUN_ID: opts.stageRun.id,
     DASHBOARD_TASK_ID: opts.task.id,
   }
+  if (opts.mcpToken)
+    env.DASHBOARD_MCP_TOKEN = opts.mcpToken
+  if (opts.mcpUrl)
+    env.DASHBOARD_MCP_URL = opts.mcpUrl
+  return env
 }
 
 /**

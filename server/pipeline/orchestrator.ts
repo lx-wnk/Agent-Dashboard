@@ -15,6 +15,7 @@ import {
   updateStageRun,
 } from '../db/stageRunsRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
+import { revokeApiKeyByName } from '../db/apiKeysRepo.js'
 import { detectCompletion } from './completionDetector.js'
 import { buildSessionName, decideRecovery } from './sessionManager.js'
 import { getHandlerForStage } from './stageHandlers.js'
@@ -451,6 +452,14 @@ export class PipelineOrchestrator {
     // Return the run that the caller expects to inspect (the updated one for
     // most transitions, or the new iteration for `iterate`).
     const resultRun = getStageRunById(newRunId ?? updatedRunId)!
+
+    // Revoke the ephemeral MCP token that was minted for this stage run when
+    // the run reaches any terminal state. async_running keeps the token alive
+    // so the still-running agent can authenticate; all other transitions end
+    // the run and must revoke immediately to limit the token's validity window.
+    if (transition.kind !== 'async_running') {
+      revokeApiKeyByName(`stage-run:${stageRun.id}`)
+    }
 
     // Fire onTaskChanged for every transition so SSE listeners see the
     // happy path too — `next`, `wait_user`, `iterate`, `on_hold`, `done`,

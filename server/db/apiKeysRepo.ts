@@ -53,6 +53,38 @@ export function revokeApiKey(id: string, db: Database = getDb()): boolean {
   return result.changes > 0
 }
 
+export function revokeApiKeyByName(name: string, db: Database = getDb()): boolean {
+  const result = db.prepare('UPDATE api_keys SET active = 0 WHERE name = ?').run(name)
+  return result.changes > 0
+}
+
+/**
+ * Insert or replace a stage-run API key. Used by stage handlers so that a
+ * re-keyed iterate run (same stageRun.id, new token) replaces the prior key
+ * without hitting the UNIQUE name constraint.
+ */
+export function upsertStageRunApiKey(input: CreateApiKeyInput, db: Database = getDb()): ApiKey {
+  const id = randomUUID()
+  db.prepare(`
+    INSERT INTO api_keys (id, name, key_hash, scopes, active, created_at)
+    VALUES (@id, @name, @key_hash, @scopes, 1, @created_at)
+    ON CONFLICT(name) DO UPDATE SET
+      id = excluded.id,
+      key_hash = excluded.key_hash,
+      scopes = excluded.scopes,
+      active = 1,
+      created_at = excluded.created_at,
+      last_used_at = NULL
+  `).run({
+    id,
+    name: input.name,
+    key_hash: input.keyHash,
+    scopes: JSON.stringify(input.scopes),
+    created_at: nowIso(),
+  })
+  return getApiKeyById(id, db)!
+}
+
 export function touchApiKey(id: string, db: Database = getDb()): void {
   db.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?').run(nowIso(), id)
 }

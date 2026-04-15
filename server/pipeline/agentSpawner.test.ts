@@ -168,4 +168,24 @@ describe('buildSpawnEnv', () => {
     // PATH is present on every sane system
     expect(env.PATH).toBeDefined()
   })
+
+  it('injects DASHBOARD_MCP_TOKEN when mcpToken is provided', () => {
+    const env = buildSpawnEnv({ ...baseOpts, mcpToken: 'mcp_abc123' })
+    expect(env.DASHBOARD_MCP_TOKEN).toBe('mcp_abc123')
+  })
+
+  it('omits DASHBOARD_MCP_TOKEN when mcpToken is absent', () => {
+    const env = buildSpawnEnv(baseOpts)
+    expect(env.DASHBOARD_MCP_TOKEN).toBeUndefined()
+  })
+
+  it('injects DASHBOARD_MCP_URL when mcpUrl is provided', () => {
+    const env = buildSpawnEnv({ ...baseOpts, mcpUrl: 'http://127.0.0.1:13120/api/mcp' })
+    expect(env.DASHBOARD_MCP_URL).toBe('http://127.0.0.1:13120/api/mcp')
+  })
+
+  it('omits DASHBOARD_MCP_URL when mcpUrl is absent', () => {
+    const env = buildSpawnEnv(baseOpts)
+    expect(env.DASHBOARD_MCP_URL).toBeUndefined()
+  })
 })
