@@ -15,8 +15,10 @@ let tmpDir: string
 let server: ReturnType<express.Express['listen']>
 let baseUrl: string
 let orchestrator: PipelineOrchestrator
+let broadcastedDeletedIds: string[]
 
 beforeEach(async () => {
+  broadcastedDeletedIds = []
   tmpDir = mkdtempSync(join(tmpdir(), 'mcp-integration-test-'))
   process.env.DASHBOARD_DB_PATH = join(tmpDir, 'test.db')
   getDb()
@@ -25,7 +27,7 @@ beforeEach(async () => {
   const app = expressLib()
   app.use(expressLib.json())
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin: () => false }))
-  app.use('/api', createMcpRouter(orchestrator, () => {}, () => {}))
+  app.use('/api', createMcpRouter(orchestrator, () => {}, id => broadcastedDeletedIds.push(id)))
 
   server = await new Promise<ReturnType<express.Express['listen']>>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s))
@@ -153,6 +155,23 @@ describe('MCP integration', () => {
     const fetchedTask = JSON.parse(getBody.result!.content![0].text) as { id: string, slug: string }
     expect(fetchedTask.id).toBe(createdTask.id)
     expect(fetchedTask.slug).toBe('test-task')
+  })
+
+  it('deletes a task via MCP and fires broadcastDeleted with the task id', async () => {
+    const token = await createAdminKey('delete-test-admin')
+
+    const createRes = await mcpToolCall(token, 'create_task', { slug: 'to-delete', title: 'Task to Delete', cwd: '/tmp' })
+    const created = JSON.parse(
+      (createRes.body as { result?: { content?: Array<{ text: string }> } }).result!.content![0].text,
+    ) as { id: string }
+
+    const deleteRes = await mcpToolCall(token, 'delete_task', { id: created.id })
+    expect(deleteRes.status).toBe(200)
+    const deleteBody = deleteRes.body as { result?: { content?: Array<{ text: string }> }, error?: unknown }
+    expect(deleteBody.error).toBeUndefined()
+    expect(JSON.parse(deleteBody.result!.content![0].text)).toEqual({ success: true })
+
+    expect(broadcastedDeletedIds).toContain(created.id)
   })
 
   it('returns MCP error "Insufficient scope" when an operator-scoped key calls list_api_keys', async () => {
