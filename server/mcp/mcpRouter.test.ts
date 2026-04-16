@@ -25,7 +25,7 @@ beforeEach(async () => {
   orchestrator = new PipelineOrchestrator()
   const app = expressLib()
   app.use(expressLib.json())
-  app.use('/api', createMcpRouter(orchestrator, () => {}))
+  app.use('/api', createMcpRouter(orchestrator, () => {}, () => {}))
 
   server = await new Promise<ReturnType<express.Express['listen']>>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s))

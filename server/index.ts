@@ -318,11 +318,17 @@ async function start() {
 
   // MCP endpoint — stateless, bearer-token authenticated, mounted before
   // the Vite catch-all so POST /api/mcp is never swallowed by the SPA.
-  app.use('/api', createMcpRouter(orchestrator, (taskId) => {
-    const task = getTaskById(taskId)
-    if (task)
-      broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
-  }))
+  app.use('/api', createMcpRouter(
+    orchestrator,
+    (taskId) => {
+      const task = getTaskById(taskId)
+      if (task)
+        broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
+    },
+    (taskId) => {
+      broadcastTaskEvent({ type: 'task_deleted', taskId })
+    },
+  ))
 
   // Spawn a new Claude agent process
   app.post('/api/agents/spawn', (req, res) => {

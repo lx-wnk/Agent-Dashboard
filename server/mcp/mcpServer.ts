@@ -62,6 +62,7 @@ export function buildMcpServer(
   orchestrator: PipelineOrchestrator,
   scopes: Set<McpScope>,
   broadcast: (taskId: string) => void,
+  broadcastDeleted: (taskId: string) => void,
 ): McpServer {
   const server = new McpServer({ name: 'dashboard-tasks', version: '1.0.0' })
 
@@ -208,6 +209,7 @@ export function buildMcpServer(
       const ok = deleteTask(id)
       if (!ok)
         mcpError(`Task not found: ${id}`)
+      broadcastDeleted(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ success: true }) }] }
     },
   )
