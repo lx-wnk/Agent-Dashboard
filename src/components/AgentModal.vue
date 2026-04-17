@@ -11,7 +11,7 @@ import TaskList from './TaskList.vue'
 import ToolTimeline from './ToolTimeline.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
 
 const localMessages = ref<OutputMessage[]>([])
 const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
@@ -66,6 +66,16 @@ onUnmounted(() => {
               ✕
             </button>
           </div>
+        </div>
+
+        <div v-if="agent.pipelineTaskId" class="task-link-banner">
+          <span class="task-link-text">
+            ⬡ Teil von
+            <strong>{{ agent.pipelineTaskTitle ?? `Task ${agent.pipelineTaskId.slice(0, 8)}` }}</strong>
+          </span>
+          <button class="task-link-btn" @click="emit('navigate', agent.pipelineTaskId)">
+            öffnen →
+          </button>
         </div>
 
         <AgentChatStream
@@ -143,6 +153,31 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 .modal-close:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.task-link-banner {
+  background: #1e3a5f;
+  border-bottom: 1px solid #1e4080;
+  padding: 5px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.task-link-text {
+  font-size: 11px;
+  color: #93c5fd;
+}
+.task-link-text strong { color: #60a5fa; }
+.task-link-btn {
+  background: none;
+  border: none;
+  color: #60a5fa;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  white-space: nowrap;
+}
+.task-link-btn:hover { color: #93c5fd; }
 .modal-output {
   flex: 1;
   padding: 16px;
