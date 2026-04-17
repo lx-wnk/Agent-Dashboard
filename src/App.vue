@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import type { Agent } from './types'
+import { computed, nextTick, ref } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
@@ -38,6 +39,20 @@ function copyScript() {
   setTimeout(() => {
     copied.value = false
   }, 2000)
+}
+
+function navigateTo(target: { agent?: Agent, taskId?: string }) {
+  selectAgent(null)
+  selectTask(null)
+  nextTick(() => {
+    if (target.agent)
+      selectAgent(target.agent)
+    if (target.taskId) {
+      const t = tasks.value.find(t => t.id === target.taskId)
+      if (t)
+        selectTask(t)
+    }
+  })
 }
 
 const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
@@ -162,10 +177,12 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
     <AgentModal
       :agent="selectedAgent"
       @close="selectAgent(null)"
+      @navigate="(taskId: string) => navigateTo({ taskId })"
     />
     <TaskModal
       :task="selectedTask"
       @close="selectTask(null)"
+      @navigate="(agent: Agent) => navigateTo({ agent })"
     />
     <SpawnDialog
       :open="showSpawnDialog"
