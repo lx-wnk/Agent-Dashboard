@@ -1,12 +1,32 @@
 import type { Agent, TokenUsage } from '../src/types.js'
 import { basename } from 'node:path'
 import { getChannelMap } from './channelDiscovery.js'
+import { findStageRunBySessionId } from './db/stageRunsRepo.js'
+import { getTaskById } from './db/tasksRepo.js'
 import { findSessionForProject } from './jsonlParser.js'
 import { estimateCost } from './pricing.js'
 import { scanProcesses } from './processScanner.js'
 
 const ACTIVE_THRESHOLD = 30_000 // 30s
 const IDLE_THRESHOLD = 300_000 // 5min
+
+export function enrichWithPipelineTask(agents: Agent[]): void {
+  for (const agent of agents) {
+    try {
+      const run = findStageRunBySessionId(agent.sessionId)
+      if (!run)
+        continue
+      const task = getTaskById(run.taskId)
+      if (!task)
+        continue
+      agent.pipelineTaskId = run.taskId
+      agent.pipelineTaskTitle = task.title
+    }
+    catch {
+      // DB not yet initialized on first boot — skip silently
+    }
+  }
+}
 
 export function calculateStatus(lastActivity: string): Agent['status'] {
   const age = Date.now() - new Date(lastActivity).getTime()
@@ -88,6 +108,8 @@ export async function getAgents(): Promise<Agent[]> {
       return diff
     return b.uptime - a.uptime
   })
+
+  enrichWithPipelineTask(agents)
 
   return agents
 }

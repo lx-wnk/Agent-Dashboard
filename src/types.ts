@@ -42,6 +42,9 @@ export interface Agent {
   lastOutput: string | null
   lastBtw: { message: string, response: string | null } | null
   machine?: string
+  /** Set when this agent session is running as part of a pipeline task stage. */
+  pipelineTaskId?: string
+  pipelineTaskTitle?: string
 }
 
 export interface ChannelReply {
