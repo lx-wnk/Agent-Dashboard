@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "dashboard": {
+      "type": "http",
+      "url": "http://127.0.0.1:13120/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DASHBOARD_MCP_TOKEN}"
+      }
+    }
+  }
+}

@@ -36,7 +36,7 @@ async function getCwdLinux(pid: number): Promise<string | null> {
 
 async function getCwdMac(pid: number): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync('lsof', ['-a', '-d', 'cwd', '-p', String(pid), '-Fn'])
+    const { stdout } = await execFileAsync('lsof', ['-a', '-d', 'cwd', '-p', String(pid), '-Fn'], { stdio: 'pipe' })
     const match = stdout.match(LSOF_PATH_RE)
     return match ? match[1] : null
   }
@@ -48,7 +48,7 @@ async function getCwdMac(pid: number): Promise<string | null> {
 const getCwd = IS_LINUX ? getCwdLinux : getCwdMac
 
 export async function scanProcesses(): Promise<ProcessInfo[]> {
-  const { stdout } = await execFileAsync('ps', ['-eo', 'pid,etime,comm'])
+  const { stdout } = await execFileAsync('ps', ['-eo', 'pid,etime,comm'], { stdio: 'pipe' })
   const lines = stdout.trim().split('\n').slice(1) // skip header
 
   const claudeLines = lines.filter((line) => {

@@ -113,7 +113,7 @@ export function spawnAnalysisAgent(opts: AnalysisSpawnOptions): AnalysisSpawnRes
 
   const prompt = buildAnalysisPrompt(opts)
 
-  const child = spawn('claude', ['-p', prompt], {
+  const child = spawn('claude', ['-p', prompt, '--permission-mode', 'acceptEdits'], {
     cwd,
     detached: true,
     stdio: ['ignore', 'ignore', 'pipe'],

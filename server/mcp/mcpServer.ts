@@ -395,9 +395,9 @@ export function buildMcpServer(
       if (!req)
         mcpError(`Permission request not found: ${request_id}`)
       const resolved = resolvePermissionRequest(request_id, outcome)
-      if (outcome === 'granted') {
-        const run = getStageRunById(req.stageRunId)
-        if (run) {
+      const run = getStageRunById(req.stageRunId)
+      if (run) {
+        if (outcome === 'granted') {
           createTaskPermission({
             taskId: run.taskId,
             tool: req.tool,
@@ -405,9 +405,9 @@ export function buildMcpServer(
             granted: true,
             preApproved: false,
           })
-          await orchestrator.resumeFromUser(run.taskId)
-          broadcast(run.taskId)
         }
+        await orchestrator.resumeFromUser(run.taskId)
+        broadcast(run.taskId)
       }
       return { content: [{ type: 'text' as const, text: JSON.stringify(resolved) }] }
     },
