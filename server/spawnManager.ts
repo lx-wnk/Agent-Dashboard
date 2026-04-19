@@ -24,8 +24,18 @@ const MAX_REPLIES_PER_PID = 50
 const MAX_STDERR_BYTES = 4096
 
 // Rate limit: sliding window, max spawn requests
-const RATE_LIMIT_WINDOW_MS = Number(process.env.DASHBOARD_SPAWN_RATE_WINDOW_MS ?? 60_000)
-const RATE_LIMIT_MAX = Number(process.env.DASHBOARD_SPAWN_RATE_LIMIT ?? 5)
+const RATE_LIMIT_WINDOW_MS = (() => {
+  const val = Number(process.env.DASHBOARD_SPAWN_RATE_WINDOW_MS ?? 60_000)
+  if (!Number.isFinite(val) || val <= 0)
+    throw new Error(`DASHBOARD_SPAWN_RATE_WINDOW_MS must be a positive integer (got: ${process.env.DASHBOARD_SPAWN_RATE_WINDOW_MS})`)
+  return val
+})()
+const RATE_LIMIT_MAX = (() => {
+  const val = Number(process.env.DASHBOARD_SPAWN_RATE_LIMIT ?? 5)
+  if (!Number.isFinite(val) || val <= 0)
+    throw new Error(`DASHBOARD_SPAWN_RATE_LIMIT must be a positive integer (got: ${process.env.DASHBOARD_SPAWN_RATE_LIMIT})`)
+  return val
+})()
 
 // Per-channel fetch timeout when forwarding a user message
 const CHANNEL_MESSAGE_TIMEOUT_MS = 5000

@@ -44,7 +44,14 @@ if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
     `[security] Dashboard bound to ${HOST} — ensure this host is on a trusted network or VPN. Never expose to the public internet.`,
   )
 }
-const SSE_INTERVAL_MS = Number(process.env.DASHBOARD_SSE_INTERVAL_MS ?? 3000)
+const SSE_INTERVAL_MS = (() => {
+  const val = Number(process.env.DASHBOARD_SSE_INTERVAL_MS ?? 3000)
+  if (!Number.isFinite(val) || val <= 0) {
+    console.warn(`[config] DASHBOARD_SSE_INTERVAL_MS invalid (got: ${process.env.DASHBOARD_SSE_INTERVAL_MS}); using 3000ms default`)
+    return 3000
+  }
+  return val
+})()
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 
 // Spawn state + logic (rate limit, stderr ring-buffer, reply store,
