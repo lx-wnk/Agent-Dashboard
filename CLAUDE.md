@@ -120,7 +120,7 @@ server/index.ts  ← composition root (only place that constructs concrete insta
 2. `pipeline/*` — imports `db/*` and `src/types.ts` only. Never imports `notifications/`, `routes/`, `services/`, or `mcp/`.
 3. `services/*` — stateless helpers. Imports only `db/*`, `src/types.ts`, `server/paths.ts`, `server/platform.ts`, and `node:*`. Type-only imports from `pipeline/orchestrator.ts` (e.g. `import type { ... } from '../pipeline/orchestrator'`) are allowed; no runtime dependency on the orchestrator. Never imports `notifications/`, `routes/`, or `mcp/`.
 4. `notifications/*` — imports `db/notificationConfigRepo` and `src/types.ts` only. Adapters are private to `dispatcher.ts`.
-5. `routes/*` and `mcp/*` — may import from `db/*`, `services/*`, `src/types.ts`, and type-only from `pipeline/orchestrator.ts` and `notifications/dispatcher.ts`. Runtime instances of the orchestrator and dispatcher are injected from `server/index.ts`.
+5. `routes/*` and `mcp/*` — may import from `db/*`, `services/*`, `src/types.ts`, and type-only from `pipeline/orchestrator.ts` and `notifications/dispatcher.ts`. Runtime instances of the orchestrator and dispatcher are injected from `server/index.ts`. Runtime imports from `pipeline/*` are limited to specific named helpers that do not touch the state machine (currently: `resolvedProjectDir` from `pipeline/sessionOutputReader.ts`, used by `routes/taskRoutes.ts`); never import the orchestrator, stage handlers, completion detector, or any other state-machine internals at runtime.
 6. `server/index.ts` is the **only** file that instantiates concrete services. It is the composition root.
 
 **Why `pipeline/` does not import `notifications/`:**
@@ -165,7 +165,7 @@ A stateless StreamableHTTP MCP server at `POST /api/mcp` — each request is sel
 - `server/routes/apiKeyRoutes.ts` — REST CRUD for API keys (`GET/POST/DELETE /api/settings/api-keys`)
 - `src/components/ApiKeySettings.vue` — UI for creating/revoking keys
 
-**Layering:** `server/mcp/*` imports `db/*` and `pipeline/orchestrator.ts` (type-only) only. Never imports `notifications/` or `routes/`.
+**Layering:** `server/mcp/*` imports `db/*`, `services/*`, `src/types.ts`, and `pipeline/orchestrator.ts` (type-only) only. Never imports `notifications/` or `routes/`. (See Rule 5 below for the full routes/mcp ↔ pipeline policy.)
 
 **Pipeline env vars injected into spawned stage agents:** `DASHBOARD_MCP_TOKEN` (stage-scoped bearer token), `DASHBOARD_MCP_URL` (e.g. `http://127.0.0.1:13120/api/mcp`). These allow stage agents to call back into the dashboard MCP endpoint.
 
