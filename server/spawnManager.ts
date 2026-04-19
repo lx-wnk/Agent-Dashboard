@@ -106,6 +106,10 @@ export class SpawnManager {
    * `isSpawnAllowed()` first — this method consumes a slot unconditionally.
    */
   spawnAgent(body: SpawnRequest): SpawnResult {
+    // Consume a rate-limit slot up-front — matches pre-extraction semantics
+    // where even requests that fail validation counted against the window.
+    this.recordSpawnAttempt()
+
     const { prompt, cwd, model, systemPrompt, enableChannel, skipPermissions, resumeSessionId } = body
 
     if (!prompt || typeof prompt !== 'string') {
@@ -130,8 +134,6 @@ export class SpawnManager {
     }
 
     try {
-      this.recordSpawnAttempt()
-
       const args: string[] = []
       if (skipPermissions) {
         args.push('--dangerously-skip-permissions')
