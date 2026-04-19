@@ -673,6 +673,15 @@ async function start() {
     app.use(vite.middlewares)
   }
 
+  // Global Express error middleware — must come after all routes/middleware.
+  // Express detects error handlers by their 4-parameter signature.
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    consola.error('Unhandled route error', err)
+    if (!res.headersSent)
+      res.status(500).json({ error: message })
+  })
+
   httpServer.listen(PORT, '127.0.0.1', () => {
     const mode = isProd ? 'production' : 'development'
     consola.info(`Claude Agent Overview (${mode}) running at http://localhost:${PORT}`)
