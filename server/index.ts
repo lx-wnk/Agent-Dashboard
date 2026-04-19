@@ -1,4 +1,5 @@
 import type { TaskEvent } from './routes/taskRoutes.js'
+import { timingSafeEqual } from 'node:crypto'
 import { fstatSync, mkdirSync, openSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
@@ -430,7 +431,9 @@ async function start() {
         const discoveryPath = join(DISCOVERY_DIR, `${parentPid}.json`)
         const raw = await readFile(discoveryPath, 'utf-8')
         const discovery = JSON.parse(raw)
-        if (discovery.token !== token) {
+        const expected = Buffer.from(String(discovery.token))
+        const provided = Buffer.from(token)
+        if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
           res.status(403).json({ error: 'Invalid token' })
           return
         }

@@ -76,7 +76,14 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
   }
   req.mcpAuth = { keyId: key.id, effectiveScopes: resolveScopes(key.scopes) }
   // Fire-and-forget — last_used_at update must not block the request
-  setImmediate(() => touchApiKey(key.id))
+  setImmediate(() => {
+    try {
+      touchApiKey(key.id)
+    }
+    catch (e) {
+      console.warn('[mcpAuth] touchApiKey failed', e)
+    }
+  })
   next()
 }
 

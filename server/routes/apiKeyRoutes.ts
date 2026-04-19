@@ -46,7 +46,7 @@ export function createApiKeyRouter(deps: ApiKeyRouterDeps): Router {
       res.status(201).json({ key, token })
     }
     catch (err) {
-      if ((err as Error).message?.includes('UNIQUE constraint'))
+      if (err instanceof Error && (err as NodeJS.ErrnoException & { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE')
         return void res.status(409).json({ error: 'An API key with this name already exists' })
       throw err
     }
