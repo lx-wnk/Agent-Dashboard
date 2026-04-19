@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage, PermissionRequest, PipelineTask, StageRun, TaskFeedback, TaskPermission } from '../types'
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
   analyzeTask,
@@ -242,17 +242,14 @@ async function onGrantPermission() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.task) {
+  if (!props.task)
+    return
+  if (e.key === 'Escape') {
     e.preventDefault()
     emit('close')
   }
 }
-watch(() => props.task, (t) => {
-  if (t)
-    window.addEventListener('keydown', onKeydown)
-  else
-    window.removeEventListener('keydown', onKeydown)
-}, { immediate: true })
+onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 function formatDate(iso: string | null): string {

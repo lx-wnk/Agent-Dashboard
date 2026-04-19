@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
@@ -33,22 +33,16 @@ watch(() => props.agent?.sessionId, (sessionId) => {
 })
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.agent) {
+  if (!props.agent)
+    return
+  if (e.key === 'Escape') {
     e.preventDefault()
     emit('close')
   }
 }
 
-watch(() => props.agent, (agent) => {
-  if (agent)
-    window.addEventListener('keydown', onKeydown)
-  else
-    window.removeEventListener('keydown', onKeydown)
-}, { immediate: true })
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
-})
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>

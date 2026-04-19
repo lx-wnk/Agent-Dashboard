@@ -24,8 +24,8 @@ const emit = defineEmits<{
 
 <style scoped>
 .task-link-banner {
-  background: #1e3a5f;
-  border-bottom: 1px solid #1e4080;
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent);
   padding: 5px 16px;
   display: flex;
   align-items: center;
@@ -34,18 +34,18 @@ const emit = defineEmits<{
 }
 .task-link-text {
   font-size: 11px;
-  color: #93c5fd;
+  color: var(--text-secondary);
 }
-.task-link-text strong { color: #60a5fa; }
+.task-link-text strong { color: var(--accent-blue); }
 .task-link-btn {
   background: none;
   border: none;
-  color: #60a5fa;
+  color: var(--accent-blue);
   font-size: 11px;
   cursor: pointer;
   text-decoration: underline;
   padding: 0;
   white-space: nowrap;
 }
-.task-link-btn:hover { color: #93c5fd; }
+.task-link-btn:hover { color: var(--text-primary); }
 </style>

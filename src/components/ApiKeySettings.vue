@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ApiKey, McpScope } from '../types'
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 
 // --- State ---
 const keys = ref<ApiKey[]>([])
@@ -16,7 +16,7 @@ const createError = ref('')
 
 // Token reveal modal
 const revealedToken = ref<string | null>(null)
-const copyHint = ref(false)
+const copyHint = ref<string | null>(null)
 
 // Revoke confirmation
 const confirmRevokeId = ref<string | null>(null)
@@ -47,7 +47,16 @@ async function loadKeys() {
   }
 }
 
-loadKeys()
+onMounted(loadKeys)
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    showCreateDialog.value = false
+    confirmRevokeId.value = null
+  }
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 // --- Revoke key ---
 async function revokeKey(key: ApiKey) {
@@ -123,16 +132,19 @@ async function handleCreate() {
 async function copyToken() {
   if (!revealedToken.value)
     return
-  await navigator.clipboard.writeText(revealedToken.value)
-  copyHint.value = true
-  setTimeout(() => {
-    copyHint.value = false
-  }, 2000)
+  try {
+    await navigator.clipboard.writeText(revealedToken.value)
+    copyHint.value = revealedToken.value
+  }
+  catch {
+    copyHint.value = '__error__'
+  }
+  setTimeout(() => { copyHint.value = null }, 2000)
 }
 
 function dismissReveal() {
   revealedToken.value = null
-  copyHint.value = false
+  copyHint.value = null
 }
 
 // --- Helpers ---
@@ -233,7 +245,6 @@ function formatDate(iso: string | null) {
         v-if="showCreateDialog"
         class="modal-backdrop"
         @click.self="closeCreateDialog"
-        @keydown.escape="closeCreateDialog"
       >
         <div class="modal">
           <header class="modal-header">
@@ -321,7 +332,9 @@ function formatDate(iso: string | null) {
             </div>
             <div class="reveal-actions">
               <button class="btn btn-primary" @click="copyToken">
-                {{ copyHint ? 'Copied!' : 'Copy to clipboard' }}
+                <span v-if="copyHint === '__error__'">Copy failed</span>
+                <span v-else-if="copyHint">Copied!</span>
+                <span v-else>Copy to clipboard</span>
               </button>
             </div>
           </div>
