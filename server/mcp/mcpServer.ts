@@ -1,6 +1,6 @@
 import type { McpScope, PipelineStage } from '../../src/types.js'
 import { VALID_STAGES } from '../../src/types.js'
-import { ALLOWED_TOOLS, bulkGrantKonzeptPermissions } from '../pipeline/approvalUtils.js'
+import { ALLOWED_TOOLS, bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { createHash, randomBytes } from 'node:crypto'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'

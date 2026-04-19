@@ -34,11 +34,11 @@ import {
   listTasksByStage,
   updateTask,
 } from '../db/tasksRepo.js'
-import { bulkGrantKonzeptPermissions } from '../pipeline/approvalUtils.js'
-import { spawnAnalysisAgent } from '../pipeline/analysisSpawner.js'
-import { recommendParallelism } from '../pipeline/resourceRecommender.js'
 import { resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
-import { createWorktree, removeWorktree } from '../pipeline/worktreeManager.js'
+import { spawnAnalysisAgent } from '../services/analysisSpawner.js'
+import { bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
+import { recommendParallelism } from '../services/resourceRecommender.js'
+import { createWorktree, removeWorktree } from '../services/worktreeManager.js'
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 

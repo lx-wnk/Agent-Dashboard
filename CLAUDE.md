@@ -72,10 +72,14 @@ The Task Pipeline subsystem (`server/db/`, `server/pipeline/`, `server/routes/ta
 - `completionDetector.ts` — converts a dead PID + session JSONL into a next/retry/fail decision. Strict per-stage schema validators (`validateStageOutput`) with injectable deps for tests.
 - `sessionOutputReader.ts` — reads the last assistant turn from a session JSONL, extracts the `` ```json `` block, falls back to newest-by-mtime session discovery when the stage_run has no `session_id` yet.
 - `sessionManager.ts` — `isPidAlive` (with EPERM handling), recovery decisions on orchestrator restart.
-- `analysisSpawner.ts` — spawns detached analysis agents (distinct from stage agents) for pre-pipeline analysis tasks.
-- `worktreeManager.ts` — creates and removes per-task git worktrees for isolated stage execution; root path via `DASHBOARD_WORKTREE_ROOT`.
-- `resourceRecommender.ts` — recommends parallelism cap based on available CPU/memory; consulted when setting `maxParallelOrchestrators`.
 - `types.ts` — `StageTransition` union (incl. `async_running`, `taskMetadataPatch` on `next`), `StageContext` with injected `recordAudit` / `requestPermission` side-effects.
+
+**Services** (`server/services/`) — stateless helpers consumed by `routes/*` and `mcp/*` (and, where appropriate, by `pipeline/*`). They do not drive the state machine and do not depend on the orchestrator at runtime:
+
+- `approvalUtils.ts` — `ALLOWED_TOOLS` allow-list and `bulkGrantKonzeptPermissions(taskId)`: bulk-grant every tool permission declared in the latest `umsetzungskonzept` stage output's `toolRequests` array.
+- `analysisSpawner.ts` — `spawnAnalysisAgent` / `buildAnalysisPrompt`: detached Claude CLI session for post-failure investigation. Distinct from `pipeline/agentSpawner.ts`; not part of the state machine (no stage_run, no channel MCP, no allow-list).
+- `resourceRecommender.ts` — `recommendParallelism()`: recommends a `maxParallelOrchestrators` value based on available CPU/memory.
+- `worktreeManager.ts` — `createWorktree` / `removeWorktree` / `isGitRepo` / `currentBranch` / `resolveWorktreeRoot`: per-task git worktrees under `DASHBOARD_WORKTREE_ROOT` (default `<repo>-worktrees` sibling), with legacy-path adoption.
 
 **Notifications** (`server/notifications/`):
 - `dispatcher.ts` — event-driven dispatcher; registered callbacks come from `server/index.ts` only (never imported by `pipeline/`).
@@ -97,21 +101,27 @@ server/index.ts  ← composition root (only place that constructs concrete insta
      └── creates TaskRouter (with TaskRouterDeps)
               │
               ▼
-        routes/taskRoutes.ts
+        routes/taskRoutes.ts ──┐
+              │                │
+        mcp/mcpServer.ts   ────┤ (both may import from services/*)
+              │                │
+              │                ▼
+              │          services/*  ─────►  db/*
               │ (type-only deps)
               ▼
         pipeline/*  ──────────►  db/*
               │
-              └─► (NO import of notifications/)
+              └─► (NO import of notifications/ or services/)
 ```
 
 **Layering rules:**
 
-1. `db/*` — imports only `node:*`, `better-sqlite3`, sibling db files, and type-only from `src/types.ts`. Never imports pipeline/notifications/routes.
-2. `pipeline/*` — imports `db/*` and `src/types.ts` only. Never imports `notifications/` or `routes/`.
-3. `notifications/*` — imports `db/notificationConfigRepo` and `src/types.ts` only. Adapters are private to `dispatcher.ts`.
-4. `routes/taskRoutes.ts` — receives `PipelineOrchestrator` and `Dispatcher` as type-only dependencies via `TaskRouterDeps`; runtime instances are injected from `server/index.ts`.
-5. `server/index.ts` is the **only** file that instantiates concrete services. It is the composition root.
+1. `db/*` — imports only `node:*`, `better-sqlite3`, sibling db files, and type-only from `src/types.ts`. Never imports pipeline/notifications/routes/services/mcp.
+2. `pipeline/*` — imports `db/*` and `src/types.ts` only. Never imports `notifications/`, `routes/`, `services/`, or `mcp/`.
+3. `services/*` — stateless helpers. Imports only `db/*`, `src/types.ts`, `server/paths.ts`, `server/platform.ts`, and `node:*`. Type-only imports from `pipeline/orchestrator.ts` (e.g. `import type { ... } from '../pipeline/orchestrator'`) are allowed; no runtime dependency on the orchestrator. Never imports `notifications/`, `routes/`, or `mcp/`.
+4. `notifications/*` — imports `db/notificationConfigRepo` and `src/types.ts` only. Adapters are private to `dispatcher.ts`.
+5. `routes/*` and `mcp/*` — may import from `db/*`, `services/*`, `src/types.ts`, and type-only from `pipeline/orchestrator.ts` and `notifications/dispatcher.ts`. Runtime instances of the orchestrator and dispatcher are injected from `server/index.ts`.
+6. `server/index.ts` is the **only** file that instantiates concrete services. It is the composition root.
 
 **Why `pipeline/` does not import `notifications/`:**
 
