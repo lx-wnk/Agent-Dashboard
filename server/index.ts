@@ -11,11 +11,11 @@ import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
 import { getTaskById } from './db/tasksRepo.js'
 import { parseFullSession } from './jsonlParser.js'
+import { createMcpRouter } from './mcp/mcpRouter.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
 import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
-import { createMcpRouter } from './mcp/mcpRouter.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
@@ -26,8 +26,12 @@ import { getSystemInfo } from './systemMonitor.js'
 // can be closed. If they are, the OS reuses those low numbers for new pipes, which
 // causes posix_spawn_file_actions_adddup2 to see an unexpected source FD → EBADF.
 for (let fd = 0; fd <= 2; fd++) {
-  try { fstatSync(fd) }
-  catch { openSync('/dev/null', fd === 0 ? 'r' : 'w') }
+  try {
+    fstatSync(fd)
+  }
+  catch {
+    openSync('/dev/null', fd === 0 ? 'r' : 'w')
+  }
 }
 
 // SECURITY: This server exposes session data (prompts, tool outputs, file paths).

@@ -1,5 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Agent } from '../src/types'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { calculateStatus, enrichWithPipelineTask } from './agentMerger'
+import { findStageRunBySessionId } from './db/stageRunsRepo.js'
+import { getTaskById } from './db/tasksRepo.js'
 
 vi.mock('./db/stageRunsRepo.js', () => ({
   findStageRunBySessionId: vi.fn(),
@@ -7,10 +11,6 @@ vi.mock('./db/stageRunsRepo.js', () => ({
 vi.mock('./db/tasksRepo.js', () => ({
   getTaskById: vi.fn(),
 }))
-
-import { findStageRunBySessionId } from './db/stageRunsRepo.js'
-import { getTaskById } from './db/tasksRepo.js'
-import { calculateStatus, enrichWithPipelineTask } from './agentMerger'
 
 // Thresholds from agentMerger.ts:
 //   ACTIVE_THRESHOLD = 30_000  (30s)
@@ -82,28 +82,68 @@ describe('enrichWithPipelineTask', () => {
 
   function makeAgent(sessionId: string): Agent {
     return {
-      pid: 1, sessionId, projectPath: '/tmp', projectName: 'proj', cwd: '/tmp',
-      entrypoint: 'cli', status: 'active', uptime: 1, lastActivity: new Date().toISOString(),
-      currentAction: null, lastTools: [], tasks: [], subagents: [],
+      pid: 1,
+      sessionId,
+      projectPath: '/tmp',
+      projectName: 'proj',
+      cwd: '/tmp',
+      entrypoint: 'cli',
+      status: 'active',
+      uptime: 1,
+      lastActivity: new Date().toISOString(),
+      currentAction: null,
+      lastTools: [],
+      tasks: [],
+      subagents: [],
       tokenUsage: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
-      costEstimate: 0, model: null, codeVersion: null, conversationTurns: 0,
-      toolCounts: {}, meta: null, lastOutput: null, lastBtw: null, channelAvailable: false,
+      costEstimate: 0,
+      model: null,
+      codeVersion: null,
+      conversationTurns: 0,
+      toolCounts: {},
+      meta: null,
+      lastOutput: null,
+      lastBtw: null,
+      channelAvailable: false,
     }
   }
 
   it('attaches pipelineTaskId and pipelineTaskTitle when stage run and task exist', () => {
     mockFindStageRun.mockReturnValue({
-      id: 'run-1', taskId: 'task-abc', stage: 'umsetzung', sessionId: 'sess-1',
-      sessionName: null, pid: 1, status: 'running',
-      startedAt: null, endedAt: null, iteration: 1, output: null,
-      tokensUsed: 0, costCents: 0,
+      id: 'run-1',
+      taskId: 'task-abc',
+      stage: 'umsetzung',
+      sessionId: 'sess-1',
+      sessionName: null,
+      pid: 1,
+      status: 'running',
+      startedAt: null,
+      endedAt: null,
+      iteration: 1,
+      output: null,
+      tokensUsed: 0,
+      costCents: 0,
     })
     mockGetTask.mockReturnValue({
-      id: 'task-abc', slug: 'my-task', title: 'My Task', description: null,
-      cwd: '/tmp', worktreePath: null, sourceBranch: null, targetBranch: null,
-      currentStage: 'umsetzung', parentTaskId: null, maxIterations: 5,
-      tokenBudget: null, costBudgetCents: null, stageTimeoutSeconds: 3600,
-      createdAt: '', updatedAt: '', metadata: null, silverBullet: false, priority: 'medium',
+      id: 'task-abc',
+      slug: 'my-task',
+      title: 'My Task',
+      description: null,
+      cwd: '/tmp',
+      worktreePath: null,
+      sourceBranch: null,
+      targetBranch: null,
+      currentStage: 'umsetzung',
+      parentTaskId: null,
+      maxIterations: 5,
+      tokenBudget: null,
+      costBudgetCents: null,
+      stageTimeoutSeconds: 3600,
+      createdAt: '',
+      updatedAt: '',
+      metadata: null,
+      silverBullet: false,
+      priority: 'medium',
     })
     const agents = [makeAgent('sess-1')]
     enrichWithPipelineTask(agents)
@@ -121,10 +161,19 @@ describe('enrichWithPipelineTask', () => {
 
   it('leaves fields undefined when stage run has no matching task', () => {
     mockFindStageRun.mockReturnValue({
-      id: 'run-2', taskId: 'missing-task', stage: 'umsetzung', sessionId: 'sess-3',
-      sessionName: null, pid: null, status: 'running',
-      startedAt: null, endedAt: null, iteration: 1, output: null,
-      tokensUsed: 0, costCents: 0,
+      id: 'run-2',
+      taskId: 'missing-task',
+      stage: 'umsetzung',
+      sessionId: 'sess-3',
+      sessionName: null,
+      pid: null,
+      status: 'running',
+      startedAt: null,
+      endedAt: null,
+      iteration: 1,
+      output: null,
+      tokensUsed: 0,
+      costCents: 0,
     })
     mockGetTask.mockReturnValue(null)
     const agents = [makeAgent('sess-3')]
@@ -134,7 +183,9 @@ describe('enrichWithPipelineTask', () => {
   })
 
   it('silently skips an agent when the DB throws', () => {
-    mockFindStageRun.mockImplementation(() => { throw new Error('DB not ready') })
+    mockFindStageRun.mockImplementation(() => {
+      throw new Error('DB not ready')
+    })
     const agents = [makeAgent('sess-4')]
     expect(() => enrichWithPipelineTask(agents)).not.toThrow()
     expect(agents[0].pipelineTaskId).toBeUndefined()

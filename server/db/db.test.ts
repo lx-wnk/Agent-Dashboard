@@ -1,10 +1,9 @@
+import { createHash, randomBytes } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { appendAudit, listAuditForTask } from './auditRepo.js'
-import { closeDb, getDb } from './client.js'
 import {
   createApiKey,
   getApiKeyByHash,
@@ -13,7 +12,8 @@ import {
   revokeApiKey,
   touchApiKey,
 } from './apiKeysRepo.js'
-import { createHash, randomBytes } from 'node:crypto'
+import { appendAudit, listAuditForTask } from './auditRepo.js'
+import { closeDb, getDb } from './client.js'
 import {
   getAllConfig,
   getConfig,
@@ -349,8 +349,12 @@ describe('api_keys table', () => {
 })
 
 describe('apiKeysRepo', () => {
-  function makeToken(): string { return `mcp_${randomBytes(16).toString('hex')}` }
-  function hashToken(t: string): string { return createHash('sha256').update(t).digest('hex') }
+  function makeToken(): string {
+    return `mcp_${randomBytes(16).toString('hex')}`
+  }
+  function hashToken(t: string): string {
+    return createHash('sha256').update(t).digest('hex')
+  }
 
   it('creates a key and retrieves it by hash', () => {
     const token = makeToken()

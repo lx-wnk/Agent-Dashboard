@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import type { ApiKey, McpScope } from '../types'
+import { ref } from 'vue'
 
 // --- State ---
 const keys = ref<ApiKey[]>([])
@@ -17,6 +17,9 @@ const createError = ref('')
 // Token reveal modal
 const revealedToken = ref<string | null>(null)
 const copyHint = ref(false)
+
+// Revoke confirmation
+const confirmRevokeId = ref<string | null>(null)
 
 // --- Group → scopes mapping ---
 const GROUP_SCOPES: Record<string, McpScope[]> = {
@@ -48,8 +51,7 @@ loadKeys()
 
 // --- Revoke key ---
 async function revokeKey(key: ApiKey) {
-  if (!window.confirm(`Revoke API key "${key.name}"? This cannot be undone.`))
-    return
+  confirmRevokeId.value = null
 
   // Optimistic update
   key.active = false
@@ -145,8 +147,12 @@ function formatDate(iso: string | null) {
   <div class="api-key-settings">
     <div class="settings-header">
       <div>
-        <h2 class="settings-title">API Keys</h2>
-        <p class="settings-subtitle">Manage MCP API keys for external access to this dashboard.</p>
+        <h2 class="settings-title">
+          API Keys
+        </h2>
+        <p class="settings-subtitle">
+          Manage MCP API keys for external access to this dashboard.
+        </p>
       </div>
       <button class="btn btn-primary" @click="openCreateDialog">
         + Add Key
@@ -182,7 +188,9 @@ function formatDate(iso: string | null) {
           :key="key.id"
           :class="{ revoked: !key.active }"
         >
-          <td class="cell-name">{{ key.name }}</td>
+          <td class="cell-name">
+            {{ key.name }}
+          </td>
           <td class="cell-scopes">
             <span
               v-for="scope in key.scopes"
@@ -190,20 +198,30 @@ function formatDate(iso: string | null) {
               class="scope-pill"
             >{{ scope }}</span>
           </td>
-          <td class="cell-date">{{ formatDate(key.createdAt) }}</td>
-          <td class="cell-date">{{ formatDate(key.lastUsedAt) }}</td>
+          <td class="cell-date">
+            {{ formatDate(key.createdAt) }}
+          </td>
+          <td class="cell-date">
+            {{ formatDate(key.lastUsedAt) }}
+          </td>
           <td>
             <span v-if="key.active" class="badge badge-active">Active</span>
             <span v-else class="badge badge-revoked">Revoked</span>
           </td>
           <td>
-            <button
-              v-if="key.active"
-              class="btn btn-danger btn-sm"
-              @click="revokeKey(key)"
-            >
-              Revoke
-            </button>
+            <template v-if="key.active">
+              <template v-if="confirmRevokeId === key.id">
+                <button class="btn btn-danger btn-sm" @click="revokeKey(key)">
+                  Confirm
+                </button>
+                <button class="btn btn-secondary btn-sm" style="margin-left:4px" @click="confirmRevokeId = null">
+                  Cancel
+                </button>
+              </template>
+              <button v-else class="btn btn-danger btn-sm" @click="confirmRevokeId = key.id">
+                Revoke
+              </button>
+            </template>
           </td>
         </tr>
       </tbody>
@@ -246,10 +264,18 @@ function formatDate(iso: string | null) {
                 v-model="newKeyGroup"
                 class="field-input"
               >
-                <option value="viewer">Viewer — tasks:read</option>
-                <option value="operator">Operator — tasks:read, pipeline:control</option>
-                <option value="developer">Developer — tasks:read, tasks:write, pipeline:control</option>
-                <option value="admin">Admin — all scopes</option>
+                <option value="viewer">
+                  Viewer — tasks:read
+                </option>
+                <option value="operator">
+                  Operator — tasks:read, pipeline:control
+                </option>
+                <option value="developer">
+                  Developer — tasks:read, tasks:write, pipeline:control
+                </option>
+                <option value="admin">
+                  Admin — all scopes
+                </option>
               </select>
             </div>
 

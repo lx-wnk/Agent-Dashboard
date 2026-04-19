@@ -1,5 +1,5 @@
-import type { McpScope } from '../../src/types.js'
 import type { NextFunction, Request, Response } from 'express'
+import type { McpScope } from '../../src/types.js'
 import { createHash } from 'node:crypto'
 import { getApiKeyByHash, touchApiKey } from '../db/apiKeysRepo.js'
 
@@ -51,9 +51,10 @@ export function resolveScopes(scopes: McpScope[]): Set<McpScope> {
 
 // Augment Express Request so downstream handlers can read mcpAuth
 declare global {
+  // eslint-disable-next-line ts/no-namespace
   namespace Express {
     interface Request {
-      mcpAuth?: { keyId: string; effectiveScopes: Set<McpScope> }
+      mcpAuth?: { keyId: string, effectiveScopes: Set<McpScope> }
     }
   }
 }
