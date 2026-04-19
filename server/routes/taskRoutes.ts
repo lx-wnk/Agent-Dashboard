@@ -1,5 +1,6 @@
 import type express from 'express'
 import type { NotificationEventType, PipelineStage, PipelineTask, StageRunStatus } from '../../src/types.js'
+import { VALID_STAGES } from '../../src/types.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { consola } from 'consola'
@@ -20,7 +21,6 @@ import {
   resolvePermissionRequest,
 } from '../db/permissionsRepo.js'
 import {
-  getLatestStageRun,
   getLatestStageRunForTask,
   getStageRunById,
   listStageRunsForTask,
@@ -34,6 +34,7 @@ import {
   listTasksByStage,
   updateTask,
 } from '../db/tasksRepo.js'
+import { bulkGrantKonzeptPermissions } from '../pipeline/approvalUtils.js'
 import { spawnAnalysisAgent } from '../pipeline/analysisSpawner.js'
 import { recommendParallelism } from '../pipeline/resourceRecommender.js'
 import { resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
@@ -54,21 +55,6 @@ export interface TaskEvent {
   payload?: unknown
 }
 
-const VALID_STAGES = new Set<PipelineStage>([
-  'backlog',
-  'pruefung',
-  'refinement',
-  'planning',
-  'approval1',
-  'umsetzungskonzept',
-  'approval2',
-  'umsetzung',
-  'selbstreview',
-  'finalisierung',
-  'done',
-  'on_hold',
-  'cancelled',
-])
 
 const VALID_EVENT_TYPES = new Set<NotificationEventType>([
   'on_hold',
@@ -381,32 +367,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     //
     // Deduplication: skip any (tool, pattern) pair that is already granted
     // so a double-click or re-approve doesn't create ghost rows.
-    if (task.currentStage === 'approval2') {
-      const konzeptRun = getLatestStageRun(task.id, 'umsetzungskonzept')
-      const rawRequests = (konzeptRun?.output as Record<string, unknown> | null)?.toolRequests
-      if (Array.isArray(rawRequests)) {
-        const existing = listTaskPermissions(task.id)
-        for (const req of rawRequests) {
-          if (typeof req !== 'object' || req === null)
-            continue
-          const r = req as Record<string, unknown>
-          const tool = typeof r.tool === 'string' ? r.tool.trim() : null
-          const pattern = typeof r.pattern === 'string' && r.pattern.trim() ? r.pattern.trim() : null
-          if (!tool)
-            continue
-          const alreadyGranted = existing.some(p => p.tool === tool && (p.pattern ?? null) === pattern && p.granted)
-          if (alreadyGranted)
-            continue
-          createTaskPermission({ taskId: task.id, tool, pattern, granted: true, preApproved: true, decidedBy: 'user' })
-        }
-        appendAudit({
-          taskId: task.id,
-          actor: 'user',
-          action: 'bulk_granted_tool_permissions',
-          details: { source: 'umsetzungskonzept_toolRequests', count: rawRequests.length },
-        })
-      }
-    }
+    if (task.currentStage === 'approval2')
+      bulkGrantKonzeptPermissions(task.id)
 
     updateTask(req.params.id, { currentStage: next })
     const updated = getTaskById(req.params.id)

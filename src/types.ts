@@ -94,6 +94,12 @@ export type PipelineStage
     | 'on_hold'
     | 'cancelled'
 
+export const VALID_STAGES = new Set<PipelineStage>([
+  'backlog', 'pruefung', 'refinement', 'planning',
+  'approval1', 'umsetzungskonzept', 'approval2', 'umsetzung',
+  'selbstreview', 'finalisierung', 'done', 'on_hold', 'cancelled',
+])
+
 // `failed` is NOT a pipeline stage — it lives only on stage_run.status.
 // When a stage run fails, the task stays on its current stage; the UI
 // derives "needs user" from latestStageRunStatus === 'failed' and offers

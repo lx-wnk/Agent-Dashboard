@@ -1,4 +1,6 @@
 import type { McpScope, PipelineStage } from '../../src/types.js'
+import { VALID_STAGES } from '../../src/types.js'
+import { ALLOWED_TOOLS, bulkGrantKonzeptPermissions } from '../pipeline/approvalUtils.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { createHash, randomBytes } from 'node:crypto'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -14,7 +16,6 @@ import {
   resolvePermissionRequest,
 } from '../db/permissionsRepo.js'
 import {
-  getLatestStageRun,
   getLatestStageRunForTask,
   getStageRunById,
   listStageRunsForTask,
@@ -40,21 +41,6 @@ function requireScope(scopes: Set<McpScope>, needed: McpScope): void {
     mcpError(`Insufficient scope: requires ${needed}`)
 }
 
-const VALID_STAGES = new Set<string>([
-  'backlog',
-  'pruefung',
-  'refinement',
-  'planning',
-  'approval1',
-  'umsetzungskonzept',
-  'approval2',
-  'umsetzung',
-  'selbstreview',
-  'finalisierung',
-  'done',
-  'on_hold',
-  'cancelled',
-])
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
@@ -74,7 +60,7 @@ export function buildMcpServer(
     { stage: z.string().optional().describe('Filter by pipeline stage') },
     async ({ stage }) => {
       requireScope(scopes, 'tasks:read')
-      if (stage && !VALID_STAGES.has(stage))
+      if (stage && !VALID_STAGES.has(stage as PipelineStage))
         mcpError(`Invalid stage: ${stage}`)
       const tasks = stage ? listTasksByStage(stage as PipelineStage) : listTasks()
       return { content: [{ type: 'text' as const, text: JSON.stringify(tasks) }] }
@@ -249,34 +235,11 @@ export function buildMcpServer(
         mcpError(`Task in stage ${task.currentStage} cannot be approved`)
 
       // approval2: bulk-grant tool permissions declared in umsetzungskonzept output
-      if (task.currentStage === 'approval2') {
-        const konzeptRun = getLatestStageRun(task.id, 'umsetzungskonzept')
-        const rawRequests = (konzeptRun?.output as Record<string, unknown> | null)?.toolRequests
-        if (Array.isArray(rawRequests)) {
-          const existing = listTaskPermissions(task.id)
-          for (const req of rawRequests) {
-            if (typeof req !== 'object' || req === null)
-              continue
-            const r = req as Record<string, unknown>
-            const tool = typeof r.tool === 'string' ? r.tool.trim() : null
-            const pattern = typeof r.pattern === 'string' && r.pattern.trim() ? r.pattern.trim() : null
-            if (!tool)
-              continue
-            const alreadyGranted = existing.some(p => p.tool === tool && (p.pattern ?? null) === pattern && p.granted)
-            if (alreadyGranted)
-              continue
-            createTaskPermission({ taskId: task.id, tool, pattern, granted: true, preApproved: true, decidedBy: 'user' })
-          }
-          appendAudit({
-            taskId: task.id,
-            actor: 'user',
-            action: 'bulk_granted_tool_permissions',
-            details: { source: 'umsetzungskonzept_toolRequests', count: rawRequests.length },
-          })
-        }
-      }
+      if (task.currentStage === 'approval2')
+        bulkGrantKonzeptPermissions(task.id)
 
       updateTask(id, { currentStage: next })
+      appendAudit({ taskId: id, actor: 'user', action: 'approved', details: { from: task.currentStage, to: next } })
       broadcast(id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ task: getTaskById(id) }) }] }
     },
@@ -368,7 +331,13 @@ export function buildMcpServer(
   server.tool(
     'grant_permission',
     'Pre-approve a tool for a task (added to allow-list for future stage runs)',
-    { task_id: z.string(), tool: z.string(), pattern: z.string().optional() },
+    {
+      task_id: z.string(),
+      tool: z.string().refine(t => ALLOWED_TOOLS.has(t), {
+        message: `tool must be one of: ${[...ALLOWED_TOOLS].sort().join(', ')}`,
+      }),
+      pattern: z.string().max(256).optional(),
+    },
     async ({ task_id, tool, pattern }) => {
       requireScope(scopes, 'pipeline:control')
       if (!getTaskById(task_id))

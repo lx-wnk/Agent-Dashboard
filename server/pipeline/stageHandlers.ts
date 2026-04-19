@@ -88,10 +88,10 @@ export function createAgentStage(
       void upsertStageRunApiKey({
         name: `stage-run:${ctx.stageRun.id}`,
         keyHash,
-        scopes: ['tasks:read', 'pipeline:control'],
+        scopes: ['tasks:read'],
       })
 
-      const port = process.env.PORT ?? '13120'
+      const port = process.env.DASHBOARD_PORT ?? '13120'
       const result = spawn({
         task: ctx.task,
         stageRun: ctx.stageRun,

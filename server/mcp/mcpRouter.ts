@@ -18,7 +18,12 @@ export function createMcpRouter(
     // self-contained — no server-side session map is maintained.
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
     await server.connect(transport)
-    await transport.handleRequest(req, res, req.body)
+    try {
+      await transport.handleRequest(req, res, req.body)
+    }
+    finally {
+      await server.close()
+    }
   })
 
   return router
