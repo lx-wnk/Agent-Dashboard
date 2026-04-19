@@ -1,6 +1,6 @@
 import type express from 'express'
 import type { NotificationEventType, PipelineStage, PipelineTask, StageRunStatus } from '../../src/types.js'
-import { VALID_STAGES } from '../../src/types.js'
+import { VALID_STAGES } from '../constants.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { consola } from 'consola'

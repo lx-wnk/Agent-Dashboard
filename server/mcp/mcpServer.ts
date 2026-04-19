@@ -1,5 +1,5 @@
 import type { McpScope, PipelineStage } from '../../src/types.js'
-import { VALID_STAGES } from '../../src/types.js'
+import { VALID_STAGES } from '../constants.js'
 import { ALLOWED_TOOLS, bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { createHash, randomBytes } from 'node:crypto'
