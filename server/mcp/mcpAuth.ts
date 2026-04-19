@@ -6,10 +6,9 @@ import type { ZodRawShape } from 'zod'
 import { z } from 'zod'
 import { getApiKeyByHash, touchApiKey } from '../db/apiKeysRepo.js'
 
-// Documentation of the scope each MCP tool requires.
-// NOTE: This map is NOT wired into runtime enforcement — each tool handler
-// calls requireScope() directly. Keep this map in sync with mcpServer.ts
-// for auditing and tests; a drift here indicates a real mismatch to investigate.
+// Runtime scope enforcement: every tool is registered via makeToolRegistrar(),
+// which reads the required scope from this map before invoking the handler.
+// Adding a tool without an entry here is a compile-time type error.
 export const TOOL_SCOPE_MAP: Record<string, McpScope> = {
   // tasks:read
   list_tasks: 'tasks:read',
