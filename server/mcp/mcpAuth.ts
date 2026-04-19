@@ -1,6 +1,9 @@
 import type { NextFunction, Request, Response } from 'express'
 import type { McpScope } from '../../src/types.js'
 import { createHash } from 'node:crypto'
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { ZodRawShape } from 'zod'
+import { z } from 'zod'
 import { getApiKeyByHash, touchApiKey } from '../db/apiKeysRepo.js'
 
 // Documentation of the scope each MCP tool requires.
@@ -76,4 +79,44 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
   // Fire-and-forget — last_used_at update must not block the request
   setImmediate(() => touchApiKey(key.id))
   next()
+}
+
+type ToolResult = { content: Array<{ type: 'text', text: string }> }
+
+/** Uniform success response — wraps data as JSON text content block. */
+export function ok(data: unknown): ToolResult {
+  return { content: [{ type: 'text' as const, text: JSON.stringify(data) }] }
+}
+
+/** Throws so the MCP SDK surfaces it as a tool error. */
+export function mcpError(message: string): never {
+  const err = new Error(message) as Error & { code: number }
+  err.code = -32003
+  throw err
+}
+
+/**
+ * Returns a tool() helper that automatically enforces the scope declared in
+ * TOOL_SCOPE_MAP before invoking the handler. All tools MUST be registered
+ * via this helper — direct server.tool() calls bypass scope enforcement.
+ */
+export function makeToolRegistrar(server: McpServer, scopes: Set<McpScope>) {
+  return function tool<S extends ZodRawShape>(
+    name: keyof typeof TOOL_SCOPE_MAP,
+    schema: S,
+    handler: (args: z.infer<z.ZodObject<S>>) => ToolResult | Promise<ToolResult>,
+  ): void {
+    const needed = TOOL_SCOPE_MAP[name]
+    // Cast through unknown to satisfy the SDK's ZodRawShapeCompat overload —
+    // ZodRawShape and ZodRawShapeCompat are structurally identical at runtime.
+    ;(server.tool as unknown as (
+      name: string,
+      schema: S,
+      cb: (args: z.infer<z.ZodObject<S>>) => ToolResult | Promise<ToolResult>,
+    ) => void)(name as string, schema, (args: z.infer<z.ZodObject<S>>) => {
+      if (!scopes.has(needed))
+        mcpError(`Insufficient scope: requires ${needed}`)
+      return handler(args)
+    })
+  }
 }
