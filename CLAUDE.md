@@ -24,10 +24,13 @@ pnpm typecheck     # vue-tsc type checking
 **Backend** (Express + Node CLI tools in `server/`):
 - `server/platform.ts` — Shared `IS_LINUX` constant for platform detection
 - `server/paths.ts` — Shared path constants (`CLAUDE_PROJECTS_DIR`, `SESSION_META_DIR`, `DISCOVERY_DIR`, `WHITESPACE_RE`)
+- `server/constants.ts` — Shared constants: `VALID_STAGES`, `SLUG_RE`, `SLUG_PATTERN_MESSAGE`, `SYSTEM_PROMPT_MAX_CHARS`
 - `server/index.ts` — Express server with `/api/agents` REST + `/api/agents/stream` SSE endpoint, integrates Vite dev middleware
 - `server/processScanner.ts` — Uses `ps` and `lsof` to find running `/claude` processes and their working directories
 - `server/jsonlParser.ts` — Tail-reads last 32KB of JSONL session files, extracts tokens, model, tools, tasks
 - `server/agentMerger.ts` — Matches PIDs to session data, calculates costs via `estimateCost` (from `pricing.ts`), determines status
+- `server/spawnManager.ts` — Rate-limited dashboard-initiated agent spawner; manages spawn slots, stderr ring-buffer, and channel-reply routing (configurable via `DASHBOARD_SPAWN_RATE_LIMIT`, `DASHBOARD_SPAWN_RATE_WINDOW_MS`)
+- `server/channelConfig.ts` — `buildDashboardChannelMcpConfig()`: builds the MCP channel config injected into user-spawned agents
 
 **Frontend** (Vue 3 + TypeScript SPA in `src/`):
 - `src/composables/useAgents.ts` — SSE-first real-time updates via `/api/agents/stream` with polling fallback; manages view mode (list/cards/kanban) with localStorage persistence and search query state
@@ -52,6 +55,7 @@ pnpm typecheck     # vue-tsc type checking
 - `src/components/StageOutputView.vue` — renders per-stage LLM output with expand/collapse
 - `src/components/AgentChatStream.vue` — live SSE-streamed agent message view
 - `src/components/BacklogForm.vue` — task creation / backlog entry form
+- `src/components/CrossLinkBanner.vue` — session↔task cross-link banner rendered in both `AgentModal.vue` and `TaskModal.vue`; emits `click` to trigger cross-navigation
 - `src/composables/useTasks.ts` — SSE-first task list state with 60s polling fallback
 - `src/composables/useRole.ts` — role-based access control composable
 
@@ -169,12 +173,14 @@ A stateless StreamableHTTP MCP server at `POST /api/mcp` — each request is sel
 
 **Pipeline env vars injected into spawned stage agents:** `DASHBOARD_MCP_TOKEN` (stage-scoped bearer token), `DASHBOARD_MCP_URL` (e.g. `http://127.0.0.1:13120/api/mcp`). These allow stage agents to call back into the dashboard MCP endpoint.
 
+**Local agent integration:** A `.mcp.json.example` is shipped at the repo root. Copy it to `.mcp.json` and export `DASHBOARD_MCP_TOKEN` — any Claude Code session opened in this repo then has automatic dashboard MCP access. `.mcp.json` is gitignored to prevent accidental token commits.
+
 ## Key Conventions
 
 - Path alias: `@/*` maps to `./src/*` (configured in tsconfig.json and vite.config.ts)
 - Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data). **Multi-machine mode** (`DASHBOARD_REMOTES` env var) requires remote instances to be network-accessible; use a VPN or SSH tunnel — never bind to `0.0.0.0` on an untrusted network.
 - **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (override via `DASHBOARD_DB_PATH`; see ADR-0001). One deliberate crossing: `server/agentMerger.ts` performs an opportunistic read-only pipeline lookup (`enrichWithPipelineTask`) to annotate agents with their linked task ID/title. This is one-way (pipeline → agent annotation only) and fails gracefully if the DB is unavailable.
-- **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge), `DASHBOARD_MCP_TOKEN` + `DASHBOARD_MCP_URL` (injected for MCP callback access).
+- **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge), `DASHBOARD_MCP_TOKEN` + `DASHBOARD_MCP_URL` (injected for MCP callback access), `DASHBOARD_HOST` (bind address, default `127.0.0.1`; logs a security warning if non-loopback), `DASHBOARD_SSE_INTERVAL_MS` (agent SSE broadcast interval ms, default `3000`), `DASHBOARD_SPAWN_RATE_LIMIT` (max user-initiated spawns per window, default `5`; must be positive integer), `DASHBOARD_SPAWN_RATE_WINDOW_MS` (spawn rate-limit window ms, default `60000`; must be positive integer).
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
 - **Platform:** macOS and Linux. `server/systemMonitor.ts` uses `top` on macOS and `/proc/stat` on Linux for CPU; `server/processScanner.ts` uses `lsof` on macOS and `/proc/<pid>/cwd` on Linux. Windows is unsupported.
