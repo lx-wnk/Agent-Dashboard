@@ -1,6 +1,6 @@
 import type { PipelineTask, StageRun, TaskPermission } from '../../src/types.js'
 import type { SpawnAgentOptions } from './agentSpawner.js'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildAllowList, buildSpawnArgs, buildSpawnEnv } from './agentSpawner.js'
 
 function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
@@ -157,6 +157,23 @@ describe('buildSpawnArgs', () => {
 })
 
 describe('buildSpawnEnv', () => {
+  let savedMcpToken: string | undefined
+  let savedMcpUrl: string | undefined
+
+  beforeEach(() => {
+    savedMcpToken = process.env.DASHBOARD_MCP_TOKEN
+    savedMcpUrl = process.env.DASHBOARD_MCP_URL
+    delete process.env.DASHBOARD_MCP_TOKEN
+    delete process.env.DASHBOARD_MCP_URL
+  })
+
+  afterEach(() => {
+    if (savedMcpToken !== undefined) process.env.DASHBOARD_MCP_TOKEN = savedMcpToken
+    else delete process.env.DASHBOARD_MCP_TOKEN
+    if (savedMcpUrl !== undefined) process.env.DASHBOARD_MCP_URL = savedMcpUrl
+    else delete process.env.DASHBOARD_MCP_URL
+  })
+
   it('injects DASHBOARD_STAGE_RUN_ID and DASHBOARD_TASK_ID', () => {
     const env = buildSpawnEnv(baseOpts)
     expect(env.DASHBOARD_STAGE_RUN_ID).toBe('sr-1')
