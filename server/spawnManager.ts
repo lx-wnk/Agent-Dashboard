@@ -23,9 +23,9 @@ const SPAWN_STORE_MAX_AGE_MS = 60 * 60 * 1000 // 1 hour
 const MAX_REPLIES_PER_PID = 50
 const MAX_STDERR_BYTES = 4096
 
-// Rate limit: sliding 60s window, max 5 spawn requests
-const RATE_LIMIT_WINDOW_MS = 60_000
-const RATE_LIMIT_MAX = 5
+// Rate limit: sliding window, max spawn requests
+const RATE_LIMIT_WINDOW_MS = Number(process.env.DASHBOARD_SPAWN_RATE_WINDOW_MS ?? 60_000)
+const RATE_LIMIT_MAX = Number(process.env.DASHBOARD_SPAWN_RATE_LIMIT ?? 5)
 
 // Per-channel fetch timeout when forwarding a user message
 const CHANNEL_MESSAGE_TIMEOUT_MS = 5000
@@ -90,6 +90,13 @@ export class SpawnManager {
       this.spawnTimestamps.shift()
     }
     return this.spawnTimestamps.length < RATE_LIMIT_MAX
+  }
+
+  /**
+   * Return the current rate limit configuration (for error messages).
+   */
+  getRateLimitConfig(): { windowMs: number, max: number } {
+    return { windowMs: RATE_LIMIT_WINDOW_MS, max: RATE_LIMIT_MAX }
   }
 
   private recordSpawnAttempt(now: number = Date.now()): void {

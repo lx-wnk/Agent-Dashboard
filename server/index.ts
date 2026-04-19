@@ -38,6 +38,13 @@ for (let fd = 0; fd <= 2; fd++) {
 // SECURITY: This server exposes session data (prompts, tool outputs, file paths).
 // Always bind to 127.0.0.1 — never expose to the network.
 const PORT = Number.parseInt(process.env.DASHBOARD_PORT || '13120', 10)
+const HOST = process.env.DASHBOARD_HOST ?? '127.0.0.1'
+if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+  console.warn(
+    `[security] Dashboard bound to ${HOST} — ensure this host is on a trusted network or VPN. Never expose to the public internet.`,
+  )
+}
+const SSE_INTERVAL_MS = Number(process.env.DASHBOARD_SSE_INTERVAL_MS ?? 3000)
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 
 // Spawn state + logic (rate limit, stderr ring-buffer, reply store,
@@ -144,7 +151,7 @@ async function start() {
       catch (err) {
         console.error('SSE broadcast error:', err)
       }
-    }, 3000)
+    }, SSE_INTERVAL_MS)
   }
 
   function stopSSEBroadcast() {
@@ -272,7 +279,7 @@ async function start() {
     const allowed = (s: string) => {
       try {
         const url = new URL(s)
-        return (url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.port === String(PORT)
+        return (url.hostname === HOST || url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.port === String(PORT)
       }
       catch {
         return false
@@ -315,7 +322,9 @@ async function start() {
       return
 
     if (!spawnManager.isSpawnAllowed()) {
-      res.status(429).json({ error: 'Too many spawn requests. Max 5 per minute.' })
+      const windowSecs = Math.round(spawnManager.getRateLimitConfig().windowMs / 1000)
+      const { max } = spawnManager.getRateLimitConfig()
+      res.status(429).json({ error: `Too many spawn requests. Max ${max} per ${windowSecs} seconds.` })
       return
     }
 
@@ -521,7 +530,7 @@ async function start() {
       res.status(500).json({ error: message })
   })
 
-  httpServer.listen(PORT, '127.0.0.1', () => {
+  httpServer.listen(PORT, HOST, () => {
     const mode = isProd ? 'production' : 'development'
     consola.info(`Claude Agent Overview (${mode}) running at http://localhost:${PORT}`)
   })
