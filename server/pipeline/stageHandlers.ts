@@ -81,8 +81,8 @@ export function createAgentStage(
       const bundle = buildPrompt(ctx)
       const feedback = buildFeedbackPrefix(ctx.priorIterationOutput)
 
-      // Generate a short-lived MCP token for this stage run so the spawned
-      // agent can authenticate against the dashboard's /api/mcp endpoint.
+      // Generate a stage-run-scoped MCP token; revoked in orchestrator.applyTransition
+      // on every terminal transition. Lifetime is state-transition-bounded, not time-bounded.
       const rawToken = `mcp_${randomBytes(16).toString('hex')}`
       const keyHash = createHash('sha256').update(rawToken).digest('hex')
       void upsertStageRunApiKey({
@@ -91,7 +91,7 @@ export function createAgentStage(
         scopes: ['tasks:read'],
       })
 
-      const port = process.env.DASHBOARD_PORT ?? '13120'
+      const port = process.env.DASHBOARD_PORT || '13120'
       const result = spawn({
         task: ctx.task,
         stageRun: ctx.stageRun,

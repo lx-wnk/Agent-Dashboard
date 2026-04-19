@@ -17,6 +17,7 @@ import {
   retryTask,
 } from '../composables/useTasks'
 import AgentChatStream from './AgentChatStream.vue'
+import CrossLinkBanner from './CrossLinkBanner.vue'
 import PromptInput from './PromptInput.vue'
 import StageOutputView from './StageOutputView.vue'
 
@@ -441,15 +442,13 @@ function formatDate(iso: string | null): string {
               </p>
             </div>
             <template v-else>
-              <div v-if="pipelineAgent" class="task-link-banner">
-                <span class="task-link-text">
-                  ⬡ Läuft als Session in
-                  <strong>{{ pipelineAgent.projectName }}</strong>
-                </span>
-                <button class="task-link-btn" @click="emit('navigate', pipelineAgent)">
-                  Session öffnen →
-                </button>
-              </div>
+              <CrossLinkBanner
+                v-if="pipelineAgent"
+                label="Running as session in"
+                :target-name="pipelineAgent.projectName"
+                button-text="Open session →"
+                @click="emit('navigate', pipelineAgent)"
+              />
               <div class="session-header">
                 <span class="session-label">Active Session</span>
                 <code class="session-id">{{ task.activeSessionId.slice(0, 8) }}</code>
@@ -793,31 +792,6 @@ function formatDate(iso: string | null): string {
   min-height: 280px;
   max-height: 50vh;
 }
-.task-link-banner {
-  background: #1e3a5f;
-  border-bottom: 1px solid #1e4080;
-  padding: 5px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-.task-link-text {
-  font-size: 11px;
-  color: #93c5fd;
-}
-.task-link-text strong { color: #60a5fa; }
-.task-link-btn {
-  background: none;
-  border: none;
-  color: #60a5fa;
-  font-size: 11px;
-  cursor: pointer;
-  text-decoration: underline;
-  padding: 0;
-  white-space: nowrap;
-}
-.task-link-btn:hover { color: #93c5fd; }
 .session-empty {
   padding: 60px 20px;
 }

@@ -2,14 +2,10 @@ import type { Agent } from '../src/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { calculateStatus, enrichWithPipelineTask } from './agentMerger'
-import { findStageRunBySessionId } from './db/stageRunsRepo.js'
-import { getTaskById } from './db/tasksRepo.js'
+import { findTasksBySessionIds } from './db/stageRunsRepo.js'
 
 vi.mock('./db/stageRunsRepo.js', () => ({
-  findStageRunBySessionId: vi.fn(),
-}))
-vi.mock('./db/tasksRepo.js', () => ({
-  getTaskById: vi.fn(),
+  findTasksBySessionIds: vi.fn(),
 }))
 
 // Thresholds from agentMerger.ts:
@@ -75,8 +71,7 @@ describe('calculateStatus', () => {
 })
 
 describe('enrichWithPipelineTask', () => {
-  const mockFindStageRun = vi.mocked(findStageRunBySessionId)
-  const mockGetTask = vi.mocked(getTaskById)
+  const mockFindTasks = vi.mocked(findTasksBySessionIds)
 
   afterEach(() => vi.clearAllMocks())
 
@@ -108,82 +103,36 @@ describe('enrichWithPipelineTask', () => {
     }
   }
 
-  it('attaches pipelineTaskId and pipelineTaskTitle when stage run and task exist', () => {
-    mockFindStageRun.mockReturnValue({
-      id: 'run-1',
-      taskId: 'task-abc',
-      stage: 'umsetzung',
-      sessionId: 'sess-1',
-      sessionName: null,
-      pid: 1,
-      status: 'running',
-      startedAt: null,
-      endedAt: null,
-      iteration: 1,
-      output: null,
-      tokensUsed: 0,
-      costCents: 0,
-    })
-    mockGetTask.mockReturnValue({
-      id: 'task-abc',
-      slug: 'my-task',
-      title: 'My Task',
-      description: null,
-      cwd: '/tmp',
-      worktreePath: null,
-      sourceBranch: null,
-      targetBranch: null,
-      currentStage: 'umsetzung',
-      parentTaskId: null,
-      maxIterations: 5,
-      tokenBudget: null,
-      costBudgetCents: null,
-      stageTimeoutSeconds: 3600,
-      createdAt: '',
-      updatedAt: '',
-      metadata: null,
-      silverBullet: false,
-      priority: 'medium',
-    })
+  it('attaches pipelineTaskId and pipelineTaskTitle when a match exists', () => {
+    mockFindTasks.mockReturnValue(new Map([['sess-1', { taskId: 'task-abc', title: 'My Task' }]]))
     const agents = [makeAgent('sess-1')]
     enrichWithPipelineTask(agents)
     expect(agents[0].pipelineTaskId).toBe('task-abc')
     expect(agents[0].pipelineTaskTitle).toBe('My Task')
   })
 
-  it('leaves fields undefined when no stage run matches', () => {
-    mockFindStageRun.mockReturnValue(null)
+  it('leaves fields undefined when no match in the returned map', () => {
+    mockFindTasks.mockReturnValue(new Map())
     const agents = [makeAgent('sess-2')]
     enrichWithPipelineTask(agents)
     expect(agents[0].pipelineTaskId).toBeUndefined()
     expect(agents[0].pipelineTaskTitle).toBeUndefined()
   })
 
-  it('leaves fields undefined when stage run has no matching task', () => {
-    mockFindStageRun.mockReturnValue({
-      id: 'run-2',
-      taskId: 'missing-task',
-      stage: 'umsetzung',
-      sessionId: 'sess-3',
-      sessionName: null,
-      pid: null,
-      status: 'running',
-      startedAt: null,
-      endedAt: null,
-      iteration: 1,
-      output: null,
-      tokensUsed: 0,
-      costCents: 0,
-    })
-    mockGetTask.mockReturnValue(null)
-    const agents = [makeAgent('sess-3')]
+  it('enriches multiple agents in one call', () => {
+    mockFindTasks.mockReturnValue(new Map([
+      ['sess-a', { taskId: 'task-1', title: 'Task One' }],
+      ['sess-b', { taskId: 'task-2', title: 'Task Two' }],
+    ]))
+    const agents = [makeAgent('sess-a'), makeAgent('sess-b'), makeAgent('sess-c')]
     enrichWithPipelineTask(agents)
-    expect(agents[0].pipelineTaskId).toBeUndefined()
-    expect(agents[0].pipelineTaskTitle).toBeUndefined()
+    expect(agents[0].pipelineTaskId).toBe('task-1')
+    expect(agents[1].pipelineTaskId).toBe('task-2')
+    expect(agents[2].pipelineTaskId).toBeUndefined()
   })
 
-  it('silently skips an agent when the DB throws', () => {
-    mockFindStageRun.mockImplementation(() => {
+  it('does not throw when the DB throws', () => {
+    mockFindTasks.mockImplementation(() => {
       throw new Error('DB not ready')
     })
     const agents = [makeAgent('sess-4')]

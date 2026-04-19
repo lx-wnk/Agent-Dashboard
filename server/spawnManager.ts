@@ -11,9 +11,9 @@
 import type { Buffer } from 'node:buffer'
 import type { ChannelInfo } from './channelDiscovery.js'
 import { spawn } from 'node:child_process'
-import { existsSync, realpathSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import { consola } from 'consola'
+import { buildDashboardChannelMcpConfig } from './channelConfig.js'
 
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const ALLOWED_MODELS = new Set(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', '']) // empty string = "Auto" (no --model flag)
@@ -25,10 +25,6 @@ const MAX_STDERR_BYTES = 4096
 // Rate limit: sliding 60s window, max 5 spawn requests
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 5
-
-const CHANNEL_DIR = join(import.meta.dirname, '..', 'channel')
-const CHANNEL_SCRIPT = join(CHANNEL_DIR, 'dashboard-channel.ts')
-const CHANNEL_TSX = join(CHANNEL_DIR, 'node_modules', '.bin', 'tsx')
 
 // Per-channel fetch timeout when forwarding a user message
 const CHANNEL_MESSAGE_TIMEOUT_MS = 5000
@@ -149,15 +145,7 @@ export class SpawnManager {
         args.push('--system-prompt', systemPrompt.slice(0, 10000))
       }
       if (enableChannel !== false) {
-        const mcpConfig = JSON.stringify({
-          mcpServers: {
-            'dashboard-channel': {
-              command: realpathSync(CHANNEL_TSX),
-              args: [realpathSync(CHANNEL_SCRIPT)],
-            },
-          },
-        })
-        args.push('--mcp-config', mcpConfig)
+        args.push('--mcp-config', buildDashboardChannelMcpConfig())
       }
 
       const child = spawn('claude', args, {

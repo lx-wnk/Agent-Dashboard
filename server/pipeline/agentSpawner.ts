@@ -15,13 +15,10 @@
 import type { ChildProcess } from 'node:child_process'
 import type { PipelineTask, StageRun, TaskPermission } from '../../src/types.js'
 import { spawn } from 'node:child_process'
-import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import process from 'node:process'
-
-const CHANNEL_DIR = join(dirname(new URL(import.meta.url).pathname), '..', '..', 'channel')
-const CHANNEL_SCRIPT = join(CHANNEL_DIR, 'dashboard-channel.ts')
-const CHANNEL_TSX = join(CHANNEL_DIR, 'node_modules', '.bin', 'tsx')
+import { buildDashboardChannelMcpConfig } from '../channelConfig.js'
 
 export interface SpawnAgentOptions {
   task: PipelineTask
@@ -128,15 +125,7 @@ export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
   const args = buildSpawnArgs(opts)
 
   if (opts.enableChannel !== false) {
-    const mcpConfig = JSON.stringify({
-      mcpServers: {
-        'dashboard-channel': {
-          command: realpathSync(CHANNEL_TSX),
-          args: [realpathSync(CHANNEL_SCRIPT)],
-        },
-      },
-    })
-    args.push('--mcp-config', mcpConfig)
+    args.push('--mcp-config', buildDashboardChannelMcpConfig())
   }
 
   const child = spawn('claude', args, {

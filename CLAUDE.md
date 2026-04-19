@@ -117,7 +117,7 @@ server/index.ts  ← composition root (only place that constructs concrete insta
 **Layering rules:**
 
 1. `db/*` — imports only `node:*`, `better-sqlite3`, sibling db files, and type-only from `src/types.ts`. Never imports pipeline/notifications/routes/services/mcp.
-2. `pipeline/*` — imports `db/*` and `src/types.ts` only. Never imports `notifications/`, `routes/`, `services/`, or `mcp/`.
+2. `pipeline/*` — imports `db/*` and `src/types.ts` only. One narrow exception: `server/channelConfig.ts` (pure `node:*` utility, no project-layer dependencies) may also be imported. Never imports `notifications/`, `routes/`, `services/`, or `mcp/`.
 3. `services/*` — stateless helpers. Imports only `db/*`, `src/types.ts`, `server/paths.ts`, `server/platform.ts`, and `node:*`. Type-only imports from `pipeline/orchestrator.ts` (e.g. `import type { ... } from '../pipeline/orchestrator'`) are allowed; no runtime dependency on the orchestrator. Never imports `notifications/`, `routes/`, or `mcp/`.
 4. `notifications/*` — imports `db/notificationConfigRepo` and `src/types.ts` only. Adapters are private to `dispatcher.ts`.
 5. `routes/*` and `mcp/*` — may import from `db/*`, `services/*`, `src/types.ts`, and type-only from `pipeline/orchestrator.ts` and `notifications/dispatcher.ts`. Runtime instances of the orchestrator and dispatcher are injected from `server/index.ts`. Runtime imports from `pipeline/*` are limited to specific named helpers that do not touch the state machine (currently: `resolvedProjectDir` from `pipeline/sessionOutputReader.ts`, used by `routes/taskRoutes.ts`); never import the orchestrator, stage handlers, completion detector, or any other state-machine internals at runtime.
@@ -173,7 +173,7 @@ A stateless StreamableHTTP MCP server at `POST /api/mcp` — each request is sel
 
 - Path alias: `@/*` maps to `./src/*` (configured in tsconfig.json and vite.config.ts)
 - Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data). **Multi-machine mode** (`DASHBOARD_REMOTES` env var) requires remote instances to be network-accessible; use a VPN or SSH tunnel — never bind to `0.0.0.0` on an untrusted network.
-- **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (override via `DASHBOARD_DB_PATH`; see ADR-0001). The scope boundary is strict — do not mix.
+- **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (override via `DASHBOARD_DB_PATH`; see ADR-0001). One deliberate crossing: `server/agentMerger.ts` performs an opportunistic read-only pipeline lookup (`enrichWithPipelineTask`) to annotate agents with their linked task ID/title. This is one-way (pipeline → agent annotation only) and fails gracefully if the DB is unavailable.
 - **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge), `DASHBOARD_MCP_TOKEN` + `DASHBOARD_MCP_URL` (injected for MCP callback access).
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`

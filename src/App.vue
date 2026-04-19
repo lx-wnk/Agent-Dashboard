@@ -41,6 +41,18 @@ function copyScript() {
   }, 2000)
 }
 
+const toastMessage = ref<string | null>(null)
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(msg: string) {
+  toastMessage.value = msg
+  if (toastTimer)
+    clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toastMessage.value = null
+  }, 3500)
+}
+
 function navigateTo(target: { agent?: Agent, taskId?: string }) {
   selectAgent(null)
   selectTask(null)
@@ -49,8 +61,13 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
       selectAgent(target.agent)
     if (target.taskId) {
       const t = tasks.value.find(t => t.id === target.taskId)
-      if (t)
+      if (t) {
         selectTask(t)
+      }
+      else {
+        console.warn('[navigateTo] task not found locally:', target.taskId)
+        showToast('Task not found — it may belong to a different machine.')
+      }
     }
   })
 }
@@ -184,6 +201,11 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       @close="selectTask(null)"
       @navigate="(agent: Agent) => navigateTo({ agent })"
     />
+    <Transition name="toast">
+      <div v-if="toastMessage" class="toast-notification">
+        {{ toastMessage }}
+      </div>
+    </Transition>
     <SpawnDialog
       :open="showSpawnDialog"
       @close="showSpawnDialog = false"
@@ -471,5 +493,30 @@ body {
 
 main {
   padding: 24px;
+}
+
+.toast-notification {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 2000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
 }
 </style>

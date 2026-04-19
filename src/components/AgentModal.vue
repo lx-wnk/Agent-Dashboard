@@ -3,6 +3,7 @@ import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
+import CrossLinkBanner from './CrossLinkBanner.vue'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
 import StatusBadge from './StatusBadge.vue'
@@ -68,15 +69,13 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-if="agent.pipelineTaskId" class="task-link-banner">
-          <span class="task-link-text">
-            ⬡ Teil von
-            <strong>{{ agent.pipelineTaskTitle ?? `Task ${agent.pipelineTaskId.slice(0, 8)}` }}</strong>
-          </span>
-          <button class="task-link-btn" @click="emit('navigate', agent.pipelineTaskId)">
-            öffnen →
-          </button>
-        </div>
+        <CrossLinkBanner
+          v-if="agent.pipelineTaskId"
+          label="Part of"
+          :target-name="agent.pipelineTaskTitle ?? `Task ${agent.pipelineTaskId.slice(0, 8)}`"
+          button-text="Open →"
+          @click="emit('navigate', agent.pipelineTaskId)"
+        />
 
         <AgentChatStream
           ref="chatStreamRef"
@@ -153,31 +152,6 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 .modal-close:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.task-link-banner {
-  background: #1e3a5f;
-  border-bottom: 1px solid #1e4080;
-  padding: 5px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-.task-link-text {
-  font-size: 11px;
-  color: #93c5fd;
-}
-.task-link-text strong { color: #60a5fa; }
-.task-link-btn {
-  background: none;
-  border: none;
-  color: #60a5fa;
-  font-size: 11px;
-  cursor: pointer;
-  text-decoration: underline;
-  padding: 0;
-  white-space: nowrap;
-}
-.task-link-btn:hover { color: #93c5fd; }
 .modal-output {
   flex: 1;
   padding: 16px;

@@ -300,6 +300,8 @@ export class PipelineOrchestrator {
     const now = new Date().toISOString()
 
     const txn = db.transaction(() => {
+      let result: { updatedRunId: string, newRunId: string | null }
+
       switch (transition.kind) {
         case 'next': {
           updateStageRun(stageRun.id, {
@@ -328,7 +330,8 @@ export class PipelineOrchestrator {
             action: 'stage_transition',
             details: { from: task.currentStage, to: transition.toStage },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'wait_user': {
@@ -342,7 +345,8 @@ export class PipelineOrchestrator {
             action: 'awaiting_user',
             details: { reason: transition.reason },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'iterate': {
@@ -370,15 +374,18 @@ export class PipelineOrchestrator {
               action: 'iteration_limit_reached',
               details: { maxIter, lastIteration: stageRun.iteration },
             }, db)
-            return { updatedRunId: stageRun.id, newRunId: null }
+            result = { updatedRunId: stageRun.id, newRunId: null }
           }
-          const newRun = createStageRun({
-            taskId: task.id,
-            stage: stageRun.stage,
-            iteration: stageRun.iteration + 1,
-            sessionName: buildSessionName(task, stageRun.stage, stageRun.iteration + 1),
-          }, db)
-          return { updatedRunId: stageRun.id, newRunId: newRun.id }
+          else {
+            const newRun = createStageRun({
+              taskId: task.id,
+              stage: stageRun.stage,
+              iteration: stageRun.iteration + 1,
+              sessionName: buildSessionName(task, stageRun.stage, stageRun.iteration + 1),
+            }, db)
+            result = { updatedRunId: stageRun.id, newRunId: newRun.id }
+          }
+          break
         }
 
         case 'on_hold': {
@@ -393,7 +400,8 @@ export class PipelineOrchestrator {
             action: 'moved_on_hold',
             details: { permissionRequestId: transition.permissionRequestId },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'done': {
@@ -404,7 +412,8 @@ export class PipelineOrchestrator {
           }, db)
           updateTask(task.id, { currentStage: 'done' }, db)
           appendAudit({ taskId: task.id, actor: 'orchestrator', action: 'task_done' }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'fail': {
@@ -424,7 +433,8 @@ export class PipelineOrchestrator {
             action: 'stage_failed',
             details: { stage: stageRun.stage, iteration: stageRun.iteration, error: transition.error },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'async_running': {
@@ -443,23 +453,24 @@ export class PipelineOrchestrator {
             action: 'agent_spawned',
             details: { pid: transition.pid, stage: stageRun.stage },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
       }
+
+      // Revoke the ephemeral MCP token atomically with the state transition.
+      // async_running keeps the token alive so the still-running agent can
+      // authenticate; all other transitions end the run.
+      if (transition.kind !== 'async_running')
+        revokeApiKeyByName(`stage-run:${stageRun.id}`, db)
+
+      return result!
     })
 
     const { updatedRunId, newRunId } = txn() as { updatedRunId: string, newRunId: string | null }
     // Return the run that the caller expects to inspect (the updated one for
     // most transitions, or the new iteration for `iterate`).
     const resultRun = getStageRunById(newRunId ?? updatedRunId)!
-
-    // Revoke the ephemeral MCP token that was minted for this stage run when
-    // the run reaches any terminal state. async_running keeps the token alive
-    // so the still-running agent can authenticate; all other transitions end
-    // the run and must revoke immediately to limit the token's validity window.
-    if (transition.kind !== 'async_running') {
-      revokeApiKeyByName(`stage-run:${stageRun.id}`)
-    }
 
     // Fire onTaskChanged for every transition so SSE listeners see the
     // happy path too — `next`, `wait_user`, `iterate`, `on_hold`, `done`,

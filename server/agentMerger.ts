@@ -1,8 +1,7 @@
 import type { Agent, TokenUsage } from '../src/types.js'
 import { basename } from 'node:path'
 import { getChannelMap } from './channelDiscovery.js'
-import { findStageRunBySessionId } from './db/stageRunsRepo.js'
-import { getTaskById } from './db/tasksRepo.js'
+import { findTasksBySessionIds } from './db/stageRunsRepo.js'
 import { findSessionForProject } from './jsonlParser.js'
 import { estimateCost } from './pricing.js'
 import { scanProcesses } from './processScanner.js'
@@ -11,20 +10,24 @@ const ACTIVE_THRESHOLD = 30_000 // 30s
 const IDLE_THRESHOLD = 300_000 // 5min
 
 export function enrichWithPipelineTask(agents: Agent[]): void {
-  for (const agent of agents) {
-    try {
-      const run = findStageRunBySessionId(agent.sessionId)
-      if (!run)
-        continue
-      const task = getTaskById(run.taskId)
-      if (!task)
-        continue
-      agent.pipelineTaskId = run.taskId
-      agent.pipelineTaskTitle = task.title
+  if (agents.length === 0)
+    return
+  try {
+    const taskMap = findTasksBySessionIds(agents.map(a => a.sessionId))
+    for (const agent of agents) {
+      const entry = taskMap.get(agent.sessionId)
+      if (entry) {
+        agent.pipelineTaskId = entry.taskId
+        agent.pipelineTaskTitle = entry.title
+      }
     }
-    catch {
-      // DB not yet initialized on first boot — skip silently
-    }
+  }
+  catch (err) {
+    // Opportunistic enrichment — skip if pipeline DB is unavailable (e.g. first boot, missing schema)
+    const msg = err instanceof Error ? err.message : String(err)
+    const isExpected = msg.includes('no such table') || msg.includes('ENOENT') || msg.includes('no such file')
+    if (!isExpected)
+      console.warn('[agentMerger] enrichWithPipelineTask failed:', err)
   }
 }
 
