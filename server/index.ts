@@ -1,7 +1,5 @@
-import type { Buffer } from 'node:buffer'
 import type { TaskEvent } from './routes/taskRoutes.js'
-import { spawn } from 'node:child_process'
-import { existsSync, fstatSync, mkdirSync, openSync, realpathSync } from 'node:fs'
+import { fstatSync, mkdirSync, openSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
 import { homedir } from 'node:os'
@@ -21,6 +19,7 @@ import { createMcpRouter } from './mcp/mcpRouter.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
+import { SpawnManager } from './spawnManager.js'
 import { getSystemInfo } from './systemMonitor.js'
 
 // Ensure FDs 0–2 are open. When spawned by tsx watch or similar tools, stdio FDs
@@ -34,44 +33,11 @@ for (let fd = 0; fd <= 2; fd++) {
 // SECURITY: This server exposes session data (prompts, tool outputs, file paths).
 // Always bind to 127.0.0.1 — never expose to the network.
 const PORT = Number.parseInt(process.env.DASHBOARD_PORT || '13120', 10)
-const ALLOWED_MODELS = new Set(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', '']) // empty string = "Auto" (no --model flag)
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
-const SPAWN_STORE_MAX_AGE_MS = 60 * 60 * 1000 // 1 hour
-const MAX_REPLIES_PER_PID = 50
-const MAX_STDERR_BYTES = 4096
-const CHANNEL_DIR = join(import.meta.dirname, '..', 'channel')
-const CHANNEL_SCRIPT = join(CHANNEL_DIR, 'dashboard-channel.ts')
-const CHANNEL_TSX = join(CHANNEL_DIR, 'node_modules', '.bin', 'tsx')
 
-// In-memory spawn status: pid → { status, exitCode, stderr }
-interface SpawnStatus {
-  pid: number
-  status: 'running' | 'exited' | 'error'
-  exitCode: number | null
-  stderr: string
-  startedAt: string
-  prompt: string
-  cwd: string
-}
-const spawnStore = new Map<number, SpawnStatus>()
-
-// Rate limiting for spawn endpoint: timestamps of recent requests
-const spawnTimestamps: number[] = []
-
-// In-memory reply store: parentPid → replies (ring buffer)
-const replyStore = new Map<number, Array<{ message: string, timestamp: string }>>()
-
-function storeReply(pid: number, message: string, timestamp: string) {
-  let replies = replyStore.get(pid)
-  if (!replies) {
-    replies = []
-    replyStore.set(pid, replies)
-  }
-  replies.push({ message, timestamp })
-  if (replies.length > MAX_REPLIES_PER_PID) {
-    replies.shift()
-  }
-}
+// Spawn state + logic (rate limit, stderr ring-buffer, reply store,
+// channel message forwarding) lives in SpawnManager.
+const spawnManager = new SpawnManager()
 
 async function start() {
   // Ensure discovery directory exists
@@ -343,123 +309,17 @@ async function start() {
     if (rejectCrossOrigin(req, res))
       return
 
-    // Rate limit: max 5 spawn requests per minute (sliding window)
-    const now = Date.now()
-    const windowStart = now - 60_000
-    // Prune timestamps older than 60 seconds
-    while (spawnTimestamps.length > 0 && spawnTimestamps[0] <= windowStart) {
-      spawnTimestamps.shift()
-    }
-    if (spawnTimestamps.length >= 5) {
+    if (!spawnManager.isSpawnAllowed()) {
       res.status(429).json({ error: 'Too many spawn requests. Max 5 per minute.' })
       return
     }
-    spawnTimestamps.push(now)
 
-    try {
-      const { prompt, cwd, model, systemPrompt, enableChannel, skipPermissions, resumeSessionId } = req.body
-
-      if (!prompt || typeof prompt !== 'string') {
-        res.status(400).json({ error: 'Missing or invalid "prompt" field' })
-        return
-      }
-      if (!cwd || typeof cwd !== 'string') {
-        res.status(400).json({ error: 'Missing or invalid "cwd" field' })
-        return
-      }
-      if (!existsSync(cwd)) {
-        res.status(400).json({ error: `Directory does not exist: ${cwd}` })
-        return
-      }
-      if (model && !ALLOWED_MODELS.has(model)) {
-        res.status(400).json({ error: 'Invalid model' })
-        return
-      }
-      if (resumeSessionId && !UUID_RE.test(resumeSessionId)) {
-        res.status(400).json({ error: 'Invalid sessionId format' })
-        return
-      }
-
-      const args: string[] = []
-      if (skipPermissions) {
-        args.push('--dangerously-skip-permissions')
-      }
-      if (resumeSessionId) {
-        args.push('--resume', resumeSessionId)
-      }
-      args.push('-p', prompt)
-      if (model) {
-        args.push('--model', model)
-      }
-      if (systemPrompt && typeof systemPrompt === 'string') {
-        args.push('--system-prompt', systemPrompt.slice(0, 10000))
-      }
-      if (enableChannel !== false) {
-        const mcpConfig = JSON.stringify({
-          mcpServers: {
-            'dashboard-channel': {
-              command: realpathSync(CHANNEL_TSX),
-              args: [realpathSync(CHANNEL_SCRIPT)],
-            },
-          },
-        })
-        args.push('--mcp-config', mcpConfig)
-      }
-
-      const child = spawn('claude', args, {
-        cwd,
-        detached: true,
-        stdio: ['ignore', 'ignore', 'pipe'], // capture stderr
-      })
-
-      const pid = child.pid ?? 0
-      const status: SpawnStatus = {
-        pid,
-        status: 'running',
-        exitCode: null,
-        stderr: '',
-        startedAt: new Date().toISOString(),
-        prompt: prompt.slice(0, 200),
-        cwd,
-      }
-      spawnStore.set(pid, status)
-
-      // Collect stderr
-      child.stderr!.on('data', (chunk: Buffer) => {
-        status.stderr += chunk.toString()
-        if (status.stderr.length > MAX_STDERR_BYTES) {
-          status.stderr = status.stderr.slice(-MAX_STDERR_BYTES)
-        }
-      })
-
-      child.on('exit', (code) => {
-        status.status = 'exited'
-        status.exitCode = code
-        consola.info(`[spawn] PID ${pid} exited with code ${code}`)
-        if (status.stderr) {
-          console.error(`[spawn] PID ${pid} stderr:\n${status.stderr}`)
-        }
-        // Prune old entries to prevent memory leak
-        for (const [key, entry] of spawnStore) {
-          if (Date.now() - new Date(entry.startedAt).getTime() > SPAWN_STORE_MAX_AGE_MS) {
-            spawnStore.delete(key)
-          }
-        }
-      })
-
-      child.on('error', (err) => {
-        status.status = 'error'
-        status.stderr += `\nSpawn error: ${err.message}`
-        console.error(`[spawn] PID ${pid} error:`, err)
-      })
-
-      child.unref()
-      res.json({ ok: true, pid })
+    const result = spawnManager.spawnAgent(req.body)
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error })
+      return
     }
-    catch (err) {
-      console.error('Error spawning agent:', err)
-      res.status(500).json({ error: 'Internal error' })
-    }
+    res.json({ ok: true, pid: result.pid })
   })
 
   // Get status of a spawned agent
@@ -469,7 +329,7 @@ async function start() {
       res.status(400).json({ error: 'Invalid PID' })
       return
     }
-    const status = spawnStore.get(pid)
+    const status = spawnManager.getStatus(pid)
     if (!status) {
       res.status(404).json({ error: 'Unknown spawn PID' })
       return
@@ -522,44 +382,20 @@ async function start() {
       }
 
       const channelMap = await getChannelMap()
-      let channel = channelMap.get(agent.pid)
-      // Fallback: match by cwd if PID-based lookup missed
-      if (!channel) {
-        for (const [, info] of channelMap) {
-          if (info.cwd && info.cwd === agent.cwd) {
-            channel = info
-            break
-          }
-        }
-      }
-      if (!channel) {
-        res.status(404).json({ error: 'Channel not available' })
-        return
-      }
+      const result = await spawnManager.sendMessageToChannel(agent, message, channelMap)
 
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 5000)
-
-      try {
-        const response = await fetch(`http://127.0.0.1:${channel.port}/message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message }),
-          signal: controller.signal,
-        })
-        clearTimeout(timeout)
-
-        const data = await response.json()
-        res.status(response.status).json(data)
-      }
-      catch (err) {
-        clearTimeout(timeout)
-        if ((err as Error).name === 'AbortError') {
+      switch (result.kind) {
+        case 'not_found':
+          res.status(404).json({ error: 'Channel not available' })
+          return
+        case 'timeout':
           res.status(504).json({ error: 'Channel request timed out' })
-        }
-        else {
-          res.status(502).json({ error: `Channel unreachable: ${(err as Error).message}` })
-        }
+          return
+        case 'unreachable':
+          res.status(502).json({ error: `Channel unreachable: ${result.message}` })
+          return
+        case 'response':
+          res.status(result.status).json(result.body)
       }
     }
     catch (err) {
@@ -600,7 +436,7 @@ async function start() {
         return
       }
 
-      storeReply(parentPid, message, timestamp)
+      spawnManager.storeReply(parentPid, message, timestamp)
       res.json({ ok: true })
     }
     catch (err) {
@@ -626,11 +462,7 @@ async function start() {
         return
       }
 
-      let replies = replyStore.get(agent.pid) || []
-      if (since) {
-        const sinceTime = new Date(since).getTime()
-        replies = replies.filter(r => new Date(r.timestamp).getTime() > sinceTime)
-      }
+      const replies = spawnManager.getReplies(agent.pid, since)
 
       res.json({ replies })
     }
