@@ -1,10 +1,9 @@
 import type { McpScope, PipelineStage } from '../../src/types.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
-import { createHash, randomBytes } from 'node:crypto'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { VALID_STAGES } from '../constants.js'
-import { createApiKey, getApiKeyById, listApiKeys, revokeApiKey } from '../db/apiKeysRepo.js'
+import { SLUG_RE, SLUG_PATTERN_MESSAGE, VALID_STAGES } from '../constants.js'
+import { createApiKey, generateApiToken, getApiKeyById, hashApiToken, listApiKeys, revokeApiKey } from '../db/apiKeysRepo.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import { createFeedback } from '../db/feedbackRepo.js'
 import {
@@ -40,7 +39,6 @@ function requireScope(scopes: Set<McpScope>, needed: McpScope): void {
     mcpError(`Insufficient scope: requires ${needed}`)
 }
 
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export function buildMcpServer(
   orchestrator: PipelineOrchestrator,
@@ -138,7 +136,7 @@ export function buildMcpServer(
     async (args) => {
       requireScope(scopes, 'tasks:write')
       if (!SLUG_RE.test(args.slug))
-        mcpError('slug must match [a-z0-9][a-z0-9-]{0,63}')
+        mcpError(SLUG_PATTERN_MESSAGE)
       if (getTaskBySlug(args.slug))
         mcpError(`slug already exists: ${args.slug}`)
       const task = createTask({
@@ -401,8 +399,8 @@ export function buildMcpServer(
     },
     async (args) => {
       requireScope(scopes, 'keys:manage')
-      const token = `mcp_${randomBytes(16).toString('hex')}`
-      const keyHash = createHash('sha256').update(token).digest('hex')
+      const token = generateApiToken()
+      const keyHash = hashApiToken(token)
       const key = createApiKey({ name: args.name, keyHash, scopes: args.scopes as McpScope[] })
       return { content: [{ type: 'text' as const, text: JSON.stringify({ key, token }) }] }
     },

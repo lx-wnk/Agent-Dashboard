@@ -19,6 +19,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 import { buildDashboardChannelMcpConfig } from '../channelConfig.js'
+import { SYSTEM_PROMPT_MAX_CHARS } from '../constants.js'
 
 export interface SpawnAgentOptions {
   task: PipelineTask
@@ -74,7 +75,7 @@ export function buildSpawnArgs(opts: SpawnAgentOptions): string[] {
   if (opts.model)
     args.push('--model', opts.model)
   if (opts.systemPrompt)
-    args.push('--system-prompt', opts.systemPrompt.slice(0, 10000))
+    args.push('--system-prompt', opts.systemPrompt.slice(0, SYSTEM_PROMPT_MAX_CHARS))
   return args
 }
 

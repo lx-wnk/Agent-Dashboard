@@ -4,7 +4,7 @@ import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { consola } from 'consola'
 import { Router } from 'express'
-import { VALID_STAGES } from '../constants.js'
+import { SLUG_RE, SLUG_PATTERN_MESSAGE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import {
   createFeedback,
@@ -63,8 +63,6 @@ const VALID_EVENT_TYPES = new Set<NotificationEventType>([
   'budget_exceeded',
   'iteration_warning',
 ])
-
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 const USER_WAIT_STAGES = new Set<PipelineStage>(['on_hold', 'approval1', 'approval2'])
 
@@ -166,7 +164,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree, silverBullet, priority } = req.body ?? {}
 
     if (!slug || typeof slug !== 'string' || !SLUG_RE.test(slug)) {
-      res.status(400).json({ error: 'slug must match [a-z0-9][a-z0-9-]{0,63}' })
+      res.status(400).json({ error: SLUG_PATTERN_MESSAGE })
       return
     }
     if (!title || typeof title !== 'string') {

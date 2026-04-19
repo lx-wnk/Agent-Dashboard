@@ -6,8 +6,10 @@ import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createApiKey,
+  generateApiToken,
   getApiKeyByHash,
   getApiKeyById,
+  hashApiToken,
   listApiKeys,
   revokeApiKey,
   touchApiKey,
@@ -414,6 +416,24 @@ describe('apiKeysRepo', () => {
     const key = createApiKey({ name: 'e', keyHash: hashToken(token), scopes: ['tasks:write'] })
     expect(getApiKeyById(key.id)?.name).toBe('e')
     expect(getApiKeyById('nonexistent')).toBeNull()
+  })
+})
+
+describe('token helpers', () => {
+  it('generateApiToken returns mcp_ prefixed 32-char hex string', () => {
+    const token = generateApiToken()
+    expect(token).toMatch(/^mcp_[0-9a-f]{32}$/)
+  })
+
+  it('hashApiToken produces stable sha256 hex', () => {
+    const hash1 = hashApiToken('mcp_abc')
+    const hash2 = hashApiToken('mcp_abc')
+    expect(hash1).toBe(hash2)
+    expect(hash1).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('two generateApiToken calls produce different tokens', () => {
+    expect(generateApiToken()).not.toBe(generateApiToken())
   })
 })
 

@@ -1,8 +1,7 @@
 import type express from 'express'
 import type { McpScope } from '../../src/types.js'
-import { createHash, randomBytes } from 'node:crypto'
 import { Router } from 'express'
-import { createApiKey, getApiKeyById, listApiKeys, revokeApiKey } from '../db/apiKeysRepo.js'
+import { createApiKey, generateApiToken, getApiKeyById, hashApiToken, listApiKeys, revokeApiKey } from '../db/apiKeysRepo.js'
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
@@ -40,8 +39,8 @@ export function createApiKeyRouter(deps: ApiKeyRouterDeps): Router {
         return void res.status(400).json({ error: `invalid scope: ${s}` })
     }
 
-    const token = `mcp_${randomBytes(16).toString('hex')}`
-    const keyHash = createHash('sha256').update(token).digest('hex')
+    const token = generateApiToken()
+    const keyHash = hashApiToken(token)
     try {
       const key = createApiKey({ name: name.trim(), keyHash, scopes })
       res.status(201).json({ key, token })

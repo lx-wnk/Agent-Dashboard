@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { consola } from 'consola'
 import { buildDashboardChannelMcpConfig } from './channelConfig.js'
+import { SYSTEM_PROMPT_MAX_CHARS } from './constants.js'
 
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const ALLOWED_MODELS = new Set(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', '']) // empty string = "Auto" (no --model flag)
@@ -142,7 +143,7 @@ export class SpawnManager {
         args.push('--model', model)
       }
       if (systemPrompt && typeof systemPrompt === 'string') {
-        args.push('--system-prompt', systemPrompt.slice(0, 10000))
+        args.push('--system-prompt', systemPrompt.slice(0, SYSTEM_PROMPT_MAX_CHARS))
       }
       if (enableChannel !== false) {
         args.push('--mcp-config', buildDashboardChannelMcpConfig())

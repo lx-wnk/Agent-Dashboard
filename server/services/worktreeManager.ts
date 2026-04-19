@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import process from 'node:process'
 import { promisify } from 'node:util'
+import { SLUG_RE as SAFE_SLUG_RE } from '../constants.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -31,7 +32,6 @@ export function resolveWorktreeRoot(cwd: string): string {
   return join(dirname(cwd), `${basename(cwd)}-worktrees`)
 }
 
-const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export interface WorktreeOptions {
   cwd: string

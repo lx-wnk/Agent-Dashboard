@@ -13,9 +13,8 @@ import type { PipelineStage } from '../../src/types.js'
 import type { SpawnAgentOptions, SpawnResult } from './agentSpawner.js'
 import type { PromptBundle } from './stagePrompts.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
-import { createHash, randomBytes } from 'node:crypto'
 import process from 'node:process'
-import { upsertStageRunApiKey } from '../db/apiKeysRepo.js'
+import { generateApiToken, hashApiToken, upsertStageRunApiKey } from '../db/apiKeysRepo.js'
 import { listUnresolvedFeedbackForStage } from '../db/feedbackRepo.js'
 import { listStageRunsForTask } from '../db/stageRunsRepo.js'
 import { spawnStageAgent } from './agentSpawner.js'
@@ -83,8 +82,8 @@ export function createAgentStage(
 
       // Generate a stage-run-scoped MCP token; revoked in orchestrator.applyTransition
       // on every terminal transition. Lifetime is state-transition-bounded, not time-bounded.
-      const rawToken = `mcp_${randomBytes(16).toString('hex')}`
-      const keyHash = createHash('sha256').update(rawToken).digest('hex')
+      const rawToken = generateApiToken()
+      const keyHash = hashApiToken(rawToken)
       void upsertStageRunApiKey({
         name: `stage-run:${ctx.stageRun.id}`,
         keyHash,

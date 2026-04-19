@@ -1,7 +1,7 @@
 import type { Database } from 'better-sqlite3'
 import type { ApiKey, McpScope } from '../../src/types.js'
 import type { ApiKeyRow } from './rowMappers.js'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { getDb } from './client.js'
 import { rowToApiKey } from './rowMappers.js'
 
@@ -13,6 +13,14 @@ export interface CreateApiKeyInput {
 
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+export function generateApiToken(): string {
+  return `mcp_${randomBytes(16).toString('hex')}`
+}
+
+export function hashApiToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
 }
 
 export function createApiKey(input: CreateApiKeyInput, db: Database = getDb()): ApiKey {
