@@ -8,10 +8,22 @@ import { getLatestStageRun } from '../db/stageRunsRepo.js'
  * concern for pipeline permission gates, not a shared type contract.
  */
 export const ALLOWED_TOOLS = new Set([
-  'Bash', 'Read', 'Write', 'Edit', 'MultiEdit',
-  'Glob', 'Grep', 'LS', 'WebFetch', 'WebSearch',
-  'Task', 'Agent', 'TodoRead', 'TodoWrite',
-  'NotebookRead', 'NotebookEdit',
+  'Bash',
+  'Read',
+  'Write',
+  'Edit',
+  'MultiEdit',
+  'Glob',
+  'Grep',
+  'LS',
+  'WebFetch',
+  'WebSearch',
+  'Task',
+  'Agent',
+  'TodoRead',
+  'TodoWrite',
+  'NotebookRead',
+  'NotebookEdit',
 ])
 
 /**

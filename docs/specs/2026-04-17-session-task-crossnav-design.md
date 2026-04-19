@@ -47,12 +47,14 @@ Add `pipelineTaskId?: number` and `pipelineTaskTitle?: string` to the `Agent` in
 Add a `navigateTo` handler in `App.vue`:
 
 ```ts
-function navigateTo(target: { agent?: Agent; taskId?: number }) {
+function navigateTo(target: { agent?: Agent, taskId?: number }) {
   selectedAgent.value = null
   selectedTask.value = null
   nextTick(() => {
-    if (target.agent) selectedAgent.value = target.agent
-    if (target.taskId) selectedTask.value = tasks.value.find(t => t.id === target.taskId) ?? null
+    if (target.agent)
+      selectedAgent.value = target.agent
+    if (target.taskId)
+      selectedTask.value = tasks.value.find(t => t.id === target.taskId) ?? null
   })
 }
 ```

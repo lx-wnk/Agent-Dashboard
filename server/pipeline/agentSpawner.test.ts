@@ -168,9 +168,11 @@ describe('buildSpawnEnv', () => {
   })
 
   afterEach(() => {
-    if (savedMcpToken !== undefined) process.env.DASHBOARD_MCP_TOKEN = savedMcpToken
+    if (savedMcpToken !== undefined)
+      process.env.DASHBOARD_MCP_TOKEN = savedMcpToken
     else delete process.env.DASHBOARD_MCP_TOKEN
-    if (savedMcpUrl !== undefined) process.env.DASHBOARD_MCP_URL = savedMcpUrl
+    if (savedMcpUrl !== undefined)
+      process.env.DASHBOARD_MCP_URL = savedMcpUrl
     else delete process.env.DASHBOARD_MCP_URL
   })
 

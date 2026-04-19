@@ -1,14 +1,14 @@
 import type express from 'express'
 import type { AddressInfo } from 'node:net'
+import { createHash, randomBytes } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import expressLib from 'express'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { closeDb, getDb } from '../db/client.js'
 import { createApiKey } from '../db/apiKeysRepo.js'
-import { createHash, randomBytes } from 'node:crypto'
+import { closeDb, getDb } from '../db/client.js'
 import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { createMcpRouter } from './mcpRouter.js'
 
@@ -42,7 +42,7 @@ afterEach(() => {
   delete process.env.DASHBOARD_DB_PATH
 })
 
-describe('POST /api/mcp', () => {
+describe('pOST /api/mcp', () => {
   it('returns 401 when Authorization header is missing', async () => {
     const res = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',

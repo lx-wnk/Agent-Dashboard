@@ -1,6 +1,7 @@
 import type { PipelineStage, PipelineTask, StageRun } from '../../src/types.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
 import { consola } from 'consola'
+import { revokeApiKeyByName } from '../db/apiKeysRepo.js'
 import { appendAudit } from '../db/auditRepo.js'
 import { getDb } from '../db/client.js'
 import { resolveFeedbackForStage } from '../db/feedbackRepo.js'
@@ -15,7 +16,6 @@ import {
   updateStageRun,
 } from '../db/stageRunsRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
-import { revokeApiKeyByName } from '../db/apiKeysRepo.js'
 import { detectCompletion } from './completionDetector.js'
 import { buildSessionName, decideRecovery } from './sessionManager.js'
 import { getHandlerForStage } from './stageHandlers.js'

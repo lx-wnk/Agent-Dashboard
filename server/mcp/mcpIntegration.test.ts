@@ -7,8 +7,8 @@ import process from 'node:process'
 import expressLib from 'express'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDb, getDb } from '../db/client.js'
-import { createApiKeyRouter } from '../routes/apiKeyRoutes.js'
 import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
+import { createApiKeyRouter } from '../routes/apiKeyRoutes.js'
 import { createMcpRouter } from './mcpRouter.js'
 
 let tmpDir: string
@@ -109,7 +109,7 @@ async function mcpToolCall(
   return mcpCall(token, 'tools/call', { name: toolName, arguments: args })
 }
 
-describe('MCP integration', () => {
+describe('mCP integration', () => {
   it('creates an admin API key via REST and uses it to initialize MCP', async () => {
     const token = await createAdminKey('integration-admin')
 

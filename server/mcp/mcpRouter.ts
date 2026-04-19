@@ -1,6 +1,6 @@
-import { Router } from 'express'
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { Router } from 'express'
 import { mcpAuthMiddleware } from './mcpAuth.js'
 import { buildMcpServer } from './mcpServer.js'
 

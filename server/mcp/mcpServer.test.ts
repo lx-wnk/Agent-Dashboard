@@ -1,5 +1,4 @@
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { describe, expect, it } from 'vitest'
 import { TOOL_SCOPE_MAP } from './mcpAuth.js'
 import { buildMcpServer } from './mcpServer.js'
@@ -21,7 +20,7 @@ function getRegisteredToolNames(): Set<string> {
   return new Set(Object.keys(tools))
 }
 
-describe('TOOL_SCOPE_MAP / buildMcpServer sync', () => {
+describe('tOOL_SCOPE_MAP / buildMcpServer sync', () => {
   it('every tool registered in buildMcpServer has an entry in TOOL_SCOPE_MAP', () => {
     const registeredNames = getRegisteredToolNames()
     const unmapped = [...registeredNames].filter(name => !(name in TOOL_SCOPE_MAP))
@@ -34,7 +33,7 @@ describe('TOOL_SCOPE_MAP / buildMcpServer sync', () => {
     expect(unregistered).toEqual([])
   })
 
-  it('TOOL_SCOPE_MAP and buildMcpServer register exactly the same set of tool names', () => {
+  it('tOOL_SCOPE_MAP and buildMcpServer register exactly the same set of tool names', () => {
     const registeredNames = getRegisteredToolNames()
     const scopeMapNames = new Set(Object.keys(TOOL_SCOPE_MAP))
     expect(registeredNames).toEqual(scopeMapNames)

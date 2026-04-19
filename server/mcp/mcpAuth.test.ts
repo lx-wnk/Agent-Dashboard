@@ -33,7 +33,7 @@ describe('resolveScopes', () => {
   })
 })
 
-describe('TOOL_SCOPE_MAP', () => {
+describe('tOOL_SCOPE_MAP', () => {
   it('maps list_tasks to tasks:read', () => {
     expect(TOOL_SCOPE_MAP.list_tasks).toBe('tasks:read')
   })

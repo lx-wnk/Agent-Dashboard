@@ -1,10 +1,9 @@
 import type { McpScope, PipelineStage } from '../../src/types.js'
-import { VALID_STAGES } from '../constants.js'
-import { ALLOWED_TOOLS, bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { createHash, randomBytes } from 'node:crypto'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
+import { VALID_STAGES } from '../constants.js'
 import { createApiKey, getApiKeyById, listApiKeys, revokeApiKey } from '../db/apiKeysRepo.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import { createFeedback } from '../db/feedbackRepo.js'
@@ -12,7 +11,6 @@ import {
   createTaskPermission,
   getPermissionRequestById,
   listPendingPermissionRequests,
-  listTaskPermissions,
   resolvePermissionRequest,
 } from '../db/permissionsRepo.js'
 import {
@@ -29,6 +27,7 @@ import {
   listTasksByStage,
   updateTask,
 } from '../db/tasksRepo.js'
+import { ALLOWED_TOOLS, bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
 
 function mcpError(message: string): never {
   const err = new Error(message) as Error & { code: number }
@@ -40,7 +39,6 @@ function requireScope(scopes: Set<McpScope>, needed: McpScope): void {
   if (!scopes.has(needed))
     mcpError(`Insufficient scope: requires ${needed}`)
 }
-
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 

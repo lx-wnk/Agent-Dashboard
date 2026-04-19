@@ -1,7 +1,7 @@
 # MCP Task Endpoint — Design Spec
 
-**Date:** 2026-04-15  
-**Status:** Approved  
+**Date:** 2026-04-15
+**Status:** Approved
 **Author:** Claude (brainstorming session with Alexander Wink)
 
 ---
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 ```
 
-**Token format:** `mcp_<32 random hex chars>`  
+**Token format:** `mcp_<32 random hex chars>`
 Generated fresh, stored hashed, returned exactly once on creation (shown in a copy-to-clipboard modal in the dashboard).
 
 ### Scope Model
@@ -177,7 +177,7 @@ Generated fresh, stored hashed, returned exactly once on creation (shown in a co
 export function createMcpRouter(orchestrator: PipelineOrchestrator): Router {
   const router = Router()
   router.post('/mcp', mcpAuthMiddleware, async (req, res) => {
-    const { effectiveScopes } = req.mcpAuth  // set by mcpAuthMiddleware
+    const { effectiveScopes } = req.mcpAuth // set by mcpAuthMiddleware
     const server = buildMcpServer(orchestrator, effectiveScopes)
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
     await server.connect(transport)

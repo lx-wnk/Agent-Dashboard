@@ -195,8 +195,8 @@ export interface ApiKeyRow {
   id: string
   name: string
   key_hash: string
-  scopes: string        // JSON array stored as string
-  active: number        // 0 | 1 (SQLite bool)
+  scopes: string // JSON array stored as string
+  active: number // 0 | 1 (SQLite bool)
   created_at: string
   last_used_at: string | null
 }
