@@ -119,6 +119,16 @@ export function enrichTask(task: PipelineTask): PipelineTask {
 export function createTaskRouter(deps: TaskRouterDeps): Router {
   const router = Router()
 
+  // Mutation sub-router — all POST/PUT/PATCH/DELETE routes register here so
+  // `rejectCrossOrigin` runs once as middleware instead of being copy-pasted
+  // into every handler (and silently forgotten on new endpoints).
+  const mutationRouter = Router()
+  mutationRouter.use((req, res, next) => {
+    if (deps.rejectCrossOrigin(req, res))
+      return
+    next()
+  })
+
   // Convenience: broadcast a task_updated with a freshly enriched payload.
   // Plain getTaskById() returns un-enriched rows missing latestStageRunStatus
   // and needsUser — the kanban then drops the run-status chip on every event.
@@ -153,10 +163,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(enrichTask(task))
   })
 
-  router.post('/tasks', async (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
-
+  mutationRouter.post('/tasks', async (req, res) => {
     const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree, silverBullet, priority } = req.body ?? {}
 
     if (!slug || typeof slug !== 'string' || !SLUG_RE.test(slug)) {
@@ -241,9 +248,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
   })
 
-  router.patch('/tasks/:id', (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.patch('/tasks/:id', (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task) {
       res.status(404).json({ error: 'Task not found' })
@@ -292,9 +297,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(updated)
   })
 
-  router.delete('/tasks/:id', async (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.delete('/tasks/:id', async (req, res) => {
     // Fetch first so we know the worktree path for cleanup.
     const task = getTaskById(req.params.id)
     if (!task) {
@@ -327,9 +330,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
   // ─── Stage progression & approvals ────────────────
 
-  router.post('/tasks/:id/progress', async (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.post('/tasks/:id/progress', async (req, res) => {
     const run = await deps.orchestrator.progressTask(req.params.id)
     if (!run) {
       res.status(409).json({ error: 'Task cannot progress (terminal, missing, or slot full)' })
@@ -340,9 +341,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json({ task, stageRun: run })
   })
 
-  router.post('/tasks/:id/approve', async (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.post('/tasks/:id/approve', async (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task) {
       res.status(404).json({ error: 'Task not found' })
@@ -387,9 +386,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   //   3. write an audit entry
   // The orchestrator's next applyTransition on that stage will mark all
   // unresolved feedback as resolved via resolveFeedbackForStage.
-  router.post('/tasks/:id/request-changes', (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.post('/tasks/:id/request-changes', (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task) {
       res.status(404).json({ error: 'Task not found' })
@@ -452,9 +449,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(listFeedbackForTask(req.params.id))
   })
 
-  router.post('/tasks/:id/cancel', (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.post('/tasks/:id/cancel', (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task) {
       res.status(404).json({ error: 'Task not found' })
@@ -473,9 +468,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // `ensureStageRun` already creates a new iteration when the latest run
   // is non-pending/non-running, so this endpoint just validates intent,
   // writes an audit trail, and defers to `progressTask`.
-  router.post('/tasks/:id/retry', async (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.post('/tasks/:id/retry', async (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task) {
       res.status(404).json({ error: 'Task not found' })
@@ -509,9 +502,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // pointers to the last session JSONLs. The session is NOT tracked as a
   // stage_run — it shows up in the dashboard's normal agent-monitoring
   // view via processScanner finding a `claude` PID in the task's cwd.
-  router.post('/tasks/:id/analyze', async (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.post('/tasks/:id/analyze', async (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task) {
       res.status(404).json({ error: 'Task not found' })
@@ -579,9 +570,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(listTaskPermissions(req.params.id))
   })
 
-  router.post('/tasks/:id/permissions', (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.post('/tasks/:id/permissions', (req, res) => {
     const { tool, pattern, granted, preApproved } = req.body ?? {}
     if (!tool || typeof tool !== 'string') {
       res.status(400).json({ error: 'tool is required' })
@@ -598,9 +587,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.status(201).json(perm)
   })
 
-  router.delete('/tasks/:id/permissions/:permId', (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.delete('/tasks/:id/permissions/:permId', (req, res) => {
     const ok = deleteTaskPermission(req.params.permId)
     if (!ok) {
       res.status(404).json({ error: 'Permission not found' })
@@ -617,9 +604,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(pending)
   })
 
-  router.post('/permission-requests', (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.post('/permission-requests', (req, res) => {
     const { stageRunId, tool, pattern, reason } = req.body ?? {}
     if (!stageRunId || typeof stageRunId !== 'string') {
       res.status(400).json({ error: 'stageRunId is required' })
@@ -663,9 +648,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.status(201).json(reqRow)
   })
 
-  router.post('/permission-requests/:id/resolve', async (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.post('/permission-requests/:id/resolve', async (req, res) => {
     const { outcome } = req.body ?? {}
     if (outcome !== 'granted' && outcome !== 'denied') {
       res.status(400).json({ error: 'outcome must be granted|denied' })
@@ -709,9 +692,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(recommendParallelism())
   })
 
-  router.put('/pipeline/config', (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.put('/pipeline/config', (req, res) => {
     const { maxParallelOrchestrators } = req.body ?? {}
     if (maxParallelOrchestrators !== undefined) {
       const n = Number(maxParallelOrchestrators)
@@ -732,9 +713,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(listPreferences())
   })
 
-  router.put('/notifications/preferences/:eventType', (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.put('/notifications/preferences/:eventType', (req, res) => {
     const eventType = req.params.eventType as NotificationEventType
     if (!VALID_EVENT_TYPES.has(eventType)) {
       res.status(400).json({ error: 'Unknown eventType' })
@@ -753,9 +732,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(getAllConfig())
   })
 
-  router.put('/notifications/config', (req, res) => {
-    if (deps.rejectCrossOrigin(req, res))
-      return
+  mutationRouter.put('/notifications/config', (req, res) => {
     const updates = req.body ?? {}
     for (const [key, value] of Object.entries(updates)) {
       if (typeof key !== 'string')
@@ -764,6 +741,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     res.json(getAllConfig())
   })
+
+  // Mount mutation sub-router so its rejectCrossOrigin middleware guards
+  // every POST/PUT/PATCH/DELETE route registered above.
+  router.use(mutationRouter)
 
   return router
 }
