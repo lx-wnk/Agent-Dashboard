@@ -4,9 +4,8 @@ import type { PipelineStage } from '../../../src/types.js'
 import { appendAudit } from '../../db/auditRepo.js'
 import { createFeedback } from '../../db/feedbackRepo.js'
 import { createTaskPermission, getPermissionRequestById, resolvePermissionRequest } from '../../db/permissionsRepo.js'
-import { getLatestStageRunForTask, getStageRunById } from '../../db/stageRunsRepo.js'
+import { getLatestStageRunForTask, getStageRunById, listStageRunsForTask } from '../../db/stageRunsRepo.js'
 import { getTaskById, updateTask, listTasksByStage } from '../../db/tasksRepo.js'
-import { listStageRunsForTask } from '../../db/stageRunsRepo.js'
 import { ALLOWED_TOOLS, bulkGrantKonzeptPermissions } from '../../services/approvalUtils.js'
 import { mcpError, ok } from '../mcpAuth.js'
 import type { makeToolRegistrar } from '../mcpAuth.js'
@@ -53,6 +52,7 @@ export function registerControlTools(
       updateTask(id, { currentStage: next })
       appendAudit({ taskId: id, actor: 'user', action: 'approved', details: { from: task.currentStage, to: next } })
       broadcast(id)
+      // Returns plain task row; SSE broadcast is separately enriched via index.ts
       return ok({ task: getTaskById(id) })
     },
   )
@@ -106,6 +106,7 @@ export function registerControlTools(
       updateTask(id, { currentStage: 'cancelled' })
       appendAudit({ taskId: id, actor: 'user', action: 'cancelled' })
       broadcast(id)
+      // Returns plain task row; SSE broadcast is separately enriched via index.ts
       return ok({ task: getTaskById(id) })
     },
   )
@@ -179,8 +180,13 @@ export function registerControlTools(
         }
         await orchestrator.resumeFromUser(run.taskId)
         broadcast(run.taskId)
+        return ok({ ...resolved, resumed: true })
       }
-      return ok(resolved)
+      // Stage run not found — permission recorded but agent cannot be signalled
+      if (outcome === 'granted') {
+        console.warn(`[controlTools] resolve_permission_request: stage run ${req.stageRunId} not found; agent not resumed`)
+      }
+      return ok({ ...resolved, resumed: false, warning: 'Stage run not found; agent not signalled' })
     },
   )
 }
