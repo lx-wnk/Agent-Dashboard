@@ -496,6 +496,44 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     const updatedRun = getLatestStageRun(task.id, 'pruefung')
     expect(updatedRun?.status).toBe('failed')
   })
+
+  it('kills and fails a stage_run that exceeds the configured timeout', async () => {
+    const task = createTask({ slug: 'to', title: 'TO', cwd: '/to' })
+    updateTask(task.id, { currentStage: 'pruefung' })
+    const run = createStageRun({ taskId: task.id, stage: 'pruefung' })
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    updateStageRun(run.id, { status: 'running', pid: 9999, startedAt: twoHoursAgo })
+
+    setPipelineConfig('stageTimeoutSeconds', '1')
+    parkAllAgentStages(orchestrator)
+    orchestrator.setCompletionDetector(async () => ({ kind: 'still_running' }))
+
+    await orchestrator.tick()
+    await new Promise(r => setImmediate(r))
+
+    const updatedRun = getLatestStageRun(task.id, 'pruefung')
+    expect(updatedRun?.status).toBe('failed')
+    const output = updatedRun?.output as Record<string, unknown> | null
+    expect(typeof output?.error).toBe('string')
+    expect(output?.error as string).toContain('stage timeout')
+  })
+
+  it('does not kill a stage_run within the configured timeout', async () => {
+    const task = createTask({ slug: 'nto', title: 'NTO', cwd: '/nto' })
+    updateTask(task.id, { currentStage: 'pruefung' })
+    const run = createStageRun({ taskId: task.id, stage: 'pruefung' })
+    updateStageRun(run.id, { status: 'running', pid: 9999 })
+
+    setPipelineConfig('stageTimeoutSeconds', '3600')
+    parkAllAgentStages(orchestrator)
+    orchestrator.setCompletionDetector(async () => ({ kind: 'still_running' }))
+
+    await orchestrator.tick()
+    await new Promise(r => setImmediate(r))
+
+    const updatedRun = getLatestStageRun(task.id, 'pruefung')
+    expect(updatedRun?.status).toBe('running')
+  })
 })
 
 describe('handleDependentTasks (dependency cascade)', () => {

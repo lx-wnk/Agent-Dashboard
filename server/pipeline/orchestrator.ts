@@ -543,6 +543,10 @@ export class PipelineOrchestrator {
       const task = getTaskById(run.taskId)
       if (!task)
         continue
+      // Task reached a terminal stage (e.g. via cascade cancel) after this
+      // run was queued — skip finalization to avoid a stale transition.
+      if (task.currentStage === 'done' || task.currentStage === 'cancelled')
+        continue
       const cwd = task.worktreePath || task.cwd
       let result
       try {
@@ -743,6 +747,18 @@ export class PipelineOrchestrator {
    * Must be called AFTER the task's stage has already been persisted to the DB.
    */
   private handleDependentTasks(taskId: string, newStage: 'done' | 'cancelled'): void {
+    const callbacks: Array<() => void> = []
+    getDb().transaction(() => {
+      this.collectDependentMutations(taskId, newStage, callbacks)
+    })()
+    for (const cb of callbacks) cb()
+  }
+
+  private collectDependentMutations(
+    taskId: string,
+    newStage: 'done' | 'cancelled',
+    callbacks: Array<() => void>,
+  ): void {
     const dependents = getDependentsOf(taskId)
     for (const dep of dependents) {
       // Skip if the dependent still has other blocking predecessors besides
@@ -761,24 +777,33 @@ export class PipelineOrchestrator {
           case 'cancel':
             updateTask(dep.taskId, { currentStage: 'cancelled' })
             appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_cancel', details: { triggeredBy: taskId } })
-            this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' })
-            this.handleDependentTasks(dep.taskId, 'cancelled')
+            callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
+            this.collectDependentMutations(dep.taskId, 'cancelled', callbacks)
             break
           case 'on_hold':
             updateTask(dep.taskId, { currentStage: 'on_hold' })
             appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_on_hold', details: { triggeredBy: taskId } })
-            this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' })
+            callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
             // on_hold is not a terminal stage — don't cascade further
             break
           case 'start':
             // No stage change — task becomes pickable now that isBlocked = false
-            this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' })
+            callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
             break
         }
       }
       else {
-        // newStage === 'done': dependent is now unblocked, will be picked up on next tick
-        this.onTaskChanged?.(dep.taskId, { transitionKind: 'unblocked' })
+        // newStage === 'done': dependent is now unblocked, will be picked up on next tick.
+        // If required_stage='cancelled' but the prerequisite reached 'done', the dependency
+        // is permanently unsatisfiable — log a warning so the operator can remove it manually.
+        if (dep.requiredStage === 'cancelled') {
+          consola.warn(
+            `[orchestrator] unsatisfiable dependency: task ${dep.taskId} requires`
+            + ` ${dep.dependsOnId} to reach 'cancelled', but it reached 'done'.`
+            + ` Remove the dependency manually to unblock the task.`,
+          )
+        }
+        callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'unblocked' }))
       }
     }
   }
