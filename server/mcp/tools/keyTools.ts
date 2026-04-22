@@ -1,8 +1,8 @@
-import { z } from 'zod'
 import type { McpScope } from '../../../src/types.js'
+import type { makeToolRegistrar } from '../mcpAuth.js'
+import { z } from 'zod'
 import { createApiKey, generateApiToken, getApiKeyById, hashApiToken, listApiKeys, revokeApiKey } from '../../db/apiKeysRepo.js'
 import { mcpError, ok } from '../mcpAuth.js'
-import type { makeToolRegistrar } from '../mcpAuth.js'
 
 type ToolFn = ReturnType<typeof makeToolRegistrar>
 
