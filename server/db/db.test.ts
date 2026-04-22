@@ -584,9 +584,18 @@ describe('taskDependenciesRepo', () => {
     expect(deps[0].onCancelAction).toBe('on_hold')
   })
 
-  it('removeDependencyById removes by row id scoped to taskId', () => {
+  it('isBlocked false when prerequisite reaches cancelled and required_stage=cancelled', () => {
     const a = createTask({ slug: 'dep-y', title: 'Y', cwd: '/y' })
     const b = createTask({ slug: 'dep-z', title: 'Z', cwd: '/z' })
+    addDependency(b.id, a.id, 'cancelled', 'on_hold')
+    expect(isBlocked(b.id)).toBe(true)
+    updateTask(a.id, { currentStage: 'cancelled' })
+    expect(isBlocked(b.id)).toBe(false)
+  })
+
+  it('removeDependencyById removes by row id scoped to taskId', () => {
+    const a = createTask({ slug: 'dep-aa', title: 'AA', cwd: '/aa' })
+    const b = createTask({ slug: 'dep-ab', title: 'AB', cwd: '/ab' })
     const dep = addDependency(b.id, a.id, 'done', 'on_hold')
     expect(removeDependencyById(dep.id, 'wrong-task')).toBe(false)
     expect(getDependenciesFor(b.id)).toHaveLength(1)

@@ -4,7 +4,7 @@ import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { consola } from 'consola'
 import { Router } from 'express'
-import { SLUG_RE, SLUG_PATTERN_MESSAGE, VALID_STAGES } from '../constants.js'
+import { SLUG_PATTERN_MESSAGE, SLUG_RE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import {
   createFeedback,
@@ -724,6 +724,16 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     if (!getTaskById(dependsOnId)) {
       res.status(404).json({ error: `Prerequisite task not found: ${dependsOnId}` })
+      return
+    }
+    const VALID_REQUIRED_STAGES = new Set(['done', 'cancelled'])
+    const VALID_CANCEL_ACTIONS = new Set(['cancel', 'start', 'on_hold'])
+    if (requiredStage && !VALID_REQUIRED_STAGES.has(requiredStage)) {
+      res.status(400).json({ error: 'requiredStage must be done or cancelled' })
+      return
+    }
+    if (onCancelAction && !VALID_CANCEL_ACTIONS.has(onCancelAction)) {
+      res.status(400).json({ error: 'onCancelAction must be cancel, start, or on_hold' })
       return
     }
     try {

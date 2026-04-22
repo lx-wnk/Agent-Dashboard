@@ -758,11 +758,13 @@ export class PipelineOrchestrator {
         switch (dep.onCancelAction) {
           case 'cancel':
             updateTask(dep.taskId, { currentStage: 'cancelled' })
+            appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_cancel', details: { triggeredBy: taskId } })
             this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' })
             this.handleDependentTasks(dep.taskId, 'cancelled')
             break
           case 'on_hold':
             updateTask(dep.taskId, { currentStage: 'on_hold' })
+            appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_on_hold', details: { triggeredBy: taskId } })
             this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' })
             // on_hold is not a terminal stage — don't cascade further
             break
