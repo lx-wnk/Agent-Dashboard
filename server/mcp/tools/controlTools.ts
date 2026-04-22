@@ -1,14 +1,14 @@
-import { z } from 'zod'
-import type { PipelineOrchestrator } from '../../pipeline/orchestrator.js'
 import type { PipelineStage } from '../../../src/types.js'
+import type { PipelineOrchestrator } from '../../pipeline/orchestrator.js'
+import type { makeToolRegistrar } from '../mcpAuth.js'
+import { z } from 'zod'
 import { appendAudit } from '../../db/auditRepo.js'
 import { createFeedback } from '../../db/feedbackRepo.js'
 import { createTaskPermission, getPermissionRequestById, resolvePermissionRequest } from '../../db/permissionsRepo.js'
 import { getLatestStageRunForTask, getStageRunById, listStageRunsForTask } from '../../db/stageRunsRepo.js'
-import { getTaskById, updateTask, listTasksByStage } from '../../db/tasksRepo.js'
+import { getTaskById, updateTask } from '../../db/tasksRepo.js'
 import { ALLOWED_TOOLS, bulkGrantKonzeptPermissions } from '../../services/approvalUtils.js'
 import { mcpError, ok } from '../mcpAuth.js'
-import type { makeToolRegistrar } from '../mcpAuth.js'
 
 type ToolFn = ReturnType<typeof makeToolRegistrar>
 
@@ -105,6 +105,7 @@ export function registerControlTools(
         mcpError(`Task is already ${task.currentStage}`)
       updateTask(id, { currentStage: 'cancelled' })
       appendAudit({ taskId: id, actor: 'user', action: 'cancelled' })
+      orchestrator.notifyTaskTerminated(id, 'cancelled')
       broadcast(id)
       // Returns plain task row; SSE broadcast is separately enriched via index.ts
       return ok({ task: getTaskById(id) })

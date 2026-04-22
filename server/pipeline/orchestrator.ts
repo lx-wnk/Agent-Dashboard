@@ -745,12 +745,14 @@ export class PipelineOrchestrator {
   private handleDependentTasks(taskId: string, newStage: 'done' | 'cancelled'): void {
     const dependents = getDependentsOf(taskId)
     for (const dep of dependents) {
-      // Check whether the dependent still has OTHER blocking dependencies
-      // besides the one that just terminated. We cannot use isBlocked()
-      // directly for the cancelled case because a cancelled prerequisite
-      // with required_stage='done' is still counted as blocking by isBlocked
-      // (cancelled != done). Instead we ask: are there any remaining
-      // dependencies that are neither done nor cancelled?
+      // Skip if the dependent still has other blocking predecessors besides
+      // the one that just terminated. We cannot use isBlocked() here because
+      // for the cancelled case a prerequisite with required_stage='done' is
+      // still counted as blocking by isBlocked (cancelled != done), causing
+      // false positives. hasOtherBlockingDeps treats both done and cancelled
+      // as terminal. For the done case the guard also applies: if the
+      // dependent has other unresolved deps, broadcasting 'unblocked' would
+      // be premature — skip until the last blocker resolves.
       if (hasOtherBlockingDeps(dep.taskId, taskId))
         continue
 

@@ -1,3 +1,4 @@
+import type { makeToolRegistrar } from '../mcpAuth.js'
 import { z } from 'zod'
 import {
   addDependency,
@@ -5,7 +6,6 @@ import {
 } from '../../db/taskDependenciesRepo.js'
 import { getTaskById } from '../../db/tasksRepo.js'
 import { mcpError, ok } from '../mcpAuth.js'
-import type { makeToolRegistrar } from '../mcpAuth.js'
 
 type ToolFn = ReturnType<typeof makeToolRegistrar>
 
@@ -32,7 +32,8 @@ export function registerDependencyTools(tool: ToolFn, broadcast: (taskId: string
         return ok(dep)
       }
       catch (err) {
-        mcpError((err as Error).message)
+        const msg = (err as Error).message
+        mcpError(msg.includes('UNIQUE') ? 'Dependency already exists' : msg)
       }
     },
   )

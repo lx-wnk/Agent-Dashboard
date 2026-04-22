@@ -32,7 +32,6 @@ export function resolveWorktreeRoot(cwd: string): string {
   return join(dirname(cwd), `${basename(cwd)}-worktrees`)
 }
 
-
 export interface WorktreeOptions {
   cwd: string
   slug: string

@@ -272,13 +272,15 @@ export async function resolvePermissionRequest(id: string, outcome: 'granted' | 
 
 export async function fetchDependencies(taskId: string): Promise<TaskDependency[]> {
   const res = await fetch(`/api/tasks/${taskId}/dependencies`)
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok)
+    throw new Error(await res.text())
   return res.json() as Promise<TaskDependency[]>
 }
 
 export async function fetchDependents(taskId: string): Promise<TaskDependency[]> {
   const res = await fetch(`/api/tasks/${taskId}/dependents`)
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok)
+    throw new Error(await res.text())
   return res.json() as Promise<TaskDependency[]>
 }
 
@@ -293,13 +295,15 @@ export async function addTaskDependency(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ dependsOnId, requiredStage, onCancelAction }),
   })
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok)
+    throw new Error(await res.text())
   return res.json() as Promise<TaskDependency>
 }
 
 export async function removeTaskDependency(taskId: string, depId: string): Promise<void> {
   const res = await fetch(`/api/tasks/${taskId}/dependencies/${depId}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok)
+    throw new Error(await res.text())
 }
 
 export function useTasks() {

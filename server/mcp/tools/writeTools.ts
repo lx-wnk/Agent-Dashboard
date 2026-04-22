@@ -1,8 +1,8 @@
+import type { makeToolRegistrar } from '../mcpAuth.js'
 import { z } from 'zod'
-import { SLUG_RE, SLUG_PATTERN_MESSAGE } from '../../constants.js'
+import { SLUG_PATTERN_MESSAGE, SLUG_RE } from '../../constants.js'
 import { createTask, deleteTask, getTaskBySlug, updateTask } from '../../db/tasksRepo.js'
 import { mcpError, ok } from '../mcpAuth.js'
-import type { makeToolRegistrar } from '../mcpAuth.js'
 
 type ToolFn = ReturnType<typeof makeToolRegistrar>
 

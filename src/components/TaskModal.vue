@@ -53,17 +53,24 @@ const depError = ref('')
 const isAddingDep = ref(false)
 
 async function loadDependencies(): Promise<void> {
-  if (!props.task) return
-  const [deps, depts] = await Promise.all([
-    fetchDependencies(props.task.id),
-    fetchDependents(props.task.id),
-  ])
-  dependencies.value = deps
-  dependents.value = depts
+  if (!props.task)
+    return
+  try {
+    const [deps, depts] = await Promise.all([
+      fetchDependencies(props.task.id),
+      fetchDependents(props.task.id),
+    ])
+    dependencies.value = deps
+    dependents.value = depts
+  }
+  catch {
+    depError.value = 'Abhängigkeiten konnten nicht geladen werden'
+  }
 }
 
 async function handleAddDependency(): Promise<void> {
-  if (!props.task || !newDepId.value.trim()) return
+  if (!props.task || !newDepId.value.trim())
+    return
   depError.value = ''
   isAddingDep.value = true
   try {
@@ -80,7 +87,8 @@ async function handleAddDependency(): Promise<void> {
 }
 
 async function handleRemoveDependency(depId: string): Promise<void> {
-  if (!props.task) return
+  if (!props.task)
+    return
   try {
     await removeTaskDependency(props.task.id, depId)
     await loadDependencies()
@@ -481,10 +489,14 @@ function formatDate(iso: string | null): string {
 
             <!-- Dependencies section -->
             <section class="dep-section">
-              <h4 class="dep-heading">Abhängigkeiten</h4>
+              <h4 class="dep-heading">
+                Abhängigkeiten
+              </h4>
 
               <div v-if="dependencies.length > 0" class="dep-list">
-                <p class="dep-subheading">Wartet auf:</p>
+                <p class="dep-subheading">
+                  Wartet auf:
+                </p>
                 <div
                   v-for="dep in dependencies"
                   :key="dep.id"
@@ -496,12 +508,16 @@ function formatDate(iso: string | null): string {
                     :class="dep.dependsOnStage === dep.requiredStage ? 'dep-met' : 'dep-unmet'"
                   >{{ dep.dependsOnStage }}</span>
                   <span class="dep-action-hint">on cancel: {{ dep.onCancelAction }}</span>
-                  <button class="dep-remove" title="Remove dependency" @click="handleRemoveDependency(dep.id)">✕</button>
+                  <button class="dep-remove" title="Remove dependency" @click="handleRemoveDependency(dep.id)">
+                    ✕
+                  </button>
                 </div>
               </div>
 
               <div v-if="dependents.length > 0" class="dep-list">
-                <p class="dep-subheading">Wird benötigt von:</p>
+                <p class="dep-subheading">
+                  Wird benötigt von:
+                </p>
                 <div v-for="dep in dependents" :key="dep.id" class="dep-row">
                   <span class="dep-title">{{ dep.taskTitle || dep.taskId }}</span>
                 </div>
@@ -513,21 +529,33 @@ function formatDate(iso: string | null): string {
                   class="dep-input"
                   placeholder="Vorgänger Task-ID"
                   :disabled="isAddingDep"
-                />
+                >
                 <select v-model="newDepStage" class="dep-select">
-                  <option value="done">Done</option>
-                  <option value="cancelled">Cancelled</option>
+                  <option value="done">
+                    Done
+                  </option>
+                  <option value="cancelled">
+                    Cancelled
+                  </option>
                 </select>
                 <select v-model="newDepCancelAction" class="dep-select">
-                  <option value="on_hold">On Hold (bei Cancel)</option>
-                  <option value="cancel">Cancel (bei Cancel)</option>
-                  <option value="start">Start (bei Cancel)</option>
+                  <option value="on_hold">
+                    On Hold (bei Cancel)
+                  </option>
+                  <option value="cancel">
+                    Cancel (bei Cancel)
+                  </option>
+                  <option value="start">
+                    Start (bei Cancel)
+                  </option>
                 </select>
                 <button class="dep-add-btn" type="submit" :disabled="isAddingDep || !newDepId.trim()">
                   Hinzufügen
                 </button>
               </form>
-              <p v-if="depError" class="dep-error">{{ depError }}</p>
+              <p v-if="depError" class="dep-error">
+                {{ depError }}
+              </p>
             </section>
           </section>
 
