@@ -20,6 +20,8 @@ export const TOOL_SCOPE_MAP: Record<string, McpScope> = {
   create_task: 'tasks:write',
   update_task: 'tasks:write',
   delete_task: 'tasks:write',
+  add_dependency: 'tasks:write',
+  remove_dependency: 'tasks:write',
   // pipeline:control
   progress_task: 'pipeline:control',
   approve_task: 'pipeline:control',

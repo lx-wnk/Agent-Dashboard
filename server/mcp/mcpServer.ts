@@ -3,6 +3,7 @@ import type { McpScope } from '../../src/types.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { makeToolRegistrar } from './mcpAuth.js'
 import { registerControlTools } from './tools/controlTools.js'
+import { registerDependencyTools } from './tools/dependencyTools.js'
 import { registerKeyTools } from './tools/keyTools.js'
 import { registerReadTools } from './tools/readTools.js'
 import { registerWriteTools } from './tools/writeTools.js'
@@ -19,6 +20,7 @@ export function buildMcpServer(
   registerReadTools(tool)
   registerWriteTools(tool, broadcast, broadcastDeleted)
   registerControlTools(tool, orchestrator, broadcast)
+  registerDependencyTools(tool, broadcast)
   registerKeyTools(tool)
 
   return server
