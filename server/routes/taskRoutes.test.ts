@@ -544,7 +544,7 @@ describe('dependency routes', () => {
 
   it('GET /tasks/:id/dependents lists dependents', async () => {
     const a = createTask({ slug: 'drt-g', title: 'G', cwd: '/g' })
-    const b = createTask({ slug: 'drt-h', title: 'H', cwd: '/b' })
+    const b = createTask({ slug: 'drt-h', title: 'H', cwd: '/h' })
     addDependency(b.id, a.id)
     const { status, data } = await api<Array<{ taskId: string }>>(
       'GET',
@@ -565,5 +565,18 @@ describe('dependency routes', () => {
     )
     expect(status).toBe(200)
     expect(data.removed).toBe(true)
+  })
+
+  it('POST /tasks/:id/dependencies returns 404 when task not found', async () => {
+    const { status } = await api('POST', '/tasks/nonexistent-id/dependencies', { dependsOnId: 'other-id' })
+    expect(status).toBe(404)
+  })
+
+  it('POST /tasks/:id/dependencies returns 409 on duplicate', async () => {
+    const a = createTask({ slug: 'drt-dup-a', title: 'A', cwd: '/dup-a' })
+    const b = createTask({ slug: 'drt-dup-b', title: 'B', cwd: '/dup-b' })
+    await api('POST', `/tasks/${b.id}/dependencies`, { dependsOnId: a.id })
+    const { status } = await api('POST', `/tasks/${b.id}/dependencies`, { dependsOnId: a.id })
+    expect(status).toBe(409)
   })
 })
