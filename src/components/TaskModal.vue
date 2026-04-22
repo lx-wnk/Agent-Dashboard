@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import type { Agent, OutputMessage, PermissionRequest, PipelineTask, StageRun, TaskFeedback, TaskPermission } from '../types'
+import type { Agent, OutputMessage, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
+  addTaskDependency,
   analyzeTask,
   approveTask,
   cancelTask,
+  fetchDependencies,
+  fetchDependents,
   fetchPendingPermissionRequests,
   fetchStageRuns,
   fetchTaskFeedback,
   fetchTaskPermissions,
   grantTaskPermission,
   progressTask,
+  removeTaskDependency,
   requestChanges,
   resolvePermissionRequest,
   retryTask,
@@ -39,6 +43,47 @@ const newPermTool = ref('')
 const newPermPattern = ref('')
 const permError = ref('')
 const isGranting = ref(false)
+
+const dependencies = ref<TaskDependency[]>([])
+const dependents = ref<TaskDependency[]>([])
+const newDepId = ref('')
+const newDepStage = ref<'done' | 'cancelled'>('done')
+const newDepCancelAction = ref<'cancel' | 'start' | 'on_hold'>('on_hold')
+const depError = ref('')
+const isAddingDep = ref(false)
+
+async function loadDependencies(): Promise<void> {
+  if (!props.task) return
+  const [deps, depts] = await Promise.all([
+    fetchDependencies(props.task.id),
+    fetchDependents(props.task.id),
+  ])
+  dependencies.value = deps
+  dependents.value = depts
+}
+
+async function handleAddDependency(): Promise<void> {
+  if (!props.task || !newDepId.value.trim()) return
+  depError.value = ''
+  isAddingDep.value = true
+  try {
+    await addTaskDependency(props.task.id, newDepId.value.trim(), newDepStage.value, newDepCancelAction.value)
+    newDepId.value = ''
+    await loadDependencies()
+  }
+  catch (err) {
+    depError.value = (err as Error).message
+  }
+  finally {
+    isAddingDep.value = false
+  }
+}
+
+async function handleRemoveDependency(depId: string): Promise<void> {
+  if (!props.task) return
+  await removeTaskDependency(props.task.id, depId)
+  await loadDependencies()
+}
 
 // Live session lookup: the backend enriches tasks with `activeSessionId` of
 // the most relevant stage_run. If that session is also discovered by the
@@ -166,6 +211,7 @@ watch(() => props.task?.id, (id, prevId) => {
     feedbackHistory.value = []
     sessionLocalMessages.value = []
     void loadDetails()
+    void loadDependencies()
   }
 })
 
@@ -426,6 +472,57 @@ function formatDate(iso: string | null): string {
                 {{ task.description }}
               </div>
             </details>
+
+            <!-- Dependencies section -->
+            <section v-if="activeTab === 'overview'" class="dep-section">
+              <h4 class="dep-heading">Abhängigkeiten</h4>
+
+              <div v-if="dependencies.length > 0" class="dep-list">
+                <p class="dep-subheading">Wartet auf:</p>
+                <div
+                  v-for="dep in dependencies"
+                  :key="dep.id"
+                  class="dep-row"
+                >
+                  <span class="dep-title">{{ dep.dependsOnTitle }}</span>
+                  <span
+                    class="meta-chip stage"
+                    :class="dep.dependsOnStage === dep.requiredStage ? 'dep-met' : 'dep-unmet'"
+                  >{{ dep.dependsOnStage }}</span>
+                  <span class="dep-action-hint">on cancel: {{ dep.onCancelAction }}</span>
+                  <button class="dep-remove" title="Remove dependency" @click="handleRemoveDependency(dep.id)">✕</button>
+                </div>
+              </div>
+
+              <div v-if="dependents.length > 0" class="dep-list">
+                <p class="dep-subheading">Wird benötigt von:</p>
+                <div v-for="dep in dependents" :key="dep.id" class="dep-row">
+                  <span class="dep-title">{{ dep.dependsOnTitle || dep.taskId }}</span>
+                </div>
+              </div>
+
+              <form class="dep-add-form" @submit.prevent="handleAddDependency">
+                <input
+                  v-model="newDepId"
+                  class="dep-input"
+                  placeholder="Vorgänger Task-ID"
+                  :disabled="isAddingDep"
+                />
+                <select v-model="newDepStage" class="dep-select">
+                  <option value="done">Done</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <select v-model="newDepCancelAction" class="dep-select">
+                  <option value="on_hold">On Hold (bei Cancel)</option>
+                  <option value="cancel">Cancel (bei Cancel)</option>
+                  <option value="start">Start (bei Cancel)</option>
+                </select>
+                <button class="dep-add-btn" type="submit" :disabled="isAddingDep || !newDepId.trim()">
+                  Hinzufügen
+                </button>
+              </form>
+              <p v-if="depError" class="dep-error">{{ depError }}</p>
+            </section>
           </section>
 
           <!-- Session tab: live chat stream against the active stage-run's agent -->
@@ -1227,4 +1324,109 @@ function formatDate(iso: string | null): string {
 
 .modal-enter-active, .modal-leave-active { transition: opacity 0.2s; }
 .modal-enter-from, .modal-leave-to { opacity: 0; }
+
+.dep-section {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.dep-heading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+.dep-subheading {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.dep-list {
+  margin-bottom: 10px;
+}
+.dep-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.dep-title {
+  flex: 1;
+  color: var(--text-primary);
+}
+.dep-action-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.dep-met {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--accent-green);
+  border: 1px solid var(--accent-green);
+}
+.dep-unmet {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--accent-red);
+  border: 1px solid rgba(248, 113, 113, 0.5);
+}
+.dep-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  font-size: 10px;
+  border-radius: 3px;
+}
+.dep-remove:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--accent-red);
+}
+.dep-add-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.dep-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.dep-select {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+.dep-add-btn {
+  padding: 4px 10px;
+  background: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dep-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.dep-error {
+  font-size: 11px;
+  color: var(--accent-red);
+  margin: 4px 0 0;
+}
 </style>
