@@ -45,6 +45,7 @@ function stageLabel(stage: PipelineStage): string {
 <template>
   <div
     class="task-card"
+    :class="{ 'is-blocked': task.isBlocked }"
     tabindex="0"
     role="button"
     :aria-label="`Open task ${task.title}`"
@@ -77,6 +78,7 @@ function stageLabel(stage: PipelineStage): string {
       <span v-if="task.worktreePath" class="meta-chip" title="Has worktree">WT</span>
       <span v-if="task.sourceBranch" class="meta-chip">{{ task.sourceBranch }}</span>
       <span v-if="task.parentTaskId" class="meta-chip" title="Follow-up task">↳</span>
+      <span v-if="task.isBlocked" class="meta-chip blocked" title="Waiting for prerequisite tasks">🔒 Blocked</span>
       <span v-if="task.currentStage === 'umsetzung'" class="meta-chip iter">
         max iter {{ task.maxIterations }}
       </span>
@@ -217,5 +219,18 @@ function stageLabel(stage: PipelineStage): string {
   background: rgba(248, 113, 113, 0.18);
   color: var(--accent-red);
   border-color: rgba(248, 113, 113, 0.5);
+}
+.meta-chip.blocked {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+.task-card.is-blocked {
+  opacity: 0.6;
+}
+.task-card.is-blocked:hover {
+  opacity: 0.85;
+  border-color: var(--border);
+  transform: none;
 }
 </style>
