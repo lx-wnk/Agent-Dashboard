@@ -53,6 +53,7 @@ import {
   deleteTask,
   getTaskById,
   getTaskBySlug,
+  listPickableTasks,
   listTasks,
   listTasksByStage,
   updateTask,
@@ -192,6 +193,44 @@ describe('tasksRepo', () => {
     const task = createTask({ slug: 'chk2', title: 'CHK2', cwd: '/chk2' })
     const run = createStageRun({ taskId: task.id, stage: 'planning' })
     expect(() => updateStageRun(run.id, { status: 'bogus' as 'running' })).toThrow()
+  })
+
+  it('getTaskById includes isBlocked=true when task has unmet dependency', async () => {
+    const { addDependency: addDep } = await import('./taskDependenciesRepo.js')
+    const a = createTask({ slug: 'blk-a', title: 'A', cwd: '/a' })
+    const b = createTask({ slug: 'blk-b', title: 'B', cwd: '/b' })
+    addDep(b.id, a.id)
+    expect(getTaskById(b.id)?.isBlocked).toBe(true)
+  })
+
+  it('getTaskById includes isBlocked=false when dependency is met', async () => {
+    const { addDependency: addDep } = await import('./taskDependenciesRepo.js')
+    const a = createTask({ slug: 'blk-c', title: 'C', cwd: '/c' })
+    const b = createTask({ slug: 'blk-d', title: 'D', cwd: '/d' })
+    addDep(b.id, a.id)
+    updateTask(a.id, { currentStage: 'done' })
+    expect(getTaskById(b.id)?.isBlocked).toBe(false)
+  })
+
+  it('listPickableTasks excludes tasks with unmet dependencies', async () => {
+    const { addDependency: addDep } = await import('./taskDependenciesRepo.js')
+    const a = createTask({ slug: 'pkb-a', title: 'A', cwd: '/a' })
+    const b = createTask({ slug: 'pkb-b', title: 'B', cwd: '/b' })
+    addDep(b.id, a.id) // b waits for a (a is still backlog → not done)
+    const pickable = listPickableTasks()
+    const ids = pickable.map(t => t.id)
+    expect(ids).toContain(a.id) // a has no deps, is pickable
+    expect(ids).not.toContain(b.id) // b is blocked
+  })
+
+  it('listPickableTasks includes a task once all its deps are met', async () => {
+    const { addDependency: addDep } = await import('./taskDependenciesRepo.js')
+    const a = createTask({ slug: 'pkb-c', title: 'C', cwd: '/c' })
+    const b = createTask({ slug: 'pkb-d', title: 'D', cwd: '/d' })
+    addDep(b.id, a.id)
+    updateTask(a.id, { currentStage: 'done' })
+    const pickable = listPickableTasks()
+    expect(pickable.map(t => t.id)).toContain(b.id)
   })
 })
 

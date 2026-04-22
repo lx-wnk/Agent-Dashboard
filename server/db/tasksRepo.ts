@@ -41,6 +41,21 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
+/**
+ * Computed column expression that evaluates to 1 when the task has at least
+ * one unmet dependency (a prerequisite task whose current_stage doesn't match
+ * the dependency's required_stage), else 0. Alias the `tasks` table when
+ * using this in a SELECT since the subquery references the same table name.
+ */
+const IS_BLOCKED_EXPR = `
+  CASE WHEN EXISTS (
+    SELECT 1 FROM task_dependencies td
+    JOIN tasks t2 ON t2.id = td.depends_on_id
+    WHERE td.task_id = tasks.id
+      AND t2.current_stage != td.required_stage
+  ) THEN 1 ELSE 0 END AS is_blocked
+`
+
 const VALID_PRIORITIES: readonly TaskPriority[] = ['high', 'medium', 'low']
 
 /**
@@ -95,39 +110,52 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
 }
 
 export function getTaskById(id: string, db: Database = getDb()): PipelineTask | null {
-  const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined
+  const row = db
+    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks WHERE tasks.id = ?`)
+    .get(id) as TaskRow | undefined
   return row ? rowToTask(row) : null
 }
 
 export function getTaskBySlug(slug: string, db: Database = getDb()): PipelineTask | null {
-  const row = db.prepare('SELECT * FROM tasks WHERE slug = ?').get(slug) as TaskRow | undefined
+  const row = db
+    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks WHERE tasks.slug = ?`)
+    .get(slug) as TaskRow | undefined
   return row ? rowToTask(row) : null
 }
 
 export function listTasks(db: Database = getDb()): PipelineTask[] {
-  const rows = db.prepare('SELECT * FROM tasks ORDER BY created_at DESC').all() as TaskRow[]
+  const rows = db
+    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks ORDER BY tasks.created_at DESC`)
+    .all() as TaskRow[]
   return rows.map(rowToTask)
 }
 
 export function listTasksByStage(stage: PipelineStage, db: Database = getDb()): PipelineTask[] {
   const rows = db
-    .prepare('SELECT * FROM tasks WHERE current_stage = ? ORDER BY created_at DESC')
+    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks WHERE tasks.current_stage = ? ORDER BY tasks.created_at DESC`)
     .all(stage) as TaskRow[]
   return rows.map(rowToTask)
 }
 
 /**
  * List tasks eligible for runner pickup: excludes terminal (done/cancelled)
- * and orchestrator-paused (on_hold, approval1, approval2) stages. Tasks with
- * a failed latest stage_run are filtered separately by the orchestrator
- * (pickNextTasksForFreeSlots) — they stay on their stage but require
- * explicit user-triggered retry via POST /tasks/:id/retry.
+ * and orchestrator-paused (on_hold, approval1, approval2) stages, AND tasks
+ * with at least one unmet dependency. Tasks with a failed latest stage_run
+ * are filtered separately by the orchestrator (pickNextTasksForFreeSlots) —
+ * they stay on their stage but require explicit user-triggered retry via
+ * POST /tasks/:id/retry.
  */
 export function listPickableTasks(db: Database = getDb()): PipelineTask[] {
   const rows = db
     .prepare(`
-      SELECT * FROM tasks
-      WHERE current_stage NOT IN ('done','cancelled','on_hold','approval1','approval2')
+      SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks
+      WHERE tasks.current_stage NOT IN ('done','cancelled','on_hold','approval1','approval2')
+        AND NOT EXISTS (
+          SELECT 1 FROM task_dependencies td
+          JOIN tasks t2 ON t2.id = td.depends_on_id
+          WHERE td.task_id = tasks.id
+            AND t2.current_stage != td.required_stage
+        )
     `)
     .all() as TaskRow[]
   return rows.map(rowToTask)
