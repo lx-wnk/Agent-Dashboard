@@ -96,7 +96,7 @@ function getDependencyById(id: string, db: Database): TaskDependency | null {
 }
 
 /**
- * DFS from dependsOnId following existing task_id → depends_on_id edges.
+ * BFS from dependsOnId following existing task_id → depends_on_id edges.
  * If the walk reaches taskId, the proposed insert would create a cycle.
  * Also catches self-dependency (taskId === dependsOnId).
  */
