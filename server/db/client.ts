@@ -59,8 +59,10 @@ function runMigrations(connection: DatabaseType): void {
       id               TEXT PRIMARY KEY,
       task_id          TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       depends_on_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      required_stage   TEXT NOT NULL DEFAULT 'done',
-      on_cancel_action TEXT NOT NULL DEFAULT 'on_hold',
+      required_stage   TEXT NOT NULL DEFAULT 'done'
+                       CHECK (required_stage IN ('done', 'cancelled')),
+      on_cancel_action TEXT NOT NULL DEFAULT 'on_hold'
+                       CHECK (on_cancel_action IN ('cancel', 'start', 'on_hold')),
       created_at       TEXT NOT NULL,
       UNIQUE(task_id, depends_on_id)
     )
