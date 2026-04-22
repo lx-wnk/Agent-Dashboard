@@ -41,6 +41,14 @@ import {
   updateStageRun,
 } from './stageRunsRepo.js'
 import {
+  addDependency,
+  getDependenciesFor,
+  getDependentsOf,
+  isBlocked,
+  removeDependency,
+  removeDependencyById,
+} from './taskDependenciesRepo.js'
+import {
   createTask,
   deleteTask,
   getTaskById,
@@ -434,6 +442,117 @@ describe('token helpers', () => {
 
   it('two generateApiToken calls produce different tokens', () => {
     expect(generateApiToken()).not.toBe(generateApiToken())
+  })
+})
+
+describe('taskDependenciesRepo', () => {
+  it('addDependency creates a row retrievable by getDependenciesFor', () => {
+    const a = createTask({ slug: 'dep-a', title: 'A', cwd: '/a' })
+    const b = createTask({ slug: 'dep-b', title: 'B', cwd: '/b' })
+    addDependency(b.id, a.id, 'done', 'on_hold')
+    const deps = getDependenciesFor(b.id)
+    expect(deps).toHaveLength(1)
+    expect(deps[0].dependsOnId).toBe(a.id)
+    expect(deps[0].requiredStage).toBe('done')
+    expect(deps[0].onCancelAction).toBe('on_hold')
+  })
+
+  it('getDependentsOf returns tasks waiting on a given task', () => {
+    const a = createTask({ slug: 'dep-c', title: 'C', cwd: '/c' })
+    const b = createTask({ slug: 'dep-d', title: 'D', cwd: '/d' })
+    addDependency(b.id, a.id, 'done', 'cancel')
+    const dependents = getDependentsOf(a.id)
+    expect(dependents).toHaveLength(1)
+    expect(dependents[0].taskId).toBe(b.id)
+  })
+
+  it('isBlocked returns true when prerequisite is not at required stage', () => {
+    const a = createTask({ slug: 'dep-e', title: 'E', cwd: '/e' })
+    const b = createTask({ slug: 'dep-f', title: 'F', cwd: '/f' })
+    addDependency(b.id, a.id, 'done', 'on_hold')
+    expect(isBlocked(b.id)).toBe(true)
+  })
+
+  it('isBlocked returns false when prerequisite has reached required stage', () => {
+    const a = createTask({ slug: 'dep-g', title: 'G', cwd: '/g' })
+    const b = createTask({ slug: 'dep-h', title: 'H', cwd: '/h' })
+    addDependency(b.id, a.id, 'done', 'on_hold')
+    updateTask(a.id, { currentStage: 'done' })
+    expect(isBlocked(b.id)).toBe(false)
+  })
+
+  it('isBlocked returns false when task has no dependencies', () => {
+    const a = createTask({ slug: 'dep-i', title: 'I', cwd: '/i' })
+    expect(isBlocked(a.id)).toBe(false)
+  })
+
+  it('isBlocked true when at least one of two deps is unmet', () => {
+    const a = createTask({ slug: 'dep-j', title: 'J', cwd: '/j' })
+    const b = createTask({ slug: 'dep-k', title: 'K', cwd: '/k' })
+    const c = createTask({ slug: 'dep-l', title: 'L', cwd: '/l' })
+    addDependency(c.id, a.id, 'done', 'on_hold')
+    addDependency(c.id, b.id, 'done', 'on_hold')
+    updateTask(a.id, { currentStage: 'done' }) // only one done
+    expect(isBlocked(c.id)).toBe(true)
+  })
+
+  it('removeDependency removes the row', () => {
+    const a = createTask({ slug: 'dep-m', title: 'M', cwd: '/m' })
+    const b = createTask({ slug: 'dep-n', title: 'N', cwd: '/n' })
+    addDependency(b.id, a.id, 'done', 'on_hold')
+    expect(getDependenciesFor(b.id)).toHaveLength(1)
+    const removed = removeDependency(b.id, a.id)
+    expect(removed).toBe(true)
+    expect(getDependenciesFor(b.id)).toHaveLength(0)
+  })
+
+  it('addDependency rejects self-dependency', () => {
+    const a = createTask({ slug: 'dep-o', title: 'O', cwd: '/o' })
+    expect(() => addDependency(a.id, a.id, 'done', 'on_hold')).toThrow('cycle')
+  })
+
+  it('addDependency rejects direct cycle A→B then B→A', () => {
+    const a = createTask({ slug: 'dep-p', title: 'P', cwd: '/p' })
+    const b = createTask({ slug: 'dep-q', title: 'Q', cwd: '/q' })
+    addDependency(b.id, a.id, 'done', 'on_hold')
+    expect(() => addDependency(a.id, b.id, 'done', 'on_hold')).toThrow('cycle')
+  })
+
+  it('addDependency rejects 3-node cycle A→B→C then C→A', () => {
+    const a = createTask({ slug: 'dep-r', title: 'R', cwd: '/r' })
+    const b = createTask({ slug: 'dep-s', title: 'S', cwd: '/s' })
+    const c = createTask({ slug: 'dep-t', title: 'T', cwd: '/t' })
+    addDependency(b.id, a.id, 'done', 'on_hold')
+    addDependency(c.id, b.id, 'done', 'on_hold')
+    expect(() => addDependency(a.id, c.id, 'done', 'on_hold')).toThrow('cycle')
+  })
+
+  it('cascade: deleting a prerequisite removes its dependency rows', () => {
+    const a = createTask({ slug: 'dep-u', title: 'U', cwd: '/u' })
+    const b = createTask({ slug: 'dep-v', title: 'V', cwd: '/v' })
+    addDependency(b.id, a.id, 'done', 'on_hold')
+    deleteTask(a.id)
+    expect(getDependenciesFor(b.id)).toHaveLength(0)
+    expect(isBlocked(b.id)).toBe(false)
+  })
+
+  it('addDependency uses defaults: required_stage=done, on_cancel_action=on_hold', () => {
+    const a = createTask({ slug: 'dep-w', title: 'W', cwd: '/w' })
+    const b = createTask({ slug: 'dep-x', title: 'X', cwd: '/x' })
+    addDependency(b.id, a.id)
+    const deps = getDependenciesFor(b.id)
+    expect(deps[0].requiredStage).toBe('done')
+    expect(deps[0].onCancelAction).toBe('on_hold')
+  })
+
+  it('removeDependencyById removes by row id scoped to taskId', () => {
+    const a = createTask({ slug: 'dep-y', title: 'Y', cwd: '/y' })
+    const b = createTask({ slug: 'dep-z', title: 'Z', cwd: '/z' })
+    const dep = addDependency(b.id, a.id, 'done', 'on_hold')
+    expect(removeDependencyById(dep.id, 'wrong-task')).toBe(false)
+    expect(getDependenciesFor(b.id)).toHaveLength(1)
+    expect(removeDependencyById(dep.id, b.id)).toBe(true)
+    expect(getDependenciesFor(b.id)).toHaveLength(0)
   })
 })
 
