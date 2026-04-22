@@ -88,6 +88,29 @@ export function isBlocked(taskId: string, db: Database = getDb()): boolean {
   return row !== undefined
 }
 
+/**
+ * Returns true if taskId has any prerequisite that has not yet reached a terminal
+ * stage (done or cancelled), excluding the given excludeDependsOnId.
+ * Used by the orchestrator cascade to decide whether to apply on_cancel_action.
+ */
+export function hasOtherBlockingDeps(
+  taskId: string,
+  excludeDependsOnId: string,
+  db: Database = getDb(),
+): boolean {
+  const row = db
+    .prepare(`
+      SELECT 1 FROM task_dependencies td
+      JOIN tasks t2 ON t2.id = td.depends_on_id
+      WHERE td.task_id = ?
+        AND td.depends_on_id != ?
+        AND t2.current_stage NOT IN ('done', 'cancelled')
+      LIMIT 1
+    `)
+    .get(taskId, excludeDependsOnId)
+  return row !== undefined
+}
+
 function getDependencyById(id: string, db: Database): TaskDependency | null {
   const row = db
     .prepare(`${DEPENDENCY_SELECT} WHERE td.id = ?`)

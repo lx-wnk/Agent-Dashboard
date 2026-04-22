@@ -584,6 +584,21 @@ describe('handleDependentTasks (dependency cascade)', () => {
     // c still blocked by b (not done/cancelled), so no cascade
     expect(getTaskById(c.id)?.currentStage).toBe('backlog')
   })
+
+  it('cancel cascade recurses: A cancelled propagates to B then to C', () => {
+    const a = createTask({ slug: 'rc-a', title: 'A', cwd: '/a' })
+    const b = createTask({ slug: 'rc-b', title: 'B', cwd: '/b' })
+    const c = createTask({ slug: 'rc-c', title: 'C', cwd: '/c' })
+    addDependency(b.id, a.id, 'done', 'cancel')
+    addDependency(c.id, b.id, 'done', 'cancel')
+    updateTask(a.id, { currentStage: 'cancelled' })
+
+    const orch = new PipelineOrchestrator({})
+    orch.notifyTaskTerminated(a.id, 'cancelled')
+
+    expect(getTaskById(b.id)?.currentStage).toBe('cancelled')
+    expect(getTaskById(c.id)?.currentStage).toBe('cancelled')
+  })
 })
 
 describe('pipelineOrchestrator concurrency', () => {

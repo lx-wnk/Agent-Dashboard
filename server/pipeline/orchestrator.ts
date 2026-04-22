@@ -16,7 +16,7 @@ import {
   listRunningStageRuns,
   updateStageRun,
 } from '../db/stageRunsRepo.js'
-import { getDependentsOf } from '../db/taskDependenciesRepo.js'
+import { getDependentsOf, hasOtherBlockingDeps } from '../db/taskDependenciesRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
 import { detectCompletion } from './completionDetector.js'
 import { buildSessionName, decideRecovery } from './sessionManager.js'
@@ -759,17 +759,23 @@ export class PipelineOrchestrator {
           case 'cancel':
             updateTask(dep.taskId, { currentStage: 'cancelled' })
             this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' })
+            this.handleDependentTasks(dep.taskId, 'cancelled')
             break
           case 'on_hold':
             updateTask(dep.taskId, { currentStage: 'on_hold' })
             this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' })
+            // on_hold is not a terminal stage — don't cascade further
             break
           case 'start':
-            // No stage change — dependent becomes pickable when no longer blocked
+            // No stage change — task becomes pickable now that isBlocked = false
+            this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' })
             break
         }
       }
-      // newStage === 'done': dependent is now unblocked, picked up on next tick
+      else {
+        // newStage === 'done': dependent is now unblocked, will be picked up on next tick
+        this.onTaskChanged?.(dep.taskId, { transitionKind: 'unblocked' })
+      }
     }
   }
 
@@ -823,31 +829,6 @@ export class PipelineOrchestrator {
 
 function isTerminal(stage: PipelineStage): boolean {
   return stage === 'done' || stage === 'cancelled'
-}
-
-/**
- * Returns true if the task has at least one blocking dependency other than
- * the one identified by `excludeDependsOnId`.
- *
- * A dependency is "still blocking" when the prerequisite task's current_stage
- * is neither 'done' nor 'cancelled' (i.e. it hasn't terminated at all).
- * A cancelled prerequisite is considered resolved for cascade purposes — the
- * on_cancel_action on that row determines what happens to the dependent, but
- * other unrelated non-terminal prerequisites keep it waiting.
- */
-function hasOtherBlockingDeps(taskId: string, excludeDependsOnId: string): boolean {
-  const db = getDb()
-  const row = db
-    .prepare(`
-      SELECT 1 FROM task_dependencies td
-      JOIN tasks t2 ON t2.id = td.depends_on_id
-      WHERE td.task_id = ?
-        AND td.depends_on_id != ?
-        AND t2.current_stage NOT IN ('done', 'cancelled')
-      LIMIT 1
-    `)
-    .get(taskId, excludeDependsOnId)
-  return row !== undefined
 }
 
 function nextStageOrDone(stage: PipelineStage): PipelineStage {
