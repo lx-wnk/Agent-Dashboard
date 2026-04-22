@@ -1,4 +1,3 @@
-import type { makeToolRegistrar } from '../mcpAuth.js'
 import { z } from 'zod'
 import {
   addDependency,
@@ -6,6 +5,7 @@ import {
 } from '../../db/taskDependenciesRepo.js'
 import { getTaskById } from '../../db/tasksRepo.js'
 import { mcpError, ok } from '../mcpAuth.js'
+import type { makeToolRegistrar } from '../mcpAuth.js'
 
 type ToolFn = ReturnType<typeof makeToolRegistrar>
 
