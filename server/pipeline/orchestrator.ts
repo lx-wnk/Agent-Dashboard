@@ -748,8 +748,9 @@ export class PipelineOrchestrator {
    */
   private handleDependentTasks(taskId: string, newStage: 'done' | 'cancelled'): void {
     const callbacks: Array<() => void> = []
+    const visited = new Set<string>()
     getDb().transaction(() => {
-      this.collectDependentMutations(taskId, newStage, callbacks)
+      this.collectDependentMutations(taskId, newStage, callbacks, visited)
     })()
     for (const cb of callbacks) cb()
   }
@@ -758,9 +759,14 @@ export class PipelineOrchestrator {
     taskId: string,
     newStage: 'done' | 'cancelled',
     callbacks: Array<() => void>,
+    visited: Set<string>,
   ): void {
     const dependents = getDependentsOf(taskId)
     for (const dep of dependents) {
+      // Skip already-visited dependents so diamond dependency graphs
+      // (C depends on both A and B, A→B→C and A→C) don't double-process C.
+      if (visited.has(dep.taskId))
+        continue
       // Skip if the dependent still has other blocking predecessors besides
       // the one that just terminated. We cannot use isBlocked() here because
       // for the cancelled case a prerequisite with required_stage='done' is
@@ -771,6 +777,7 @@ export class PipelineOrchestrator {
       // be premature — skip until the last blocker resolves.
       if (hasOtherBlockingDeps(dep.taskId, taskId))
         continue
+      visited.add(dep.taskId)
 
       if (newStage === 'cancelled') {
         switch (dep.onCancelAction) {
@@ -778,7 +785,7 @@ export class PipelineOrchestrator {
             updateTask(dep.taskId, { currentStage: 'cancelled' })
             appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_cancel', details: { triggeredBy: taskId } })
             callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
-            this.collectDependentMutations(dep.taskId, 'cancelled', callbacks)
+            this.collectDependentMutations(dep.taskId, 'cancelled', callbacks, visited)
             break
           case 'on_hold':
             updateTask(dep.taskId, { currentStage: 'on_hold' })

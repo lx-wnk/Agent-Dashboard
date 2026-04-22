@@ -637,6 +637,27 @@ describe('handleDependentTasks (dependency cascade)', () => {
     expect(getTaskById(b.id)?.currentStage).toBe('cancelled')
     expect(getTaskById(c.id)?.currentStage).toBe('cancelled')
   })
+
+  it('diamond graph: C depends on A and B, B depends on A — C is only cancelled once', () => {
+    const a = createTask({ slug: 'dia-a', title: 'A', cwd: '/a' })
+    const b = createTask({ slug: 'dia-b', title: 'B', cwd: '/b' })
+    const c = createTask({ slug: 'dia-c', title: 'C', cwd: '/c' })
+    addDependency(b.id, a.id, 'done', 'cancel')
+    addDependency(c.id, a.id, 'done', 'cancel')
+    addDependency(c.id, b.id, 'done', 'cancel')
+    updateTask(a.id, { currentStage: 'cancelled' })
+
+    const notified: string[] = []
+    const orch = new PipelineOrchestrator({
+      onTaskChanged: taskId => notified.push(taskId),
+    })
+    orch.notifyTaskTerminated(a.id, 'cancelled')
+
+    expect(getTaskById(b.id)?.currentStage).toBe('cancelled')
+    expect(getTaskById(c.id)?.currentStage).toBe('cancelled')
+    // C must appear exactly once — no duplicate cascade from the diamond
+    expect(notified.filter(id => id === c.id)).toHaveLength(1)
+  })
 })
 
 describe('pipelineOrchestrator concurrency', () => {
