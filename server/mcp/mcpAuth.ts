@@ -1,9 +1,8 @@
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { NextFunction, Request, Response } from 'express'
+import type { z, ZodRawShape } from 'zod'
 import type { McpScope } from '../../src/types.js'
 import { createHash } from 'node:crypto'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ZodRawShape } from 'zod'
-import { z } from 'zod'
 import { getApiKeyByHash, touchApiKey } from '../db/apiKeysRepo.js'
 
 // Runtime scope enforcement: every tool is registered via makeToolRegistrar(),
@@ -89,7 +88,7 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
   next()
 }
 
-type ToolResult = { content: Array<{ type: 'text', text: string }> }
+interface ToolResult { content: Array<{ type: 'text', text: string }> }
 
 /** Uniform success response — wraps data as JSON text content block. */
 export function ok(data: unknown): ToolResult {

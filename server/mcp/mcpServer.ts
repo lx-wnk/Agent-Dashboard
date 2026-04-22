@@ -1,6 +1,6 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { McpScope } from '../../src/types.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { makeToolRegistrar } from './mcpAuth.js'
 import { registerControlTools } from './tools/controlTools.js'
 import { registerDependencyTools } from './tools/dependencyTools.js'
