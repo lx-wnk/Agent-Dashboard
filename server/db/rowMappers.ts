@@ -126,7 +126,7 @@ export function rowToTask(row: TaskRow): PipelineTask {
     metadata: parseJson<Record<string, unknown>>(row.metadata, row.id),
     silverBullet: row.silver_bullet === 1,
     priority: (row.priority as TaskPriority) ?? 'medium',
-    isBlocked: row.is_blocked === 1,
+    isBlocked: row.is_blocked !== undefined ? row.is_blocked === 1 : undefined,
   }
 }
 
