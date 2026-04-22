@@ -52,6 +52,22 @@ function runMigrations(connection: DatabaseType): void {
   // Picker index (idempotent).
   connection.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_picker ON tasks(silver_bullet DESC, priority, created_at)').run()
 
+  // Runtime migration: create task_dependencies for DBs created before this feature.
+  // schema.sql uses CREATE TABLE IF NOT EXISTS which is idempotent for new DBs.
+  connection.exec(`
+    CREATE TABLE IF NOT EXISTS task_dependencies (
+      id               TEXT PRIMARY KEY,
+      task_id          TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      depends_on_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      required_stage   TEXT NOT NULL DEFAULT 'done',
+      on_cancel_action TEXT NOT NULL DEFAULT 'on_hold',
+      created_at       TEXT NOT NULL,
+      UNIQUE(task_id, depends_on_id)
+    )
+  `)
+  connection.exec(`CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(task_id)`)
+  connection.exec(`CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_id)`)
+
   const version = connection
     .prepare('SELECT MAX(version) as v FROM schema_version')
     .get() as { v: number | null }

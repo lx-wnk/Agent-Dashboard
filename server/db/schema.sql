@@ -177,3 +177,20 @@ CREATE TABLE IF NOT EXISTS api_keys (
 
 CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(active);
+
+-- Task dependency links: task_id must wait for depends_on_id to reach required_stage.
+-- ON DELETE CASCADE: removing either task automatically cleans up its dependency rows.
+CREATE TABLE IF NOT EXISTS task_dependencies (
+  id               TEXT PRIMARY KEY,
+  task_id          TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  depends_on_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  required_stage   TEXT NOT NULL DEFAULT 'done'
+                   CHECK (required_stage IN ('done', 'cancelled')),
+  on_cancel_action TEXT NOT NULL DEFAULT 'on_hold'
+                   CHECK (on_cancel_action IN ('cancel', 'start', 'on_hold')),
+  created_at       TEXT NOT NULL,
+  UNIQUE(task_id, depends_on_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_id);
