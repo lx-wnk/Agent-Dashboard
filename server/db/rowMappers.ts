@@ -218,8 +218,9 @@ export function rowToApiKey(row: ApiKeyRow): ApiKey {
 export interface TaskDependencyRow {
   id: string
   task_id: string
+  task_title: string // joined from tasks (t1)
   depends_on_id: string
-  depends_on_title: string // joined from tasks
+  depends_on_title: string // joined from tasks (t2)
   depends_on_stage: string // joined from tasks
   required_stage: string
   on_cancel_action: string
@@ -230,6 +231,7 @@ export function rowToTaskDependency(row: TaskDependencyRow): TaskDependency {
   return {
     id: row.id,
     taskId: row.task_id,
+    taskTitle: row.task_title,
     dependsOnId: row.depends_on_id,
     dependsOnTitle: row.depends_on_title,
     dependsOnStage: row.depends_on_stage as PipelineStage,

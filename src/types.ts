@@ -112,6 +112,7 @@ export type TaskPriority = 'high' | 'medium' | 'low'
 export interface TaskDependency {
   id: string
   taskId: string
+  taskTitle: string
   dependsOnId: string
   dependsOnTitle: string
   dependsOnStage: PipelineStage

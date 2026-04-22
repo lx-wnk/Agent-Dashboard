@@ -81,8 +81,13 @@ async function handleAddDependency(): Promise<void> {
 
 async function handleRemoveDependency(depId: string): Promise<void> {
   if (!props.task) return
-  await removeTaskDependency(props.task.id, depId)
-  await loadDependencies()
+  try {
+    await removeTaskDependency(props.task.id, depId)
+    await loadDependencies()
+  }
+  catch (err) {
+    depError.value = (err as Error).message
+  }
 }
 
 // Live session lookup: the backend enriches tasks with `activeSessionId` of
@@ -240,6 +245,7 @@ watch(
     if (id !== prevId)
       return
     void loadDetails()
+    void loadDependencies()
   },
 )
 
@@ -474,7 +480,7 @@ function formatDate(iso: string | null): string {
             </details>
 
             <!-- Dependencies section -->
-            <section v-if="activeTab === 'overview'" class="dep-section">
+            <section class="dep-section">
               <h4 class="dep-heading">Abhängigkeiten</h4>
 
               <div v-if="dependencies.length > 0" class="dep-list">
@@ -497,7 +503,7 @@ function formatDate(iso: string | null): string {
               <div v-if="dependents.length > 0" class="dep-list">
                 <p class="dep-subheading">Wird benötigt von:</p>
                 <div v-for="dep in dependents" :key="dep.id" class="dep-row">
-                  <span class="dep-title">{{ dep.dependsOnTitle || dep.taskId }}</span>
+                  <span class="dep-title">{{ dep.taskTitle || dep.taskId }}</span>
                 </div>
               </div>
 

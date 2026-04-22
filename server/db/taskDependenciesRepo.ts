@@ -11,11 +11,14 @@ function nowIso(): string {
 
 const DEPENDENCY_SELECT = `
   SELECT
-    td.id, td.task_id, td.depends_on_id,
+    td.id, td.task_id,
+    t1.title AS task_title,
+    td.depends_on_id,
     t2.title AS depends_on_title,
     t2.current_stage AS depends_on_stage,
     td.required_stage, td.on_cancel_action, td.created_at
   FROM task_dependencies td
+  JOIN tasks t1 ON t1.id = td.task_id
   JOIN tasks t2 ON t2.id = td.depends_on_id
 `
 
