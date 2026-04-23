@@ -44,7 +44,7 @@ export async function getAgents(): Promise<Agent[]> {
   const processes = await scanProcesses()
 
   const sessions = await Promise.all(
-    processes.map(proc => findSessionForProject(proc.cwd)),
+    processes.map(proc => findSessionForProject(proc.cwd, proc.uptime)),
   )
 
   const agents: Agent[] = processes.map((proc, i) => {
