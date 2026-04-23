@@ -36,6 +36,7 @@ export interface TaskRow {
   silver_bullet: number
   priority: string
   is_blocked?: number // 0 | 1 computed subquery, present in enriched queries
+  is_unsatisfiable?: number // 0 | 1 computed subquery, present in enriched queries
 }
 
 export interface StageRunRow {
@@ -127,6 +128,7 @@ export function rowToTask(row: TaskRow): PipelineTask {
     silverBullet: row.silver_bullet === 1,
     priority: (row.priority as TaskPriority) ?? 'medium',
     isBlocked: row.is_blocked !== undefined ? row.is_blocked === 1 : undefined,
+    isUnsatisfiable: row.is_unsatisfiable !== undefined ? row.is_unsatisfiable === 1 : undefined,
   }
 }
 

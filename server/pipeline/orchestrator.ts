@@ -810,8 +810,12 @@ export class PipelineOrchestrator {
             if (depTask?.currentStage === 'on_hold') {
               updateTask(dep.taskId, { currentStage: 'backlog' })
               appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_start', details: { triggeredBy: taskId } })
+              callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
             }
-            callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
+            else {
+              // No stage change — only isBlocked cleared.
+              callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'unblocked' }))
+            }
             break
           }
         }

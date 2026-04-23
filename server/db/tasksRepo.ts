@@ -56,6 +56,16 @@ const IS_BLOCKED_EXPR = `
   ) THEN 1 ELSE 0 END AS is_blocked
 `
 
+const IS_UNSATISFIABLE_EXPR = `
+  CASE WHEN EXISTS (
+    SELECT 1 FROM task_dependencies td
+    JOIN tasks t2 ON t2.id = td.depends_on_id
+    WHERE td.task_id = tasks.id
+      AND t2.current_stage != td.required_stage
+      AND t2.current_stage IN ('done', 'cancelled')
+  ) THEN 1 ELSE 0 END AS is_unsatisfiable
+`
+
 const VALID_PRIORITIES: readonly TaskPriority[] = ['high', 'medium', 'low']
 
 /**
@@ -111,28 +121,28 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
 
 export function getTaskById(id: string, db: Database = getDb()): PipelineTask | null {
   const row = db
-    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks WHERE tasks.id = ?`)
+    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks WHERE tasks.id = ?`)
     .get(id) as TaskRow | undefined
   return row ? rowToTask(row) : null
 }
 
 export function getTaskBySlug(slug: string, db: Database = getDb()): PipelineTask | null {
   const row = db
-    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks WHERE tasks.slug = ?`)
+    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks WHERE tasks.slug = ?`)
     .get(slug) as TaskRow | undefined
   return row ? rowToTask(row) : null
 }
 
 export function listTasks(db: Database = getDb()): PipelineTask[] {
   const rows = db
-    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks ORDER BY tasks.created_at DESC`)
+    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks ORDER BY tasks.created_at DESC`)
     .all() as TaskRow[]
   return rows.map(rowToTask)
 }
 
 export function listTasksByStage(stage: PipelineStage, db: Database = getDb()): PipelineTask[] {
   const rows = db
-    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks WHERE tasks.current_stage = ? ORDER BY tasks.created_at DESC`)
+    .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks WHERE tasks.current_stage = ? ORDER BY tasks.created_at DESC`)
     .all(stage) as TaskRow[]
   return rows.map(rowToTask)
 }
@@ -148,7 +158,7 @@ export function listTasksByStage(stage: PipelineStage, db: Database = getDb()): 
 export function listPickableTasks(db: Database = getDb()): PipelineTask[] {
   const rows = db
     .prepare(`
-      SELECT tasks.*, ${IS_BLOCKED_EXPR} FROM tasks
+      SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks
       WHERE tasks.current_stage NOT IN ('done','cancelled','on_hold','approval1','approval2')
         AND NOT EXISTS (
           SELECT 1 FROM task_dependencies td

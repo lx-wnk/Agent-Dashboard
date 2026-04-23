@@ -458,6 +458,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'Task not found' })
       return
     }
+    if (task.currentStage === 'cancelled' || task.currentStage === 'done') {
+      res.status(400).json({ error: `Task is already ${task.currentStage}` })
+      return
+    }
     updateTask(req.params.id, { currentStage: 'cancelled' })
     deps.orchestrator.notifyTaskTerminated(req.params.id, 'cancelled')
     const updated = getTaskById(req.params.id)
@@ -726,11 +730,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: `Prerequisite task not found: ${dependsOnId}` })
       return
     }
-    if (requiredStage && !(DEPENDENCY_REQUIRED_STAGES as readonly string[]).includes(requiredStage)) {
+    if (!(DEPENDENCY_REQUIRED_STAGES as readonly string[]).includes(requiredStage)) {
       res.status(400).json({ error: 'requiredStage must be done or cancelled' })
       return
     }
-    if (onCancelAction && !(DEPENDENCY_CANCEL_ACTIONS as readonly string[]).includes(onCancelAction)) {
+    if (!(DEPENDENCY_CANCEL_ACTIONS as readonly string[]).includes(onCancelAction)) {
       res.status(400).json({ error: 'onCancelAction must be cancel, start, or on_hold' })
       return
     }

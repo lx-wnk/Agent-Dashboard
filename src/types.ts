@@ -160,6 +160,9 @@ export interface PipelineTask {
   activePid?: number | null
   // True when this task is blocked by unfulfilled dependencies.
   isBlocked?: boolean
+  // True when blocked AND every blocking prereq is terminal (done/cancelled)
+  // but reached the wrong stage — dependency can never be satisfied.
+  isUnsatisfiable?: boolean
 }
 
 export interface StageRun {

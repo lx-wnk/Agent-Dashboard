@@ -78,7 +78,8 @@ function stageLabel(stage: PipelineStage): string {
       <span v-if="task.worktreePath" class="meta-chip" title="Has worktree">WT</span>
       <span v-if="task.sourceBranch" class="meta-chip">{{ task.sourceBranch }}</span>
       <span v-if="task.parentTaskId" class="meta-chip" title="Follow-up task">↳</span>
-      <span v-if="task.isBlocked" class="meta-chip blocked" title="Waiting for prerequisite tasks">🔒 Blocked</span>
+      <span v-if="task.isUnsatisfiable" class="meta-chip unsatisfiable" title="Dependency can never be fulfilled — prerequisite reached wrong terminal stage. Remove dependency manually.">⚠ Unsatisfiable dep</span>
+      <span v-else-if="task.isBlocked" class="meta-chip blocked" title="Waiting for prerequisite tasks">🔒 Blocked</span>
       <span v-if="task.currentStage === 'umsetzung'" class="meta-chip iter">
         max iter {{ task.maxIterations }}
       </span>
@@ -224,6 +225,11 @@ function stageLabel(stage: PipelineStage): string {
   background: rgba(148, 163, 184, 0.15);
   color: var(--text-muted);
   border: 1px solid rgba(148, 163, 184, 0.3);
+}
+.meta-chip.unsatisfiable {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--accent-yellow);
+  border: 1px solid rgba(251, 191, 36, 0.35);
 }
 .task-card.is-blocked {
   opacity: 0.6;
