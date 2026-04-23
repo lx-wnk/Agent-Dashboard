@@ -21,6 +21,8 @@ import process from 'node:process'
 import { buildDashboardChannelMcpConfig } from '../channelConfig.js'
 import { SYSTEM_PROMPT_MAX_CHARS } from '../constants.js'
 
+const GIT_PUSH_RE = /\bgit push\b/i
+
 export interface SpawnAgentOptions {
   task: PipelineTask
   stageRun: StageRun
@@ -55,7 +57,7 @@ export function buildAllowList(permissions: TaskPermission[]): string[] {
       continue
     // Block git push regardless of what was granted — stage agents may commit
     // but must never push; pushes must be triggered by the user.
-    if (p.tool === 'Bash' && p.pattern && /\bgit push\b/i.test(p.pattern))
+    if (p.tool === 'Bash' && p.pattern && GIT_PUSH_RE.test(p.pattern))
       continue
     allow.push(p.pattern ? `${p.tool}(${p.pattern})` : p.tool)
   }
