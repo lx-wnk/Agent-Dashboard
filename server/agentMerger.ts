@@ -23,9 +23,10 @@ export function enrichWithPipelineTask(agents: Agent[]): void {
     }
   }
   catch (err) {
-    // Opportunistic enrichment — skip if pipeline DB is unavailable (e.g. first boot, missing schema)
-    const msg = err instanceof Error ? err.message : String(err)
-    const isExpected = msg.includes('no such table') || msg.includes('ENOENT') || msg.includes('no such file')
+    // Opportunistic enrichment — skip if pipeline DB is unavailable (e.g. first boot, missing schema).
+    // Use structured error codes (stable) rather than message string matching (fragile).
+    const code = (err as NodeJS.ErrnoException).code
+    const isExpected = code === 'SQLITE_ERROR' || code === 'ENOENT'
     if (!isExpected)
       console.warn('[agentMerger] enrichWithPipelineTask failed:', err)
   }
