@@ -45,9 +45,11 @@ const isGranting = ref(false)
 // agent starts before session_id is persisted to the DB.
 const pipelineAgent = computed(() => {
   const sid = props.task?.activeSessionId
-  if (sid) return agents.value.find(a => a.sessionId === sid) ?? null
+  if (sid)
+    return agents.value.find(a => a.sessionId === sid) ?? null
   const pid = props.task?.activePid
-  if (pid) return agents.value.find(a => a.pid === pid) ?? null
+  if (pid)
+    return agents.value.find(a => a.pid === pid) ?? null
   return null
 })
 

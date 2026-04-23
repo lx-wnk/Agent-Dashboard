@@ -17,8 +17,8 @@ import {
 } from '../db/stageRunsRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
 import { detectCompletion } from './completionDetector.js'
-import { findNewestSessionId } from './sessionOutputReader.js'
 import { attachSessionId, buildSessionName, decideRecovery } from './sessionManager.js'
+import { findNewestSessionId } from './sessionOutputReader.js'
 import { getHandlerForStage } from './stageHandlers.js'
 import { STAGE_ORDER } from './types.js'
 

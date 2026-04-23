@@ -4,7 +4,7 @@ import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { consola } from 'consola'
 import { Router } from 'express'
-import { SLUG_RE, SLUG_PATTERN_MESSAGE, VALID_STAGES } from '../constants.js'
+import { SLUG_PATTERN_MESSAGE, SLUG_RE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import {
   createFeedback,

@@ -432,21 +432,21 @@ describe('pickBestJsonlFile', () => {
   it('matches by birthtime when uptime is provided and birthtime is supported', () => {
     // Process started ~10 min ago → should get the 10-min-old file
     const uptimeSecs = 600
-    const old = file('old.jsonl', 5_000, 605_000)   // birthtime 605s ago ≈ 10 min
-    const newer = file('new.jsonl', 2_000, 120_000)  // birthtime 120s ago ≈ 2 min
+    const old = file('old.jsonl', 5_000, 605_000) // birthtime 605s ago ≈ 10 min
+    const newer = file('new.jsonl', 2_000, 120_000) // birthtime 120s ago ≈ 2 min
     expect(pickBestJsonlFile([old, newer], uptimeSecs)).toBe(old)
   })
 
   it('matches the newer file when process is young', () => {
     const uptimeSecs = 90
     const old = file('old.jsonl', 5_000, 600_000)
-    const newer = file('new.jsonl', 2_000, 95_000)   // birthtime 95s ago ≈ uptime
+    const newer = file('new.jsonl', 2_000, 95_000) // birthtime 95s ago ≈ uptime
     expect(pickBestJsonlFile([old, newer], uptimeSecs)).toBe(newer)
   })
 
   it('falls back to newest by mtime when birthtime is zero for all files', () => {
     const older = file('old.jsonl', 60_000, undefined) // birthtimeMs = 0
-    const newer = file('new.jsonl', 5_000, undefined)  // birthtimeMs = 0
+    const newer = file('new.jsonl', 5_000, undefined) // birthtimeMs = 0
     expect(pickBestJsonlFile([older, newer], 30)).toBe(newer)
   })
 })
