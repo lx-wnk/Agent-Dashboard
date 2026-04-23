@@ -47,10 +47,8 @@ if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
 }
 const SSE_INTERVAL_MS = (() => {
   const val = Number(process.env.DASHBOARD_SSE_INTERVAL_MS ?? 3000)
-  if (!Number.isFinite(val) || val <= 0) {
-    console.warn(`[config] DASHBOARD_SSE_INTERVAL_MS invalid (got: ${process.env.DASHBOARD_SSE_INTERVAL_MS}); using 3000ms default`)
-    return 3000
-  }
+  if (!Number.isFinite(val) || val <= 0)
+    throw new Error(`DASHBOARD_SSE_INTERVAL_MS must be a positive number (got: ${process.env.DASHBOARD_SSE_INTERVAL_MS})`)
   return val
 })()
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i

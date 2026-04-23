@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS stage_runs (
 
 CREATE INDEX IF NOT EXISTS idx_stage_runs_task ON stage_runs(task_id);
 CREATE INDEX IF NOT EXISTS idx_stage_runs_status ON stage_runs(status);
-CREATE INDEX IF NOT EXISTS idx_stage_runs_session ON stage_runs(session_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_runs_session ON stage_runs(session_id) WHERE session_id IS NOT NULL;
 -- Composite index for getLatestStageRun hot path (task_id, stage, iteration DESC)
 CREATE INDEX IF NOT EXISTS idx_stage_runs_latest ON stage_runs(task_id, stage, iteration DESC);
 
