@@ -53,6 +53,10 @@ export function buildAllowList(permissions: TaskPermission[]): string[] {
   for (const p of permissions) {
     if (!p.granted)
       continue
+    // Block git push regardless of what was granted — stage agents may commit
+    // but must never push; pushes must be triggered by the user.
+    if (p.tool === 'Bash' && p.pattern && /\bgit push\b/i.test(p.pattern))
+      continue
     allow.push(p.pattern ? `${p.tool}(${p.pattern})` : p.tool)
   }
   return allow

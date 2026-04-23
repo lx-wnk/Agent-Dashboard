@@ -101,6 +101,16 @@ describe('buildAllowList', () => {
     ])
     expect(list).toEqual([])
   })
+
+  it('blocks git push patterns even when granted', () => {
+    const list = buildAllowList([
+      permission({ tool: 'Bash', pattern: 'git push *' }),
+      permission({ tool: 'Bash', pattern: 'git push origin main' }),
+      permission({ tool: 'Bash', pattern: 'git commit -m *' }),
+    ])
+    expect(list).toEqual(['Bash(git commit -m *)'])
+    expect(list.some(e => e.includes('git push'))).toBe(false)
+  })
 })
 
 describe('buildSpawnArgs', () => {
