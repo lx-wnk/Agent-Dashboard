@@ -803,10 +803,17 @@ export class PipelineOrchestrator {
             callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
             // on_hold is not a terminal stage — don't cascade further
             break
-          case 'start':
-            // No stage change — task becomes pickable now that isBlocked = false
+          case 'start': {
+            // Move on_hold tasks to backlog so they become pickable.
+            // approval1/2 stay put — they need a human decision regardless.
+            const depTask = getTaskById(dep.taskId)
+            if (depTask?.currentStage === 'on_hold') {
+              updateTask(dep.taskId, { currentStage: 'backlog' })
+              appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_start', details: { triggeredBy: taskId } })
+            }
             callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
             break
+          }
         }
       }
       else {
