@@ -544,9 +544,19 @@ export class PipelineOrchestrator {
       if (!task)
         continue
       // Task reached a terminal stage (e.g. via cascade cancel) after this
-      // run was queued — skip finalization to avoid a stale transition.
-      if (task.currentStage === 'done' || task.currentStage === 'cancelled')
+      // run was queued — reap any orphaned running stage_run so its runner
+      // slot is freed. cancel_task (REST + MCP) flips currentStage without
+      // touching the stage_run, so without this the slot leaks forever.
+      if (task.currentStage === 'done' || task.currentStage === 'cancelled') {
+        if (run.pid !== null) {
+          try {
+            process.kill(run.pid, 'SIGTERM')
+          }
+          catch { /* already dead */ }
+        }
+        this.applyTransition(task, run, { kind: 'fail', error: 'task cancelled externally' })
         continue
+      }
       const cwd = task.worktreePath || task.cwd
       let result
       try {
