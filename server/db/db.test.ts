@@ -136,7 +136,7 @@ describe('tasksRepo', () => {
 
   it('deletes tasks and cascades to stage_runs', () => {
     const task = createTask({ slug: 'temp', title: 'Temp', cwd: '/t' })
-    createStageRun({ taskId: task.id, stage: 'pruefung' })
+    createStageRun({ taskId: task.id, stage: 'umsetzung' })
     expect(listStageRunsForTask(task.id)).toHaveLength(1)
 
     deleteTask(task.id)
@@ -191,7 +191,7 @@ describe('tasksRepo', () => {
 
   it('rejects invalid stage_run status via CHECK constraint', () => {
     const task = createTask({ slug: 'chk2', title: 'CHK2', cwd: '/chk2' })
-    const run = createStageRun({ taskId: task.id, stage: 'planning' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
     expect(() => updateStageRun(run.id, { status: 'bogus' as 'running' })).toThrow()
   })
 
@@ -266,7 +266,7 @@ describe('stageRunsRepo', () => {
 
   it('finds stage run by session id', () => {
     const task = createTask({ slug: 'sid', title: 'SID', cwd: '/sid' })
-    const run = createStageRun({ taskId: task.id, stage: 'planning' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
     updateStageRun(run.id, { sessionId: 'uuid-123' })
     const found = findStageRunBySessionId('uuid-123')
     expect(found?.id).toBe(run.id)
@@ -287,9 +287,9 @@ describe('stageRunsRepo', () => {
 
   it('stores output JSON correctly', () => {
     const task = createTask({ slug: 'out', title: 'Out', cwd: '/out' })
-    const run = createStageRun({ taskId: task.id, stage: 'planning' })
+    const run = createStageRun({ taskId: task.id, stage: 'selbstreview' })
     updateStageRun(run.id, { output: { findings: ['a', 'b'], score: 0.9 } })
-    const fetched = findStageRunBySessionId(run.sessionId || '') || getLatestStageRun(task.id, 'planning')
+    const fetched = findStageRunBySessionId(run.sessionId || '') || getLatestStageRun(task.id, 'selbstreview')
     expect(fetched?.output).toEqual({ findings: ['a', 'b'], score: 0.9 })
   })
 })
@@ -341,13 +341,13 @@ describe('auditRepo', () => {
       taskId: task.id,
       actor: 'orchestrator',
       action: 'stage_transition',
-      details: { from: 'backlog', to: 'pruefung' },
+      details: { from: 'backlog', to: 'umsetzung' },
     })
 
     const log = listAuditForTask(task.id)
     expect(log).toHaveLength(2)
     expect(log[0].action).toBe('created')
-    expect(log[1].details).toEqual({ from: 'backlog', to: 'pruefung' })
+    expect(log[1].details).toEqual({ from: 'backlog', to: 'umsetzung' })
   })
 })
 

@@ -78,7 +78,7 @@ describe('decideRecovery', () => {
 describe('attachSessionId', () => {
   it('persists a session id to a stage run', () => {
     const task = createTask({ slug: 'd', title: 'D', cwd: '/d' })
-    const run = createStageRun({ taskId: task.id, stage: 'planning' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
     attachSessionId(run.id, 'uuid-xyz')
     // Re-read via a direct query to verify.
     const db = getDb()

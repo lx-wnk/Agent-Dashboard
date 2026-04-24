@@ -52,6 +52,7 @@ export function createRefineRouter(
     const { stdout, waitForExit } = spawnRefinementTurn(message, history, task.cwd)
 
     let fullResponse = ''
+    let turnFinalized = false
     stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString()
       fullResponse += text
@@ -59,6 +60,9 @@ export function createRefineRouter(
     })
 
     stdout.on('error', (streamErr) => {
+      if (turnFinalized)
+        return
+      turnFinalized = true
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[stream error]' })
       res.write(`event: error\ndata: ${JSON.stringify({ error: String(streamErr) })}\n\n`)
       res.end()
@@ -66,6 +70,10 @@ export function createRefineRouter(
 
     try {
       await waitForExit()
+
+      if (turnFinalized)
+        return
+      turnFinalized = true
 
       const phaseMatch = fullResponse.match(PHASE_DONE_RE)
       const detectedPhase = phaseMatch ? phaseMatch[1] : undefined
@@ -81,12 +89,16 @@ export function createRefineRouter(
         res.write(`event: phase_change\ndata: ${JSON.stringify({ phase: detectedPhase })}\n\n`)
       }
       res.write(`event: done\ndata: {}\n\n`)
+      res.end()
     }
     catch (err) {
+      if (turnFinalized)
+        return
+      turnFinalized = true
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[error]' })
       res.write(`event: error\ndata: ${JSON.stringify({ error: err instanceof Error ? err.message : 'spawn failed' })}\n\n`)
+      res.end()
     }
-    res.end()
   })
 
   mutationRouter.post('/:taskId/confirm', (req, res) => {

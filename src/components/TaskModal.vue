@@ -1,22 +1,19 @@
 <script setup lang="ts">
-import type { Agent, OutputMessage, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
+import type { Agent, OutputMessage, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskPermission } from '../types'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
   addTaskDependency,
   analyzeTask,
-  approveTask,
   cancelTask,
   fetchDependencies,
   fetchDependents,
   fetchPendingPermissionRequests,
   fetchStageRuns,
-  fetchTaskFeedback,
   fetchTaskPermissions,
   grantTaskPermission,
   progressTask,
   removeTaskDependency,
-  requestChanges,
   resolvePermissionRequest,
   retryTask,
 } from '../composables/useTasks'
@@ -35,8 +32,6 @@ const activeTab = ref<Tab>('overview')
 const stageRuns = ref<StageRun[]>([])
 const permissions = ref<TaskPermission[]>([])
 const pendingRequests = ref<PermissionRequest[]>([])
-const feedbackHistory = ref<TaskFeedback[]>([])
-const feedbackInput = ref('')
 const actionError = ref('')
 const isActing = ref(false)
 const newPermTool = ref('')
@@ -123,10 +118,8 @@ const sessionChatRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
 // live agent right now and what (if anything) the user should do next.
 const sessionEmptyHint = computed<{ title: string, body: string }>(() => {
   const stage = props.task?.currentStage
-  if (stage === 'backlog' || stage === 'pruefung')
+  if (stage === 'backlog')
     return { title: 'No agent started yet', body: 'This task is waiting to be picked up by the pipeline.' }
-  if (stage === 'approval1' || stage === 'approval2')
-    return { title: 'Waiting for approval', body: 'The previous stage is complete — review the output in the Overview tab and approve or request changes.' }
   if (stage === 'on_hold')
     return { title: 'Task paused', body: 'The task was put on hold and needs a decision before an agent can continue.' }
   if (stage === 'done')
@@ -149,31 +142,6 @@ function isTerminal(stage: string | undefined) {
 function isFailedRun(task: { latestStageRunStatus?: string | null } | null | undefined) {
   return task?.latestStageRunStatus === 'failed'
 }
-
-// Per approval-gate, tell the UI which prior stage_run holds the artifact
-// to review and what label belongs on the green "Approve" button.
-const approvalMeta = computed(() => {
-  const stage = props.task?.currentStage
-  if (stage === 'approval1')
-    return { label: 'Approve Plan', reviewStage: 'planning' as const, sectionTitle: 'Plan for Approval' }
-  if (stage === 'approval2')
-    return { label: 'Approve Concept', reviewStage: 'umsetzungskonzept' as const, sectionTitle: 'Concept for Approval' }
-  return null
-})
-
-const approvalContent = computed(() => {
-  if (!approvalMeta.value)
-    return null
-  const reviewStage = approvalMeta.value.reviewStage
-  // Walk newest → oldest for the last successful run of the reviewed stage.
-  // stageRuns.value is ordered ascending by start time from fetchStageRuns.
-  for (let i = stageRuns.value.length - 1; i >= 0; i--) {
-    const run = stageRuns.value[i]
-    if (run.stage === reviewStage && run.status === 'done' && run.output)
-      return run.output
-  }
-  return null
-})
 
 const isOnHoldStage = computed(() => props.task?.currentStage === 'on_hold')
 
@@ -208,17 +176,6 @@ async function loadDetails() {
   stageRuns.value = await fetchStageRuns(props.task.id)
   permissions.value = await fetchTaskPermissions(props.task.id)
   pendingRequests.value = await fetchPendingPermissionRequests(props.task.id)
-  feedbackHistory.value = await fetchTaskFeedback(props.task.id)
-}
-
-async function onRequestChanges() {
-  const text = feedbackInput.value.trim()
-  if (!text || !props.task)
-    return
-  await handleAction(async () => {
-    await requestChanges(props.task!.id, text)
-    feedbackInput.value = ''
-  })
 }
 
 // Reset modal-local state when the user opens a different task.
@@ -226,8 +183,6 @@ watch(() => props.task?.id, (id, prevId) => {
   if (id && id !== prevId) {
     activeTab.value = 'overview'
     actionError.value = ''
-    feedbackInput.value = ''
-    feedbackHistory.value = []
     sessionLocalMessages.value = []
     void loadDetails()
     void loadDependencies()
@@ -367,8 +322,8 @@ function formatDate(iso: string | null): string {
         <div class="modal-body">
           <!-- Overview tab -->
           <section v-if="activeTab === 'overview'" class="tab-content">
-            <!-- Latest stage run summary (non-approval states) -->
-            <div v-if="!approvalMeta && latestStageRun" class="latest-run-card">
+            <!-- Latest stage run summary -->
+            <div v-if="latestStageRun" class="latest-run-card">
               <div class="latest-run-head">
                 <span class="stage-label-pill">{{ latestStageRun.stage }}</span>
                 <span class="iteration-pill">iter {{ latestStageRun.iteration }}</span>
@@ -396,60 +351,6 @@ function formatDate(iso: string | null): string {
               </details>
             </div>
 
-            <div v-if="approvalMeta" class="approval-preview">
-              <h3>{{ approvalMeta.sectionTitle }}</h3>
-              <StageOutputView
-                v-if="approvalContent"
-                :stage="approvalMeta.reviewStage"
-                :output="approvalContent"
-              />
-              <div v-else class="empty-hint">
-                No output from stage <code>{{ approvalMeta.reviewStage }}</code> found.
-              </div>
-
-              <div v-if="feedbackHistory.length > 0" class="feedback-thread">
-                <h4>Feedback History</h4>
-                <div
-                  v-for="fb in feedbackHistory"
-                  :key="fb.id"
-                  class="feedback-entry"
-                  :class="{ resolved: fb.resolvedAt !== null }"
-                >
-                  <div class="feedback-meta">
-                    <span class="feedback-iter">#{{ fb.iteration }}</span>
-                    <span class="feedback-stage">{{ fb.stage }}</span>
-                    <span class="feedback-date">{{ formatDate(fb.createdAt) }}</span>
-                    <span v-if="fb.resolvedAt" class="feedback-status resolved">✓ addressed</span>
-                    <span v-else class="feedback-status pending">open</span>
-                  </div>
-                  <p class="feedback-text">
-                    {{ fb.feedback }}
-                  </p>
-                </div>
-              </div>
-
-              <div class="feedback-input-block">
-                <label for="feedback-textarea">Request Changes</label>
-                <textarea
-                  id="feedback-textarea"
-                  v-model="feedbackInput"
-                  rows="3"
-                  placeholder="What should the agent change in the next iteration?"
-                  :disabled="isActing"
-                  maxlength="4000"
-                />
-                <div class="feedback-input-foot">
-                  <span class="char-count">{{ feedbackInput.length }} / 4000</span>
-                  <button
-                    class="btn btn-red"
-                    :disabled="isActing || feedbackInput.trim().length === 0"
-                    @click="onRequestChanges"
-                  >
-                    Request Changes
-                  </button>
-                </div>
-              </div>
-            </div>
             <dl class="facts">
               <div>
                 <dt>CWD</dt><dd class="mono">
@@ -754,16 +655,7 @@ function formatDate(iso: string | null): string {
               Analyze Failure
             </button>
             <button
-              v-if="approvalMeta"
-              class="btn btn-green"
-              :disabled="isActing"
-              :title="`Advance past ${task.currentStage} gate`"
-              @click="handleAction(() => approveTask(task!.id))"
-            >
-              {{ approvalMeta.label }}
-            </button>
-            <button
-              v-else-if="!isTerminal(task.currentStage) && !isOnHoldStage && !isFailedRun(task)"
+              v-if="!isTerminal(task.currentStage) && !isOnHoldStage && !isFailedRun(task)"
               class="btn btn-secondary"
               :disabled="isActing"
               title="Manually advance to the next stage (skips approval gates)"

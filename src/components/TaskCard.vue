@@ -22,13 +22,8 @@ function runStatusLabel(status: StageRunStatus): string {
 }
 
 const STAGE_LABELS: Record<PipelineStage, string> = {
+  konzept: 'Konzept',
   backlog: 'Backlog',
-  pruefung: 'Prüfung',
-  refinement: 'Refinement',
-  planning: 'Planung',
-  approval1: 'Freigabe 1',
-  umsetzungskonzept: 'Konzept',
-  approval2: 'Freigabe 2',
   umsetzung: 'Umsetzung',
   selbstreview: 'Selbstreview',
   finalisierung: 'Finalisierung',

@@ -7,9 +7,6 @@ const props = defineProps<{
   output: unknown
 }>()
 
-interface PlanningSubtask { id?: string, title?: string, files?: string[] }
-interface UmsetzungskonzeptStep { id?: string, description?: string, files?: string[] }
-interface UmsetzungskonzeptToolRequest { tool?: string, pattern?: string, reason?: string }
 interface SelbstreviewFinding { severity?: string, message?: string, file?: string }
 
 function asRecord(o: unknown): Record<string, unknown> | null {
@@ -24,34 +21,6 @@ const pretty = computed(() => {
     return null
 
   switch (props.stage) {
-    case 'planning':
-      return {
-        kind: 'planning' as const,
-        subtasks: (Array.isArray(r.subtasks) ? r.subtasks : []) as PlanningSubtask[],
-        acceptanceCriteria: (Array.isArray(r.acceptanceCriteria) ? r.acceptanceCriteria : []) as string[],
-      }
-    case 'umsetzungskonzept':
-      return {
-        kind: 'umsetzungskonzept' as const,
-        steps: (Array.isArray(r.steps) ? r.steps : []) as UmsetzungskonzeptStep[],
-        toolRequests: (Array.isArray(r.toolRequests) ? r.toolRequests : []) as UmsetzungskonzeptToolRequest[],
-      }
-    case 'pruefung':
-      return {
-        kind: 'pruefung' as const,
-        wellDefined: Boolean(r.wellDefined),
-        complexity: String(r.complexity ?? ''),
-        recommendation: String(r.recommendation ?? ''),
-        risks: (Array.isArray(r.risks) ? r.risks : []) as string[],
-        blockers: (Array.isArray(r.blockers) ? r.blockers : []) as string[],
-      }
-    case 'refinement':
-      return {
-        kind: 'refinement' as const,
-        refinedTitle: String(r.refinedTitle ?? ''),
-        refinedDescription: String(r.refinedDescription ?? ''),
-        successCriteria: (Array.isArray(r.successCriteria) ? r.successCriteria : []) as string[],
-      }
     case 'selbstreview':
       return {
         kind: 'selbstreview' as const,
@@ -82,114 +51,8 @@ function shortPath(full: string): string {
 
 <template>
   <div class="stage-output-view">
-    <!-- Planning: subtasks + acceptance criteria -->
-    <template v-if="pretty?.kind === 'planning'">
-      <div v-if="pretty.subtasks.length > 0" class="section">
-        <h4>Subtasks <span class="count">({{ pretty.subtasks.length }})</span></h4>
-        <ol class="subtask-list">
-          <li v-for="(st, i) in pretty.subtasks" :key="st.id ?? i" class="subtask">
-            <div class="subtask-head">
-              <code v-if="st.id" class="id-pill">{{ st.id }}</code>
-              <span class="subtask-title">{{ st.title ?? '(no title)' }}</span>
-            </div>
-            <ul v-if="st.files && st.files.length > 0" class="file-list">
-              <li v-for="f in st.files" :key="f" :title="f">
-                <code>{{ shortPath(f) }}</code>
-              </li>
-            </ul>
-          </li>
-        </ol>
-      </div>
-      <div v-if="pretty.acceptanceCriteria.length > 0" class="section">
-        <h4>Acceptance Criteria <span class="count">({{ pretty.acceptanceCriteria.length }})</span></h4>
-        <ul class="checklist">
-          <li v-for="(ac, i) in pretty.acceptanceCriteria" :key="i">
-            <span class="check">☐</span> {{ ac }}
-          </li>
-        </ul>
-      </div>
-    </template>
-
-    <!-- Umsetzungskonzept: steps + toolRequests -->
-    <template v-else-if="pretty?.kind === 'umsetzungskonzept'">
-      <div v-if="pretty.steps.length > 0" class="section">
-        <h4>Steps <span class="count">({{ pretty.steps.length }})</span></h4>
-        <ol class="subtask-list">
-          <li v-for="(step, i) in pretty.steps" :key="step.id ?? i" class="subtask">
-            <div class="subtask-head">
-              <code v-if="step.id" class="id-pill">{{ step.id }}</code>
-              <span class="subtask-title">{{ step.description ?? '(no description)' }}</span>
-            </div>
-            <ul v-if="step.files && step.files.length > 0" class="file-list">
-              <li v-for="f in step.files" :key="f" :title="f">
-                <code>{{ shortPath(f) }}</code>
-              </li>
-            </ul>
-          </li>
-        </ol>
-      </div>
-      <div v-if="pretty.toolRequests.length > 0" class="section">
-        <h4>Tool Requests <span class="count">({{ pretty.toolRequests.length }})</span></h4>
-        <ul class="tool-list">
-          <li v-for="(tr, i) in pretty.toolRequests" :key="i">
-            <code class="tool-name">{{ tr.tool }}<template v-if="tr.pattern">({{ tr.pattern }})</template></code>
-            <span v-if="tr.reason" class="tool-reason">— {{ tr.reason }}</span>
-          </li>
-        </ul>
-      </div>
-    </template>
-
-    <!-- Pruefung -->
-    <template v-else-if="pretty?.kind === 'pruefung'">
-      <dl class="kv">
-        <div><dt>Well-defined</dt><dd>{{ pretty.wellDefined ? '✓ yes' : '✗ no' }}</dd></div>
-        <div><dt>Complexity</dt><dd><code class="id-pill">{{ pretty.complexity }}</code></dd></div>
-        <div><dt>Recommendation</dt><dd><code class="id-pill">{{ pretty.recommendation }}</code></dd></div>
-      </dl>
-      <div v-if="pretty.risks.length > 0" class="section">
-        <h4>Risks</h4>
-        <ul class="checklist">
-          <li v-for="(r, i) in pretty.risks" :key="i">
-            ⚠ {{ r }}
-          </li>
-        </ul>
-      </div>
-      <div v-if="pretty.blockers.length > 0" class="section">
-        <h4>Blockers</h4>
-        <ul class="checklist">
-          <li v-for="(b, i) in pretty.blockers" :key="i">
-            ⛔ {{ b }}
-          </li>
-        </ul>
-      </div>
-    </template>
-
-    <!-- Refinement -->
-    <template v-else-if="pretty?.kind === 'refinement'">
-      <div class="section">
-        <h4>Refined Title</h4>
-        <p class="prose">
-          {{ pretty.refinedTitle }}
-        </p>
-      </div>
-      <div class="section">
-        <h4>Refined Description</h4>
-        <p class="prose">
-          {{ pretty.refinedDescription }}
-        </p>
-      </div>
-      <div v-if="pretty.successCriteria.length > 0" class="section">
-        <h4>Success Criteria <span class="count">({{ pretty.successCriteria.length }})</span></h4>
-        <ul class="checklist">
-          <li v-for="(sc, i) in pretty.successCriteria" :key="i">
-            <span class="check">☐</span> {{ sc }}
-          </li>
-        </ul>
-      </div>
-    </template>
-
     <!-- Selbstreview -->
-    <template v-else-if="pretty?.kind === 'selbstreview'">
+    <template v-if="pretty?.kind === 'selbstreview'">
       <dl class="kv">
         <div>
           <dt>Passed</dt>
