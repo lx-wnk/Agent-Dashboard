@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { useTasks } from '../composables/useTasks'
 import TaskCard from './TaskCard.vue'
 
-defineEmits<{ select: [task: PipelineTask] }>()
+const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
 const { tasksByStageMap } = useTasks()
 
@@ -91,7 +91,8 @@ const columnsWithTasks = computed(() =>
           v-for="task in tasks"
           :key="task.id"
           :task="task"
-          @select="(t) => $emit('select', t)"
+          @select="(t) => emit('select', t)"
+          @open-chat="(t) => emit('openChat', t)"
         />
         <div v-if="!tasks.length" class="empty-hint">
           —

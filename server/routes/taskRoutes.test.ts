@@ -179,6 +179,7 @@ describe('pOST /api/tasks/:id/progress', () => {
       slug: 'prog',
       title: 'P',
       cwd: '/p',
+      stage: 'backlog',
     })
 
     const { status, data } = await api<{ task: { currentStage: string } }>(

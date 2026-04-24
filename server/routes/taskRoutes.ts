@@ -156,7 +156,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   })
 
   mutationRouter.post('/tasks', async (req, res) => {
-    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree, silverBullet, priority } = req.body ?? {}
+    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree, silverBullet, priority, stage } = req.body ?? {}
 
     if (!slug || typeof slug !== 'string' || !SLUG_RE.test(slug)) {
       res.status(400).json({ error: SLUG_PATTERN_MESSAGE })
@@ -176,6 +176,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     if (priority !== undefined && priority !== 'high' && priority !== 'medium' && priority !== 'low') {
       res.status(400).json({ error: 'priority must be one of high|medium|low' })
+      return
+    }
+    if (stage !== undefined && (typeof stage !== 'string' || !VALID_STAGES.has(stage as PipelineStage))) {
+      res.status(400).json({ error: 'invalid stage' })
       return
     }
 
@@ -218,6 +222,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         metadata: typeof metadata === 'object' && metadata !== null ? metadata : null,
         silverBullet: silverBullet === true,
         priority: (priority === 'high' || priority === 'medium' || priority === 'low') ? priority : undefined,
+        currentStage: (typeof stage === 'string' && VALID_STAGES.has(stage as PipelineStage)) ? (stage as PipelineStage) : 'konzept',
       })
       deps.broadcastTaskEvent({ type: 'task_created', taskId: task.id, payload: enrichTask(task) })
       res.status(201).json(enrichTask(task))

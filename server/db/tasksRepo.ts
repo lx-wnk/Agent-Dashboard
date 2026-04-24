@@ -21,6 +21,7 @@ export interface CreateTaskInput {
   metadata?: Record<string, unknown> | null
   silverBullet?: boolean
   priority?: TaskPriority
+  currentStage?: PipelineStage
 }
 
 export interface UpdateTaskInput {
@@ -92,7 +93,7 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
       created_at, updated_at, metadata, silver_bullet, priority
     ) VALUES (
       @id, @slug, @title, @description, @cwd, @worktree_path,
-      @source_branch, @target_branch, 'backlog', @parent_task_id,
+      @source_branch, @target_branch, @current_stage, @parent_task_id,
       @max_iterations, @token_budget, @cost_budget_cents, @stage_timeout_seconds,
       @created_at, @updated_at, @metadata, @silver_bullet, @priority
     )
@@ -105,6 +106,7 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
     worktree_path: input.worktreePath ?? null,
     source_branch: input.sourceBranch ?? null,
     target_branch: input.targetBranch ?? null,
+    current_stage: input.currentStage ?? 'backlog',
     parent_task_id: input.parentTaskId ?? null,
     max_iterations: input.maxIterations ?? 20,
     token_budget: input.tokenBudget ?? null,

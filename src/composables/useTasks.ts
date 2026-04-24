@@ -120,6 +120,7 @@ export interface CreateTaskInput {
   parentTaskId?: string
   silverBullet?: boolean
   priority?: 'high' | 'medium' | 'low'
+  stage?: string
 }
 
 export async function createTask(input: CreateTaskInput): Promise<PipelineTask> {
@@ -139,6 +140,7 @@ export async function createTask(input: CreateTaskInput): Promise<PipelineTask> 
       parentTaskId: input.parentTaskId,
       silverBullet: input.silverBullet,
       priority: input.priority,
+      stage: input.stage,
     }),
   })
   if (!res.ok) {

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- stage_runs.status — the task stays on the stage where the run died
   -- so the UI can surface retry/analyze actions on the same stage.
   current_stage TEXT NOT NULL CHECK (current_stage IN (
-    'backlog','pruefung','refinement','planning','approval1',
+    'konzept','backlog','pruefung','refinement','planning','approval1',
     'umsetzungskonzept','approval2','umsetzung','selbstreview',
     'finalisierung','done','on_hold','cancelled'
   )),
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS stage_runs (
   id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   stage TEXT NOT NULL CHECK (stage IN (
-    'backlog','pruefung','refinement','planning','approval1',
+    'konzept','backlog','pruefung','refinement','planning','approval1',
     'umsetzungskonzept','approval2','umsetzung','selbstreview',
     'finalisierung','done','on_hold','cancelled'
   )),

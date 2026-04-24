@@ -2,7 +2,7 @@
 import type { PipelineStage, PipelineTask, StageRunStatus } from '../types'
 
 defineProps<{ task: PipelineTask }>()
-defineEmits<{ select: [task: PipelineTask] }>()
+const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -63,6 +63,13 @@ function stageLabel(stage: PipelineStage): string {
     <div v-if="task.description" class="task-desc">
       {{ task.description }}
     </div>
+    <button
+      v-if="task.currentStage === 'konzept'"
+      class="btn-resume-chat"
+      @click.stop="emit('openChat', task)"
+    >
+      Chat fortsetzen →
+    </button>
     <div class="task-meta">
       <span class="meta-chip stage" :class="`stage-${task.currentStage}`">
         {{ stageLabel(task.currentStage) }}
@@ -238,5 +245,26 @@ function stageLabel(stage: PipelineStage): string {
   opacity: 0.85;
   border-color: var(--border);
   transform: none;
+}
+.btn-resume-chat {
+  align-self: flex-start;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--accent-blue);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-resume-chat:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: var(--accent-blue);
+}
+.btn-resume-chat:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 </style>

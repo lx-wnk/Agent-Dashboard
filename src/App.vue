@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import type { Agent } from './types'
+import type { Agent, PipelineTask } from './types'
 import { computed, nextTick, ref } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
-import BacklogForm from './components/BacklogForm.vue'
 import CostTrend from './components/CostTrend.vue'
 import PipelineBoard from './components/PipelineBoard.vue'
+import RefinementChat from './components/RefinementChat.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
-import { useTasks } from './composables/useTasks'
+import { createTask, useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { formatTokens, totalTokenCount } from './utils/format'
 
@@ -21,9 +21,25 @@ const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, sear
 const { theme, toggleTheme } = useTheme()
 const { tasks, selectedTask, selectTask } = useTasks()
 const showSpawnDialog = ref(false)
-const showBacklog = ref(false)
+const activeKonzeptTask = ref<PipelineTask | null>(null)
 const showSessions = ref(false)
 const showSettings = ref(false)
+
+async function openNewTask() {
+  try {
+    const task = await createTask({
+      slug: `konzept-${Date.now()}`,
+      title: 'New Task',
+      cwd: '/',
+      stage: 'konzept',
+    })
+    if (task)
+      activeKonzeptTask.value = task
+  }
+  catch (err) {
+    showToast(`Failed to create task: ${(err as Error).message}`)
+  }
+}
 const scriptPath = ref('')
 const homeDir = ref('')
 const copied = ref(false)
@@ -133,7 +149,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <button
         v-if="viewMode === 'pipeline'"
         class="spawn-btn"
-        @click="showBacklog = true"
+        @click="openNewTask"
       >
         + New Task
       </button>
@@ -183,6 +199,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
         <PipelineBoard
           v-else-if="viewMode === 'pipeline'"
           @select="selectTask"
+          @open-chat="activeKonzeptTask = $event"
         />
         <AgentCardGrid
           v-else
@@ -210,9 +227,11 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       :open="showSpawnDialog"
       @close="showSpawnDialog = false"
     />
-    <BacklogForm
-      :open="showBacklog"
-      @close="showBacklog = false"
+    <RefinementChat
+      :open="activeKonzeptTask !== null"
+      :task="activeKonzeptTask"
+      @close="activeKonzeptTask = null"
+      @confirmed="activeKonzeptTask = null"
     />
     <SessionList
       :open="showSessions"
