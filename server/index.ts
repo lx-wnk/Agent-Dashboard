@@ -19,6 +19,7 @@ import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
 import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
+import { createRefineRouter } from './routes/refineRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
 import { SpawnManager } from './spawnManager.js'
@@ -309,6 +310,16 @@ async function start() {
     broadcastTaskEvent,
     dispatcher,
   }))
+
+  // Refine routes (agent-based ticket refinement)
+  app.use('/api/refine', createRefineRouter(
+    (taskId) => {
+      const task = getTaskById(taskId)
+      if (task)
+        broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
+    },
+    rejectCrossOrigin,
+  ))
 
   // MCP endpoint — stateless, bearer-token authenticated, mounted before
   // the Vite catch-all so POST /api/mcp is never swallowed by the SPA.
