@@ -359,7 +359,7 @@ describe('task enrichment (needsUser)', () => {
 
     // Then it advanced to backlog (unusual but this is the stale-run scenario)
     // and the new stage has no stage_run yet
-    forceStage(t.id, 'pruefung')
+    forceStage(t.id, 'backlog')
 
     const { data } = await api<{ needsUser: boolean, latestStageRunStatus: string | null }>(
       'GET',
