@@ -67,11 +67,15 @@ export function spawnRefinementTurn(
 
   const waitForExit = (): Promise<void> =>
     new Promise((resolve, reject) => {
-      child.on('close', code =>
-        code === 0 ? resolve() : reject(new Error(`refinement spawn exited ${code}`)),
+      child.on('close', (code, signal) =>
+        code === 0
+          ? resolve()
+          : reject(new Error(`refinement spawn exited code=${code} signal=${signal}`)),
       )
       child.on('error', reject)
     })
 
-  return { stdout: child.stdout as Readable, waitForExit }
+  if (!child.stdout)
+    throw new Error('refinement spawn: stdout pipe missing')
+  return { stdout: child.stdout, waitForExit }
 }
