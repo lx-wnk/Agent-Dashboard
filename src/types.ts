@@ -199,7 +199,7 @@ export interface PermissionRequest {
   outcome: 'granted' | 'denied' | 'timeout' | null
 }
 
-export type FeedbackStage = 'planning' | 'umsetzungskonzept'
+export type FeedbackStage = PipelineStage
 
 export interface TaskFeedback {
   id: string
