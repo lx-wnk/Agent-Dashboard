@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import process from 'node:process'
 import { promisify } from 'node:util'
+import { SLUG_RE as SAFE_SLUG_RE } from '../constants.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -30,8 +31,6 @@ export function resolveWorktreeRoot(cwd: string): string {
     return envRoot.trim()
   return join(dirname(cwd), `${basename(cwd)}-worktrees`)
 }
-
-const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export interface WorktreeOptions {
   cwd: string
@@ -93,8 +92,8 @@ async function isRegisteredWorktree(cwd: string, targetPath: string): Promise<bo
         return true
     }
   }
-  catch {
-    /* ignore */
+  catch (e) {
+    console.warn('[worktreeManager] git worktree list failed', e)
   }
   return false
 }
@@ -130,8 +129,9 @@ async function hasUncommittedChanges(worktreePath: string): Promise<boolean> {
     const { stdout } = await execFileAsync('git', ['-C', worktreePath, 'status', '--porcelain'])
     return stdout.trim().length > 0
   }
-  catch {
+  catch (e) {
     // If we can't determine state, assume dirty to err on the safe side.
+    console.warn('[worktreeManager] git status failed, assuming dirty', e)
     return true
   }
 }
@@ -144,7 +144,8 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
     const { stdout } = await execFileAsync('git', ['-C', cwd, 'rev-parse', '--is-inside-work-tree'])
     return stdout.trim() === 'true'
   }
-  catch {
+  catch (e) {
+    console.warn('[worktreeManager] git rev-parse (isGitRepo) failed', e)
     return false
   }
 }
@@ -158,7 +159,8 @@ export async function currentBranch(cwd: string): Promise<string | null> {
     const branch = stdout.trim()
     return branch === 'HEAD' ? null : branch
   }
-  catch {
+  catch (e) {
+    console.warn('[worktreeManager] git rev-parse (currentBranch) failed', e)
     return null
   }
 }

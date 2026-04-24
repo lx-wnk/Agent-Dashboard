@@ -8,6 +8,13 @@ package-lock.json
 .env.*
 !.env.dist
 
+# MCP config contains token placeholders — copy from .mcp.json.example
+.mcp.json
+!.mcp.json.example
+
+# Plans and specs are local-only artefacts (already implemented; never version)
+/docs/plans/*
+/docs/specs/*
 
 /docs/superpowers/*
 
@@ -15,3 +22,6 @@ package-lock.json
 .claude/skills/
 .agents/skills/
 .claude/worktrees/
+
+# Local settings contain tokens — never commit
+.claude/settings.local.json

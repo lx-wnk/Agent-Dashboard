@@ -1,6 +1,7 @@
 import type { PipelineStage, PipelineTask, StageRun } from '../../src/types.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
 import { consola } from 'consola'
+import { revokeApiKeyByName } from '../db/apiKeysRepo.js'
 import { appendAudit } from '../db/auditRepo.js'
 import { getDb } from '../db/client.js'
 import { resolveFeedbackForStage } from '../db/feedbackRepo.js'
@@ -16,7 +17,8 @@ import {
 } from '../db/stageRunsRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
 import { detectCompletion } from './completionDetector.js'
-import { buildSessionName, decideRecovery } from './sessionManager.js'
+import { attachSessionId, buildSessionName, decideRecovery } from './sessionManager.js'
+import { findNewestSessionId } from './sessionOutputReader.js'
 import { getHandlerForStage } from './stageHandlers.js'
 import { STAGE_ORDER } from './types.js'
 
@@ -299,6 +301,8 @@ export class PipelineOrchestrator {
     const now = new Date().toISOString()
 
     const txn = db.transaction(() => {
+      let result: { updatedRunId: string, newRunId: string | null }
+
       switch (transition.kind) {
         case 'next': {
           updateStageRun(stageRun.id, {
@@ -327,7 +331,8 @@ export class PipelineOrchestrator {
             action: 'stage_transition',
             details: { from: task.currentStage, to: transition.toStage },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'wait_user': {
@@ -341,7 +346,8 @@ export class PipelineOrchestrator {
             action: 'awaiting_user',
             details: { reason: transition.reason },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'iterate': {
@@ -369,15 +375,18 @@ export class PipelineOrchestrator {
               action: 'iteration_limit_reached',
               details: { maxIter, lastIteration: stageRun.iteration },
             }, db)
-            return { updatedRunId: stageRun.id, newRunId: null }
+            result = { updatedRunId: stageRun.id, newRunId: null }
           }
-          const newRun = createStageRun({
-            taskId: task.id,
-            stage: stageRun.stage,
-            iteration: stageRun.iteration + 1,
-            sessionName: buildSessionName(task, stageRun.stage, stageRun.iteration + 1),
-          }, db)
-          return { updatedRunId: stageRun.id, newRunId: newRun.id }
+          else {
+            const newRun = createStageRun({
+              taskId: task.id,
+              stage: stageRun.stage,
+              iteration: stageRun.iteration + 1,
+              sessionName: buildSessionName(task, stageRun.stage, stageRun.iteration + 1),
+            }, db)
+            result = { updatedRunId: stageRun.id, newRunId: newRun.id }
+          }
+          break
         }
 
         case 'on_hold': {
@@ -392,7 +401,8 @@ export class PipelineOrchestrator {
             action: 'moved_on_hold',
             details: { permissionRequestId: transition.permissionRequestId },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'done': {
@@ -403,7 +413,8 @@ export class PipelineOrchestrator {
           }, db)
           updateTask(task.id, { currentStage: 'done' }, db)
           appendAudit({ taskId: task.id, actor: 'orchestrator', action: 'task_done' }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'fail': {
@@ -423,7 +434,8 @@ export class PipelineOrchestrator {
             action: 'stage_failed',
             details: { stage: stageRun.stage, iteration: stageRun.iteration, error: transition.error },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
 
         case 'async_running': {
@@ -442,9 +454,18 @@ export class PipelineOrchestrator {
             action: 'agent_spawned',
             details: { pid: transition.pid, stage: stageRun.stage },
           }, db)
-          return { updatedRunId: stageRun.id, newRunId: null }
+          result = { updatedRunId: stageRun.id, newRunId: null }
+          break
         }
       }
+
+      // Revoke the ephemeral MCP token atomically with the state transition.
+      // async_running keeps the token alive so the still-running agent can
+      // authenticate; all other transitions end the run.
+      if (transition.kind !== 'async_running')
+        revokeApiKeyByName(`stage-run:${stageRun.id}`, db)
+
+      return result!
     })
 
     const { updatedRunId, newRunId } = txn() as { updatedRunId: string, newRunId: string | null }
@@ -523,8 +544,14 @@ export class PipelineOrchestrator {
         consola.error('[orchestrator] completion detection failed:', err)
         continue
       }
-      if (result.kind === 'still_running')
+      if (result.kind === 'still_running') {
+        // Eagerly attach session_id while the agent is still running so the
+        // frontend cross-link banner and live session tab work without waiting
+        // for the completion detector (which only runs after the PID exits).
+        if (!run.sessionId && run.startedAt)
+          void this.tryAttachSessionId(run.id, cwd, run.startedAt)
         continue
+      }
 
       // Re-fetch the stage_run to guard against races where applyTransition
       // on a prior iteration already moved this row to done/failed.
@@ -575,6 +602,15 @@ export class PipelineOrchestrator {
         })
       }
     }
+  }
+
+  private async tryAttachSessionId(stageRunId: string, cwd: string, startedAt: string): Promise<void> {
+    try {
+      const sid = await findNewestSessionId(cwd, startedAt)
+      if (sid)
+        attachSessionId(stageRunId, sid)
+    }
+    catch { /* non-critical: completion detector will attach it after the run ends */ }
   }
 
   /**

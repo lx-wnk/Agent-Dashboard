@@ -37,7 +37,15 @@ function renderMarkdown(text: string): string {
 }
 
 const outputMessages = computed<OutputMessage[]>(() => {
-  const all = [...sessionMessages.value, ...channelReplies.value, ...(props.localMessages ?? [])]
+  // Deduplicate: once a human message appears in sessionMessages (from JSONL),
+  // remove it from localMessages to avoid showing it twice during the poll gap.
+  const inSession = new Set(
+    sessionMessages.value.filter(m => m.role === 'human').map(m => m.content),
+  )
+  const filteredLocal = (props.localMessages ?? []).filter(
+    m => m.role !== 'human' || !inSession.has(m.content),
+  )
+  const all = [...sessionMessages.value, ...channelReplies.value, ...filteredLocal]
   all.sort((a, b) => {
     const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
     const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0

@@ -1,13 +1,7 @@
-import { execFile } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { readFile, statfs } from 'node:fs/promises'
 import { cpus, freemem, loadavg, totalmem, uptime } from 'node:os'
-import { promisify } from 'node:util'
 import { WHITESPACE_RE } from './paths.js'
 import { IS_LINUX } from './platform.js'
-
-const execFileAsync = promisify(execFile)
-
-const CPU_IDLE_RE = /([\d.]+)%\s*idle/
 
 export interface SystemInfo {
   cpu: {
@@ -67,40 +61,48 @@ async function getCpuUsageLinux(): Promise<number> {
   }
 }
 
+// Previous os.cpus() snapshot for delta-based CPU calculation on macOS
+let prevMacCpus: ReturnType<typeof cpus> | null = null
+
 async function getCpuUsageMac(): Promise<number> {
-  try {
-    const { stdout } = await execFileAsync('top', ['-l', '1', '-n', '0', '-s', '0'])
-    const cpuLine = stdout.split('\n').find(line => line.startsWith('CPU usage:'))
-    if (!cpuLine)
-      return 0
+  const currentCpus = cpus()
 
-    const idleMatch = cpuLine.match(CPU_IDLE_RE)
-    if (!idleMatch)
-      return 0
-
-    return Math.round((100 - Number.parseFloat(idleMatch[1])) * 100) / 100
-  }
-  catch {
+  if (!prevMacCpus) {
+    prevMacCpus = currentCpus
     return 0
   }
+
+  let totalDelta = 0
+  let idleDelta = 0
+
+  for (let i = 0; i < currentCpus.length; i++) {
+    const curr = currentCpus[i].times
+    const prev = prevMacCpus[i]?.times ?? curr
+    const currTotal = curr.user + curr.nice + curr.sys + curr.idle + curr.irq
+    const prevTotal = prev.user + prev.nice + prev.sys + prev.idle + prev.irq
+    totalDelta += currTotal - prevTotal
+    idleDelta += curr.idle - prev.idle
+  }
+
+  prevMacCpus = currentCpus
+
+  if (totalDelta === 0)
+    return 0
+  return Math.round((1 - idleDelta / totalDelta) * 10000) / 100
 }
 
 async function getDiskUsage(): Promise<SystemInfo['disk']> {
-  const { stdout } = await execFileAsync('df', ['-k', '/'])
-  const lines = stdout.trim().split('\n')
-  const parts = lines[1].trim().split(WHITESPACE_RE)
-
-  const totalKb = Number.parseInt(parts[1], 10)
-  const usedKb = Number.parseInt(parts[2], 10)
-  const availableKb = Number.parseInt(parts[3], 10)
-  const capacityStr = parts[4] // e.g. "45%"
+  const stats = await statfs('/')
+  const total = stats.blocks * stats.bsize
+  const available = stats.bavail * stats.bsize
+  const used = total - stats.bfree * stats.bsize
 
   return {
-    total: totalKb * 1024,
-    used: usedKb * 1024,
-    available: availableKb * 1024,
-    usagePercent: Number.parseInt(capacityStr, 10),
-    mount: parts[parts.length - 1],
+    total,
+    used,
+    available,
+    usagePercent: Math.round((used / total) * 10000) / 100,
+    mount: '/',
   }
 }
 

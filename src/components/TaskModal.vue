@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { OutputMessage, PermissionRequest, PipelineTask, StageRun, TaskFeedback, TaskPermission } from '../types'
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import type { Agent, OutputMessage, PermissionRequest, PipelineTask, StageRun, TaskFeedback, TaskPermission } from '../types'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
   analyzeTask,
@@ -17,11 +17,12 @@ import {
   retryTask,
 } from '../composables/useTasks'
 import AgentChatStream from './AgentChatStream.vue'
+import CrossLinkBanner from './CrossLinkBanner.vue'
 import PromptInput from './PromptInput.vue'
 import StageOutputView from './StageOutputView.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [], navigate: [agent: Agent] }>()
 
 const { agents } = useAgents()
 
@@ -39,16 +40,17 @@ const newPermPattern = ref('')
 const permError = ref('')
 const isGranting = ref(false)
 
-// Live session lookup: the backend enriches tasks with `activeSessionId` of
-// the most relevant stage_run. If that session is also discovered by the
-// agent scanner (it will be, for any running detached claude process), we
-// get a live Agent object with channelAvailable/status, which we pass into
-// AgentChatStream + PromptInput unchanged.
+// Live session lookup: match by sessionId first (set after orchestrator attaches
+// it), fall back to activePid so the live stream works immediately when the
+// agent starts before session_id is persisted to the DB.
 const pipelineAgent = computed(() => {
   const sid = props.task?.activeSessionId
-  if (!sid)
-    return null
-  return agents.value.find(a => a.sessionId === sid) ?? null
+  if (sid)
+    return agents.value.find(a => a.sessionId === sid) ?? null
+  const pid = props.task?.activePid
+  if (pid)
+    return agents.value.find(a => a.pid === pid) ?? null
+  return null
 })
 
 const sessionLocalMessages = ref<OutputMessage[]>([])
@@ -168,6 +170,13 @@ watch(() => props.task?.id, (id, prevId) => {
   }
 })
 
+// Auto-switch to session tab when a live agent appears for this task.
+// Only fires once per task open (guarded by the activeTab reset above).
+watch(pipelineAgent, (agent, prev) => {
+  if (agent && !prev && activeTab.value === 'overview')
+    activeTab.value = 'session'
+})
+
 // Live refresh: when the SSE store pushes updated task fields (stage,
 // iteration, run status, active session), re-fetch the dependent details
 // so the modal stays in sync with the kanban without re-opening it.
@@ -234,17 +243,14 @@ async function onGrantPermission() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.task) {
+  if (!props.task)
+    return
+  if (e.key === 'Escape') {
     e.preventDefault()
     emit('close')
   }
 }
-watch(() => props.task, (t) => {
-  if (t)
-    window.addEventListener('keydown', onKeydown)
-  else
-    window.removeEventListener('keydown', onKeydown)
-}, { immediate: true })
+onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 function formatDate(iso: string | null): string {
@@ -307,7 +313,13 @@ function formatDate(iso: string | null): string {
                   <template v-if="latestStageRun.endedAt"> → {{ formatDate(latestStageRun.endedAt) }}</template>
                 </span>
               </div>
-              <div v-if="latestRunAgentMessage" class="agent-message-block">
+              <AgentChatStream
+                v-if="latestStageRun.status === 'running' && pipelineAgent"
+                :agent="pipelineAgent"
+                :local-messages="[]"
+                class="overview-live-stream"
+              />
+              <div v-else-if="latestRunAgentMessage" class="agent-message-block">
                 <div class="agent-message-label">
                   Agent output
                 </div>
@@ -434,6 +446,13 @@ function formatDate(iso: string | null): string {
               </p>
             </div>
             <template v-else>
+              <CrossLinkBanner
+                v-if="pipelineAgent"
+                label="Running as session in"
+                :target-name="pipelineAgent.projectName"
+                button-text="Open session →"
+                @click="emit('navigate', pipelineAgent)"
+              />
               <div class="session-header">
                 <span class="session-label">Active Session</span>
                 <code class="session-id">{{ task.activeSessionId.slice(0, 8) }}</code>
@@ -776,6 +795,13 @@ function formatDate(iso: string | null): string {
   padding: 12px 20px;
   min-height: 280px;
   max-height: 50vh;
+}
+.overview-live-stream {
+  padding: 12px 0;
+  min-height: 200px;
+  max-height: 40vh;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
 }
 .session-empty {
   padding: 60px 20px;

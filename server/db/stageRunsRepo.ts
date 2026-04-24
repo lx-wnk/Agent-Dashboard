@@ -127,6 +127,23 @@ export function findStageRunBySessionId(sessionId: string, db: Database = getDb(
   return row ? rowToStageRun(row) : null
 }
 
+export function findTasksBySessionIds(
+  sessionIds: string[],
+  db: Database = getDb(),
+): Map<string, { taskId: string, title: string }> {
+  if (sessionIds.length === 0)
+    return new Map()
+  const rows = db
+    .prepare(`
+      SELECT sr.session_id, sr.task_id, t.title
+      FROM stage_runs sr
+      JOIN tasks t ON t.id = sr.task_id
+      WHERE sr.session_id IN (SELECT value FROM json_each(?))
+    `)
+    .all(JSON.stringify(sessionIds)) as Array<{ session_id: string, task_id: string, title: string }>
+  return new Map(rows.map(r => [r.session_id, { taskId: r.task_id, title: r.title }]))
+}
+
 export function listRunningStageRuns(db: Database = getDb()): StageRun[] {
   const rows = db
     .prepare(`SELECT * FROM stage_runs WHERE status IN ('running', 'awaiting_user', 'on_hold')`)

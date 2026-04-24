@@ -24,10 +24,13 @@ pnpm typecheck     # vue-tsc type checking
 **Backend** (Express + Node CLI tools in `server/`):
 - `server/platform.ts` — Shared `IS_LINUX` constant for platform detection
 - `server/paths.ts` — Shared path constants (`CLAUDE_PROJECTS_DIR`, `SESSION_META_DIR`, `DISCOVERY_DIR`, `WHITESPACE_RE`)
+- `server/constants.ts` — Shared constants: `VALID_STAGES`, `SLUG_RE`, `SLUG_PATTERN_MESSAGE`, `SYSTEM_PROMPT_MAX_CHARS`
 - `server/index.ts` — Express server with `/api/agents` REST + `/api/agents/stream` SSE endpoint, integrates Vite dev middleware
 - `server/processScanner.ts` — Uses `ps` and `lsof` to find running `/claude` processes and their working directories
 - `server/jsonlParser.ts` — Tail-reads last 32KB of JSONL session files, extracts tokens, model, tools, tasks
 - `server/agentMerger.ts` — Matches PIDs to session data, calculates costs via `estimateCost` (from `pricing.ts`), determines status
+- `server/spawnManager.ts` — Rate-limited dashboard-initiated agent spawner; manages spawn slots, stderr ring-buffer, and channel-reply routing (configurable via `DASHBOARD_SPAWN_RATE_LIMIT`, `DASHBOARD_SPAWN_RATE_WINDOW_MS`)
+- `server/channelConfig.ts` — `buildDashboardChannelMcpConfig()`: builds the MCP channel config injected into user-spawned agents
 
 **Frontend** (Vue 3 + TypeScript SPA in `src/`):
 - `src/composables/useAgents.ts` — SSE-first real-time updates via `/api/agents/stream` with polling fallback; manages view mode (list/cards/kanban) with localStorage persistence and search query state
@@ -52,6 +55,7 @@ pnpm typecheck     # vue-tsc type checking
 - `src/components/StageOutputView.vue` — renders per-stage LLM output with expand/collapse
 - `src/components/AgentChatStream.vue` — live SSE-streamed agent message view
 - `src/components/BacklogForm.vue` — task creation / backlog entry form
+- `src/components/CrossLinkBanner.vue` — session↔task cross-link banner rendered in both `AgentModal.vue` and `TaskModal.vue`; emits `click` to trigger cross-navigation
 - `src/composables/useTasks.ts` — SSE-first task list state with 60s polling fallback
 - `src/composables/useRole.ts` — role-based access control composable
 
@@ -72,10 +76,14 @@ The Task Pipeline subsystem (`server/db/`, `server/pipeline/`, `server/routes/ta
 - `completionDetector.ts` — converts a dead PID + session JSONL into a next/retry/fail decision. Strict per-stage schema validators (`validateStageOutput`) with injectable deps for tests.
 - `sessionOutputReader.ts` — reads the last assistant turn from a session JSONL, extracts the `` ```json `` block, falls back to newest-by-mtime session discovery when the stage_run has no `session_id` yet.
 - `sessionManager.ts` — `isPidAlive` (with EPERM handling), recovery decisions on orchestrator restart.
-- `analysisSpawner.ts` — spawns detached analysis agents (distinct from stage agents) for pre-pipeline analysis tasks.
-- `worktreeManager.ts` — creates and removes per-task git worktrees for isolated stage execution; root path via `DASHBOARD_WORKTREE_ROOT`.
-- `resourceRecommender.ts` — recommends parallelism cap based on available CPU/memory; consulted when setting `maxParallelOrchestrators`.
 - `types.ts` — `StageTransition` union (incl. `async_running`, `taskMetadataPatch` on `next`), `StageContext` with injected `recordAudit` / `requestPermission` side-effects.
+
+**Services** (`server/services/`) — stateless helpers consumed by `routes/*` and `mcp/*` (and, where appropriate, by `pipeline/*`). They do not drive the state machine and do not depend on the orchestrator at runtime:
+
+- `approvalUtils.ts` — `ALLOWED_TOOLS` allow-list and `bulkGrantKonzeptPermissions(taskId)`: bulk-grant every tool permission declared in the latest `umsetzungskonzept` stage output's `toolRequests` array.
+- `analysisSpawner.ts` — `spawnAnalysisAgent` / `buildAnalysisPrompt`: detached Claude CLI session for post-failure investigation. Distinct from `pipeline/agentSpawner.ts`; not part of the state machine (no stage_run, no channel MCP, no allow-list).
+- `resourceRecommender.ts` — `recommendParallelism()`: recommends a `maxParallelOrchestrators` value based on available CPU/memory.
+- `worktreeManager.ts` — `createWorktree` / `removeWorktree` / `isGitRepo` / `currentBranch` / `resolveWorktreeRoot`: per-task git worktrees under `DASHBOARD_WORKTREE_ROOT` (default `<repo>-worktrees` sibling), with legacy-path adoption.
 
 **Notifications** (`server/notifications/`):
 - `dispatcher.ts` — event-driven dispatcher; registered callbacks come from `server/index.ts` only (never imported by `pipeline/`).
@@ -84,6 +92,8 @@ The Task Pipeline subsystem (`server/db/`, `server/pipeline/`, `server/routes/ta
 **Channel bridge** (`channel/dashboard-channel.ts`) — MCP server injected into every spawned stage agent. Reads `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` env vars and forwards permission requests back to the orchestrator's `onPermissionRequest` callback via the dashboard API. Enables the two-way permission gate without any pipeline-to-notification dependency.
 
 **Runner slots:** `maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `umsetzung`. Agent-less stages (backlog, approval1/2) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → createdAt) and the sticky-run invariant.
+
+**Stage timeout:** `stageTimeoutSeconds` (pipeline_config key, default 1800) is enforced by the orchestrator's tick loop. If a stage agent's PID is still alive after this many seconds, the orchestrator sends SIGTERM and applies a `fail` transition, freeing its runner slot. Set to `0` to disable. Written via `UPDATE pipeline_config SET value='3600' WHERE key='stageTimeoutSeconds'` (or INSERT if absent).
 
 **Schema validation + retry:** every agent-driven stage's output is validated against a strict per-stage schema in `validateStageOutput`. A schema mismatch on the first iteration → `iterate` with the validation error and the rejected payload fed back into the next prompt; a second failure → `wait_user`. Hard failures (no session, no parseable JSON) → `fail` immediately without retry. This strategy is also documented in the private `feedback_llm_output_validation` memory.
 
@@ -97,21 +107,27 @@ server/index.ts  ← composition root (only place that constructs concrete insta
      └── creates TaskRouter (with TaskRouterDeps)
               │
               ▼
-        routes/taskRoutes.ts
+        routes/taskRoutes.ts ──┐
+              │                │
+        mcp/mcpServer.ts   ────┤ (both may import from services/*)
+              │                │
+              │                ▼
+              │          services/*  ─────►  db/*
               │ (type-only deps)
               ▼
         pipeline/*  ──────────►  db/*
               │
-              └─► (NO import of notifications/)
+              └─► (NO import of notifications/ or services/)
 ```
 
 **Layering rules:**
 
-1. `db/*` — imports only `node:*`, `better-sqlite3`, sibling db files, and type-only from `src/types.ts`. Never imports pipeline/notifications/routes.
-2. `pipeline/*` — imports `db/*` and `src/types.ts` only. Never imports `notifications/` or `routes/`.
-3. `notifications/*` — imports `db/notificationConfigRepo` and `src/types.ts` only. Adapters are private to `dispatcher.ts`.
-4. `routes/taskRoutes.ts` — receives `PipelineOrchestrator` and `Dispatcher` as type-only dependencies via `TaskRouterDeps`; runtime instances are injected from `server/index.ts`.
-5. `server/index.ts` is the **only** file that instantiates concrete services. It is the composition root.
+1. `db/*` — imports only `node:*`, `better-sqlite3`, sibling db files, and type-only from `src/types.ts`. Never imports pipeline/notifications/routes/services/mcp.
+2. `pipeline/*` — imports `db/*` and `src/types.ts` only. One narrow exception: `server/channelConfig.ts` (pure `node:*` utility, no project-layer dependencies) may also be imported. Never imports `notifications/`, `routes/`, `services/`, or `mcp/`.
+3. `services/*` — stateless helpers. Imports only `db/*`, `src/types.ts`, `server/paths.ts`, `server/platform.ts`, and `node:*`. Type-only imports from `pipeline/orchestrator.ts` (e.g. `import type { ... } from '../pipeline/orchestrator'`) are allowed; no runtime dependency on the orchestrator. Never imports `notifications/`, `routes/`, or `mcp/`.
+4. `notifications/*` — imports `db/notificationConfigRepo` and `src/types.ts` only. Adapters are private to `dispatcher.ts`.
+5. `routes/*` and `mcp/*` — may import from `db/*`, `services/*`, `src/types.ts`, and type-only from `pipeline/orchestrator.ts` and `notifications/dispatcher.ts`. Runtime instances of the orchestrator and dispatcher are injected from `server/index.ts`. Runtime imports from `pipeline/*` are limited to specific named helpers that do not touch the state machine (currently: `resolvedProjectDir` from `pipeline/sessionOutputReader.ts`, used by `routes/taskRoutes.ts`); never import the orchestrator, stage handlers, completion detector, or any other state-machine internals at runtime.
+6. `server/index.ts` is the **only** file that instantiates concrete services. It is the composition root.
 
 **Why `pipeline/` does not import `notifications/`:**
 
@@ -139,12 +155,34 @@ The same pattern applies inside `StageContext` (`server/pipeline/types.ts`): sta
 - New runner-picker priority tier? Update `comparePickOrder` in `orchestrator.ts` AND the `project_task_pipeline_runner_model` memory, in that order. The memory captures user intent; code changes must stay consistent with it.
 - **SSE event coverage for new transitions / mutation paths:** the kanban relies on `onTaskChanged` (fires after every successful `applyTransition`) plus the route-level `broadcastEnrichedUpdate(taskId)` helper in `server/routes/taskRoutes.ts`. Both must produce **enriched** payloads (via `enrichTask`), otherwise the cards lose `latestStageRunStatus` / `needsUser` and the run-status chip vanishes. When you add a new mutation endpoint, call `broadcastEnrichedUpdate(taskId)` — never raw `broadcastTaskEvent({ payload: getTaskById(...) })`. When you add a new transition kind to `applyTransition`, the existing `onTaskChanged` call covers it automatically. A 60s polling fallback in `useTasks.ts` is a safety net only — don't rely on it for primary updates.
 
+## MCP Endpoint
+
+A stateless StreamableHTTP MCP server at `POST /api/mcp` — each request is self-contained (no server-side session map).
+
+**Authentication:** Bearer token (`Authorization: Bearer mcp_<hex>`). Tokens are never stored — only their SHA-256 hash lives in the `api_keys` SQLite table. Clients must also send `Accept: application/json, text/event-stream`.
+
+**Scope model:** `tasks:read` | `tasks:write` | `pipeline:control` | `keys:manage`. Higher scopes imply lower ones (`keys:manage` → all; `tasks:write` → `tasks:read`). Each MCP tool checks its required scope at call time and returns an MCP error if insufficient.
+
+**Key files:**
+- `server/db/apiKeysRepo.ts` — CRUD for `api_keys` table (SHA-256 hashed tokens, `upsertStageRunApiKey` for iterate re-key)
+- `server/mcp/mcpAuth.ts` — `mcpAuthMiddleware` (hash lookup + scope resolution), `TOOL_SCOPE_MAP`
+- `server/mcp/mcpServer.ts` — `buildMcpServer(orchestrator, scopes, broadcast)` — all tool registrations
+- `server/mcp/mcpRouter.ts` — `createMcpRouter` — thin Express router that creates a transport per request
+- `server/routes/apiKeyRoutes.ts` — REST CRUD for API keys (`GET/POST/DELETE /api/settings/api-keys`)
+- `src/components/ApiKeySettings.vue` — UI for creating/revoking keys
+
+**Layering:** `server/mcp/*` imports `db/*`, `services/*`, `src/types.ts`, and `pipeline/orchestrator.ts` (type-only) only. Never imports `notifications/` or `routes/`. (See Rule 5 below for the full routes/mcp ↔ pipeline policy.)
+
+**Pipeline env vars injected into spawned stage agents:** `DASHBOARD_MCP_TOKEN` (stage-scoped bearer token), `DASHBOARD_MCP_URL` (e.g. `http://127.0.0.1:13120/api/mcp`). These allow stage agents to call back into the dashboard MCP endpoint.
+
+**Local agent integration:** A `.mcp.json.example` is shipped at the repo root. Copy it to `.mcp.json` and export `DASHBOARD_MCP_TOKEN` — any Claude Code session opened in this repo then has automatic dashboard MCP access. `.mcp.json` is gitignored to prevent accidental token commits.
+
 ## Key Conventions
 
 - Path alias: `@/*` maps to `./src/*` (configured in tsconfig.json and vite.config.ts)
 - Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data). **Multi-machine mode** (`DASHBOARD_REMOTES` env var) requires remote instances to be network-accessible; use a VPN or SSH tunnel — never bind to `0.0.0.0` on an untrusted network.
-- **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (override via `DASHBOARD_DB_PATH`; see ADR-0001). The scope boundary is strict — do not mix.
-- **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge).
+- **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (override via `DASHBOARD_DB_PATH`; see ADR-0001). One deliberate crossing: `server/agentMerger.ts` performs an opportunistic read-only pipeline lookup (`enrichWithPipelineTask`) to annotate agents with their linked task ID/title. This is one-way (pipeline → agent annotation only) and fails gracefully if the DB is unavailable.
+- **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge), `DASHBOARD_MCP_TOKEN` + `DASHBOARD_MCP_URL` (injected for MCP callback access), `DASHBOARD_HOST` (bind address, default `127.0.0.1`; logs a security warning if non-loopback), `DASHBOARD_SSE_INTERVAL_MS` (agent SSE broadcast interval ms, default `3000`), `DASHBOARD_SPAWN_RATE_LIMIT` (max user-initiated spawns per window, default `5`; must be positive integer), `DASHBOARD_SPAWN_RATE_WINDOW_MS` (spawn rate-limit window ms, default `60000`; must be positive integer).
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
 - **Platform:** macOS and Linux. `server/systemMonitor.ts` uses `top` on macOS and `/proc/stat` on Linux for CPU; `server/processScanner.ts` uses `lsof` on macOS and `/proc/<pid>/cwd` on Linux. Windows is unsupported.

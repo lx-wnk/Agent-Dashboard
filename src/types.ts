@@ -42,6 +42,9 @@ export interface Agent {
   lastOutput: string | null
   lastBtw: { message: string, response: string | null } | null
   machine?: string
+  /** Set when this agent session is running as part of a pipeline task stage. */
+  pipelineTaskId?: string
+  pipelineTaskTitle?: string
 }
 
 export interface ChannelReply {
@@ -221,4 +224,17 @@ export interface NotificationPreference {
   eventType: NotificationEventType
   channels: NotificationChannel[]
   enabled: boolean
+}
+
+// MCP API Key types
+export type McpScope = 'tasks:read' | 'tasks:write' | 'pipeline:control' | 'keys:manage'
+
+export interface ApiKey {
+  id: string
+  name: string
+  // key_hash is intentionally absent — never send the hash over the wire
+  scopes: McpScope[]
+  active: boolean
+  createdAt: string
+  lastUsedAt: string | null
 }

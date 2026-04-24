@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
+import CrossLinkBanner from './CrossLinkBanner.vue'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
 import StatusBadge from './StatusBadge.vue'
@@ -11,7 +12,7 @@ import TaskList from './TaskList.vue'
 import ToolTimeline from './ToolTimeline.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
 
 const localMessages = ref<OutputMessage[]>([])
 const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
@@ -32,22 +33,16 @@ watch(() => props.agent?.sessionId, (sessionId) => {
 })
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.agent) {
+  if (!props.agent)
+    return
+  if (e.key === 'Escape') {
     e.preventDefault()
     emit('close')
   }
 }
 
-watch(() => props.agent, (agent) => {
-  if (agent)
-    window.addEventListener('keydown', onKeydown)
-  else
-    window.removeEventListener('keydown', onKeydown)
-}, { immediate: true })
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
-})
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -67,6 +62,14 @@ onUnmounted(() => {
             </button>
           </div>
         </div>
+
+        <CrossLinkBanner
+          v-if="agent.pipelineTaskId"
+          label="Part of"
+          :target-name="agent.pipelineTaskTitle ?? `Task ${agent.pipelineTaskId.slice(0, 8)}`"
+          button-text="Open →"
+          @click="emit('navigate', agent.pipelineTaskId)"
+        />
 
         <AgentChatStream
           ref="chatStreamRef"
