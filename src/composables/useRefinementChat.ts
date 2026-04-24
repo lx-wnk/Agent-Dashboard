@@ -7,8 +7,6 @@ export interface ChatMessage {
   phase?: string | null
 }
 
-export type RefinementPhase = 'analyse' | 'spec' | 'umsetzungskonzept' | 'approval' | null
-
 const PHASE_LABELS: Record<string, string> = {
   analyse: 'Analyse',
   spec: 'Spec',
@@ -18,7 +16,6 @@ const PHASE_LABELS: Record<string, string> = {
 
 export function useRefinementChat(taskId: () => string | null) {
   const messages = ref<ChatMessage[]>([])
-  const currentPhase = ref<RefinementPhase>(null)
   const completedPhases = ref<Set<string>>(new Set())
   const isStreaming = ref(false)
   const error = ref<string | null>(null)
@@ -29,6 +26,10 @@ export function useRefinementChat(taskId: () => string | null) {
     if (!id) return
     try {
       const res = await fetch(`/api/refine/${id}/turns`)
+      if (!res.ok) {
+        error.value = 'Failed to load history'
+        return
+      }
       const turns = await res.json() as Array<{ role: string, content: string, phase: string | null }>
       messages.value = turns.map(t => ({ role: t.role as 'user' | 'assistant', content: t.content, phase: t.phase }))
       for (const t of turns) {
@@ -58,7 +59,12 @@ export function useRefinementChat(taskId: () => string | null) {
         body: JSON.stringify({ message }),
       })
 
-      const reader = res.body!.getReader()
+      if (!res.ok || !res.body) {
+        error.value = `Server error: ${res.status}`
+        return
+      }
+
+      const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
 
@@ -74,7 +80,13 @@ export function useRefinementChat(taskId: () => string | null) {
           const eventLine = lines.find(l => l.startsWith('event:'))
           const dataLine = lines.find(l => l.startsWith('data:'))
           if (!dataLine) continue
-          const data = JSON.parse(dataLine.slice(5))
+          let data: any
+          try {
+            data = JSON.parse(dataLine.slice(5).trimStart())
+          }
+          catch {
+            continue
+          }
           const event = eventLine ? eventLine.slice(7) : 'message'
 
           if (event === 'phase_change' && data.phase) {
@@ -100,12 +112,18 @@ export function useRefinementChat(taskId: () => string | null) {
   async function confirm(): Promise<PipelineTask | null> {
     const id = taskId()
     if (!id) return null
-    const res = await fetch(`/api/refine/${id}/confirm`, { method: 'POST' })
-    if (!res.ok) {
-      error.value = (await res.json()).error
+    try {
+      const res = await fetch(`/api/refine/${id}/confirm`, { method: 'POST' })
+      if (!res.ok) {
+        error.value = (await res.json().catch(() => null))?.error ?? 'Confirm failed'
+        return null
+      }
+      return await res.json()
+    }
+    catch (err) {
+      error.value = String(err)
       return null
     }
-    return res.json()
   }
 
   function phaseLabel(phase: string) {
@@ -114,7 +132,6 @@ export function useRefinementChat(taskId: () => string | null) {
 
   return {
     messages,
-    currentPhase,
     completedPhases,
     isStreaming,
     error,

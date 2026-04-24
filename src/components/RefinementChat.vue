@@ -126,14 +126,14 @@ function isPhaseMarker(idx: number): string | null {
   display: flex; align-items: center; justify-content: center; z-index: 100;
 }
 .chat-modal {
-  background: var(--color-surface, #1a1a2e);
+  background: var(--bg-primary);
   border-radius: 12px; width: min(680px, 95vw);
   height: min(720px, 90vh);
   display: flex; flex-direction: column; overflow: hidden;
 }
 .chat-header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 20px; border-bottom: 1px solid var(--color-border, #333);
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
 }
 .chat-title { font-size: 1.1rem; font-weight: 600; }
 .chat-close { background: none; border: none; cursor: pointer; font-size: 1.2rem; }
@@ -145,40 +145,40 @@ function isPhaseMarker(idx: number): string | null {
 .chat-greeting { font-size: 1.1rem; margin-bottom: 16px; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .chip {
-  padding: 8px 14px; border-radius: 20px; border: 1px solid var(--color-border, #444);
+  padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border);
   background: none; cursor: pointer; font-size: 0.9rem;
 }
-.chip:hover { background: var(--color-hover, #2a2a3e); }
+.chip:hover { background: var(--bg-tertiary); }
 .bubble {
   max-width: 80%; padding: 10px 14px; border-radius: 12px; line-height: 1.5;
   white-space: pre-wrap; word-break: break-word;
 }
-.bubble.user { align-self: flex-end; background: var(--color-primary, #4c6ef5); color: white; }
-.bubble.assistant { align-self: flex-start; background: var(--color-surface-alt, #252540); }
+.bubble.user { align-self: flex-end; background: var(--accent-blue); color: white; }
+.bubble.assistant { align-self: flex-start; background: var(--bg-secondary); }
 .phase-marker {
-  text-align: center; font-size: 0.8rem; color: var(--color-success, #69db7c);
+  text-align: center; font-size: 0.8rem; color: var(--accent-green);
   opacity: 0.8; padding: 4px 0;
 }
-.chat-error { padding: 8px 20px; color: var(--color-error, #ff6b6b); font-size: 0.85rem; }
-.confirm-bar { padding: 12px 20px; border-top: 1px solid var(--color-border, #333); }
+.chat-error { padding: 8px 20px; color: var(--accent-red); font-size: 0.85rem; }
+.confirm-bar { padding: 12px 20px; border-top: 1px solid var(--border); }
 .btn-confirm {
   width: 100%; padding: 12px; border-radius: 8px;
-  background: var(--color-success, #69db7c); color: #000;
+  background: var(--accent-green); color: #000;
   border: none; cursor: pointer; font-size: 1rem; font-weight: 600;
 }
 .chat-input-bar {
   display: flex; gap: 8px; padding: 12px 20px;
-  border-top: 1px solid var(--color-border, #333);
+  border-top: 1px solid var(--border);
 }
 .chat-input {
   flex: 1; padding: 10px 14px; border-radius: 8px;
-  border: 1px solid var(--color-border, #444); background: var(--color-surface-alt, #252540);
+  border: 1px solid var(--border); background: var(--bg-secondary);
   color: inherit; font-size: 0.95rem;
 }
 .chat-input:disabled { opacity: 0.5; }
 .btn-send {
   padding: 10px 16px; border-radius: 8px;
-  background: var(--color-primary, #4c6ef5); color: white;
+  background: var(--accent-blue); color: white;
   border: none; cursor: pointer; font-size: 1.1rem;
 }
 .btn-send:disabled { opacity: 0.4; cursor: default; }
