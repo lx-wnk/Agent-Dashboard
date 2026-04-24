@@ -19,26 +19,16 @@ interface ColumnDef {
   hint?: string
 }
 
-// Consolidated 8 swimlanes. "Needs You" gathers every stage where the user
-// must act before progress can continue (approvals + runtime permission
-// requests + mid-stage awaiting_user). Agent-driven stages are grouped
-// into phases.
 const COLUMNS: ColumnDef[] = [
   {
     id: 'needs-you',
     label: 'Needs You',
-    stages: [], // virtual column: filters by needsUser flag (see tasksForColumn)
+    stages: [],
     group: 'needs-you',
     hint: 'User action required',
   },
+  { id: 'konzept', label: 'Konzept', stages: ['konzept'], group: 'active' },
   { id: 'backlog', label: 'Backlog', stages: ['backlog'], group: 'active' },
-  {
-    id: 'analysis',
-    label: 'Analysis',
-    stages: ['pruefung', 'refinement', 'planning'],
-    group: 'active',
-  },
-  { id: 'konzept', label: 'Concept', stages: ['umsetzungskonzept'], group: 'active' },
   {
     id: 'umsetzung',
     label: 'Implementation',
@@ -47,15 +37,7 @@ const COLUMNS: ColumnDef[] = [
   },
   { id: 'finalisierung', label: 'Completion', stages: ['finalisierung'], group: 'active' },
   { id: 'done', label: 'Done', stages: ['done'], group: 'terminal' },
-  // `failed` is no longer a terminal task stage — failed tasks stay on
-  // their current stage and appear in "Needs You" via the needsUser flag.
-  // Only explicitly cancelled tasks land here now.
-  {
-    id: 'cancelled',
-    label: 'Cancelled',
-    stages: ['cancelled'],
-    group: 'terminal',
-  },
+  { id: 'cancelled', label: 'Cancelled', stages: ['cancelled'], group: 'terminal' },
 ]
 
 function tasksForColumn(col: ColumnDef): PipelineTask[] {
