@@ -103,7 +103,8 @@ export function createRefineRouter(
       description: typeof konzeptOutput.refinedDescription === 'string'
         ? konzeptOutput.refinedDescription
         : task.description,
-      metadata: { ...(task.metadata ?? {}), ...konzeptOutput },
+      cwd: typeof konzeptOutput.cwd === 'string' ? konzeptOutput.cwd : task.cwd,
+      metadata: { ...(task.metadata ?? {}), konzeptOutput },
       currentStage: 'backlog',
     })
 

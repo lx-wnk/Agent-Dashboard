@@ -26,6 +26,7 @@ export interface CreateTaskInput {
 export interface UpdateTaskInput {
   title?: string
   description?: string | null
+  cwd?: string
   worktreePath?: string | null
   currentStage?: PipelineStage
   maxIterations?: number
@@ -192,6 +193,10 @@ export function updateTask(id: string, input: UpdateTaskInput, db: Database = ge
   if (input.description !== undefined) {
     updates.push('description = @description')
     params.description = input.description
+  }
+  if (input.cwd !== undefined) {
+    updates.push('cwd = @cwd')
+    params.cwd = input.cwd
   }
   if (input.worktreePath !== undefined) {
     updates.push('worktree_path = @worktree_path')
