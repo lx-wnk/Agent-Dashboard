@@ -8,6 +8,16 @@ const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
 
 const inputText = ref('')
 const chatEl = ref<HTMLElement | null>(null)
+const textareaEl = ref<HTMLTextAreaElement | null>(null)
+
+function autoResize() {
+  const el = textareaEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
+watch(inputText, () => nextTick(autoResize))
 
 const taskId = computed(() => props.task?.id ?? null)
 const {
@@ -41,6 +51,7 @@ async function handleSend() {
   const msg = inputText.value.trim()
   if (!msg || isStreaming.value) return
   inputText.value = ''
+  await nextTick(autoResize)
   await sendMessage(msg)
 }
 
@@ -107,10 +118,12 @@ function isPhaseMarker(idx: number): string | null {
       </div>
 
       <div class="chat-input-bar">
-        <input
+        <textarea
+          ref="textareaEl"
           v-model="inputText"
           class="chat-input"
           placeholder="Nachricht..."
+          rows="1"
           :disabled="isStreaming || approvalReady"
           @keydown.enter.exact.prevent="handleSend"
         />
@@ -244,11 +257,14 @@ function isPhaseMarker(idx: number): string | null {
 .chat-input-bar {
   display: flex; gap: 8px; padding: 14px 20px;
   border-top: 1px solid var(--border); flex-shrink: 0;
+  align-items: flex-end;
 }
 .chat-input {
   flex: 1; padding: 10px 14px; border-radius: 10px;
   border: 1px solid var(--border); background: var(--bg-secondary);
-  color: inherit; font-size: 0.92rem;
+  color: inherit; font-size: 0.92rem; font-family: inherit;
+  line-height: 1.5; resize: none; overflow-y: auto;
+  min-height: 40px; max-height: 160px;
   transition: border-color 0.15s;
 }
 .chat-input:focus { outline: none; border-color: var(--accent-blue); }

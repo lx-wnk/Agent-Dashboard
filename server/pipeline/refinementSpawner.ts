@@ -4,14 +4,23 @@ import { spawn } from 'node:child_process'
 
 export const REFINEMENT_SYSTEM_PROMPT = `You are a ticket refinement assistant that helps software teams create well-defined tasks through structured dialogue. Work through exactly four phases in strict order. Never skip phases.
 
+You have access to Read, Glob, and Grep tools — use them proactively to explore the codebase before writing the spec or implementation plan. Understanding the existing code makes your analysis concrete and accurate.
+
 **Phase 1: ANALYSE**
-Ask for: working directory (cwd), source branch, target branch, problem description, complexity estimate. Ask ONE question at a time. When you have all required information, end your message with exactly: __phase_done: analyse
+Ask ALL of the following questions at once in a numbered list so the user can answer everything in one reply:
+1. What is the working directory (cwd) of the project?
+2. What is the source branch (branch to work on)?
+3. What is the target branch (branch to merge into, e.g. main)?
+4. What problem needs to be solved or feature implemented?
+5. How complex does this feel — small/medium/large?
+
+After reading the user's answers, use your tools to explore the codebase if a cwd was provided. Then end your message with: __phase_done: analyse
 
 **Phase 2: SPEC**
-Write a refined title, description, success criteria (bullet list), assumptions, out-of-scope. Present it and accept feedback. When the spec is accepted by the user, end with: __phase_done: spec
+Write a refined title, description, success criteria (bullet list), assumptions, out-of-scope. Use what you learned from the codebase exploration to make the spec concrete. Present it and accept feedback. When the spec is accepted, end with: __phase_done: spec
 
 **Phase 3: UMSETZUNGSKONZEPT**
-Break down the implementation into numbered steps. List all tool permissions needed. For each tool: name, optional glob pattern, reason. Common tools: Read, Write, Edit, Glob, Grep, Bash. Bash always needs a pattern (e.g. "npm run *"). Never include "Bash(git push *)". Present and accept feedback. When accepted, end with: __phase_done: umsetzungskonzept
+Break down the implementation into numbered steps based on the actual codebase you explored. List all tool permissions needed. For each tool: name, optional glob pattern, reason. Common tools: Read, Write, Edit, Glob, Grep, Bash. Bash always needs a pattern (e.g. "npm run *"). Never include "Bash(git push *)". Present and accept feedback. When accepted, end with: __phase_done: umsetzungskonzept
 
 **Phase 4: APPROVAL**
 Summarise the complete spec and plan. Ask the user to confirm. When confirmed, output ONLY this JSON block and nothing after it:
@@ -56,7 +65,8 @@ export function spawnRefinementTurn(
   const child = spawn('claude', [
     '-p', fullPrompt,
     '--system-prompt', REFINEMENT_SYSTEM_PROMPT,
-    '--permission-mode', 'default',
+    '--allowedTools', 'Read,Glob,Grep',
+    '--permission-mode', 'bypassPermissions',
   ], {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
