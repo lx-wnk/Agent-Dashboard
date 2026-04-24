@@ -103,6 +103,27 @@ describe('pOST /api/tasks', () => {
     const r2 = await api('POST', '/tasks', { slug: 'nx', title: 'T' })
     expect(r2.status).toBe(400)
   })
+
+  it('creates a task with stage: "backlog" when provided', async () => {
+    const { status, data } = await api<{ currentStage: string }>('POST', '/tasks', {
+      slug: 'bl',
+      title: 'Backlog task',
+      cwd: '/bl',
+      stage: 'backlog',
+    })
+    expect(status).toBe(201)
+    expect(data.currentStage).toBe('backlog')
+  })
+
+  it('defaults to konzept when stage is omitted', async () => {
+    const { status, data } = await api<{ currentStage: string }>('POST', '/tasks', {
+      slug: 'dk',
+      title: 'Default stage',
+      cwd: '/dk',
+    })
+    expect(status).toBe(201)
+    expect(data.currentStage).toBe('konzept')
+  })
 })
 
 describe('gET /api/tasks', () => {

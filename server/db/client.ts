@@ -99,29 +99,19 @@ function runMigrations(connection: DatabaseType): void {
  * in schema.sql never reach legacy DBs without this migration.
  */
 function migrateKonzeptCheckConstraint(connection: DatabaseType): void {
-  const acceptsKonzept = (table: 'tasks' | 'stage_runs'): boolean => {
+  // Probe the `tasks` CHECK constraint only — both tables were created
+  // together, so if `tasks` rejects 'konzept' the stage_runs CHECK is
+  // equally stale and both get rebuilt below in the same transaction.
+  const tasksAcceptsKonzept = (): boolean => {
     // Use savepoint so a failed INSERT doesn't poison any outer transaction.
     try {
       connection.exec('SAVEPOINT probe_konzept')
-      if (table === 'tasks') {
-        connection
-          .prepare(
-            `INSERT INTO tasks (id, slug, title, cwd, current_stage, max_iterations, stage_timeout_seconds, priority, created_at, updated_at)
-             VALUES ('__probe__', '__probe__', 'p', '/', 'konzept', 1, 1, 'medium', '', '')`,
-          )
-          .run()
-      }
-      else {
-        // Need a referenced task for FK; use the probe row we just created —
-        // if the tasks table already accepts konzept we bail via the outer
-        // short-circuit before ever reaching here.
-        connection
-          .prepare(
-            `INSERT INTO stage_runs (id, task_id, stage, status, iteration)
-             VALUES ('__probe__', '__probe__', 'konzept', 'pending', 0)`,
-          )
-          .run()
-      }
+      connection
+        .prepare(
+          `INSERT INTO tasks (id, slug, title, cwd, current_stage, max_iterations, stage_timeout_seconds, priority, created_at, updated_at)
+           VALUES ('__probe__', '__probe__', 'p', '/', 'konzept', 1, 1, 'medium', '', '')`,
+        )
+        .run()
       connection.exec('ROLLBACK TO probe_konzept')
       connection.exec('RELEASE probe_konzept')
       return true
@@ -136,10 +126,11 @@ function migrateKonzeptCheckConstraint(connection: DatabaseType): void {
     }
   }
 
-  const tasksOk = acceptsKonzept('tasks')
-  if (tasksOk)
-    return // both tables were created together; if tasks accepts konzept, stage_runs was rebuilt with it too.
+  if (tasksAcceptsKonzept())
+    return
 
+  // Must run outside any outer transaction — the caller (getDb → runMigrations)
+  // only runs DDL before this point, so BEGIN here is always the top-level tx.
   connection.exec('BEGIN')
   try {
     // Rebuild tasks.
