@@ -23,7 +23,7 @@ import PromptInput from './PromptInput.vue'
 import StageOutputView from './StageOutputView.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
-const emit = defineEmits<{ close: [], navigate: [agent: Agent] }>()
+const emit = defineEmits<{ close: [], navigate: [agent: Agent], openChat: [task: PipelineTask] }>()
 
 const { agents } = useAgents()
 
@@ -322,6 +322,16 @@ function formatDate(iso: string | null): string {
         <div class="modal-body">
           <!-- Overview tab -->
           <section v-if="activeTab === 'overview'" class="tab-content">
+            <div v-if="task.currentStage === 'konzept'" class="konzept-chat-banner">
+              <div class="konzept-chat-info">
+                <span class="konzept-chat-label">Dieses Ticket wartet auf Refinement</span>
+                <span class="konzept-chat-hint">Führe das Gespräch mit dem Refinement-Assistenten weiter</span>
+              </div>
+              <button class="btn-open-chat" @click="emit('openChat', task)">
+                Chat fortsetzen →
+              </button>
+            </div>
+
             <!-- Latest stage run summary -->
             <div v-if="latestStageRun" class="latest-run-card">
               <div class="latest-run-head">
@@ -899,6 +909,55 @@ function formatDate(iso: string | null): string {
 }
 .description-collapsible[open] > summary {
   margin-bottom: 6px;
+}
+
+.konzept-chat-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid var(--accent-blue);
+  border-left: 4px solid var(--accent-blue);
+  border-radius: 6px;
+}
+.konzept-chat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.konzept-chat-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.konzept-chat-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.btn-open-chat {
+  background: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: filter 0.15s;
+  flex-shrink: 0;
+}
+.btn-open-chat:hover {
+  filter: brightness(1.1);
+}
+.btn-open-chat:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 
 .latest-run-card {
