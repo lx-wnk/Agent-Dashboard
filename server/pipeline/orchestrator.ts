@@ -1,5 +1,6 @@
 import type { PipelineStage, PipelineTask, StageRun } from '../../src/types.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
+import process from 'node:process'
 import { consola } from 'consola'
 import { revokeApiKeyByName } from '../db/apiKeysRepo.js'
 import { appendAudit } from '../db/auditRepo.js'
@@ -15,6 +16,7 @@ import {
   listRunningStageRuns,
   updateStageRun,
 } from '../db/stageRunsRepo.js'
+import { getDependentsOf, hasOtherBlockingDeps } from '../db/taskDependenciesRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
 import { detectCompletion } from './completionDetector.js'
 import { attachSessionId, buildSessionName, decideRecovery } from './sessionManager.js'
@@ -25,6 +27,8 @@ import { STAGE_ORDER } from './types.js'
 const POLL_INTERVAL_MS = 2000
 const MAX_PARALLEL_KEY = 'maxParallelOrchestrators'
 const DEFAULT_MAX_PARALLEL = 3
+const STAGE_TIMEOUT_KEY = 'stageTimeoutSeconds'
+const DEFAULT_STAGE_TIMEOUT_SECONDS = 1800
 
 /**
  * Callback invoked when a stage handler creates a runtime permission request.
@@ -480,6 +484,11 @@ export class PipelineOrchestrator {
     // stage transitions like planning→approval1.
     this.onTaskChanged?.(task.id, { transitionKind: transition.kind })
 
+    // Cascade terminal stage to dependents AFTER onTaskChanged so the
+    // kanban first reflects this task's new state before dependents change.
+    if (transition.kind === 'done')
+      this.handleDependentTasks(task.id, 'done')
+
     // Fire the onStageFailed callback AFTER the transaction commits so
     // listeners see a consistent DB state. Covers both the explicit
     // `fail` transition and the iteration-limit branch of `iterate`.
@@ -535,6 +544,20 @@ export class PipelineOrchestrator {
       const task = getTaskById(run.taskId)
       if (!task)
         continue
+      // Task reached a terminal stage (e.g. via cascade cancel) after this
+      // run was queued — reap any orphaned running stage_run so its runner
+      // slot is freed. cancel_task (REST + MCP) flips currentStage without
+      // touching the stage_run, so without this the slot leaks forever.
+      if (task.currentStage === 'done' || task.currentStage === 'cancelled') {
+        if (run.pid !== null) {
+          try {
+            process.kill(run.pid, 'SIGTERM')
+          }
+          catch { /* already dead */ }
+        }
+        this.applyTransition(task, run, { kind: 'fail', error: 'task cancelled externally' })
+        continue
+      }
       const cwd = task.worktreePath || task.cwd
       let result
       try {
@@ -550,6 +573,31 @@ export class PipelineOrchestrator {
         // for the completion detector (which only runs after the PID exits).
         if (!run.sessionId && run.startedAt)
           void this.tryAttachSessionId(run.id, cwd, run.startedAt)
+
+        // Enforce stage timeout: a PID-alive run that has exceeded the
+        // configured limit is killed and failed so it doesn't hold a runner
+        // slot indefinitely (infinite tool loop, network hang, etc.).
+        const timeoutSeconds = getPipelineConfigNumber(STAGE_TIMEOUT_KEY, DEFAULT_STAGE_TIMEOUT_SECONDS)
+        if (timeoutSeconds > 0 && run.startedAt) {
+          const elapsedMs = Date.now() - new Date(run.startedAt).getTime()
+          if (elapsedMs > timeoutSeconds * 1000) {
+            consola.warn(
+              `[orchestrator] stage ${run.stage} (run ${run.id}) timed out after`
+              + ` ${Math.round(elapsedMs / 1000)}s (limit ${timeoutSeconds}s) — killing PID ${run.pid}`,
+            )
+            try {
+              process.kill(run.pid!, 'SIGTERM')
+            }
+            catch { /* already dead — race with natural completion */ }
+            const timedOutRun = getStageRunById(run.id)
+            if (timedOutRun && timedOutRun.status === 'running') {
+              this.applyTransition(task, timedOutRun, {
+                kind: 'fail',
+                error: `stage timeout: ran for ${Math.round(elapsedMs / 1000)}s (limit: ${timeoutSeconds}s)`,
+              })
+            }
+          }
+        }
         continue
       }
 
@@ -707,6 +755,111 @@ export class PipelineOrchestrator {
     const max = getPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
     const busy = countBusyRunners(exceptTaskId)
     return busy < max
+  }
+
+  /**
+   * After a task reaches a terminal stage, check if any dependents are now
+   * actionable and apply the configured on_cancel_action for cancelled
+   * predecessors.
+   *
+   * For a `done` predecessor: any dependent whose only blocking dependency
+   * was this task is now unblocked — it becomes pickable on the next tick
+   * with no explicit stage change needed here.
+   *
+   * For a `cancelled` predecessor: apply on_cancel_action only if the
+   * dependent has no OTHER unmet prerequisites (i.e. this was the last
+   * blocker or all remaining blockers are also cancelled/done).
+   *
+   * Must be called AFTER the task's stage has already been persisted to the DB.
+   */
+  private handleDependentTasks(taskId: string, newStage: 'done' | 'cancelled'): void {
+    const callbacks: Array<() => void> = []
+    const visited = new Set<string>()
+    getDb().transaction(() => {
+      this.collectDependentMutations(taskId, newStage, callbacks, visited)
+    })()
+    for (const cb of callbacks) cb()
+  }
+
+  private collectDependentMutations(
+    taskId: string,
+    newStage: 'done' | 'cancelled',
+    callbacks: Array<() => void>,
+    visited: Set<string>,
+  ): void {
+    const dependents = getDependentsOf(taskId)
+    for (const dep of dependents) {
+      // Skip already-visited dependents so diamond dependency graphs
+      // (C depends on both A and B, A→B→C and A→C) don't double-process C.
+      if (visited.has(dep.taskId))
+        continue
+      // Skip if the dependent still has other blocking predecessors besides
+      // the one that just terminated. We cannot use isBlocked() here because
+      // for the cancelled case a prerequisite with required_stage='done' is
+      // still counted as blocking by isBlocked (cancelled != done), causing
+      // false positives. hasOtherBlockingDeps treats both done and cancelled
+      // as terminal. For the done case the guard also applies: if the
+      // dependent has other unresolved deps, broadcasting 'unblocked' would
+      // be premature — skip until the last blocker resolves.
+      if (hasOtherBlockingDeps(dep.taskId, taskId))
+        continue
+      visited.add(dep.taskId)
+
+      if (newStage === 'cancelled') {
+        switch (dep.onCancelAction) {
+          case 'cancel':
+            updateTask(dep.taskId, { currentStage: 'cancelled' })
+            appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_cancel', details: { triggeredBy: taskId } })
+            callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
+            this.collectDependentMutations(dep.taskId, 'cancelled', callbacks, visited)
+            break
+          case 'on_hold':
+            updateTask(dep.taskId, { currentStage: 'on_hold' })
+            appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_on_hold', details: { triggeredBy: taskId } })
+            callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
+            // on_hold is not a terminal stage — don't cascade further
+            break
+          case 'start': {
+            // Move on_hold tasks to backlog so they become pickable.
+            // approval1/2 stay put — they need a human decision regardless.
+            const depTask = getTaskById(dep.taskId)
+            if (depTask?.currentStage === 'on_hold') {
+              updateTask(dep.taskId, { currentStage: 'backlog' })
+              appendAudit({ taskId: dep.taskId, actor: 'orchestrator', action: 'cascade_start', details: { triggeredBy: taskId } })
+              callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'cancel_cascade' }))
+            }
+            else {
+              // No stage change — only isBlocked cleared.
+              callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'unblocked' }))
+            }
+            break
+          }
+        }
+      }
+      else {
+        // newStage === 'done': dependent is now unblocked, will be picked up on next tick.
+        // If required_stage='cancelled' but the prerequisite reached 'done', the dependency
+        // is permanently unsatisfiable — log a warning so the operator can remove it manually.
+        if (dep.requiredStage === 'cancelled') {
+          consola.warn(
+            `[orchestrator] unsatisfiable dependency: task ${dep.taskId} requires`
+            + ` ${dep.dependsOnId} to reach 'cancelled', but it reached 'done'.`
+            + ` Remove the dependency manually to unblock the task.`,
+          )
+        }
+        callbacks.push(() => this.onTaskChanged?.(dep.taskId, { transitionKind: 'unblocked' }))
+      }
+    }
+  }
+
+  /**
+   * Called by the cancel route (and any other external termination path)
+   * after updateTask has already set currentStage to a terminal value.
+   * Cascades the termination to dependent tasks according to their
+   * configured on_cancel_action.
+   */
+  public notifyTaskTerminated(taskId: string, stage: 'done' | 'cancelled'): void {
+    this.handleDependentTasks(taskId, stage)
   }
 
   /**

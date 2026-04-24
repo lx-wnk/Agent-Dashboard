@@ -1,4 +1,4 @@
-import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskFeedback, TaskPermission } from '../types'
+import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import { computed, onUnmounted, ref } from 'vue'
 
 const tasks = ref<PipelineTask[]>([])
@@ -268,6 +268,42 @@ export async function resolvePermissionRequest(id: string, outcome: 'granted' | 
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
     throw new Error(err.error || 'Failed to resolve')
   }
+}
+
+export async function fetchDependencies(taskId: string): Promise<TaskDependency[]> {
+  const res = await fetch(`/api/tasks/${taskId}/dependencies`)
+  if (!res.ok)
+    throw new Error(await res.text())
+  return res.json() as Promise<TaskDependency[]>
+}
+
+export async function fetchDependents(taskId: string): Promise<TaskDependency[]> {
+  const res = await fetch(`/api/tasks/${taskId}/dependents`)
+  if (!res.ok)
+    throw new Error(await res.text())
+  return res.json() as Promise<TaskDependency[]>
+}
+
+export async function addTaskDependency(
+  taskId: string,
+  dependsOnId: string,
+  requiredStage: 'done' | 'cancelled' = 'done',
+  onCancelAction: 'cancel' | 'start' | 'on_hold' = 'on_hold',
+): Promise<TaskDependency> {
+  const res = await fetch(`/api/tasks/${taskId}/dependencies`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dependsOnId, requiredStage, onCancelAction }),
+  })
+  if (!res.ok)
+    throw new Error(await res.text())
+  return res.json() as Promise<TaskDependency>
+}
+
+export async function removeTaskDependency(taskId: string, depId: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/dependencies/${depId}`, { method: 'DELETE' })
+  if (!res.ok)
+    throw new Error(await res.text())
 }
 
 export function useTasks() {

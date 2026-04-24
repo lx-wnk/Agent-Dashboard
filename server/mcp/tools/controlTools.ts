@@ -111,6 +111,7 @@ export function registerControlTools(
         updateTask(id, { currentStage: 'cancelled' })
         appendAudit({ taskId: id, actor: 'user', action: 'cancelled' })
       })()
+      orchestrator.notifyTaskTerminated(id, 'cancelled')
       broadcast(id)
       // Returns plain task row; SSE broadcast is separately enriched via index.ts
       return ok({ task: getTaskById(id) })

@@ -4,7 +4,7 @@ import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { consola } from 'consola'
 import { Router } from 'express'
-import { SLUG_PATTERN_MESSAGE, SLUG_RE, VALID_STAGES } from '../constants.js'
+import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import {
   createFeedback,
@@ -25,6 +25,12 @@ import {
   getStageRunById,
   listStageRunsForTask,
 } from '../db/stageRunsRepo.js'
+import {
+  addDependency,
+  getDependenciesFor,
+  getDependentsOf,
+  removeDependencyById,
+} from '../db/taskDependenciesRepo.js'
 import {
   createTask,
   deleteTask,
@@ -452,7 +458,12 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'Task not found' })
       return
     }
+    if (task.currentStage === 'cancelled' || task.currentStage === 'done') {
+      res.status(400).json({ error: `Task is already ${task.currentStage}` })
+      return
+    }
     updateTask(req.params.id, { currentStage: 'cancelled' })
+    deps.orchestrator.notifyTaskTerminated(req.params.id, 'cancelled')
     const updated = getTaskById(req.params.id)
     broadcastEnrichedUpdate(req.params.id)
     res.json(updated)
@@ -675,6 +686,86 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       broadcastEnrichedUpdate(run.taskId)
     }
     res.json(resolved)
+  })
+
+  // ─── Task dependencies ────────────────
+
+  // GET /tasks/:id/dependencies — list all prerequisites for a task
+  router.get('/tasks/:id/dependencies', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    res.json(getDependenciesFor(req.params.id))
+  })
+
+  // GET /tasks/:id/dependents — list all tasks waiting on this task
+  router.get('/tasks/:id/dependents', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    res.json(getDependentsOf(req.params.id))
+  })
+
+  // POST /tasks/:id/dependencies — add a dependency
+  mutationRouter.post('/tasks/:id/dependencies', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const { dependsOnId, requiredStage = 'done', onCancelAction = 'on_hold' } = req.body as {
+      dependsOnId?: string
+      requiredStage?: 'done' | 'cancelled'
+      onCancelAction?: 'cancel' | 'start' | 'on_hold'
+    }
+    if (!dependsOnId) {
+      res.status(400).json({ error: 'dependsOnId is required' })
+      return
+    }
+    if (!getTaskById(dependsOnId)) {
+      res.status(404).json({ error: `Prerequisite task not found: ${dependsOnId}` })
+      return
+    }
+    if (!(DEPENDENCY_REQUIRED_STAGES as readonly string[]).includes(requiredStage)) {
+      res.status(400).json({ error: 'requiredStage must be done or cancelled' })
+      return
+    }
+    if (!(DEPENDENCY_CANCEL_ACTIONS as readonly string[]).includes(onCancelAction)) {
+      res.status(400).json({ error: 'onCancelAction must be cancel, start, or on_hold' })
+      return
+    }
+    try {
+      const dep = addDependency(req.params.id, dependsOnId, requiredStage, onCancelAction)
+      broadcastEnrichedUpdate(req.params.id)
+      res.status(201).json(dep)
+    }
+    catch (err) {
+      const msg = (err as Error).message
+      if (msg.includes('cycle')) {
+        res.status(400).json({ error: msg })
+        return
+      }
+      if (msg.includes('UNIQUE')) {
+        res.status(409).json({ error: 'Dependency already exists' })
+        return
+      }
+      throw err
+    }
+  })
+
+  // DELETE /tasks/:id/dependencies/:depId — remove a dependency by its row ID
+  mutationRouter.delete('/tasks/:id/dependencies/:depId', (req, res) => {
+    const removed = removeDependencyById(req.params.depId, req.params.id)
+    if (!removed) {
+      res.status(404).json({ error: 'Dependency not found' })
+      return
+    }
+    broadcastEnrichedUpdate(req.params.id)
+    res.json({ removed })
   })
 
   // ─── Pipeline config (maxParallel, etc.) ────────────────

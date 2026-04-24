@@ -8,7 +8,8 @@ import process from 'node:process'
 import expressLib from 'express'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDb, getDb } from '../db/client.js'
-import { updateTask } from '../db/tasksRepo.js'
+import { addDependency } from '../db/taskDependenciesRepo.js'
+import { createTask, updateTask } from '../db/tasksRepo.js'
 import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { createTaskRouter } from './taskRoutes.js'
 
@@ -499,5 +500,83 @@ describe('notification endpoints', () => {
     const { data } = await api<Record<string, string>>('GET', '/notifications/config')
     expect(data.smtp_host).toBe('smtp.example.com')
     expect(data.webhook_url).toBe('https://hooks.example.com/abc')
+  })
+})
+
+describe('dependency routes', () => {
+  it('pOST /tasks/:id/dependencies adds a dependency', async () => {
+    const a = createTask({ slug: 'drt-a', title: 'A', cwd: '/a' })
+    const b = createTask({ slug: 'drt-b', title: 'B', cwd: '/b' })
+    const { status, data } = await api<{ dependsOnId: string }>(
+      'POST',
+      `/tasks/${b.id}/dependencies`,
+      { dependsOnId: a.id, requiredStage: 'done', onCancelAction: 'cancel' },
+    )
+    expect(status).toBe(201)
+    expect(data.dependsOnId).toBe(a.id)
+  })
+
+  it('pOST /tasks/:id/dependencies returns 400 on cycle', async () => {
+    const a = createTask({ slug: 'drt-c', title: 'C', cwd: '/c' })
+    const b = createTask({ slug: 'drt-d', title: 'D', cwd: '/d' })
+    await api('POST', `/tasks/${b.id}/dependencies`, { dependsOnId: a.id })
+    const { status, data } = await api<{ error: string }>(
+      'POST',
+      `/tasks/${a.id}/dependencies`,
+      { dependsOnId: b.id },
+    )
+    expect(status).toBe(400)
+    expect(data.error).toMatch(/cycle/)
+  })
+
+  it('gET /tasks/:id/dependencies lists prerequisites', async () => {
+    const a = createTask({ slug: 'drt-e', title: 'E', cwd: '/e' })
+    const b = createTask({ slug: 'drt-f', title: 'F', cwd: '/f' })
+    addDependency(b.id, a.id)
+    const { status, data } = await api<Array<{ dependsOnId: string }>>(
+      'GET',
+      `/tasks/${b.id}/dependencies`,
+    )
+    expect(status).toBe(200)
+    expect(data).toHaveLength(1)
+    expect(data[0].dependsOnId).toBe(a.id)
+  })
+
+  it('gET /tasks/:id/dependents lists dependents', async () => {
+    const a = createTask({ slug: 'drt-g', title: 'G', cwd: '/g' })
+    const b = createTask({ slug: 'drt-h', title: 'H', cwd: '/h' })
+    addDependency(b.id, a.id)
+    const { status, data } = await api<Array<{ taskId: string }>>(
+      'GET',
+      `/tasks/${a.id}/dependents`,
+    )
+    expect(status).toBe(200)
+    expect(data).toHaveLength(1)
+    expect(data[0].taskId).toBe(b.id)
+  })
+
+  it('dELETE /tasks/:id/dependencies/:depId removes a dependency', async () => {
+    const a = createTask({ slug: 'drt-i', title: 'I', cwd: '/i' })
+    const b = createTask({ slug: 'drt-j', title: 'J', cwd: '/j' })
+    const dep = addDependency(b.id, a.id)
+    const { status, data } = await api<{ removed: boolean }>(
+      'DELETE',
+      `/tasks/${b.id}/dependencies/${dep.id}`,
+    )
+    expect(status).toBe(200)
+    expect(data.removed).toBe(true)
+  })
+
+  it('pOST /tasks/:id/dependencies returns 404 when task not found', async () => {
+    const { status } = await api('POST', '/tasks/nonexistent-id/dependencies', { dependsOnId: 'other-id' })
+    expect(status).toBe(404)
+  })
+
+  it('pOST /tasks/:id/dependencies returns 409 on duplicate', async () => {
+    const a = createTask({ slug: 'drt-dup-a', title: 'A', cwd: '/dup-a' })
+    const b = createTask({ slug: 'drt-dup-b', title: 'B', cwd: '/dup-b' })
+    await api('POST', `/tasks/${b.id}/dependencies`, { dependsOnId: a.id })
+    const { status } = await api('POST', `/tasks/${b.id}/dependencies`, { dependsOnId: a.id })
+    expect(status).toBe(409)
   })
 })

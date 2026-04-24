@@ -8,6 +8,7 @@ import type {
   PipelineTask,
   StageRun,
   StageRunStatus,
+  TaskDependency,
   TaskPermission,
   TaskPriority,
 } from '../../src/types.js'
@@ -34,6 +35,8 @@ export interface TaskRow {
   metadata: string | null
   silver_bullet: number
   priority: string
+  is_blocked?: number // 0 | 1 computed subquery, present in enriched queries
+  is_unsatisfiable?: number // 0 | 1 computed subquery, present in enriched queries
 }
 
 export interface StageRunRow {
@@ -124,6 +127,8 @@ export function rowToTask(row: TaskRow): PipelineTask {
     metadata: parseJson<Record<string, unknown>>(row.metadata, row.id),
     silverBullet: row.silver_bullet === 1,
     priority: (row.priority as TaskPriority) ?? 'medium',
+    isBlocked: row.is_blocked !== undefined ? row.is_blocked === 1 : undefined,
+    isUnsatisfiable: row.is_unsatisfiable !== undefined ? row.is_unsatisfiable === 1 : undefined,
   }
 }
 
@@ -209,5 +214,31 @@ export function rowToApiKey(row: ApiKeyRow): ApiKey {
     active: row.active === 1,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
+  }
+}
+
+export interface TaskDependencyRow {
+  id: string
+  task_id: string
+  task_title: string // joined from tasks (t1)
+  depends_on_id: string
+  depends_on_title: string // joined from tasks (t2)
+  depends_on_stage: string // joined from tasks
+  required_stage: string
+  on_cancel_action: string
+  created_at: string
+}
+
+export function rowToTaskDependency(row: TaskDependencyRow): TaskDependency {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    taskTitle: row.task_title,
+    dependsOnId: row.depends_on_id,
+    dependsOnTitle: row.depends_on_title,
+    dependsOnStage: row.depends_on_stage as PipelineStage,
+    requiredStage: row.required_stage as 'done' | 'cancelled',
+    onCancelAction: row.on_cancel_action as 'cancel' | 'start' | 'on_hold',
+    createdAt: row.created_at,
   }
 }
