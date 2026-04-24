@@ -45,13 +45,8 @@ export interface StageHandler {
 
 // Canonical stage order for auto-transitions
 export const STAGE_ORDER: PipelineStage[] = [
+  'konzept',
   'backlog',
-  'pruefung',
-  'refinement',
-  'planning',
-  'approval1',
-  'umsetzungskonzept',
-  'approval2',
   'umsetzung',
   'selbstreview',
   'finalisierung',
