@@ -93,6 +93,8 @@ The Task Pipeline subsystem (`server/db/`, `server/pipeline/`, `server/routes/ta
 
 **Runner slots:** `maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `umsetzung`. Agent-less stages (backlog, approval1/2) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → createdAt) and the sticky-run invariant.
 
+**Stage timeout:** `stageTimeoutSeconds` (pipeline_config key, default 1800) is enforced by the orchestrator's tick loop. If a stage agent's PID is still alive after this many seconds, the orchestrator sends SIGTERM and applies a `fail` transition, freeing its runner slot. Set to `0` to disable. Written via `UPDATE pipeline_config SET value='3600' WHERE key='stageTimeoutSeconds'` (or INSERT if absent).
+
 **Schema validation + retry:** every agent-driven stage's output is validated against a strict per-stage schema in `validateStageOutput`. A schema mismatch on the first iteration → `iterate` with the validation error and the rejected payload fed back into the next prompt; a second failure → `wait_user`. Hard failures (no session, no parseable JSON) → `fail` immediately without retry. This strategy is also documented in the private `feedback_llm_output_validation` memory.
 
 **Layer direction (no upward imports):**

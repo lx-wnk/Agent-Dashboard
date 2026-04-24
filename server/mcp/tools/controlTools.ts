@@ -3,6 +3,7 @@ import type { PipelineOrchestrator } from '../../pipeline/orchestrator.js'
 import type { makeToolRegistrar } from '../mcpAuth.js'
 import { z } from 'zod'
 import { appendAudit } from '../../db/auditRepo.js'
+import { getDb } from '../../db/client.js'
 import { createFeedback } from '../../db/feedbackRepo.js'
 import { createTaskPermission, getPermissionRequestById, resolvePermissionRequest } from '../../db/permissionsRepo.js'
 import { getLatestStageRunForTask, getStageRunById, listStageRunsForTask } from '../../db/stageRunsRepo.js'
@@ -45,12 +46,13 @@ export function registerControlTools(
       if (!next)
         mcpError(`Task in stage ${task.currentStage} cannot be approved`)
 
-      // approval2: bulk-grant tool permissions declared in umsetzungskonzept output
-      if (task.currentStage === 'approval2')
-        bulkGrantKonzeptPermissions(task.id)
-
-      updateTask(id, { currentStage: next })
-      appendAudit({ taskId: id, actor: 'user', action: 'approved', details: { from: task.currentStage, to: next } })
+      getDb().transaction(() => {
+        // approval2: bulk-grant tool permissions declared in umsetzungskonzept output
+        if (task.currentStage === 'approval2')
+          bulkGrantKonzeptPermissions(task.id)
+        updateTask(id, { currentStage: next })
+        appendAudit({ taskId: id, actor: 'user', action: 'approved', details: { from: task.currentStage, to: next } })
+      })()
       broadcast(id)
       // Returns plain task row; SSE broadcast is separately enriched via index.ts
       return ok({ task: getTaskById(id) })
@@ -82,13 +84,15 @@ export function registerControlTools(
         stageRunId: priorRun?.id ?? null,
         feedback,
       })
-      updateTask(id, { currentStage: regressionStage })
-      appendAudit({
-        taskId: task.id,
-        actor: 'user',
-        action: 'request_changes',
-        details: { fromStage: task.currentStage, toStage: regressionStage, feedbackId: feedbackRow.id, iteration: feedbackRow.iteration },
-      })
+      getDb().transaction(() => {
+        updateTask(id, { currentStage: regressionStage })
+        appendAudit({
+          taskId: task.id,
+          actor: 'user',
+          action: 'request_changes',
+          details: { fromStage: task.currentStage, toStage: regressionStage, feedbackId: feedbackRow.id, iteration: feedbackRow.iteration },
+        })
+      })()
       broadcast(id)
       return ok({ task: getTaskById(id) })
     },
@@ -103,8 +107,10 @@ export function registerControlTools(
         mcpError(`Task not found: ${id}`)
       if (task.currentStage === 'done' || task.currentStage === 'cancelled')
         mcpError(`Task is already ${task.currentStage}`)
-      updateTask(id, { currentStage: 'cancelled' })
-      appendAudit({ taskId: id, actor: 'user', action: 'cancelled' })
+      getDb().transaction(() => {
+        updateTask(id, { currentStage: 'cancelled' })
+        appendAudit({ taskId: id, actor: 'user', action: 'cancelled' })
+      })()
       orchestrator.notifyTaskTerminated(id, 'cancelled')
       broadcast(id)
       // Returns plain task row; SSE broadcast is separately enriched via index.ts

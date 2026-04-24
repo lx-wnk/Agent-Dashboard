@@ -1,4 +1,5 @@
 import type { TaskEvent } from './routes/taskRoutes.js'
+import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
 import { fstatSync, mkdirSync, openSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'

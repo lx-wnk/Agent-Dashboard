@@ -19,7 +19,8 @@ import {
 import { getDependentsOf, hasOtherBlockingDeps } from '../db/taskDependenciesRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
 import { detectCompletion } from './completionDetector.js'
-import { buildSessionName, decideRecovery } from './sessionManager.js'
+import { attachSessionId, buildSessionName, decideRecovery } from './sessionManager.js'
+import { findNewestSessionId } from './sessionOutputReader.js'
 import { getHandlerForStage } from './stageHandlers.js'
 import { STAGE_ORDER } from './types.js'
 
@@ -567,6 +568,12 @@ export class PipelineOrchestrator {
         continue
       }
       if (result.kind === 'still_running') {
+        // Eagerly attach session_id while the agent is still running so the
+        // frontend cross-link banner and live session tab work without waiting
+        // for the completion detector (which only runs after the PID exits).
+        if (!run.sessionId && run.startedAt)
+          void this.tryAttachSessionId(run.id, cwd, run.startedAt)
+
         // Enforce stage timeout: a PID-alive run that has exceeded the
         // configured limit is killed and failed so it doesn't hold a runner
         // slot indefinitely (infinite tool loop, network hang, etc.).
@@ -643,6 +650,15 @@ export class PipelineOrchestrator {
         })
       }
     }
+  }
+
+  private async tryAttachSessionId(stageRunId: string, cwd: string, startedAt: string): Promise<void> {
+    try {
+      const sid = await findNewestSessionId(cwd, startedAt)
+      if (sid)
+        attachSessionId(stageRunId, sid)
+    }
+    catch { /* non-critical: completion detector will attach it after the run ends */ }
   }
 
   /**

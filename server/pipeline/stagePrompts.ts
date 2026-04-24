@@ -77,14 +77,14 @@ export function umsetzungskonzeptPrompt(
   const feedbackPrefix = buildUserFeedbackPrefix(userFeedback)
   return {
     systemPrompt: SHARED_CONTEXT,
-    userPrompt: `${feedbackPrefix}## Task: ${task.title}\n\n${task.description || ''}\n\n## Plan From Previous Stage\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`\n\n## Your Job: Implementation Plan + Tool Inventory\n\nProduce the concrete implementation plan AND a complete list of tool permissions you will need during umsetzung. Be exhaustive — any missing tool will force a mid-run ON HOLD pause.\n\nRespond with a \`\`\`json\`\`\` block: {"steps": [{"n": number, "description": string}], "toolRequests": [{"tool": string, "pattern": string|null, "reason": string}]}. \n\nCommon tools: Read, Grep, Glob, Write, Edit, Bash. For Bash, always include a pattern (e.g. "npm *", "git status"). Do NOT request Bash(git push *) unless absolutely necessary. Do NOT request WebFetch unless you know you need network access.`,
+    userPrompt: `${feedbackPrefix}## Task: ${task.title}\n\n${task.description || ''}\n\n## Plan From Previous Stage\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`\n\n## Your Job: Implementation Plan + Tool Inventory\n\nProduce the concrete implementation plan AND a complete list of tool permissions you will need during umsetzung. Be exhaustive — any missing tool will force a mid-run ON HOLD pause.\n\nRespond with a \`\`\`json\`\`\` block: {"steps": [{"n": number, "description": string}], "toolRequests": [{"tool": string, "pattern": string|null, "reason": string}]}. \n\nCommon tools: Read, Grep, Glob, Write, Edit, Bash. For Bash, always include a pattern (e.g. "npm *", "git status"). NEVER request Bash(git push *) — pushing is always the user's responsibility, never yours. Do NOT request WebFetch unless you know you need network access.`,
   }
 }
 
 export function umsetzungPrompt(task: PipelineTask, prevOutput: unknown, feedback?: string): PromptBundle {
   const systemPrompt = `${SHARED_CONTEXT}
 
-You are the Opus orchestrator for this task's implementation phase. Use the Task tool to dispatch subagents for parallel work when beneficial. Commit your work via git when done. Call dashboard_reply when you need to communicate status.
+You are the Opus orchestrator for this task's implementation phase. Use the Task tool to dispatch subagents for parallel work when beneficial. Commit your work via git when done — but NEVER git push; pushing is always the user's responsibility. Call dashboard_reply when you need to communicate status.
 
 ## Permission handling — CRITICAL
 

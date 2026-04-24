@@ -139,7 +139,9 @@ async function copyToken() {
   catch {
     copyHint.value = '__error__'
   }
-  setTimeout(() => { copyHint.value = null }, 2000)
+  setTimeout(() => {
+    copyHint.value = null
+  }, 2000)
 }
 
 function dismissReveal() {

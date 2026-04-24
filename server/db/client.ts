@@ -51,6 +51,9 @@ function runMigrations(connection: DatabaseType): void {
     connection.prepare(`ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium'`).run()
   // Picker index (idempotent).
   connection.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_picker ON tasks(silver_bullet DESC, priority, created_at)').run()
+  // Upgrade stage_runs.session_id index to UNIQUE (idempotent: drops old non-unique index first).
+  connection.prepare('DROP INDEX IF EXISTS idx_stage_runs_session').run()
+  connection.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_runs_session ON stage_runs(session_id) WHERE session_id IS NOT NULL').run()
 
   // Runtime migration: create task_dependencies for DBs created before this feature.
   // schema.sql uses CREATE TABLE IF NOT EXISTS which is idempotent for new DBs.
