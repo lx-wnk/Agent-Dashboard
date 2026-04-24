@@ -203,7 +203,7 @@ CREATE TABLE IF NOT EXISTS refinement_turns (
   role        TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
   content     TEXT NOT NULL,
   phase       TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_refinement_turns_task

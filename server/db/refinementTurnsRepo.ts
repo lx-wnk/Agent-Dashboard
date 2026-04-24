@@ -31,29 +31,37 @@ function rowToTurn(row: RefinementTurnRow): RefinementTurn {
   }
 }
 
-export function createTurn(
-  input: Omit<RefinementTurn, 'id' | 'createdAt'>,
+export interface InsertTurnInput {
+  taskId: string
+  role: 'user' | 'assistant'
+  content: string
+  phase?: string
+}
+
+export function insertTurn(
+  turn: InsertTurnInput,
   db: Database = getDb(),
 ): RefinementTurn {
   const id = randomUUID()
   const createdAt = new Date().toISOString()
+  const phase = turn.phase ?? null
   db.prepare(`
     INSERT INTO refinement_turns (id, task_id, role, content, phase, created_at)
     VALUES (@id, @task_id, @role, @content, @phase, @created_at)
   `).run({
     id,
-    task_id: input.taskId,
-    role: input.role,
-    content: input.content,
-    phase: input.phase ?? null,
+    task_id: turn.taskId,
+    role: turn.role,
+    content: turn.content,
+    phase,
     created_at: createdAt,
   })
   return {
     id,
-    taskId: input.taskId,
-    role: input.role,
-    content: input.content,
-    phase: input.phase ?? null,
+    taskId: turn.taskId,
+    role: turn.role,
+    content: turn.content,
+    phase,
     createdAt,
   }
 }
@@ -71,4 +79,11 @@ export function listTurns(
     `)
     .all(taskId) as RefinementTurnRow[]
   return rows.map(rowToTurn)
+}
+
+export function deleteTurnsForTask(
+  taskId: string,
+  db: Database = getDb(),
+): void {
+  db.prepare('DELETE FROM refinement_turns WHERE task_id = ?').run(taskId)
 }
