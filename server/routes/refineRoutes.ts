@@ -98,6 +98,11 @@ export function createRefineRouter(
       return
     }
 
+    if (typeof konzeptOutput !== 'object' || konzeptOutput === null || Array.isArray(konzeptOutput)) {
+      res.status(409).json({ error: 'Assistant JSON is not a plain object' })
+      return
+    }
+
     updateTask(task.id, {
       title: typeof konzeptOutput.refinedTitle === 'string' ? konzeptOutput.refinedTitle : task.title,
       description: typeof konzeptOutput.refinedDescription === 'string'

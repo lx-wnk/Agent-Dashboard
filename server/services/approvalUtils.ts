@@ -27,7 +27,9 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
   const task = getTaskById(taskId)
   if (!task)
     return
-  const rawRequests = (task.metadata as Record<string, unknown> | null)?.toolRequests
+  const metadata = task?.metadata as Record<string, unknown> | null
+  const konzeptOutput = metadata?.konzeptOutput as Record<string, unknown> | undefined
+  const rawRequests = konzeptOutput?.toolRequests ?? metadata?.toolRequests
   if (!Array.isArray(rawRequests))
     return
 

@@ -19,11 +19,13 @@ beforeEach(() => {
 })
 
 describe('bulkGrantKonzeptPermissions', () => {
-  it('reads toolRequests from task.metadata', () => {
+  it('reads toolRequests from task.metadata.konzeptOutput', () => {
     vi.mocked(getTaskById).mockReturnValue({
       id: 'task-1',
       metadata: {
-        toolRequests: [{ tool: 'Read', pattern: null, reason: 'read files' }],
+        konzeptOutput: {
+          toolRequests: [{ tool: 'Read', pattern: null, reason: 'read files' }],
+        },
       },
     } as unknown as PipelineTask)
 
@@ -43,7 +45,7 @@ describe('bulkGrantKonzeptPermissions', () => {
   it('skips unknown tools', () => {
     vi.mocked(getTaskById).mockReturnValue({
       id: 'task-1',
-      metadata: { toolRequests: [{ tool: 'NotARealTool', pattern: null, reason: 'x' }] },
+      metadata: { konzeptOutput: { toolRequests: [{ tool: 'NotARealTool', pattern: null, reason: 'x' }] } },
     } as unknown as PipelineTask)
     bulkGrantKonzeptPermissions('task-1')
     expect(vi.mocked(createTaskPermission)).not.toHaveBeenCalled()
@@ -53,7 +55,9 @@ describe('bulkGrantKonzeptPermissions', () => {
     vi.mocked(getTaskById).mockReturnValue({
       id: 'task-1',
       metadata: {
-        toolRequests: [{ tool: 'Read', pattern: 'src/**', reason: 'read source' }],
+        konzeptOutput: {
+          toolRequests: [{ tool: 'Read', pattern: 'src/**', reason: 'read source' }],
+        },
       },
     } as unknown as PipelineTask)
     vi.mocked(listTaskPermissions).mockReturnValue([
@@ -78,7 +82,9 @@ describe('bulkGrantKonzeptPermissions', () => {
     vi.mocked(getTaskById).mockReturnValue({
       id: 'task-1',
       metadata: {
-        toolRequests: [{ tool: 'Read', pattern: null, reason: 'r' }],
+        konzeptOutput: {
+          toolRequests: [{ tool: 'Read', pattern: null, reason: 'r' }],
+        },
       },
     } as unknown as PipelineTask)
 
@@ -103,7 +109,9 @@ describe('bulkGrantKonzeptPermissions', () => {
     vi.mocked(getTaskById).mockReturnValue({
       id: 'task-1',
       metadata: {
-        toolRequests: [null, { tool: 'Read', pattern: null, reason: 'r' }],
+        konzeptOutput: {
+          toolRequests: [null, { tool: 'Read', pattern: null, reason: 'r' }],
+        },
       },
     } as unknown as PipelineTask)
 
