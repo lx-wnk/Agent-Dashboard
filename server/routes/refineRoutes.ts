@@ -1,19 +1,33 @@
+import type express from 'express'
 import type { Buffer } from 'node:buffer'
 import { Router } from 'express'
+import { appendAudit } from '../db/auditRepo.js'
 import { insertTurn, listTurns } from '../db/refinementTurnsRepo.js'
 import { getTaskById, updateTask } from '../db/tasksRepo.js'
 import { spawnRefinementTurn } from '../pipeline/refinementSpawner.js'
 import { bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
+
+type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
 const PHASE_DONE_RE = /__phase_done:\s*(\w+)/
 const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/
 
 export function createRefineRouter(
   broadcastEnrichedUpdate: (taskId: string) => void,
+  rejectCrossOrigin: RejectCrossOrigin,
 ): Router {
   const router = Router()
 
-  router.post('/:taskId/turn', async (req, res) => {
+  // CSRF guard applied as sub-router middleware so every POST/PUT/PATCH/DELETE
+  // route registered below is protected without per-handler boilerplate.
+  const mutationRouter = Router()
+  mutationRouter.use((req, res, next) => {
+    if (rejectCrossOrigin(req, res))
+      return
+    next()
+  })
+
+  mutationRouter.post('/:taskId/turn', async (req, res) => {
     const task = getTaskById(req.params.taskId)
     if (!task || task.currentStage !== 'konzept') {
       res.status(404).json({ error: 'Task not found or not in konzept stage' })
@@ -44,6 +58,12 @@ export function createRefineRouter(
       res.write(`data: ${JSON.stringify({ text })}\n\n`)
     })
 
+    stdout.on('error', (streamErr) => {
+      insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[stream error]' })
+      res.write(`event: error\ndata: ${JSON.stringify({ error: String(streamErr) })}\n\n`)
+      res.end()
+    })
+
     try {
       await waitForExit()
 
@@ -64,12 +84,12 @@ export function createRefineRouter(
     }
     catch (err) {
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[error]' })
-      res.write(`event: error\ndata: ${JSON.stringify({ error: String(err) })}\n\n`)
+      res.write(`event: error\ndata: ${JSON.stringify({ error: err instanceof Error ? err.message : 'spawn failed' })}\n\n`)
     }
     res.end()
   })
 
-  router.post('/:taskId/confirm', (req, res) => {
+  mutationRouter.post('/:taskId/confirm', (req, res) => {
     const task = getTaskById(req.params.taskId)
     if (!task || task.currentStage !== 'konzept') {
       res.status(404).json({ error: 'Task not found or not in konzept stage' })
@@ -115,6 +135,7 @@ export function createRefineRouter(
 
     bulkGrantKonzeptPermissions(task.id)
     broadcastEnrichedUpdate(task.id)
+    appendAudit({ taskId: task.id, actor: 'user', action: 'refine_confirmed', details: { cwd: konzeptOutput.cwd } })
 
     res.json(getTaskById(task.id))
   })
@@ -127,6 +148,10 @@ export function createRefineRouter(
     }
     res.json(listTurns(req.params.taskId))
   })
+
+  // Mount mutation sub-router so its rejectCrossOrigin middleware guards
+  // every POST route registered above.
+  router.use(mutationRouter)
 
   return router
 }
