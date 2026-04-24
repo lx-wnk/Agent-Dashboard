@@ -249,11 +249,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     const body = req.body ?? {}
 
     // Clients must NOT write currentStage directly — stage transitions go
-    // through /progress, /approve, /cancel so the state machine and
-    // notifications stay consistent.
+    // through /progress, /cancel, or /api/refine/:id/confirm so the state
+    // machine and notifications stay consistent.
     if (body.currentStage !== undefined) {
       res.status(400).json({
-        error: 'currentStage cannot be set via PATCH — use /progress, /approve, or /cancel',
+        error: 'currentStage cannot be set via PATCH — use /progress, /cancel, or /api/refine/:id/confirm',
       })
       return
     }
