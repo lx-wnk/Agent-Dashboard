@@ -38,4 +38,10 @@ describe('tOOL_SCOPE_MAP / buildMcpServer sync', () => {
     const scopeMapNames = new Set(Object.keys(TOOL_SCOPE_MAP))
     expect(registeredNames).toEqual(scopeMapNames)
   })
+
+  it('registers add_dependency and remove_dependency tools', () => {
+    const registeredNames = getRegisteredToolNames()
+    expect(registeredNames).toContain('add_dependency')
+    expect(registeredNames).toContain('remove_dependency')
+  })
 })

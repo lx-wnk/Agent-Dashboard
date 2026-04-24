@@ -9,7 +9,8 @@ import { closeDb, getDb } from '../db/client.js'
 import { setPipelineConfig } from '../db/notificationConfigRepo.js'
 import { createTaskPermission } from '../db/permissionsRepo.js'
 import { createStageRun, getLatestStageRun, listStageRunsForTask, updateStageRun } from '../db/stageRunsRepo.js'
-import { createTask, getTaskById } from '../db/tasksRepo.js'
+import { addDependency, isBlocked } from '../db/taskDependenciesRepo.js'
+import { createTask, getTaskById, updateTask } from '../db/tasksRepo.js'
 import { PipelineOrchestrator } from './orchestrator.js'
 
 let tmpDir: string
@@ -494,6 +495,168 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     expect(getTaskById(task.id)?.currentStage).toBe('pruefung')
     const updatedRun = getLatestStageRun(task.id, 'pruefung')
     expect(updatedRun?.status).toBe('failed')
+  })
+
+  it('kills and fails a stage_run that exceeds the configured timeout', async () => {
+    const task = createTask({ slug: 'to', title: 'TO', cwd: '/to' })
+    updateTask(task.id, { currentStage: 'pruefung' })
+    const run = createStageRun({ taskId: task.id, stage: 'pruefung' })
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    updateStageRun(run.id, { status: 'running', pid: 9999, startedAt: twoHoursAgo })
+
+    setPipelineConfig('stageTimeoutSeconds', '1')
+    parkAllAgentStages(orchestrator)
+    orchestrator.setCompletionDetector(async () => ({ kind: 'still_running' }))
+
+    await orchestrator.tick()
+    await new Promise(r => setImmediate(r))
+
+    const updatedRun = getLatestStageRun(task.id, 'pruefung')
+    expect(updatedRun?.status).toBe('failed')
+    const output = updatedRun?.output as Record<string, unknown> | null
+    expect(typeof output?.error).toBe('string')
+    expect(output?.error as string).toContain('stage timeout')
+  })
+
+  it('does not kill a stage_run within the configured timeout', async () => {
+    const task = createTask({ slug: 'nto', title: 'NTO', cwd: '/nto' })
+    updateTask(task.id, { currentStage: 'pruefung' })
+    const run = createStageRun({ taskId: task.id, stage: 'pruefung' })
+    updateStageRun(run.id, { status: 'running', pid: 9999 })
+
+    setPipelineConfig('stageTimeoutSeconds', '3600')
+    parkAllAgentStages(orchestrator)
+    orchestrator.setCompletionDetector(async () => ({ kind: 'still_running' }))
+
+    await orchestrator.tick()
+    await new Promise(r => setImmediate(r))
+
+    const updatedRun = getLatestStageRun(task.id, 'pruefung')
+    expect(updatedRun?.status).toBe('running')
+  })
+})
+
+describe('handleDependentTasks (dependency cascade)', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'orch-dep-test-'))
+    process.env.DASHBOARD_DB_PATH = join(tmpDir, 'test.db')
+    getDb()
+  })
+
+  afterEach(() => {
+    closeDb()
+    rmSync(tmpDir, { recursive: true, force: true })
+    delete process.env.DASHBOARD_DB_PATH
+  })
+
+  it('when prerequisite reaches done: dependent becomes pickable (no cascade action)', () => {
+    const a = createTask({ slug: 'a', title: 'A', cwd: '/a' })
+    const b = createTask({ slug: 'b', title: 'B', cwd: '/b' })
+    addDependency(b.id, a.id, 'done', 'cancel')
+    expect(isBlocked(b.id)).toBe(true)
+
+    const notified: string[] = []
+    const orch = new PipelineOrchestrator({
+      onTaskChanged: (taskId) => { notified.push(taskId) },
+    })
+    updateTask(a.id, { currentStage: 'done' }) // simulate the actual stage change
+    orch.notifyTaskTerminated(a.id, 'done')
+
+    expect(isBlocked(b.id)).toBe(false)
+    expect(getTaskById(b.id)?.currentStage).toBe('backlog')
+  })
+
+  it('when prerequisite cancelled + on_cancel_action=cancel: dependent moves to cancelled', () => {
+    const a = createTask({ slug: 'ca', title: 'CA', cwd: '/ca' })
+    const b = createTask({ slug: 'cb', title: 'CB', cwd: '/cb' })
+    addDependency(b.id, a.id, 'done', 'cancel')
+    updateTask(a.id, { currentStage: 'cancelled' })
+
+    const notified: string[] = []
+    const orch = new PipelineOrchestrator({
+      onTaskChanged: (taskId) => { notified.push(taskId) },
+    })
+    orch.notifyTaskTerminated(a.id, 'cancelled')
+
+    expect(getTaskById(b.id)?.currentStage).toBe('cancelled')
+    expect(notified).toContain(b.id)
+  })
+
+  it('when prerequisite cancelled + on_cancel_action=on_hold: dependent moves to on_hold', () => {
+    const a = createTask({ slug: 'ha', title: 'HA', cwd: '/ha' })
+    const b = createTask({ slug: 'hb', title: 'HB', cwd: '/hb' })
+    addDependency(b.id, a.id, 'done', 'on_hold')
+    updateTask(a.id, { currentStage: 'cancelled' })
+
+    const orch = new PipelineOrchestrator({})
+    orch.notifyTaskTerminated(a.id, 'cancelled')
+
+    expect(getTaskById(b.id)?.currentStage).toBe('on_hold')
+  })
+
+  it('when prerequisite cancelled + on_cancel_action=start: dependent stays pickable (no stage change)', () => {
+    const a = createTask({ slug: 'sa', title: 'SA', cwd: '/sa' })
+    const b = createTask({ slug: 'sb', title: 'SB', cwd: '/sb' })
+    addDependency(b.id, a.id, 'done', 'start')
+    updateTask(a.id, { currentStage: 'cancelled' })
+
+    const orch = new PipelineOrchestrator({})
+    orch.notifyTaskTerminated(a.id, 'cancelled')
+
+    expect(getTaskById(b.id)?.currentStage).toBe('backlog')
+  })
+
+  it('when prerequisite cancelled but dependent still has other unmet deps: no cascade', () => {
+    const a = createTask({ slug: 'ma', title: 'MA', cwd: '/ma' })
+    const b = createTask({ slug: 'mb', title: 'MB', cwd: '/mb' })
+    const c = createTask({ slug: 'mc', title: 'MC', cwd: '/mc' })
+    addDependency(c.id, a.id, 'done', 'cancel')
+    addDependency(c.id, b.id, 'done', 'cancel')
+    updateTask(a.id, { currentStage: 'cancelled' })
+
+    const orch = new PipelineOrchestrator({})
+    orch.notifyTaskTerminated(a.id, 'cancelled')
+
+    // c still blocked by b (not done/cancelled), so no cascade
+    expect(getTaskById(c.id)?.currentStage).toBe('backlog')
+  })
+
+  it('cancel cascade recurses: A cancelled propagates to B then to C', () => {
+    const a = createTask({ slug: 'rc-a', title: 'A', cwd: '/a' })
+    const b = createTask({ slug: 'rc-b', title: 'B', cwd: '/b' })
+    const c = createTask({ slug: 'rc-c', title: 'C', cwd: '/c' })
+    addDependency(b.id, a.id, 'done', 'cancel')
+    addDependency(c.id, b.id, 'done', 'cancel')
+    updateTask(a.id, { currentStage: 'cancelled' })
+
+    const orch = new PipelineOrchestrator({})
+    orch.notifyTaskTerminated(a.id, 'cancelled')
+
+    expect(getTaskById(b.id)?.currentStage).toBe('cancelled')
+    expect(getTaskById(c.id)?.currentStage).toBe('cancelled')
+  })
+
+  it('diamond graph: C depends on A and B, B depends on A — C is only cancelled once', () => {
+    const a = createTask({ slug: 'dia-a', title: 'A', cwd: '/a' })
+    const b = createTask({ slug: 'dia-b', title: 'B', cwd: '/b' })
+    const c = createTask({ slug: 'dia-c', title: 'C', cwd: '/c' })
+    addDependency(b.id, a.id, 'done', 'cancel')
+    addDependency(c.id, a.id, 'done', 'cancel')
+    addDependency(c.id, b.id, 'done', 'cancel')
+    updateTask(a.id, { currentStage: 'cancelled' })
+
+    const notified: string[] = []
+    const orch = new PipelineOrchestrator({
+      onTaskChanged: taskId => notified.push(taskId),
+    })
+    orch.notifyTaskTerminated(a.id, 'cancelled')
+
+    expect(getTaskById(b.id)?.currentStage).toBe('cancelled')
+    expect(getTaskById(c.id)?.currentStage).toBe('cancelled')
+    // C must appear exactly once — no duplicate cascade from the diamond
+    expect(notified.filter(id => id === c.id)).toHaveLength(1)
   })
 })
 

@@ -20,3 +20,6 @@ export const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 export const SLUG_PATTERN_MESSAGE = 'slug must match [a-z0-9][a-z0-9-]{0,63}'
 
 export const SYSTEM_PROMPT_MAX_CHARS = 10_000
+
+export const DEPENDENCY_REQUIRED_STAGES = ['done', 'cancelled'] as const
+export const DEPENDENCY_CANCEL_ACTIONS = ['cancel', 'start', 'on_hold'] as const

@@ -109,6 +109,18 @@ export type StageRunStatus
 
 export type TaskPriority = 'high' | 'medium' | 'low'
 
+export interface TaskDependency {
+  id: string
+  taskId: string
+  taskTitle: string
+  dependsOnId: string
+  dependsOnTitle: string
+  dependsOnStage: PipelineStage
+  requiredStage: 'done' | 'cancelled'
+  onCancelAction: 'cancel' | 'start' | 'on_hold'
+  createdAt: string
+}
+
 export interface PipelineTask {
   id: string
   slug: string
@@ -146,6 +158,11 @@ export interface PipelineTask {
   activeSessionId?: string | null
   // PID of the stage_run when it is currently running. Null between runs.
   activePid?: number | null
+  // True when this task is blocked by unfulfilled dependencies.
+  isBlocked?: boolean
+  // True when blocked AND every blocking prereq is terminal (done/cancelled)
+  // but reached the wrong stage — dependency can never be satisfied.
+  isUnsatisfiable?: boolean
 }
 
 export interface StageRun {
