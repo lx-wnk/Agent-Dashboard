@@ -13,6 +13,8 @@ import type { PipelineStage } from '../../src/types.js'
 import type { SpawnAgentOptions, SpawnResult } from './agentSpawner.js'
 import type { PromptBundle } from './stagePrompts.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
+import process from 'node:process'
+import { generateApiToken, hashApiToken, upsertStageRunApiKey } from '../db/apiKeysRepo.js'
 import { listUnresolvedFeedbackForStage } from '../db/feedbackRepo.js'
 import { listStageRunsForTask } from '../db/stageRunsRepo.js'
 import { spawnStageAgent } from './agentSpawner.js'
@@ -77,12 +79,26 @@ export function createAgentStage(
     async execute(ctx: StageContext): Promise<StageTransition> {
       const bundle = buildPrompt(ctx)
       const feedback = buildFeedbackPrefix(ctx.priorIterationOutput)
+
+      // Generate a stage-run-scoped MCP token; revoked in orchestrator.applyTransition
+      // on every terminal transition. Lifetime is state-transition-bounded, not time-bounded.
+      const rawToken = generateApiToken()
+      const keyHash = hashApiToken(rawToken)
+      void upsertStageRunApiKey({
+        name: `stage-run:${ctx.stageRun.id}`,
+        keyHash,
+        scopes: ['tasks:read'],
+      })
+
+      const port = process.env.DASHBOARD_PORT || '13120'
       const result = spawn({
         task: ctx.task,
         stageRun: ctx.stageRun,
         systemPrompt: bundle.systemPrompt,
         prompt: feedback + bundle.userPrompt,
         permissions: ctx.permissions,
+        mcpToken: rawToken,
+        mcpUrl: `http://127.0.0.1:${port}/api/mcp`,
       })
       ctx.recordAudit(`${stage}_spawned`, {
         pid: result.pid,

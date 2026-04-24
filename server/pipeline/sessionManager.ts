@@ -57,7 +57,9 @@ export function decideRecovery(stageRun: StageRun): RecoveryDecision {
  */
 export function attachSessionId(stageRunId: string, sessionId: string): void {
   const existing = findStageRunBySessionId(sessionId)
-  if (existing && existing.id === stageRunId)
+  if (existing) {
+    // Already attached (same run = no-op; different run = don't steal it).
     return
+  }
   updateStageRun(stageRunId, { sessionId })
 }

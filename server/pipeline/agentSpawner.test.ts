@@ -1,6 +1,6 @@
 import type { PipelineTask, StageRun, TaskPermission } from '../../src/types.js'
 import type { SpawnAgentOptions } from './agentSpawner.js'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildAllowList, buildSpawnArgs, buildSpawnEnv } from './agentSpawner.js'
 
 function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
@@ -101,6 +101,16 @@ describe('buildAllowList', () => {
     ])
     expect(list).toEqual([])
   })
+
+  it('blocks git push patterns even when granted', () => {
+    const list = buildAllowList([
+      permission({ tool: 'Bash', pattern: 'git push *' }),
+      permission({ tool: 'Bash', pattern: 'git push origin main' }),
+      permission({ tool: 'Bash', pattern: 'git commit -m *' }),
+    ])
+    expect(list).toEqual(['Bash(git commit -m *)'])
+    expect(list.some(e => e.includes('git push'))).toBe(false)
+  })
 })
 
 describe('buildSpawnArgs', () => {
@@ -157,6 +167,25 @@ describe('buildSpawnArgs', () => {
 })
 
 describe('buildSpawnEnv', () => {
+  let savedMcpToken: string | undefined
+  let savedMcpUrl: string | undefined
+
+  beforeEach(() => {
+    savedMcpToken = process.env.DASHBOARD_MCP_TOKEN
+    savedMcpUrl = process.env.DASHBOARD_MCP_URL
+    delete process.env.DASHBOARD_MCP_TOKEN
+    delete process.env.DASHBOARD_MCP_URL
+  })
+
+  afterEach(() => {
+    if (savedMcpToken !== undefined)
+      process.env.DASHBOARD_MCP_TOKEN = savedMcpToken
+    else delete process.env.DASHBOARD_MCP_TOKEN
+    if (savedMcpUrl !== undefined)
+      process.env.DASHBOARD_MCP_URL = savedMcpUrl
+    else delete process.env.DASHBOARD_MCP_URL
+  })
+
   it('injects DASHBOARD_STAGE_RUN_ID and DASHBOARD_TASK_ID', () => {
     const env = buildSpawnEnv(baseOpts)
     expect(env.DASHBOARD_STAGE_RUN_ID).toBe('sr-1')
@@ -167,5 +196,25 @@ describe('buildSpawnEnv', () => {
     const env = buildSpawnEnv(baseOpts)
     // PATH is present on every sane system
     expect(env.PATH).toBeDefined()
+  })
+
+  it('injects DASHBOARD_MCP_TOKEN when mcpToken is provided', () => {
+    const env = buildSpawnEnv({ ...baseOpts, mcpToken: 'mcp_abc123' })
+    expect(env.DASHBOARD_MCP_TOKEN).toBe('mcp_abc123')
+  })
+
+  it('omits DASHBOARD_MCP_TOKEN when mcpToken is absent', () => {
+    const env = buildSpawnEnv(baseOpts)
+    expect(env.DASHBOARD_MCP_TOKEN).toBeUndefined()
+  })
+
+  it('injects DASHBOARD_MCP_URL when mcpUrl is provided', () => {
+    const env = buildSpawnEnv({ ...baseOpts, mcpUrl: 'http://127.0.0.1:13120/api/mcp' })
+    expect(env.DASHBOARD_MCP_URL).toBe('http://127.0.0.1:13120/api/mcp')
+  })
+
+  it('omits DASHBOARD_MCP_URL when mcpUrl is absent', () => {
+    const env = buildSpawnEnv(baseOpts)
+    expect(env.DASHBOARD_MCP_URL).toBeUndefined()
   })
 })

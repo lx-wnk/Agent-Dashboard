@@ -15,13 +15,13 @@
 import type { ChildProcess } from 'node:child_process'
 import type { PipelineTask, StageRun, TaskPermission } from '../../src/types.js'
 import { spawn } from 'node:child_process'
-import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import process from 'node:process'
+import { buildDashboardChannelMcpConfig } from '../channelConfig.js'
+import { SYSTEM_PROMPT_MAX_CHARS } from '../constants.js'
 
-const CHANNEL_DIR = join(dirname(new URL(import.meta.url).pathname), '..', '..', 'channel')
-const CHANNEL_SCRIPT = join(CHANNEL_DIR, 'dashboard-channel.ts')
-const CHANNEL_TSX = join(CHANNEL_DIR, 'node_modules', '.bin', 'tsx')
+const GIT_PUSH_RE = /\bgit push\b/i
 
 export interface SpawnAgentOptions {
   task: PipelineTask
@@ -32,6 +32,10 @@ export interface SpawnAgentOptions {
   permissions: TaskPermission[]
   enableChannel?: boolean
   resumeSessionId?: string | null
+  /** Short-lived MCP token for this stage run (raw `mcp_<hex>` value). */
+  mcpToken?: string
+  /** MCP endpoint URL, e.g. "http://127.0.0.1:13120/api/mcp". */
+  mcpUrl?: string
 }
 
 export interface SpawnResult {
@@ -50,6 +54,10 @@ export function buildAllowList(permissions: TaskPermission[]): string[] {
   const allow: string[] = []
   for (const p of permissions) {
     if (!p.granted)
+      continue
+    // Block git push regardless of what was granted — stage agents may commit
+    // but must never push; pushes must be triggered by the user.
+    if (p.tool === 'Bash' && p.pattern && GIT_PUSH_RE.test(p.pattern))
       continue
     allow.push(p.pattern ? `${p.tool}(${p.pattern})` : p.tool)
   }
@@ -73,7 +81,7 @@ export function buildSpawnArgs(opts: SpawnAgentOptions): string[] {
   if (opts.model)
     args.push('--model', opts.model)
   if (opts.systemPrompt)
-    args.push('--system-prompt', opts.systemPrompt.slice(0, 10000))
+    args.push('--system-prompt', opts.systemPrompt.slice(0, SYSTEM_PROMPT_MAX_CHARS))
   return args
 }
 
@@ -83,11 +91,16 @@ export function buildSpawnArgs(opts: SpawnAgentOptions): string[] {
  * right task. Pure function — exported for testing.
  */
 export function buildSpawnEnv(opts: SpawnAgentOptions): NodeJS.ProcessEnv {
-  return {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     DASHBOARD_STAGE_RUN_ID: opts.stageRun.id,
     DASHBOARD_TASK_ID: opts.task.id,
   }
+  if (opts.mcpToken)
+    env.DASHBOARD_MCP_TOKEN = opts.mcpToken
+  if (opts.mcpUrl)
+    env.DASHBOARD_MCP_URL = opts.mcpUrl
+  return env
 }
 
 /**
@@ -119,15 +132,7 @@ export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
   const args = buildSpawnArgs(opts)
 
   if (opts.enableChannel !== false) {
-    const mcpConfig = JSON.stringify({
-      mcpServers: {
-        'dashboard-channel': {
-          command: realpathSync(CHANNEL_TSX),
-          args: [realpathSync(CHANNEL_SCRIPT)],
-        },
-      },
-    })
-    args.push('--mcp-config', mcpConfig)
+    args.push('--mcp-config', buildDashboardChannelMcpConfig())
   }
 
   const child = spawn('claude', args, {

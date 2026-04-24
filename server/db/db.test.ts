@@ -1,8 +1,19 @@
+import { createHash, randomBytes } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  createApiKey,
+  generateApiToken,
+  getApiKeyByHash,
+  getApiKeyById,
+  hashApiToken,
+  listApiKeys,
+  revokeApiKey,
+  touchApiKey,
+} from './apiKeysRepo.js'
 import { appendAudit, listAuditForTask } from './auditRepo.js'
 import { closeDb, getDb } from './client.js'
 import {
@@ -321,6 +332,108 @@ describe('notificationConfigRepo', () => {
     setPipelineConfig('maxParallelOrchestrators', '5')
     expect(getPipelineConfigNumber('maxParallelOrchestrators', 3)).toBe(5)
     expect(getPipelineConfigNumber('missing', 7)).toBe(7)
+  })
+})
+
+describe('api_keys table', () => {
+  it('has the expected columns after migration', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(api_keys)').all() as Array<{ name: string }>
+    const names = cols.map(c => c.name)
+    expect(names).toContain('id')
+    expect(names).toContain('name')
+    expect(names).toContain('key_hash')
+    expect(names).toContain('scopes')
+    expect(names).toContain('active')
+    expect(names).toContain('created_at')
+    expect(names).toContain('last_used_at')
+  })
+})
+
+describe('apiKeysRepo', () => {
+  function makeToken(): string {
+    return `mcp_${randomBytes(16).toString('hex')}`
+  }
+  function hashToken(t: string): string {
+    return createHash('sha256').update(t).digest('hex')
+  }
+
+  it('creates a key and retrieves it by hash', () => {
+    const token = makeToken()
+    const key = createApiKey({ name: 'ci-bot', keyHash: hashToken(token), scopes: ['tasks:read', 'pipeline:control'] })
+    expect(key.id).toBeTruthy()
+    expect(key.name).toBe('ci-bot')
+    expect(key.scopes).toEqual(['tasks:read', 'pipeline:control'])
+    expect(key.active).toBe(true)
+    expect(key.lastUsedAt).toBeNull()
+
+    const found = getApiKeyByHash(hashToken(token))
+    expect(found?.id).toBe(key.id)
+  })
+
+  it('returns null for unknown hash', () => {
+    expect(getApiKeyByHash('not-a-real-hash')).toBeNull()
+  })
+
+  it('lists only active keys by default, includeRevoked shows all', () => {
+    const t1 = makeToken()
+    const t2 = makeToken()
+    const k1 = createApiKey({ name: 'a', keyHash: hashToken(t1), scopes: ['tasks:read'] })
+    const k2 = createApiKey({ name: 'b', keyHash: hashToken(t2), scopes: ['tasks:write'] })
+    revokeApiKey(k2.id)
+
+    const active = listApiKeys()
+    expect(active.map(k => k.id)).toContain(k1.id)
+    expect(active.map(k => k.id)).not.toContain(k2.id)
+
+    const all = listApiKeys({ includeRevoked: true })
+    expect(all).toHaveLength(2)
+  })
+
+  it('revokes a key — getApiKeyByHash returns null after revoke', () => {
+    const token = makeToken()
+    const key = createApiKey({ name: 'c', keyHash: hashToken(token), scopes: ['tasks:read'] })
+    revokeApiKey(key.id)
+    expect(getApiKeyByHash(hashToken(token))).toBeNull()
+  })
+
+  it('touchApiKey updates last_used_at', () => {
+    const token = makeToken()
+    const key = createApiKey({ name: 'd', keyHash: hashToken(token), scopes: ['tasks:read'] })
+    expect(key.lastUsedAt).toBeNull()
+    touchApiKey(key.id)
+    const refreshed = getApiKeyByHash(hashToken(token))
+    expect(refreshed?.lastUsedAt).toBeTruthy()
+  })
+
+  it('enforces unique name constraint', () => {
+    createApiKey({ name: 'dup', keyHash: hashToken(makeToken()), scopes: ['tasks:read'] })
+    expect(() => createApiKey({ name: 'dup', keyHash: hashToken(makeToken()), scopes: ['tasks:read'] })).toThrow()
+  })
+
+  it('getApiKeyById retrieves by primary key', () => {
+    const token = makeToken()
+    const key = createApiKey({ name: 'e', keyHash: hashToken(token), scopes: ['tasks:write'] })
+    expect(getApiKeyById(key.id)?.name).toBe('e')
+    expect(getApiKeyById('nonexistent')).toBeNull()
+  })
+})
+
+describe('token helpers', () => {
+  it('generateApiToken returns mcp_ prefixed 32-char hex string', () => {
+    const token = generateApiToken()
+    expect(token).toMatch(/^mcp_[0-9a-f]{32}$/)
+  })
+
+  it('hashApiToken produces stable sha256 hex', () => {
+    const hash1 = hashApiToken('mcp_abc')
+    const hash2 = hashApiToken('mcp_abc')
+    expect(hash1).toBe(hash2)
+    expect(hash1).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('two generateApiToken calls produce different tokens', () => {
+    expect(generateApiToken()).not.toBe(generateApiToken())
   })
 })
 

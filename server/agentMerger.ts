@@ -1,12 +1,36 @@
 import type { Agent, TokenUsage } from '../src/types.js'
 import { basename } from 'node:path'
 import { getChannelMap } from './channelDiscovery.js'
+import { findTasksBySessionIds } from './db/stageRunsRepo.js'
 import { findSessionForProject } from './jsonlParser.js'
 import { estimateCost } from './pricing.js'
 import { scanProcesses } from './processScanner.js'
 
 const ACTIVE_THRESHOLD = 30_000 // 30s
 const IDLE_THRESHOLD = 300_000 // 5min
+
+export function enrichWithPipelineTask(agents: Agent[]): void {
+  if (agents.length === 0)
+    return
+  try {
+    const taskMap = findTasksBySessionIds(agents.map(a => a.sessionId))
+    for (const agent of agents) {
+      const entry = taskMap.get(agent.sessionId)
+      if (entry) {
+        agent.pipelineTaskId = entry.taskId
+        agent.pipelineTaskTitle = entry.title
+      }
+    }
+  }
+  catch (err) {
+    // Opportunistic enrichment — skip if pipeline DB is unavailable (e.g. first boot, missing schema).
+    // Use structured error codes (stable) rather than message string matching (fragile).
+    const code = (err as NodeJS.ErrnoException).code
+    const isExpected = code === 'SQLITE_ERROR' || code === 'ENOENT'
+    if (!isExpected)
+      console.warn('[agentMerger] enrichWithPipelineTask failed:', err)
+  }
+}
 
 export function calculateStatus(lastActivity: string): Agent['status'] {
   const age = Date.now() - new Date(lastActivity).getTime()
@@ -21,7 +45,7 @@ export async function getAgents(): Promise<Agent[]> {
   const processes = await scanProcesses()
 
   const sessions = await Promise.all(
-    processes.map(proc => findSessionForProject(proc.cwd)),
+    processes.map(proc => findSessionForProject(proc.cwd, proc.uptime)),
   )
 
   const agents: Agent[] = processes.map((proc, i) => {
@@ -88,6 +112,8 @@ export async function getAgents(): Promise<Agent[]> {
       return diff
     return b.uptime - a.uptime
   })
+
+  enrichWithPipelineTask(agents)
 
   return agents
 }

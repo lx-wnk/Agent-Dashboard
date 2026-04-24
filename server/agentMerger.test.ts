@@ -1,5 +1,12 @@
+import type { Agent } from '../src/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { calculateStatus } from './agentMerger'
+
+import { calculateStatus, enrichWithPipelineTask } from './agentMerger'
+import { findTasksBySessionIds } from './db/stageRunsRepo.js'
+
+vi.mock('./db/stageRunsRepo.js', () => ({
+  findTasksBySessionIds: vi.fn(),
+}))
 
 // Thresholds from agentMerger.ts:
 //   ACTIVE_THRESHOLD = 30_000  (30s)
@@ -60,5 +67,76 @@ describe('calculateStatus', () => {
   it('returns "idle" for a very old timestamp', () => {
     const lastActivity = new Date(0).toISOString() // Unix epoch
     expect(calculateStatus(lastActivity)).toBe('idle')
+  })
+})
+
+describe('enrichWithPipelineTask', () => {
+  const mockFindTasks = vi.mocked(findTasksBySessionIds)
+
+  afterEach(() => vi.clearAllMocks())
+
+  function makeAgent(sessionId: string): Agent {
+    return {
+      pid: 1,
+      sessionId,
+      projectPath: '/tmp',
+      projectName: 'proj',
+      cwd: '/tmp',
+      entrypoint: 'cli',
+      status: 'active',
+      uptime: 1,
+      lastActivity: new Date().toISOString(),
+      currentAction: null,
+      lastTools: [],
+      tasks: [],
+      subagents: [],
+      tokenUsage: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
+      costEstimate: 0,
+      model: null,
+      codeVersion: null,
+      conversationTurns: 0,
+      toolCounts: {},
+      meta: null,
+      lastOutput: null,
+      lastBtw: null,
+      channelAvailable: false,
+    }
+  }
+
+  it('attaches pipelineTaskId and pipelineTaskTitle when a match exists', () => {
+    mockFindTasks.mockReturnValue(new Map([['sess-1', { taskId: 'task-abc', title: 'My Task' }]]))
+    const agents = [makeAgent('sess-1')]
+    enrichWithPipelineTask(agents)
+    expect(agents[0].pipelineTaskId).toBe('task-abc')
+    expect(agents[0].pipelineTaskTitle).toBe('My Task')
+  })
+
+  it('leaves fields undefined when no match in the returned map', () => {
+    mockFindTasks.mockReturnValue(new Map())
+    const agents = [makeAgent('sess-2')]
+    enrichWithPipelineTask(agents)
+    expect(agents[0].pipelineTaskId).toBeUndefined()
+    expect(agents[0].pipelineTaskTitle).toBeUndefined()
+  })
+
+  it('enriches multiple agents in one call', () => {
+    mockFindTasks.mockReturnValue(new Map([
+      ['sess-a', { taskId: 'task-1', title: 'Task One' }],
+      ['sess-b', { taskId: 'task-2', title: 'Task Two' }],
+    ]))
+    const agents = [makeAgent('sess-a'), makeAgent('sess-b'), makeAgent('sess-c')]
+    enrichWithPipelineTask(agents)
+    expect(agents[0].pipelineTaskId).toBe('task-1')
+    expect(agents[1].pipelineTaskId).toBe('task-2')
+    expect(agents[2].pipelineTaskId).toBeUndefined()
+  })
+
+  it('does not throw when the DB throws', () => {
+    mockFindTasks.mockImplementation(() => {
+      throw new Error('DB not ready')
+    })
+    const agents = [makeAgent('sess-4')]
+    expect(() => enrichWithPipelineTask(agents)).not.toThrow()
+    expect(agents[0].pipelineTaskId).toBeUndefined()
   })
 })

@@ -259,7 +259,49 @@ export async function readSessionMeta(sessionId: string): Promise<SessionMeta | 
   }
 }
 
-export async function findSessionForProject(cwd: string): Promise<SessionData | null> {
+/**
+ * Pick the best JSONL file for a process given all candidates.
+ *
+ * When multiple Claude processes share the same cwd, each has its own session
+ * file. We use the file's birthtime (creation time) to match it against the
+ * estimated process start time derived from `processUptimeSeconds`.
+ *
+ * Fallback: if birthtime is unreliable (all zero, or platform doesn't support
+ * it), we rank by mtime and assign by uptime order so at least each process
+ * gets a distinct file.
+ *
+ * Exported for testing.
+ */
+export function pickBestJsonlFile(
+  files: Array<{ name: string, mtime: Date, birthtimeMs: number }>,
+  processUptimeSeconds?: number,
+): { name: string, mtime: Date, birthtimeMs: number } {
+  if (files.length === 1 || processUptimeSeconds === undefined) {
+    // Default: newest by mtime
+    return [...files].sort((a, b) => b.mtime.getTime() - a.mtime.getTime())[0]
+  }
+
+  const estimatedStartMs = Date.now() - processUptimeSeconds * 1000
+
+  // Check if birthtime is supported (non-zero and distinct from mtime for at
+  // least one file — on systems without birthtime support birthtimeMs === 0).
+  const birthtimeSupported = files.some(f => f.birthtimeMs > 0)
+  if (birthtimeSupported) {
+    return files.reduce((best, f) => {
+      const bestDiff = Math.abs(best.birthtimeMs - estimatedStartMs)
+      const fDiff = Math.abs(f.birthtimeMs - estimatedStartMs)
+      return fDiff < bestDiff ? f : best
+    })
+  }
+
+  // Birthtime not supported: fall back to newest
+  return [...files].sort((a, b) => b.mtime.getTime() - a.mtime.getTime())[0]
+}
+
+export async function findSessionForProject(
+  cwd: string,
+  processUptimeSeconds?: number,
+): Promise<SessionData | null> {
   const encoded = encodePath(cwd)
   const projectDir = join(CLAUDE_PROJECTS_DIR, encoded)
 
@@ -273,22 +315,22 @@ export async function findSessionForProject(cwd: string): Promise<SessionData | 
   if (!dirStat.isDirectory())
     return null
 
-  // Find newest .jsonl file in this project directory
+  // Find .jsonl files for this project directory; when multiple processes share
+  // a cwd, pick the one whose birthtime best matches this process's start time.
   const entries = await readdir(projectDir, { withFileTypes: true })
   const jsonlEntries = entries.filter(e => e.isFile() && e.name.endsWith('.jsonl'))
   const jsonlFiles = await Promise.all(
     jsonlEntries.map(async (e) => {
       const s = await stat(join(projectDir, e.name))
-      return { name: e.name, mtime: s.mtime }
+      return { name: e.name, mtime: s.mtime, birthtimeMs: s.birthtimeMs }
     }),
   )
 
   if (jsonlFiles.length === 0)
     return null
 
-  jsonlFiles.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
-  const newestFile = jsonlFiles[0]
-  const sessionFilePath = join(projectDir, newestFile.name)
+  const selectedFile = pickBestJsonlFile(jsonlFiles, processUptimeSeconds)
+  const sessionFilePath = join(projectDir, selectedFile.name)
 
   const raw = await tailRead(sessionFilePath)
   const parsed = parseJsonlLines(raw)
@@ -309,7 +351,7 @@ export async function findSessionForProject(cwd: string): Promise<SessionData | 
   }
 
   // Find subagents
-  const sessionId = newestFile.name.replace('.jsonl', '')
+  const sessionId = selectedFile.name.replace('.jsonl', '')
   const subagentDir = join(projectDir, sessionId, 'subagents')
   const subagents = await findSubagents(subagentDir)
 
@@ -327,7 +369,7 @@ export async function findSessionForProject(cwd: string): Promise<SessionData | 
     sessionId: info.sessionId || sessionId,
     projectPath: cwd,
     entrypoint: info.entrypoint || 'unknown',
-    lastActivity: newestFile.mtime.toISOString(),
+    lastActivity: selectedFile.mtime.toISOString(),
     currentAction: info.currentAction ?? null,
     lastOutput: info.lastOutput ?? null,
     lastBtw: info.lastBtw ?? null,
