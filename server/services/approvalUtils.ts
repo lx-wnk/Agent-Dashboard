@@ -1,6 +1,6 @@
 import { appendAudit } from '../db/auditRepo.js'
 import { createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
-import { getLatestStageRun } from '../db/stageRunsRepo.js'
+import { getTaskById } from '../db/tasksRepo.js'
 
 /**
  * The set of Claude Code tool names that may be granted as task permissions.
@@ -28,15 +28,16 @@ export const ALLOWED_TOOLS = new Set([
 
 /**
  * When approval2 is approved, bulk-grant every tool permission declared in
- * the umsetzungskonzept stage output's `toolRequests` array.
+ * the konzept `toolRequests` array stored on `task.metadata` (set by
+ * POST /api/refine/:taskId/confirm).
  *
  * Skips permissions already granted for the same tool+pattern pair.
  * Silently drops entries with unknown tool names (LLM hallucination guard).
  * Writes a single audit entry regardless of how many grants were created.
  */
 export function bulkGrantKonzeptPermissions(taskId: string): void {
-  const konzeptRun = getLatestStageRun(taskId, 'umsetzungskonzept')
-  const rawRequests = (konzeptRun?.output as Record<string, unknown> | null)?.toolRequests
+  const task = getTaskById(taskId)
+  const rawRequests = (task?.metadata as Record<string, unknown> | null)?.toolRequests
   if (!Array.isArray(rawRequests))
     return
 
@@ -59,6 +60,6 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
     taskId,
     actor: 'user',
     action: 'bulk_granted_tool_permissions',
-    details: { source: 'umsetzungskonzept_toolRequests', count: rawRequests.length },
+    details: { source: 'konzept_metadata_toolRequests', count: rawRequests.length },
   })
 }
