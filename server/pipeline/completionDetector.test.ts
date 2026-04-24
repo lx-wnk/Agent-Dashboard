@@ -6,7 +6,7 @@ function makeRun(overrides: Partial<StageRun> = {}): StageRun {
   return {
     id: 'run-1',
     taskId: 'task-1',
-    stage: 'pruefung',
+    stage: 'selbstreview',
     sessionId: 'sess-1',
     sessionName: null,
     pid: 1234,
@@ -21,52 +21,46 @@ function makeRun(overrides: Partial<StageRun> = {}): StageRun {
   }
 }
 
-const validPruefung = {
-  wellDefined: true,
-  risks: ['r1'],
-  complexity: 'M',
-  blockers: [],
-  recommendation: 'proceed',
+const validSelbstreview = {
+  passed: true,
+  findings: ['f1'],
+  summary: 'looks good',
 }
 
-describe('validateStageOutput - pruefung', () => {
+describe('validateStageOutput - selbstreview', () => {
   it('accepts a well-formed payload', () => {
-    expect(validateStageOutput('pruefung', validPruefung)).toEqual({ ok: true })
+    expect(validateStageOutput('selbstreview', validSelbstreview)).toEqual({ ok: true })
   })
 
-  it('rejects missing recommendation', () => {
-    const { recommendation, ...rest } = validPruefung
-    const result = validateStageOutput('pruefung', rest)
+  it('rejects missing summary', () => {
+    const { summary, ...rest } = validSelbstreview
+    const result = validateStageOutput('selbstreview', rest)
     expect(result.ok).toBe(false)
-    expect(result.error).toContain('recommendation')
+    expect(result.error).toContain('summary')
   })
 
-  it('rejects an unknown complexity enum value', () => {
-    const result = validateStageOutput('pruefung', { ...validPruefung, complexity: 'medium' })
+  it('rejects non-boolean passed', () => {
+    const result = validateStageOutput('selbstreview', { ...validSelbstreview, passed: 'yes' })
     expect(result.ok).toBe(false)
-    expect(result.error).toContain('complexity')
+    expect(result.error).toContain('passed')
   })
 
-  it('rejects non-boolean wellDefined', () => {
-    const result = validateStageOutput('pruefung', { ...validPruefung, wellDefined: 'yes' })
+  it('rejects non-array findings', () => {
+    const result = validateStageOutput('selbstreview', { ...validSelbstreview, findings: 'nope' })
     expect(result.ok).toBe(false)
-    expect(result.error).toContain('wellDefined')
+    expect(result.error).toContain('findings')
   })
 })
 
 describe('validateStageOutput - other stages', () => {
-  it('checks planning required fields', () => {
-    expect(validateStageOutput('planning', { subtasks: [], acceptanceCriteria: [] }).ok).toBe(true)
-    expect(validateStageOutput('planning', { subtasks: [] }).ok).toBe(false)
-  })
-
-  it('checks selbstreview required fields', () => {
-    expect(validateStageOutput('selbstreview', {
-      passed: true,
-      findings: [],
-      summary: 'ok',
+  it('checks finalisierung required fields', () => {
+    expect(validateStageOutput('finalisierung', {
+      summary: 'done',
+      insights: [],
+      openTodos: [],
+      testPlan: [],
     }).ok).toBe(true)
-    expect(validateStageOutput('selbstreview', { passed: true, findings: [] }).ok).toBe(false)
+    expect(validateStageOutput('finalisierung', { summary: 'done' }).ok).toBe(false)
   })
 
   it('accepts anything for stages without a structured schema', () => {
@@ -84,19 +78,19 @@ describe('detectCompletion', () => {
     expect(result.kind).toBe('still_running')
   })
 
-  it('returns completed with output for a valid pruefung payload', async () => {
+  it('returns completed with output for a valid selbstreview payload', async () => {
     const run = makeRun()
     const result = await detectCompletion(run, '/cwd', {
       isPidAlive: () => false,
-      readOutput: async () => ({ output: validPruefung, rawText: '```json\n{}\n```' }),
+      readOutput: async () => ({ output: validSelbstreview, rawText: '```json\n{}\n```' }),
     })
     expect(result.kind).toBe('completed')
-    expect(result.output).toEqual(validPruefung)
+    expect(result.output).toEqual(validSelbstreview)
   })
 
   it('returns retryable failed WITH output when the payload parses but schema is wrong', async () => {
     const run = makeRun()
-    const badOutput = { ...validPruefung, recommendation: 'maybe' }
+    const badOutput = { ...validSelbstreview, passed: 'maybe' }
     const result = await detectCompletion(run, '/cwd', {
       isPidAlive: () => false,
       readOutput: async () => ({ output: badOutput, rawText: '```json\n{}\n```' }),
@@ -104,7 +98,7 @@ describe('detectCompletion', () => {
     expect(result.kind).toBe('failed')
     expect(result.retryable).toBe(true)
     expect(result.output).toEqual(badOutput)
-    expect(result.error).toContain('recommendation')
+    expect(result.error).toContain('passed')
   })
 
   it('returns failed WITHOUT output when no session could be located', async () => {
@@ -165,7 +159,7 @@ describe('detectCompletion', () => {
       persistSessionId: (id, sessionId) => {
         persisted = { id, sessionId }
       },
-      readOutput: async () => ({ output: validPruefung, rawText: '```json\n{}\n```' }),
+      readOutput: async () => ({ output: validSelbstreview, rawText: '```json\n{}\n```' }),
     })
     expect(persisted).toEqual({ id: 'run-1', sessionId: 'discovered-sess' })
   })

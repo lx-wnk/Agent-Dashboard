@@ -174,7 +174,7 @@ describe('pATCH /api/tasks', () => {
 })
 
 describe('pOST /api/tasks/:id/progress', () => {
-  it('advances a task through the backlog → pruefung transition', async () => {
+  it('advances a task through the backlog → umsetzung transition', async () => {
     const { data: task } = await api<{ id: string }>('POST', '/tasks', {
       slug: 'prog',
       title: 'P',
@@ -186,98 +186,8 @@ describe('pOST /api/tasks/:id/progress', () => {
       `/tasks/${task.id}/progress`,
     )
     expect(status).toBe(200)
-    expect(data.task.currentStage).toBe('pruefung')
+    expect(data.task.currentStage).toBe('umsetzung')
     expect(events.some(e => e.type === 'task_updated')).toBe(true)
-  })
-})
-
-describe('pOST /api/tasks/:id/approve', () => {
-  it('advances approval1 → umsetzungskonzept', async () => {
-    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
-      slug: 'app',
-      title: 'A',
-      cwd: '/a',
-    })
-    forceStage(task.id, 'approval1')
-
-    const { status, data } = await api<{ currentStage: string }>(
-      'POST',
-      `/tasks/${task.id}/approve`,
-    )
-    expect(status).toBe(200)
-    expect(data.currentStage).toBe('umsetzungskonzept')
-  })
-
-  it('advances approval2 → umsetzung and bulk-grants toolRequests from umsetzungskonzept', async () => {
-    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
-      slug: 'app2',
-      title: 'A2',
-      cwd: '/a2',
-    })
-    forceStage(task.id, 'approval2')
-
-    // Seed a done umsetzungskonzept run with toolRequests in its output.
-    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzungskonzept' })
-    updateStageRun(run.id, {
-      status: 'done',
-      startedAt: new Date().toISOString(),
-      output: {
-        steps: [],
-        toolRequests: [
-          { tool: 'Write', pattern: null, reason: 'create files' },
-          { tool: 'Bash', pattern: 'npm run *', reason: 'run npm scripts' },
-        ],
-      },
-    })
-
-    const { status, data } = await api<{ currentStage: string }>(
-      'POST',
-      `/tasks/${task.id}/approve`,
-    )
-    expect(status).toBe(200)
-    expect(data.currentStage).toBe('umsetzung')
-
-    const { listTaskPermissions } = await import('../db/permissionsRepo.js')
-    const perms = listTaskPermissions(task.id)
-    expect(perms.some(p => p.tool === 'Write' && p.pattern === null && p.granted)).toBe(true)
-    expect(perms.some(p => p.tool === 'Bash' && p.pattern === 'npm run *' && p.granted)).toBe(true)
-  })
-
-  it('does not create duplicate permissions on double-approve', async () => {
-    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
-      slug: 'dup',
-      title: 'Dup',
-      cwd: '/dup',
-    })
-    forceStage(task.id, 'approval2')
-
-    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzungskonzept' })
-    updateStageRun(run.id, {
-      status: 'done',
-      startedAt: new Date().toISOString(),
-      output: { steps: [], toolRequests: [{ tool: 'Read', pattern: null }] },
-    })
-
-    await api('POST', `/tasks/${task.id}/approve`)
-    // Force back to approval2 to simulate double-click scenario.
-    forceStage(task.id, 'approval2')
-    await api('POST', `/tasks/${task.id}/approve`)
-
-    const { listTaskPermissions } = await import('../db/permissionsRepo.js')
-    const perms = listTaskPermissions(task.id).filter(p => p.tool === 'Read' && p.granted)
-    expect(perms.length).toBe(1)
-  })
-
-  it('rejects approval when not in an approval stage', async () => {
-    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
-      slug: 'nope',
-      title: 'N',
-      cwd: '/n',
-    })
-    const { status } = await api('POST', `/tasks/${task.id}/approve`)
-    expect(status).toBe(409)
   })
 })
 
@@ -390,17 +300,6 @@ describe('pipeline config', () => {
 })
 
 describe('task enrichment (needsUser)', () => {
-  it('flags needsUser=true for tasks in approval1 stage regardless of runs', async () => {
-    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
-      slug: 'ap',
-      title: 'AP',
-      cwd: '/ap',
-    })
-    forceStage(t.id, 'approval1')
-    const { data } = await api<{ needsUser: boolean }>('GET', `/tasks/${t.id}`)
-    expect(data.needsUser).toBe(true)
-  })
-
   it('flags needsUser=true when current stage run is awaiting_user', async () => {
     const { data: t } = await api<{ id: string }>('POST', '/tasks', {
       slug: 'au',

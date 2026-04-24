@@ -148,18 +148,19 @@ export function listTasksByStage(stage: PipelineStage, db: Database = getDb()): 
 }
 
 /**
- * List tasks eligible for runner pickup: excludes terminal (done/cancelled)
- * and orchestrator-paused (on_hold, approval1, approval2) stages, AND tasks
- * with at least one unmet dependency. Tasks with a failed latest stage_run
- * are filtered separately by the orchestrator (pickNextTasksForFreeSlots) —
- * they stay on their stage but require explicit user-triggered retry via
+ * List tasks eligible for runner pickup: excludes terminal (done/cancelled),
+ * orchestrator-paused (on_hold), and chat-driven (konzept — advanced only
+ * by POST /api/refine/:taskId/confirm) stages, AND tasks with at least one
+ * unmet dependency. Tasks with a failed latest stage_run are filtered
+ * separately by the orchestrator (pickNextTasksForFreeSlots) — they stay on
+ * their stage but require explicit user-triggered retry via
  * POST /tasks/:id/retry.
  */
 export function listPickableTasks(db: Database = getDb()): PipelineTask[] {
   const rows = db
     .prepare(`
       SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks
-      WHERE tasks.current_stage NOT IN ('done','cancelled','on_hold','approval1','approval2')
+      WHERE tasks.current_stage NOT IN ('konzept','done','cancelled','on_hold')
         AND NOT EXISTS (
           SELECT 1 FROM task_dependencies td
           JOIN tasks t2 ON t2.id = td.depends_on_id

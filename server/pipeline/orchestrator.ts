@@ -5,7 +5,6 @@ import { consola } from 'consola'
 import { revokeApiKeyByName } from '../db/apiKeysRepo.js'
 import { appendAudit } from '../db/auditRepo.js'
 import { getDb } from '../db/client.js'
-import { resolveFeedbackForStage } from '../db/feedbackRepo.js'
 import { getPipelineConfigNumber } from '../db/notificationConfigRepo.js'
 import { createPermissionRequest, listTaskPermissions } from '../db/permissionsRepo.js'
 import {
@@ -263,9 +262,7 @@ export class PipelineOrchestrator {
 
   private getPreviousStageOutput(task: PipelineTask): Record<string, unknown> | null {
     // Walk back through the canonical order and return the first prior
-    // stage that produced a non-null output. Approval1/approval2 stages
-    // are agent-less wait_user gates that store null output — skipping
-    // them lets agent handlers see the real previous meaningful result.
+    // stage that produced a non-null output.
     const idx = STAGE_ORDER.indexOf(task.currentStage)
     if (idx <= 0)
       return null
@@ -324,11 +321,6 @@ export class PipelineOrchestrator {
           if (transition.taskMetadataPatch !== undefined)
             patch.metadata = transition.taskMetadataPatch
           updateTask(task.id, patch, db)
-          // Resolve any user feedback that was pending on this stage —
-          // a successful next-transition means the agent has produced a
-          // fresh artifact that supersedes the prior reviewed output.
-          if (stageRun.stage === 'planning' || stageRun.stage === 'umsetzungskonzept')
-            resolveFeedbackForStage(task.id, stageRun.stage, stageRun.id, db)
           appendAudit({
             taskId: task.id,
             actor: 'orchestrator',
@@ -481,7 +473,7 @@ export class PipelineOrchestrator {
     // happy path too — `next`, `wait_user`, `iterate`, `on_hold`, `done`,
     // `async_running`, `fail`. Without this callback the kanban only
     // updates on permission requests and failures, missing healthy
-    // stage transitions like planning→approval1.
+    // stage transitions.
     this.onTaskChanged?.(task.id, { transitionKind: transition.kind })
 
     // Cascade terminal stage to dependents AFTER onTaskChanged so the
@@ -821,7 +813,6 @@ export class PipelineOrchestrator {
             break
           case 'start': {
             // Move on_hold tasks to backlog so they become pickable.
-            // approval1/2 stay put — they need a human decision regardless.
             const depTask = getTaskById(dep.taskId)
             if (depTask?.currentStage === 'on_hold') {
               updateTask(dep.taskId, { currentStage: 'backlog' })
