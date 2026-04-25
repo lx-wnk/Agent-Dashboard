@@ -327,18 +327,18 @@ function formatDate(iso: string | null): string {
 
 function stageRunStatusClass(status: string): string {
   switch (status) {
-    case 'running': return 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
-    case 'done': return 'bg-green-400/20 text-green-400'
-    case 'failed': return 'bg-red-400/20 text-red-400'
-    case 'on_hold': return 'bg-yellow-500/20 text-yellow-500'
+    case 'running': return 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
+    case 'done': return 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400'
+    case 'failed': return 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400'
+    case 'on_hold': return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400'
     default: return 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
   }
 }
 
 function sessionStatusClass(status: string): string {
   switch (status) {
-    case 'active': return 'bg-green-400/20 text-green-400'
-    case 'waiting': return 'bg-yellow-500/20 text-yellow-500'
+    case 'active': return 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400'
+    case 'waiting': return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400'
     default: return 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
   }
 }
@@ -361,7 +361,7 @@ function sessionStatusClass(status: string): string {
           <span v-if="isFailedRun(task)" class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400" title="Latest stage run failed">
             RUN FAILED
           </span>
-          <span class="task-slug font-mono text-xs text-blue-600 dark:text-blue-400">{{ task.slug }}</span>
+          <span class="font-mono text-xs text-blue-600 dark:text-blue-400">{{ task.slug }}</span>
           <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {{ task.title }}
           </h2>
@@ -391,11 +391,10 @@ function sessionStatusClass(status: string): string {
             v-if="pipelineAgent"
             class="inline-block w-1.5 h-1.5 rounded-full ml-[5px] align-middle"
             :class="{
-              'bg-green-400': pipelineAgent.status === 'active',
+              'bg-green-400 animate-[pulse_2s_ease-in-out_infinite]': pipelineAgent.status === 'active',
               'bg-yellow-500': pipelineAgent.status === 'waiting',
               'bg-slate-400 dark:bg-slate-500': pipelineAgent.status !== 'active' && pipelineAgent.status !== 'waiting',
             }"
-            :style="pipelineAgent.status === 'active' ? 'animation: pulse 2s ease-in-out infinite' : ''"
           />
         </button>
         <button
@@ -518,7 +517,7 @@ function sessionStatusClass(status: string): string {
               </div>
             </div>
           </div>
-          <dl class="grid gap-y-1.5 gap-x-4 text-[13px] mb-4" style="grid-template-columns: auto 1fr">
+          <dl class="grid grid-cols-[auto_1fr] gap-y-1.5 gap-x-4 text-[13px] mb-4">
             <div class="contents">
               <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
                 CWD
@@ -752,7 +751,7 @@ function sessionStatusClass(status: string): string {
               <div class="flex gap-1.5 mt-1.5">
                 <button
                   type="button"
-                  class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed px-2.5 py-1 text-[11px] bg-green-600 text-white hover:brightness-110"
+                  class="border-none rounded px-2.5 py-1 text-[11px] font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-green-600 text-white hover:brightness-110"
                   :disabled="isActing"
                   @click="onResolve(req, 'granted')"
                 >
@@ -760,7 +759,7 @@ function sessionStatusClass(status: string): string {
                 </button>
                 <button
                   type="button"
-                  class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed px-2.5 py-1 text-[11px] bg-red-600 text-white hover:brightness-110"
+                  class="border-none rounded px-2.5 py-1 text-[11px] font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-red-600 text-white hover:brightness-110"
                   :disabled="isActing"
                   @click="onResolve(req, 'denied')"
                 >
@@ -794,7 +793,7 @@ function sessionStatusClass(status: string): string {
               >
               <button
                 type="button"
-                class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed px-2.5 py-1 text-[11px] bg-green-600 text-white hover:brightness-110"
+                class="border-none rounded px-2.5 py-1 text-[11px] font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-green-600 text-white hover:brightness-110"
                 :disabled="isGranting || !newPermTool.trim()"
                 @click="onGrantPermission"
               >
