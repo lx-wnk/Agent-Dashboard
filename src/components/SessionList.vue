@@ -9,6 +9,7 @@ interface SessionInfo {
   lastModified: string
   model: string | null
   firstPrompt: string | null
+  lastResponse: string | null
   totalInputTokens: number
   totalOutputTokens: number
   costEstimate: number
@@ -167,6 +168,7 @@ watch(() => props.open, (isOpen) => {
               <p v-if="s.firstPrompt" class="session-prompt">
                 {{ s.firstPrompt }}
               </p>
+              <pre v-if="s.lastResponse" class="session-last-response">{{ s.lastResponse }}</pre>
               <div class="session-meta">
                 <span v-if="s.model" class="meta-tag model">{{ shortModel(s.model) }}</span>
                 <span v-if="s.costEstimate > 0" class="meta-tag cost">${{ s.costEstimate.toFixed(2) }}</span>
@@ -339,6 +341,22 @@ watch(() => props.open, (isOpen) => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.session-last-response {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border-left: 2px solid var(--border);
+  padding: 5px 8px;
+  margin: 4px 0 6px;
+  border-radius: 0 4px 4px 0;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 5.5lh;
+  overflow-y: auto;
 }
 
 .session-meta {
