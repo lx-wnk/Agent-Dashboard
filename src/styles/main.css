@@ -38,7 +38,6 @@
 .markdown-body pre code { background: none; padding: 0; }
 .markdown-body ul, .markdown-body ol { margin: 4px 0; padding-left: 1.4em; }
 .markdown-body strong { color: var(--color-slate-100); }
-.dark .markdown-body strong { color: var(--color-slate-100); }
 .markdown-body a { color: var(--color-blue-400); }
 .markdown-body table { border-collapse: collapse; width: 100%; margin: 6px 0; font-size: 12px; }
 .markdown-body th, .markdown-body td {
