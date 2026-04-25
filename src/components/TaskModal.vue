@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Agent, OutputMessage, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskPermission } from '../types'
+import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskPermission } from '../types'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
@@ -19,7 +19,6 @@ import {
 } from '../composables/useTasks'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
-import PromptInput from './PromptInput.vue'
 import StageOutputView from './StageOutputView.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
@@ -27,7 +26,7 @@ const emit = defineEmits<{ close: [], navigate: [agent: Agent], openChat: [task:
 
 const { agents } = useAgents()
 
-type Tab = 'overview' | 'session' | 'stages' | 'permissions' | 'audit'
+type Tab = 'overview' | 'stages' | 'permissions' | 'audit'
 const activeTab = ref<Tab>('overview')
 const stageRuns = ref<StageRun[]>([])
 const permissions = ref<TaskPermission[]>([])
@@ -98,9 +97,6 @@ async function handleRemoveDependency(depId: string): Promise<void> {
 // immediately when the agent starts before session_id is persisted to the DB.
 // The backend enriches tasks with `activeSessionId` of the most relevant
 // stage_run. If that session is also discovered by the agent scanner (it will
-// be, for any running detached claude process), we get a live Agent object
-// with channelAvailable/status, which we pass into AgentChatStream +
-// PromptInput unchanged.
 const pipelineAgent = computed(() => {
   const sid = props.task?.activeSessionId
   if (sid)
@@ -111,28 +107,6 @@ const pipelineAgent = computed(() => {
   return null
 })
 
-const sessionLocalMessages = ref<OutputMessage[]>([])
-const sessionChatRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
-
-// Stage-aware empty state for the Session tab: explains WHY there's no
-// live agent right now and what (if anything) the user should do next.
-const sessionEmptyHint = computed<{ title: string, body: string }>(() => {
-  const stage = props.task?.currentStage
-  if (stage === 'backlog')
-    return { title: 'No agent started yet', body: 'This task is waiting to be picked up by the pipeline.' }
-  if (stage === 'on_hold')
-    return { title: 'Task paused', body: 'The task was put on hold and needs a decision before an agent can continue.' }
-  if (stage === 'done')
-    return { title: 'Task completed', body: 'No more sessions running. Find the history in the Stages tab.' }
-  if (stage === 'cancelled')
-    return { title: 'Task cancelled', body: 'No sessions — the task was cancelled.' }
-  return { title: 'No active session', body: 'Between stage runs — the next agent will start shortly.' }
-})
-
-function onSessionMessageSent(msg: OutputMessage) {
-  sessionLocalMessages.value.push(msg)
-  nextTick(() => sessionChatRef.value?.scrollToBottom())
-}
 
 function isTerminal(stage: string | undefined) {
   // `failed` is intentionally excluded — failed tasks are actionable
@@ -183,18 +157,11 @@ watch(() => props.task?.id, (id, prevId) => {
   if (id && id !== prevId) {
     activeTab.value = 'overview'
     actionError.value = ''
-    sessionLocalMessages.value = []
     void loadDetails()
     void loadDependencies()
   }
 })
 
-// Auto-switch to session tab when a live agent appears for this task.
-// Only fires once per task open (guarded by the activeTab reset above).
-watch(pipelineAgent, (agent, prev) => {
-  if (agent && !prev && activeTab.value === 'overview')
-    activeTab.value = 'session'
-})
 
 // Live refresh: when the SSE store pushes updated task fields (stage,
 // iteration, run status, active session), re-fetch the dependent details
@@ -303,10 +270,6 @@ function formatDate(iso: string | null): string {
         <nav class="tabs">
           <button :class="{ active: activeTab === 'overview' }" @click="activeTab = 'overview'">
             Overview
-          </button>
-          <button :class="{ active: activeTab === 'session' }" @click="activeTab = 'session'">
-            Session
-            <span v-if="pipelineAgent" class="tab-dot" :class="pipelineAgent.status" />
           </button>
           <button :class="{ active: activeTab === 'stages' }" @click="activeTab = 'stages'">
             Stages ({{ stageRuns.length }})
@@ -480,52 +443,6 @@ function formatDate(iso: string | null): string {
                 {{ depError }}
               </p>
             </section>
-          </section>
-
-          <!-- Session tab: live chat stream against the active stage-run's agent -->
-          <section v-if="activeTab === 'session'" class="tab-content session-tab">
-            <div v-if="!task.activeSessionId" class="empty-hint session-empty">
-              <p class="session-empty-title">
-                {{ sessionEmptyHint.title }}
-              </p>
-              <p class="session-empty-body">
-                {{ sessionEmptyHint.body }}
-              </p>
-            </div>
-            <template v-else>
-              <CrossLinkBanner
-                v-if="pipelineAgent"
-                label="Running as session in"
-                :target-name="pipelineAgent.projectName"
-                button-text="Open session →"
-                @click="emit('navigate', pipelineAgent)"
-              />
-              <div class="session-header">
-                <span class="session-label">Active Session</span>
-                <code class="session-id">{{ task.activeSessionId.slice(0, 8) }}</code>
-                <span v-if="pipelineAgent" class="session-status" :class="pipelineAgent.status">
-                  {{ pipelineAgent.status }}
-                </span>
-                <span v-else class="session-status offline">
-                  offline
-                </span>
-              </div>
-              <AgentChatStream
-                ref="sessionChatRef"
-                :agent="pipelineAgent"
-                :local-messages="sessionLocalMessages"
-                class="session-stream"
-              />
-              <PromptInput
-                v-if="pipelineAgent"
-                :agent="pipelineAgent"
-                variant="full"
-                @message-sent="onSessionMessageSent"
-              />
-              <p v-else class="session-hint">
-                The agent is not currently active — you can chat here once a new stage run starts.
-              </p>
-            </template>
           </section>
 
           <!-- Stages tab -->
@@ -786,82 +703,12 @@ function formatDate(iso: string | null): string {
   50% { opacity: 1; }
 }
 
-.session-tab {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0;
-  height: 100%;
-  min-height: 400px;
-}
-.session-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 20px 6px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.session-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-}
-.session-id {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: var(--bg-tertiary);
-  padding: 1px 6px;
-  border-radius: 3px;
-  color: var(--accent-blue);
-}
-.session-status {
-  font-size: 10px;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 700;
-  margin-left: auto;
-}
-.session-status.active { background: rgba(74, 222, 128, 0.2); color: var(--accent-green); }
-.session-status.waiting { background: rgba(234, 179, 8, 0.2); color: rgb(234, 179, 8); }
-.session-status.idle { background: var(--bg-tertiary); color: var(--text-muted); }
-.session-status.offline { background: var(--bg-tertiary); color: var(--text-muted); }
-.session-stream {
-  flex: 1;
-  padding: 12px 20px;
-  min-height: 280px;
-  max-height: 50vh;
-}
 .overview-live-stream {
   padding: 12px 0;
   min-height: 200px;
   max-height: 40vh;
   border-top: 1px solid var(--border);
   margin-top: 8px;
-}
-.session-empty {
-  padding: 60px 20px;
-}
-.session-empty-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-.session-empty-body {
-  font-size: 12px;
-  color: var(--text-muted);
-  max-width: 420px;
-  margin: 0 auto;
-  line-height: 1.5;
-}
-.session-hint {
-  padding: 10px 20px;
-  font-size: 12px;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
 }
 
 .modal-body { flex: 1; overflow-y: auto; }
