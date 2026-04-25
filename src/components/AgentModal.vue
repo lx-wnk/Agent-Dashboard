@@ -3,14 +3,14 @@ import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
-import BaseModal from './BaseModal.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
-import StatusBadge from './StatusBadge.vue'
 import SubAgentList from './SubAgentList.vue'
 import TaskList from './TaskList.vue'
 import ToolTimeline from './ToolTimeline.vue'
+import AppBadge from './ui/AppBadge.vue'
+import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
 const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
@@ -47,22 +47,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <BaseModal :open="!!agent" :z-index="1000" @close="emit('close')">
-    <div v-if="agent" class="modal-window">
-      <div class="modal-titlebar">
-        <div class="modal-title-left">
-          <StatusBadge :status="agent.status" />
-          <span class="modal-project">{{ agent.projectName }}</span>
+  <AppModal :open="!!agent" :z-index="1000" @close="emit('close')">
+    <div v-if="agent" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-[900px] max-h-[80vh] flex flex-col overflow-hidden">
+      <div class="bg-slate-50 dark:bg-slate-800 px-4 py-2.5 flex justify-between items-center flex-shrink-0">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <AppBadge :variant="agent.status" />
+          <span class="font-semibold text-sm text-slate-900 dark:text-slate-100">{{ agent.projectName }}</span>
           <MachineBadge v-if="agent.machine" :machine="agent.machine" />
-          <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
+          <span class="text-[11px] text-slate-400 dark:text-slate-600 whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
         </div>
-        <div class="modal-title-right">
-          <button class="modal-close" @click="emit('close')">
-            ✕
-          </button>
-        </div>
+        <button type="button" class="bg-transparent border-none text-slate-500 dark:text-slate-400 text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100" @click="emit('close')">
+          ✕
+        </button>
       </div>
-
       <CrossLinkBanner
         v-if="agent.pipelineTaskId"
         label="Part of"
@@ -70,93 +67,25 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         button-text="Open →"
         @click="emit('navigate', agent.pipelineTaskId)"
       />
-
       <AgentChatStream
         ref="chatStreamRef"
         :agent="agent"
         :local-messages="localMessages"
-        class="modal-output"
+        class="flex-1 p-4"
       />
-
-      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="modal-details">
+      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
         <details>
-          <summary class="details-summary">
+          <summary class="px-4 py-2 text-xs text-slate-400 dark:text-slate-600 cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400">
             Agent Details (Tasks, Tools, Subagents)
           </summary>
-          <div class="details-content">
+          <div class="px-4 pb-3 pt-2 flex flex-col gap-3 max-h-[200px] overflow-y-auto">
             <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
             <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
             <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
           </div>
         </details>
       </div>
-
       <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
     </div>
-  </BaseModal>
+  </AppModal>
 </template>
-
-<style scoped>
-.modal-window {
-  background: var(--bg-secondary);
-  border-radius: 10px;
-  border: 1px solid var(--bg-tertiary);
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
-  width: 100%;
-  max-width: 900px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.modal-titlebar {
-  background: var(--bg-tertiary);
-  padding: 10px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
-}
-.modal-title-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.modal-project { font-weight: 600; font-size: 14px; }
-.modal-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-.modal-close:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.modal-output {
-  flex: 1;
-  padding: 16px;
-}
-.modal-details {
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.details-summary {
-  padding: 8px 16px;
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
-}
-.details-summary:hover { color: var(--text-secondary); }
-.details-content {
-  padding: 8px 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-</style>
