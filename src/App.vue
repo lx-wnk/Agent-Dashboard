@@ -217,7 +217,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       :task="selectedTask"
       @close="selectTask(null)"
       @navigate="(agent: Agent) => navigateTo({ agent })"
-      @open-chat="activeKonzeptTask = $event"
+      @open-chat="(t) => { selectTask(null); activeKonzeptTask = t }"
     />
     <Transition name="toast">
       <div v-if="toastMessage" class="toast-notification">
