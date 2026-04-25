@@ -104,29 +104,36 @@ defineExpose({ focus })
 </script>
 
 <template>
-  <div class="prompt-wrapper" :class="variant">
-    <div v-if="showSuggestions" class="slash-suggestions">
+  <div class="relative" :class="variant">
+    <div v-if="showSuggestions" class="absolute bottom-full left-0 right-0 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 border-b-0 rounded-t-md max-h-60 overflow-y-auto z-10">
       <button
         v-for="(cmd, i) in slashSuggestions"
         :key="cmd.name"
-        class="slash-item"
-        :class="{ selected: i === selectedIndex }"
+        type="button"
+        class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-slate-500 dark:text-slate-400 text-[13px] font-mono cursor-pointer text-left hover:bg-slate-100 dark:hover:bg-slate-800"
+        :class="{ 'bg-slate-100 dark:bg-slate-800': i === selectedIndex }"
         @mousedown.prevent="selectSuggestion(cmd)"
       >
-        <span class="slash-name">{{ cmd.name }}</span>
-        <span class="slash-desc">{{ cmd.description }}</span>
+        <span class="text-blue-600 dark:text-blue-400 font-semibold flex-shrink-0">{{ cmd.name }}</span>
+        <span class="text-slate-400 dark:text-slate-600 text-xs">{{ cmd.description }}</span>
       </button>
     </div>
-    <div class="prompt-bar">
-      <span class="prompt-cursor">❯</span>
+    <div
+      class="border-t border-slate-200 dark:border-slate-700 flex items-end"
+      :class="variant === 'full' ? 'px-4 py-2.5 gap-2 flex-shrink-0' : 'px-3 py-2 gap-1.5 items-center'"
+    >
+      <span
+        class="text-blue-600 dark:text-blue-400 flex-shrink-0 pb-0.5"
+        :class="variant === 'full' ? 'text-[14px]' : 'text-[13px] pb-0'"
+      >❯</span>
       <textarea
         v-if="variant === 'full'"
         ref="inputEl"
         v-model="promptInput"
-        class="prompt-field prompt-textarea"
         rows="1"
         placeholder="Enter prompt..."
         :disabled="isSending"
+        class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
         @input="autoResize"
       />
@@ -134,133 +141,30 @@ defineExpose({ focus })
         v-else
         ref="inputEl"
         v-model="promptInput"
-        class="prompt-field prompt-input"
         placeholder="Enter prompt..."
         :disabled="isSending"
+        class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50"
         @keydown="onKeydown"
       >
       <button
-        class="prompt-send"
+        type="button"
+        class="bg-blue-600 text-white border-none rounded font-bold cursor-pointer flex-shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+        :class="variant === 'full' ? 'px-3.5 py-1.5 text-[14px]' : 'px-2.5 py-1 text-[13px]'"
         :disabled="isSending || promptInput.trim().length === 0"
         @click="handleSend"
       >
         {{ isSending ? '...' : '↵' }}
       </button>
     </div>
-    <p v-if="sendStatus" class="prompt-status" :class="sendStatus">
+    <p
+      v-if="sendStatus"
+      class="text-[11px]"
+      :class="[
+        variant === 'full' ? 'px-4 pb-2' : 'px-3 pb-1.5 pt-0.5',
+        sendStatus === 'sent' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+      ]"
+    >
       {{ sendStatus === 'sent' ? 'Sent' : sendError }}
     </p>
   </div>
 </template>
-
-<style scoped>
-.prompt-wrapper {
-  position: relative;
-}
-.prompt-bar {
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: flex-end;
-}
-.prompt-wrapper.compact .prompt-bar {
-  padding: 8px 12px;
-  gap: 6px;
-  align-items: center;
-}
-.prompt-wrapper.full .prompt-bar {
-  padding: 10px 16px;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.prompt-cursor {
-  color: var(--accent-blue);
-  flex-shrink: 0;
-  padding-bottom: 2px;
-}
-.prompt-wrapper.compact .prompt-cursor { font-size: 13px; padding-bottom: 0; }
-.prompt-wrapper.full .prompt-cursor { font-size: 14px; }
-.prompt-field {
-  flex: 1;
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: var(--font-mono);
-  outline: none;
-}
-.prompt-field::placeholder { color: var(--text-muted); }
-.prompt-field:disabled { opacity: 0.5; }
-.prompt-textarea {
-  resize: none;
-  line-height: 1.4;
-  overflow-y: auto;
-  min-height: 22px;
-  max-height: 144px;
-}
-.prompt-send {
-  background: var(--accent-blue);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-weight: bold;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.prompt-wrapper.compact .prompt-send {
-  padding: 4px 10px;
-  font-size: 13px;
-}
-.prompt-wrapper.full .prompt-send {
-  padding: 6px 14px;
-  font-size: 14px;
-}
-.prompt-send:disabled { opacity: 0.4; cursor: not-allowed; }
-.prompt-send:not(:disabled):hover { filter: brightness(1.15); }
-.prompt-status { font-size: 11px; }
-.prompt-wrapper.compact .prompt-status { padding: 2px 12px 6px; }
-.prompt-wrapper.full .prompt-status { padding: 0 16px 8px; }
-.prompt-status.sent { color: var(--accent-green); }
-.prompt-status.error { color: var(--accent-red); }
-
-/* Slash command suggestions */
-.slash-suggestions {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
-  max-height: 240px;
-  overflow-y: auto;
-  z-index: 10;
-}
-.slash-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 16px;
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-family: var(--font-mono);
-  cursor: pointer;
-  text-align: left;
-}
-.slash-item:hover,
-.slash-item.selected {
-  background: var(--bg-tertiary);
-}
-.slash-name {
-  color: var(--accent-blue);
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.slash-desc {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-</style>
