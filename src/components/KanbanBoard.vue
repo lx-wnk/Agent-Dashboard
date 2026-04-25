@@ -84,7 +84,9 @@ const totalTasks = computed(() =>
           class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5 cursor-pointer transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
           @click="$emit('select', card.agent)"
         >
-          <div class="text-[13px] text-slate-900 dark:text-slate-100 leading-snug mb-2 break-words">{{ card.task.subject }}</div>
+          <div class="text-[13px] text-slate-900 dark:text-slate-100 leading-snug mb-2 break-words">
+            {{ card.task.subject }}
+          </div>
           <div class="flex items-center justify-between gap-2">
             <span class="text-[11px] font-mono text-slate-400 dark:text-slate-600 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">{{ card.agent.projectName }}</span>
             <AppBadge :variant="card.agent.status" />

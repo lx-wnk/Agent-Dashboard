@@ -57,8 +57,12 @@ function stageLabel(stage: PipelineStage): string {
       <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
       <span class="text-[10px] text-slate-400 dark:text-slate-600">{{ shortDate(task.createdAt) }}</span>
     </div>
-    <div class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 leading-tight line-clamp-2">{{ task.title }}</div>
-    <div v-if="task.description" class="text-[11px] text-slate-400 dark:text-slate-600 leading-snug line-clamp-2">{{ task.description }}</div>
+    <div class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 leading-tight line-clamp-2">
+      {{ task.title }}
+    </div>
+    <div v-if="task.description" class="text-[11px] text-slate-400 dark:text-slate-600 leading-snug line-clamp-2">
+      {{ task.description }}
+    </div>
     <div class="flex flex-wrap gap-1 mt-0.5">
       <span
         class="text-[10px] font-mono px-1.5 py-px rounded border"
