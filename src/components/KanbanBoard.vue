@@ -20,7 +20,6 @@ interface ColumnDef {
   key: string
   title: string
   icon: string
-  iconClass: string
   cards: KanbanCard[]
 }
 
@@ -51,9 +50,9 @@ const columns = computed<ColumnDef[]>(() => {
   }
 
   return [
-    { key: 'pending', title: 'Pending', icon: '○', iconClass: 'pending-icon', cards: pending },
-    { key: 'inProgress', title: 'In Progress', icon: '●', iconClass: 'progress-icon', cards: inProgress },
-    { key: 'completed', title: 'Completed', icon: '✓', iconClass: 'completed-icon', cards: completed },
+    { key: 'pending', title: 'Pending', icon: '○', cards: pending },
+    { key: 'inProgress', title: 'In Progress', icon: '●', cards: inProgress },
+    { key: 'completed', title: 'Completed', icon: '✓', cards: completed },
   ]
 })
 
