@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { createTask } from '../composables/useTasks'
+import BaseModal from './BaseModal.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -20,10 +21,16 @@ const errorMsg = ref('')
 const isCreating = ref(false)
 
 watch(() => props.open, (val) => {
-  if (val) {
+  if (val)
     errorMsg.value = ''
-  }
 })
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && props.open)
+    emit('close')
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 function resetForm() {
   slug.value = ''
@@ -90,189 +97,173 @@ async function handleCreate() {
 </script>
 
 <template>
-  <Transition name="dialog">
-    <div
-      v-if="open"
-      class="backlog-backdrop"
-      @click.self="emit('close')"
-      @keydown.escape="emit('close')"
-    >
-      <div class="backlog-modal">
-        <header class="modal-header">
-          <h2>New Task</h2>
-          <button class="close-btn" @click="emit('close')">
-            &times;
-          </button>
-        </header>
+  <BaseModal :open="open" @close="emit('close')">
+    <div class="backlog-modal">
+      <header class="modal-header">
+        <h2>New Task</h2>
+        <button class="close-btn" @click="emit('close')">
+          &times;
+        </button>
+      </header>
 
-        <form class="modal-body" @submit.prevent="handleCreate">
+      <form class="modal-body" @submit.prevent="handleCreate">
+        <div class="field">
+          <label for="task-title" class="field-label">Title</label>
+          <input
+            id="task-title"
+            v-model="title"
+            class="field-input"
+            type="text"
+            required
+            placeholder="Fix login bug in auth middleware"
+            @blur="slugifyTitle"
+          >
+        </div>
+
+        <div class="field">
+          <label for="task-slug" class="field-label">Slug (url-safe id)</label>
+          <input
+            id="task-slug"
+            v-model="slug"
+            class="field-input"
+            type="text"
+            pattern="[a-z0-9][a-z0-9-]{0,63}"
+            placeholder="auto-generated from title"
+          >
+        </div>
+
+        <div class="field">
+          <label for="task-desc" class="field-label">Description</label>
+          <textarea
+            id="task-desc"
+            v-model="description"
+            class="field-input"
+            rows="3"
+            placeholder="What should the agent do? Include screenshots or references as needed."
+          />
+        </div>
+
+        <div class="field">
+          <label for="task-cwd" class="field-label">Working Directory</label>
+          <input
+            id="task-cwd"
+            v-model="cwd"
+            class="field-input"
+            type="text"
+            required
+            placeholder="/path/to/project"
+          >
+        </div>
+
+        <div class="field-row">
           <div class="field">
-            <label for="task-title" class="field-label">Title</label>
+            <label for="task-src" class="field-label">Source Branch</label>
             <input
-              id="task-title"
-              v-model="title"
+              id="task-src"
+              v-model="sourceBranch"
               class="field-input"
               type="text"
-              required
-              placeholder="Fix login bug in auth middleware"
-              @blur="slugifyTitle"
+              placeholder="main"
             >
           </div>
-
           <div class="field">
-            <label for="task-slug" class="field-label">Slug (url-safe id)</label>
+            <label for="task-tgt" class="field-label">Target Branch</label>
             <input
-              id="task-slug"
-              v-model="slug"
+              id="task-tgt"
+              v-model="targetBranch"
               class="field-input"
               type="text"
-              pattern="[a-z0-9][a-z0-9-]{0,63}"
-              placeholder="auto-generated from title"
+              placeholder="feat/my-branch"
             >
           </div>
+        </div>
 
-          <div class="field">
-            <label for="task-desc" class="field-label">Description</label>
-            <textarea
-              id="task-desc"
-              v-model="description"
-              class="field-input"
-              rows="3"
-              placeholder="What should the agent do? Include screenshots or references as needed."
-            />
-          </div>
+        <div class="field-checkbox">
+          <input
+            id="task-worktree"
+            v-model="useWorktree"
+            type="checkbox"
+          >
+          <label for="task-worktree">Use isolated git worktree (recommended)</label>
+        </div>
 
+        <div class="field-row">
           <div class="field">
-            <label for="task-cwd" class="field-label">Working Directory</label>
-            <input
-              id="task-cwd"
-              v-model="cwd"
+            <label for="task-priority" class="field-label">Priority</label>
+            <select
+              id="task-priority"
+              v-model="priority"
               class="field-input"
-              type="text"
-              required
-              placeholder="/path/to/project"
             >
+              <option value="high">
+                High
+              </option>
+              <option value="medium">
+                Medium
+              </option>
+              <option value="low">
+                Low
+              </option>
+            </select>
           </div>
-
-          <div class="field-row">
-            <div class="field">
-              <label for="task-src" class="field-label">Source Branch</label>
-              <input
-                id="task-src"
-                v-model="sourceBranch"
-                class="field-input"
-                type="text"
-                placeholder="main"
-              >
-            </div>
-            <div class="field">
-              <label for="task-tgt" class="field-label">Target Branch</label>
-              <input
-                id="task-tgt"
-                v-model="targetBranch"
-                class="field-input"
-                type="text"
-                placeholder="feat/my-branch"
-              >
-            </div>
-          </div>
-
-          <div class="field-checkbox">
+          <div class="field-checkbox silver-bullet">
             <input
-              id="task-worktree"
-              v-model="useWorktree"
+              id="task-silver"
+              v-model="silverBullet"
               type="checkbox"
             >
-            <label for="task-worktree">Use isolated git worktree (recommended)</label>
+            <label for="task-silver">Silver bullet (jump the queue)</label>
           </div>
+        </div>
 
-          <div class="field-row">
-            <div class="field">
-              <label for="task-priority" class="field-label">Priority</label>
-              <select
-                id="task-priority"
-                v-model="priority"
-                class="field-input"
-              >
-                <option value="high">
-                  High
-                </option>
-                <option value="medium">
-                  Medium
-                </option>
-                <option value="low">
-                  Low
-                </option>
-              </select>
-            </div>
-            <div class="field-checkbox silver-bullet">
-              <input
-                id="task-silver"
-                v-model="silverBullet"
-                type="checkbox"
-              >
-              <label for="task-silver">Silver bullet (jump the queue)</label>
-            </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="task-iter" class="field-label">Max Iterations</label>
+            <input
+              id="task-iter"
+              v-model.number="maxIterations"
+              class="field-input"
+              type="number"
+              min="1"
+              max="50"
+            >
           </div>
-
-          <div class="field-row">
-            <div class="field">
-              <label for="task-iter" class="field-label">Max Iterations</label>
-              <input
-                id="task-iter"
-                v-model.number="maxIterations"
-                class="field-input"
-                type="number"
-                min="1"
-                max="50"
-              >
-            </div>
-            <div class="field">
-              <label for="task-tokens" class="field-label">Token Budget (optional)</label>
-              <input
-                id="task-tokens"
-                v-model.number="tokenBudget"
-                class="field-input"
-                type="number"
-                min="0"
-                placeholder="∞"
-              >
-            </div>
+          <div class="field">
+            <label for="task-tokens" class="field-label">Token Budget (optional)</label>
+            <input
+              id="task-tokens"
+              v-model.number="tokenBudget"
+              class="field-input"
+              type="number"
+              min="0"
+              placeholder="∞"
+            >
           </div>
+        </div>
 
-          <p v-if="errorMsg" class="error-msg">
-            {{ errorMsg }}
-          </p>
-        </form>
+        <p v-if="errorMsg" class="error-msg">
+          {{ errorMsg }}
+        </p>
+      </form>
 
-        <footer class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="emit('close')">
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="isCreating || !title.trim() || !cwd.trim()"
-            @click="handleCreate"
-          >
-            {{ isCreating ? 'Creating...' : 'Create Task' }}
-          </button>
-        </footer>
-      </div>
+      <footer class="modal-footer">
+        <button type="button" class="btn btn-secondary" @click="emit('close')">
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="isCreating || !title.trim() || !cwd.trim()"
+          @click="handleCreate"
+        >
+          {{ isCreating ? 'Creating...' : 'Create Task' }}
+        </button>
+      </footer>
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
-.backlog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 .backlog-modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -347,7 +338,4 @@ async function handleCreate() {
 .btn-primary { background: var(--accent-blue); color: white; }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.dialog-enter-active, .dialog-leave-active { transition: opacity 0.2s ease; }
-.dialog-enter-from, .dialog-leave-to { opacity: 0; }
 </style>

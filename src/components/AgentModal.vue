@@ -3,6 +3,7 @@ import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
+import BaseModal from './BaseModal.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
@@ -46,68 +47,56 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <Transition name="modal">
-    <div v-if="agent" class="modal-backdrop" @click.self="emit('close')">
-      <div class="modal-window">
-        <div class="modal-titlebar">
-          <div class="modal-title-left">
-            <StatusBadge :status="agent.status" />
-            <span class="modal-project">{{ agent.projectName }}</span>
-            <MachineBadge v-if="agent.machine" :machine="agent.machine" />
-            <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
-          </div>
-          <div class="modal-title-right">
-            <button class="modal-close" @click="emit('close')">
-              ✕
-            </button>
-          </div>
+  <BaseModal :open="!!agent" :z-index="1000" @close="emit('close')">
+    <div v-if="agent" class="modal-window">
+      <div class="modal-titlebar">
+        <div class="modal-title-left">
+          <StatusBadge :status="agent.status" />
+          <span class="modal-project">{{ agent.projectName }}</span>
+          <MachineBadge v-if="agent.machine" :machine="agent.machine" />
+          <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
         </div>
-
-        <CrossLinkBanner
-          v-if="agent.pipelineTaskId"
-          label="Part of"
-          :target-name="agent.pipelineTaskTitle ?? `Task ${agent.pipelineTaskId.slice(0, 8)}`"
-          button-text="Open →"
-          @click="emit('navigate', agent.pipelineTaskId)"
-        />
-
-        <AgentChatStream
-          ref="chatStreamRef"
-          :agent="agent"
-          :local-messages="localMessages"
-          class="modal-output"
-        />
-
-        <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="modal-details">
-          <details>
-            <summary class="details-summary">
-              Agent Details (Tasks, Tools, Subagents)
-            </summary>
-            <div class="details-content">
-              <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
-              <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
-              <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
-            </div>
-          </details>
+        <div class="modal-title-right">
+          <button class="modal-close" @click="emit('close')">
+            ✕
+          </button>
         </div>
-
-        <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
       </div>
+
+      <CrossLinkBanner
+        v-if="agent.pipelineTaskId"
+        label="Part of"
+        :target-name="agent.pipelineTaskTitle ?? `Task ${agent.pipelineTaskId.slice(0, 8)}`"
+        button-text="Open →"
+        @click="emit('navigate', agent.pipelineTaskId)"
+      />
+
+      <AgentChatStream
+        ref="chatStreamRef"
+        :agent="agent"
+        :local-messages="localMessages"
+        class="modal-output"
+      />
+
+      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="modal-details">
+        <details>
+          <summary class="details-summary">
+            Agent Details (Tasks, Tools, Subagents)
+          </summary>
+          <div class="details-content">
+            <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
+            <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
+            <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
+          </div>
+        </details>
+      </div>
+
+      <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 24px;
-}
 .modal-window {
   background: var(--bg-secondary);
   border-radius: 10px;
@@ -170,9 +159,4 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   max-height: 200px;
   overflow-y: auto;
 }
-.modal-enter-active, .modal-leave-active { transition: opacity 0.2s; }
-.modal-enter-active .modal-window, .modal-leave-active .modal-window { transition: transform 0.2s; }
-.modal-enter-from, .modal-leave-to { opacity: 0; }
-.modal-enter-from .modal-window { transform: scale(0.95); }
-.modal-leave-to .modal-window { transform: scale(0.95); }
 </style>

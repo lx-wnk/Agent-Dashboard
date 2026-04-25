@@ -21,6 +21,7 @@ import {
   retryTask,
 } from '../composables/useTasks'
 import AgentChatStream from './AgentChatStream.vue'
+import BaseModal from './BaseModal.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
 import PromptInput from './PromptInput.vue'
 import StageOutputView from './StageOutputView.vue'
@@ -326,478 +327,466 @@ function formatDate(iso: string | null): string {
 </script>
 
 <template>
-  <Transition name="modal">
-    <div v-if="task" class="task-modal-backdrop" @click.self="emit('close')">
-      <div class="task-modal">
-        <header class="modal-head">
-          <div class="head-left">
-            <span class="stage-badge" :class="`stage-${task.currentStage}`">{{ task.currentStage }}</span>
-            <span v-if="isFailedRun(task)" class="run-status-badge status-failed" title="Latest stage run failed">
-              RUN FAILED
-            </span>
-            <span class="task-slug">{{ task.slug }}</span>
-            <h2>{{ task.title }}</h2>
-          </div>
-          <div class="head-right">
-            <button class="close-btn" title="Close (Esc)" @click="emit('close')">
-              &times;
-            </button>
-          </div>
-        </header>
+  <BaseModal :open="!!task" :z-index="1000" @close="emit('close')">
+    <div v-if="task" class="task-modal">
+      <header class="modal-head">
+        <div class="head-left">
+          <span class="stage-badge" :class="`stage-${task.currentStage}`">{{ task.currentStage }}</span>
+          <span v-if="isFailedRun(task)" class="run-status-badge status-failed" title="Latest stage run failed">
+            RUN FAILED
+          </span>
+          <span class="task-slug">{{ task.slug }}</span>
+          <h2>{{ task.title }}</h2>
+        </div>
+        <div class="head-right">
+          <button class="close-btn" title="Close (Esc)" @click="emit('close')">
+            &times;
+          </button>
+        </div>
+      </header>
 
-        <nav class="tabs">
-          <button :class="{ active: activeTab === 'overview' }" @click="activeTab = 'overview'">
-            Overview
-          </button>
-          <button :class="{ active: activeTab === 'session' }" @click="activeTab = 'session'">
-            Session
-            <span v-if="pipelineAgent" class="tab-dot" :class="pipelineAgent.status" />
-          </button>
-          <button :class="{ active: activeTab === 'stages' }" @click="activeTab = 'stages'">
-            Stages ({{ stageRuns.length }})
-          </button>
-          <button :class="{ active: activeTab === 'permissions' }" @click="activeTab = 'permissions'">
-            Permissions ({{ permissions.length }})
-          </button>
-          <button :class="{ active: activeTab === 'audit' }" @click="activeTab = 'audit'">
-            Audit
-          </button>
-        </nav>
+      <nav class="tabs">
+        <button :class="{ active: activeTab === 'overview' }" @click="activeTab = 'overview'">
+          Overview
+        </button>
+        <button :class="{ active: activeTab === 'session' }" @click="activeTab = 'session'">
+          Session
+          <span v-if="pipelineAgent" class="tab-dot" :class="pipelineAgent.status" />
+        </button>
+        <button :class="{ active: activeTab === 'stages' }" @click="activeTab = 'stages'">
+          Stages ({{ stageRuns.length }})
+        </button>
+        <button :class="{ active: activeTab === 'permissions' }" @click="activeTab = 'permissions'">
+          Permissions ({{ permissions.length }})
+        </button>
+        <button :class="{ active: activeTab === 'audit' }" @click="activeTab = 'audit'">
+          Audit
+        </button>
+      </nav>
 
-        <div class="modal-body">
-          <!-- Overview tab -->
-          <section v-if="activeTab === 'overview'" class="tab-content">
-            <!-- Latest stage run summary (non-approval states) -->
-            <div v-if="!approvalMeta && latestStageRun" class="latest-run-card">
-              <div class="latest-run-head">
-                <span class="stage-label-pill">{{ latestStageRun.stage }}</span>
-                <span class="iteration-pill">iter {{ latestStageRun.iteration }}</span>
-                <span class="stage-status" :class="`status-${latestStageRun.status}`">{{ latestStageRun.status }}</span>
-                <span class="latest-run-times">
-                  {{ formatDate(latestStageRun.startedAt) }}
-                  <template v-if="latestStageRun.endedAt"> → {{ formatDate(latestStageRun.endedAt) }}</template>
-                </span>
-              </div>
-              <AgentChatStream
-                v-if="latestStageRun.status === 'running' && pipelineAgent"
-                :agent="pipelineAgent"
-                :local-messages="[]"
-                class="overview-live-stream"
-              />
-              <div v-else-if="latestRunAgentMessage" class="agent-message-block">
-                <div class="agent-message-label">
-                  Agent output
-                </div>
-                <pre class="agent-message-body">{{ latestRunAgentMessage }}</pre>
-              </div>
-              <details v-else-if="latestStageRun.output" class="latest-run-output">
-                <summary>Stage output</summary>
-                <StageOutputView :stage="latestStageRun.stage" :output="latestStageRun.output" />
-              </details>
+      <div class="modal-body">
+        <!-- Overview tab -->
+        <section v-if="activeTab === 'overview'" class="tab-content">
+          <!-- Latest stage run summary (non-approval states) -->
+          <div v-if="!approvalMeta && latestStageRun" class="latest-run-card">
+            <div class="latest-run-head">
+              <span class="stage-label-pill">{{ latestStageRun.stage }}</span>
+              <span class="iteration-pill">iter {{ latestStageRun.iteration }}</span>
+              <span class="stage-status" :class="`status-${latestStageRun.status}`">{{ latestStageRun.status }}</span>
+              <span class="latest-run-times">
+                {{ formatDate(latestStageRun.startedAt) }}
+                <template v-if="latestStageRun.endedAt"> → {{ formatDate(latestStageRun.endedAt) }}</template>
+              </span>
             </div>
-
-            <div v-if="approvalMeta" class="approval-preview">
-              <h3>{{ approvalMeta.sectionTitle }}</h3>
-              <StageOutputView
-                v-if="approvalContent"
-                :stage="approvalMeta.reviewStage"
-                :output="approvalContent"
-              />
-              <div v-else class="empty-hint">
-                No output from stage <code>{{ approvalMeta.reviewStage }}</code> found.
+            <AgentChatStream
+              v-if="latestStageRun.status === 'running' && pipelineAgent"
+              :agent="pipelineAgent"
+              :local-messages="[]"
+              class="overview-live-stream"
+            />
+            <div v-else-if="latestRunAgentMessage" class="agent-message-block">
+              <div class="agent-message-label">
+                Agent output
               </div>
-
-              <div v-if="feedbackHistory.length > 0" class="feedback-thread">
-                <h4>Feedback History</h4>
-                <div
-                  v-for="fb in feedbackHistory"
-                  :key="fb.id"
-                  class="feedback-entry"
-                  :class="{ resolved: fb.resolvedAt !== null }"
-                >
-                  <div class="feedback-meta">
-                    <span class="feedback-iter">#{{ fb.iteration }}</span>
-                    <span class="feedback-stage">{{ fb.stage }}</span>
-                    <span class="feedback-date">{{ formatDate(fb.createdAt) }}</span>
-                    <span v-if="fb.resolvedAt" class="feedback-status resolved">✓ addressed</span>
-                    <span v-else class="feedback-status pending">open</span>
-                  </div>
-                  <p class="feedback-text">
-                    {{ fb.feedback }}
-                  </p>
-                </div>
-              </div>
-
-              <div class="feedback-input-block">
-                <label for="feedback-textarea">Request Changes</label>
-                <textarea
-                  id="feedback-textarea"
-                  v-model="feedbackInput"
-                  rows="3"
-                  placeholder="What should the agent change in the next iteration?"
-                  :disabled="isActing"
-                  maxlength="4000"
-                />
-                <div class="feedback-input-foot">
-                  <span class="char-count">{{ feedbackInput.length }} / 4000</span>
-                  <button
-                    class="btn btn-red"
-                    :disabled="isActing || feedbackInput.trim().length === 0"
-                    @click="onRequestChanges"
-                  >
-                    Request Changes
-                  </button>
-                </div>
-              </div>
+              <pre class="agent-message-body">{{ latestRunAgentMessage }}</pre>
             </div>
-            <dl class="facts">
-              <div>
-                <dt>CWD</dt><dd class="mono">
-                  {{ task.cwd }}
-                </dd>
-              </div>
-              <div v-if="task.worktreePath">
-                <dt>Worktree</dt><dd class="mono">
-                  {{ task.worktreePath }}
-                </dd>
-              </div>
-              <div v-if="task.sourceBranch">
-                <dt>Source</dt><dd class="mono">
-                  {{ task.sourceBranch }}
-                </dd>
-              </div>
-              <div v-if="task.targetBranch">
-                <dt>Target</dt><dd class="mono">
-                  {{ task.targetBranch }}
-                </dd>
-              </div>
-              <div>
-                <dt>Max Iter</dt><dd>
-                  {{ task.maxIterations }}
-                </dd>
-              </div>
-              <div v-if="task.tokenBudget">
-                <dt>Token Budget</dt><dd>
-                  {{ task.tokenBudget.toLocaleString() }}
-                </dd>
-              </div>
-              <div>
-                <dt>Created</dt><dd>
-                  {{ formatDate(task.createdAt) }}
-                </dd>
-              </div>
-              <div v-if="task.parentTaskId">
-                <dt>Parent</dt><dd class="mono">
-                  {{ task.parentTaskId }}
-                </dd>
-              </div>
-            </dl>
-            <details v-if="task.description" class="description-collapsible">
-              <summary>Origin Prompt</summary>
-              <div class="description">
-                {{ task.description }}
-              </div>
+            <details v-else-if="latestStageRun.output" class="latest-run-output">
+              <summary>Stage output</summary>
+              <StageOutputView :stage="latestStageRun.stage" :output="latestStageRun.output" />
             </details>
+          </div>
 
-            <!-- Dependencies section -->
-            <section class="dep-section">
-              <h4 class="dep-heading">
-                Abhängigkeiten
-              </h4>
+          <div v-if="approvalMeta" class="approval-preview">
+            <h3>{{ approvalMeta.sectionTitle }}</h3>
+            <StageOutputView
+              v-if="approvalContent"
+              :stage="approvalMeta.reviewStage"
+              :output="approvalContent"
+            />
+            <div v-else class="empty-hint">
+              No output from stage <code>{{ approvalMeta.reviewStage }}</code> found.
+            </div>
 
-              <div v-if="dependencies.length > 0" class="dep-list">
-                <p class="dep-subheading">
-                  Wartet auf:
-                </p>
-                <div
-                  v-for="dep in dependencies"
-                  :key="dep.id"
-                  class="dep-row"
-                >
-                  <span class="dep-title">{{ dep.dependsOnTitle }}</span>
-                  <span
-                    class="meta-chip stage"
-                    :class="dep.dependsOnStage === dep.requiredStage ? 'dep-met' : 'dep-unmet'"
-                  >{{ dep.dependsOnStage }}</span>
-                  <span class="dep-action-hint">on cancel: {{ dep.onCancelAction }}</span>
-                  <button class="dep-remove" title="Remove dependency" @click="handleRemoveDependency(dep.id)">
-                    ✕
-                  </button>
+            <div v-if="feedbackHistory.length > 0" class="feedback-thread">
+              <h4>Feedback History</h4>
+              <div
+                v-for="fb in feedbackHistory"
+                :key="fb.id"
+                class="feedback-entry"
+                :class="{ resolved: fb.resolvedAt !== null }"
+              >
+                <div class="feedback-meta">
+                  <span class="feedback-iter">#{{ fb.iteration }}</span>
+                  <span class="feedback-stage">{{ fb.stage }}</span>
+                  <span class="feedback-date">{{ formatDate(fb.createdAt) }}</span>
+                  <span v-if="fb.resolvedAt" class="feedback-status resolved">✓ addressed</span>
+                  <span v-else class="feedback-status pending">open</span>
                 </div>
-              </div>
-
-              <div v-if="dependents.length > 0" class="dep-list">
-                <p class="dep-subheading">
-                  Wird benötigt von:
+                <p class="feedback-text">
+                  {{ fb.feedback }}
                 </p>
-                <div v-for="dep in dependents" :key="dep.id" class="dep-row">
-                  <span class="dep-title">{{ dep.taskTitle || dep.taskId }}</span>
-                </div>
               </div>
+            </div>
 
-              <form class="dep-add-form" @submit.prevent="handleAddDependency">
-                <input
-                  v-model="newDepId"
-                  class="dep-input"
-                  placeholder="Vorgänger Task-ID"
-                  :disabled="isAddingDep"
+            <div class="feedback-input-block">
+              <label for="feedback-textarea">Request Changes</label>
+              <textarea
+                id="feedback-textarea"
+                v-model="feedbackInput"
+                rows="3"
+                placeholder="What should the agent change in the next iteration?"
+                :disabled="isActing"
+                maxlength="4000"
+              />
+              <div class="feedback-input-foot">
+                <span class="char-count">{{ feedbackInput.length }} / 4000</span>
+                <button
+                  class="btn btn-red"
+                  :disabled="isActing || feedbackInput.trim().length === 0"
+                  @click="onRequestChanges"
                 >
-                <select v-model="newDepStage" class="dep-select">
-                  <option value="done">
-                    Done
-                  </option>
-                  <option value="cancelled">
-                    Cancelled
-                  </option>
-                </select>
-                <select v-model="newDepCancelAction" class="dep-select">
-                  <option value="on_hold">
-                    On Hold (bei Cancel)
-                  </option>
-                  <option value="cancel">
-                    Cancel (bei Cancel)
-                  </option>
-                  <option value="start">
-                    Start (bei Cancel)
-                  </option>
-                </select>
-                <button class="dep-add-btn" type="submit" :disabled="isAddingDep || !newDepId.trim()">
-                  Hinzufügen
+                  Request Changes
                 </button>
-              </form>
-              <p v-if="depError" class="dep-error">
-                {{ depError }}
+              </div>
+            </div>
+          </div>
+          <dl class="facts">
+            <div>
+              <dt>CWD</dt><dd class="mono">
+                {{ task.cwd }}
+              </dd>
+            </div>
+            <div v-if="task.worktreePath">
+              <dt>Worktree</dt><dd class="mono">
+                {{ task.worktreePath }}
+              </dd>
+            </div>
+            <div v-if="task.sourceBranch">
+              <dt>Source</dt><dd class="mono">
+                {{ task.sourceBranch }}
+              </dd>
+            </div>
+            <div v-if="task.targetBranch">
+              <dt>Target</dt><dd class="mono">
+                {{ task.targetBranch }}
+              </dd>
+            </div>
+            <div>
+              <dt>Max Iter</dt><dd>
+                {{ task.maxIterations }}
+              </dd>
+            </div>
+            <div v-if="task.tokenBudget">
+              <dt>Token Budget</dt><dd>
+                {{ task.tokenBudget.toLocaleString() }}
+              </dd>
+            </div>
+            <div>
+              <dt>Created</dt><dd>
+                {{ formatDate(task.createdAt) }}
+              </dd>
+            </div>
+            <div v-if="task.parentTaskId">
+              <dt>Parent</dt><dd class="mono">
+                {{ task.parentTaskId }}
+              </dd>
+            </div>
+          </dl>
+          <details v-if="task.description" class="description-collapsible">
+            <summary>Origin Prompt</summary>
+            <div class="description">
+              {{ task.description }}
+            </div>
+          </details>
+
+          <!-- Dependencies section -->
+          <section class="dep-section">
+            <h4 class="dep-heading">
+              Abhängigkeiten
+            </h4>
+
+            <div v-if="dependencies.length > 0" class="dep-list">
+              <p class="dep-subheading">
+                Wartet auf:
               </p>
-            </section>
+              <div
+                v-for="dep in dependencies"
+                :key="dep.id"
+                class="dep-row"
+              >
+                <span class="dep-title">{{ dep.dependsOnTitle }}</span>
+                <span
+                  class="meta-chip stage"
+                  :class="dep.dependsOnStage === dep.requiredStage ? 'dep-met' : 'dep-unmet'"
+                >{{ dep.dependsOnStage }}</span>
+                <span class="dep-action-hint">on cancel: {{ dep.onCancelAction }}</span>
+                <button class="dep-remove" title="Remove dependency" @click="handleRemoveDependency(dep.id)">
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div v-if="dependents.length > 0" class="dep-list">
+              <p class="dep-subheading">
+                Wird benötigt von:
+              </p>
+              <div v-for="dep in dependents" :key="dep.id" class="dep-row">
+                <span class="dep-title">{{ dep.taskTitle || dep.taskId }}</span>
+              </div>
+            </div>
+
+            <form class="dep-add-form" @submit.prevent="handleAddDependency">
+              <input
+                v-model="newDepId"
+                class="dep-input"
+                placeholder="Vorgänger Task-ID"
+                :disabled="isAddingDep"
+              >
+              <select v-model="newDepStage" class="dep-select">
+                <option value="done">
+                  Done
+                </option>
+                <option value="cancelled">
+                  Cancelled
+                </option>
+              </select>
+              <select v-model="newDepCancelAction" class="dep-select">
+                <option value="on_hold">
+                  On Hold (bei Cancel)
+                </option>
+                <option value="cancel">
+                  Cancel (bei Cancel)
+                </option>
+                <option value="start">
+                  Start (bei Cancel)
+                </option>
+              </select>
+              <button class="dep-add-btn" type="submit" :disabled="isAddingDep || !newDepId.trim()">
+                Hinzufügen
+              </button>
+            </form>
+            <p v-if="depError" class="dep-error">
+              {{ depError }}
+            </p>
           </section>
+        </section>
 
-          <!-- Session tab: live chat stream against the active stage-run's agent -->
-          <section v-if="activeTab === 'session'" class="tab-content session-tab">
-            <div v-if="!task.activeSessionId" class="empty-hint session-empty">
-              <p class="session-empty-title">
-                {{ sessionEmptyHint.title }}
-              </p>
-              <p class="session-empty-body">
-                {{ sessionEmptyHint.body }}
-              </p>
+        <!-- Session tab: live chat stream against the active stage-run's agent -->
+        <section v-if="activeTab === 'session'" class="tab-content session-tab">
+          <div v-if="!task.activeSessionId" class="empty-hint session-empty">
+            <p class="session-empty-title">
+              {{ sessionEmptyHint.title }}
+            </p>
+            <p class="session-empty-body">
+              {{ sessionEmptyHint.body }}
+            </p>
+          </div>
+          <template v-else>
+            <CrossLinkBanner
+              v-if="pipelineAgent"
+              label="Running as session in"
+              :target-name="pipelineAgent.projectName"
+              button-text="Open session →"
+              @click="emit('navigate', pipelineAgent)"
+            />
+            <div class="session-header">
+              <span class="session-label">Active Session</span>
+              <code class="session-id">{{ task.activeSessionId.slice(0, 8) }}</code>
+              <span v-if="pipelineAgent" class="session-status" :class="pipelineAgent.status">
+                {{ pipelineAgent.status }}
+              </span>
+              <span v-else class="session-status offline">
+                offline
+              </span>
             </div>
-            <template v-else>
-              <CrossLinkBanner
-                v-if="pipelineAgent"
-                label="Running as session in"
-                :target-name="pipelineAgent.projectName"
-                button-text="Open session →"
-                @click="emit('navigate', pipelineAgent)"
-              />
-              <div class="session-header">
-                <span class="session-label">Active Session</span>
-                <code class="session-id">{{ task.activeSessionId.slice(0, 8) }}</code>
-                <span v-if="pipelineAgent" class="session-status" :class="pipelineAgent.status">
-                  {{ pipelineAgent.status }}
-                </span>
-                <span v-else class="session-status offline">
-                  offline
-                </span>
-              </div>
-              <AgentChatStream
-                ref="sessionChatRef"
-                :agent="pipelineAgent"
-                :local-messages="sessionLocalMessages"
-                class="session-stream"
-              />
-              <PromptInput
-                v-if="pipelineAgent"
-                :agent="pipelineAgent"
-                variant="full"
-                @message-sent="onSessionMessageSent"
-              />
-              <p v-else class="session-hint">
-                The agent is not currently active — you can chat here once a new stage run starts.
-              </p>
-            </template>
-          </section>
+            <AgentChatStream
+              ref="sessionChatRef"
+              :agent="pipelineAgent"
+              :local-messages="sessionLocalMessages"
+              class="session-stream"
+            />
+            <PromptInput
+              v-if="pipelineAgent"
+              :agent="pipelineAgent"
+              variant="full"
+              @message-sent="onSessionMessageSent"
+            />
+            <p v-else class="session-hint">
+              The agent is not currently active — you can chat here once a new stage run starts.
+            </p>
+          </template>
+        </section>
 
-          <!-- Stages tab -->
-          <section v-if="activeTab === 'stages'" class="tab-content">
-            <div v-if="stageRuns.length === 0" class="empty-hint">
-              No stage runs yet.
+        <!-- Stages tab -->
+        <section v-if="activeTab === 'stages'" class="tab-content">
+          <div v-if="stageRuns.length === 0" class="empty-hint">
+            No stage runs yet.
+          </div>
+          <div v-for="run in stageRuns" v-else :key="run.id" class="stage-run">
+            <div class="stage-run-head">
+              <span class="stage-label">{{ run.stage }}</span>
+              <span class="iteration">iter {{ run.iteration }}</span>
+              <span class="stage-status" :class="`status-${run.status}`">{{ run.status }}</span>
             </div>
-            <div v-for="run in stageRuns" v-else :key="run.id" class="stage-run">
-              <div class="stage-run-head">
-                <span class="stage-label">{{ run.stage }}</span>
-                <span class="iteration">iter {{ run.iteration }}</span>
-                <span class="stage-status" :class="`status-${run.status}`">{{ run.status }}</span>
-              </div>
-              <div v-if="run.sessionName" class="stage-meta">
-                session: <code>{{ run.sessionName }}</code>
-              </div>
-              <div class="stage-meta">
-                started {{ formatDate(run.startedAt) }} · ended {{ formatDate(run.endedAt) }}
-              </div>
-              <details v-if="run.output" class="stage-output">
-                <summary>Output</summary>
-                <StageOutputView :stage="run.stage" :output="run.output" />
-              </details>
+            <div v-if="run.sessionName" class="stage-meta">
+              session: <code>{{ run.sessionName }}</code>
             </div>
-          </section>
+            <div class="stage-meta">
+              started {{ formatDate(run.startedAt) }} · ended {{ formatDate(run.endedAt) }}
+            </div>
+            <details v-if="run.output" class="stage-output">
+              <summary>Output</summary>
+              <StageOutputView :stage="run.stage" :output="run.output" />
+            </details>
+          </div>
+        </section>
 
-          <!-- Permissions tab -->
-          <section v-if="activeTab === 'permissions'" class="tab-content">
-            <div v-if="pendingRequests.length > 0" class="pending-section">
-              <h3>Pending runtime requests</h3>
-              <div v-for="req in pendingRequests" :key="req.id" class="perm-request">
-                <div class="perm-request-head">
-                  <strong>{{ req.tool }}</strong>
-                  <span v-if="req.pattern" class="mono">{{ req.pattern }}</span>
-                </div>
-                <div v-if="req.reason" class="perm-reason">
-                  {{ req.reason }}
-                </div>
-                <div class="perm-actions">
-                  <button
-                    class="btn btn-sm btn-green"
-                    :disabled="isActing"
-                    @click="onResolve(req, 'granted')"
-                  >
-                    Grant
-                  </button>
-                  <button
-                    class="btn btn-sm btn-red"
-                    :disabled="isActing"
-                    @click="onResolve(req, 'denied')"
-                  >
-                    Deny
-                  </button>
-                </div>
+        <!-- Permissions tab -->
+        <section v-if="activeTab === 'permissions'" class="tab-content">
+          <div v-if="pendingRequests.length > 0" class="pending-section">
+            <h3>Pending runtime requests</h3>
+            <div v-for="req in pendingRequests" :key="req.id" class="perm-request">
+              <div class="perm-request-head">
+                <strong>{{ req.tool }}</strong>
+                <span v-if="req.pattern" class="mono">{{ req.pattern }}</span>
               </div>
-            </div>
-
-            <!-- Manual permission grant form -->
-            <div class="perm-grant-form">
-              <h3>Grant a tool permission</h3>
-              <p class="perm-grant-hint">
-                Pre-approve a tool before Retry — useful when the agent hit a permission wall.
-                Examples: <code>Write</code>, <code>Bash</code> with pattern <code>npm run *</code>
-              </p>
-              <div class="perm-grant-row">
-                <input
-                  v-model="newPermTool"
-                  class="perm-input"
-                  placeholder="Tool (e.g. Bash, Write)"
-                  @keydown.enter="onGrantPermission"
-                >
-                <input
-                  v-model="newPermPattern"
-                  class="perm-input perm-input-pattern"
-                  placeholder="Pattern (optional, e.g. npm run *)"
-                  @keydown.enter="onGrantPermission"
-                >
+              <div v-if="req.reason" class="perm-reason">
+                {{ req.reason }}
+              </div>
+              <div class="perm-actions">
                 <button
                   class="btn btn-sm btn-green"
-                  :disabled="isGranting || !newPermTool.trim()"
-                  @click="onGrantPermission"
+                  :disabled="isActing"
+                  @click="onResolve(req, 'granted')"
                 >
                   Grant
                 </button>
-              </div>
-              <p v-if="permError" class="perm-error">
-                {{ permError }}
-              </p>
-            </div>
-
-            <div v-if="permissions.length > 0">
-              <h3>Granted permissions</h3>
-              <div v-for="p in permissions" :key="p.id" class="perm-row">
-                <span class="perm-tool">{{ p.tool }}</span>
-                <span v-if="p.pattern" class="perm-pattern">{{ p.pattern }}</span>
-                <span class="perm-type">{{ p.preApproved ? 'pre-approved' : 'runtime' }}</span>
-                <span class="perm-decided">{{ p.decidedBy }}</span>
+                <button
+                  class="btn btn-sm btn-red"
+                  :disabled="isActing"
+                  @click="onResolve(req, 'denied')"
+                >
+                  Deny
+                </button>
               </div>
             </div>
-            <div v-if="permissions.length === 0 && pendingRequests.length === 0" class="empty-hint">
-              No permissions granted yet.
-            </div>
-          </section>
-
-          <!-- Audit tab -->
-          <section v-if="activeTab === 'audit'" class="tab-content">
-            <div class="empty-hint">
-              Audit log viewer — Phase 6.
-            </div>
-          </section>
-        </div>
-
-        <footer class="modal-actions">
-          <p v-if="actionError" class="action-error">
-            {{ actionError }}
-          </p>
-          <p v-if="analysisInfo" class="action-info">
-            Analysis agent spawned · PID <code>{{ analysisInfo.pid }}</code> · look for it in the agents list.
-          </p>
-          <div class="action-buttons">
-            <button
-              v-if="isFailedRun(task)"
-              class="btn btn-primary"
-              :disabled="isActing"
-              title="Start a fresh iteration of this stage"
-              @click="handleAction(() => retryTask(task!.id))"
-            >
-              Retry Stage
-            </button>
-            <button
-              v-if="isFailedRun(task)"
-              class="btn btn-secondary"
-              :disabled="isActing"
-              title="Spawn a standalone Claude session with the failure context attached"
-              @click="onAnalyze"
-            >
-              Analyze Failure
-            </button>
-            <button
-              v-if="approvalMeta"
-              class="btn btn-green"
-              :disabled="isActing"
-              :title="`Advance past ${task.currentStage} gate`"
-              @click="handleAction(() => approveTask(task!.id))"
-            >
-              {{ approvalMeta.label }}
-            </button>
-            <button
-              v-else-if="!isTerminal(task.currentStage) && !isOnHoldStage && !isFailedRun(task)"
-              class="btn btn-secondary"
-              :disabled="isActing"
-              title="Manually advance to the next stage (skips approval gates)"
-              @click="handleAction(() => progressTask(task!.id))"
-            >
-              Progress →
-            </button>
-            <button
-              v-if="!isTerminal(task.currentStage)"
-              class="btn btn-red"
-              :disabled="isActing"
-              title="Stop this task and mark it as cancelled"
-              @click="handleAction(() => cancelTask(task!.id))"
-            >
-              Cancel Task
-            </button>
           </div>
-        </footer>
+
+          <!-- Manual permission grant form -->
+          <div class="perm-grant-form">
+            <h3>Grant a tool permission</h3>
+            <p class="perm-grant-hint">
+              Pre-approve a tool before Retry — useful when the agent hit a permission wall.
+              Examples: <code>Write</code>, <code>Bash</code> with pattern <code>npm run *</code>
+            </p>
+            <div class="perm-grant-row">
+              <input
+                v-model="newPermTool"
+                class="perm-input"
+                placeholder="Tool (e.g. Bash, Write)"
+                @keydown.enter="onGrantPermission"
+              >
+              <input
+                v-model="newPermPattern"
+                class="perm-input perm-input-pattern"
+                placeholder="Pattern (optional, e.g. npm run *)"
+                @keydown.enter="onGrantPermission"
+              >
+              <button
+                class="btn btn-sm btn-green"
+                :disabled="isGranting || !newPermTool.trim()"
+                @click="onGrantPermission"
+              >
+                Grant
+              </button>
+            </div>
+            <p v-if="permError" class="perm-error">
+              {{ permError }}
+            </p>
+          </div>
+
+          <div v-if="permissions.length > 0">
+            <h3>Granted permissions</h3>
+            <div v-for="p in permissions" :key="p.id" class="perm-row">
+              <span class="perm-tool">{{ p.tool }}</span>
+              <span v-if="p.pattern" class="perm-pattern">{{ p.pattern }}</span>
+              <span class="perm-type">{{ p.preApproved ? 'pre-approved' : 'runtime' }}</span>
+              <span class="perm-decided">{{ p.decidedBy }}</span>
+            </div>
+          </div>
+          <div v-if="permissions.length === 0 && pendingRequests.length === 0" class="empty-hint">
+            No permissions granted yet.
+          </div>
+        </section>
+
+        <!-- Audit tab -->
+        <section v-if="activeTab === 'audit'" class="tab-content">
+          <div class="empty-hint">
+            Audit log viewer — Phase 6.
+          </div>
+        </section>
       </div>
+
+      <footer class="modal-actions">
+        <p v-if="actionError" class="action-error">
+          {{ actionError }}
+        </p>
+        <p v-if="analysisInfo" class="action-info">
+          Analysis agent spawned · PID <code>{{ analysisInfo.pid }}</code> · look for it in the agents list.
+        </p>
+        <div class="action-buttons">
+          <button
+            v-if="isFailedRun(task)"
+            class="btn btn-primary"
+            :disabled="isActing"
+            title="Start a fresh iteration of this stage"
+            @click="handleAction(() => retryTask(task!.id))"
+          >
+            Retry Stage
+          </button>
+          <button
+            v-if="isFailedRun(task)"
+            class="btn btn-secondary"
+            :disabled="isActing"
+            title="Spawn a standalone Claude session with the failure context attached"
+            @click="onAnalyze"
+          >
+            Analyze Failure
+          </button>
+          <button
+            v-if="approvalMeta"
+            class="btn btn-green"
+            :disabled="isActing"
+            :title="`Advance past ${task.currentStage} gate`"
+            @click="handleAction(() => approveTask(task!.id))"
+          >
+            {{ approvalMeta.label }}
+          </button>
+          <button
+            v-else-if="!isTerminal(task.currentStage) && !isOnHoldStage && !isFailedRun(task)"
+            class="btn btn-secondary"
+            :disabled="isActing"
+            title="Manually advance to the next stage (skips approval gates)"
+            @click="handleAction(() => progressTask(task!.id))"
+          >
+            Progress →
+          </button>
+          <button
+            v-if="!isTerminal(task.currentStage)"
+            class="btn btn-red"
+            :disabled="isActing"
+            title="Stop this task and mark it as cancelled"
+            @click="handleAction(() => cancelTask(task!.id))"
+          >
+            Cancel Task
+          </button>
+        </div>
+      </footer>
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
-.task-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 24px;
-}
 .task-modal {
   background: var(--bg-secondary);
   border-radius: 10px;
@@ -1374,9 +1363,6 @@ function formatDate(iso: string | null): string {
 .btn-green { background: var(--accent-green); color: var(--bg-primary); }
 .btn-red { background: var(--accent-red); color: white; }
 .btn:hover:not(:disabled) { filter: brightness(1.1); }
-
-.modal-enter-active, .modal-leave-active { transition: opacity 0.2s; }
-.modal-enter-from, .modal-leave-to { opacity: 0; }
 
 .dep-section {
   margin-top: 16px;

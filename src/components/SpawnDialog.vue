@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import BaseModal from './BaseModal.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -156,7 +157,13 @@ watch(() => props.open, (isOpen) => {
   }
 })
 
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && props.open)
+    emit('close')
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
   stopStatusPoll()
   if (autoCloseTimer) {
     clearTimeout(autoCloseTimer)
@@ -166,143 +173,126 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Transition name="dialog">
-    <div
-      v-if="open"
-      class="spawn-backdrop"
-      @click.self="emit('close')"
-      @keydown.escape="emit('close')"
-    >
-      <div class="spawn-modal">
-        <header class="modal-header">
-          <h2>New Agent</h2>
-          <button class="close-btn" @click="emit('close')">
-            &times;
-          </button>
-        </header>
+  <BaseModal :open="open" @close="emit('close')">
+    <div class="spawn-modal">
+      <header class="modal-header">
+        <h2>New Agent</h2>
+        <button class="close-btn" @click="emit('close')">
+          &times;
+        </button>
+      </header>
 
-        <form class="modal-body" @submit.prevent>
-          <div class="field">
-            <label class="field-label" for="spawn-prompt">Prompt</label>
-            <textarea
-              id="spawn-prompt"
-              v-model="prompt"
-              class="field-input"
-              rows="4"
-              required
-              placeholder="What should the agent do?"
-            />
-          </div>
+      <form class="modal-body" @submit.prevent>
+        <div class="field">
+          <label class="field-label" for="spawn-prompt">Prompt</label>
+          <textarea
+            id="spawn-prompt"
+            v-model="prompt"
+            class="field-input"
+            rows="4"
+            required
+            placeholder="What should the agent do?"
+          />
+        </div>
 
-          <div class="field">
-            <label class="field-label" for="spawn-cwd">Working Directory</label>
-            <input
-              id="spawn-cwd"
-              v-model="cwd"
-              class="field-input"
-              type="text"
-              required
-              placeholder="/path/to/project"
-            >
-          </div>
-
-          <div class="field">
-            <label class="field-label" for="spawn-model">Model</label>
-            <select id="spawn-model" v-model="model" class="field-input">
-              <option value="">
-                Auto
-              </option>
-              <option value="claude-opus-4-6">
-                claude-opus-4-6
-              </option>
-              <option value="claude-sonnet-4-6">
-                claude-sonnet-4-6
-              </option>
-              <option value="claude-haiku-4-5">
-                claude-haiku-4-5
-              </option>
-            </select>
-          </div>
-
-          <div class="field">
-            <label class="field-label" for="spawn-system">System Prompt</label>
-            <textarea
-              id="spawn-system"
-              v-model="systemPrompt"
-              class="field-input"
-              rows="2"
-              placeholder="Custom system instructions (optional)"
-            />
-          </div>
-
-          <div class="field-checkbox">
-            <input
-              id="spawn-channel"
-              v-model="enableChannel"
-              type="checkbox"
-            >
-            <label for="spawn-channel">Enable dashboard control channel</label>
-          </div>
-
-          <div class="field-checkbox">
-            <input
-              id="spawn-yolo"
-              v-model="skipPermissions"
-              type="checkbox"
-              @change="skipPermissionsConfirmed = false"
-            >
-            <label for="spawn-yolo">Skip permission prompts <span class="yolo-hint">(--dangerously-skip-permissions)</span></label>
-          </div>
-
-          <div v-if="skipPermissions" class="danger-warning">
-            The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
-          </div>
-
-          <div v-if="skipPermissionsConfirmed" class="danger-confirm">
-            Click "Spawn Agent" again to confirm.
-          </div>
-
-          <p v-if="spawnStatusMsg" class="status-msg">
-            {{ spawnStatusMsg }}
-          </p>
-          <p v-if="errorMsg" class="error-msg">
-            {{ errorMsg }}
-          </p>
-        </form>
-
-        <footer class="modal-footer">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            @click="emit('close')"
+        <div class="field">
+          <label class="field-label" for="spawn-cwd">Working Directory</label>
+          <input
+            id="spawn-cwd"
+            v-model="cwd"
+            class="field-input"
+            type="text"
+            required
+            placeholder="/path/to/project"
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="isSpawning || !prompt.trim() || !cwd.trim()"
-            @click="handleSpawn"
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="spawn-model">Model</label>
+          <select id="spawn-model" v-model="model" class="field-input">
+            <option value="">
+              Auto
+            </option>
+            <option value="claude-opus-4-6">
+              claude-opus-4-6
+            </option>
+            <option value="claude-sonnet-4-6">
+              claude-sonnet-4-6
+            </option>
+            <option value="claude-haiku-4-5">
+              claude-haiku-4-5
+            </option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="spawn-system">System Prompt</label>
+          <textarea
+            id="spawn-system"
+            v-model="systemPrompt"
+            class="field-input"
+            rows="2"
+            placeholder="Custom system instructions (optional)"
+          />
+        </div>
+
+        <div class="field-checkbox">
+          <input
+            id="spawn-channel"
+            v-model="enableChannel"
+            type="checkbox"
           >
-            {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
-          </button>
-        </footer>
-      </div>
+          <label for="spawn-channel">Enable dashboard control channel</label>
+        </div>
+
+        <div class="field-checkbox">
+          <input
+            id="spawn-yolo"
+            v-model="skipPermissions"
+            type="checkbox"
+            @change="skipPermissionsConfirmed = false"
+          >
+          <label for="spawn-yolo">Skip permission prompts <span class="yolo-hint">(--dangerously-skip-permissions)</span></label>
+        </div>
+
+        <div v-if="skipPermissions" class="danger-warning">
+          The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
+        </div>
+
+        <div v-if="skipPermissionsConfirmed" class="danger-confirm">
+          Click "Spawn Agent" again to confirm.
+        </div>
+
+        <p v-if="spawnStatusMsg" class="status-msg">
+          {{ spawnStatusMsg }}
+        </p>
+        <p v-if="errorMsg" class="error-msg">
+          {{ errorMsg }}
+        </p>
+      </form>
+
+      <footer class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          @click="emit('close')"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="isSpawning || !prompt.trim() || !cwd.trim()"
+          @click="handleSpawn"
+        >
+          {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
+        </button>
+      </footer>
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
-.spawn-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .spawn-modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -498,27 +488,5 @@ select.field-input option {
 .btn-primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-/* Dialog transition */
-.dialog-enter-active,
-.dialog-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.dialog-enter-active .spawn-modal,
-.dialog-leave-active .spawn-modal {
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.dialog-enter-from,
-.dialog-leave-to {
-  opacity: 0;
-}
-
-.dialog-enter-from .spawn-modal,
-.dialog-leave-to .spawn-modal {
-  transform: scale(0.95);
-  opacity: 0;
 }
 </style>
