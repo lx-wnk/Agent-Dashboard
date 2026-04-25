@@ -1,7 +1,23 @@
 <script setup lang="ts">
+import type { ImageAttachment } from '../composables/useRefinementChat'
 import type { PipelineTask } from '../types'
+import DOMPurify from 'dompurify'
+import { Marked } from 'marked'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
+
+const md = new Marked({ breaks: true, gfm: true })
+
+function cleanContent(text: string): string {
+  return text
+    .replace(/__phase_done:\s*\w+/g, '')
+    .replace(/^\*{0,2}[Rr]efined\s+[Tt]itle\*{0,2}:?[^\n]*\n?/gm, '')
+    .trimEnd()
+}
+
+function renderMarkdown(text: string): string {
+  return DOMPurify.sanitize(md.parse(cleanContent(text), { async: false }) as string)
+}
 
 const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
 const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
@@ -9,6 +25,8 @@ const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
 const inputText = ref('')
 const chatEl = ref<HTMLElement | null>(null)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
+const fileInputEl = ref<HTMLInputElement | null>(null)
+const pendingImages = ref<ImageAttachment[]>([])
 
 function autoResize() {
   const el = textareaEl.value
@@ -32,6 +50,67 @@ const EXAMPLE_CHIPS = [
   'Eine neue API-Integration',
 ]
 
+// ── Dynamic title ─────────────────────────────
+const chatTitle = computed(() => {
+  // Prefer a refinedTitle extracted from the agent's JSON output
+  for (const msg of [...messages.value].reverse()) {
+    if (msg.role !== 'assistant' || !msg.content) continue
+    const jsonMatch = msg.content.match(/```json\n([\s\S]*?)```/)
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1])
+        if (typeof parsed.refinedTitle === 'string' && parsed.refinedTitle.trim()) {
+          const t = parsed.refinedTitle.trim()
+          return t.length > 30 ? `${t.slice(0, 27)}…` : t
+        }
+      }
+      catch {}
+    }
+  }
+  // Fall back to first user message
+  const firstUser = messages.value.find(m => m.role === 'user')
+  if (!firstUser?.content) return 'Neues Ticket'
+  const t = firstUser.content.replace(/\s+/g, ' ').trim()
+  return t.length > 30 ? `${t.slice(0, 27)}…` : t
+})
+
+// ── Image handling ────────────────────────────
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = ev => resolve(ev.target?.result as string)
+    reader.readAsDataURL(file)
+  })
+}
+
+async function handlePaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (const item of Array.from(items)) {
+    if (!item.type.startsWith('image/')) continue
+    e.preventDefault()
+    const file = item.getAsFile()
+    if (!file) continue
+    const dataUrl = await readFileAsDataUrl(file)
+    pendingImages.value.push({ dataUrl, mimeType: item.type })
+  }
+}
+
+async function handleFileSelect(e: Event) {
+  const files = (e.target as HTMLInputElement).files
+  if (!files) return
+  for (const file of Array.from(files)) {
+    if (!file.type.startsWith('image/')) continue
+    const dataUrl = await readFileAsDataUrl(file)
+    pendingImages.value.push({ dataUrl, mimeType: file.type })
+  }
+  if (fileInputEl.value) fileInputEl.value.value = ''
+}
+
+function removeImage(idx: number) {
+  pendingImages.value.splice(idx, 1)
+}
+
 watch(() => props.open, async (val) => {
   if (val && props.task) {
     await loadHistory()
@@ -50,9 +129,11 @@ watch(messages, async () => {
 async function handleSend() {
   const msg = inputText.value.trim()
   if (!msg || isStreaming.value) return
+  const images = pendingImages.value.length > 0 ? [...pendingImages.value] : undefined
   inputText.value = ''
+  pendingImages.value = []
   await nextTick(autoResize)
-  await sendMessage(msg)
+  await sendMessage(msg, images)
 }
 
 async function handleConfirm() {
@@ -71,7 +152,7 @@ function isPhaseMarker(idx: number): string | null {
   <div v-if="open" class="chat-backdrop" @click.self="emit('close')">
     <div class="chat-modal">
       <div class="chat-header">
-        <span class="chat-title">Neues Ticket</span>
+        <span class="chat-title">{{ chatTitle }}</span>
         <button class="chat-close" @click="emit('close')">✕</button>
       </div>
 
@@ -99,12 +180,20 @@ function isPhaseMarker(idx: number): string | null {
             ✓ {{ phaseLabel(isPhaseMarker(idx)!) }} abgeschlossen
           </div>
 
-          <div :class="['bubble', msg.role]">
-            <span class="bubble-content">{{ msg.content }}</span>
+          <div v-if="msg.role === 'user'" class="bubble user">
+            <div v-if="msg.images?.length" class="bubble-images">
+              <img v-for="(img, i) in msg.images" :key="i" :src="img.dataUrl" class="bubble-img" alt="attachment" />
+            </div>
+            {{ msg.content }}
           </div>
+          <div
+            v-else-if="msg.content"
+            class="bubble assistant markdown-body"
+            v-html="renderMarkdown(msg.content)"
+          />
         </template>
 
-        <div v-if="isStreaming" class="bubble assistant streaming">
+        <div v-if="isStreaming && !messages.at(-1)?.content" class="bubble assistant streaming">
           <span class="dot-pulse"><span /><span /><span /></span>
         </div>
       </div>
@@ -117,7 +206,28 @@ function isPhaseMarker(idx: number): string | null {
         </button>
       </div>
 
+      <div v-if="pendingImages.length > 0" class="image-preview-row">
+        <div v-for="(img, idx) in pendingImages" :key="idx" class="image-preview">
+          <img :src="img.dataUrl" alt="attachment" />
+          <button class="remove-img" @click="removeImage(idx)">✕</button>
+        </div>
+      </div>
+
       <div class="chat-input-bar">
+        <button
+          class="btn-attach"
+          title="Bild anhängen"
+          :disabled="isStreaming || approvalReady"
+          @click="fileInputEl?.click()"
+        >⊕</button>
+        <input
+          ref="fileInputEl"
+          type="file"
+          accept="image/*"
+          multiple
+          style="display:none"
+          @change="handleFileSelect"
+        >
         <textarea
           ref="textareaEl"
           v-model="inputText"
@@ -126,10 +236,18 @@ function isPhaseMarker(idx: number): string | null {
           rows="1"
           :disabled="isStreaming || approvalReady"
           @keydown.enter.exact.prevent="handleSend"
+          @paste="handlePaste"
         />
         <button
+          v-if="messages.length > 0 && !approvalReady"
+          class="btn-ok"
+          title="Ja, passt so — weiter"
+          :disabled="isStreaming"
+          @click="sendMessage('Ja, passt so. Mach weiter.')"
+        >✓</button>
+        <button
           class="btn-send"
-          :disabled="isStreaming || !inputText.trim() || approvalReady"
+          :disabled="isStreaming || (!inputText.trim() && !pendingImages.length) || approvalReady"
           @click="handleSend"
         >→</button>
       </div>
@@ -165,8 +283,9 @@ function isPhaseMarker(idx: number): string | null {
 .chat-close:hover { opacity: 1; background: var(--bg-secondary); }
 
 .chat-messages {
-  flex: 1; overflow-y: auto; padding: 20px;
-  display: flex; flex-direction: column; gap: 12px;
+  flex: 1; overflow-y: auto; padding: 16px 20px;
+  display: flex; flex-direction: column; gap: 6px;
+  font-family: var(--font-mono); font-size: 13px;
 }
 .chat-messages.empty { justify-content: center; }
 
@@ -211,20 +330,55 @@ function isPhaseMarker(idx: number): string | null {
 
 /* ── Message bubbles ──────────────────────────── */
 .bubble {
-  max-width: 78%; padding: 10px 14px; border-radius: 14px;
-  line-height: 1.55; white-space: pre-wrap; word-break: break-word;
-  font-size: 0.92rem;
+  max-width: 80%; padding: 8px 12px; border-radius: 12px;
+  line-height: 1.5; word-break: break-word;
+  font-size: 13px; font-family: var(--font-mono);
 }
 .bubble.user {
   align-self: flex-end;
-  background: var(--accent-blue); color: white;
+  background: var(--bg-tertiary); color: var(--text-muted);
   border-bottom-right-radius: 4px;
+  white-space: pre-wrap;
+}
+.bubble-images {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;
+}
+.bubble-img {
+  max-width: 180px; max-height: 120px; border-radius: 6px;
+  object-fit: cover; border: 1px solid var(--border);
 }
 .bubble.assistant {
   align-self: flex-start;
-  background: var(--bg-secondary);
+  background: var(--bg-tertiary); color: var(--text-secondary);
   border-bottom-left-radius: 4px;
 }
+
+/* ── Markdown body ────────────────────────────── */
+.markdown-body { white-space: normal; }
+.markdown-body :deep(p) { margin: 0 0 0.4em; }
+.markdown-body :deep(p:last-child) { margin-bottom: 0; }
+.markdown-body :deep(code) {
+  background: var(--bg-primary); padding: 1px 5px;
+  border-radius: 4px; font-size: 0.9em;
+}
+.markdown-body :deep(pre) {
+  background: var(--bg-primary); padding: 10px 12px;
+  border-radius: 6px; overflow-x: auto; margin: 6px 0;
+}
+.markdown-body :deep(pre code) { background: none; padding: 0; }
+.markdown-body :deep(ul), .markdown-body :deep(ol) { margin: 4px 0; padding-left: 1.4em; }
+.markdown-body :deep(li) { margin: 2px 0; }
+.markdown-body :deep(strong) { color: var(--text-primary); }
+.markdown-body :deep(a) { color: var(--accent-blue); }
+.markdown-body :deep(h1), .markdown-body :deep(h2), .markdown-body :deep(h3) {
+  color: var(--text-primary); margin: 0.5em 0 0.25em;
+  font-size: 1em; font-weight: 700;
+}
+.markdown-body :deep(blockquote) {
+  border-left: 3px solid var(--border); padding-left: 10px;
+  margin: 6px 0; color: var(--text-muted);
+}
+.markdown-body :deep(hr) { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
 
 /* ── Phase milestone ──────────────────────────── */
 .phase-marker {
@@ -254,17 +408,48 @@ function isPhaseMarker(idx: number): string | null {
   transition: opacity 0.15s, transform 0.1s;
 }
 .btn-confirm:hover { opacity: 0.9; transform: translateY(-1px); }
+/* ── Image preview row ────────────────────────── */
+.image-preview-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 10px 20px 0; flex-shrink: 0;
+}
+.image-preview {
+  position: relative; display: inline-flex;
+}
+.image-preview img {
+  max-width: 80px; max-height: 60px; border-radius: 6px;
+  object-fit: cover; border: 1px solid var(--border);
+}
+.remove-img {
+  position: absolute; top: -6px; right: -6px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--bg-tertiary); border: 1px solid var(--border);
+  color: var(--text-muted); font-size: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1; padding: 0;
+}
+.remove-img:hover { background: var(--accent-red); color: white; border-color: var(--accent-red); }
+
 .chat-input-bar {
-  display: flex; gap: 8px; padding: 14px 20px;
+  display: flex; gap: 8px; padding: 10px 20px 14px;
   border-top: 1px solid var(--border); flex-shrink: 0;
   align-items: flex-end;
 }
+.btn-attach {
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  color: var(--text-muted); font-size: 1.1rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-attach:hover:not(:disabled) { border-color: var(--accent-blue); color: var(--accent-blue); }
+.btn-attach:disabled { opacity: 0.35; cursor: default; }
 .chat-input {
-  flex: 1; padding: 10px 14px; border-radius: 10px;
+  flex: 1; padding: 8px 12px; border-radius: 10px;
   border: 1px solid var(--border); background: var(--bg-secondary);
-  color: inherit; font-size: 0.92rem; font-family: inherit;
+  color: var(--text-primary); font-size: 13px; font-family: var(--font-mono);
   line-height: 1.5; resize: none; overflow-y: auto;
-  min-height: 40px; max-height: 160px;
+  min-height: 38px; max-height: 160px;
   transition: border-color 0.15s;
 }
 .chat-input:focus { outline: none; border-color: var(--accent-blue); }
@@ -278,6 +463,15 @@ function isPhaseMarker(idx: number): string | null {
 }
 .btn-send:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
 .btn-send:disabled { opacity: 0.35; cursor: default; }
+.btn-ok {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  background: var(--accent-green); color: #000;
+  border: none; cursor: pointer; font-size: 1rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-ok:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+.btn-ok:disabled { opacity: 0.35; cursor: default; }
 
 /* ── Streaming indicator ──────────────────────── */
 .bubble.streaming { min-width: 52px; }
