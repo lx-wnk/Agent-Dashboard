@@ -1,23 +1,16 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import AppBadge from './ui/AppBadge.vue'
 import MachineBadge from './MachineBadge.vue'
-import StatusBadge from './StatusBadge.vue'
 
-defineProps<{
-  agent: Agent
-  expanded: boolean
-}>()
-
-defineEmits<{
-  select: [agent: Agent]
-  toggleSubagents: []
-}>()
+defineProps<{ agent: Agent, expanded: boolean }>()
+defineEmits<{ select: [agent: Agent], toggleSubagents: [] }>()
 </script>
 
 <template>
   <tr
-    class="agent-row"
+    class="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-900 focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
     tabindex="0"
     role="row"
     :aria-label="`Open details for ${agent.projectName}`"
@@ -25,36 +18,41 @@ defineEmits<{
     @keydown.enter="$emit('select', agent)"
     @keydown.space.prevent="$emit('select', agent)"
   >
-    <td class="col-status">
-      <StatusBadge :status="agent.status" />
+    <td class="w-24 px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 text-sm">
+      <AppBadge :variant="agent.status" />
     </td>
-    <td class="col-project">
+    <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 text-sm text-slate-900 dark:text-slate-100 font-medium">
       {{ agent.projectName }}
-      <span v-if="agent.channelAvailable" class="channel-badge" title="Channel active">CH</span>
+      <span
+        v-if="agent.channelAvailable"
+        title="Channel active"
+        class="inline-block ml-1.5 px-1 text-[9px] font-semibold text-green-600 dark:text-green-400 border border-green-600 dark:border-green-400 rounded align-middle tracking-wider"
+      >CH</span>
       <MachineBadge v-if="agent.machine" :machine="agent.machine" />
     </td>
-    <td class="col-action">
+    <td class="max-w-[250px] overflow-hidden text-ellipsis whitespace-nowrap px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-400">
       {{ agent.currentAction || '—' }}
     </td>
-    <td class="col-model">
+    <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-600 whitespace-nowrap">
       {{ shortModel(agent.model) }}
     </td>
-    <td class="col-tokens">
+    <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-400 dark:text-slate-600 whitespace-nowrap">
       {{ formatTokens(totalTokenCount(agent.tokenUsage)) }}
     </td>
-    <td class="col-cost">
+    <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 text-xs font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
       {{ formatCost(agent.costEstimate) }}
     </td>
-    <td class="col-uptime">
+    <td class="w-20 px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-600">
       {{ formatUptime(agent.uptime) }}
     </td>
-    <td class="col-pid">
+    <td class="w-[70px] px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-400 dark:text-slate-600">
       {{ agent.pid }}
     </td>
-    <td class="col-toggle">
+    <td class="w-[50px] text-center px-3 py-2.5 border-b border-slate-200 dark:border-slate-800">
       <button
         v-if="agent.subagents.length > 0"
-        class="toggle-btn"
+        type="button"
+        class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-[11px] px-1.5 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300"
         @click.stop="$emit('toggleSubagents')"
       >
         {{ expanded ? '▼' : '▶' }} {{ agent.subagents.length }}
@@ -62,63 +60,3 @@ defineEmits<{
     </td>
   </tr>
 </template>
-
-<style scoped>
-.agent-row {
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.agent-row:hover {
-  background: var(--bg-secondary);
-}
-
-.agent-row:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: -2px;
-}
-
-.agent-row td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
-}
-
-.col-status { width: 100px; }
-.col-project { color: var(--text-primary); font-weight: 500; }
-.col-action { color: var(--text-secondary); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-model { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
-.col-tokens { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
-.col-cost { color: var(--accent-green); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
-.col-uptime { color: var(--text-muted); width: 80px; }
-.col-pid { color: var(--text-muted); width: 70px; font-family: var(--font-mono); font-size: 12px; }
-.col-toggle { width: 50px; text-align: center; }
-
-.toggle-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.toggle-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.channel-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 4px;
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--accent-green);
-  border: 1px solid var(--accent-green);
-  border-radius: 3px;
-  vertical-align: middle;
-  letter-spacing: 0.5px;
-}
-</style>
