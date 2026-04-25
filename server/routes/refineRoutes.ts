@@ -1,5 +1,8 @@
 import type express from 'express'
-import type { Buffer } from 'node:buffer'
+import { Buffer } from 'node:buffer'
+import { unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Router } from 'express'
 import { appendAudit } from '../db/auditRepo.js'
 import { insertTurn, listTurns } from '../db/refinementTurnsRepo.js'
@@ -7,10 +10,17 @@ import { getTaskById, updateTask } from '../db/tasksRepo.js'
 import { spawnRefinementTurn } from '../pipeline/refinementSpawner.js'
 import { bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
 
+interface ImageAttachment {
+  dataUrl: string
+  mimeType: string
+}
+
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
 const PHASE_DONE_RE = /__phase_done:\s*(\w+)/
 const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/
+
+const activeTurns = new Set<string>()
 
 export function createRefineRouter(
   broadcastEnrichedUpdate: (taskId: string) => void,
@@ -34,22 +44,55 @@ export function createRefineRouter(
       return
     }
 
-    const body = req.body as { message?: unknown }
+    const body = req.body as { message?: unknown, images?: unknown }
     const message = typeof body.message === 'string' ? body.message.trim() : ''
     if (!message) {
       res.status(400).json({ error: 'message is required' })
       return
     }
 
+    const rawImages = Array.isArray(body.images) ? body.images : []
+    const images: ImageAttachment[] = rawImages.filter(
+      (img): img is ImageAttachment =>
+        typeof img === 'object' && img !== null
+        && typeof (img as Record<string, unknown>).dataUrl === 'string'
+        && typeof (img as Record<string, unknown>).mimeType === 'string',
+    )
+
+    const tempFiles: string[] = []
+    let spawnMessage = message
+    if (images.length > 0) {
+      const paths: string[] = []
+      for (const img of images) {
+        const ext = img.mimeType.replace('image/', '').split('+')[0] || 'png'
+        const filename = `refine-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+        const filePath = join(tmpdir(), filename)
+        const b64 = img.dataUrl.includes(',') ? img.dataUrl.split(',')[1] : img.dataUrl
+        writeFileSync(filePath, Buffer.from(b64, 'base64'))
+        tempFiles.push(filePath)
+        paths.push(filePath)
+      }
+      spawnMessage = `${message}\n\n[Attached image${paths.length > 1 ? 's' : ''} — please read and analyse: ${paths.join(', ')}]`
+    }
+
     const history = listTurns(req.params.taskId)
+
+    // Use first user message as provisional title while refinement is in progress
+    if (history.filter(t => t.role === 'user').length === 0 && task.title === 'New Task') {
+      const provisional = message.replace(/\s+/g, ' ').trim().slice(0, 60)
+      updateTask(task.id, { title: provisional })
+      broadcastEnrichedUpdate(task.id)
+    }
+
     insertTurn({ taskId: task.id, role: 'user', content: message })
 
+    activeTurns.add(task.id)
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    const { stdout, waitForExit } = spawnRefinementTurn(message, history, task.cwd)
+    const { stdout, waitForExit } = spawnRefinementTurn(spawnMessage, history, task.cwd)
 
     let fullResponse = ''
     let turnFinalized = false
@@ -78,6 +121,19 @@ export function createRefineRouter(
       const phaseMatch = fullResponse.match(PHASE_DONE_RE)
       const detectedPhase = phaseMatch ? phaseMatch[1] : undefined
 
+      // Update task title from refinedTitle whenever the agent emits it
+      const jsonMatch = fullResponse.match(JSON_BLOCK_RE)
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>
+          if (typeof parsed.refinedTitle === 'string' && parsed.refinedTitle.trim()) {
+            updateTask(task.id, { title: parsed.refinedTitle.trim() })
+            broadcastEnrichedUpdate(task.id)
+          }
+        }
+        catch {}
+      }
+
       insertTurn({
         taskId: task.id,
         role: 'assistant',
@@ -98,6 +154,12 @@ export function createRefineRouter(
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[error]' })
       res.write(`event: error\ndata: ${JSON.stringify({ error: err instanceof Error ? err.message : 'spawn failed' })}\n\n`)
       res.end()
+    }
+    finally {
+      activeTurns.delete(task.id)
+      for (const f of tempFiles) {
+        try { unlinkSync(f) } catch {}
+      }
     }
   })
 
@@ -158,7 +220,10 @@ export function createRefineRouter(
       res.status(404).json({ error: 'Task not found' })
       return
     }
-    res.json(listTurns(req.params.taskId))
+    res.json({
+      turns: listTurns(req.params.taskId),
+      isProcessing: activeTurns.has(req.params.taskId),
+    })
   })
 
   // Mount mutation sub-router so its rejectCrossOrigin middleware guards

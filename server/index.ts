@@ -65,7 +65,7 @@ async function start() {
   mkdirSync(DISCOVERY_DIR, { recursive: true })
 
   const app = express()
-  app.use(express.json())
+  app.use(express.json({ limit: '10mb' }))
 
   // ─── API routes (before Vite middleware) ────────────────
 
