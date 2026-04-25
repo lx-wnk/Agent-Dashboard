@@ -63,7 +63,7 @@ Never write a message like "please grant me write permission to X" — that mess
 
   return {
     systemPrompt,
-    userPrompt: `## Task: ${task.title}\n\n${task.description || ''}\n\n## Konzept (spec, plan, toolRequests)\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`${feedbackBlock}\n\n## Your Job: Implement\n\nWork step-by-step through the konzept plan. Commit each logical change via git. When finished, write a short summary to dashboard_reply and stop.`,
+    userPrompt: `## Task: ${task.title}\n\n${task.description || ''}\n\n## Konzept (spec, plan, toolRequests)\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`${feedbackBlock}\n\n## Your Job: Implement\n\nWork step-by-step through the konzept plan. Commit each logical change via git.\n\nWhen finished, produce a \`\`\`json\`\`\` block as your final output:\n{"summary": string, "commits": string[], "openItems": string[]}\n\nOptionally also call dashboard_reply with the summary text.`,
   }
 }
 
