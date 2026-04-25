@@ -44,8 +44,8 @@ function stageLabel(stage: PipelineStage): string {
 
 <template>
   <div
-    class="task-card"
-    :class="{ 'is-blocked': task.isBlocked }"
+    class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5 cursor-pointer transition-all flex flex-col gap-1.5"
+    :class="task.isBlocked ? 'opacity-60 hover:opacity-85' : 'hover:border-blue-500 dark:hover:border-blue-400 hover:-translate-y-px'"
     tabindex="0"
     role="button"
     :aria-label="`Open task ${task.title}`"
@@ -53,190 +53,43 @@ function stageLabel(stage: PipelineStage): string {
     @keydown.enter="$emit('select', task)"
     @keydown.space.prevent="$emit('select', task)"
   >
-    <div class="task-card-head">
-      <span class="task-slug">{{ task.slug }}</span>
-      <span class="task-date">{{ shortDate(task.createdAt) }}</span>
+    <div class="flex justify-between items-baseline gap-2">
+      <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
+      <span class="text-[10px] text-slate-400 dark:text-slate-600">{{ shortDate(task.createdAt) }}</span>
     </div>
-    <div class="task-title">
-      {{ task.title }}
-    </div>
-    <div v-if="task.description" class="task-desc">
-      {{ task.description }}
-    </div>
-    <div class="task-meta">
-      <span class="meta-chip stage" :class="`stage-${task.currentStage}`">
-        {{ stageLabel(task.currentStage) }}
-      </span>
+    <div class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 leading-tight line-clamp-2">{{ task.title }}</div>
+    <div v-if="task.description" class="text-[11px] text-slate-400 dark:text-slate-600 leading-snug line-clamp-2">{{ task.description }}</div>
+    <div class="flex flex-wrap gap-1 mt-0.5">
+      <span
+        class="text-[10px] font-mono px-1.5 py-px rounded border"
+        :class="{
+          'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700': !['on_hold', 'approval1', 'approval2', 'umsetzung', 'done', 'cancelled'].includes(task.currentStage),
+          'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/60': ['on_hold', 'approval1', 'approval2'].includes(task.currentStage),
+          'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700': task.currentStage === 'umsetzung',
+          'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 border-green-300 dark:border-green-700': task.currentStage === 'done',
+          'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border-red-300 dark:border-red-700': task.currentStage === 'cancelled',
+        }"
+      >{{ stageLabel(task.currentStage) }}</span>
       <span
         v-if="task.latestStageRunStatus"
-        class="meta-chip run-status"
-        :class="`run-${task.latestStageRunStatus}`"
+        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border"
+        :class="{
+          'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-600/50': task.latestStageRunStatus === 'running',
+          'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700': task.latestStageRunStatus === 'pending',
+          'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-700/50': ['awaiting_user', 'on_hold'].includes(task.latestStageRunStatus),
+          'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 border-green-200 dark:border-green-700/50': task.latestStageRunStatus === 'done',
+          'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border-red-200 dark:border-red-700/50': task.latestStageRunStatus === 'failed',
+        }"
         :title="`Latest stage run: ${runStatusLabel(task.latestStageRunStatus)}`"
-      >
-        {{ runStatusLabel(task.latestStageRunStatus) }}
-      </span>
-      <span v-if="task.worktreePath" class="meta-chip" title="Has worktree">WT</span>
-      <span v-if="task.sourceBranch" class="meta-chip">{{ task.sourceBranch }}</span>
-      <span v-if="task.parentTaskId" class="meta-chip" title="Follow-up task">↳</span>
-      <span v-if="task.isUnsatisfiable" class="meta-chip unsatisfiable" title="Dependency can never be fulfilled — prerequisite reached wrong terminal stage. Remove dependency manually.">⚠ Unsatisfiable dep</span>
-      <span v-else-if="task.isBlocked" class="meta-chip blocked" title="Waiting for prerequisite tasks">🔒 Blocked</span>
-      <span v-if="task.currentStage === 'umsetzung'" class="meta-chip iter">
+      >{{ runStatusLabel(task.latestStageRunStatus) }}</span>
+      <span v-if="task.worktreePath" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Has worktree">WT</span>
+      <span v-if="task.sourceBranch" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700">{{ task.sourceBranch }}</span>
+      <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Follow-up task">↳</span>
+      <span v-if="task.isUnsatisfiable" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50" title="Unsatisfiable dep">⚠ Unsatisfiable dep</span>
+      <span v-else-if="task.isBlocked" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700/50" title="Waiting for prerequisite">🔒 Blocked</span>
+      <span v-if="task.currentStage === 'umsetzung'" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50">
         max iter {{ task.maxIterations }}
       </span>
     </div>
   </div>
 </template>
-
-<style scoped>
-.task-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  cursor: pointer;
-  transition: border-color 0.15s, transform 0.15s;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.task-card:hover {
-  border-color: var(--accent-blue);
-  transform: translateY(-1px);
-}
-.task-card:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 2px;
-}
-.task-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-.task-slug {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--accent-blue);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.task-date {
-  font-size: 10px;
-  color: var(--text-muted);
-}
-.task-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.task-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.task-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.meta-chip {
-  font-size: 10px;
-  color: var(--text-muted);
-  background: var(--bg-tertiary);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-}
-.meta-chip.iter {
-  color: var(--accent-yellow);
-}
-.meta-chip.stage {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-.meta-chip.stage.stage-on_hold,
-.meta-chip.stage.stage-approval1,
-.meta-chip.stage.stage-approval2 {
-  background: rgba(234, 179, 8, 0.15);
-  color: rgb(234, 179, 8);
-  border-color: rgba(234, 179, 8, 0.4);
-}
-.meta-chip.stage.stage-umsetzung {
-  background: rgba(59, 130, 246, 0.15);
-  color: var(--accent-blue);
-  border-color: var(--accent-blue);
-}
-.meta-chip.stage.stage-done {
-  background: rgba(74, 222, 128, 0.15);
-  color: var(--accent-green);
-  border-color: var(--accent-green);
-}
-.meta-chip.stage.stage-cancelled {
-  background: rgba(248, 113, 113, 0.15);
-  color: var(--accent-red);
-  border-color: var(--accent-red);
-}
-.meta-chip.run-status {
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  font-weight: 700;
-  border: 1px solid var(--border);
-}
-.meta-chip.run-status.run-running {
-  background: rgba(59, 130, 246, 0.18);
-  color: var(--accent-blue);
-  border-color: rgba(59, 130, 246, 0.5);
-}
-.meta-chip.run-status.run-pending {
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-}
-.meta-chip.run-status.run-awaiting_user,
-.meta-chip.run-status.run-on_hold {
-  background: rgba(234, 179, 8, 0.18);
-  color: rgb(234, 179, 8);
-  border-color: rgba(234, 179, 8, 0.5);
-}
-.meta-chip.run-status.run-done {
-  background: rgba(74, 222, 128, 0.15);
-  color: var(--accent-green);
-  border-color: rgba(74, 222, 128, 0.5);
-}
-.meta-chip.run-status.run-failed {
-  background: rgba(248, 113, 113, 0.18);
-  color: var(--accent-red);
-  border-color: rgba(248, 113, 113, 0.5);
-}
-.meta-chip.blocked {
-  background: rgba(148, 163, 184, 0.15);
-  color: var(--text-muted);
-  border: 1px solid rgba(148, 163, 184, 0.3);
-}
-.meta-chip.unsatisfiable {
-  background: rgba(251, 191, 36, 0.12);
-  color: var(--accent-yellow);
-  border: 1px solid rgba(251, 191, 36, 0.35);
-}
-.task-card.is-blocked {
-  opacity: 0.6;
-}
-.task-card.is-blocked:hover {
-  opacity: 0.85;
-  border-color: var(--border);
-  transform: none;
-}
-</style>
