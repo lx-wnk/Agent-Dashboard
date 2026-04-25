@@ -2,9 +2,9 @@
 import type { Agent } from '../types'
 import { computed } from 'vue'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
-import AppBadge from './ui/AppBadge.vue'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
+import AppBadge from './ui/AppBadge.vue'
 
 const props = defineProps<{ agent: Agent }>()
 defineEmits<{ select: [agent: Agent] }>()
@@ -34,7 +34,9 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
       </div>
     </div>
     <div class="relative px-3 py-3 h-[150px] overflow-hidden text-[13px] leading-relaxed text-slate-500 dark:text-slate-400 font-mono">
-      <template v-if="agent.lastOutput">{{ agent.lastOutput }}</template>
+      <template v-if="agent.lastOutput">
+        {{ agent.lastOutput }}
+      </template>
       <span v-else class="text-slate-400 dark:text-slate-600 italic">No output yet</span>
       <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-slate-900 to-transparent pointer-events-none" />
     </div>
@@ -45,7 +47,9 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
       <div v-if="agent.lastBtw.response" class="text-slate-500 dark:text-slate-400 border-l-2 border-yellow-400/60 pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
         {{ agent.lastBtw.response }}
       </div>
-      <div v-else class="text-slate-400 dark:text-slate-600 pl-2.5" style="animation: pulse 2s ease-in-out infinite;">...</div>
+      <div v-else class="text-slate-400 dark:text-slate-600 pl-2.5" style="animation: pulse 2s ease-in-out infinite;">
+        ...
+      </div>
     </div>
     <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" @click.stop @keydown.enter.stop @keydown.space.stop />
   </div>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
-import AppBadge from './ui/AppBadge.vue'
 import MachineBadge from './MachineBadge.vue'
+import AppBadge from './ui/AppBadge.vue'
 
 defineProps<{ agent: Agent, expanded: boolean }>()
 defineEmits<{ select: [agent: Agent], toggleSubagents: [] }>()

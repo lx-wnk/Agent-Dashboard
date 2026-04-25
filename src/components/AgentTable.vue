@@ -90,7 +90,7 @@ function toggleSubagents(pid: number) {
       <thead>
         <tr>
           <th
-            v-for="[field, label] in ([['status','Status'],['projectName','Project'],['currentAction','Current Action'],['model','Model'],['tokens','Tokens'],['costEstimate','Cost'],['uptime','Uptime'],['pid','PID']] as const)"
+            v-for="[field, label] in ([['status', 'Status'], ['projectName', 'Project'], ['currentAction', 'Current Action'], ['model', 'Model'], ['tokens', 'Tokens'], ['costEstimate', 'Cost'], ['uptime', 'Uptime'], ['pid', 'PID']] as const)"
             :key="field"
             class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 sticky top-0 z-[1] cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400 transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
             tabindex="0"
