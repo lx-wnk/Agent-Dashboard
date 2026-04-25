@@ -75,132 +75,149 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
 </script>
 
 <template>
-  <div class="app">
-    <header class="app-header">
-      <h1>Claude Agent Overview</h1>
-      <span v-if="viewMode !== 'pipeline'" class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
-      <span v-else class="agent-count">{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
-      <span v-if="totalCost > 0" class="header-stat">${{ totalCost.toFixed(2) }}</span>
-      <span v-if="totalTokens > 0" class="header-stat">{{ formatTokens(totalTokens) }} tokens</span>
+  <div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+    <header class="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+      <h1 class="text-[18px] font-semibold text-slate-900 dark:text-slate-100">
+        Claude Agent Overview
+      </h1>
+      <span class="text-xs text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+        <template v-if="viewMode !== 'pipeline'">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</template>
+        <template v-else>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</template>
+      </span>
+      <span v-if="totalCost > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">${{ totalCost.toFixed(2) }}</span>
+      <span v-if="totalTokens > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">{{ formatTokens(totalTokens) }} tokens</span>
       <input
         v-model="searchQuery"
-        class="header-search"
         type="text"
         :placeholder="viewMode === 'pipeline' ? 'Search tasks...' : 'Search agents...'"
+        class="ml-auto bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-1.5 text-[13px] text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 w-[200px] focus:outline-none focus:border-blue-500 focus:w-[260px] transition-[width] duration-200"
       >
-      <div class="view-toggle">
+      <div class="flex bg-slate-100 dark:bg-slate-800 rounded-md overflow-hidden">
         <button
-          class="toggle-btn"
-          :class="{ active: viewMode !== 'pipeline' }"
+          type="button"
+          class="px-3 py-1.5 text-[13px] font-sans border-none cursor-pointer transition-all"
+          :class="viewMode !== 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300'"
           title="Agent monitoring dashboard"
           @click="viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
         >
           Dashboard
         </button>
         <button
-          class="toggle-btn"
-          :class="{ active: viewMode === 'pipeline' }"
+          type="button"
+          class="px-3 py-1.5 text-[13px] font-sans border-none cursor-pointer transition-all"
+          :class="viewMode === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300'"
           title="Task pipeline kanban"
           @click="viewMode = 'pipeline'"
         >
           Kanban
         </button>
       </div>
-      <button class="sessions-btn" @click="showSessions = true">
+      <button
+        type="button"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        @click="showSessions = true"
+      >
         Sessions
       </button>
       <button
         v-if="viewMode === 'pipeline'"
-        class="spawn-btn"
+        type="button"
+        class="bg-green-600 text-white border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
         @click="showBacklog = true"
       >
         + New Task
       </button>
-      <button v-else class="spawn-btn" @click="showSpawnDialog = true">
+      <button
+        v-else
+        type="button"
+        class="bg-green-600 text-white border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
+        @click="showSpawnDialog = true"
+      >
         + New Agent
       </button>
-      <button class="settings-icon-btn" title="Settings" @click="showSettings = true; selectAgent(null); selectTask(null); showSessions = false; showSpawnDialog = false">
+      <button
+        type="button"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-none rounded-md px-2.5 py-1.5 text-base cursor-pointer leading-none hover:text-slate-700 dark:hover:text-slate-300 hover:brightness-110"
+        title="Settings"
+        @click="showSettings = true; selectAgent(null); selectTask(null); showSessions = false; showSpawnDialog = false"
+      >
         ⚙
       </button>
     </header>
+
     <ResourceBar />
     <CostTrend :trend="costTrend" />
-    <div v-if="scriptPath" class="script-banner">
-      <span class="script-label">Channel script:</span>
-      <code class="script-path" tabindex="0" role="button" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript" @keydown.enter="copyScript" @keydown.space.prevent="copyScript">{{ scriptPath }}</code>
-      <span v-if="copied" class="copied-hint">Copied!</span>
+
+    <div v-if="scriptPath" class="flex items-center gap-2 px-6 py-1.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-xs">
+      <span class="text-slate-400 dark:text-slate-600 whitespace-nowrap">Channel script:</span>
+      <code
+        class="font-mono text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded cursor-pointer select-all transition-colors hover:text-green-600 dark:hover:text-green-400 focus-visible:outline-2 focus-visible:outline-blue-500"
+        tabindex="0"
+        role="button"
+        :title="copied ? 'Copied!' : 'Click to copy'"
+        @click="copyScript"
+        @keydown.enter="copyScript"
+        @keydown.space.prevent="copyScript"
+      >{{ scriptPath }}</code>
+      <span v-if="copied" class="text-green-600 dark:text-green-400 text-[11px]">Copied!</span>
     </div>
-    <div class="sub-toolbar" :class="{ 'sub-toolbar--hidden': showSettings || viewMode === 'pipeline' }">
+
+    <div
+      class="flex items-center gap-1 px-6 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+      :class="{ 'invisible pointer-events-none': showSettings || viewMode === 'pipeline' }"
+    >
       <button
-        class="sub-toggle-btn"
-        :class="{ active: viewMode === 'cards' }"
+        type="button"
+        class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
+        :class="viewMode === 'cards' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400'"
         title="Card view"
         @click="viewMode = 'cards'"
       >
         ⊞ Cards
       </button>
       <button
-        class="sub-toggle-btn"
-        :class="{ active: viewMode === 'list' }"
+        type="button"
+        class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
+        :class="viewMode === 'list' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400'"
         title="List view"
         @click="viewMode = 'list'"
       >
         ≡ List
       </button>
     </div>
-    <main>
-      <p v-if="isLoading" class="loading">
+
+    <main class="p-6">
+      <p v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600">
         Loading agents...
       </p>
-      <p v-else-if="error" class="error">
+      <p v-else-if="error" class="text-center py-12 text-red-600 dark:text-red-400">
         Error: {{ error }}
       </p>
-      <AgentTable
-        v-else-if="viewMode === 'list'"
-        :agents="filteredAgents"
-        @select="selectAgent"
-      />
-      <PipelineBoard
-        v-else-if="viewMode === 'pipeline'"
-        @select="selectTask"
-      />
-      <AgentCardGrid
-        v-else
-        :agents="filteredAgents"
-        @select="selectAgent"
-      />
+      <AgentTable v-else-if="viewMode === 'list'" :agents="filteredAgents" @select="selectAgent" />
+      <PipelineBoard v-else-if="viewMode === 'pipeline'" @select="selectTask" />
+      <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
     </main>
-    <AgentModal
-      :agent="selectedAgent"
-      @close="selectAgent(null)"
-      @navigate="(taskId: string) => navigateTo({ taskId })"
-    />
-    <TaskModal
-      :task="selectedTask"
-      @close="selectTask(null)"
-      @navigate="(agent: Agent) => navigateTo({ agent })"
-    />
+
+    <AgentModal :agent="selectedAgent" @close="selectAgent(null)" @navigate="(taskId: string) => navigateTo({ taskId })" />
+    <TaskModal :task="selectedTask" @close="selectTask(null)" @navigate="(agent: Agent) => navigateTo({ agent })" />
+
     <Transition name="toast">
-      <div v-if="toastMessage" class="toast-notification">
+      <div
+        v-if="toastMessage"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)] pointer-events-none"
+      >
         {{ toastMessage }}
       </div>
     </Transition>
-    <SpawnDialog
-      :open="showSpawnDialog"
-      @close="showSpawnDialog = false"
-    />
-    <BacklogForm
-      :open="showBacklog"
-      @close="showBacklog = false"
-    />
-    <SessionList
-      :open="showSessions"
-      :home-dir="homeDir"
-      @close="showSessions = false"
-    />
-    <ApiKeySettings
-      :open="showSettings"
-      @close="showSettings = false"
-    />
+
+    <SpawnDialog :open="showSpawnDialog" @close="showSpawnDialog = false" />
+    <BacklogForm :open="showBacklog" @close="showBacklog = false" />
+    <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
+    <ApiKeySettings :open="showSettings" @close="showSettings = false" />
   </div>
 </template>
+
+<style>
+.toast-enter-active, .toast-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(8px); }
+</style>
