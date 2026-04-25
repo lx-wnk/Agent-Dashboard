@@ -52,10 +52,10 @@ const tokenDelta = computed(() => {
       <div
         v-for="(point, i) in sparkData"
         :key="i"
-        class="flex-1 min-w-0.5 bg-green-600 dark:bg-green-400 rounded-t-px opacity-70 hover:opacity-100 transition-opacity"
+        class="flex-1 min-w-0.5 bg-green-600 dark:bg-green-400 rounded-t-px transition-opacity"
         :style="{ height: `${Math.max(2, (point.cost / maxCost) * 100)}%` }"
         :title="`$${point.cost.toFixed(2)}`"
-        :class="{ 'opacity-100': i === sparkData.length - 1 }"
+        :class="i === sparkData.length - 1 ? 'opacity-100' : 'opacity-70 hover:opacity-100'"
       />
     </div>
   </div>
