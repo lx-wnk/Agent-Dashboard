@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { createTask } from '../composables/useTasks'
-import BaseModal from './BaseModal.vue'
+import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -97,22 +97,24 @@ async function handleCreate() {
 </script>
 
 <template>
-  <BaseModal :open="open" @close="emit('close')">
-    <div class="backlog-modal">
-      <header class="modal-header">
-        <h2>New Task</h2>
-        <button class="close-btn" @click="emit('close')">
+  <AppModal :open="open" @close="emit('close')">
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-xl">
+      <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          New Task
+        </h2>
+        <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="emit('close')">
           &times;
         </button>
       </header>
 
-      <form class="modal-body" @submit.prevent="handleCreate">
-        <div class="field">
-          <label for="task-title" class="field-label">Title</label>
+      <form class="p-5" @submit.prevent="handleCreate">
+        <div class="mb-4 flex flex-col gap-1.5">
+          <label for="task-title" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Title</label>
           <input
             id="task-title"
             v-model="title"
-            class="field-input"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
             type="text"
             required
             placeholder="Fix login bug in auth middleware"
@@ -120,65 +122,65 @@ async function handleCreate() {
           >
         </div>
 
-        <div class="field">
-          <label for="task-slug" class="field-label">Slug (url-safe id)</label>
+        <div class="mb-4 flex flex-col gap-1.5">
+          <label for="task-slug" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Slug (url-safe id)</label>
           <input
             id="task-slug"
             v-model="slug"
-            class="field-input"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
             type="text"
             pattern="[a-z0-9][a-z0-9-]{0,63}"
             placeholder="auto-generated from title"
           >
         </div>
 
-        <div class="field">
-          <label for="task-desc" class="field-label">Description</label>
+        <div class="mb-4 flex flex-col gap-1.5">
+          <label for="task-desc" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Description</label>
           <textarea
             id="task-desc"
             v-model="description"
-            class="field-input"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug resize-y focus:outline-none focus:border-blue-500"
             rows="3"
             placeholder="What should the agent do? Include screenshots or references as needed."
           />
         </div>
 
-        <div class="field">
-          <label for="task-cwd" class="field-label">Working Directory</label>
+        <div class="mb-4 flex flex-col gap-1.5">
+          <label for="task-cwd" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Working Directory</label>
           <input
             id="task-cwd"
             v-model="cwd"
-            class="field-input"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
             type="text"
             required
             placeholder="/path/to/project"
           >
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label for="task-src" class="field-label">Source Branch</label>
+        <div class="flex gap-3 mb-4">
+          <div class="flex-1 flex flex-col gap-1.5">
+            <label for="task-src" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Source Branch</label>
             <input
               id="task-src"
               v-model="sourceBranch"
-              class="field-input"
+              class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
               type="text"
               placeholder="main"
             >
           </div>
-          <div class="field">
-            <label for="task-tgt" class="field-label">Target Branch</label>
+          <div class="flex-1 flex flex-col gap-1.5">
+            <label for="task-tgt" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Target Branch</label>
             <input
               id="task-tgt"
               v-model="targetBranch"
-              class="field-input"
+              class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
               type="text"
               placeholder="feat/my-branch"
             >
           </div>
         </div>
 
-        <div class="field-checkbox">
+        <div class="flex items-center gap-2 mb-4">
           <input
             id="task-worktree"
             v-model="useWorktree"
@@ -187,13 +189,13 @@ async function handleCreate() {
           <label for="task-worktree">Use isolated git worktree (recommended)</label>
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label for="task-priority" class="field-label">Priority</label>
+        <div class="flex gap-3 mb-4">
+          <div class="flex-1 flex flex-col gap-1.5">
+            <label for="task-priority" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Priority</label>
             <select
               id="task-priority"
               v-model="priority"
-              class="field-input"
+              class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
             >
               <option value="high">
                 High
@@ -206,7 +208,7 @@ async function handleCreate() {
               </option>
             </select>
           </div>
-          <div class="field-checkbox silver-bullet">
+          <div class="flex-1 flex items-center gap-2 self-center mt-4">
             <input
               id="task-silver"
               v-model="silverBullet"
@@ -216,24 +218,24 @@ async function handleCreate() {
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label for="task-iter" class="field-label">Max Iterations</label>
+        <div class="flex gap-3 mb-4">
+          <div class="flex-1 flex flex-col gap-1.5">
+            <label for="task-iter" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Max Iterations</label>
             <input
               id="task-iter"
               v-model.number="maxIterations"
-              class="field-input"
+              class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
               type="number"
               min="1"
               max="50"
             >
           </div>
-          <div class="field">
-            <label for="task-tokens" class="field-label">Token Budget (optional)</label>
+          <div class="flex-1 flex flex-col gap-1.5">
+            <label for="task-tokens" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Token Budget (optional)</label>
             <input
               id="task-tokens"
               v-model.number="tokenBudget"
-              class="field-input"
+              class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
               type="number"
               min="0"
               placeholder="∞"
@@ -241,18 +243,18 @@ async function handleCreate() {
           </div>
         </div>
 
-        <p v-if="errorMsg" class="error-msg">
+        <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mt-1 leading-snug">
           {{ errorMsg }}
         </p>
       </form>
 
-      <footer class="modal-footer">
-        <button type="button" class="btn btn-secondary" @click="emit('close')">
+      <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+        <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer whitespace-nowrap font-sans bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110" @click="emit('close')">
           Cancel
         </button>
         <button
           type="button"
-          class="btn btn-primary"
+          class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer whitespace-nowrap font-sans bg-green-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
           :disabled="isCreating || !title.trim() || !cwd.trim()"
           @click="handleCreate"
         >
@@ -260,82 +262,5 @@ async function handleCreate() {
         </button>
       </footer>
     </div>
-  </BaseModal>
+  </AppModal>
 </template>
-
-<style scoped>
-.backlog-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  width: 100%;
-  max-width: 560px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-}
-.modal-header h2 { font-size: 18px; font-weight: 600; color: var(--text-primary); }
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 24px;
-  cursor: pointer;
-  line-height: 1;
-}
-.close-btn:hover { color: var(--text-primary); }
-.modal-body { padding: 20px; }
-.field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
-.field-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-}
-.field-input {
-  width: 100%;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: inherit;
-  padding: 8px 10px;
-  resize: vertical;
-}
-.field-input:focus { outline: none; border-color: var(--accent-blue); }
-.field-row { display: flex; gap: 12px; }
-.field-checkbox { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-.field-checkbox label { font-size: 13px; color: var(--text-secondary); cursor: pointer; }
-.field-checkbox input[type="checkbox"] { accent-color: var(--accent-blue); cursor: pointer; }
-.silver-bullet { flex: 1; align-self: center; margin-bottom: 0; }
-.error-msg { color: var(--accent-red); font-size: 12px; line-height: 1.4; }
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
-}
-.btn {
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-.btn-secondary { background: var(--bg-tertiary); color: var(--text-secondary); }
-.btn-secondary:hover { filter: brightness(1.15); }
-.btn-primary { background: var(--accent-blue); color: white; }
-.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
-.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-</style>
