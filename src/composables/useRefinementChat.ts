@@ -1,10 +1,16 @@
 import type { PipelineTask } from '../types'
-import { ref } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
+
+export interface ImageAttachment {
+  dataUrl: string
+  mimeType: string
+}
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   phase?: string | null
+  images?: ImageAttachment[]
 }
 
 const PHASE_LABELS: Record<string, string> = {
@@ -20,32 +26,89 @@ export function useRefinementChat(taskId: () => string | null) {
   const isStreaming = ref(false)
   const error = ref<string | null>(null)
   const approvalReady = ref(false)
+  const pollingTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+
+  function stopPolling() {
+    if (pollingTimer.value !== null) {
+      clearTimeout(pollingTimer.value)
+      pollingTimer.value = null
+    }
+  }
+
+  interface TurnsResponse {
+    turns: Array<{ role: string, content: string, phase: string | null }>
+    isProcessing: boolean
+  }
+
+  function applyTurnsToMessages(turns: TurnsResponse['turns']) {
+    messages.value = turns.map(t => ({
+      role: t.role as 'user' | 'assistant',
+      content: t.content,
+      phase: t.phase,
+    }))
+    for (const t of turns) {
+      if (t.phase) completedPhases.value.add(t.phase)
+    }
+    if (completedPhases.value.has('approval')) approvalReady.value = true
+  }
+
+  function startPolling(id: string) {
+    if (pollingTimer.value !== null) return
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/refine/${id}/turns`)
+        if (!res.ok) {
+          pollingTimer.value = setTimeout(poll, 3000)
+          return
+        }
+        const data = await res.json() as TurnsResponse
+        if (data.isProcessing) {
+          pollingTimer.value = setTimeout(poll, 3000)
+          return
+        }
+        // Done — replace messages with completed turns and stop polling
+        isStreaming.value = false
+        applyTurnsToMessages(data.turns)
+        stopPolling()
+      }
+      catch {
+        pollingTimer.value = setTimeout(poll, 3000)
+      }
+    }
+
+    pollingTimer.value = setTimeout(poll, 3000)
+  }
 
   async function loadHistory() {
     const id = taskId()
     if (!id) return
+    // If an SSE stream is active in this tab, don't overwrite live state
+    if (isStreaming.value) return
     try {
       const res = await fetch(`/api/refine/${id}/turns`)
       if (!res.ok) {
         error.value = 'Failed to load history'
         return
       }
-      const turns = await res.json() as Array<{ role: string, content: string, phase: string | null }>
-      messages.value = turns.map(t => ({ role: t.role as 'user' | 'assistant', content: t.content, phase: t.phase }))
-      for (const t of turns) {
-        if (t.phase) completedPhases.value.add(t.phase)
+      const data = await res.json() as TurnsResponse
+      applyTurnsToMessages(data.turns)
+
+      if (data.isProcessing && !isStreaming.value) {
+        isStreaming.value = true
+        messages.value.push({ role: 'assistant', content: '' })
+        startPolling(id)
       }
-      if (completedPhases.value.has('approval')) approvalReady.value = true
     }
     catch {
       error.value = 'Failed to load history'
     }
   }
 
-  async function sendMessage(message: string) {
+  async function sendMessage(message: string, images?: ImageAttachment[]) {
     const id = taskId()
     if (!id || isStreaming.value) return
-    messages.value.push({ role: 'user', content: message })
+    messages.value.push({ role: 'user', content: message, images })
     isStreaming.value = true
     error.value = null
 
@@ -56,7 +119,7 @@ export function useRefinementChat(taskId: () => string | null) {
       const res = await fetch(`/api/refine/${id}/turn`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(images?.length ? { images } : {}) }),
       })
 
       if (!res.ok || !res.body) {
@@ -129,6 +192,15 @@ export function useRefinementChat(taskId: () => string | null) {
   function phaseLabel(phase: string) {
     return PHASE_LABELS[phase] ?? phase
   }
+
+  watch(taskId, () => {
+    stopPolling()
+    isStreaming.value = false
+  })
+
+  onUnmounted(() => {
+    stopPolling()
+  })
 
   return {
     messages,
