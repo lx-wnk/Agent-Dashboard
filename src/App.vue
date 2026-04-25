@@ -18,7 +18,6 @@ import { useTheme } from './composables/useTheme'
 import { formatTokens, totalTokenCount } from './utils/format'
 
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
-const { theme, toggleTheme } = useTheme()
 const { tasks, selectedTask, selectTask } = useTasks()
 const showSpawnDialog = ref(false)
 const showBacklog = ref(false)
@@ -80,12 +79,11 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
   <div class="app">
     <header class="app-header">
       <h1>Claude Agent Overview</h1>
-      <span v-if="!showSettings && viewMode !== 'pipeline'" class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
-      <span v-else-if="!showSettings" class="agent-count">{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
+      <span v-if="viewMode !== 'pipeline'" class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
+      <span v-else class="agent-count">{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span v-if="totalCost > 0" class="header-stat">${{ totalCost.toFixed(2) }}</span>
       <span v-if="totalTokens > 0" class="header-stat">{{ formatTokens(totalTokens) }} tokens</span>
       <input
-        v-if="!showSettings"
         v-model="searchQuery"
         class="header-search"
         type="text"
@@ -94,39 +92,21 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <div class="view-toggle">
         <button
           class="toggle-btn"
-          :class="{ active: !showSettings && viewMode !== 'pipeline' }"
+          :class="{ active: viewMode !== 'pipeline' }"
           title="Agent monitoring dashboard"
-          @click="showSettings = false; viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
+          @click="viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
         >
           Dashboard
         </button>
         <button
           class="toggle-btn"
-          :class="{ active: !showSettings && viewMode === 'pipeline' }"
+          :class="{ active: viewMode === 'pipeline' }"
           title="Task pipeline kanban"
-          @click="showSettings = false; viewMode = 'pipeline'"
+          @click="viewMode = 'pipeline'"
         >
           Kanban
         </button>
-        <button
-          class="toggle-btn"
-          :class="{ active: showSettings }"
-          title="Settings"
-          @click="showSettings = true"
-        >
-          Settings
-        </button>
       </div>
-      <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
-        {{ theme === 'dark' ? '☀' : '☾' }}
-      </button>
-      <a
-        class="issue-btn"
-        href="https://github.com/lx-wnk/Agent-Dashboard/issues/new/choose"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Report a bug or request a feature"
-      >Issue</a>
       <button class="sessions-btn" @click="showSessions = true">
         Sessions
       </button>
@@ -140,6 +120,9 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <button v-else class="spawn-btn" @click="showSpawnDialog = true">
         + New Agent
       </button>
+      <button class="settings-icon-btn" title="Settings" @click="showSettings = true; selectAgent(null); selectTask(null); showSessions = false; showSpawnDialog = false">
+        ⚙
+      </button>
     </header>
     <ResourceBar />
     <CostTrend :trend="costTrend" />
@@ -148,7 +131,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <code class="script-path" tabindex="0" role="button" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript" @keydown.enter="copyScript" @keydown.space.prevent="copyScript">{{ scriptPath }}</code>
       <span v-if="copied" class="copied-hint">Copied!</span>
     </div>
-    <div v-if="!showSettings && viewMode !== 'pipeline'" class="sub-toolbar">
+    <div class="sub-toolbar" :class="{ 'sub-toolbar--hidden': showSettings || viewMode === 'pipeline' }">
       <button
         class="sub-toggle-btn"
         :class="{ active: viewMode === 'cards' }"
@@ -167,29 +150,26 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       </button>
     </div>
     <main>
-      <ApiKeySettings v-if="showSettings" />
-      <template v-else>
-        <p v-if="isLoading" class="loading">
-          Loading agents...
-        </p>
-        <p v-else-if="error" class="error">
-          Error: {{ error }}
-        </p>
-        <AgentTable
-          v-else-if="viewMode === 'list'"
-          :agents="filteredAgents"
-          @select="selectAgent"
-        />
-        <PipelineBoard
-          v-else-if="viewMode === 'pipeline'"
-          @select="selectTask"
-        />
-        <AgentCardGrid
-          v-else
-          :agents="filteredAgents"
-          @select="selectAgent"
-        />
-      </template>
+      <p v-if="isLoading" class="loading">
+        Loading agents...
+      </p>
+      <p v-else-if="error" class="error">
+        Error: {{ error }}
+      </p>
+      <AgentTable
+        v-else-if="viewMode === 'list'"
+        :agents="filteredAgents"
+        @select="selectAgent"
+      />
+      <PipelineBoard
+        v-else-if="viewMode === 'pipeline'"
+        @select="selectTask"
+      />
+      <AgentCardGrid
+        v-else
+        :agents="filteredAgents"
+        @select="selectAgent"
+      />
     </main>
     <AgentModal
       :agent="selectedAgent"
@@ -218,6 +198,10 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       :open="showSessions"
       :home-dir="homeDir"
       @close="showSessions = false"
+    />
+    <ApiKeySettings
+      :open="showSettings"
+      @close="showSettings = false"
     />
   </div>
 </template>
@@ -313,30 +297,6 @@ body {
   filter: brightness(1.2);
 }
 
-.issue-btn {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: none;
-  border-radius: 6px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  text-decoration: none;
-}
-
-.issue-btn:hover {
-  color: var(--text-primary);
-  filter: brightness(1.15);
-}
-
-.issue-btn:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 2px;
-}
-
 .sessions-btn {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
@@ -351,6 +311,22 @@ body {
 }
 
 .sessions-btn:hover {
+  color: var(--text-primary);
+  filter: brightness(1.15);
+}
+
+.settings-icon-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.15s, filter 0.15s;
+}
+.settings-icon-btn:hover {
   color: var(--text-primary);
   filter: brightness(1.15);
 }
@@ -435,6 +411,10 @@ body {
   border-radius: 4px;
   font-family: inherit;
   transition: background 0.15s, color 0.15s;
+}
+.sub-toolbar--hidden {
+  visibility: hidden;
+  pointer-events: none;
 }
 .sub-toggle-btn.active {
   background: var(--bg-tertiary);
