@@ -250,14 +250,56 @@ function formatDate(iso: string | null) {
                 : 'border-slate-200 dark:border-slate-700 hover:border-blue-400'"
               @click="setTheme(opt.value)"
             >
-              <div class="theme-preview h-[100px] flex flex-col" :data-preview="opt.value">
-                <div class="preview-topbar h-3.5 mx-2 mt-2 mb-1.5 rounded-sm" />
-                <div class="preview-body flex flex-1 gap-1.5 px-2 pb-2">
-                  <div class="preview-sidebar w-7 rounded-sm" />
-                  <div class="preview-main flex-1 flex flex-col gap-1 justify-center">
-                    <div class="preview-row h-1.5 rounded-sm" />
-                    <div class="preview-row short h-1.5 w-3/5 rounded-sm" />
-                    <div class="preview-row h-1.5 rounded-sm" />
+              <div
+                class="h-[100px] flex flex-col"
+                :class="{
+                  'bg-[#f0f4f8]': opt.value === 'light',
+                  'bg-[#1a2235]': opt.value === 'dark',
+                  'bg-[linear-gradient(135deg,#f0f4f8_50%,#1a2235_50%)]': opt.value === 'system',
+                }"
+              >
+                <div
+                  class="h-3.5 mx-2 mt-2 mb-1.5 rounded-sm"
+                  :class="{
+                    'bg-[#cbd5e1]': opt.value === 'light',
+                    'bg-[#2d3f5a]': opt.value === 'dark',
+                    'bg-[color-mix(in_srgb,#cbd5e1_50%,#2d3f5a)]': opt.value === 'system',
+                  }"
+                />
+                <div class="flex flex-1 gap-1.5 px-2 pb-2">
+                  <div
+                    class="w-7 rounded-sm"
+                    :class="{
+                      'bg-[#cbd5e1]': opt.value === 'light',
+                      'bg-[#243248]': opt.value === 'dark',
+                      'bg-[color-mix(in_srgb,#cbd5e1_50%,#243248)]': opt.value === 'system',
+                    }"
+                  />
+                  <div class="flex-1 flex flex-col gap-1 justify-center">
+                    <div
+                      class="h-1.5 rounded-sm"
+                      :class="{
+                        'bg-[#cbd5e1]': opt.value === 'light',
+                        'bg-[#2d3f5a]': opt.value === 'dark',
+                        'bg-[color-mix(in_srgb,#cbd5e1_50%,#2d3f5a)]': opt.value === 'system',
+                      }"
+                    />
+                    <div
+                      class="h-1.5 w-3/5 rounded-sm"
+                      :class="{
+                        'bg-[#cbd5e1]': opt.value === 'light',
+                        'bg-[#2d3f5a]': opt.value === 'dark',
+                        'bg-[color-mix(in_srgb,#cbd5e1_50%,#2d3f5a)]': opt.value === 'system',
+                      }"
+                    />
+                    <div
+                      class="h-1.5 rounded-sm"
+                      :class="{
+                        'bg-[#cbd5e1]': opt.value === 'light',
+                        'bg-[#2d3f5a]': opt.value === 'dark',
+                        'bg-[color-mix(in_srgb,#cbd5e1_50%,#2d3f5a)]': opt.value === 'system',
+                      }"
+                    />
                   </div>
                 </div>
               </div>
@@ -454,22 +496,3 @@ function formatDate(iso: string | null) {
     </Transition>
   </AppModal>
 </template>
-
-<style scoped>
-/* mini UI previews — keeping scoped CSS since these need complex data-attr selectors */
-.theme-preview[data-preview="light"] { background: #f0f4f8; }
-.theme-preview[data-preview="dark"]  { background: #1a2235; }
-.theme-preview[data-preview="system"] { background: linear-gradient(135deg, #f0f4f8 50%, #1a2235 50%); }
-
-.theme-preview[data-preview="light"] .preview-topbar { background: #cbd5e1; }
-.theme-preview[data-preview="dark"]  .preview-topbar { background: #2d3f5a; }
-.theme-preview[data-preview="system"] .preview-topbar { background: color-mix(in srgb, #cbd5e1 50%, #2d3f5a); }
-
-.theme-preview[data-preview="light"]  .preview-sidebar { background: #cbd5e1; }
-.theme-preview[data-preview="dark"]   .preview-sidebar { background: #243248; }
-.theme-preview[data-preview="system"] .preview-sidebar { background: color-mix(in srgb, #cbd5e1 50%, #243248); }
-
-.theme-preview[data-preview="light"]  .preview-row { background: #cbd5e1; }
-.theme-preview[data-preview="dark"]   .preview-row { background: #2d3f5a; }
-.theme-preview[data-preview="system"] .preview-row { background: color-mix(in srgb, #cbd5e1 50%, #2d3f5a); }
-</style>

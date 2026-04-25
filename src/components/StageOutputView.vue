@@ -149,7 +149,7 @@ function shortPath(full: string): string {
 
     <!-- Pruefung -->
     <template v-else-if="pretty?.kind === 'pruefung'">
-      <dl class="grid gap-1 text-xs mb-1" style="grid-template-columns: auto 1fr; gap: 4px 12px">
+      <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs mb-1">
         <div class="contents">
           <dt class="text-slate-400 dark:text-slate-600 uppercase text-[10px]">
             Well-defined
@@ -229,7 +229,7 @@ function shortPath(full: string): string {
 
     <!-- Selbstreview -->
     <template v-else-if="pretty?.kind === 'selbstreview'">
-      <dl class="grid gap-1 text-xs mb-1" style="grid-template-columns: auto 1fr; gap: 4px 12px">
+      <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs mb-1">
         <div class="contents">
           <dt class="text-slate-400 dark:text-slate-600 uppercase text-[10px]">
             Passed

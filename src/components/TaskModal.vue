@@ -324,6 +324,24 @@ function formatDate(iso: string | null): string {
     return '—'
   return new Date(iso).toLocaleString()
 }
+
+function stageRunStatusClass(status: string): string {
+  switch (status) {
+    case 'running': return 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
+    case 'done': return 'bg-green-400/20 text-green-400'
+    case 'failed': return 'bg-red-400/20 text-red-400'
+    case 'on_hold': return 'bg-yellow-500/20 text-yellow-500'
+    default: return 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  }
+}
+
+function sessionStatusClass(status: string): string {
+  switch (status) {
+    case 'active': return 'bg-green-400/20 text-green-400'
+    case 'waiting': return 'bg-yellow-500/20 text-yellow-500'
+    default: return 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
+  }
+}
 </script>
 
 <template>
@@ -331,7 +349,15 @@ function formatDate(iso: string | null): string {
     <div v-if="task" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-[860px] max-h-[90vh] flex flex-col overflow-hidden">
       <header class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
         <div class="flex items-center gap-2.5 flex-wrap">
-          <span class="stage-badge" :class="`stage-${task.currentStage}`">{{ task.currentStage }}</span>
+          <span
+            class="text-[10px] uppercase font-mono px-2 py-[3px] rounded"
+            :class="{
+              'bg-yellow-500/20 text-yellow-500': task.currentStage === 'on_hold',
+              'bg-green-400/20 text-green-400': task.currentStage === 'done',
+              'bg-red-400/20 text-red-400': task.currentStage === 'cancelled',
+              'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400': !['on_hold', 'done', 'cancelled'].includes(task.currentStage ?? ''),
+            }"
+          >{{ task.currentStage }}</span>
           <span v-if="isFailedRun(task)" class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400" title="Latest stage run failed">
             RUN FAILED
           </span>
@@ -361,7 +387,16 @@ function formatDate(iso: string | null): string {
           @click="activeTab = 'session'"
         >
           Session
-          <span v-if="pipelineAgent" class="tab-dot" :class="pipelineAgent.status" />
+          <span
+            v-if="pipelineAgent"
+            class="inline-block w-1.5 h-1.5 rounded-full ml-[5px] align-middle"
+            :class="{
+              'bg-green-400': pipelineAgent.status === 'active',
+              'bg-yellow-500': pipelineAgent.status === 'waiting',
+              'bg-slate-400 dark:bg-slate-500': pipelineAgent.status !== 'active' && pipelineAgent.status !== 'waiting',
+            }"
+            :style="pipelineAgent.status === 'active' ? 'animation: pulse 2s ease-in-out infinite' : ''"
+          />
         </button>
         <button
           type="button"
@@ -393,12 +428,12 @@ function formatDate(iso: string | null): string {
         <!-- Overview tab -->
         <section v-if="activeTab === 'overview'" class="flex-1 overflow-y-auto p-5 flex flex-col gap-4 min-h-0">
           <!-- Latest stage run summary (non-approval states) -->
-          <div v-if="!approvalMeta && latestStageRun" class="latest-run-card">
-            <div class="latest-run-head">
-              <span class="stage-label-pill">{{ latestStageRun.stage }}</span>
-              <span class="iteration-pill">iter {{ latestStageRun.iteration }}</span>
-              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="`status-${latestStageRun.status}`">{{ latestStageRun.status }}</span>
-              <span class="latest-run-times">
+          <div v-if="!approvalMeta && latestStageRun" class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3.5 py-3 mb-4">
+            <div class="flex items-center gap-2 flex-wrap mb-2">
+              <span class="font-mono text-[10px] uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded font-semibold">{{ latestStageRun.stage }}</span>
+              <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">iter {{ latestStageRun.iteration }}</span>
+              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="stageRunStatusClass(latestStageRun.status)">{{ latestStageRun.status }}</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-600 ml-auto">
                 {{ formatDate(latestStageRun.startedAt) }}
                 <template v-if="latestStageRun.endedAt"> → {{ formatDate(latestStageRun.endedAt) }}</template>
               </span>
@@ -407,54 +442,60 @@ function formatDate(iso: string | null): string {
               v-if="latestStageRun.status === 'running' && pipelineAgent"
               :agent="pipelineAgent"
               :local-messages="[]"
-              class="overview-live-stream"
+              class="border-t border-slate-200 dark:border-slate-700 mt-2 pt-3 min-h-[200px] max-h-[40vh] px-0 py-3"
             />
-            <div v-else-if="latestRunAgentMessage" class="agent-message-block">
-              <div class="agent-message-label">
+            <div v-else-if="latestRunAgentMessage" class="mt-1.5">
+              <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
                 Agent output
               </div>
-              <pre class="agent-message-body">{{ latestRunAgentMessage }}</pre>
+              <pre class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ latestRunAgentMessage }}</pre>
             </div>
-            <details v-else-if="latestStageRun.output" class="latest-run-output">
-              <summary>Stage output</summary>
+            <details v-else-if="latestStageRun.output">
+              <summary class="cursor-pointer text-[11px] text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
+                Stage output
+              </summary>
               <StageOutputView :stage="latestStageRun.stage" :output="latestStageRun.output" />
             </details>
           </div>
 
-          <div v-if="approvalMeta" class="approval-preview">
-            <h3>{{ approvalMeta.sectionTitle }}</h3>
+          <div v-if="approvalMeta" class="bg-green-400/[.08] border border-green-400/35 rounded-md px-3.5 py-3 mb-4">
+            <h3 class="text-[11px] uppercase text-green-400 tracking-[0.5px] mb-2">
+              {{ approvalMeta.sectionTitle }}
+            </h3>
             <StageOutputView
               v-if="approvalContent"
               :stage="approvalMeta.reviewStage"
               :output="approvalContent"
             />
-            <div v-else class="empty-hint">
+            <div v-else class="text-slate-400 dark:text-slate-600 text-xs text-center py-8">
               No output from stage <code>{{ approvalMeta.reviewStage }}</code> found.
             </div>
 
-            <div v-if="feedbackHistory.length > 0" class="feedback-thread">
-              <h4>Feedback History</h4>
+            <div v-if="feedbackHistory.length > 0" class="mt-3.5 pt-3 border-t border-green-400/25">
+              <h4 class="text-[11px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-2">
+                Feedback History
+              </h4>
               <div
                 v-for="fb in feedbackHistory"
                 :key="fb.id"
-                class="feedback-entry"
-                :class="{ resolved: fb.resolvedAt !== null }"
+                class="rounded px-2.5 py-2 mb-1.5"
+                :class="fb.resolvedAt !== null ? 'border-l-2 border-green-400 opacity-70 bg-slate-50 dark:bg-slate-950' : 'border-l-2 border-yellow-500 bg-slate-50 dark:bg-slate-950'"
               >
-                <div class="feedback-meta">
-                  <span class="feedback-iter">#{{ fb.iteration }}</span>
-                  <span class="feedback-stage">{{ fb.stage }}</span>
-                  <span class="feedback-date">{{ formatDate(fb.createdAt) }}</span>
-                  <span v-if="fb.resolvedAt" class="feedback-status resolved">✓ addressed</span>
-                  <span v-else class="feedback-status pending">open</span>
+                <div class="flex items-center gap-2 text-[10px] text-slate-400 dark:text-slate-600 mb-1 flex-wrap">
+                  <span class="font-mono bg-slate-100 dark:bg-slate-800 px-[5px] py-px rounded text-blue-600 dark:text-blue-400 font-semibold">#{{ fb.iteration }}</span>
+                  <span class="font-mono">{{ fb.stage }}</span>
+                  <span class="ml-auto">{{ formatDate(fb.createdAt) }}</span>
+                  <span v-if="fb.resolvedAt" class="text-[9px] font-bold uppercase px-[5px] py-px rounded bg-green-400/[.18] text-green-400">✓ addressed</span>
+                  <span v-else class="text-[9px] font-bold uppercase px-[5px] py-px rounded bg-yellow-500/[.18] text-yellow-500">open</span>
                 </div>
-                <p class="feedback-text">
+                <p class="text-xs leading-relaxed text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
                   {{ fb.feedback }}
                 </p>
               </div>
             </div>
 
-            <div class="feedback-input-block">
-              <label for="feedback-textarea">Request Changes</label>
+            <div class="mt-3.5 pt-3 border-t border-green-400/25">
+              <label for="feedback-textarea" class="block text-[11px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1.5">Request Changes</label>
               <textarea
                 id="feedback-textarea"
                 v-model="feedbackInput"
@@ -464,7 +505,7 @@ function formatDate(iso: string | null): string {
                 :disabled="isActing"
                 maxlength="4000"
               />
-              <div class="feedback-input-foot">
+              <div class="flex justify-between items-center mt-1.5">
                 <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">{{ feedbackInput.length }} / 4000</span>
                 <button
                   type="button"
@@ -477,51 +518,69 @@ function formatDate(iso: string | null): string {
               </div>
             </div>
           </div>
-          <dl class="facts">
-            <div>
-              <dt>CWD</dt><dd class="mono">
+          <dl class="grid gap-y-1.5 gap-x-4 text-[13px] mb-4" style="grid-template-columns: auto 1fr">
+            <div class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                CWD
+              </dt><dd class="font-mono text-xs text-slate-900 dark:text-slate-100">
                 {{ task.cwd }}
               </dd>
             </div>
-            <div v-if="task.worktreePath">
-              <dt>Worktree</dt><dd class="mono">
+            <div v-if="task.worktreePath" class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Worktree
+              </dt><dd class="font-mono text-xs text-slate-900 dark:text-slate-100">
                 {{ task.worktreePath }}
               </dd>
             </div>
-            <div v-if="task.sourceBranch">
-              <dt>Source</dt><dd class="mono">
+            <div v-if="task.sourceBranch" class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Source
+              </dt><dd class="font-mono text-xs text-slate-900 dark:text-slate-100">
                 {{ task.sourceBranch }}
               </dd>
             </div>
-            <div v-if="task.targetBranch">
-              <dt>Target</dt><dd class="mono">
+            <div v-if="task.targetBranch" class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Target
+              </dt><dd class="font-mono text-xs text-slate-900 dark:text-slate-100">
                 {{ task.targetBranch }}
               </dd>
             </div>
-            <div>
-              <dt>Max Iter</dt><dd>
+            <div class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Max Iter
+              </dt><dd class="text-slate-900 dark:text-slate-100">
                 {{ task.maxIterations }}
               </dd>
             </div>
-            <div v-if="task.tokenBudget">
-              <dt>Token Budget</dt><dd>
+            <div v-if="task.tokenBudget" class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Token Budget
+              </dt><dd class="text-slate-900 dark:text-slate-100">
                 {{ task.tokenBudget.toLocaleString() }}
               </dd>
             </div>
-            <div>
-              <dt>Created</dt><dd>
+            <div class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Created
+              </dt><dd class="text-slate-900 dark:text-slate-100">
                 {{ formatDate(task.createdAt) }}
               </dd>
             </div>
-            <div v-if="task.parentTaskId">
-              <dt>Parent</dt><dd class="mono">
+            <div v-if="task.parentTaskId" class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Parent
+              </dt><dd class="font-mono text-xs text-slate-900 dark:text-slate-100">
                 {{ task.parentTaskId }}
               </dd>
             </div>
           </dl>
-          <details v-if="task.description" class="description-collapsible">
-            <summary>Origin Prompt</summary>
-            <div class="description">
+          <details v-if="task.description" class="mt-3 text-xs">
+            <summary class="cursor-pointer text-slate-400 dark:text-slate-600 py-1.5 select-none hover:text-slate-500 dark:hover:text-slate-400">
+              Origin Prompt
+            </summary>
+            <div class="mt-1.5 px-3 py-3 bg-slate-50 dark:bg-slate-950 rounded-md text-[13px] leading-relaxed whitespace-pre-wrap text-slate-600 dark:text-slate-400">
               {{ task.description }}
             </div>
           </details>
@@ -532,8 +591,8 @@ function formatDate(iso: string | null): string {
               Abhängigkeiten
             </h4>
 
-            <div v-if="dependencies.length > 0" class="dep-list">
-              <p class="dep-subheading">
+            <div v-if="dependencies.length > 0" class="mb-2.5">
+              <p class="text-[11px] text-slate-400 dark:text-slate-600 font-semibold uppercase tracking-[0.3px] mb-1">
                 Wartet auf:
               </p>
               <div
@@ -548,15 +607,15 @@ function formatDate(iso: string | null): string {
                     ? 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 border border-green-300 dark:border-green-700'
                     : 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700/50'"
                 >{{ dep.dependsOnStage }}</span>
-                <span class="dep-action-hint">on cancel: {{ dep.onCancelAction }}</span>
+                <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">on cancel: {{ dep.onCancelAction }}</span>
                 <button type="button" class="bg-transparent border-none cursor-pointer text-slate-400 dark:text-slate-600 px-1 py-px text-[10px] rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" title="Remove dependency" @click="handleRemoveDependency(dep.id)">
                   ✕
                 </button>
               </div>
             </div>
 
-            <div v-if="dependents.length > 0" class="dep-list">
-              <p class="dep-subheading">
+            <div v-if="dependents.length > 0" class="mb-2.5">
+              <p class="text-[11px] text-slate-400 dark:text-slate-600 font-semibold uppercase tracking-[0.3px] mb-1">
                 Wird benötigt von:
               </p>
               <div v-for="dep in dependents" :key="dep.id" class="flex items-center gap-2 py-1 text-xs">
@@ -601,12 +660,12 @@ function formatDate(iso: string | null): string {
         </section>
 
         <!-- Session tab: live chat stream against the active stage-run's agent -->
-        <section v-if="activeTab === 'session'" class="tab-content session-tab">
-          <div v-if="!task.activeSessionId" class="empty-hint session-empty">
-            <p class="session-empty-title">
+        <section v-if="activeTab === 'session'" class="flex flex-col gap-2 p-0 h-full min-h-[400px]">
+          <div v-if="!task.activeSessionId" class="text-slate-400 dark:text-slate-600 text-xs text-center px-5 py-[60px]">
+            <p class="text-[13px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5">
               {{ sessionEmptyHint.title }}
             </p>
-            <p class="session-empty-body">
+            <p class="text-xs text-slate-400 dark:text-slate-600 max-w-[420px] mx-auto leading-relaxed">
               {{ sessionEmptyHint.body }}
             </p>
           </div>
@@ -618,13 +677,17 @@ function formatDate(iso: string | null): string {
               button-text="Open session →"
               @click="emit('navigate', pipelineAgent)"
             />
-            <div class="session-header">
-              <span class="session-label">Active Session</span>
-              <code class="session-id">{{ task.activeSessionId.slice(0, 8) }}</code>
-              <span v-if="pipelineAgent" class="session-status" :class="pipelineAgent.status">
+            <div class="flex items-center gap-2.5 px-5 py-2.5 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+              <span class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600">Active Session</span>
+              <code class="font-mono text-[11px] bg-slate-100 dark:bg-slate-800 px-1.5 py-px rounded text-blue-600 dark:text-blue-400">{{ task.activeSessionId.slice(0, 8) }}</code>
+              <span
+                v-if="pipelineAgent"
+                class="text-[10px] uppercase px-2 py-0.5 rounded font-bold ml-auto"
+                :class="sessionStatusClass(pipelineAgent.status)"
+              >
                 {{ pipelineAgent.status }}
               </span>
-              <span v-else class="session-status offline">
+              <span v-else class="text-[10px] uppercase px-2 py-0.5 rounded font-bold ml-auto bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600">
                 offline
               </span>
             </div>
@@ -632,7 +695,7 @@ function formatDate(iso: string | null): string {
               ref="sessionChatRef"
               :agent="pipelineAgent"
               :local-messages="sessionLocalMessages"
-              class="session-stream"
+              class="flex-1 px-5 py-3 min-h-[280px] max-h-[50vh]"
             />
             <PromptInput
               v-if="pipelineAgent"
@@ -640,22 +703,22 @@ function formatDate(iso: string | null): string {
               variant="full"
               @message-sent="onSessionMessageSent"
             />
-            <p v-else class="session-hint">
+            <p v-else class="px-5 py-2.5 text-xs text-slate-400 dark:text-slate-600 border-t border-slate-200 dark:border-slate-700">
               The agent is not currently active — you can chat here once a new stage run starts.
             </p>
           </template>
         </section>
 
         <!-- Stages tab -->
-        <section v-if="activeTab === 'stages'" class="tab-content">
-          <div v-if="stageRuns.length === 0" class="empty-hint">
+        <section v-if="activeTab === 'stages'" class="p-5">
+          <div v-if="stageRuns.length === 0" class="text-slate-400 dark:text-slate-600 text-xs text-center py-8">
             No stage runs yet.
           </div>
           <div v-for="run in stageRuns" v-else :key="run.id" class="px-3 py-2.5 bg-slate-50 dark:bg-slate-950 rounded-md mb-2">
             <div class="flex items-center gap-2.5 mb-1">
               <span class="font-semibold text-xs text-slate-900 dark:text-slate-100">{{ run.stage }}</span>
               <span class="font-mono text-[11px] text-slate-400 dark:text-slate-600">iter {{ run.iteration }}</span>
-              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="`status-${run.status}`">{{ run.status }}</span>
+              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="stageRunStatusClass(run.status)">{{ run.status }}</span>
             </div>
             <div v-if="run.sessionName" class="text-[11px] text-slate-400 dark:text-slate-600 mt-0.5">
               session: <code>{{ run.sessionName }}</code>
@@ -663,26 +726,30 @@ function formatDate(iso: string | null): string {
             <div class="text-[11px] text-slate-400 dark:text-slate-600 mt-0.5">
               started {{ formatDate(run.startedAt) }} · ended {{ formatDate(run.endedAt) }}
             </div>
-            <details v-if="run.output" class="stage-output">
-              <summary>Output</summary>
+            <details v-if="run.output" class="mt-1.5 text-[11px]">
+              <summary class="cursor-pointer text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
+                Output
+              </summary>
               <StageOutputView :stage="run.stage" :output="run.output" />
             </details>
           </div>
         </section>
 
         <!-- Permissions tab -->
-        <section v-if="activeTab === 'permissions'" class="tab-content">
-          <div v-if="pendingRequests.length > 0" class="pending-section">
-            <h3>Pending runtime requests</h3>
+        <section v-if="activeTab === 'permissions'" class="p-5">
+          <div v-if="pendingRequests.length > 0" class="mb-4">
+            <h3 class="text-[11px] uppercase text-slate-400 dark:text-slate-600 mb-2 tracking-[0.5px]">
+              Pending runtime requests
+            </h3>
             <div v-for="req in pendingRequests" :key="req.id" class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded-md p-3 mb-2">
-              <div class="perm-request-head">
+              <div class="flex gap-2.5 items-baseline">
                 <strong>{{ req.tool }}</strong>
-                <span v-if="req.pattern" class="mono">{{ req.pattern }}</span>
+                <span v-if="req.pattern" class="font-mono text-xs text-slate-900 dark:text-slate-100">{{ req.pattern }}</span>
               </div>
-              <div v-if="req.reason" class="perm-reason">
+              <div v-if="req.reason" class="text-[11px] text-slate-400 dark:text-slate-600 my-1">
                 {{ req.reason }}
               </div>
-              <div class="perm-actions">
+              <div class="flex gap-1.5 mt-1.5">
                 <button
                   type="button"
                   class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed px-2.5 py-1 text-[11px] bg-green-600 text-white hover:brightness-110"
@@ -704,13 +771,15 @@ function formatDate(iso: string | null): string {
           </div>
 
           <!-- Manual permission grant form -->
-          <div class="perm-grant-form">
-            <h3>Grant a tool permission</h3>
-            <p class="perm-grant-hint">
+          <div class="border border-slate-200 dark:border-slate-700 rounded-md px-3.5 py-3 mb-3 bg-slate-50 dark:bg-slate-950">
+            <h3 class="text-[11px] uppercase text-slate-400 dark:text-slate-600 mb-1 tracking-[0.5px]">
+              Grant a tool permission
+            </h3>
+            <p class="text-[11px] text-slate-400 dark:text-slate-600 mb-2.5 leading-relaxed">
               Pre-approve a tool before Retry — useful when the agent hit a permission wall.
-              Examples: <code>Write</code>, <code>Bash</code> with pattern <code>npm run *</code>
+              Examples: <code class="bg-slate-100 dark:bg-slate-800 px-[3px] rounded text-[11px]">Write</code>, <code class="bg-slate-100 dark:bg-slate-800 px-[3px] rounded text-[11px]">Bash</code> with pattern <code class="bg-slate-100 dark:bg-slate-800 px-[3px] rounded text-[11px]">npm run *</code>
             </p>
-            <div class="perm-grant-row">
+            <div class="flex gap-2 items-center">
               <input
                 v-model="newPermTool"
                 class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:border-blue-500"
@@ -732,28 +801,30 @@ function formatDate(iso: string | null): string {
                 Grant
               </button>
             </div>
-            <p v-if="permError" class="perm-error">
+            <p v-if="permError" class="text-[11px] text-red-400 mt-1.5">
               {{ permError }}
             </p>
           </div>
 
           <div v-if="permissions.length > 0">
-            <h3>Granted permissions</h3>
-            <div v-for="p in permissions" :key="p.id" class="perm-row">
-              <span class="perm-tool">{{ p.tool }}</span>
-              <span v-if="p.pattern" class="perm-pattern">{{ p.pattern }}</span>
-              <span class="perm-type">{{ p.preApproved ? 'pre-approved' : 'runtime' }}</span>
-              <span class="perm-decided">{{ p.decidedBy }}</span>
+            <h3 class="text-[11px] uppercase text-slate-400 dark:text-slate-600 mb-2 tracking-[0.5px]">
+              Granted permissions
+            </h3>
+            <div v-for="p in permissions" :key="p.id" class="flex gap-2.5 px-2.5 py-1.5 text-xs border-b border-slate-200 dark:border-slate-700">
+              <span class="font-semibold text-slate-900 dark:text-slate-100 min-w-[80px]">{{ p.tool }}</span>
+              <span v-if="p.pattern" class="font-mono text-slate-400 dark:text-slate-600 flex-1">{{ p.pattern }}</span>
+              <span class="text-[10px] text-slate-400 dark:text-slate-600 uppercase">{{ p.preApproved ? 'pre-approved' : 'runtime' }}</span>
+              <span class="text-[10px] text-slate-400 dark:text-slate-600">{{ p.decidedBy }}</span>
             </div>
           </div>
-          <div v-if="permissions.length === 0 && pendingRequests.length === 0" class="empty-hint">
+          <div v-if="permissions.length === 0 && pendingRequests.length === 0" class="text-slate-400 dark:text-slate-600 text-xs text-center py-8">
             No permissions granted yet.
           </div>
         </section>
 
         <!-- Audit tab -->
-        <section v-if="activeTab === 'audit'" class="tab-content">
-          <div class="empty-hint">
+        <section v-if="activeTab === 'audit'" class="p-5">
+          <div class="text-slate-400 dark:text-slate-600 text-xs text-center py-8">
             Audit log viewer — Phase 6.
           </div>
         </section>
@@ -822,452 +893,3 @@ function formatDate(iso: string | null): string {
     </div>
   </AppModal>
 </template>
-
-<style scoped>
-.stage-badge {
-  font-size: 10px;
-  text-transform: uppercase;
-  background: theme('colors.slate.100');
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  color: theme('colors.slate.500');
-}
-:is(.dark) .stage-badge {
-  background: theme('colors.slate.800');
-  color: theme('colors.slate.400');
-}
-.stage-badge.stage-on_hold { background: rgba(234, 179, 8, 0.2); color: rgb(234, 179, 8); }
-.stage-badge.stage-done { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
-.stage-badge.stage-cancelled { background: rgba(248, 113, 113, 0.2); color: #f87171; }
-
-.tab-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  margin-left: 5px;
-  vertical-align: middle;
-  background: var(--text-muted, #94a3b8);
-}
-.tab-dot.active { background: #4ade80; animation: pulse 2s ease-in-out infinite; }
-.tab-dot.waiting { background: rgb(234, 179, 8); }
-.tab-dot.idle { background: var(--text-muted, #94a3b8); }
-@keyframes pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
-}
-
-.session-tab {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0;
-  height: 100%;
-  min-height: 400px;
-}
-.session-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 20px 6px;
-  border-bottom: 1px solid theme('colors.slate.200');
-  flex-shrink: 0;
-}
-:is(.dark) .session-header { border-bottom-color: theme('colors.slate.700'); }
-.session-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: theme('colors.slate.400');
-}
-:is(.dark) .session-label { color: theme('colors.slate.600'); }
-.session-id {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: theme('colors.slate.100');
-  padding: 1px 6px;
-  border-radius: 3px;
-  color: theme('colors.blue.600');
-}
-:is(.dark) .session-id { background: theme('colors.slate.800'); color: theme('colors.blue.400'); }
-.session-status {
-  font-size: 10px;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 700;
-  margin-left: auto;
-}
-.session-status.active { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
-.session-status.waiting { background: rgba(234, 179, 8, 0.2); color: rgb(234, 179, 8); }
-.session-status.idle,
-.session-status.offline { background: theme('colors.slate.100'); color: theme('colors.slate.400'); }
-:is(.dark) .session-status.idle,
-:is(.dark) .session-status.offline { background: theme('colors.slate.800'); color: theme('colors.slate.600'); }
-.session-stream {
-  flex: 1;
-  padding: 12px 20px;
-  min-height: 280px;
-  max-height: 50vh;
-}
-.overview-live-stream {
-  padding: 12px 0;
-  min-height: 200px;
-  max-height: 40vh;
-  border-top: 1px solid theme('colors.slate.200');
-  margin-top: 8px;
-}
-:is(.dark) .overview-live-stream { border-top-color: theme('colors.slate.700'); }
-.session-empty {
-  padding: 60px 20px;
-}
-.session-empty-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: theme('colors.slate.500');
-  margin-bottom: 6px;
-}
-:is(.dark) .session-empty-title { color: theme('colors.slate.400'); }
-.session-empty-body {
-  font-size: 12px;
-  color: theme('colors.slate.400');
-  max-width: 420px;
-  margin: 0 auto;
-  line-height: 1.5;
-}
-:is(.dark) .session-empty-body { color: theme('colors.slate.600'); }
-.session-hint {
-  padding: 10px 20px;
-  font-size: 12px;
-  color: theme('colors.slate.400');
-  border-top: 1px solid theme('colors.slate.200');
-}
-:is(.dark) .session-hint { color: theme('colors.slate.600'); border-top-color: theme('colors.slate.700'); }
-
-.tab-content { padding: 18px 20px; }
-.empty-hint { color: theme('colors.slate.400'); font-size: 12px; text-align: center; padding: 32px 0; }
-:is(.dark) .empty-hint { color: theme('colors.slate.600'); }
-
-.facts {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 6px 16px;
-  font-size: 13px;
-  margin-bottom: 16px;
-}
-.facts > div { display: contents; }
-.facts dt {
-  color: theme('colors.slate.400');
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-:is(.dark) .facts dt { color: theme('colors.slate.600'); }
-.facts dd { color: theme('colors.slate.900'); }
-:is(.dark) .facts dd { color: theme('colors.slate.100'); }
-.mono { font-family: var(--font-mono); font-size: 12px; }
-
-.description {
-  padding: 12px;
-  background: theme('colors.slate.50');
-  border-radius: 6px;
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  color: theme('colors.slate.600');
-}
-:is(.dark) .description { background: theme('colors.slate.950'); color: theme('colors.slate.400'); }
-.description-collapsible {
-  margin-top: 12px;
-  font-size: 12px;
-}
-.description-collapsible > summary {
-  cursor: pointer;
-  color: theme('colors.slate.400');
-  padding: 6px 0;
-  user-select: none;
-}
-:is(.dark) .description-collapsible > summary { color: theme('colors.slate.600'); }
-.description-collapsible > summary:hover { color: theme('colors.slate.500'); }
-:is(.dark) .description-collapsible > summary:hover { color: theme('colors.slate.400'); }
-.description-collapsible[open] > summary { margin-bottom: 6px; }
-
-.latest-run-card {
-  background: theme('colors.slate.50');
-  border: 1px solid theme('colors.slate.200');
-  border-radius: 6px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
-}
-:is(.dark) .latest-run-card { background: theme('colors.slate.950'); border-color: theme('colors.slate.700'); }
-.latest-run-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-.stage-label-pill {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  background: theme('colors.slate.100');
-  color: theme('colors.slate.500');
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-}
-:is(.dark) .stage-label-pill { background: theme('colors.slate.800'); color: theme('colors.slate.400'); }
-.iteration-pill {
-  font-size: 10px;
-  color: theme('colors.slate.400');
-  font-family: var(--font-mono);
-}
-:is(.dark) .iteration-pill { color: theme('colors.slate.600'); }
-.latest-run-times {
-  font-size: 11px;
-  color: theme('colors.slate.400');
-  margin-left: auto;
-}
-:is(.dark) .latest-run-times { color: theme('colors.slate.600'); }
-.agent-message-block { margin-top: 6px; }
-.agent-message-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: theme('colors.slate.400');
-  margin-bottom: 4px;
-}
-:is(.dark) .agent-message-label { color: theme('colors.slate.600'); }
-.agent-message-body {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: theme('colors.white');
-  border-radius: 4px;
-  padding: 10px 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 300px;
-  overflow-y: auto;
-  color: theme('colors.slate.600');
-  line-height: 1.5;
-}
-:is(.dark) .agent-message-body { background: theme('colors.slate.900'); color: theme('colors.slate.400'); }
-.latest-run-output > summary {
-  cursor: pointer;
-  font-size: 11px;
-  color: theme('colors.slate.400');
-  padding: 2px 0;
-  user-select: none;
-}
-:is(.dark) .latest-run-output > summary { color: theme('colors.slate.600'); }
-.latest-run-output > summary:hover { color: theme('colors.slate.500'); }
-.latest-run-output[open] > summary { margin-bottom: 8px; }
-
-.approval-preview {
-  background: rgba(74, 222, 128, 0.08);
-  border: 1px solid rgba(74, 222, 128, 0.35);
-  border-radius: 6px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
-}
-.approval-preview h3 {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #4ade80;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
-}
-.approval-preview pre {
-  background: theme('colors.slate.50');
-  padding: 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  max-height: 360px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-:is(.dark) .approval-preview pre { background: theme('colors.slate.950'); }
-.approval-preview code {
-  font-family: var(--font-mono);
-  background: theme('colors.slate.100');
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-:is(.dark) .approval-preview code { background: theme('colors.slate.800'); }
-.feedback-thread {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(74, 222, 128, 0.25);
-}
-.feedback-thread h4 {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: theme('colors.slate.400');
-  margin-bottom: 8px;
-}
-:is(.dark) .feedback-thread h4 { color: theme('colors.slate.600'); }
-.feedback-entry {
-  background: theme('colors.slate.50');
-  border-left: 2px solid rgb(234, 179, 8);
-  border-radius: 4px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-}
-:is(.dark) .feedback-entry { background: theme('colors.slate.950'); }
-.feedback-entry.resolved {
-  border-left-color: #4ade80;
-  opacity: 0.7;
-}
-.feedback-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 10px;
-  color: theme('colors.slate.400');
-  margin-bottom: 4px;
-  flex-wrap: wrap;
-}
-:is(.dark) .feedback-meta { color: theme('colors.slate.600'); }
-.feedback-iter {
-  font-family: var(--font-mono);
-  background: theme('colors.slate.100');
-  padding: 1px 5px;
-  border-radius: 3px;
-  color: theme('colors.blue.600');
-  font-weight: 600;
-}
-:is(.dark) .feedback-iter { background: theme('colors.slate.800'); color: theme('colors.blue.400'); }
-.feedback-stage { font-family: var(--font-mono); }
-.feedback-date { margin-left: auto; }
-.feedback-status {
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 3px;
-}
-.feedback-status.resolved { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
-.feedback-status.pending { background: rgba(234, 179, 8, 0.18); color: rgb(234, 179, 8); }
-.feedback-text {
-  font-size: 12px;
-  line-height: 1.5;
-  color: theme('colors.slate.600');
-  white-space: pre-wrap;
-}
-:is(.dark) .feedback-text { color: theme('colors.slate.400'); }
-.feedback-input-block {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(74, 222, 128, 0.25);
-}
-.feedback-input-block label {
-  display: block;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: theme('colors.slate.400');
-  margin-bottom: 6px;
-}
-:is(.dark) .feedback-input-block label { color: theme('colors.slate.600'); }
-.feedback-input-foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 6px;
-}
-
-.status-running { background: rgba(59, 130, 246, 0.2); color: theme('colors.blue.600'); }
-.status-done { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
-.status-failed { background: rgba(248, 113, 113, 0.2); color: #f87171; }
-.status-on_hold { background: rgba(234, 179, 8, 0.2); color: rgb(234, 179, 8); }
-:is(.dark) .status-running { color: theme('colors.blue.400'); }
-
-.stage-output { margin-top: 6px; font-size: 11px; }
-.stage-output pre {
-  background: theme('colors.slate.100');
-  padding: 8px;
-  border-radius: 4px;
-  overflow-x: auto;
-  max-height: 180px;
-  overflow-y: auto;
-}
-:is(.dark) .stage-output pre { background: theme('colors.slate.800'); }
-
-.pending-section h3, .tab-content > h3 {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: theme('colors.slate.400');
-  margin-bottom: 8px;
-  letter-spacing: 0.5px;
-}
-:is(.dark) .pending-section h3,
-:is(.dark) .tab-content > h3 { color: theme('colors.slate.600'); }
-.perm-request-head { display: flex; gap: 10px; align-items: baseline; }
-.perm-reason { font-size: 11px; color: theme('colors.slate.400'); margin: 4px 0; }
-:is(.dark) .perm-reason { color: theme('colors.slate.600'); }
-.perm-actions { display: flex; gap: 6px; margin-top: 6px; }
-
-.perm-row {
-  display: flex;
-  gap: 10px;
-  padding: 6px 10px;
-  font-size: 12px;
-  border-bottom: 1px solid theme('colors.slate.200');
-}
-:is(.dark) .perm-row { border-bottom-color: theme('colors.slate.700'); }
-.perm-tool { font-weight: 600; color: theme('colors.slate.900'); min-width: 80px; }
-:is(.dark) .perm-tool { color: theme('colors.slate.100'); }
-.perm-pattern { font-family: var(--font-mono); color: theme('colors.slate.400'); flex: 1; }
-:is(.dark) .perm-pattern { color: theme('colors.slate.600'); }
-.perm-type { font-size: 10px; color: theme('colors.slate.400'); text-transform: uppercase; }
-:is(.dark) .perm-type { color: theme('colors.slate.600'); }
-.perm-decided { font-size: 10px; color: theme('colors.slate.400'); }
-:is(.dark) .perm-decided { color: theme('colors.slate.600'); }
-
-.perm-grant-form {
-  border: 1px solid theme('colors.slate.200');
-  border-radius: 6px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
-  background: theme('colors.slate.50');
-}
-:is(.dark) .perm-grant-form { border-color: theme('colors.slate.700'); background: theme('colors.slate.950'); }
-.perm-grant-form h3 { margin: 0 0 4px; }
-.perm-grant-hint {
-  font-size: 11px;
-  color: theme('colors.slate.400');
-  margin: 0 0 10px;
-  line-height: 1.5;
-}
-:is(.dark) .perm-grant-hint { color: theme('colors.slate.600'); }
-.perm-grant-hint code {
-  background: theme('colors.slate.100');
-  padding: 0 3px;
-  border-radius: 3px;
-  font-size: 11px;
-}
-:is(.dark) .perm-grant-hint code { background: theme('colors.slate.800'); }
-.perm-grant-row { display: flex; gap: 8px; align-items: center; }
-.perm-error { font-size: 11px; color: #f87171; margin: 6px 0 0; }
-
-.dep-subheading {
-  font-size: 11px;
-  color: theme('colors.slate.400');
-  margin: 0 0 4px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-:is(.dark) .dep-subheading { color: theme('colors.slate.600'); }
-.dep-list { margin-bottom: 10px; }
-.dep-action-hint {
-  font-size: 10px;
-  color: theme('colors.slate.400');
-  font-family: var(--font-mono);
-}
-:is(.dark) .dep-action-hint { color: theme('colors.slate.600'); }
-</style>
