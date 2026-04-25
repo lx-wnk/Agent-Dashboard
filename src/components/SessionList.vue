@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { shortModel } from '../utils/format'
+import BaseModal from './BaseModal.vue'
 
 interface SessionInfo {
   sessionId: string
@@ -9,6 +10,7 @@ interface SessionInfo {
   lastModified: string
   model: string | null
   firstPrompt: string | null
+  lastResponse: string | null
   totalInputTokens: number
   totalOutputTokens: number
   costEstimate: number
@@ -87,6 +89,7 @@ async function resumeSession(s: SessionInfo) {
 
     resumeMsg.value[s.sessionId] = `PID ${data.pid} spawned`
     resumePrompts.value[s.sessionId] = ''
+    loadSessions()
     setTimeout(() => {
       resumeMsg.value[s.sessionId] = ''
     }, 4000)
@@ -114,102 +117,108 @@ async function loadSessions() {
   isLoading.value = false
 }
 
+let refreshInterval: ReturnType<typeof setInterval> | null = null
+
 watch(() => props.open, (isOpen) => {
-  if (isOpen)
+  if (isOpen) {
     loadSessions()
+    refreshInterval = setInterval(loadSessions, 15_000)
+  }
+  else {
+    if (refreshInterval) {
+      clearInterval(refreshInterval)
+      refreshInterval = null
+    }
+  }
 })
+
+onUnmounted(() => {
+  if (refreshInterval)
+    clearInterval(refreshInterval)
+})
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && props.open)
+    emit('close')
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <Transition name="dialog">
-    <div
-      v-if="open"
-      class="sessions-backdrop"
-      @click.self="emit('close')"
-      @keydown.escape="emit('close')"
-    >
-      <div class="sessions-modal">
-        <header class="modal-header">
-          <h2>Past Sessions</h2>
-          <button class="close-btn" @click="emit('close')">
-            &times;
-          </button>
-        </header>
+  <BaseModal :open="open" @close="emit('close')">
+    <div class="sessions-modal">
+      <header class="modal-header">
+        <h2>Past Sessions</h2>
+        <button class="close-btn" @click="emit('close')">
+          &times;
+        </button>
+      </header>
 
-        <div class="modal-body">
-          <div class="search-row">
-            <input
-              v-model="search"
-              class="search-input"
-              type="text"
-              placeholder="Filter by project or prompt..."
-            >
-          </div>
+      <div class="modal-body">
+        <div class="search-row">
+          <input
+            v-model="search"
+            class="search-input"
+            type="text"
+            placeholder="Filter by project or prompt..."
+          >
+        </div>
 
-          <p v-if="isLoading" class="status-msg">
-            Loading sessions...
-          </p>
-          <p v-else-if="filtered.length === 0" class="status-msg">
-            No sessions found.
-          </p>
+        <p v-if="isLoading" class="status-msg">
+          Loading sessions...
+        </p>
+        <p v-else-if="filtered.length === 0" class="status-msg">
+          No sessions found.
+        </p>
 
-          <div v-else class="session-list">
-            <div
-              v-for="s in filtered"
-              :key="s.sessionId"
-              class="session-card"
-            >
-              <div class="session-top">
-                <span class="session-project">{{ s.projectName }}</span>
-                <span class="session-date">{{ formatDate(s.lastModified) }}</span>
-              </div>
-              <code class="session-path">{{ shortenPath(s.projectPath) }}</code>
-              <p v-if="s.firstPrompt" class="session-prompt">
-                {{ s.firstPrompt }}
-              </p>
-              <div class="session-meta">
-                <span v-if="s.model" class="meta-tag model">{{ shortModel(s.model) }}</span>
-                <span v-if="s.costEstimate > 0" class="meta-tag cost">${{ s.costEstimate.toFixed(2) }}</span>
-                <span class="meta-tag session-id-tag" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
-              </div>
-              <div class="session-actions">
-                <input
-                  v-model="resumePrompts[s.sessionId]"
-                  class="resume-input"
-                  type="text"
-                  placeholder="Follow-up prompt..."
-                  @keydown.enter="resumeSession(s)"
-                >
-                <button
-                  class="resume-btn"
-                  :disabled="!resumePrompts[s.sessionId]?.trim() || spawning === s.sessionId"
-                  @click="resumeSession(s)"
-                >
-                  {{ spawning === s.sessionId ? '...' : 'Resume' }}
-                </button>
-              </div>
-              <p v-if="resumeMsg[s.sessionId]" class="resume-status" :class="{ error: resumeError[s.sessionId] }">
-                {{ resumeMsg[s.sessionId] }}
-              </p>
+        <div v-else class="session-list">
+          <div
+            v-for="s in filtered"
+            :key="s.sessionId"
+            class="session-card"
+          >
+            <div class="session-top">
+              <span class="session-project">{{ s.projectName }}</span>
+              <span class="session-date">{{ formatDate(s.lastModified) }}</span>
             </div>
+            <code class="session-path">{{ shortenPath(s.projectPath) }}</code>
+            <p v-if="s.firstPrompt" class="session-prompt">
+              {{ s.firstPrompt }}
+            </p>
+            <pre v-if="s.lastResponse" class="session-last-response">{{ s.lastResponse }}</pre>
+            <div class="session-meta">
+              <span v-if="s.model" class="meta-tag model">{{ shortModel(s.model) }}</span>
+              <span v-if="s.costEstimate > 0" class="meta-tag cost">${{ s.costEstimate.toFixed(2) }}</span>
+              <span class="meta-tag session-id-tag" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
+            </div>
+            <div class="session-actions">
+              <input
+                v-model="resumePrompts[s.sessionId]"
+                class="resume-input"
+                type="text"
+                placeholder="Follow-up prompt..."
+                @keydown.enter="resumeSession(s)"
+              >
+              <button
+                class="resume-btn"
+                :disabled="!resumePrompts[s.sessionId]?.trim() || spawning === s.sessionId"
+                @click="resumeSession(s)"
+              >
+                {{ spawning === s.sessionId ? '...' : 'Resume' }}
+              </button>
+            </div>
+            <p v-if="resumeMsg[s.sessionId]" class="resume-status" :class="{ error: resumeError[s.sessionId] }">
+              {{ resumeMsg[s.sessionId] }}
+            </p>
           </div>
         </div>
       </div>
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
-.sessions-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .sessions-modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -341,6 +350,22 @@ watch(() => props.open, (isOpen) => {
   overflow: hidden;
 }
 
+.session-last-response {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border-left: 2px solid var(--border);
+  padding: 5px 8px;
+  margin: 4px 0 6px;
+  border-radius: 0 4px 4px 0;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 5.5lh;
+  overflow-y: auto;
+}
+
 .session-meta {
   display: flex;
   gap: 6px;
@@ -411,26 +436,4 @@ watch(() => props.open, (isOpen) => {
 }
 
 .resume-status.error { color: var(--accent-red); }
-
-/* Dialog transition */
-.dialog-enter-active,
-.dialog-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.dialog-enter-active .sessions-modal,
-.dialog-leave-active .sessions-modal {
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.dialog-enter-from,
-.dialog-leave-to {
-  opacity: 0;
-}
-
-.dialog-enter-from .sessions-modal,
-.dialog-leave-to .sessions-modal {
-  transform: scale(0.95);
-  opacity: 0;
-}
 </style>
