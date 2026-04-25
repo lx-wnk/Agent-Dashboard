@@ -92,7 +92,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         </div>
 
         <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
-      </div>
     </div>
   </BaseModal>
 </template>

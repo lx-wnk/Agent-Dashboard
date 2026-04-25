@@ -360,7 +360,6 @@ function formatDate(iso: string | null) {
           </div>
         </div>
       </Transition>
-    </div>
   </BaseModal>
 </template>
 
