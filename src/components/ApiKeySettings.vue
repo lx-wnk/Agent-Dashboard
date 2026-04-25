@@ -2,7 +2,7 @@
 import type { ApiKey, McpScope } from '../types'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
-import BaseModal from './BaseModal.vue'
+import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -177,41 +177,47 @@ function formatDate(iso: string | null) {
 </script>
 
 <template>
-  <BaseModal :open="open" @close="emit('close')">
-    <div class="settings-modal">
+  <AppModal :open="open" @close="emit('close')">
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-[975px] h-[700px] flex overflow-hidden">
       <!-- ── Sidebar ──────────────────────────────── -->
-      <nav class="settings-sidebar">
-        <div class="sidebar-header">
-          <h2 class="sidebar-title">
+      <nav class="w-[260px] flex-shrink-0 bg-slate-50 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-700 px-3 py-5 flex flex-col">
+        <div class="flex items-center justify-between px-1 pb-1 mb-2">
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100">
             Settings
           </h2>
-          <button class="close-btn" @click="emit('close')">
+          <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="emit('close')">
             &times;
           </button>
         </div>
-        <ul class="sidebar-nav">
+        <ul class="list-none p-0 m-0 flex flex-col gap-0.5">
           <li>
             <button
-              class="nav-item"
-              :class="{ active: activeSection === 'appearance' }"
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'appearance'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
               @click="activeSection = 'appearance'"
             >
-              <span class="nav-icon">◑</span> Appearance
+              <span class="text-sm flex-shrink-0">◑</span> Appearance
             </button>
           </li>
           <li>
             <button
-              class="nav-item"
-              :class="{ active: activeSection === 'apiKeys' }"
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'apiKeys'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
               @click="activeSection = 'apiKeys'"
             >
-              <span class="nav-icon">⬡</span> API Keys
+              <span class="text-sm flex-shrink-0">⬡</span> API Keys
             </button>
           </li>
         </ul>
-        <div class="sidebar-footer">
+        <div class="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700">
           <a
-            class="sidebar-issue-link"
+            class="text-xs text-slate-400 dark:text-slate-600 no-underline block px-1.5 py-1 rounded hover:text-slate-500 dark:hover:text-slate-400 transition-colors"
             href="https://github.com/lx-wnk/Agent-Dashboard/issues/new/choose"
             target="_blank"
             rel="noopener noreferrer"
@@ -220,16 +226,16 @@ function formatDate(iso: string | null) {
       </nav>
 
       <!-- ── Content ─────────────────────────────── -->
-      <div class="settings-content">
+      <div class="flex-1 overflow-y-auto px-7 py-7">
         <!-- Appearance -->
         <section v-if="activeSection === 'appearance'">
-          <h3 class="section-title">
+          <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
             Themes
           </h3>
-          <p class="section-desc">
+          <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
             Choose your preferred color scheme.
           </p>
-          <div class="theme-cards">
+          <div class="flex gap-3.5 flex-wrap">
             <button
               v-for="opt in ([
                 { value: 'light', label: 'Light Mode' },
@@ -237,23 +243,26 @@ function formatDate(iso: string | null) {
                 { value: 'system', label: 'System' },
               ] as const)"
               :key="opt.value"
-              class="theme-card"
-              :class="{ selected: themePref === opt.value }"
+              type="button"
+              class="w-40 border-2 rounded-lg overflow-hidden cursor-pointer bg-transparent p-0 transition-all font-sans"
+              :class="themePref === opt.value
+                ? 'border-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]'
+                : 'border-slate-200 dark:border-slate-700 hover:border-blue-400'"
               @click="setTheme(opt.value)"
             >
-              <div class="theme-preview" :data-preview="opt.value">
-                <div class="preview-topbar" />
-                <div class="preview-body">
-                  <div class="preview-sidebar" />
-                  <div class="preview-main">
-                    <div class="preview-row" />
-                    <div class="preview-row short" />
-                    <div class="preview-row" />
+              <div class="theme-preview h-[100px] flex flex-col" :data-preview="opt.value">
+                <div class="preview-topbar h-3.5 mx-2 mt-2 mb-1.5 rounded-sm" />
+                <div class="preview-body flex flex-1 gap-1.5 px-2 pb-2">
+                  <div class="preview-sidebar w-7 rounded-sm" />
+                  <div class="preview-main flex-1 flex flex-col gap-1 justify-center">
+                    <div class="preview-row h-1.5 rounded-sm" />
+                    <div class="preview-row short h-1.5 w-3/5 rounded-sm" />
+                    <div class="preview-row h-1.5 rounded-sm" />
                   </div>
                 </div>
               </div>
-              <div class="theme-card-footer">
-                <span class="theme-check">{{ themePref === opt.value ? '✓' : '' }}</span>
+              <div class="px-2.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 flex items-center gap-1.5 bg-white dark:bg-slate-900">
+                <span class="w-3.5 text-blue-500 font-bold text-[13px]">{{ themePref === opt.value ? '✓' : '' }}</span>
                 {{ opt.label }}
               </div>
             </button>
@@ -262,68 +271,70 @@ function formatDate(iso: string | null) {
 
         <!-- API Keys -->
         <section v-else-if="activeSection === 'apiKeys'">
-          <div class="section-header">
-            <div>
-              <h3 class="section-title">
+          <div class="flex items-start justify-between gap-3 mb-4">
+            <div class="flex-1">
+              <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
                 API Keys
               </h3>
-              <p class="section-desc">
+              <p class="text-xs text-slate-400 dark:text-slate-600">
                 Manage MCP API keys for external access to this dashboard.
               </p>
             </div>
-            <button class="btn btn-primary" @click="openCreateDialog">
+            <button type="button" class="px-4 py-1.5 bg-blue-600 text-white border-none rounded text-sm font-semibold cursor-pointer hover:brightness-110 whitespace-nowrap" @click="openCreateDialog">
               + Add Key
             </button>
           </div>
-          <p v-if="errorMsg" class="error-msg">
+          <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mb-3">
             {{ errorMsg }}
           </p>
-          <div v-if="isLoading" class="loading">
+          <div v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
             Loading keys...
           </div>
-          <div v-else-if="keys.length === 0 && !errorMsg" class="empty-state">
+          <div v-else-if="keys.length === 0 && !errorMsg" class="text-center py-8 text-slate-400 dark:text-slate-600 text-sm">
             No API keys yet. Create one to allow MCP clients to connect.
           </div>
-          <table v-else class="keys-table">
+          <table v-else class="w-full border-collapse text-[13px]">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Scopes</th>
-                <th>Created</th>
-                <th>Last Used</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">Name</th>
+                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">Scopes</th>
+                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">Created</th>
+                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">Last Used</th>
+                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">Status</th>
+                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">Actions</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="key in keys" :key="key.id" :class="{ revoked: !key.active }">
-                <td class="cell-name">
+              <tr v-for="key in keys" :key="key.id" :class="{ 'opacity-45': !key.active }">
+                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-medium whitespace-nowrap">
                   {{ key.name }}
                 </td>
-                <td class="cell-scopes">
-                  <span v-for="scope in key.scopes" :key="scope" class="scope-pill">{{ scope }}</span>
+                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
+                  <div class="flex flex-wrap gap-1">
+                    <span v-for="scope in key.scopes" :key="scope" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-1.5 py-px rounded font-mono">{{ scope }}</span>
+                  </div>
                 </td>
-                <td class="cell-date">
+                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-mono text-xs">
                   {{ formatDate(key.createdAt) }}
                 </td>
-                <td class="cell-date">
+                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-mono text-xs">
                   {{ formatDate(key.lastUsedAt) }}
                 </td>
-                <td>
-                  <span v-if="key.active" class="badge badge-active">Active</span>
-                  <span v-else class="badge badge-revoked">Revoked</span>
+                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
+                  <span v-if="key.active" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400">Active</span>
+                  <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600">Revoked</span>
                 </td>
-                <td>
+                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
                   <template v-if="key.active">
                     <template v-if="confirmRevokeId === key.id">
-                      <button class="btn btn-danger btn-sm" @click="revokeKey(key)">
+                      <button type="button" class="border-none rounded px-2.5 py-1 text-xs font-semibold cursor-pointer bg-red-600 text-white hover:brightness-110 mr-1" @click="revokeKey(key)">
                         Confirm
                       </button>
-                      <button class="btn btn-secondary btn-sm" style="margin-left:4px" @click="confirmRevokeId = null">
+                      <button type="button" class="border-none rounded px-2.5 py-1 text-xs font-semibold cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110" @click="confirmRevokeId = null">
                         Cancel
                       </button>
                     </template>
-                    <button v-else class="btn btn-danger btn-sm" @click="confirmRevokeId = key.id">
+                    <button v-else type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmRevokeId = key.id">
                       Revoke
                     </button>
                   </template>
@@ -337,22 +348,36 @@ function formatDate(iso: string | null) {
 
     <!-- Create key dialog -->
     <Transition name="dialog">
-      <div v-if="showCreateDialog" class="modal-backdrop" @click.self="closeCreateDialog">
-        <div class="modal">
-          <header class="modal-header">
-            <h2>Create API Key</h2>
-            <button class="close-btn" @click="closeCreateDialog">
+      <div v-if="showCreateDialog" class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center" @click.self="closeCreateDialog">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Create API Key
+            </h2>
+            <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="closeCreateDialog">
               &times;
             </button>
           </header>
-          <form class="modal-body" @submit.prevent="handleCreate">
-            <div class="field">
-              <label for="key-name" class="field-label">Name</label>
-              <input id="key-name" v-model="newKeyName" class="field-input" type="text" required placeholder="e.g. CI pipeline key" autofocus>
+          <form class="p-5" @submit.prevent="handleCreate">
+            <div class="flex flex-col gap-1 mb-3.5">
+              <label for="key-name" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Name</label>
+              <input
+                id="key-name"
+                v-model="newKeyName"
+                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                type="text"
+                required
+                placeholder="e.g. CI pipeline key"
+                autofocus
+              >
             </div>
-            <div class="field">
-              <label for="key-group" class="field-label">Role / Scope Group</label>
-              <select id="key-group" v-model="newKeyGroup" class="field-input">
+            <div class="flex flex-col gap-1 mb-3.5">
+              <label for="key-group" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Role / Scope Group</label>
+              <select
+                id="key-group"
+                v-model="newKeyGroup"
+                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              >
                 <option value="viewer">
                   Viewer — tasks:read
                 </option>
@@ -367,15 +392,15 @@ function formatDate(iso: string | null) {
                 </option>
               </select>
             </div>
-            <p v-if="createError" class="error-msg">
+            <p v-if="createError" class="text-xs text-red-600 dark:text-red-400 mb-2">
               {{ createError }}
             </p>
           </form>
-          <footer class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeCreateDialog">
+          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+            <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer font-sans bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110" @click="closeCreateDialog">
               Cancel
             </button>
-            <button type="button" class="btn btn-primary" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
+            <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer font-sans bg-blue-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
               {{ isCreating ? 'Creating...' : 'Create Key' }}
             </button>
           </footer>
@@ -385,500 +410,54 @@ function formatDate(iso: string | null) {
 
     <!-- Token reveal dialog -->
     <Transition name="dialog">
-      <div v-if="revealedToken" class="modal-backdrop" @click.self="dismissReveal">
-        <div class="modal">
-          <header class="modal-header">
-            <h2>Your new API key</h2>
+      <div v-if="revealedToken" class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center" @click.self="dismissReveal">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Your new API key
+            </h2>
           </header>
-          <div class="modal-body">
-            <p class="reveal-warning">
-              Save this token now — it will <strong>never be shown again</strong>.
+          <div class="p-5">
+            <p class="text-[13px] text-slate-600 dark:text-slate-400 mb-3">
+              Save this token now — it will <strong class="text-yellow-600 dark:text-yellow-400">never be shown again</strong>.
             </p>
-            <div class="token-box">
-              <code class="token-text">{{ revealedToken }}</code>
+            <div class="font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
+              {{ revealedToken }}
             </div>
-            <div class="reveal-actions">
-              <button class="btn btn-primary" @click="copyToken">
+            <div class="flex justify-end">
+              <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer font-sans bg-blue-600 text-white hover:brightness-110" @click="copyToken">
                 <span v-if="copyHint === '__error__'">Copy failed</span>
                 <span v-else-if="copyHint">Copied!</span>
                 <span v-else>Copy to clipboard</span>
               </button>
             </div>
           </div>
-          <footer class="modal-footer">
-            <button class="btn btn-secondary" @click="dismissReveal">
+          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+            <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer font-sans bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110" @click="dismissReveal">
               Done — I have saved the token
             </button>
           </footer>
         </div>
       </div>
     </Transition>
-  </BaseModal>
+  </AppModal>
 </template>
 
 <style scoped>
-/* ── Modal shell ───────────────────────────────── */
-.settings-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  width: 100%;
-  max-width: 975px;
-  height: 700px;
-  display: flex;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  overflow: hidden;
-}
-
-/* ── Sidebar ───────────────────────────────────── */
-.settings-sidebar {
-  width: 260px;
-  flex-shrink: 0;
-  background: var(--bg-primary);
-  border-right: 1px solid var(--border);
-  padding: 20px 12px 16px;
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  padding: 0 4px;
-}
-
-.sidebar-nav {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.nav-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-radius: 6px;
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.12s, color 0.12s;
-}
-
-.nav-item:hover { background: var(--bg-secondary); color: var(--text-primary); }
-.nav-item.active { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
-
-.nav-icon { font-size: 14px; flex-shrink: 0; }
-
-/* ── Sidebar header & footer ───────────────────── */
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4px 4px;
-  margin-bottom: 8px;
-}
-
-.sidebar-footer {
-  margin-top: auto;
-  padding: 12px 4px 0;
-  border-top: 1px solid var(--border);
-}
-
-.sidebar-issue-link {
-  font-size: 12px;
-  color: var(--text-muted);
-  text-decoration: none;
-  display: block;
-  padding: 4px 6px;
-  border-radius: 4px;
-  transition: color 0.12s;
-}
-.sidebar-issue-link:hover { color: var(--text-secondary); }
-
-/* ── Content panel ─────────────────────────────── */
-.settings-content {
-  flex: 1;
-  padding: 28px 28px 24px;
-  overflow-y: auto;
-}
-
-.section-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.section-desc {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 20px;
-}
-
-.section-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.section-header > div { flex: 1; }
-.section-header .section-desc { margin-bottom: 0; }
-
-/* ── Theme cards ───────────────────────────────── */
-.theme-cards {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.theme-card {
-  width: 160px;
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  background: none;
-  padding: 0;
-  transition: border-color 0.15s, box-shadow 0.15s;
-  font-family: inherit;
-}
-
-.theme-card:hover { border-color: var(--accent-blue); }
-.theme-card.selected { border-color: var(--accent-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 20%, transparent); }
-
-/* mini UI previews */
-.theme-preview {
-  height: 100px;
-  display: flex;
-  flex-direction: column;
-}
-
+/* mini UI previews — keeping scoped CSS since these need complex data-attr selectors */
 .theme-preview[data-preview="light"] { background: #f0f4f8; }
 .theme-preview[data-preview="dark"]  { background: #1a2235; }
 .theme-preview[data-preview="system"] { background: linear-gradient(135deg, #f0f4f8 50%, #1a2235 50%); }
 
-.preview-topbar {
-  height: 14px;
-  margin: 8px 8px 6px;
-  border-radius: 3px;
-}
 .theme-preview[data-preview="light"] .preview-topbar { background: #cbd5e1; }
 .theme-preview[data-preview="dark"]  .preview-topbar { background: #2d3f5a; }
 .theme-preview[data-preview="system"] .preview-topbar { background: color-mix(in srgb, #cbd5e1 50%, #2d3f5a); }
 
-.preview-body { display: flex; flex: 1; gap: 6px; padding: 0 8px 8px; }
-
-.preview-sidebar {
-  width: 30px;
-  border-radius: 3px;
-}
 .theme-preview[data-preview="light"]  .preview-sidebar { background: #cbd5e1; }
 .theme-preview[data-preview="dark"]   .preview-sidebar { background: #243248; }
 .theme-preview[data-preview="system"] .preview-sidebar { background: color-mix(in srgb, #cbd5e1 50%, #243248); }
 
-.preview-main { flex: 1; display: flex; flex-direction: column; gap: 5px; justify-content: center; }
-
-.preview-row {
-  height: 7px;
-  border-radius: 2px;
-}
-.preview-row.short { width: 60%; }
 .theme-preview[data-preview="light"]  .preview-row { background: #cbd5e1; }
 .theme-preview[data-preview="dark"]   .preview-row { background: #2d3f5a; }
 .theme-preview[data-preview="system"] .preview-row { background: color-mix(in srgb, #cbd5e1 50%, #2d3f5a); }
-
-.theme-card-footer {
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--bg-secondary);
-}
-.theme-check {
-  width: 14px;
-  color: var(--accent-blue);
-  font-weight: 700;
-  font-size: 13px;
-}
-
-/* ── Table ─────────────────────────────────────── */
-/* Table */
-.keys-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.keys-table th {
-  text-align: left;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.keys-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-primary);
-  vertical-align: middle;
-}
-
-.keys-table tr.revoked td {
-  opacity: 0.45;
-}
-
-.cell-name {
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.cell-scopes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.cell-date {
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.scope-pill {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  white-space: nowrap;
-}
-
-/* Badges */
-.badge {
-  display: inline-block;
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.badge-active {
-  background: color-mix(in srgb, var(--accent-green) 15%, transparent);
-  color: var(--accent-green);
-}
-
-.badge-revoked {
-  background: var(--bg-tertiary);
-  color: var(--accent-gray);
-}
-
-/* Buttons */
-.btn {
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-}
-
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 12px;
-}
-
-.btn-primary {
-  background: var(--accent-blue);
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.btn-primary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-}
-
-.btn-secondary:hover {
-  filter: brightness(1.15);
-}
-
-.btn-danger {
-  background: color-mix(in srgb, var(--accent-red) 15%, transparent);
-  color: var(--accent-red);
-}
-
-.btn-danger:hover {
-  background: color-mix(in srgb, var(--accent-red) 25%, transparent);
-}
-
-/* Empty / loading */
-.loading,
-.empty-state {
-  text-align: center;
-  padding: 48px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.error-msg {
-  color: var(--accent-red);
-  font-size: 12px;
-  margin-bottom: 12px;
-}
-
-/* Modal shared */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  width: 100%;
-  max-width: 480px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.modal-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 22px;
-  cursor: pointer;
-  line-height: 1;
-  padding: 2px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.close-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-}
-
-.modal-body {
-  padding: 20px;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
-}
-
-/* Form */
-.field {
-  margin-bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.field-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-}
-
-.field-input {
-  width: 100%;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: inherit;
-  padding: 8px 10px;
-}
-
-.field-input:focus {
-  outline: none;
-  border-color: var(--accent-blue);
-}
-
-/* Token reveal */
-.reveal-warning {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-}
-
-.reveal-warning strong {
-  color: var(--accent-yellow);
-}
-
-.token-box {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 12px;
-  overflow-x: auto;
-  margin-bottom: 12px;
-}
-
-.token-text {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--accent-green);
-  word-break: break-all;
-  user-select: all;
-}
-
-.reveal-actions {
-  display: flex;
-  justify-content: flex-end;
-}
 </style>

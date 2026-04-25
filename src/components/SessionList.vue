@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { shortModel } from '../utils/format'
-import BaseModal from './BaseModal.vue'
+import AppModal from './ui/AppModal.vue'
 
 interface SessionInfo {
   sessionId: string
@@ -146,294 +146,77 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <BaseModal :open="open" @close="emit('close')">
-    <div class="sessions-modal">
-      <header class="modal-header">
-        <h2>Past Sessions</h2>
-        <button class="close-btn" @click="emit('close')">
+  <AppModal :open="open" @close="emit('close')">
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
+      <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Past Sessions
+        </h2>
+        <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="emit('close')">
           &times;
         </button>
       </header>
 
-      <div class="modal-body">
-        <div class="search-row">
+      <div class="flex-1 overflow-y-auto p-5">
+        <div class="mb-3">
           <input
             v-model="search"
-            class="search-input"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-green-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
             type="text"
             placeholder="Filter by project or prompt..."
           >
         </div>
 
-        <p v-if="isLoading" class="status-msg">
+        <p v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
           Loading sessions...
         </p>
-        <p v-else-if="filtered.length === 0" class="status-msg">
+        <p v-else-if="filtered.length === 0" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
           No sessions found.
         </p>
 
-        <div v-else class="session-list">
+        <div v-else class="flex flex-col gap-2">
           <div
             v-for="s in filtered"
             :key="s.sessionId"
-            class="session-card"
+            class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5"
           >
-            <div class="session-top">
-              <span class="session-project">{{ s.projectName }}</span>
-              <span class="session-date">{{ formatDate(s.lastModified) }}</span>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ s.projectName }}</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-600">{{ formatDate(s.lastModified) }}</span>
             </div>
-            <code class="session-path">{{ shortenPath(s.projectPath) }}</code>
-            <p v-if="s.firstPrompt" class="session-prompt">
+            <code class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate block mb-1">{{ shortenPath(s.projectPath) }}</code>
+            <p v-if="s.firstPrompt" class="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 mb-1.5">
               {{ s.firstPrompt }}
             </p>
-            <pre v-if="s.lastResponse" class="session-last-response">{{ s.lastResponse }}</pre>
-            <div class="session-meta">
-              <span v-if="s.model" class="meta-tag model">{{ shortModel(s.model) }}</span>
-              <span v-if="s.costEstimate > 0" class="meta-tag cost">${{ s.costEstimate.toFixed(2) }}</span>
-              <span class="meta-tag session-id-tag" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
+            <pre v-if="s.lastResponse" class="text-[11px] font-mono text-slate-400 dark:text-slate-600 bg-white dark:bg-slate-900 border-l-2 border-slate-200 dark:border-slate-700 px-2 py-1.5 mb-1.5 rounded-r leading-relaxed whitespace-pre-wrap break-words max-h-[5.5lh] overflow-y-auto">{{ s.lastResponse }}</pre>
+            <div class="flex gap-1.5 mb-2">
+              <span v-if="s.model" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 uppercase tracking-wide font-mono">{{ shortModel(s.model) }}</span>
+              <span v-if="s.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-green-600 dark:text-green-400 font-mono">${{ s.costEstimate.toFixed(2) }}</span>
+              <span class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 font-mono" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
             </div>
-            <div class="session-actions">
+            <div class="flex gap-1.5">
               <input
                 v-model="resumePrompts[s.sessionId]"
-                class="resume-input"
+                class="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-xs px-2 py-1 focus:outline-none focus:border-green-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
                 type="text"
                 placeholder="Follow-up prompt..."
                 @keydown.enter="resumeSession(s)"
               >
               <button
-                class="resume-btn"
+                type="button"
+                class="flex-shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-3 py-1 text-xs font-semibold cursor-pointer hover:text-green-600 dark:hover:text-green-400 hover:border-green-500 dark:hover:border-green-500 disabled:opacity-40 disabled:cursor-not-allowed"
                 :disabled="!resumePrompts[s.sessionId]?.trim() || spawning === s.sessionId"
                 @click="resumeSession(s)"
               >
                 {{ spawning === s.sessionId ? '...' : 'Resume' }}
               </button>
             </div>
-            <p v-if="resumeMsg[s.sessionId]" class="resume-status" :class="{ error: resumeError[s.sessionId] }">
+            <p v-if="resumeMsg[s.sessionId]" class="text-[11px] mt-1" :class="resumeError[s.sessionId] ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
               {{ resumeMsg[s.sessionId] }}
             </p>
           </div>
         </div>
       </div>
     </div>
-  </BaseModal>
+  </AppModal>
 </template>
-
-<style scoped>
-.sessions-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  width: 100%;
-  max-width: 640px;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.modal-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 24px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-}
-
-.close-btn:hover { color: var(--text-primary); }
-
-.modal-body {
-  padding: 16px 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.search-row {
-  margin-bottom: 12px;
-}
-
-.search-input {
-  width: 100%;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: inherit;
-  padding: 8px 10px;
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: var(--accent-green);
-}
-
-.search-input::placeholder { color: var(--text-muted); }
-
-.status-msg {
-  text-align: center;
-  color: var(--text-muted);
-  padding: 24px;
-  font-size: 13px;
-}
-
-.session-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.session-card {
-  background: var(--bg-primary);
-  border-radius: 6px;
-  padding: 10px 12px;
-  border: 1px solid transparent;
-}
-
-.session-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.session-project {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.session-date {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.session-path {
-  display: block;
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-id-tag {
-  font-family: var(--font-mono);
-  letter-spacing: 0;
-}
-
-.session-prompt {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.3;
-  margin-bottom: 6px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.session-last-response {
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  background: var(--bg-secondary);
-  border-left: 2px solid var(--border);
-  padding: 5px 8px;
-  margin: 4px 0 6px;
-  border-radius: 0 4px 4px 0;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 5.5lh;
-  overflow-y: auto;
-}
-
-.session-meta {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.meta-tag {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.meta-tag.cost { color: var(--accent-green); }
-.session-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.resume-input {
-  flex: 1;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-family: inherit;
-  padding: 4px 8px;
-}
-
-.resume-input:focus {
-  outline: none;
-  border-color: var(--accent-green);
-}
-
-.resume-input::placeholder { color: var(--text-muted); }
-
-.resume-btn {
-  flex-shrink: 0;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.resume-btn:hover:not(:disabled) {
-  color: var(--accent-green);
-  border-color: var(--accent-green);
-}
-
-.resume-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.resume-status {
-  font-size: 11px;
-  color: var(--accent-green);
-  margin-top: 4px;
-}
-
-.resume-status.error { color: var(--accent-red); }
-</style>
