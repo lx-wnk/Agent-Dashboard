@@ -214,7 +214,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             </div>
           </div>
         </div>
-      </div>
     </div>
   </BaseModal>
 </template>

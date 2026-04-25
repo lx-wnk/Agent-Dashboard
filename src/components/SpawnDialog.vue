@@ -288,7 +288,6 @@ onUnmounted(() => {
             {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
           </button>
         </footer>
-      </div>
     </div>
   </BaseModal>
 </template>

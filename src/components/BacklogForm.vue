@@ -259,7 +259,6 @@ async function handleCreate() {
             {{ isCreating ? 'Creating...' : 'Create Task' }}
           </button>
         </footer>
-      </div>
     </div>
   </BaseModal>
 </template>
