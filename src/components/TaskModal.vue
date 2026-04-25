@@ -782,7 +782,6 @@ function formatDate(iso: string | null): string {
             </button>
           </div>
         </footer>
-      </div>
     </div>
   </BaseModal>
 </template>
