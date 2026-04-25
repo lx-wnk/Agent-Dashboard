@@ -2,9 +2,9 @@
 import type { Agent } from '../types'
 import { computed } from 'vue'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import AppBadge from './ui/AppBadge.vue'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
-import StatusBadge from './StatusBadge.vue'
 
 const props = defineProps<{ agent: Agent }>()
 defineEmits<{ select: [agent: Agent] }>()
@@ -14,7 +14,7 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 
 <template>
   <div
-    class="agent-card"
+    class="rounded-lg overflow-hidden cursor-pointer border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-900 transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
     tabindex="0"
     role="button"
     :aria-label="`Open details for ${agent.projectName}`"
@@ -22,140 +22,31 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
     @keydown.enter="$emit('select', agent)"
     @keydown.space.prevent="$emit('select', agent)"
   >
-    <div class="card-titlebar">
-      <div class="card-title-left">
-        <StatusBadge :status="agent.status" />
-        <span class="card-project">{{ agent.projectName }}</span>
-        <span class="card-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }}</span>
+    <div class="bg-slate-50 dark:bg-slate-800 px-3 py-2 flex justify-between items-center gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <AppBadge :variant="agent.status" />
+        <span class="font-semibold text-[13px] text-slate-900 dark:text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
+        <span class="text-[11px] text-slate-400 dark:text-slate-600 whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }}</span>
         <MachineBadge v-if="agent.machine" :machine="agent.machine" />
       </div>
-      <div class="card-title-right">
-        <span class="card-meta">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
+      <div class="flex-shrink-0">
+        <span class="text-[11px] text-slate-400 dark:text-slate-600 whitespace-nowrap">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
       </div>
     </div>
-    <div class="card-output">
-      <template v-if="agent.lastOutput">
-        {{ agent.lastOutput }}
-      </template>
-      <span v-else class="card-no-output">No output yet</span>
+    <div class="relative px-3 py-3 h-[150px] overflow-hidden text-[13px] leading-relaxed text-slate-500 dark:text-slate-400 font-mono">
+      <template v-if="agent.lastOutput">{{ agent.lastOutput }}</template>
+      <span v-else class="text-slate-400 dark:text-slate-600 italic">No output yet</span>
+      <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-slate-900 to-transparent pointer-events-none" />
     </div>
-    <div v-if="agent.lastBtw" class="card-btw" @click.stop>
-      <div class="btw-question">
+    <div v-if="agent.lastBtw" class="border-t border-slate-200 dark:border-slate-700 px-3 py-2 flex flex-col gap-1 text-[12px] font-mono" @click.stop>
+      <div class="text-slate-400 dark:text-slate-600 border-l-2 border-yellow-400/60 pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
         {{ agent.lastBtw.message }}
       </div>
-      <div v-if="agent.lastBtw.response" class="btw-response">
+      <div v-if="agent.lastBtw.response" class="text-slate-500 dark:text-slate-400 border-l-2 border-yellow-400/60 pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
         {{ agent.lastBtw.response }}
       </div>
-      <div v-else class="btw-pending">
-        ...
-      </div>
+      <div v-else class="text-slate-400 dark:text-slate-600 pl-2.5" style="animation: pulse 2s ease-in-out infinite;">...</div>
     </div>
     <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" @click.stop @keydown.enter.stop @keydown.space.stop />
   </div>
 </template>
-
-<style scoped>
-.agent-card {
-  background: var(--bg-primary);
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  border: 1px solid var(--border);
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.agent-card:hover {
-  border-color: var(--bg-tertiary);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-}
-.agent-card:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: -2px;
-}
-.card-titlebar {
-  background: var(--bg-secondary);
-  padding: 8px 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-.card-title-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.card-title-right { flex-shrink: 0; }
-.card-project {
-  font-weight: 600;
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.card-meta {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-.card-output {
-  padding: 12px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  height: 150px;
-  overflow: hidden;
-  position: relative;
-  font-family: var(--font-mono);
-}
-.card-output::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 32px;
-  background: linear-gradient(transparent, var(--bg-primary));
-  pointer-events: none;
-}
-.card-no-output {
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-/* /btw exchange */
-.card-btw {
-  border-top: 1px solid var(--border);
-  padding: 8px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  font-family: var(--font-mono);
-}
-.btw-question {
-  color: var(--text-muted);
-  border-left: 2px solid rgba(234, 179, 8, 0.6);
-  padding-left: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.btw-response {
-  color: var(--text-secondary);
-  border-left: 2px solid rgba(234, 179, 8, 0.6);
-  padding-left: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.btw-pending {
-  color: var(--text-muted);
-  padding-left: 10px;
-  animation: pulse 2s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
-}
-</style>
