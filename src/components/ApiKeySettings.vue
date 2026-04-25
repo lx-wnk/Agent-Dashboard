@@ -2,6 +2,7 @@
 import type { ApiKey, McpScope } from '../types'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
+import BaseModal from './BaseModal.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -173,9 +174,8 @@ function formatDate(iso: string | null) {
 </script>
 
 <template>
-  <Transition name="dialog">
-    <div v-if="open" class="settings-backdrop" @click.self="emit('close')">
-      <div class="settings-modal">
+  <BaseModal :open="open" @close="emit('close')">
+    <div class="settings-modal">
 
         <!-- ── Sidebar ──────────────────────────────── -->
         <nav class="settings-sidebar">
@@ -361,21 +361,11 @@ function formatDate(iso: string | null) {
         </div>
       </Transition>
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
 /* ── Modal shell ───────────────────────────────── */
-.settings-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .settings-modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -840,14 +830,4 @@ function formatDate(iso: string | null) {
   justify-content: flex-end;
 }
 
-/* Transitions */
-.dialog-enter-active,
-.dialog-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.dialog-enter-from,
-.dialog-leave-to {
-  opacity: 0;
-}
 </style>

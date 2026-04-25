@@ -21,6 +21,7 @@ import {
   retryTask,
 } from '../composables/useTasks'
 import AgentChatStream from './AgentChatStream.vue'
+import BaseModal from './BaseModal.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
 import PromptInput from './PromptInput.vue'
 import StageOutputView from './StageOutputView.vue'
@@ -326,9 +327,8 @@ function formatDate(iso: string | null): string {
 </script>
 
 <template>
-  <Transition name="modal">
-    <div v-if="task" class="task-modal-backdrop" @click.self="emit('close')">
-      <div class="task-modal">
+  <BaseModal :open="!!task" :z-index="1000" @close="emit('close')">
+    <div v-if="task" class="task-modal">
         <header class="modal-head">
           <div class="head-left">
             <span class="stage-badge" :class="`stage-${task.currentStage}`">{{ task.currentStage }}</span>
@@ -784,20 +784,10 @@ function formatDate(iso: string | null): string {
         </footer>
       </div>
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
-.task-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 24px;
-}
 .task-modal {
   background: var(--bg-secondary);
   border-radius: 10px;
@@ -1375,8 +1365,6 @@ function formatDate(iso: string | null): string {
 .btn-red { background: var(--accent-red); color: white; }
 .btn:hover:not(:disabled) { filter: brightness(1.1); }
 
-.modal-enter-active, .modal-leave-active { transition: opacity 0.2s; }
-.modal-enter-from, .modal-leave-to { opacity: 0; }
 
 .dep-section {
   margin-top: 16px;

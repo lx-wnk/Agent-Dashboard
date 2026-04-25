@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import BaseModal from './BaseModal.vue'
 import { createTask } from '../composables/useTasks'
 
 const props = defineProps<{ open: boolean }>()
@@ -20,10 +21,16 @@ const errorMsg = ref('')
 const isCreating = ref(false)
 
 watch(() => props.open, (val) => {
-  if (val) {
+  if (val)
     errorMsg.value = ''
-  }
 })
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && props.open)
+    emit('close')
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 function resetForm() {
   slug.value = ''
@@ -90,14 +97,8 @@ async function handleCreate() {
 </script>
 
 <template>
-  <Transition name="dialog">
-    <div
-      v-if="open"
-      class="backlog-backdrop"
-      @click.self="emit('close')"
-      @keydown.escape="emit('close')"
-    >
-      <div class="backlog-modal">
+  <BaseModal :open="open" @close="emit('close')">
+    <div class="backlog-modal">
         <header class="modal-header">
           <h2>New Task</h2>
           <button class="close-btn" @click="emit('close')">
@@ -260,19 +261,10 @@ async function handleCreate() {
         </footer>
       </div>
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
-.backlog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 .backlog-modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -348,6 +340,4 @@ async function handleCreate() {
 .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.dialog-enter-active, .dialog-leave-active { transition: opacity 0.2s ease; }
-.dialog-enter-from, .dialog-leave-to { opacity: 0; }
 </style>

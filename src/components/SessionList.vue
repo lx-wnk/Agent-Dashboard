@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { shortModel } from '../utils/format'
+import BaseModal from './BaseModal.vue'
 
 interface SessionInfo {
   sessionId: string
@@ -88,6 +89,7 @@ async function resumeSession(s: SessionInfo) {
 
     resumeMsg.value[s.sessionId] = `PID ${data.pid} spawned`
     resumePrompts.value[s.sessionId] = ''
+    loadSessions()
     setTimeout(() => {
       resumeMsg.value[s.sessionId] = ''
     }, 4000)
@@ -115,21 +117,37 @@ async function loadSessions() {
   isLoading.value = false
 }
 
+let refreshInterval: ReturnType<typeof setInterval> | null = null
+
 watch(() => props.open, (isOpen) => {
-  if (isOpen)
+  if (isOpen) {
     loadSessions()
+    refreshInterval = setInterval(loadSessions, 15_000)
+  }
+  else {
+    if (refreshInterval) {
+      clearInterval(refreshInterval)
+      refreshInterval = null
+    }
+  }
 })
+
+onUnmounted(() => {
+  if (refreshInterval)
+    clearInterval(refreshInterval)
+})
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && props.open)
+    emit('close')
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <Transition name="dialog">
-    <div
-      v-if="open"
-      class="sessions-backdrop"
-      @click.self="emit('close')"
-      @keydown.escape="emit('close')"
-    >
-      <div class="sessions-modal">
+  <BaseModal :open="open" @close="emit('close')">
+    <div class="sessions-modal">
         <header class="modal-header">
           <h2>Past Sessions</h2>
           <button class="close-btn" @click="emit('close')">
@@ -198,20 +216,10 @@ watch(() => props.open, (isOpen) => {
         </div>
       </div>
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
-.sessions-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .sessions-modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -430,25 +438,4 @@ watch(() => props.open, (isOpen) => {
 
 .resume-status.error { color: var(--accent-red); }
 
-/* Dialog transition */
-.dialog-enter-active,
-.dialog-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.dialog-enter-active .sessions-modal,
-.dialog-leave-active .sessions-modal {
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.dialog-enter-from,
-.dialog-leave-to {
-  opacity: 0;
-}
-
-.dialog-enter-from .sessions-modal,
-.dialog-leave-to .sessions-modal {
-  transform: scale(0.95);
-  opacity: 0;
-}
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import BaseModal from './BaseModal.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -156,7 +157,13 @@ watch(() => props.open, (isOpen) => {
   }
 })
 
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && props.open)
+    emit('close')
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
   stopStatusPoll()
   if (autoCloseTimer) {
     clearTimeout(autoCloseTimer)
@@ -166,14 +173,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Transition name="dialog">
-    <div
-      v-if="open"
-      class="spawn-backdrop"
-      @click.self="emit('close')"
-      @keydown.escape="emit('close')"
-    >
-      <div class="spawn-modal">
+  <BaseModal :open="open" @close="emit('close')">
+    <div class="spawn-modal">
         <header class="modal-header">
           <h2>New Agent</h2>
           <button class="close-btn" @click="emit('close')">
@@ -289,20 +290,10 @@ onUnmounted(() => {
         </footer>
       </div>
     </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <style scoped>
-.spawn-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .spawn-modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -500,25 +491,4 @@ select.field-input option {
   cursor: not-allowed;
 }
 
-/* Dialog transition */
-.dialog-enter-active,
-.dialog-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.dialog-enter-active .spawn-modal,
-.dialog-leave-active .spawn-modal {
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.dialog-enter-from,
-.dialog-leave-to {
-  opacity: 0;
-}
-
-.dialog-enter-from .spawn-modal,
-.dialog-leave-to .spawn-modal {
-  transform: scale(0.95);
-  opacity: 0;
-}
 </style>
