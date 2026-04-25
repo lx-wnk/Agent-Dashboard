@@ -58,7 +58,10 @@ async function loadKeys() {
   }
 }
 
-watch(() => props.open, (val) => { if (val) loadKeys() })
+watch(() => props.open, (val) => {
+  if (val)
+    loadKeys()
+})
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
@@ -176,190 +179,240 @@ function formatDate(iso: string | null) {
 <template>
   <BaseModal :open="open" @close="emit('close')">
     <div class="settings-modal">
+      <!-- ── Sidebar ──────────────────────────────── -->
+      <nav class="settings-sidebar">
+        <div class="sidebar-header">
+          <h2 class="sidebar-title">
+            Settings
+          </h2>
+          <button class="close-btn" @click="emit('close')">
+            &times;
+          </button>
+        </div>
+        <ul class="sidebar-nav">
+          <li>
+            <button
+              class="nav-item"
+              :class="{ active: activeSection === 'appearance' }"
+              @click="activeSection = 'appearance'"
+            >
+              <span class="nav-icon">◑</span> Appearance
+            </button>
+          </li>
+          <li>
+            <button
+              class="nav-item"
+              :class="{ active: activeSection === 'apiKeys' }"
+              @click="activeSection = 'apiKeys'"
+            >
+              <span class="nav-icon">⬡</span> API Keys
+            </button>
+          </li>
+        </ul>
+        <div class="sidebar-footer">
+          <a
+            class="sidebar-issue-link"
+            href="https://github.com/lx-wnk/Agent-Dashboard/issues/new/choose"
+            target="_blank"
+            rel="noopener noreferrer"
+          >Report an issue</a>
+        </div>
+      </nav>
 
-        <!-- ── Sidebar ──────────────────────────────── -->
-        <nav class="settings-sidebar">
-          <div class="sidebar-header">
-            <h2 class="sidebar-title">Settings</h2>
-            <button class="close-btn" @click="emit('close')">&times;</button>
-          </div>
-          <ul class="sidebar-nav">
-            <li>
-              <button
-                class="nav-item"
-                :class="{ active: activeSection === 'appearance' }"
-                @click="activeSection = 'appearance'"
-              >
-                <span class="nav-icon">◑</span> Appearance
-              </button>
-            </li>
-            <li>
-              <button
-                class="nav-item"
-                :class="{ active: activeSection === 'apiKeys' }"
-                @click="activeSection = 'apiKeys'"
-              >
-                <span class="nav-icon">⬡</span> API Keys
-              </button>
-            </li>
-          </ul>
-          <div class="sidebar-footer">
-            <a
-              class="sidebar-issue-link"
-              href="https://github.com/lx-wnk/Agent-Dashboard/issues/new/choose"
-              target="_blank"
-              rel="noopener noreferrer"
-            >Report an issue</a>
-          </div>
-        </nav>
-
-        <!-- ── Content ─────────────────────────────── -->
-        <div class="settings-content">
-
-          <!-- Appearance -->
-          <section v-if="activeSection === 'appearance'">
-            <h3 class="section-title">Themes</h3>
-            <p class="section-desc">Choose your preferred color scheme.</p>
-            <div class="theme-cards">
-              <button
-                v-for="opt in ([
-                  { value: 'light', label: 'Light Mode' },
-                  { value: 'dark', label: 'Dark Mode' },
-                  { value: 'system', label: 'System' },
-                ] as const)"
-                :key="opt.value"
-                class="theme-card"
-                :class="{ selected: themePref === opt.value }"
-                @click="setTheme(opt.value)"
-              >
-                <div class="theme-preview" :data-preview="opt.value">
-                  <div class="preview-topbar" />
-                  <div class="preview-body">
-                    <div class="preview-sidebar" />
-                    <div class="preview-main">
-                      <div class="preview-row" />
-                      <div class="preview-row short" />
-                      <div class="preview-row" />
-                    </div>
+      <!-- ── Content ─────────────────────────────── -->
+      <div class="settings-content">
+        <!-- Appearance -->
+        <section v-if="activeSection === 'appearance'">
+          <h3 class="section-title">
+            Themes
+          </h3>
+          <p class="section-desc">
+            Choose your preferred color scheme.
+          </p>
+          <div class="theme-cards">
+            <button
+              v-for="opt in ([
+                { value: 'light', label: 'Light Mode' },
+                { value: 'dark', label: 'Dark Mode' },
+                { value: 'system', label: 'System' },
+              ] as const)"
+              :key="opt.value"
+              class="theme-card"
+              :class="{ selected: themePref === opt.value }"
+              @click="setTheme(opt.value)"
+            >
+              <div class="theme-preview" :data-preview="opt.value">
+                <div class="preview-topbar" />
+                <div class="preview-body">
+                  <div class="preview-sidebar" />
+                  <div class="preview-main">
+                    <div class="preview-row" />
+                    <div class="preview-row short" />
+                    <div class="preview-row" />
                   </div>
                 </div>
-                <div class="theme-card-footer">
-                  <span class="theme-check">{{ themePref === opt.value ? '✓' : '' }}</span>
-                  {{ opt.label }}
-                </div>
-              </button>
-            </div>
-          </section>
-
-          <!-- API Keys -->
-          <section v-else-if="activeSection === 'apiKeys'">
-            <div class="section-header">
-              <div>
-                <h3 class="section-title">API Keys</h3>
-                <p class="section-desc">Manage MCP API keys for external access to this dashboard.</p>
               </div>
-              <button class="btn btn-primary" @click="openCreateDialog">+ Add Key</button>
+              <div class="theme-card-footer">
+                <span class="theme-check">{{ themePref === opt.value ? '✓' : '' }}</span>
+                {{ opt.label }}
+              </div>
+            </button>
+          </div>
+        </section>
+
+        <!-- API Keys -->
+        <section v-else-if="activeSection === 'apiKeys'">
+          <div class="section-header">
+            <div>
+              <h3 class="section-title">
+                API Keys
+              </h3>
+              <p class="section-desc">
+                Manage MCP API keys for external access to this dashboard.
+              </p>
             </div>
-            <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
-            <div v-if="isLoading" class="loading">Loading keys...</div>
-            <div v-else-if="keys.length === 0 && !errorMsg" class="empty-state">
-              No API keys yet. Create one to allow MCP clients to connect.
-            </div>
-            <table v-else class="keys-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Scopes</th>
-                  <th>Created</th>
-                  <th>Last Used</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="key in keys" :key="key.id" :class="{ revoked: !key.active }">
-                  <td class="cell-name">{{ key.name }}</td>
-                  <td class="cell-scopes">
-                    <span v-for="scope in key.scopes" :key="scope" class="scope-pill">{{ scope }}</span>
-                  </td>
-                  <td class="cell-date">{{ formatDate(key.createdAt) }}</td>
-                  <td class="cell-date">{{ formatDate(key.lastUsedAt) }}</td>
-                  <td>
-                    <span v-if="key.active" class="badge badge-active">Active</span>
-                    <span v-else class="badge badge-revoked">Revoked</span>
-                  </td>
-                  <td>
-                    <template v-if="key.active">
-                      <template v-if="confirmRevokeId === key.id">
-                        <button class="btn btn-danger btn-sm" @click="revokeKey(key)">Confirm</button>
-                        <button class="btn btn-secondary btn-sm" style="margin-left:4px" @click="confirmRevokeId = null">Cancel</button>
-                      </template>
-                      <button v-else class="btn btn-danger btn-sm" @click="confirmRevokeId = key.id">Revoke</button>
+            <button class="btn btn-primary" @click="openCreateDialog">
+              + Add Key
+            </button>
+          </div>
+          <p v-if="errorMsg" class="error-msg">
+            {{ errorMsg }}
+          </p>
+          <div v-if="isLoading" class="loading">
+            Loading keys...
+          </div>
+          <div v-else-if="keys.length === 0 && !errorMsg" class="empty-state">
+            No API keys yet. Create one to allow MCP clients to connect.
+          </div>
+          <table v-else class="keys-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Scopes</th>
+                <th>Created</th>
+                <th>Last Used</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="key in keys" :key="key.id" :class="{ revoked: !key.active }">
+                <td class="cell-name">
+                  {{ key.name }}
+                </td>
+                <td class="cell-scopes">
+                  <span v-for="scope in key.scopes" :key="scope" class="scope-pill">{{ scope }}</span>
+                </td>
+                <td class="cell-date">
+                  {{ formatDate(key.createdAt) }}
+                </td>
+                <td class="cell-date">
+                  {{ formatDate(key.lastUsedAt) }}
+                </td>
+                <td>
+                  <span v-if="key.active" class="badge badge-active">Active</span>
+                  <span v-else class="badge badge-revoked">Revoked</span>
+                </td>
+                <td>
+                  <template v-if="key.active">
+                    <template v-if="confirmRevokeId === key.id">
+                      <button class="btn btn-danger btn-sm" @click="revokeKey(key)">
+                        Confirm
+                      </button>
+                      <button class="btn btn-secondary btn-sm" style="margin-left:4px" @click="confirmRevokeId = null">
+                        Cancel
+                      </button>
                     </template>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </section>
+                    <button v-else class="btn btn-danger btn-sm" @click="confirmRevokeId = key.id">
+                      Revoke
+                    </button>
+                  </template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+
+    <!-- Create key dialog -->
+    <Transition name="dialog">
+      <div v-if="showCreateDialog" class="modal-backdrop" @click.self="closeCreateDialog">
+        <div class="modal">
+          <header class="modal-header">
+            <h2>Create API Key</h2>
+            <button class="close-btn" @click="closeCreateDialog">
+              &times;
+            </button>
+          </header>
+          <form class="modal-body" @submit.prevent="handleCreate">
+            <div class="field">
+              <label for="key-name" class="field-label">Name</label>
+              <input id="key-name" v-model="newKeyName" class="field-input" type="text" required placeholder="e.g. CI pipeline key" autofocus>
+            </div>
+            <div class="field">
+              <label for="key-group" class="field-label">Role / Scope Group</label>
+              <select id="key-group" v-model="newKeyGroup" class="field-input">
+                <option value="viewer">
+                  Viewer — tasks:read
+                </option>
+                <option value="operator">
+                  Operator — tasks:read, pipeline:control
+                </option>
+                <option value="developer">
+                  Developer — tasks:read, tasks:write, pipeline:control
+                </option>
+                <option value="admin">
+                  Admin — all scopes
+                </option>
+              </select>
+            </div>
+            <p v-if="createError" class="error-msg">
+              {{ createError }}
+            </p>
+          </form>
+          <footer class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="closeCreateDialog">
+              Cancel
+            </button>
+            <button type="button" class="btn btn-primary" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
+              {{ isCreating ? 'Creating...' : 'Create Key' }}
+            </button>
+          </footer>
         </div>
       </div>
+    </Transition>
 
-      <!-- Create key dialog -->
-      <Transition name="dialog">
-        <div v-if="showCreateDialog" class="modal-backdrop" @click.self="closeCreateDialog">
-          <div class="modal">
-            <header class="modal-header">
-              <h2>Create API Key</h2>
-              <button class="close-btn" @click="closeCreateDialog">&times;</button>
-            </header>
-            <form class="modal-body" @submit.prevent="handleCreate">
-              <div class="field">
-                <label for="key-name" class="field-label">Name</label>
-                <input id="key-name" v-model="newKeyName" class="field-input" type="text" required placeholder="e.g. CI pipeline key" autofocus>
-              </div>
-              <div class="field">
-                <label for="key-group" class="field-label">Role / Scope Group</label>
-                <select id="key-group" v-model="newKeyGroup" class="field-input">
-                  <option value="viewer">Viewer — tasks:read</option>
-                  <option value="operator">Operator — tasks:read, pipeline:control</option>
-                  <option value="developer">Developer — tasks:read, tasks:write, pipeline:control</option>
-                  <option value="admin">Admin — all scopes</option>
-                </select>
-              </div>
-              <p v-if="createError" class="error-msg">{{ createError }}</p>
-            </form>
-            <footer class="modal-footer">
-              <button type="button" class="btn btn-secondary" @click="closeCreateDialog">Cancel</button>
-              <button type="button" class="btn btn-primary" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
-                {{ isCreating ? 'Creating...' : 'Create Key' }}
-              </button>
-            </footer>
-          </div>
-        </div>
-      </Transition>
-
-      <!-- Token reveal dialog -->
-      <Transition name="dialog">
-        <div v-if="revealedToken" class="modal-backdrop" @click.self="dismissReveal">
-          <div class="modal">
-            <header class="modal-header"><h2>Your new API key</h2></header>
-            <div class="modal-body">
-              <p class="reveal-warning">Save this token now — it will <strong>never be shown again</strong>.</p>
-              <div class="token-box"><code class="token-text">{{ revealedToken }}</code></div>
-              <div class="reveal-actions">
-                <button class="btn btn-primary" @click="copyToken">
-                  <span v-if="copyHint === '__error__'">Copy failed</span>
-                  <span v-else-if="copyHint">Copied!</span>
-                  <span v-else>Copy to clipboard</span>
-                </button>
-              </div>
+    <!-- Token reveal dialog -->
+    <Transition name="dialog">
+      <div v-if="revealedToken" class="modal-backdrop" @click.self="dismissReveal">
+        <div class="modal">
+          <header class="modal-header">
+            <h2>Your new API key</h2>
+          </header>
+          <div class="modal-body">
+            <p class="reveal-warning">
+              Save this token now — it will <strong>never be shown again</strong>.
+            </p>
+            <div class="token-box">
+              <code class="token-text">{{ revealedToken }}</code>
             </div>
-            <footer class="modal-footer">
-              <button class="btn btn-secondary" @click="dismissReveal">Done — I have saved the token</button>
-            </footer>
+            <div class="reveal-actions">
+              <button class="btn btn-primary" @click="copyToken">
+                <span v-if="copyHint === '__error__'">Copy failed</span>
+                <span v-else-if="copyHint">Copied!</span>
+                <span v-else>Copy to clipboard</span>
+              </button>
+            </div>
           </div>
+          <footer class="modal-footer">
+            <button class="btn btn-secondary" @click="dismissReveal">
+              Done — I have saved the token
+            </button>
+          </footer>
         </div>
-      </Transition>
+      </div>
+    </Transition>
   </BaseModal>
 </template>
 
@@ -828,5 +881,4 @@ function formatDate(iso: string | null) {
   display: flex;
   justify-content: flex-end;
 }
-
 </style>

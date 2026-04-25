@@ -49,49 +49,49 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 <template>
   <BaseModal :open="!!agent" :z-index="1000" @close="emit('close')">
     <div v-if="agent" class="modal-window">
-        <div class="modal-titlebar">
-          <div class="modal-title-left">
-            <StatusBadge :status="agent.status" />
-            <span class="modal-project">{{ agent.projectName }}</span>
-            <MachineBadge v-if="agent.machine" :machine="agent.machine" />
-            <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
-          </div>
-          <div class="modal-title-right">
-            <button class="modal-close" @click="emit('close')">
-              ✕
-            </button>
-          </div>
+      <div class="modal-titlebar">
+        <div class="modal-title-left">
+          <StatusBadge :status="agent.status" />
+          <span class="modal-project">{{ agent.projectName }}</span>
+          <MachineBadge v-if="agent.machine" :machine="agent.machine" />
+          <span class="modal-meta">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
         </div>
-
-        <CrossLinkBanner
-          v-if="agent.pipelineTaskId"
-          label="Part of"
-          :target-name="agent.pipelineTaskTitle ?? `Task ${agent.pipelineTaskId.slice(0, 8)}`"
-          button-text="Open →"
-          @click="emit('navigate', agent.pipelineTaskId)"
-        />
-
-        <AgentChatStream
-          ref="chatStreamRef"
-          :agent="agent"
-          :local-messages="localMessages"
-          class="modal-output"
-        />
-
-        <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="modal-details">
-          <details>
-            <summary class="details-summary">
-              Agent Details (Tasks, Tools, Subagents)
-            </summary>
-            <div class="details-content">
-              <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
-              <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
-              <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
-            </div>
-          </details>
+        <div class="modal-title-right">
+          <button class="modal-close" @click="emit('close')">
+            ✕
+          </button>
         </div>
+      </div>
 
-        <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
+      <CrossLinkBanner
+        v-if="agent.pipelineTaskId"
+        label="Part of"
+        :target-name="agent.pipelineTaskTitle ?? `Task ${agent.pipelineTaskId.slice(0, 8)}`"
+        button-text="Open →"
+        @click="emit('navigate', agent.pipelineTaskId)"
+      />
+
+      <AgentChatStream
+        ref="chatStreamRef"
+        :agent="agent"
+        :local-messages="localMessages"
+        class="modal-output"
+      />
+
+      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="modal-details">
+        <details>
+          <summary class="details-summary">
+            Agent Details (Tasks, Tools, Subagents)
+          </summary>
+          <div class="details-content">
+            <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
+            <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
+            <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
+          </div>
+        </details>
+      </div>
+
+      <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
     </div>
   </BaseModal>
 </template>

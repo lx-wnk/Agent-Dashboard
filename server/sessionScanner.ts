@@ -48,7 +48,8 @@ function extractLastAssistantText(entries: any[]): string | null {
         .map((c: any) => (c.text as string))
         .join('')
         .trim()
-      if (text) last = text
+      if (text)
+        last = text
     }
   }
   return last ? last.slice(0, 1000) : null

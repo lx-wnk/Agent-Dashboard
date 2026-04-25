@@ -148,72 +148,72 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 <template>
   <BaseModal :open="open" @close="emit('close')">
     <div class="sessions-modal">
-        <header class="modal-header">
-          <h2>Past Sessions</h2>
-          <button class="close-btn" @click="emit('close')">
-            &times;
-          </button>
-        </header>
+      <header class="modal-header">
+        <h2>Past Sessions</h2>
+        <button class="close-btn" @click="emit('close')">
+          &times;
+        </button>
+      </header>
 
-        <div class="modal-body">
-          <div class="search-row">
-            <input
-              v-model="search"
-              class="search-input"
-              type="text"
-              placeholder="Filter by project or prompt..."
-            >
-          </div>
+      <div class="modal-body">
+        <div class="search-row">
+          <input
+            v-model="search"
+            class="search-input"
+            type="text"
+            placeholder="Filter by project or prompt..."
+          >
+        </div>
 
-          <p v-if="isLoading" class="status-msg">
-            Loading sessions...
-          </p>
-          <p v-else-if="filtered.length === 0" class="status-msg">
-            No sessions found.
-          </p>
+        <p v-if="isLoading" class="status-msg">
+          Loading sessions...
+        </p>
+        <p v-else-if="filtered.length === 0" class="status-msg">
+          No sessions found.
+        </p>
 
-          <div v-else class="session-list">
-            <div
-              v-for="s in filtered"
-              :key="s.sessionId"
-              class="session-card"
-            >
-              <div class="session-top">
-                <span class="session-project">{{ s.projectName }}</span>
-                <span class="session-date">{{ formatDate(s.lastModified) }}</span>
-              </div>
-              <code class="session-path">{{ shortenPath(s.projectPath) }}</code>
-              <p v-if="s.firstPrompt" class="session-prompt">
-                {{ s.firstPrompt }}
-              </p>
-              <pre v-if="s.lastResponse" class="session-last-response">{{ s.lastResponse }}</pre>
-              <div class="session-meta">
-                <span v-if="s.model" class="meta-tag model">{{ shortModel(s.model) }}</span>
-                <span v-if="s.costEstimate > 0" class="meta-tag cost">${{ s.costEstimate.toFixed(2) }}</span>
-                <span class="meta-tag session-id-tag" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
-              </div>
-              <div class="session-actions">
-                <input
-                  v-model="resumePrompts[s.sessionId]"
-                  class="resume-input"
-                  type="text"
-                  placeholder="Follow-up prompt..."
-                  @keydown.enter="resumeSession(s)"
-                >
-                <button
-                  class="resume-btn"
-                  :disabled="!resumePrompts[s.sessionId]?.trim() || spawning === s.sessionId"
-                  @click="resumeSession(s)"
-                >
-                  {{ spawning === s.sessionId ? '...' : 'Resume' }}
-                </button>
-              </div>
-              <p v-if="resumeMsg[s.sessionId]" class="resume-status" :class="{ error: resumeError[s.sessionId] }">
-                {{ resumeMsg[s.sessionId] }}
-              </p>
+        <div v-else class="session-list">
+          <div
+            v-for="s in filtered"
+            :key="s.sessionId"
+            class="session-card"
+          >
+            <div class="session-top">
+              <span class="session-project">{{ s.projectName }}</span>
+              <span class="session-date">{{ formatDate(s.lastModified) }}</span>
             </div>
+            <code class="session-path">{{ shortenPath(s.projectPath) }}</code>
+            <p v-if="s.firstPrompt" class="session-prompt">
+              {{ s.firstPrompt }}
+            </p>
+            <pre v-if="s.lastResponse" class="session-last-response">{{ s.lastResponse }}</pre>
+            <div class="session-meta">
+              <span v-if="s.model" class="meta-tag model">{{ shortModel(s.model) }}</span>
+              <span v-if="s.costEstimate > 0" class="meta-tag cost">${{ s.costEstimate.toFixed(2) }}</span>
+              <span class="meta-tag session-id-tag" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
+            </div>
+            <div class="session-actions">
+              <input
+                v-model="resumePrompts[s.sessionId]"
+                class="resume-input"
+                type="text"
+                placeholder="Follow-up prompt..."
+                @keydown.enter="resumeSession(s)"
+              >
+              <button
+                class="resume-btn"
+                :disabled="!resumePrompts[s.sessionId]?.trim() || spawning === s.sessionId"
+                @click="resumeSession(s)"
+              >
+                {{ spawning === s.sessionId ? '...' : 'Resume' }}
+              </button>
+            </div>
+            <p v-if="resumeMsg[s.sessionId]" class="resume-status" :class="{ error: resumeError[s.sessionId] }">
+              {{ resumeMsg[s.sessionId] }}
+            </p>
           </div>
         </div>
+      </div>
     </div>
   </BaseModal>
 </template>
@@ -436,5 +436,4 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .resume-status.error { color: var(--accent-red); }
-
 </style>
