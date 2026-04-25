@@ -38,85 +38,25 @@ const tokenDelta = computed(() => {
 </script>
 
 <template>
-  <div v-if="sparkData.length >= 2" class="cost-trend">
-    <div class="trend-header">
-      <span class="trend-label">Cost trend (3min)</span>
-      <span v-if="costDelta !== null" class="trend-delta" :class="costDelta > 0 ? 'up' : 'flat'">
+  <div v-if="sparkData.length >= 2" class="flex flex-col gap-1 px-6 py-1.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+    <div class="flex items-center gap-2">
+      <span class="text-[11px] text-slate-400 dark:text-slate-600">Cost trend (3min)</span>
+      <span v-if="costDelta !== null" class="text-[11px] font-mono" :class="costDelta > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-600'">
         {{ costDelta > 0 ? '+' : '' }}${{ costDelta.toFixed(2) }}
       </span>
-      <span v-if="tokenDelta !== null && tokenDelta > 0" class="trend-delta tokens">
+      <span v-if="tokenDelta !== null && tokenDelta > 0" class="text-[11px] font-mono text-blue-600 dark:text-blue-400">
         +{{ formatTokens(tokenDelta) }} tok
       </span>
     </div>
-    <div class="sparkline">
+    <div class="flex items-end gap-px h-6">
       <div
         v-for="(point, i) in sparkData"
         :key="i"
-        class="spark-bar"
+        class="flex-1 min-w-0.5 bg-green-600 dark:bg-green-400 rounded-t-px opacity-70 hover:opacity-100 transition-opacity"
         :style="{ height: `${Math.max(2, (point.cost / maxCost) * 100)}%` }"
         :title="`$${point.cost.toFixed(2)}`"
+        :class="{ 'opacity-100': i === sparkData.length - 1 }"
       />
     </div>
   </div>
 </template>
-
-<style scoped>
-.cost-trend {
-  padding: 6px 24px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
-}
-
-.trend-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.trend-label {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.trend-delta {
-  font-size: 11px;
-  font-family: var(--font-mono);
-}
-
-.trend-delta.up {
-  color: var(--accent-red);
-}
-
-.trend-delta.flat {
-  color: var(--text-muted);
-}
-
-.trend-delta.tokens {
-  color: var(--accent-blue);
-}
-
-.sparkline {
-  display: flex;
-  align-items: flex-end;
-  gap: 1px;
-  height: 24px;
-}
-
-.spark-bar {
-  flex: 1;
-  min-width: 2px;
-  background: var(--accent-green);
-  border-radius: 1px 1px 0 0;
-  opacity: 0.7;
-  transition: opacity 0.15s;
-}
-
-.spark-bar:hover {
-  opacity: 1;
-}
-
-.spark-bar:last-child {
-  opacity: 1;
-}
-</style>
