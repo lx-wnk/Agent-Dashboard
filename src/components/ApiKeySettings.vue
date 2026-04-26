@@ -2,6 +2,7 @@
 import type { ApiKey, McpScope } from '../types'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
+import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ open: boolean }>()
@@ -322,9 +323,9 @@ function formatDate(iso: string | null) {
                 Manage MCP API keys for external access to this dashboard.
               </p>
             </div>
-            <button type="button" class="px-4 py-1.5 bg-blue-600 text-white border-none rounded text-sm font-semibold cursor-pointer hover:brightness-110 whitespace-nowrap" @click="openCreateDialog">
+            <AppButton variant="info" @click="openCreateDialog">
               + Add Key
-            </button>
+            </AppButton>
           </div>
           <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mb-3">
             {{ errorMsg }}
@@ -381,12 +382,12 @@ function formatDate(iso: string | null) {
                 <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
                   <template v-if="key.active">
                     <template v-if="confirmRevokeId === key.id">
-                      <button type="button" class="border-none rounded px-2.5 py-1 text-xs font-semibold cursor-pointer bg-red-600 text-white hover:brightness-110 mr-1" @click="revokeKey(key)">
+                      <AppButton variant="danger" size="sm" class="mr-1" @click="revokeKey(key)">
                         Confirm
-                      </button>
-                      <button type="button" class="border-none rounded px-2.5 py-1 text-xs font-semibold cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110" @click="confirmRevokeId = null">
+                      </AppButton>
+                      <AppButton variant="secondary" size="sm" @click="confirmRevokeId = null">
                         Cancel
-                      </button>
+                      </AppButton>
                     </template>
                     <button v-else type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmRevokeId = key.id">
                       Revoke
@@ -451,12 +452,12 @@ function formatDate(iso: string | null) {
             </p>
           </form>
           <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
-            <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer font-sans bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110" @click="closeCreateDialog">
+            <AppButton variant="secondary" @click="closeCreateDialog">
               Cancel
-            </button>
-            <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer font-sans bg-blue-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
+            </AppButton>
+            <AppButton variant="info" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
               {{ isCreating ? 'Creating...' : 'Create Key' }}
-            </button>
+            </AppButton>
           </footer>
         </div>
       </div>
@@ -479,17 +480,17 @@ function formatDate(iso: string | null) {
               {{ revealedToken }}
             </div>
             <div class="flex justify-end">
-              <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer font-sans bg-blue-600 text-white hover:brightness-110" @click="copyToken">
+              <AppButton variant="info" @click="copyToken">
                 <span v-if="copyHint === '__error__'">Copy failed</span>
                 <span v-else-if="copyHint">Copied!</span>
                 <span v-else>Copy to clipboard</span>
-              </button>
+              </AppButton>
             </div>
           </div>
           <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
-            <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer font-sans bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110" @click="dismissReveal">
+            <AppButton variant="secondary" @click="dismissReveal">
               Done — I have saved the token
-            </button>
+            </AppButton>
           </footer>
         </div>
       </div>

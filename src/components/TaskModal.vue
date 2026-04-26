@@ -20,10 +20,13 @@ import {
   resolvePermissionRequest,
   retryTask,
 } from '../composables/useTasks'
+import { agentSessionStatusClass, runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
 import PromptInput from './PromptInput.vue'
 import StageOutputView from './StageOutputView.vue'
+import AppButton from './ui/AppButton.vue'
+import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
@@ -325,23 +328,6 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleString()
 }
 
-function stageRunStatusClass(status: string): string {
-  switch (status) {
-    case 'running': return 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
-    case 'done': return 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400'
-    case 'failed': return 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400'
-    case 'on_hold': return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400'
-    default: return 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-  }
-}
-
-function sessionStatusClass(status: string): string {
-  switch (status) {
-    case 'active': return 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400'
-    case 'waiting': return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400'
-    default: return 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
-  }
-}
 </script>
 
 <template>
@@ -431,7 +417,7 @@ function sessionStatusClass(status: string): string {
             <div class="flex items-center gap-2 flex-wrap mb-2">
               <span class="font-mono text-[10px] uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded font-semibold">{{ latestStageRun.stage }}</span>
               <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">iter {{ latestStageRun.iteration }}</span>
-              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="stageRunStatusClass(latestStageRun.status)">{{ latestStageRun.status }}</span>
+              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="runStatusChipClass(latestStageRun.status)">{{ latestStageRun.status }}</span>
               <span class="text-[11px] text-slate-400 dark:text-slate-600 ml-auto">
                 {{ formatDate(latestStageRun.startedAt) }}
                 <template v-if="latestStageRun.endedAt"> → {{ formatDate(latestStageRun.endedAt) }}</template>
@@ -506,14 +492,14 @@ function sessionStatusClass(status: string): string {
               />
               <div class="flex justify-between items-center mt-1.5">
                 <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">{{ feedbackInput.length }} / 4000</span>
-                <button
-                  type="button"
-                  class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-red-600 text-white hover:brightness-110"
+                <AppButton
+                  variant="danger"
+                  size="sm"
                   :disabled="isActing || feedbackInput.trim().length === 0"
                   @click="onRequestChanges"
                 >
                   Request Changes
-                </button>
+                </AppButton>
               </div>
             </div>
           </div>
@@ -623,12 +609,12 @@ function sessionStatusClass(status: string): string {
             </div>
 
             <form class="flex gap-1.5 items-center flex-wrap mt-2" @submit.prevent="handleAddDependency">
-              <input
+              <AppInput
                 v-model="newDepId"
-                class="flex-1 min-w-0 px-2 py-1 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs"
+                class="flex-1 min-w-0"
                 placeholder="Vorgänger Task-ID"
                 :disabled="isAddingDep"
-              >
+              />
               <select v-model="newDepStage" class="px-1.5 py-1 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-[11px]">
                 <option value="done">
                   Done
@@ -682,7 +668,7 @@ function sessionStatusClass(status: string): string {
               <span
                 v-if="pipelineAgent"
                 class="text-[10px] uppercase px-2 py-0.5 rounded font-bold ml-auto"
-                :class="sessionStatusClass(pipelineAgent.status)"
+                :class="agentSessionStatusClass(pipelineAgent.status)"
               >
                 {{ pipelineAgent.status }}
               </span>
@@ -717,7 +703,7 @@ function sessionStatusClass(status: string): string {
             <div class="flex items-center gap-2.5 mb-1">
               <span class="font-semibold text-xs text-slate-900 dark:text-slate-100">{{ run.stage }}</span>
               <span class="font-mono text-[11px] text-slate-400 dark:text-slate-600">iter {{ run.iteration }}</span>
-              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="stageRunStatusClass(run.status)">{{ run.status }}</span>
+              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="runStatusChipClass(run.status)">{{ run.status }}</span>
             </div>
             <div v-if="run.sessionName" class="text-[11px] text-slate-400 dark:text-slate-600 mt-0.5">
               session: <code>{{ run.sessionName }}</code>
@@ -749,22 +735,22 @@ function sessionStatusClass(status: string): string {
                 {{ req.reason }}
               </div>
               <div class="flex gap-1.5 mt-1.5">
-                <button
-                  type="button"
-                  class="border-none rounded px-2.5 py-1 text-[11px] font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-green-600 text-white hover:brightness-110"
+                <AppButton
+                  variant="primary"
+                  size="sm"
                   :disabled="isActing"
                   @click="onResolve(req, 'granted')"
                 >
                   Grant
-                </button>
-                <button
-                  type="button"
-                  class="border-none rounded px-2.5 py-1 text-[11px] font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-red-600 text-white hover:brightness-110"
+                </AppButton>
+                <AppButton
+                  variant="danger"
+                  size="sm"
                   :disabled="isActing"
                   @click="onResolve(req, 'denied')"
                 >
                   Deny
-                </button>
+                </AppButton>
               </div>
             </div>
           </div>
@@ -791,14 +777,14 @@ function sessionStatusClass(status: string): string {
                 placeholder="Pattern (optional, e.g. npm run *)"
                 @keydown.enter="onGrantPermission"
               >
-              <button
-                type="button"
-                class="border-none rounded px-2.5 py-1 text-[11px] font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-green-600 text-white hover:brightness-110"
+              <AppButton
+                variant="primary"
+                size="sm"
                 :disabled="isGranting || !newPermTool.trim()"
                 @click="onGrantPermission"
               >
                 Grant
-              </button>
+              </AppButton>
             </div>
             <p v-if="permError" class="text-[11px] text-red-400 mt-1.5">
               {{ permError }}
@@ -837,56 +823,51 @@ function sessionStatusClass(status: string): string {
           Analysis agent spawned · PID <code>{{ analysisInfo.pid }}</code> · look for it in the agents list.
         </p>
         <div class="flex gap-2 justify-end">
-          <button
+          <AppButton
             v-if="isFailedRun(task)"
-            type="button"
-            class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-blue-600 text-white hover:brightness-110"
+            variant="info"
             :disabled="isActing"
             title="Start a fresh iteration of this stage"
             @click="handleAction(() => retryTask(task!.id))"
           >
             Retry Stage
-          </button>
-          <button
+          </AppButton>
+          <AppButton
             v-if="isFailedRun(task)"
-            type="button"
-            class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110"
+            variant="secondary"
             :disabled="isActing"
             title="Spawn a standalone Claude session with the failure context attached"
             @click="onAnalyze"
           >
             Analyze Failure
-          </button>
-          <button
+          </AppButton>
+          <AppButton
             v-if="approvalMeta"
-            type="button"
-            class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-green-600 text-white hover:brightness-110"
+            variant="primary"
             :disabled="isActing"
             :title="`Advance past ${task.currentStage} gate`"
             @click="handleAction(() => approveTask(task!.id))"
           >
             {{ approvalMeta.label }}
-          </button>
-          <button
+          </AppButton>
+          <AppButton
             v-else-if="!isTerminal(task.currentStage) && !isOnHoldStage && !isFailedRun(task)"
-            type="button"
-            class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110"
+            variant="secondary"
             :disabled="isActing"
             title="Manually advance to the next stage (skips approval gates)"
             @click="handleAction(() => progressTask(task!.id))"
           >
             Progress →
-          </button>
-          <button
+          </AppButton>
+          <AppButton
             v-if="!isTerminal(task.currentStage)"
-            type="button"
-            class="border-none rounded px-3.5 py-1.5 text-xs font-semibold cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed bg-red-600 text-white hover:brightness-110"
+            variant="danger"
             :disabled="isActing"
             title="Stop this task and mark it as cancelled"
             @click="handleAction(() => cancelTask(task!.id))"
           >
             Cancel Task
-          </button>
+          </AppButton>
         </div>
       </footer>
     </div>
