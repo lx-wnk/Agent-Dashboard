@@ -73,6 +73,17 @@ function runMigrations(connection: DatabaseType): void {
   connection.exec(`CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(task_id)`)
   connection.exec(`CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_id)`)
 
+  // Agent monitoring telemetry — deliberately separate from pipeline_config.
+  // t is unique: SSE fires at a fixed interval so two points at the same ms are impossible.
+  connection.exec(`
+    CREATE TABLE IF NOT EXISTS agent_cost_trend (
+      t      INTEGER NOT NULL UNIQUE,
+      cost   REAL    NOT NULL,
+      tokens INTEGER NOT NULL
+    )
+  `)
+  connection.exec(`CREATE INDEX IF NOT EXISTS idx_agent_cost_trend_t ON agent_cost_trend(t)`)
+
   const version = connection
     .prepare('SELECT MAX(version) as v FROM schema_version')
     .get() as { v: number | null }
@@ -82,6 +93,14 @@ function runMigrations(connection: DatabaseType): void {
       .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(1, new Date().toISOString())
   }
+
+  // Runtime migration: add user_id to tasks and api_keys for multi-user support.
+  const apiKeyCols = connection.prepare('PRAGMA table_info(api_keys)').all() as Array<{ name: string }>
+  if (!apiKeyCols.some(c => c.name === 'user_id'))
+    connection.prepare('ALTER TABLE api_keys ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL').run()
+
+  if (!hasCol('user_id'))
+    connection.prepare('ALTER TABLE tasks ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL').run()
 }
 
 export function resetDb(): void {

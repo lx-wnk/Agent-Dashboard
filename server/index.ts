@@ -11,6 +11,7 @@ import { consola } from 'consola'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
+import { getDb } from './db/client.js'
 import { getTaskById } from './db/tasksRepo.js'
 import { parseFullSession } from './jsonlParser.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
@@ -118,7 +119,48 @@ async function start() {
 
   // Cost trend history: ring buffer, 1h at 3s interval = 1200 entries
   const MAX_TREND_POINTS = 1200
-  const costTrend: Array<{ t: number, cost: number, tokens: number }> = []
+
+  // Track the last persisted timestamp to only insert new points on each interval
+  let persistedUpTo = 0
+
+  // Load persisted trend on startup (best-effort)
+  const costTrend: Array<{ t: number, cost: number, tokens: number }> = (() => {
+    try {
+      const db = getDb()
+      const rows = db.prepare(
+        'SELECT t, cost, tokens FROM agent_cost_trend ORDER BY t ASC',
+      ).all() as Array<{ t: number, cost: number, tokens: number }>
+      if (rows.length > 0)
+        persistedUpTo = rows[rows.length - 1].t
+      return rows.slice(-MAX_TREND_POINTS)
+    }
+    catch {
+      return []
+    }
+  })()
+
+  // Persist new trend points every 60s (best-effort — never crash the server)
+  const persistTrendId = setInterval(() => {
+    const newPoints = costTrend.filter(p => p.t > persistedUpTo)
+    if (newPoints.length === 0)
+      return
+    try {
+      const db = getDb()
+      const insert = db.prepare('INSERT OR IGNORE INTO agent_cost_trend (t, cost, tokens) VALUES (?, ?, ?)')
+      db.transaction(() => {
+        for (const p of newPoints)
+          insert.run(p.t, p.cost, p.tokens)
+        db.prepare(
+          'DELETE FROM agent_cost_trend WHERE t NOT IN (SELECT t FROM agent_cost_trend ORDER BY t DESC LIMIT ?)',
+        ).run(MAX_TREND_POINTS)
+      })()
+      persistedUpTo = newPoints[newPoints.length - 1].t
+    }
+    catch (err) {
+      console.warn('[cost-trend] persist failed:', err)
+    }
+  }, 60_000)
+  persistTrendId.unref()
 
   // SSE broadcast + cost trend recording: only scan processes when clients are connected
   let sseBroadcastId: ReturnType<typeof setInterval> | null = null
