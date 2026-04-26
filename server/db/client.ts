@@ -93,6 +93,14 @@ function runMigrations(connection: DatabaseType): void {
       .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(1, new Date().toISOString())
   }
+
+  // Runtime migration: add user_id to tasks and api_keys for multi-user support.
+  const apiKeyCols = connection.prepare('PRAGMA table_info(api_keys)').all() as Array<{ name: string }>
+  if (!apiKeyCols.some(c => c.name === 'user_id'))
+    connection.prepare('ALTER TABLE api_keys ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL').run()
+
+  if (!hasCol('user_id'))
+    connection.prepare('ALTER TABLE tasks ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL').run()
 }
 
 export function resetDb(): void {
