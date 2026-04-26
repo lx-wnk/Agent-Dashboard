@@ -1,5 +1,37 @@
 import { describe, expect, it } from 'vitest'
 import { parseElapsedTime, scanProcesses } from './processScanner'
+import { parseLsofBatch } from './processScanner'
+
+describe('parseLsofBatch', () => {
+  it('parses a single process entry', () => {
+    const stdout = 'p123\nn/Users/alex/my-project\n'
+    expect(parseLsofBatch(stdout)).toEqual(new Map([[123, '/Users/alex/my-project']]))
+  })
+
+  it('parses multiple process entries', () => {
+    const stdout = 'p100\nn/home/a\np200\nn/home/b\n'
+    const result = parseLsofBatch(stdout)
+    expect(result.get(100)).toBe('/home/a')
+    expect(result.get(200)).toBe('/home/b')
+    expect(result.size).toBe(2)
+  })
+
+  it('returns empty map for empty input', () => {
+    expect(parseLsofBatch('')).toEqual(new Map())
+  })
+
+  it('ignores lines that are not p- or n-prefixed', () => {
+    const stdout = 'p99\nf3\nn/some/path\n'
+    expect(parseLsofBatch(stdout)).toEqual(new Map([[99, '/some/path']]))
+  })
+
+  it('skips a pid entry that has no following n-line before next p-line', () => {
+    const stdout = 'p99\np100\nn/some/path\n'
+    const result = parseLsofBatch(stdout)
+    expect(result.get(99)).toBeUndefined()
+    expect(result.get(100)).toBe('/some/path')
+  })
+})
 
 // NOTE: processScanner.ts captures `execFileAsync = promisify(execFile)` at
 // module-evaluation time.  Vitest's vi.mock on node:util or node:child_process
