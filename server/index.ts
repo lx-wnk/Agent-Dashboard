@@ -11,6 +11,7 @@ import { consola } from 'consola'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { getChannelMap } from './channelDiscovery.js'
+import { getDb } from './db/client.js'
 import { getTaskById } from './db/tasksRepo.js'
 import { parseFullSession } from './jsonlParser.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
@@ -118,7 +119,37 @@ async function start() {
 
   // Cost trend history: ring buffer, 1h at 3s interval = 1200 entries
   const MAX_TREND_POINTS = 1200
-  const costTrend: Array<{ t: number, cost: number, tokens: number }> = []
+  const TREND_CONFIG_KEY = 'cost_trend_history'
+  const TREND_TTL_MS = 24 * 60 * 60 * 1000 // 24h
+
+  // Load persisted trend on startup (best-effort)
+  const costTrend: Array<{ t: number, cost: number, tokens: number }> = (() => {
+    try {
+      const db = getDb()
+      const row = db.prepare('SELECT value FROM pipeline_config WHERE key = ?').get(TREND_CONFIG_KEY) as { value: string } | undefined
+      if (!row)
+        return []
+      const parsed: Array<{ t: number, cost: number, tokens: number }> = JSON.parse(row.value)
+      const cutoff = Date.now() - TREND_TTL_MS
+      return parsed.filter(p => p.t > cutoff)
+    }
+    catch {
+      return []
+    }
+  })()
+
+  // Persist trend every 60s (best-effort — never crash the server)
+  setInterval(() => {
+    try {
+      const db = getDb()
+      db.prepare(
+        'INSERT INTO pipeline_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      ).run(TREND_CONFIG_KEY, JSON.stringify(costTrend))
+    }
+    catch {
+      // intentionally swallowed
+    }
+  }, 60_000)
 
   // SSE broadcast + cost trend recording: only scan processes when clients are connected
   let sseBroadcastId: ReturnType<typeof setInterval> | null = null
