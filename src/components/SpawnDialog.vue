@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import BaseModal from './BaseModal.vue'
+import AppButton from './ui/AppButton.vue'
+import AppInput from './ui/AppInput.vue'
+import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -173,43 +175,43 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <BaseModal :open="open" @close="emit('close')">
-    <div class="spawn-modal">
-      <header class="modal-header">
-        <h2>New Agent</h2>
-        <button class="close-btn" @click="emit('close')">
+  <AppModal :open="open" @close="emit('close')">
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-xl">
+      <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          New Agent
+        </h2>
+        <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="emit('close')">
           &times;
         </button>
       </header>
 
-      <form class="modal-body" @submit.prevent>
-        <div class="field">
-          <label class="field-label" for="spawn-prompt">Prompt</label>
-          <textarea
+      <form class="p-5" @submit.prevent>
+        <div class="mb-4">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-prompt">Prompt</label>
+          <AppInput
             id="spawn-prompt"
             v-model="prompt"
-            class="field-input"
-            rows="4"
+            type="textarea"
+            :rows="4"
             required
             placeholder="What should the agent do?"
           />
         </div>
 
-        <div class="field">
-          <label class="field-label" for="spawn-cwd">Working Directory</label>
-          <input
+        <div class="mb-4">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-cwd">Working Directory</label>
+          <AppInput
             id="spawn-cwd"
             v-model="cwd"
-            class="field-input"
-            type="text"
             required
             placeholder="/path/to/project"
-          >
+          />
         </div>
 
-        <div class="field">
-          <label class="field-label" for="spawn-model">Model</label>
-          <select id="spawn-model" v-model="model" class="field-input">
+        <div class="mb-4">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-model">Model</label>
+          <select id="spawn-model" v-model="model" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
             <option value="">
               Auto
             </option>
@@ -225,18 +227,18 @@ onUnmounted(() => {
           </select>
         </div>
 
-        <div class="field">
-          <label class="field-label" for="spawn-system">System Prompt</label>
-          <textarea
+        <div class="mb-4">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-system">System Prompt</label>
+          <AppInput
             id="spawn-system"
             v-model="systemPrompt"
-            class="field-input"
-            rows="2"
+            type="textarea"
+            :rows="2"
             placeholder="Custom system instructions (optional)"
           />
         </div>
 
-        <div class="field-checkbox">
+        <div class="flex items-center gap-2 mb-4">
           <input
             id="spawn-channel"
             v-model="enableChannel"
@@ -245,248 +247,44 @@ onUnmounted(() => {
           <label for="spawn-channel">Enable dashboard control channel</label>
         </div>
 
-        <div class="field-checkbox">
+        <div class="flex items-center gap-2 mb-4">
           <input
             id="spawn-yolo"
             v-model="skipPermissions"
             type="checkbox"
             @change="skipPermissionsConfirmed = false"
           >
-          <label for="spawn-yolo">Skip permission prompts <span class="yolo-hint">(--dangerously-skip-permissions)</span></label>
+          <label for="spawn-yolo">Skip permission prompts <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">(--dangerously-skip-permissions)</span></label>
         </div>
 
-        <div v-if="skipPermissions" class="danger-warning">
+        <div v-if="skipPermissions" class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded p-2 px-3 text-xs leading-relaxed text-yellow-600 dark:text-yellow-400 mb-3">
           The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
         </div>
 
-        <div v-if="skipPermissionsConfirmed" class="danger-confirm">
+        <div v-if="skipPermissionsConfirmed" class="text-xs text-red-600 dark:text-red-400 font-semibold mb-2">
           Click "Spawn Agent" again to confirm.
         </div>
 
-        <p v-if="spawnStatusMsg" class="status-msg">
+        <p v-if="spawnStatusMsg" class="text-xs text-green-600 dark:text-green-400 mt-1 leading-snug">
           {{ spawnStatusMsg }}
         </p>
-        <p v-if="errorMsg" class="error-msg">
+        <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mt-1 leading-snug whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto">
           {{ errorMsg }}
         </p>
       </form>
 
-      <footer class="modal-footer">
-        <button
-          type="button"
-          class="btn btn-secondary"
-          @click="emit('close')"
-        >
+      <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+        <AppButton variant="secondary" @click="emit('close')">
           Cancel
-        </button>
-        <button
-          type="button"
-          class="btn btn-primary"
+        </AppButton>
+        <AppButton
+          variant="primary"
           :disabled="isSpawning || !prompt.trim() || !cwd.trim()"
           @click="handleSpawn"
         >
           {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
-        </button>
+        </AppButton>
       </footer>
     </div>
-  </BaseModal>
+  </AppModal>
 </template>
-
-<style scoped>
-.spawn-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  width: 100%;
-  max-width: 520px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.modal-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 24px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-}
-
-.close-btn:hover {
-  color: var(--text-primary);
-}
-
-.modal-body {
-  padding: 20px;
-}
-
-.field {
-  margin-bottom: 16px;
-}
-
-.field-label {
-  display: block;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
-
-.field-input {
-  width: 100%;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: inherit;
-  padding: 8px 10px;
-  line-height: 1.4;
-  resize: vertical;
-}
-
-.field-input::placeholder {
-  color: var(--text-muted);
-}
-
-.field-input:focus {
-  outline: none;
-  border-color: var(--accent-green);
-}
-
-select.field-input {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 28px;
-  cursor: pointer;
-}
-
-select.field-input option {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.field-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.field-checkbox input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-green);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.field-checkbox label {
-  font-size: 13px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.yolo-hint {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-.danger-warning {
-  background: rgba(234, 179, 8, 0.1);
-  border: 1px solid rgba(234, 179, 8, 0.3);
-  border-radius: 4px;
-  padding: 8px 12px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: rgb(234, 179, 8);
-  margin-bottom: 12px;
-}
-
-.danger-confirm {
-  font-size: 12px;
-  color: var(--accent-red);
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.status-msg {
-  font-size: 12px;
-  color: var(--accent-green);
-  margin-top: 4px;
-  line-height: 1.4;
-}
-
-.error-msg {
-  font-size: 12px;
-  color: var(--accent-red);
-  margin-top: 4px;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 120px;
-  overflow-y: auto;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
-}
-
-.btn {
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  font-family: inherit;
-}
-
-.btn-secondary {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-}
-
-.btn-secondary:hover {
-  filter: brightness(1.15);
-}
-
-.btn-primary {
-  background: var(--accent-green);
-  color: var(--bg-primary);
-}
-
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.btn-primary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-</style>

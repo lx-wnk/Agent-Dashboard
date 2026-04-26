@@ -1,51 +1,22 @@
 <script setup lang="ts">
 import type { SubAgent } from '../types'
-import StatusBadge from './StatusBadge.vue'
+import AppBadge from './ui/AppBadge.vue'
 
-defineProps<{
-  subagent: SubAgent
-}>()
+defineProps<{ subagent: SubAgent }>()
 </script>
 
 <template>
-  <tr class="subagent-row">
-    <td class="col-status">
-      <StatusBadge :status="subagent.status" />
+  <tr>
+    <td class="px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-900">
+      <AppBadge :variant="subagent.status" />
     </td>
-    <td class="col-type" colspan="2">
-      <span class="indent">↳</span>
+    <td colspan="2" class="pl-9 pr-3 py-1.5 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-900 max-w-[350px] overflow-hidden text-ellipsis whitespace-nowrap">
+      <span class="text-slate-400 dark:text-slate-600 mr-1.5">↳</span>
       {{ subagent.type === 'unknown' ? subagent.id.substring(0, 16) : subagent.type }}
     </td>
-    <td class="col-action">
+    <td class="px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-900">
       {{ subagent.currentAction || '—' }}
     </td>
-    <td colspan="5" />
+    <td colspan="5" class="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800" />
   </tr>
 </template>
-
-<style scoped>
-.subagent-row td {
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text-muted);
-  background: var(--bg-secondary);
-}
-
-.indent {
-  color: var(--text-muted);
-  margin-right: 6px;
-}
-
-.col-type {
-  padding-left: 36px;
-  max-width: 350px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.col-action {
-  color: var(--text-muted);
-}
-</style>

@@ -7,10 +7,11 @@
 </head>
 <body>
   <script>
-    // Apply theme before first paint to prevent FOUC for light-mode users
     (function() {
-      var t = localStorage.getItem('agent-theme');
-      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      var stored = localStorage.getItem('agent-theme');
+      var isDark = stored === 'dark'
+        || (stored !== 'light' && !window.matchMedia('(prefers-color-scheme: light)').matches);
+      if (isDark) document.documentElement.classList.add('dark');
     })();
   </script>
   <div id="app"></div>
