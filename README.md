@@ -57,45 +57,6 @@ Open [http://localhost:13120](http://localhost:13120) — running Claude Code ag
 5. **Status classification** — active (< 30s), waiting (< 5min), idle (> 5min) since last activity
 6. **Real-time updates** — browser subscribes to `/api/agents/stream` (SSE) with polling fallback
 
-### Directory Structure
-
-```
-├── server/                    # Express backend
-│   ├── index.ts               # API server + SSE + Vite middleware
-│   ├── processScanner.ts      # Finds Claude processes via ps/lsof
-│   ├── jsonlParser.ts         # Reads JSONL session logs
-│   ├── agentMerger.ts         # Merges process + session data, cost calc
-│   ├── pricing.ts             # MODEL_PRICING lookup table
-│   ├── channelDiscovery.ts    # Reads channel discovery files
-│   ├── remoteAggregator.ts    # Multi-machine agent aggregation
-│   └── systemMonitor.ts       # CPU/disk monitoring (macOS + Linux)
-├── src/                       # Vue 3 frontend
-│   ├── App.vue                # Root: header stats, view toggle, search
-│   ├── components/
-│   │   ├── AgentTable.vue     # Sortable agent table (list view)
-│   │   ├── AgentRow.vue       # Table row per agent
-│   │   ├── SubAgentRow.vue    # Indented subagent rows
-│   │   ├── AgentCard.vue      # Card view tile with output preview
-│   │   ├── AgentCardGrid.vue  # Responsive grid for cards
-│   │   ├── AgentModal.vue     # Chat-style session modal
-│   │   ├── KanbanBoard.vue    # Kanban board (tasks across agents)
-│   │   ├── SpawnDialog.vue    # Spawn new agents modal
-│   │   ├── PromptInput.vue    # Prompt input with slash autocomplete
-│   │   ├── ToolTimeline.vue   # Recent tool calls timeline
-│   │   ├── TaskList.vue       # Agent task tracker
-│   │   ├── SubAgentList.vue   # Subagent list in detail panel
-│   │   ├── ApiKeySettings.vue # API key management UI (create, list, revoke)
-│   │   └── CrossLinkBanner.vue # session↔task cross-link banner
-│   ├── composables/
-│   │   ├── useAgents.ts       # SSE + polling for agent data
-│   │   ├── useAgentPrompt.ts  # Send prompts to agents
-│   │   └── useTheme.ts        # Dark/light theme with OS detection
-│   ├── types.ts               # Shared TypeScript interfaces
-│   └── utils/format.ts        # Token, cost, uptime formatters
-└── channel/                   # MCP Channel server (separate package)
-    ├── dashboard-channel.ts   # Standalone MCP server for agent control
-    └── package.json           # @modelcontextprotocol/sdk dependency
-```
 
 ## Task Pipeline
 
