@@ -31,7 +31,8 @@ export function parseLsofBatch(stdout: string): Map<number, string> {
   let currentPid: number | null = null
   for (const line of stdout.split('\n')) {
     if (line.startsWith('p')) {
-      currentPid = Number.parseInt(line.slice(1), 10)
+      const parsed = Number.parseInt(line.slice(1), 10)
+      currentPid = Number.isFinite(parsed) ? parsed : null
     }
     else if (line.startsWith('n') && currentPid !== null) {
       result.set(currentPid, line.slice(1))
