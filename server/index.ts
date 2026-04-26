@@ -215,35 +215,45 @@ async function start() {
 
   // Cost trend history: ring buffer, 1h at 3s interval = 1200 entries
   const MAX_TREND_POINTS = 1200
-  const TREND_CONFIG_KEY = 'cost_trend_history'
-  const TREND_TTL_MS = 24 * 60 * 60 * 1000 // 24h
+
+  // Track the last persisted timestamp to only insert new points on each interval
+  let persistedUpTo = 0
 
   // Load persisted trend on startup (best-effort)
   const costTrend: Array<{ t: number, cost: number, tokens: number }> = (() => {
     try {
       const db = getDb()
-      const row = db.prepare('SELECT value FROM pipeline_config WHERE key = ?').get(TREND_CONFIG_KEY) as { value: string } | undefined
-      if (!row)
-        return []
-      const parsed: Array<{ t: number, cost: number, tokens: number }> = JSON.parse(row.value)
-      const cutoff = Date.now() - TREND_TTL_MS
-      return parsed.filter(p => p.t > cutoff).slice(-MAX_TREND_POINTS)
+      const rows = db.prepare(
+        'SELECT t, cost, tokens FROM agent_cost_trend ORDER BY t ASC',
+      ).all() as Array<{ t: number, cost: number, tokens: number }>
+      if (rows.length > 0)
+        persistedUpTo = rows[rows.length - 1].t
+      return rows.slice(-MAX_TREND_POINTS)
     }
     catch {
       return []
     }
   })()
 
-  // Persist trend every 60s (best-effort — never crash the server)
+  // Persist new trend points every 60s (best-effort — never crash the server)
   const persistTrendId = setInterval(() => {
+    const newPoints = costTrend.filter(p => p.t > persistedUpTo)
+    if (newPoints.length === 0)
+      return
     try {
       const db = getDb()
-      db.prepare(
-        'INSERT INTO pipeline_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-      ).run(TREND_CONFIG_KEY, JSON.stringify(costTrend))
+      const insert = db.prepare('INSERT OR IGNORE INTO agent_cost_trend (t, cost, tokens) VALUES (?, ?, ?)')
+      db.transaction(() => {
+        for (const p of newPoints)
+          insert.run(p.t, p.cost, p.tokens)
+        db.prepare(
+          'DELETE FROM agent_cost_trend WHERE t NOT IN (SELECT t FROM agent_cost_trend ORDER BY t DESC LIMIT ?)',
+        ).run(MAX_TREND_POINTS)
+      })()
+      persistedUpTo = newPoints[newPoints.length - 1].t
     }
-    catch {
-      // intentionally swallowed
+    catch (err) {
+      console.warn('[cost-trend] persist failed:', err)
     }
   }, 60_000)
   persistTrendId.unref()
