@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
+import AppButton from './ui/AppButton.vue'
+import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ open: boolean }>()
@@ -187,11 +189,11 @@ onUnmounted(() => {
       <form class="p-5" @submit.prevent>
         <div class="mb-4">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-prompt">Prompt</label>
-          <textarea
+          <AppInput
             id="spawn-prompt"
             v-model="prompt"
-            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug resize-y focus:outline-none focus:border-green-500"
-            rows="4"
+            type="textarea"
+            :rows="4"
             required
             placeholder="What should the agent do?"
           />
@@ -199,14 +201,12 @@ onUnmounted(() => {
 
         <div class="mb-4">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-cwd">Working Directory</label>
-          <input
+          <AppInput
             id="spawn-cwd"
             v-model="cwd"
-            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
-            type="text"
             required
             placeholder="/path/to/project"
-          >
+          />
         </div>
 
         <div class="mb-4">
@@ -229,11 +229,11 @@ onUnmounted(() => {
 
         <div class="mb-4">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-system">System Prompt</label>
-          <textarea
+          <AppInput
             id="spawn-system"
             v-model="systemPrompt"
-            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug resize-y focus:outline-none focus:border-green-500"
-            rows="2"
+            type="textarea"
+            :rows="2"
             placeholder="Custom system instructions (optional)"
           />
         </div>
@@ -274,21 +274,16 @@ onUnmounted(() => {
       </form>
 
       <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
-        <button
-          type="button"
-          class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer whitespace-nowrap font-sans bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110"
-          @click="emit('close')"
-        >
+        <AppButton variant="secondary" @click="emit('close')">
           Cancel
-        </button>
-        <button
-          type="button"
-          class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer whitespace-nowrap font-sans bg-green-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+        </AppButton>
+        <AppButton
+          variant="primary"
           :disabled="isSpawning || !prompt.trim() || !cwd.trim()"
           @click="handleSpawn"
         >
           {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
-        </button>
+        </AppButton>
       </footer>
     </div>
   </AppModal>

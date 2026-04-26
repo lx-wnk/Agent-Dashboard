@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'info'
 type Size = 'sm' | 'md'
 
 withDefaults(defineProps<{
@@ -24,6 +24,7 @@ withDefaults(defineProps<{
       variant === 'secondary' && 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:brightness-110',
       variant === 'ghost' && 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300',
       variant === 'danger' && 'bg-red-600 text-white hover:brightness-110',
+      variant === 'info' && 'bg-blue-600 text-white hover:brightness-110',
     ]"
   >
     <slot />

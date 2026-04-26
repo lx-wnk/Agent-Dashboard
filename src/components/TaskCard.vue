@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PipelineStage, PipelineTask, StageRunStatus } from '../types'
+import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
 
 defineProps<{ task: PipelineTask }>()
 defineEmits<{ select: [task: PipelineTask] }>()
@@ -66,24 +67,12 @@ function stageLabel(stage: PipelineStage): string {
     <div class="flex flex-wrap gap-1 mt-0.5">
       <span
         class="text-[10px] font-mono px-1.5 py-px rounded border"
-        :class="{
-          'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700': !['on_hold', 'approval1', 'approval2', 'umsetzung', 'done', 'cancelled'].includes(task.currentStage),
-          'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/60': ['on_hold', 'approval1', 'approval2'].includes(task.currentStage),
-          'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700': task.currentStage === 'umsetzung',
-          'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 border-green-300 dark:border-green-700': task.currentStage === 'done',
-          'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border-red-300 dark:border-red-700': task.currentStage === 'cancelled',
-        }"
+        :class="stageChipClass(task.currentStage)"
       >{{ stageLabel(task.currentStage) }}</span>
       <span
         v-if="task.latestStageRunStatus"
         class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border"
-        :class="{
-          'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-600/50': task.latestStageRunStatus === 'running',
-          'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700': task.latestStageRunStatus === 'pending',
-          'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-700/50': ['awaiting_user', 'on_hold'].includes(task.latestStageRunStatus),
-          'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 border-green-200 dark:border-green-700/50': task.latestStageRunStatus === 'done',
-          'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border-red-200 dark:border-red-700/50': task.latestStageRunStatus === 'failed',
-        }"
+        :class="runStatusChipClass(task.latestStageRunStatus)"
         :title="`Latest stage run: ${runStatusLabel(task.latestStageRunStatus)}`"
       >{{ runStatusLabel(task.latestStageRunStatus) }}</span>
       <span v-if="task.worktreePath" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Has worktree">WT</span>

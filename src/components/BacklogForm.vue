@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { createTask } from '../composables/useTasks'
+import AppButton from './ui/AppButton.vue'
+import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ open: boolean }>()
@@ -111,72 +113,62 @@ async function handleCreate() {
       <form class="p-5" @submit.prevent="handleCreate">
         <div class="mb-4 flex flex-col gap-1.5">
           <label for="task-title" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Title</label>
-          <input
+          <AppInput
             id="task-title"
             v-model="title"
-            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
-            type="text"
             required
             placeholder="Fix login bug in auth middleware"
             @blur="slugifyTitle"
-          >
+          />
         </div>
 
         <div class="mb-4 flex flex-col gap-1.5">
           <label for="task-slug" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Slug (url-safe id)</label>
-          <input
+          <AppInput
             id="task-slug"
             v-model="slug"
-            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
-            type="text"
             pattern="[a-z0-9][a-z0-9-]{0,63}"
             placeholder="auto-generated from title"
-          >
+          />
         </div>
 
         <div class="mb-4 flex flex-col gap-1.5">
           <label for="task-desc" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Description</label>
-          <textarea
+          <AppInput
             id="task-desc"
             v-model="description"
-            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug resize-y focus:outline-none focus:border-blue-500"
-            rows="3"
+            type="textarea"
+            :rows="3"
             placeholder="What should the agent do? Include screenshots or references as needed."
           />
         </div>
 
         <div class="mb-4 flex flex-col gap-1.5">
           <label for="task-cwd" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Working Directory</label>
-          <input
+          <AppInput
             id="task-cwd"
             v-model="cwd"
-            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
-            type="text"
             required
             placeholder="/path/to/project"
-          >
+          />
         </div>
 
         <div class="flex gap-3 mb-4">
           <div class="flex-1 flex flex-col gap-1.5">
             <label for="task-src" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Source Branch</label>
-            <input
+            <AppInput
               id="task-src"
               v-model="sourceBranch"
-              class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
-              type="text"
               placeholder="main"
-            >
+            />
           </div>
           <div class="flex-1 flex flex-col gap-1.5">
             <label for="task-tgt" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Target Branch</label>
-            <input
+            <AppInput
               id="task-tgt"
               v-model="targetBranch"
-              class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 focus:outline-none focus:border-blue-500"
-              type="text"
               placeholder="feat/my-branch"
-            >
+            />
           </div>
         </div>
 
@@ -249,17 +241,16 @@ async function handleCreate() {
       </form>
 
       <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
-        <button type="button" class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer whitespace-nowrap font-sans bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:brightness-110" @click="emit('close')">
+        <AppButton variant="secondary" @click="emit('close')">
           Cancel
-        </button>
-        <button
-          type="button"
-          class="border-none rounded px-4 py-2 text-[13px] font-semibold cursor-pointer whitespace-nowrap font-sans bg-green-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+        </AppButton>
+        <AppButton
+          variant="primary"
           :disabled="isCreating || !title.trim() || !cwd.trim()"
           @click="handleCreate"
         >
           {{ isCreating ? 'Creating...' : 'Create Task' }}
-        </button>
+        </AppButton>
       </footer>
     </div>
   </AppModal>
