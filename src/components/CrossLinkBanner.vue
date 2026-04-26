@@ -5,47 +5,19 @@ defineProps<{
   buttonText?: string
 }>()
 
-const emit = defineEmits<{
-  click: []
-}>()
+const emit = defineEmits<{ click: [] }>()
 </script>
 
 <template>
-  <div class="task-link-banner">
-    <span class="task-link-text">
-      ⬡ {{ label }}
-      <strong>{{ targetName }}</strong>
+  <div class="flex items-center justify-between flex-shrink-0 px-4 py-1.5 bg-blue-50/50 dark:bg-blue-950/20 border-b border-blue-200/50 dark:border-blue-800/40">
+    <span class="text-[11px] text-slate-500 dark:text-slate-400">
+      ⬡ {{ label }} <strong class="text-blue-600 dark:text-blue-400">{{ targetName }}</strong>
     </span>
-    <button class="task-link-btn" @click="emit('click')">
+    <button
+      class="bg-transparent border-none text-[11px] text-blue-600 dark:text-blue-400 cursor-pointer underline p-0 whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-300"
+      @click="emit('click')"
+    >
       {{ buttonText ?? 'Open →' }}
     </button>
   </div>
 </template>
-
-<style scoped>
-.task-link-banner {
-  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent);
-  padding: 5px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-.task-link-text {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-.task-link-text strong { color: var(--accent-blue); }
-.task-link-btn {
-  background: none;
-  border: none;
-  color: var(--accent-blue);
-  font-size: 11px;
-  cursor: pointer;
-  text-decoration: underline;
-  padding: 0;
-  white-space: nowrap;
-}
-.task-link-btn:hover { color: var(--text-primary); }
-</style>

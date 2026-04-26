@@ -230,259 +230,91 @@ defineExpose({ scrollToBottom })
 </script>
 
 <template>
-  <div ref="outputEl" class="chat-stream">
-    <div v-if="agent?.machine" class="output-empty">
+  <div ref="outputEl" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed">
+    <div v-if="agent?.machine" class="text-slate-400 dark:text-slate-600 text-center py-12">
       Session output is not available for remote agents.
     </div>
-    <div v-else-if="isLoadingOutput" class="output-loading">
+    <div v-else-if="isLoadingOutput" class="text-slate-400 dark:text-slate-600 text-center py-12">
       Loading session output...
     </div>
     <template v-else-if="chatEntries.length > 0">
       <template v-for="(entry, i) in chatEntries" :key="i">
-        <div v-if="entry.kind === 'tool_group'" class="chat-row tool_call">
-          <details class="tool-group">
-            <summary class="tool-group-summary">
+        <div v-if="entry.kind === 'tool_group'" class="flex justify-center">
+          <details class="w-full border border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-950 text-xs">
+            <summary class="px-2.5 py-1 text-slate-400 dark:text-slate-600 cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400">
               {{ entry.calls.length }} tool call{{ entry.calls.length > 1 ? 's' : '' }}
             </summary>
-            <div class="tool-group-list">
-              <details v-for="(call, j) in entry.calls" :key="j" class="tool-group-item">
-                <summary class="tool-item-summary">
-                  {{ call.toolName }}<span v-if="call.filePath" class="tool-item-path">{{ call.filePath }}</span>
+            <div class="border-t border-slate-200 dark:border-slate-700 py-1">
+              <details v-for="(call, j) in entry.calls" :key="j" class="px-2.5">
+                <summary class="py-0.5 text-slate-500 dark:text-slate-400 text-[11px] cursor-pointer hover:text-slate-700 dark:hover:text-slate-300">
+                  {{ call.toolName }}<span v-if="call.filePath" class="text-slate-400 dark:text-slate-600 ml-1.5 text-[10px]">{{ call.filePath }}</span>
                 </summary>
-                <pre v-if="call.result" class="tool-result-content">{{ call.result }}</pre>
+                <pre v-if="call.result" class="bg-slate-100 dark:bg-slate-800 rounded p-2 text-[11px] text-slate-500 dark:text-slate-400 max-h-[200px] overflow-y-auto mt-1 mb-1 whitespace-pre-wrap break-words">{{ call.result }}</pre>
               </details>
             </div>
           </details>
         </div>
-
-        <div v-else-if="entry.kind === 'task_group'" class="chat-row tool_call">
-          <div class="task-group">
-            <div v-for="(task, j) in entry.tasks" :key="j" class="task-item" :class="task.status">
-              <span class="task-icon">{{ task.status === 'completed' ? '✓' : task.status === 'in_progress' ? '›' : '○' }}</span>
-              <span class="task-subject">{{ task.subject }}</span>
+        <div v-else-if="entry.kind === 'task_group'" class="flex justify-center">
+          <div class="w-full border border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 text-xs">
+            <div
+              v-for="(task, j) in entry.tasks"
+              :key="j"
+              class="flex items-baseline gap-1.5 py-px text-slate-500 dark:text-slate-400"
+            >
+              <span
+                class="flex-shrink-0 w-3.5 text-center font-semibold"
+                :class="{
+                  'text-green-600 dark:text-green-400': task.status === 'completed',
+                  'text-blue-600 dark:text-blue-400': task.status === 'in_progress',
+                  'text-slate-400 dark:text-slate-600': task.status === 'pending',
+                }"
+              >{{ task.status === 'completed' ? '✓' : task.status === 'in_progress' ? '›' : '○' }}</span>
+              <span
+                class="font-mono"
+                :class="task.status === 'completed' ? 'text-slate-400 dark:text-slate-600 line-through' : ''"
+              >{{ task.subject }}</span>
             </div>
           </div>
         </div>
-
-        <div v-else class="chat-row" :class="entry.msg.role">
-          <div v-if="entry.msg.role === 'human'" class="chat-bubble human-bubble" :class="{ queued: entry.msg.queued }">
+        <div
+          v-else
+          class="flex"
+          :class="{
+            'justify-end': entry.msg.role === 'human',
+            'justify-start': entry.msg.role === 'channel_reply' || entry.msg.role === 'assistant',
+            'justify-center': entry.msg.role === 'tool_call' || entry.msg.role === 'tool_result',
+          }"
+        >
+          <div
+            v-if="entry.msg.role === 'human'"
+            class="max-w-[80%] px-3 py-2 rounded-xl rounded-br-sm text-[13px] leading-relaxed break-words whitespace-pre-wrap bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600"
+            :class="{ 'border border-yellow-400/40': entry.msg.queued }"
+          >
             {{ entry.msg.content }}
           </div>
           <div
             v-else-if="entry.msg.role === 'channel_reply'"
-            class="chat-bubble reply-bubble markdown-body"
+            class="max-w-[80%] px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-l-2 border-green-500 dark:border-green-400 markdown-body"
             v-html="renderMarkdown(entry.msg.content)"
           />
           <div
             v-else-if="entry.msg.role === 'assistant'"
-            class="chat-bubble assistant-bubble markdown-body"
+            class="max-w-[80%] px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 markdown-body"
             v-html="renderMarkdown(entry.msg.content)"
           />
-          <div v-else-if="entry.msg.role === 'subagent'" class="chat-subagent">
-            <span class="subagent-icon">⑂</span>
-            <span class="subagent-type">{{ entry.msg.subagentType }}</span>
-            <span class="subagent-desc">{{ entry.msg.content }}</span>
+          <div v-else-if="entry.msg.role === 'subagent'" class="flex items-center gap-1.5 px-2.5 py-1 border border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-950 text-xs text-slate-500 dark:text-slate-400">
+            <span class="text-[14px] text-blue-600 dark:text-blue-400">⑂</span>
+            <span class="font-semibold text-slate-900 dark:text-slate-100 text-[11px] uppercase tracking-wide">{{ entry.msg.subagentType }}</span>
+            <span class="text-slate-400 dark:text-slate-600">{{ entry.msg.content }}</span>
           </div>
         </div>
       </template>
     </template>
-    <div v-else class="output-empty">
+    <div v-else class="text-slate-400 dark:text-slate-600 text-center py-12">
       No output available for this session.
     </div>
-    <div v-if="agent?.status === 'active' && agent.currentAction" class="chat-activity">
+    <div v-if="agent?.status === 'active' && agent.currentAction" class="text-slate-400 dark:text-slate-600 text-xs italic py-1" style="animation: pulse 2s ease-in-out infinite;">
       {{ agent.currentAction }}...
     </div>
   </div>
 </template>
-
-<style scoped>
-.chat-stream {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.6;
-}
-.output-loading, .output-empty {
-  color: var(--text-muted);
-  text-align: center;
-  padding: 48px;
-}
-.chat-row { display: flex; }
-.chat-row.human { justify-content: flex-end; }
-.chat-row.channel_reply,
-.chat-row.assistant { justify-content: flex-start; }
-.chat-row.tool_call,
-.chat-row.tool_result { justify-content: center; }
-
-.chat-bubble {
-  max-width: 80%;
-  padding: 8px 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.5;
-  word-break: break-word;
-  white-space: pre-wrap;
-}
-.human-bubble {
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  border-bottom-right-radius: 4px;
-}
-.human-bubble.queued { border: 1px solid rgba(234, 179, 8, 0.4); }
-.assistant-bubble,
-.reply-bubble {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border-bottom-left-radius: 4px;
-}
-.reply-bubble { border-left: 2px solid var(--accent-green); }
-
-.chat-activity {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-style: italic;
-  padding: 4px 0;
-  animation: pulse 2s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
-}
-
-.tool-group {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-primary);
-  font-size: 12px;
-}
-.tool-group-summary {
-  padding: 4px 10px;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
-}
-.tool-group-summary:hover { color: var(--text-secondary); }
-.tool-group-list { border-top: 1px solid var(--border); padding: 4px 0; }
-.tool-group-item { padding: 0 10px; }
-.tool-item-summary {
-  padding: 2px 0;
-  color: var(--text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-}
-.tool-item-summary:hover { color: var(--text-primary); }
-.tool-item-path { color: var(--text-muted); margin-left: 6px; font-size: 10px; }
-.tool-result-content {
-  background: var(--bg-tertiary);
-  border-radius: 4px;
-  padding: 8px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  max-height: 200px;
-  overflow-y: auto;
-  margin: 4px 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.task-group {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-primary);
-  padding: 6px 10px;
-  font-size: 12px;
-}
-.task-item {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 1px 0;
-  color: var(--text-secondary);
-}
-.task-icon {
-  flex-shrink: 0;
-  width: 14px;
-  text-align: center;
-  font-weight: 600;
-}
-.task-item.completed .task-icon { color: var(--accent-green); }
-.task-item.in_progress .task-icon { color: var(--accent-blue); }
-.task-item.pending .task-icon { color: var(--text-muted); }
-.task-item.completed .task-subject { color: var(--text-muted); text-decoration: line-through; }
-.task-subject { font-family: var(--font-mono); }
-
-.chat-subagent {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-primary);
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.subagent-icon { font-size: 14px; color: var(--accent-blue); }
-.subagent-type {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-.subagent-desc { color: var(--text-muted); }
-
-.markdown-body { white-space: normal; }
-.markdown-body :deep(p) { margin: 0 0 0.4em; }
-.markdown-body :deep(p:last-child) { margin-bottom: 0; }
-.markdown-body :deep(code) {
-  background: rgba(255, 255, 255, 0.08);
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: 12px;
-}
-.markdown-body :deep(pre) {
-  background: var(--bg-primary);
-  border-radius: 4px;
-  padding: 8px;
-  overflow-x: auto;
-  margin: 4px 0;
-}
-.markdown-body :deep(pre code) { background: none; padding: 0; }
-.markdown-body :deep(ul), .markdown-body :deep(ol) { margin: 4px 0; padding-left: 1.4em; }
-.markdown-body :deep(strong) { color: var(--text-primary); }
-.markdown-body :deep(a) { color: var(--accent-blue); }
-.markdown-body :deep(table) {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 6px 0;
-  font-size: 12px;
-}
-.markdown-body :deep(th),
-.markdown-body :deep(td) {
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  text-align: left;
-}
-.markdown-body :deep(th) {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-weight: 600;
-}
-.markdown-body :deep(blockquote) {
-  border-left: 3px solid var(--border);
-  margin: 4px 0;
-  padding: 2px 10px;
-  color: var(--text-muted);
-}
-.markdown-body :deep(hr) {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 8px 0;
-}
-</style>

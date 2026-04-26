@@ -3,22 +3,10 @@ defineProps<{ machine: string }>()
 </script>
 
 <template>
-  <span class="machine-badge" :title="`Machine: ${machine}`">{{ machine }}</span>
+  <span
+    :title="`Machine: ${machine}`"
+    class="inline-block text-[9px] font-semibold text-blue-600 dark:text-blue-400 border border-blue-600 dark:border-blue-400 rounded px-1 max-w-[100px] overflow-hidden text-ellipsis whitespace-nowrap align-middle"
+  >
+    {{ machine }}
+  </span>
 </template>
-
-<style scoped>
-.machine-badge {
-  display: inline-block;
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--accent-blue);
-  border: 1px solid var(--accent-blue);
-  border-radius: 3px;
-  padding: 0 4px;
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-</style>

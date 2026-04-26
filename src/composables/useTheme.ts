@@ -14,7 +14,7 @@ function resolveTheme(pref: ThemePreference): Theme {
 }
 
 function applyTheme(t: Theme) {
-  document.documentElement.setAttribute('data-theme', t)
+  document.documentElement.classList.toggle('dark', t === 'dark')
 }
 
 function initTheme() {
