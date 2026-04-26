@@ -327,7 +327,6 @@ function formatDate(iso: string | null): string {
     return '—'
   return new Date(iso).toLocaleString()
 }
-
 </script>
 
 <template>
