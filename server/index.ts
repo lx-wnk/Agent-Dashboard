@@ -16,6 +16,7 @@ import { signJwt } from './auth/jwtUtils.js'
 import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
 import { getChannelMap } from './channelDiscovery.js'
 import { getDb } from './db/client.js'
+import { listRemoteRegistrationsForUser } from './db/remoteRegistrationsRepo.js'
 import { getTaskById } from './db/tasksRepo.js'
 import { upsertUser } from './db/usersRepo.js'
 import { parseFullSession } from './jsonlParser.js'
@@ -185,9 +186,10 @@ async function start() {
   })
 
   // SSE stream for real-time agent updates (replaces client-side polling)
-  const sseClients = new Set<express.Response>()
+  interface SseClient { res: express.Response, userId: string, isAdmin: boolean }
+  const sseClients = new Set<SseClient>()
 
-  app.get('/api/agents/stream', requireApiToken, (_req, res) => {
+  app.get('/api/agents/stream', requireApiToken, requireAuth, (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -196,10 +198,11 @@ async function start() {
     })
     res.flushHeaders()
 
-    sseClients.add(res)
+    const client: SseClient = { res, userId: req.user!.id, isAdmin: req.user!.isAdmin }
+    sseClients.add(client)
     startSSEBroadcast()
-    _req.on('close', () => {
-      sseClients.delete(res)
+    req.on('close', () => {
+      sseClients.delete(client)
       stopSSEBroadcast()
     })
   })
@@ -258,32 +261,44 @@ async function start() {
     sseBroadcastId = setInterval(async () => {
       try {
         const localAgents = await getAgents()
-        const remotes = getEnvRemoteTargets()
-        const agents = remotes.length > 0 ? await aggregateAgents(localAgents, remotes) : localAgents
+        const envRemotes = getEnvRemoteTargets()
 
-        // Record cost trend point
-        const totalCost = agents.reduce((sum, a) => sum + a.costEstimate, 0)
-        const totalTokens = agents.reduce((sum, a) => {
+        // Baseline aggregation for cost trend (env remotes only — shared across all users)
+        const baselineAgents = await aggregateAgents(localAgents, envRemotes)
+        const totalCost = baselineAgents.reduce((sum, a) => sum + a.costEstimate, 0)
+        const totalTokens = baselineAgents.reduce((sum, a) => {
           const u = a.tokenUsage
           return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
         }, 0)
         costTrend.push({ t: Date.now(), cost: totalCost, tokens: totalTokens })
-        if (costTrend.length > MAX_TREND_POINTS) {
+        if (costTrend.length > MAX_TREND_POINTS)
           costTrend.shift()
-        }
 
-        // Send agents + trend data in a single SSE event
-        const payload = JSON.stringify({ agents, trend: costTrend.slice(-60) })
-        const data = `data: ${payload}\n\n`
-        for (const client of sseClients) {
+        const trendSlice = costTrend.slice(-60)
+
+        // Fan out: each client gets local agents + their own remotes
+        await Promise.all([...sseClients].map(async (client) => {
           try {
-            if (!client.writableEnded)
-              client.write(data)
+            if (client.res.writableEnded)
+              return
+
+            const userRemotes = isAuthEnabled()
+              ? listRemoteRegistrationsForUser(client.userId).map(r => ({
+                  url: r.url,
+                  bearerKey: r.bearerKey,
+                  name: r.name,
+                }))
+              : []
+
+            const allRemotes = [...envRemotes, ...userRemotes]
+            const agents = await aggregateAgents(localAgents, allRemotes)
+            const payload = JSON.stringify({ agents, trend: trendSlice })
+            client.res.write(`data: ${payload}\n\n`)
           }
           catch {
             sseClients.delete(client)
           }
-        }
+        }))
       }
       catch (err) {
         console.error('SSE broadcast error:', err)
