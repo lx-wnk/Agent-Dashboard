@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseLsofBatch, parseElapsedTime, scanProcesses } from './processScanner'
+import { parseElapsedTime, parseLsofBatch, scanProcesses } from './processScanner'
 
 describe('parseLsofBatch', () => {
   it('parses a single process entry', () => {

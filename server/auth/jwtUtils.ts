@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
 export interface JwtPayload {
@@ -40,8 +41,9 @@ export function verifyJwt(token: string, secret: string): JwtPayload | null {
       || typeof payload.login !== 'string'
       || typeof payload.isAdmin !== 'boolean'
       || typeof payload.exp !== 'number'
-    )
+    ) {
       return null
+    }
     if (payload.exp < Math.floor(Date.now() / 1000))
       return null
     return payload

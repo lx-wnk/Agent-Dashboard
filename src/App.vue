@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { Agent } from './types'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import BacklogForm from './components/BacklogForm.vue'
 import CostTrend from './components/CostTrend.vue'
+import LoginPage from './components/LoginPage.vue'
 import PipelineBoard from './components/PipelineBoard.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
@@ -14,7 +15,15 @@ import SpawnDialog from './components/SpawnDialog.vue'
 import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
 import { useTasks } from './composables/useTasks'
+import { useUser } from './composables/useUser'
 import { formatTokens, totalTokenCount } from './utils/format'
+
+const { user, authEnabled, loaded, loadUser } = useUser()
+const showLogin = computed(() => authEnabled.value && !user.value)
+
+onMounted(() => {
+  loadUser()
+})
 
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
 const { tasks, selectedTask, selectTask } = useTasks()
@@ -75,7 +84,8 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+  <LoginPage v-if="loaded && showLogin" />
+  <div v-else-if="loaded" class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
     <header class="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
       <h1 class="text-[18px] font-semibold text-slate-900 dark:text-slate-100">
         Claude Agent Overview
@@ -215,6 +225,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
   </div>
+  <div v-else class="min-h-screen bg-slate-50 dark:bg-slate-950" />
 </template>
 
 <style>

@@ -3,6 +3,7 @@ import process from 'node:process'
 import { verifyJwt } from './jwtUtils.js'
 
 declare global {
+  // eslint-disable-next-line ts/no-namespace
   namespace Express {
     interface Request {
       user?: { id: string, login: string, isAdmin: boolean }

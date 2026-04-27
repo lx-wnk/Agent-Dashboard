@@ -63,7 +63,12 @@ async function getCwdsMac(pids: number[]): Promise<Map<number, string>> {
     return new Map()
   try {
     const { stdout } = await execFileAsync('lsof', [
-      '-a', '-d', 'cwd', '-p', pids.join(','), '-Fn',
+      '-a',
+      '-d',
+      'cwd',
+      '-p',
+      pids.join(','),
+      '-Fn',
     ])
     return parseLsofBatch(stdout)
   }
