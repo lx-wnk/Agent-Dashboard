@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './client.js'
 import type { PermissionRequest, TaskPermission } from '../../src/types.js'
 import type { PermissionRequestRow, TaskPermissionRow } from './rowMappers.js'
 import { randomUUID } from 'node:crypto'

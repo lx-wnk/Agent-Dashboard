@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './client.js'
 import type { AuditEntry } from '../../src/types.js'
 import type { AuditRow } from './rowMappers.js'
 import { randomUUID } from 'node:crypto'

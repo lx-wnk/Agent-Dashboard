@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './client.js'
 import type { NotificationChannel, NotificationEventType, NotificationPreference } from '../../src/types.js'
 import type { NotificationPreferenceRow } from './rowMappers.js'
 import { getDb } from './client.js'

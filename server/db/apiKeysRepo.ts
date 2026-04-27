@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './client.js'
 import type { ApiKey, McpScope } from '../../src/types.js'
 import type { ApiKeyRow } from './rowMappers.js'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
