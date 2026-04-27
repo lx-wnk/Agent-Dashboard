@@ -1,19 +1,8 @@
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
 
-// Mark Bun built-ins (e.g. `bun:sqlite`) as external so Vite/Vitest does not
-// try to bundle them. Bun resolves these natively at runtime.
-const bunBuiltinsPlugin = {
-  name: 'externalize-bun-builtins',
-  enforce: 'pre' as const,
-  resolveId(id: string) {
-    if (id.startsWith('bun:'))
-      return { id, external: true }
-  },
-}
-
 export default defineConfig({
-  plugins: [vue(), bunBuiltinsPlugin],
+  plugins: [vue()],
   resolve: {
     alias: {
       '@': new URL('./src', import.meta.url).pathname,
@@ -21,14 +10,10 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.test.ts', 'server/**/*.test.ts'],
-    environmentMatchGlobs: [
-      ['server/**/*.test.ts', 'node'],
-    ],
-    server: {
-      deps: {
-        external: [/^bun:/],
-      },
-    },
+    // Server tests transitively import `bun:sqlite` (via server/db/client.ts).
+    // Vitest runs under Node's ESM loader, which cannot resolve the `bun:`
+    // protocol — even when marked external. Server tests are run separately
+    // via `bun test` (see the `test:server` npm script).
+    include: ['src/**/*.test.ts'],
   },
 })

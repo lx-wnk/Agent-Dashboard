@@ -18,14 +18,32 @@ export function getDbPath(): string {
 }
 
 /**
- * better-sqlite3 / bun:sqlite parameter-binding compatibility shim.
+ * Compatibility shims layered onto bun:sqlite to keep the repo's call
+ * sites — written against better-sqlite3 — working unchanged.
  *
- * better-sqlite3 accepts a plain object like `{ slug: 'x' }` for `@slug`
- * placeholders. bun:sqlite requires the prefix character to be present in
- * the object key (e.g. `{ '@slug': 'x' }`). The repo code base was written
- * against better-sqlite3, so we intercept run/get/all calls and rewrite
- * the binding object to add the `@` prefix when needed. Array bindings and
- * already-prefixed keys are passed through untouched.
+ * Two shims are installed via `installPrepareShim`, which wraps every
+ * Statement returned by `db.prepare(...)`:
+ *
+ *   1. `bindArgs` (run/get/all) — better-sqlite3 accepts a plain object
+ *      like `{ slug: 'x' }` for `@slug` placeholders. bun:sqlite requires
+ *      the sigil character to be present in the object key (e.g.
+ *      `{ '@slug': 'x' }`). We rewrite bare keys to `@`-prefixed keys.
+ *      Array bindings and already-prefixed keys (`@`, `$`, `:`) pass
+ *      through untouched.
+ *
+ *   2. `null → undefined` (get only) — bun:sqlite's `.get()` returns
+ *      `null` for "no row found"; better-sqlite3 returns `undefined`.
+ *      We normalize to `undefined` so call sites can keep using
+ *      `row !== undefined` / `row ? ... : null` patterns.
+ *
+ * The shim is wired only to `prepare()` — `db.exec(...)` and `db.run(...)`
+ * intentionally bypass it. Those are used exclusively for DDL / parameterless
+ * pragmas and migrations in this codebase, so no binding rewrite is needed.
+ *
+ * Convention: every parameterized SQL string in `server/db/*.ts` uses the
+ * `@name` placeholder sigil (never `$name` or `:name`). The shim only emits
+ * `@`-prefixed keys, so introducing `$` or `:` placeholders without also
+ * teaching the shim about them would silently break bindings.
  */
 function bindArgs(args: unknown[]): unknown[] {
   if (args.length !== 1)
@@ -91,7 +109,7 @@ export function closeDb(): void {
   }
 }
 
-function migrate_v1_base_schema(db: Database): void {
+function migrateV1BaseSchema(db: Database): void {
   const schemaPath = join(dirname(fileURLToPath(import.meta.url)), 'schema.sql')
   db.exec(readFileSync(schemaPath, 'utf-8'))
 
@@ -133,7 +151,7 @@ function migrate_v1_base_schema(db: Database): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_agent_cost_trend_t ON agent_cost_trend(t)')
 }
 
-function migrate_v2_multi_user(db: Database): void {
+function migrateV2MultiUser(db: Database): void {
   const taskCols = db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>
   const hasTaskCol = (name: string) => taskCols.some(c => c.name === name)
   const apiKeyCols = db.prepare('PRAGMA table_info(api_keys)').all() as Array<{ name: string }>
@@ -148,7 +166,7 @@ function migrate_v2_multi_user(db: Database): void {
 }
 
 function runMigrations(db: Database): void {
-  migrate_v1_base_schema(db)
+  migrateV1BaseSchema(db)
 
   const version = db.prepare('SELECT MAX(version) as v FROM schema_version')
     .get() as { v: number | null }
@@ -158,7 +176,7 @@ function runMigrations(db: Database): void {
       .run(1, new Date().toISOString())
   }
 
-  migrate_v2_multi_user(db)
+  migrateV2MultiUser(db)
 
   if ((version.v ?? 0) < 2) {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
