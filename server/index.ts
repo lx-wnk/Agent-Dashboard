@@ -15,12 +15,14 @@ import { exchangeCodeForToken, getGitHubUser, isOrgMember } from './auth/githubO
 import { signJwt } from './auth/jwtUtils.js'
 import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
 import { getChannelMap } from './channelDiscovery.js'
+import { UUID_RE } from './constants.js'
 import { getDb } from './db/client.js'
 import { listRemoteRegistrationsForUser } from './db/remoteRegistrationsRepo.js'
 import { getTaskById } from './db/tasksRepo.js'
 import { upsertUser } from './db/usersRepo.js'
 import { parseFullSession } from './jsonlParser.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
+import { createRejectCrossOrigin, requireApiToken } from './middleware.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
@@ -61,7 +63,6 @@ const SSE_INTERVAL_MS = (() => {
   }
   return val
 })()
-const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 
 // Spawn state + logic (rate limit, stderr ring-buffer, reply store,
 // channel message forwarding) lives in SpawnManager.
@@ -152,26 +153,6 @@ async function start() {
       : scriptAbsolute
     res.json({ scriptPath, homedir: home })
   })
-
-  function requireApiToken(req: express.Request, res: express.Response, next: express.NextFunction): void {
-    const apiToken = process.env.DASHBOARD_API_TOKEN
-    if (!apiToken) {
-      next()
-      return
-    }
-    const auth = req.headers.authorization
-    if (!auth?.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'Missing Authorization header' })
-      return
-    }
-    const provided = Buffer.from(auth.slice(7))
-    const expected = Buffer.from(apiToken)
-    if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
-      res.status(403).json({ error: 'Invalid token' })
-      return
-    }
-    next()
-  }
 
   app.get('/api/agents', requireApiToken, async (req, res) => {
     try {
@@ -428,26 +409,7 @@ async function start() {
   orchestrator.start()
 
   // CSRF protection for mutation endpoints
-  function rejectCrossOrigin(req: express.Request, res: express.Response): boolean {
-    const origin = req.headers.origin || ''
-    const referer = req.headers.referer || ''
-    // Allow requests with no origin (non-browser clients like curl)
-    if (!origin && !referer)
-      return false
-    const allowed = (s: string) => {
-      try {
-        const url = new URL(s)
-        return (url.hostname === HOST || url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.port === String(PORT)
-      }
-      catch {
-        return false
-      }
-    }
-    if (allowed(origin) || allowed(referer))
-      return false
-    res.status(403).json({ error: 'Cross-origin request blocked' })
-    return true
-  }
+  const rejectCrossOrigin = createRejectCrossOrigin(HOST, PORT)
 
   // API key management routes (browser-facing, CSRF-guarded, no bearer token required)
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin }))
