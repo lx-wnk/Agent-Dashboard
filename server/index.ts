@@ -408,7 +408,6 @@ async function start() {
   })
   orchestrator.start()
 
-  // CSRF protection for mutation endpoints
   const rejectCrossOrigin = createRejectCrossOrigin(HOST, PORT)
 
   // API key management routes (browser-facing, CSRF-guarded, no bearer token required)
