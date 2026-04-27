@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
-interface Remote { id: string; url: string; name: string | null; createdAt: string; connectionOk?: boolean }
+interface Remote { id: string, url: string, name: string | null, createdAt: string, connectionOk?: boolean }
 
 const remotes = ref<Remote[]>([])
 const form = ref({ url: '', name: '', bearerKey: '' })
@@ -73,8 +73,12 @@ onMounted(load)
         class="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-bg-surface text-sm"
       >
         <div>
-          <div class="font-medium text-text-primary">{{ r.name ?? r.url }}</div>
-          <div v-if="r.name" class="text-xs text-text-muted">{{ r.url }}</div>
+          <div class="font-medium text-text-primary">
+            {{ r.name ?? r.url }}
+          </div>
+          <div v-if="r.name" class="text-xs text-text-muted">
+            {{ r.url }}
+          </div>
           <span
             v-if="r.connectionOk !== undefined"
             class="text-xs"
@@ -102,20 +106,22 @@ onMounted(load)
         placeholder="http://192.168.1.5:13120"
         required
         class="input-field text-sm"
-      />
+      >
       <input
         v-model="form.name"
         type="text"
         placeholder="Name (z.B. MacBook)"
         class="input-field text-sm"
-      />
+      >
       <input
         v-model="form.bearerKey"
         type="password"
         placeholder="DASHBOARD_API_TOKEN (optional)"
         class="input-field text-sm"
-      />
-      <p v-if="error" class="text-xs text-red-400">{{ error }}</p>
+      >
+      <p v-if="error" class="text-xs text-red-400">
+        {{ error }}
+      </p>
       <button type="submit" :disabled="saving" class="btn-primary text-sm self-start">
         {{ saving ? 'Wird gespeichert…' : 'Hinzufügen & testen' }}
       </button>
