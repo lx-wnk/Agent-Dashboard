@@ -632,7 +632,7 @@ describe('legacy DB migration', () => {
     legacyDir = mkdtempSync(join(tmpdir(), 'dashboard-db-legacy-'))
     const legacyPath = join(legacyDir, 'legacy.db')
 
-    const Database = (await import('better-sqlite3')).default
+    const { Database } = await import('bun:sqlite')
     const legacy = new Database(legacyPath)
     // Seed a minimal pre-migration tasks schema — the columns that
     // existed BEFORE this branch landed. CHECK constraints intentionally
