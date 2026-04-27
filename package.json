@@ -19,12 +19,12 @@
     "start": "NODE_ENV=production bun server/index.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "vitest run && bun test server/",
+    "test": "vitest run && bun test server/ --parallel",
     "test:watch": "vitest",
-    "test:server": "bun test server/",
+    "test:server": "bun test server/ --parallel",
     "test:e2e": "playwright test",
     "typecheck": "vue-tsc --noEmit",
-    "fix": "eslint . --fix && vue-tsc --noEmit && vitest run && bun test server/"
+    "fix": "eslint . --fix && vue-tsc --noEmit && vitest run && bun test server/ --parallel"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
