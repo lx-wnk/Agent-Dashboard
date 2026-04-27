@@ -36,8 +36,7 @@ import {
   deleteTask,
   getTaskById,
   getTaskBySlug,
-  listTasks,
-  listTasksByStage,
+  listTasksForUser,
   updateTask,
 } from '../db/tasksRepo.js'
 import { resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
@@ -80,6 +79,12 @@ const USER_WAIT_STAGES = new Set<PipelineStage>(['on_hold', 'approval1', 'approv
  * run belongs to the task's CURRENT stage. Otherwise a stale awaiting_user
  * run from a prior stage would incorrectly flag an advanced task.
  */
+// Returns false for non-admin users trying to access another user's task.
+// Returns 404 (not 403) at call sites to avoid leaking task existence.
+export function canAccessTask(task: PipelineTask, user: { id: string, isAdmin: boolean }): boolean {
+  return user.isAdmin || task.userId === user.id
+}
+
 export function enrichTask(task: PipelineTask): PipelineTask {
   const latest = getLatestStageRunForTask(task.id)
   const latestBelongsToCurrent = latest?.stage === task.currentStage
@@ -146,20 +151,22 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
   router.get('/tasks', (req, res) => {
     const stage = req.query.stage as string | undefined
+    const user = req.user! // set by requireAuth middleware
     if (stage) {
       if (!VALID_STAGES.has(stage as PipelineStage)) {
         res.status(400).json({ error: 'Invalid stage' })
         return
       }
-      res.json(listTasksByStage(stage as PipelineStage).map(enrichTask))
+      const all = listTasksForUser(user.id, user.isAdmin)
+      res.json(all.filter(t => t.currentStage === stage).map(enrichTask))
       return
     }
-    res.json(listTasks().map(enrichTask))
+    res.json(listTasksForUser(user.id, user.isAdmin).map(enrichTask))
   })
 
   router.get('/tasks/:id', (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -229,6 +236,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         metadata: typeof metadata === 'object' && metadata !== null ? metadata : null,
         silverBullet: silverBullet === true,
         priority: (priority === 'high' || priority === 'medium' || priority === 'low') ? priority : undefined,
+        userId: req.user!.id,
       })
       deps.broadcastTaskEvent({ type: 'task_created', taskId: task.id, payload: enrichTask(task) })
       res.status(201).json(enrichTask(task))
@@ -253,7 +261,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
   mutationRouter.patch('/tasks/:id', (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -303,7 +311,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   mutationRouter.delete('/tasks/:id', async (req, res) => {
     // Fetch first so we know the worktree path for cleanup.
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -334,6 +342,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // ─── Stage progression & approvals ────────────────
 
   mutationRouter.post('/tasks/:id/progress', async (req, res) => {
+    const precheck = getTaskById(req.params.id)
+    if (!precheck || !canAccessTask(precheck, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
     const run = await deps.orchestrator.progressTask(req.params.id)
     if (!run) {
       res.status(409).json({ error: 'Task cannot progress (terminal, missing, or slot full)' })
@@ -346,7 +359,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
   mutationRouter.post('/tasks/:id/approve', async (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -391,7 +404,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // unresolved feedback as resolved via resolveFeedbackForStage.
   mutationRouter.post('/tasks/:id/request-changes', (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -445,7 +458,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
   router.get('/tasks/:id/feedback', (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -454,7 +467,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
   mutationRouter.post('/tasks/:id/cancel', (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -478,7 +491,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // writes an audit trail, and defers to `progressTask`.
   mutationRouter.post('/tasks/:id/retry', async (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -512,7 +525,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // view via processScanner finding a `claude` PID in the task's cwd.
   mutationRouter.post('/tasks/:id/analyze', async (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -565,16 +578,31 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // ─── Task stage runs & audit ────────────────
 
   router.get('/tasks/:id/stage-runs', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
     res.json(listStageRunsForTask(req.params.id))
   })
 
   router.get('/tasks/:id/audit', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
     res.json(listAuditForTask(req.params.id))
   })
 
   // ─── Permissions ────────────────
 
   router.get('/tasks/:id/permissions', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
     res.json(listTaskPermissions(req.params.id))
   })
 
@@ -607,6 +635,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // ─── Runtime permission requests (agent asked mid-stage) ────────────────
 
   router.get('/tasks/:id/permission-requests', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
     const runs = listStageRunsForTask(req.params.id)
     const pending = runs.flatMap(r => listPendingPermissionRequests(r.id))
     res.json(pending)
@@ -693,7 +726,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // GET /tasks/:id/dependencies — list all prerequisites for a task
   router.get('/tasks/:id/dependencies', (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -703,7 +736,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // GET /tasks/:id/dependents — list all tasks waiting on this task
   router.get('/tasks/:id/dependents', (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -713,7 +746,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // POST /tasks/:id/dependencies — add a dependency
   mutationRouter.post('/tasks/:id/dependencies', (req, res) => {
     const task = getTaskById(req.params.id)
-    if (!task) {
+    if (!task || !canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }
@@ -759,6 +792,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
   // DELETE /tasks/:id/dependencies/:depId — remove a dependency by its row ID
   mutationRouter.delete('/tasks/:id/dependencies/:depId', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
     const removed = removeDependencyById(req.params.depId, req.params.id)
     if (!removed) {
       res.status(404).json({ error: 'Dependency not found' })

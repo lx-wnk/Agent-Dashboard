@@ -306,13 +306,18 @@ export async function removeTaskDependency(taskId: string, depId: string): Promi
     throw new Error(await res.text())
 }
 
-export function useTasks() {
+function startStream() {
   subscriberCount++
   if (subscriberCount === 1) {
     void fetchTasks()
     startSSE()
     startPolling()
   }
+}
+
+export function useTasks(options?: { autoStart?: boolean }) {
+  if (options?.autoStart !== false)
+    startStream()
 
   onUnmounted(() => {
     subscriberCount--
@@ -349,5 +354,6 @@ export function useTasks() {
     tasksByStageMap,
     selectTask,
     refetch: fetchTasks,
+    startStream,
   }
 }

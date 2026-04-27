@@ -194,3 +194,27 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
 
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_id);
+
+-- Dashboard users (populated on first GitHub OAuth login)
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,   -- GitHub numeric user ID (stable across username renames)
+  github_login  TEXT NOT NULL,      -- for display only; can change
+  display_name  TEXT,
+  avatar_url    TEXT,
+  is_admin      INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL,
+  last_login_at TEXT
+);
+
+-- Per-user registered local dashboard instances (for remote session aggregation)
+CREATE TABLE IF NOT EXISTS remote_registrations (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  url         TEXT NOT NULL,
+  name        TEXT,
+  bearer_key  TEXT,
+  created_at  TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_reg_user_url
+  ON remote_registrations(user_id, url);

@@ -21,21 +21,12 @@ export interface SessionInfo {
 
 const MAX_SESSIONS = 100
 
-/**
- * Decode an encoded project directory name back to an absolute path.
- *
- * Claude Code encodes paths by replacing `/` and `_` with `-`, which is
- * ambiguous on decode. We restore the leading `/` and replace remaining
- * `-` with `/`. This won't be perfect for every edge case (e.g. directory
- * names that originally contained `-`), but it gives a reasonable
- * human-readable project path most of the time.
- */
 export function decodeProjectDir(encoded: string): string {
-  // On macOS, paths look like -Users-username-code-project
-  // Restore leading `/` and try to rebuild the path
-  if (encoded.startsWith('-')) {
-    return `/${encoded.slice(1).replace(/-/g, '/')}`
-  }
+  // Return the raw encoded string — decoding is lossy since `/`, `.`, `_`
+  // are all encoded as `-`. The call site already prefers headInfo.cwd
+  // (the actual filesystem path from JSONL); this fallback is only reached
+  // for sessions with unreadable JSONL where showing the encoded form is
+  // better than fabricating a wrong path.
   return encoded
 }
 
