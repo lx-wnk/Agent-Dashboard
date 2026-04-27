@@ -12,7 +12,13 @@ const VALID_STATUSES = new Set(['active', 'waiting', 'idle'])
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const localHostname = hostname()
 
-export function getRemoteUrls(): string[] {
+export interface RemoteTarget {
+  url: string
+  bearerKey?: string | null
+  name?: string | null
+}
+
+export function getEnvRemoteTargets(): RemoteTarget[] {
   const env = process.env.DASHBOARD_REMOTES
   if (!env)
     return []
@@ -37,7 +43,8 @@ export function getRemoteUrls(): string[] {
         return false
       }
     })
-  return [...new Set(urls)]
+  const validUrls = [...new Set(urls)]
+  return validUrls.map(url => ({ url }))
 }
 
 function validateAgent(obj: unknown): obj is Agent {
@@ -51,48 +58,52 @@ function validateAgent(obj: unknown): obj is Agent {
     && typeof a.projectName === 'string'
 }
 
-async function fetchRemoteAgents(url: string): Promise<(Agent & { machine: string })[]> {
+async function fetchRemoteAgents(remote: RemoteTarget): Promise<(Agent & { machine: string })[]> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS)
 
   try {
-    const res = await fetch(`${url}/api/agents`, {
+    const headers: Record<string, string> = { [ORIGIN_HEADER]: localHostname }
+    if (remote.bearerKey)
+      headers.Authorization = `Bearer ${remote.bearerKey}`
+
+    const res = await fetch(`${remote.url}/api/agents`, {
       signal: controller.signal,
-      headers: { [ORIGIN_HEADER]: localHostname },
+      headers,
     })
     clearTimeout(timeout)
     if (!res.ok) {
-      consola.warn(`[remotes] ${url} responded with HTTP ${res.status}`)
+      consola.warn(`[remotes] ${remote.url} responded with HTTP ${res.status}`)
       return []
     }
 
     // Enforce response size limit
     const contentLength = res.headers.get('content-length')
     if (contentLength && Number.parseInt(contentLength, 10) > MAX_RESPONSE_BYTES) {
-      consola.warn(`[remotes] ${url} response too large (${contentLength} bytes)`)
+      consola.warn(`[remotes] ${remote.url} response too large (${contentLength} bytes)`)
       return []
     }
 
     const text = await res.text()
     if (text.length > MAX_RESPONSE_BYTES) {
-      consola.warn(`[remotes] ${url} response too large (${text.length} bytes)`)
+      consola.warn(`[remotes] ${remote.url} response too large (${text.length} bytes)`)
       return []
     }
 
     const data = JSON.parse(text)
     if (!Array.isArray(data)) {
-      consola.warn(`[remotes] ${url} returned non-array response`)
+      consola.warn(`[remotes] ${remote.url} returned non-array response`)
       return []
     }
 
-    const label = new URL(url).hostname
+    const label = remote.name ?? new URL(remote.url).hostname
     return data
       // Skip agents already tagged with a machine (prevent transitive chains)
       .filter((a: Record<string, unknown>) => !a.machine)
       // Validate required fields
       .filter((a: unknown) => {
         if (!validateAgent(a)) {
-          consola.debug(`[remotes] Skipping invalid agent from ${url}`)
+          consola.debug(`[remotes] Skipping invalid agent from ${remote.url}`)
           return false
         }
         return true
@@ -102,7 +113,7 @@ async function fetchRemoteAgents(url: string): Promise<(Agent & { machine: strin
   catch (err) {
     clearTimeout(timeout)
     const reason = (err as Error).name === 'AbortError' ? 'timeout' : (err as Error).message
-    consola.warn(`[remotes] Failed to reach ${url}: ${reason}`)
+    consola.warn(`[remotes] Failed to reach ${remote.url}: ${reason}`)
     return []
   }
 }
@@ -114,14 +125,14 @@ export function isRemoteFetch(reqHeaders: Record<string, string | string[] | und
   return !!reqHeaders[ORIGIN_HEADER.toLowerCase()]
 }
 
-export async function aggregateAgents(localAgents: Agent[], remoteUrls: string[]): Promise<Agent[]> {
-  if (remoteUrls.length === 0)
+export async function aggregateAgents(localAgents: Agent[], remotes: RemoteTarget[]): Promise<Agent[]> {
+  if (remotes.length === 0)
     return localAgents
 
   const tagged = localAgents.map(a => ({ ...a, machine: localHostname }))
 
   const remoteResults = await Promise.all(
-    remoteUrls.map(url => fetchRemoteAgents(url)),
+    remotes.map(r => fetchRemoteAgents(r)),
   )
 
   return [...tagged, ...remoteResults.flat()]

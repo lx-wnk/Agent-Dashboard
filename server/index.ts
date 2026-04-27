@@ -23,7 +23,7 @@ import { createMcpRouter } from './mcp/mcpRouter.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
-import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
+import { aggregateAgents, getEnvRemoteTargets, isRemoteFetch } from './remoteAggregator.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
@@ -154,8 +154,8 @@ async function start() {
         res.json(localAgents)
         return
       }
-      const remoteUrls = getRemoteUrls()
-      const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
+      const remotes = getEnvRemoteTargets()
+      const agents = remotes.length > 0 ? await aggregateAgents(localAgents, remotes) : localAgents
       res.json(agents)
     }
     catch (err) {
@@ -238,8 +238,8 @@ async function start() {
     sseBroadcastId = setInterval(async () => {
       try {
         const localAgents = await getAgents()
-        const remoteUrls = getRemoteUrls()
-        const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
+        const remotes = getEnvRemoteTargets()
+        const agents = remotes.length > 0 ? await aggregateAgents(localAgents, remotes) : localAgents
 
         // Record cost trend point
         const totalCost = agents.reduce((sum, a) => sum + a.costEstimate, 0)
