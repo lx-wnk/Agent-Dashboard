@@ -1,7 +1,6 @@
 import type { TaskEvent } from './routes/taskRoutes.js'
 import { fstatSync, mkdirSync, openSync } from 'node:fs'
 import { createServer as createHttpServer } from 'node:http'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { consola } from 'consola'
@@ -22,9 +21,9 @@ import { createAgentRouter } from './routes/agentRoutes.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createAuthRouter } from './routes/authRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
+import { createSystemRouter } from './routes/systemRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { SpawnManager } from './spawnManager.js'
-import { getSystemInfo } from './systemMonitor.js'
 
 // Ensure FDs 0–2 are open. When spawned by tsx watch or similar tools, stdio FDs
 // can be closed. If they are, the OS reuses those low numbers for new pipes, which
@@ -77,15 +76,8 @@ async function start() {
 
   // ─── API routes (before Vite middleware) ────────────────
 
-  // Dashboard config (script path, home dir)
-  app.get('/api/config', (_req, res) => {
-    const home = homedir()
-    const scriptAbsolute = join(import.meta.dirname, '..', 'scripts', 'claude-with-channel.sh')
-    const scriptPath = scriptAbsolute.startsWith(home)
-      ? `~${scriptAbsolute.slice(home.length)}`
-      : scriptAbsolute
-    res.json({ scriptPath, homedir: home })
-  })
+  // System routes: /api/config, /api/system
+  app.use('/api', createSystemRouter({ serverDir: import.meta.dirname }))
 
   // SSE stream for real-time agent updates (replaces client-side polling)
   interface SseClient { res: express.Response, userId: string, isAdmin: boolean }
@@ -344,17 +336,6 @@ async function start() {
 
   // Agent routes (REST endpoints — non-SSE; SSE stream stays above)
   app.use('/api', createAgentRouter({ spawnManager, requireApiToken, rejectCrossOrigin }))
-
-  app.get('/api/system', async (_req, res) => {
-    try {
-      const info = await getSystemInfo()
-      res.json(info)
-    }
-    catch (err) {
-      console.error('Error fetching system info:', err)
-      res.status(500).json({ error: 'Failed to fetch system info' })
-    }
-  })
 
   // ─── HTTP server ───────────────────────────────────────
 
