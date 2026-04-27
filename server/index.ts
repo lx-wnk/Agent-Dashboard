@@ -25,6 +25,7 @@ import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
 import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
+import { createRemoteRouter } from './routes/remoteRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
 import { SpawnManager } from './spawnManager.js'
@@ -417,6 +418,9 @@ async function start() {
     broadcastTaskEvent,
     dispatcher,
   }))
+
+  // Remote dashboard registration routes (per-user CRUD)
+  app.use('/api/remotes', createRemoteRouter())
 
   // MCP endpoint — stateless, bearer-token authenticated, mounted before
   // the Vite catch-all so POST /api/mcp is never swallowed by the SPA.
