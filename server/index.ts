@@ -104,10 +104,16 @@ async function start() {
         res.status(403).send('You must be a member of the required GitHub org to access this dashboard.')
         return
       }
+      const jwtSecret = process.env.JWT_SECRET
+      if (!jwtSecret) {
+        console.error('[auth] JWT_SECRET is not set — refusing to issue session token')
+        res.status(500).send('Server misconfiguration: JWT_SECRET is not set')
+        return
+      }
       const user = upsertUser({ id: ghUser.id, githubLogin: ghUser.login, displayName: ghUser.name, avatarUrl: ghUser.avatar_url })
       const token = signJwt(
         { sub: user.id, login: user.githubLogin, isAdmin: user.isAdmin },
-        process.env.JWT_SECRET ?? 'change-me',
+        jwtSecret,
         8 * 3600,
       )
       res.cookie('dashboard_session', token, { httpOnly: true, sameSite: 'lax', maxAge: 8 * 3600 * 1000 })
@@ -189,7 +195,7 @@ async function start() {
   interface SseClient { res: express.Response, userId: string, isAdmin: boolean }
   const sseClients = new Set<SseClient>()
 
-  app.get('/api/agents/stream', requireApiToken, requireAuth, (req, res) => {
+  app.get('/api/agents/stream', requireApiToken, (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',

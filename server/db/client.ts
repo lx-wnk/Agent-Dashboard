@@ -101,6 +101,9 @@ function runMigrations(connection: DatabaseType): void {
 
   if (!hasCol('user_id'))
     connection.prepare('ALTER TABLE tasks ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL').run()
+
+  connection.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id)').run()
+  connection.prepare('CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)').run()
 }
 
 export function resetDb(): void {

@@ -20,6 +20,8 @@ export async function exchangeCodeForToken(code: string): Promise<string> {
       code,
     }),
   })
+  if (!res.ok)
+    throw new Error(`GitHub token exchange returned ${res.status}`)
   const data = await res.json() as { access_token?: string, error?: string }
   if (!data.access_token)
     throw new Error(data.error ?? 'No access_token returned')

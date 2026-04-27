@@ -35,7 +35,7 @@ export function verifyJwt(token: string, secret: string): JwtPayload | null {
     const sigBuf = Buffer.from(sig)
     if (expectedBuf.length !== sigBuf.length || !timingSafeEqual(expectedBuf, sigBuf))
       return null
-    const payload: JwtPayload = JSON.parse(Buffer.from(body, 'base64').toString())
+    const payload: JwtPayload = JSON.parse(Buffer.from(body, 'base64url').toString())
     if (
       typeof payload.sub !== 'string'
       || typeof payload.login !== 'string'

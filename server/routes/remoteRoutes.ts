@@ -8,6 +8,31 @@ import {
 
 const REMOTE_TIMEOUT_MS = 5000
 
+const BLOCKED_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0'])
+const LOOPBACK_RE = /^127\.\d+\.\d+\.\d+$/
+const LINK_LOCAL_RE = /^169\.254\.\d+\.\d+$/
+
+function isSafeRemoteUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:')
+      return false
+    const host = u.hostname.toLowerCase()
+    if (BLOCKED_HOSTNAMES.has(host))
+      return false
+    // IPv4 loopback (127.x.x.x) and link-local (169.254.x.x)
+    if (LOOPBACK_RE.test(host) || LINK_LOCAL_RE.test(host))
+      return false
+    // IPv6 loopback full form
+    if (host === '[::1]')
+      return false
+    return true
+  }
+  catch {
+    return false
+  }
+}
+
 async function testRemoteConnection(url: string, bearerKey: string | null): Promise<boolean> {
   try {
     const controller = new AbortController()
@@ -39,12 +64,8 @@ export function createRemoteRouter(): Router {
       res.status(400).json({ error: 'url is required' })
       return
     }
-    try {
-      // eslint-disable-next-line no-new
-      new URL(url) // validate URL format
-    }
-    catch {
-      res.status(400).json({ error: 'url is not a valid URL' })
+    if (!isSafeRemoteUrl(url)) {
+      res.status(400).json({ error: 'url must be an http/https address pointing to an external host' })
       return
     }
     const ok = await testRemoteConnection(url, typeof bearerKey === 'string' ? bearerKey : null)

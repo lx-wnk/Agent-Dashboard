@@ -34,7 +34,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
   const payload = verifyJwt(token, secret)
   if (!payload) {
-    res.clearCookie('dashboard_session')
+    res.clearCookie('dashboard_session', { httpOnly: true, sameSite: 'lax', path: '/' })
     res.status(401).json({ error: 'Session expired' })
     return
   }
