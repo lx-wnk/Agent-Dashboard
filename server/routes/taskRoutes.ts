@@ -36,8 +36,7 @@ import {
   deleteTask,
   getTaskById,
   getTaskBySlug,
-  listTasks,
-  listTasksByStage,
+  listTasksForUser,
   updateTask,
 } from '../db/tasksRepo.js'
 import { resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
@@ -146,15 +145,17 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
   router.get('/tasks', (req, res) => {
     const stage = req.query.stage as string | undefined
+    const user = req.user! // set by requireAuth middleware
     if (stage) {
       if (!VALID_STAGES.has(stage as PipelineStage)) {
         res.status(400).json({ error: 'Invalid stage' })
         return
       }
-      res.json(listTasksByStage(stage as PipelineStage).map(enrichTask))
+      const all = listTasksForUser(user.id, user.isAdmin)
+      res.json(all.filter(t => t.currentStage === stage).map(enrichTask))
       return
     }
-    res.json(listTasks().map(enrichTask))
+    res.json(listTasksForUser(user.id, user.isAdmin).map(enrichTask))
   })
 
   router.get('/tasks/:id', (req, res) => {
@@ -229,6 +230,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         metadata: typeof metadata === 'object' && metadata !== null ? metadata : null,
         silverBullet: silverBullet === true,
         priority: (priority === 'high' || priority === 'medium' || priority === 'low') ? priority : undefined,
+        userId: req.user!.id,
       })
       deps.broadcastTaskEvent({ type: 'task_created', taskId: task.id, payload: enrichTask(task) })
       res.status(201).json(enrichTask(task))
