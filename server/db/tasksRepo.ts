@@ -1,5 +1,5 @@
-import type { Database } from './client.js'
 import type { PipelineStage, PipelineTask, TaskPriority } from '../../src/types.js'
+import type { Database } from './client.js'
 import type { TaskRow } from './rowMappers.js'
 import { randomUUID } from 'node:crypto'
 import { getDb } from './client.js'
@@ -250,7 +250,10 @@ export function updateTask(id: string, input: UpdateTaskInput, db: Database = ge
     return existing
 
   updates.push('updated_at = @updated_at')
-  db.prepare(`UPDATE tasks SET ${updates.join(', ')} WHERE id = @id`).run(params)
+  // The compat shim in client.ts rewrites bare keys into `@key` bindings, so
+  // `Record<string, unknown>` is safe at runtime even though bun:sqlite's
+  // declared `SQLQueryBindings` only accepts primitive value types.
+  db.prepare(`UPDATE tasks SET ${updates.join(', ')} WHERE id = @id`).run(params as never)
   return getTaskById(id, db)
 }
 

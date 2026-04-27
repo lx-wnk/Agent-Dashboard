@@ -1,5 +1,5 @@
-import type { Database } from './client.js'
 import type { PipelineStage, StageRun, StageRunStatus } from '../../src/types.js'
+import type { Database } from './client.js'
 import type { StageRunRow } from './rowMappers.js'
 import { randomUUID } from 'node:crypto'
 import { getDb } from './client.js'
@@ -203,6 +203,9 @@ export function updateStageRun(
   if (updates.length === 0)
     return existing
 
-  db.prepare(`UPDATE stage_runs SET ${updates.join(', ')} WHERE id = @id`).run(params)
+  // The compat shim in client.ts rewrites bare keys into `@key` bindings, so
+  // `Record<string, unknown>` is safe at runtime even though bun:sqlite's
+  // declared `SQLQueryBindings` only accepts primitive value types.
+  db.prepare(`UPDATE stage_runs SET ${updates.join(', ')} WHERE id = @id`).run(params as never)
   return getStageRunById(id, db)
 }

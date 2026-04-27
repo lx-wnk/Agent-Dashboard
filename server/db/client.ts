@@ -1,9 +1,9 @@
-import { Database as BunDatabase } from 'bun:sqlite'
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { Database as BunDatabase } from 'bun:sqlite'
 
 const DEFAULT_DB_PATH = join(homedir(), '.claude', 'dashboard-tasks.db')
 
@@ -64,7 +64,7 @@ function bindArgs(args: unknown[]): unknown[] {
   return [out]
 }
 
-function wrapStatement<T extends { run: Function, get: Function, all: Function }>(stmt: T): T {
+function wrapStatement<T extends { run: (...a: unknown[]) => unknown, get: (...a: unknown[]) => unknown, all: (...a: unknown[]) => unknown }>(stmt: T): T {
   const origRun = stmt.run.bind(stmt)
   const origGet = stmt.get.bind(stmt)
   const origAll = stmt.all.bind(stmt)
@@ -83,8 +83,14 @@ function wrapStatement<T extends { run: Function, get: Function, all: Function }
 
 function installPrepareShim(database: BunDatabase): void {
   const origPrepare = database.prepare.bind(database)
-  // @ts-expect-error — re-assigning a method on the bun:sqlite Database
-  database.prepare = (sql: string) => wrapStatement(origPrepare(sql))
+  // Re-assign `prepare` so every Statement returned by the rest of the codebase
+  // is wrapped by the compat shim (named-param prefix + null→undefined). We
+  // cast through `unknown` because bun:sqlite's `prepare` is a generic method
+  // and reassigning it with our simpler signature is the whole point of the
+  // shim. Keeping the cast pinpointed here means the rest of the file stays
+  // strictly typed against `BunDatabase`.
+  ;(database as unknown as { prepare: (sql: string) => unknown }).prepare
+    = (sql: string) => wrapStatement(origPrepare(sql) as any)
 }
 
 export function getDb(): Database {

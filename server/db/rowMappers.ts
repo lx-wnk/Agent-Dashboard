@@ -35,6 +35,7 @@ export interface TaskRow {
   metadata: string | null
   silver_bullet: number
   priority: string
+  user_id: string | null
   is_blocked?: number // 0 | 1 computed subquery, present in enriched queries
   is_unsatisfiable?: number // 0 | 1 computed subquery, present in enriched queries
 }
@@ -127,6 +128,7 @@ export function rowToTask(row: TaskRow): PipelineTask {
     metadata: parseJson<Record<string, unknown>>(row.metadata, row.id),
     silverBullet: row.silver_bullet === 1,
     priority: (row.priority as TaskPriority) ?? 'medium',
+    userId: row.user_id,
     isBlocked: row.is_blocked !== undefined ? row.is_blocked === 1 : undefined,
     isUnsatisfiable: row.is_unsatisfiable !== undefined ? row.is_unsatisfiable === 1 : undefined,
   }

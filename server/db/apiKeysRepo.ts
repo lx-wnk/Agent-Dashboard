@@ -1,5 +1,5 @@
-import type { Database } from './client.js'
 import type { ApiKey, McpScope } from '../../src/types.js'
+import type { Database } from './client.js'
 import type { ApiKeyRow } from './rowMappers.js'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { getDb } from './client.js'

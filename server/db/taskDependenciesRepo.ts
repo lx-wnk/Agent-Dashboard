@@ -1,5 +1,5 @@
-import type { Database } from './client.js'
 import type { TaskDependency } from '../../src/types.js'
+import type { Database } from './client.js'
 import type { TaskDependencyRow } from './rowMappers.js'
 import { randomUUID } from 'node:crypto'
 import { getDb } from './client.js'

@@ -1,5 +1,5 @@
-import type { Database } from './client.js'
 import type { NotificationChannel, NotificationEventType, NotificationPreference } from '../../src/types.js'
+import type { Database } from './client.js'
 import type { NotificationPreferenceRow } from './rowMappers.js'
 import { getDb } from './client.js'
 import { rowToNotificationPreference } from './rowMappers.js'
