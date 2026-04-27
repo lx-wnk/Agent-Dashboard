@@ -8,17 +8,25 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { consola } from 'consola'
+import cookieParser from 'cookie-parser'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
+import { exchangeCodeForToken, getGitHubUser, isOrgMember } from './auth/githubOAuth.js'
+import { signJwt } from './auth/jwtUtils.js'
+import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
 import { getChannelMap } from './channelDiscovery.js'
+import { getDb } from './db/client.js'
+import { listRemoteRegistrationsForUser } from './db/remoteRegistrationsRepo.js'
 import { getTaskById } from './db/tasksRepo.js'
+import { upsertUser } from './db/usersRepo.js'
 import { parseFullSession } from './jsonlParser.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
-import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
+import { aggregateAgents, getEnvRemoteTargets, isRemoteFetch } from './remoteAggregator.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
+import { createRemoteRouter } from './routes/remoteRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { getSessions } from './sessionScanner.js'
 import { SpawnManager } from './spawnManager.js'
@@ -65,6 +73,73 @@ async function start() {
 
   const app = express()
   app.use(express.json())
+  app.use(cookieParser())
+
+  // ─── Auth routes (public — before requireAuth) ───────────
+
+  app.get('/auth/login', (_req, res) => {
+    if (!isAuthEnabled()) {
+      res.redirect('/')
+      return
+    }
+    const params = new URLSearchParams({
+      client_id: process.env.GITHUB_CLIENT_ID!,
+      scope: 'read:org',
+      redirect_uri: `http://${HOST}:${PORT}/auth/callback`,
+    })
+    res.redirect(`https://github.com/login/oauth/authorize?${params}`)
+  })
+
+  app.get('/auth/callback', async (req, res) => {
+    const code = req.query.code as string | undefined
+    if (!code) {
+      res.status(400).send('Missing code')
+      return
+    }
+    try {
+      const accessToken = await exchangeCodeForToken(code)
+      const ghUser = await getGitHubUser(accessToken)
+      const member = await isOrgMember(ghUser.login, accessToken)
+      if (!member) {
+        res.status(403).send('You must be a member of the required GitHub org to access this dashboard.')
+        return
+      }
+      const jwtSecret = process.env.JWT_SECRET
+      if (!jwtSecret) {
+        console.error('[auth] JWT_SECRET is not set — refusing to issue session token')
+        res.status(500).send('Server misconfiguration: JWT_SECRET is not set')
+        return
+      }
+      const user = upsertUser({ id: ghUser.id, githubLogin: ghUser.login, displayName: ghUser.name, avatarUrl: ghUser.avatar_url })
+      const token = signJwt(
+        { sub: user.id, login: user.githubLogin, isAdmin: user.isAdmin },
+        jwtSecret,
+        8 * 3600,
+      )
+      res.cookie('dashboard_session', token, { httpOnly: true, sameSite: 'lax', maxAge: 8 * 3600 * 1000 })
+      res.redirect('/')
+    }
+    catch (err) {
+      console.error('[auth] OAuth callback error:', err)
+      res.status(500).send('Authentication failed')
+    }
+  })
+
+  app.post('/auth/logout', (_req, res) => {
+    res.clearCookie('dashboard_session')
+    res.redirect('/auth/login')
+  })
+
+  app.get('/api/me', requireAuth, (req, res) => {
+    if (!isAuthEnabled()) {
+      res.json({ user: null, isAdmin: true, authEnabled: false })
+      return
+    }
+    res.json({ user: req.user, isAdmin: req.user?.isAdmin ?? false, authEnabled: true })
+  })
+
+  // All /api/* routes (except /auth/* and /api/me above) require authentication
+  app.use('/api', requireAuth)
 
   // ─── API routes (before Vite middleware) ────────────────
 
@@ -78,7 +153,27 @@ async function start() {
     res.json({ scriptPath, homedir: home })
   })
 
-  app.get('/api/agents', async (req, res) => {
+  function requireApiToken(req: express.Request, res: express.Response, next: express.NextFunction): void {
+    const apiToken = process.env.DASHBOARD_API_TOKEN
+    if (!apiToken) {
+      next()
+      return
+    }
+    const auth = req.headers.authorization
+    if (!auth?.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Missing Authorization header' })
+      return
+    }
+    const provided = Buffer.from(auth.slice(7))
+    const expected = Buffer.from(apiToken)
+    if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+      res.status(403).json({ error: 'Invalid token' })
+      return
+    }
+    next()
+  }
+
+  app.get('/api/agents', requireApiToken, async (req, res) => {
     try {
       const localAgents = await getAgents()
       // If this request comes from another dashboard (X-Dashboard-Origin), return local-only to prevent chains
@@ -86,8 +181,8 @@ async function start() {
         res.json(localAgents)
         return
       }
-      const remoteUrls = getRemoteUrls()
-      const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
+      const remotes = getEnvRemoteTargets()
+      const agents = remotes.length > 0 ? await aggregateAgents(localAgents, remotes) : localAgents
       res.json(agents)
     }
     catch (err) {
@@ -97,9 +192,10 @@ async function start() {
   })
 
   // SSE stream for real-time agent updates (replaces client-side polling)
-  const sseClients = new Set<express.Response>()
+  interface SseClient { res: express.Response, userId: string, isAdmin: boolean }
+  const sseClients = new Set<SseClient>()
 
-  app.get('/api/agents/stream', (_req, res) => {
+  app.get('/api/agents/stream', requireApiToken, (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -108,17 +204,59 @@ async function start() {
     })
     res.flushHeaders()
 
-    sseClients.add(res)
+    const client: SseClient = { res, userId: req.user!.id, isAdmin: req.user!.isAdmin }
+    sseClients.add(client)
     startSSEBroadcast()
-    _req.on('close', () => {
-      sseClients.delete(res)
+    req.on('close', () => {
+      sseClients.delete(client)
       stopSSEBroadcast()
     })
   })
 
   // Cost trend history: ring buffer, 1h at 3s interval = 1200 entries
   const MAX_TREND_POINTS = 1200
-  const costTrend: Array<{ t: number, cost: number, tokens: number }> = []
+
+  // Track the last persisted timestamp to only insert new points on each interval
+  let persistedUpTo = 0
+
+  // Load persisted trend on startup (best-effort)
+  const costTrend: Array<{ t: number, cost: number, tokens: number }> = (() => {
+    try {
+      const db = getDb()
+      const rows = db.prepare(
+        'SELECT t, cost, tokens FROM agent_cost_trend ORDER BY t ASC',
+      ).all() as Array<{ t: number, cost: number, tokens: number }>
+      if (rows.length > 0)
+        persistedUpTo = rows[rows.length - 1].t
+      return rows.slice(-MAX_TREND_POINTS)
+    }
+    catch {
+      return []
+    }
+  })()
+
+  // Persist new trend points every 60s (best-effort — never crash the server)
+  const persistTrendId = setInterval(() => {
+    const newPoints = costTrend.filter(p => p.t > persistedUpTo)
+    if (newPoints.length === 0)
+      return
+    try {
+      const db = getDb()
+      const insert = db.prepare('INSERT OR IGNORE INTO agent_cost_trend (t, cost, tokens) VALUES (?, ?, ?)')
+      db.transaction(() => {
+        for (const p of newPoints)
+          insert.run(p.t, p.cost, p.tokens)
+        db.prepare(
+          'DELETE FROM agent_cost_trend WHERE t NOT IN (SELECT t FROM agent_cost_trend ORDER BY t DESC LIMIT ?)',
+        ).run(MAX_TREND_POINTS)
+      })()
+      persistedUpTo = newPoints[newPoints.length - 1].t
+    }
+    catch (err) {
+      console.warn('[cost-trend] persist failed:', err)
+    }
+  }, 60_000)
+  persistTrendId.unref()
 
   // SSE broadcast + cost trend recording: only scan processes when clients are connected
   let sseBroadcastId: ReturnType<typeof setInterval> | null = null
@@ -129,32 +267,44 @@ async function start() {
     sseBroadcastId = setInterval(async () => {
       try {
         const localAgents = await getAgents()
-        const remoteUrls = getRemoteUrls()
-        const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
+        const envRemotes = getEnvRemoteTargets()
 
-        // Record cost trend point
-        const totalCost = agents.reduce((sum, a) => sum + a.costEstimate, 0)
-        const totalTokens = agents.reduce((sum, a) => {
+        // Baseline aggregation for cost trend (env remotes only — shared across all users)
+        const baselineAgents = await aggregateAgents(localAgents, envRemotes)
+        const totalCost = baselineAgents.reduce((sum, a) => sum + a.costEstimate, 0)
+        const totalTokens = baselineAgents.reduce((sum, a) => {
           const u = a.tokenUsage
           return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
         }, 0)
         costTrend.push({ t: Date.now(), cost: totalCost, tokens: totalTokens })
-        if (costTrend.length > MAX_TREND_POINTS) {
+        if (costTrend.length > MAX_TREND_POINTS)
           costTrend.shift()
-        }
 
-        // Send agents + trend data in a single SSE event
-        const payload = JSON.stringify({ agents, trend: costTrend.slice(-60) })
-        const data = `data: ${payload}\n\n`
-        for (const client of sseClients) {
+        const trendSlice = costTrend.slice(-60)
+
+        // Fan out: each client gets local agents + their own remotes
+        await Promise.all([...sseClients].map(async (client) => {
           try {
-            if (!client.writableEnded)
-              client.write(data)
+            if (client.res.writableEnded)
+              return
+
+            const userRemotes = isAuthEnabled()
+              ? listRemoteRegistrationsForUser(client.userId).map(r => ({
+                  url: r.url,
+                  bearerKey: r.bearerKey,
+                  name: r.name,
+                }))
+              : []
+
+            const allRemotes = [...envRemotes, ...userRemotes]
+            const agents = await aggregateAgents(localAgents, allRemotes)
+            const payload = JSON.stringify({ agents, trend: trendSlice })
+            client.res.write(`data: ${payload}\n\n`)
           }
           catch {
             sseClients.delete(client)
           }
-        }
+        }))
       }
       catch (err) {
         console.error('SSE broadcast error:', err)
@@ -309,6 +459,9 @@ async function start() {
     broadcastTaskEvent,
     dispatcher,
   }))
+
+  // Remote dashboard registration routes (per-user CRUD)
+  app.use('/api/remotes', createRemoteRouter())
 
   // MCP endpoint — stateless, bearer-token authenticated, mounted before
   // the Vite catch-all so POST /api/mcp is never swallowed by the SPA.

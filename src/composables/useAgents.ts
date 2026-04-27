@@ -153,8 +153,9 @@ function stopDataStream() {
   }
 }
 
-export function useAgents() {
-  startDataStream()
+export function useAgents(options?: { autoStart?: boolean }) {
+  if (options?.autoStart !== false)
+    startDataStream()
   onUnmounted(stopDataStream)
 
   function selectAgent(agent: Agent | null) {
@@ -171,5 +172,6 @@ export function useAgents() {
     searchQuery,
     viewMode,
     selectAgent,
+    startStream: startDataStream,
   }
 }
