@@ -146,7 +146,27 @@ async function start() {
     res.json({ scriptPath, homedir: home })
   })
 
-  app.get('/api/agents', async (req, res) => {
+  function requireApiToken(req: express.Request, res: express.Response, next: express.NextFunction): void {
+    const apiToken = process.env.DASHBOARD_API_TOKEN
+    if (!apiToken) {
+      next()
+      return
+    }
+    const auth = req.headers.authorization
+    if (!auth?.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Missing Authorization header' })
+      return
+    }
+    const provided = Buffer.from(auth.slice(7))
+    const expected = Buffer.from(apiToken)
+    if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+      res.status(403).json({ error: 'Invalid token' })
+      return
+    }
+    next()
+  }
+
+  app.get('/api/agents', requireApiToken, async (req, res) => {
     try {
       const localAgents = await getAgents()
       // If this request comes from another dashboard (X-Dashboard-Origin), return local-only to prevent chains
@@ -167,7 +187,7 @@ async function start() {
   // SSE stream for real-time agent updates (replaces client-side polling)
   const sseClients = new Set<express.Response>()
 
-  app.get('/api/agents/stream', (_req, res) => {
+  app.get('/api/agents/stream', requireApiToken, (_req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
