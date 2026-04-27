@@ -45,9 +45,17 @@ export async function isOrgMember(githubLogin: string, userAccessToken: string):
   if (!org)
     return true
 
-  const token = process.env.GITHUB_ORG_MEMBERSHIP_PUBLIC === 'true'
-    ? userAccessToken
-    : (process.env.GITHUB_SERVER_TOKEN ?? userAccessToken)
+  let token: string
+  if (process.env.GITHUB_ORG_MEMBERSHIP_PUBLIC === 'true') {
+    token = userAccessToken
+  }
+  else if (process.env.GITHUB_SERVER_TOKEN) {
+    token = process.env.GITHUB_SERVER_TOKEN
+  }
+  else {
+    console.warn('[auth] GITHUB_ORG is set but GITHUB_SERVER_TOKEN is missing — falling back to user token. Private org membership checks will likely fail.')
+    token = userAccessToken
+  }
 
   const res = await fetch(`${GH_API}/orgs/${org}/members/${githubLogin}`, {
     headers: { 'Authorization': `Bearer ${token}`, 'User-Agent': 'claude-agent-dashboard' },

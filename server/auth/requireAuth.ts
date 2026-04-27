@@ -25,7 +25,13 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     res.status(401).json({ error: 'Not authenticated' })
     return
   }
-  const payload = verifyJwt(token, process.env.JWT_SECRET ?? '')
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    console.error('[auth] JWT_SECRET is not set — rejecting all requests')
+    res.status(500).json({ error: 'Server misconfiguration' })
+    return
+  }
+  const payload = verifyJwt(token, secret)
   if (!payload) {
     res.clearCookie('dashboard_session')
     res.status(401).json({ error: 'Session expired' })

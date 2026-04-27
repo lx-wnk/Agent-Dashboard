@@ -35,6 +35,13 @@ export function verifyJwt(token: string, secret: string): JwtPayload | null {
     if (expectedBuf.length !== sigBuf.length || !timingSafeEqual(expectedBuf, sigBuf))
       return null
     const payload: JwtPayload = JSON.parse(Buffer.from(body, 'base64').toString())
+    if (
+      typeof payload.sub !== 'string'
+      || typeof payload.login !== 'string'
+      || typeof payload.isAdmin !== 'boolean'
+      || typeof payload.exp !== 'number'
+    )
+      return null
     if (payload.exp < Math.floor(Date.now() / 1000))
       return null
     return payload
