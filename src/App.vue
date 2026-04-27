@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent } from './types'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
@@ -25,8 +25,16 @@ onMounted(() => {
   loadUser()
 })
 
-const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
-const { tasks, selectedTask, selectTask } = useTasks()
+const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
+const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
+
+// Start data streams only after auth is confirmed — avoids 401 flood while login page is shown
+watch(loaded, (isLoaded) => {
+  if (isLoaded && !showLogin.value) {
+    startAgents()
+    startTasks()
+  }
+}, { immediate: true })
 const showSpawnDialog = ref(false)
 const showBacklog = ref(false)
 const showSessions = ref(false)

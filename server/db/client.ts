@@ -104,6 +104,12 @@ function runMigrations(connection: DatabaseType): void {
 
   connection.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id)').run()
   connection.prepare('CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)').run()
+
+  if ((version.v ?? 0) < 2) {
+    connection
+      .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(2, new Date().toISOString())
+  }
 }
 
 export function resetDb(): void {
