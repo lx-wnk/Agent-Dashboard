@@ -8,11 +8,16 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { consola } from 'consola'
+import cookieParser from 'cookie-parser'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
+import { exchangeCodeForToken, getGitHubUser, isOrgMember } from './auth/githubOAuth.js'
+import { signJwt } from './auth/jwtUtils.js'
+import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
 import { getChannelMap } from './channelDiscovery.js'
 import { getDb } from './db/client.js'
 import { getTaskById } from './db/tasksRepo.js'
+import { upsertUser } from './db/usersRepo.js'
 import { parseFullSession } from './jsonlParser.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
@@ -66,6 +71,67 @@ async function start() {
 
   const app = express()
   app.use(express.json())
+  app.use(cookieParser())
+
+  // ─── Auth routes (public — before requireAuth) ───────────
+
+  app.get('/auth/login', (_req, res) => {
+    if (!isAuthEnabled()) {
+      res.redirect('/')
+      return
+    }
+    const params = new URLSearchParams({
+      client_id: process.env.GITHUB_CLIENT_ID!,
+      scope: 'read:org',
+      redirect_uri: `http://${HOST}:${PORT}/auth/callback`,
+    })
+    res.redirect(`https://github.com/login/oauth/authorize?${params}`)
+  })
+
+  app.get('/auth/callback', async (req, res) => {
+    const code = req.query.code as string | undefined
+    if (!code) {
+      res.status(400).send('Missing code')
+      return
+    }
+    try {
+      const accessToken = await exchangeCodeForToken(code)
+      const ghUser = await getGitHubUser(accessToken)
+      const member = await isOrgMember(ghUser.login, accessToken)
+      if (!member) {
+        res.status(403).send('You must be a member of the required GitHub org to access this dashboard.')
+        return
+      }
+      const user = upsertUser({ id: ghUser.id, githubLogin: ghUser.login, displayName: ghUser.name, avatarUrl: ghUser.avatar_url })
+      const token = signJwt(
+        { sub: user.id, login: user.githubLogin, isAdmin: user.isAdmin },
+        process.env.JWT_SECRET ?? 'change-me',
+        8 * 3600,
+      )
+      res.cookie('dashboard_session', token, { httpOnly: true, sameSite: 'lax', maxAge: 8 * 3600 * 1000 })
+      res.redirect('/')
+    }
+    catch (err) {
+      console.error('[auth] OAuth callback error:', err)
+      res.status(500).send('Authentication failed')
+    }
+  })
+
+  app.post('/auth/logout', (_req, res) => {
+    res.clearCookie('dashboard_session')
+    res.redirect('/auth/login')
+  })
+
+  app.get('/api/me', requireAuth, (req, res) => {
+    if (!isAuthEnabled()) {
+      res.json({ user: null, isAdmin: true, authEnabled: false })
+      return
+    }
+    res.json({ user: req.user, isAdmin: req.user?.isAdmin ?? false, authEnabled: true })
+  })
+
+  // All /api/* routes (except /auth/* and /api/me above) require authentication
+  app.use('/api', requireAuth)
 
   // ─── API routes (before Vite middleware) ────────────────
 
