@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
-import { fileURLToPath } from 'node:url'
 import { Database as BunDatabase } from 'bun:sqlite'
+import schemaSql from './schema.sql' with { type: 'text' }
 
 const DEFAULT_DB_PATH = join(homedir(), '.claude', 'dashboard-tasks.db')
 
@@ -116,8 +116,7 @@ export function closeDb(): void {
 }
 
 function migrateV1BaseSchema(db: Database): void {
-  const schemaPath = join(dirname(fileURLToPath(import.meta.url)), 'schema.sql')
-  db.exec(readFileSync(schemaPath, 'utf-8'))
+  db.exec(schemaSql)
 
   const taskCols = db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>
   const hasTaskCol = (name: string) => taskCols.some(c => c.name === name)
