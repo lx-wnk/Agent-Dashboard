@@ -2,6 +2,7 @@ import type express from 'express'
 import type { NotificationEventType, PipelineStage, PipelineTask } from '../../src/types.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
+import process from 'node:process'
 import { consola } from 'consola'
 import { Router } from 'express'
 import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, VALID_STAGES } from '../constants.js'
@@ -23,6 +24,7 @@ import {
   getLatestStageRunForTask,
   getStageRunById,
   listStageRunsForTask,
+  updateStageRun,
 } from '../db/stageRunsRepo.js'
 import {
   addDependency,
@@ -89,6 +91,14 @@ export function enrichTask(task: PipelineTask): PipelineTask {
   const latestBelongsToCurrent = latest?.stage === task.currentStage
   const latestStatus = latestBelongsToCurrent ? (latest?.status ?? null) : null
   const currentIteration = latestBelongsToCurrent ? (latest?.iteration ?? 0) : 0
+  // A `running` stage run that has open permission requests is effectively
+  // user-blocked even though its DB status hasn't flipped yet — surface it
+  // in the Needs You column so the user sees the pending decision.
+  const hasPendingPermissions
+    = latestBelongsToCurrent
+      && latestStatus === 'running'
+      && latest != null
+      && listPendingPermissionRequests(latest.id).length > 0
   const needsUser
     = USER_WAIT_STAGES.has(task.currentStage)
       || latestStatus === 'awaiting_user'
@@ -97,6 +107,7 @@ export function enrichTask(task: PipelineTask): PipelineTask {
       // the task stays on its current stage and the UI surfaces it in
       // the Needs You column with Retry + Analyze actions.
       || latestStatus === 'failed'
+      || hasPendingPermissions
   // Live session surfacing: the modal's "follow along" pane needs the
   // session_id of whichever stage_run the user would most like to watch.
   // Prefer a currently-running run on the current stage; otherwise fall
@@ -511,6 +522,53 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json({ task: updated, stageRun: run })
   })
 
+  // ─── Resume the latest failed stage from its prior session ───────────
+  //
+  // Like /retry, but instead of starting a fresh conversation we pass the
+  // failed run's session_id to the orchestrator so the spawned claude
+  // process is launched with `--resume <sessionId>`. Useful when the agent
+  // got a long way in but hit a permission wall or a transient error —
+  // the resumed conversation keeps its tool history intact.
+  //
+  // Only valid when the latest stage_run on the task's current stage is
+  // `failed` AND has a session_id attached.
+  mutationRouter.post('/tasks/:id/resume-stage', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const latest = getLatestStageRunForTask(req.params.id)
+    if (!latest || latest.stage !== task.currentStage || latest.status !== 'failed') {
+      res.status(409).json({ error: 'Task has no failed stage run to resume on its current stage' })
+      return
+    }
+    if (!latest.sessionId) {
+      res.status(409).json({ error: 'Failed stage run has no session_id to resume from' })
+      return
+    }
+    appendAudit({
+      taskId: task.id,
+      actor: 'user',
+      action: 'resume_stage_requested',
+      details: {
+        stage: latest.stage,
+        iteration: latest.iteration,
+        sessionId: latest.sessionId,
+      },
+    })
+    const run = await deps.orchestrator.progressTask(task.id, {
+      resumeSessionId: latest.sessionId,
+    })
+    if (!run) {
+      res.status(409).json({ error: 'Task could not progress (slot full, no handler, or terminal)' })
+      return
+    }
+    const updated = getTaskById(task.id)
+    broadcastEnrichedUpdate(task.id)
+    res.json({ task: updated, stageRun: run })
+  })
+
   // ─── Launch an ad-hoc analysis session ────────────────
   //
   // Spawns an independent Claude CLI session in the task's worktree with
@@ -684,6 +742,16 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     })
     deps.broadcastTaskEvent({ type: 'permission_request', taskId: run.taskId, payload: reqRow })
 
+    // Flip the stage_run to awaiting_user so the orchestrator's tick loop
+    // stops counting elapsed time toward the stage timeout (see
+    // hasPendingPerms guard in orchestrator.finalizeCompletedAsyncRuns).
+    // The agent process stays alive and idle on the channel waiting for
+    // the user's decision; without this, a slow user response would race
+    // the timeout and the agent would be SIGTERM'd mid-question.
+    if (run.status === 'running')
+      updateStageRun(run.id, { status: 'awaiting_user' })
+    broadcastEnrichedUpdate(run.taskId)
+
     // Fire-and-forget notification for ON HOLD state — catch rejections so
     // an adapter failure never becomes an unhandled promise rejection.
     if (deps.dispatcher) {
@@ -729,9 +797,49 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
           preApproved: false,
           decidedBy: 'user',
         })
+
+        // Auto-restart pattern: when the run was paused at awaiting_user
+        // for this permission, the spawned claude process can't pick the
+        // newly-granted permission up mid-conversation — its
+        // .claude/settings.json was written at spawn time. Kill the idle
+        // process, mark the stage_run failed, and trigger a fresh
+        // iteration which will re-read permissions and re-render the
+        // settings file with the just-granted entry.
+        if (run.status === 'awaiting_user') {
+          if (run.pid !== null) {
+            try {
+              process.kill(run.pid, 'SIGTERM')
+            }
+            catch { /* already dead */ }
+          }
+          updateStageRun(run.id, {
+            status: 'failed',
+            output: { error: 'restarting after permission grant' },
+            endedAt: new Date().toISOString(),
+          })
+          appendAudit({
+            taskId: run.taskId,
+            actor: 'user',
+            action: 'permission_granted_restart',
+            details: {
+              permissionRequestId: existing.id,
+              tool: existing.tool,
+              pattern: existing.pattern,
+              stageRunId: run.id,
+            },
+          })
+          await deps.orchestrator.progressTask(run.taskId)
+        }
+        else {
+          // Normal resume path — agent never paused (race) or already finished.
+          await deps.orchestrator.resumeFromUser(run.taskId)
+        }
       }
-      // Try to resume the task
-      await deps.orchestrator.resumeFromUser(run.taskId)
+      else {
+        // outcome === 'denied' — leave the run in awaiting_user; the agent
+        // will see the denial via channel and either replan or give up.
+        await deps.orchestrator.resumeFromUser(run.taskId)
+      }
       broadcastEnrichedUpdate(run.taskId)
     }
     res.json(resolved)

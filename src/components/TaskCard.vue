@@ -77,6 +77,11 @@ function stageLabel(stage: PipelineStage): string {
         :class="runStatusChipClass(task.latestStageRunStatus)"
         :title="`Latest stage run: ${runStatusLabel(task.latestStageRunStatus)}`"
       >{{ runStatusLabel(task.latestStageRunStatus) }}</span>
+      <span
+        v-if="task.needsUser && task.latestStageRunStatus === 'awaiting_user'"
+        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-yellow-100 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700/60"
+        title="Agent is paused and waiting for a permission grant"
+      >⚠ Needs Permission</span>
       <span v-if="task.worktreePath" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Has worktree">WT</span>
       <span v-if="task.sourceBranch" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700">{{ task.sourceBranch }}</span>
       <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Follow-up task">↳</span>

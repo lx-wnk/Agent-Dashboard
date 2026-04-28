@@ -19,6 +19,7 @@ import {
   removeTaskDependency,
   requestChanges,
   resolvePermissionRequest,
+  resumeStageTask,
   retryTask,
 } from '../composables/useTasks'
 import { runStatusChipClass } from '../utils/statusColors'
@@ -383,6 +384,50 @@ function formatDate(iso: string | null): string {
       <div class="flex-1 overflow-y-auto">
         <!-- Overview tab -->
         <section v-if="activeTab === 'overview'" class="flex-1 overflow-y-auto p-5 flex flex-col gap-4 min-h-0">
+          <!-- Pending permission requests banner -->
+          <div
+            v-if="pendingRequests.length > 0"
+            class="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-700/60 rounded-md px-3.5 py-3"
+          >
+            <h3 class="text-[11px] uppercase tracking-[0.5px] text-yellow-700 dark:text-yellow-400 font-semibold mb-2 flex items-center gap-1.5">
+              <span aria-hidden="true">⚠</span> Waiting for Permission
+            </h3>
+            <div
+              v-for="req in pendingRequests"
+              :key="req.id"
+              class="border-t border-yellow-200 dark:border-yellow-800/50 first:border-t-0 first:pt-0 pt-2 mt-2 first:mt-0"
+            >
+              <div class="flex items-baseline gap-2 flex-wrap">
+                <strong class="text-sm text-slate-900 dark:text-slate-100">{{ req.tool }}</strong>
+                <span
+                  v-if="req.pattern"
+                  class="font-mono text-xs text-slate-700 dark:text-slate-300 bg-yellow-100/60 dark:bg-yellow-900/40 px-1.5 py-px rounded"
+                >{{ req.pattern }}</span>
+              </div>
+              <p v-if="req.reason" class="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                {{ req.reason }}
+              </p>
+              <div class="flex gap-1.5 mt-2">
+                <AppButton
+                  variant="primary"
+                  size="sm"
+                  :disabled="isActing"
+                  @click="onResolve(req, 'granted')"
+                >
+                  Grant
+                </AppButton>
+                <AppButton
+                  variant="danger"
+                  size="sm"
+                  :disabled="isActing"
+                  @click="onResolve(req, 'denied')"
+                >
+                  Deny
+                </AppButton>
+              </div>
+            </div>
+          </div>
+
           <!-- Konzept refinement banner -->
           <div
             v-if="task.currentStage === 'konzept'"
@@ -777,6 +822,15 @@ function formatDate(iso: string | null): string {
           Analysis agent spawned · PID <code>{{ analysisInfo.pid }}</code> · look for it in the agents list.
         </p>
         <div class="flex gap-2 justify-end">
+          <AppButton
+            v-if="isFailedRun(task) && latestStageRun?.sessionId"
+            variant="secondary"
+            :disabled="isActing"
+            title="Continue the agent's last session from where it stopped"
+            @click="handleAction(() => resumeStageTask(task!.id))"
+          >
+            Resume Session
+          </AppButton>
           <AppButton
             v-if="isFailedRun(task)"
             variant="info"

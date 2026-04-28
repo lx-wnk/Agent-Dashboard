@@ -188,6 +188,19 @@ export async function retryTask(taskId: string): Promise<void> {
 }
 
 /**
+ * Resume the task's last stage_run by continuing the agent's previous Claude
+ * session via `--resume`. Picks up where the agent stopped (e.g. after a
+ * permission grant). Requires the latest stage_run to have a sessionId.
+ */
+export async function resumeStageTask(taskId: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/resume-stage`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(err.error || 'Failed to resume task')
+  }
+}
+
+/**
  * Spawn an independent analysis side-session for the task. The session
  * is a normal `claude` CLI process launched in the task's worktree with
  * a rich prompt containing task identity + failure details + pointers to

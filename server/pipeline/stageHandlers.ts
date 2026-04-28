@@ -94,6 +94,7 @@ export function createAgentStage(
         systemPrompt: bundle.systemPrompt,
         prompt: feedback + bundle.userPrompt,
         permissions: ctx.permissions,
+        resumeSessionId: ctx.resumeSessionId ?? null,
         mcpToken: rawToken,
         mcpUrl: `http://127.0.0.1:${port}/api/mcp`,
       })
@@ -101,6 +102,7 @@ export function createAgentStage(
         pid: result.pid,
         iteration: ctx.stageRun.iteration,
         hasFeedback: feedback.length > 0,
+        resumedSessionId: ctx.resumeSessionId ?? null,
       })
       return { kind: 'async_running', pid: result.pid }
     },
