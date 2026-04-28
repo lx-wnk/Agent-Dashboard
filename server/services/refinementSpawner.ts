@@ -50,6 +50,51 @@ export function serializeHistory(turns: RefinementTurn[]): string {
   return `Previous conversation:\n${lines.join('\n\n')}\n\n`
 }
 
+const PHASE_DONE_RE = /(?:^|\n)__phase_done:\s*\w+/
+
+/**
+ * Phase-aware windowing of refinement history to keep prompts within context limits.
+ *
+ * Always preserves assistant turns containing `__phase_done: <phase>` anchors
+ * (so the model retains its commitments from completed phases) plus the most
+ * recent user/assistant exchange. If the resulting prompt still exceeds
+ * `maxChars`, it falls back to the must-keep set: anchors + last exchange only.
+ */
+export function buildWindowedHistory(turns: RefinementTurn[], maxChars = 40_000): string {
+  if (turns.length === 0)
+    return ''
+
+  // Step 1: separate phase-done anchor turns from regular turns
+  const anchorTurns: RefinementTurn[] = []
+  const regularTurns: RefinementTurn[] = []
+  for (const t of turns) {
+    if (t.role === 'assistant' && PHASE_DONE_RE.test(t.content))
+      anchorTurns.push(t)
+    else
+      regularTurns.push(t)
+  }
+
+  // Step 2: keep last 2 regular turns (user + assistant pair)
+  const recentRegular = regularTurns.slice(-2)
+
+  // Step 3: build candidate set: all anchors + recent regular turns
+  // Preserve original ordering by filtering the original turns array
+  const keepSet = new Set<RefinementTurn>([...anchorTurns, ...recentRegular])
+  const candidate = turns.filter(t => keepSet.has(t))
+
+  // Step 4: serialize and check against maxChars
+  const serialized = candidate.map(t => `${t.role}: ${t.content}`).join('\n\n')
+  if (serialized.length <= maxChars)
+    return serialized
+
+  // Step 5: if over limit, keep only anchors + last user+assistant exchange (mustKeep)
+  const mustKeep = turns.filter(t =>
+    anchorTurns.includes(t)
+    || recentRegular.slice(-2).includes(t),
+  )
+  return mustKeep.map(t => `${t.role}: ${t.content}`).join('\n\n')
+}
+
 export interface SpawnRefinementResult {
   child: ChildProcess
   stdout: Readable
@@ -62,7 +107,8 @@ export function spawnRefinementTurn(
   history: RefinementTurn[],
   cwd: string,
 ): SpawnRefinementResult {
-  const historyBlock = serializeHistory(history)
+  const windowed = buildWindowedHistory(history)
+  const historyBlock = windowed.length > 0 ? `Previous conversation:\n${windowed}\n\n` : ''
   const fullPrompt = `${historyBlock}Human: ${message}\n\nContinue the conversation as the assistant. Follow the phase instructions exactly.`
 
   const child = spawn('claude', [
