@@ -700,13 +700,39 @@ export class PipelineOrchestrator {
       const passed = output.passed === true
       if (!passed) {
         const feedback = summarizeReviewFindings(output)
-        const nextMeta = { ...(task.metadata ?? {}), review_feedback: feedback }
+        const prevCycles = typeof task.metadata?.review_cycles === 'number'
+          ? task.metadata.review_cycles
+          : 0
+        const cycles = prevCycles + 1
+        const perTaskCap = typeof task.metadata?.maxReviewCycles === 'number'
+          ? task.metadata.maxReviewCycles
+          : undefined
+        const maxCycles = perTaskCap ?? getPipelineConfigNumber('maxReviewCycles', 3)
+
+        if (cycles >= maxCycles) {
+          return {
+            kind: 'wait_user',
+            reason: `review cycle limit (${maxCycles}) reached`,
+            output,
+          }
+        }
+
+        const nextMeta = {
+          ...(task.metadata ?? {}),
+          review_feedback: feedback,
+          review_cycles: cycles,
+        }
         return { kind: 'next', toStage: 'umsetzung', output, taskMetadataPatch: nextMeta }
       }
-      // Passed — clear any lingering feedback so the finalisierung
-      // handler doesn't read stale review notes from metadata.
-      if (task.metadata && typeof task.metadata === 'object' && 'review_feedback' in task.metadata) {
-        const { review_feedback: _drop, ...rest } = task.metadata
+      // Passed — clear any lingering feedback and the cycle counter so
+      // the finalisierung handler doesn't read stale review notes and a
+      // future re-entry into selbstreview starts from zero.
+      if (
+        task.metadata
+        && typeof task.metadata === 'object'
+        && ('review_feedback' in task.metadata || 'review_cycles' in task.metadata)
+      ) {
+        const { review_feedback: _drop1, review_cycles: _drop2, ...rest } = task.metadata
         const cleared = Object.keys(rest).length > 0 ? rest : null
         return { kind: 'next', toStage: 'finalisierung', output, taskMetadataPatch: cleared }
       }
