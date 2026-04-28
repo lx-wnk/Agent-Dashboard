@@ -7,8 +7,8 @@ import { Router } from 'express'
 import { appendAudit } from '../db/auditRepo.js'
 import { insertTurn, listTurns } from '../db/refinementTurnsRepo.js'
 import { getTaskById, updateTask } from '../db/tasksRepo.js'
-import { spawnRefinementTurn } from '../pipeline/refinementSpawner.js'
-import { bulkGrantAgentFilePermissions, bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
+import { spawnRefinementTurn } from '../services/refinementSpawner.js'
+import { applyPresetPermissions, bulkGrantKonzeptPermissions, saveGrantsToPresets } from '../services/approvalUtils.js'
 
 interface ImageAttachment {
   dataUrl: string
@@ -216,7 +216,10 @@ export function createRefineRouter(
     })
 
     bulkGrantKonzeptPermissions(task.id)
-    bulkGrantAgentFilePermissions(task.id, typeof konzeptOutput.cwd === 'string' ? konzeptOutput.cwd : task.cwd)
+    const userId = task.userId ?? null
+    const cwd = typeof konzeptOutput.cwd === 'string' ? konzeptOutput.cwd : task.cwd
+    applyPresetPermissions(task.id, userId, cwd)
+    saveGrantsToPresets(task.id, userId, cwd)
     broadcastEnrichedUpdate(task.id)
     appendAudit({ taskId: task.id, actor: 'user', action: 'refine_confirmed', details: { cwd: konzeptOutput.cwd } })
 

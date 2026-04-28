@@ -66,7 +66,6 @@ export function spawnRefinementTurn(
     '-p', fullPrompt,
     '--system-prompt', REFINEMENT_SYSTEM_PROMPT,
     '--allowedTools', 'Read,Glob,Grep',
-    '--permission-mode', 'bypassPermissions',
   ], {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],

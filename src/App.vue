@@ -14,7 +14,7 @@ import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
-import { createTask, useTasks } from './composables/useTasks'
+import { useTasks } from './composables/useTasks'
 import { useUser } from './composables/useUser'
 import { formatTokens, totalTokenCount } from './utils/format'
 
@@ -37,23 +37,13 @@ watch(loaded, (isLoaded) => {
 }, { immediate: true })
 const showSpawnDialog = ref(false)
 const activeKonzeptTask = ref<PipelineTask | null>(null)
+const showRefinementChat = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
 
-async function openNewTask() {
-  try {
-    const task = await createTask({
-      slug: `konzept-${Date.now()}`,
-      title: 'New Task',
-      cwd: '/',
-      stage: 'konzept',
-    })
-    if (task)
-      activeKonzeptTask.value = task
-  }
-  catch (err) {
-    showToast(`Failed to create task: ${(err as Error).message}`)
-  }
+function openNewTask() {
+  activeKonzeptTask.value = null
+  showRefinementChat.value = true
 }
 const scriptPath = ref('')
 const homeDir = ref('')
@@ -230,7 +220,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <PipelineBoard
         v-else-if="viewMode === 'pipeline'"
         @select="selectTask"
-        @open-chat="activeKonzeptTask = $event"
+        @open-chat="(t) => { activeKonzeptTask = t; showRefinementChat = true }"
       />
       <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
     </main>
@@ -240,7 +230,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       :task="selectedTask"
       @close="selectTask(null)"
       @navigate="(agent: Agent) => navigateTo({ agent })"
-      @open-chat="(t) => { selectTask(null); activeKonzeptTask = t }"
+      @open-chat="(t) => { selectTask(null); activeKonzeptTask = t; showRefinementChat = true }"
     />
 
 
@@ -254,10 +244,11 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
     </Transition>
     <SpawnDialog :open="showSpawnDialog" @close="showSpawnDialog = false" />
     <RefinementChat
-      :open="activeKonzeptTask !== null"
+      :open="showRefinementChat"
       :task="activeKonzeptTask"
-      @close="activeKonzeptTask = null"
-      @confirmed="activeKonzeptTask = null"
+      @task-created="activeKonzeptTask = $event"
+      @close="showRefinementChat = false; activeKonzeptTask = null"
+      @confirmed="showRefinementChat = false; activeKonzeptTask = null"
     />
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
