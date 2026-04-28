@@ -18,6 +18,10 @@ export function useAgentPrompt(getAgent: () => Agent | null, onMessageSent?: OnM
     isSending.value = true
     sendStatus.value = null
 
+    // Optimistic: show message immediately, clear input, don't wait for network
+    onMessageSent?.({ role: 'human', content: msg, timestamp: new Date().toISOString() })
+    promptInput.value = ''
+
     try {
       if (agent.channelAvailable && agent.status !== 'idle') {
         const res = await fetch(`/api/agents/${agent.sessionId}/message`, {
@@ -46,12 +50,6 @@ export function useAgentPrompt(getAgent: () => Agent | null, onMessageSent?: OnM
         }
       }
       sendStatus.value = 'sent'
-      onMessageSent?.({
-        role: 'human',
-        content: msg,
-        timestamp: new Date().toISOString(),
-      })
-      promptInput.value = ''
     }
     catch (err) {
       sendStatus.value = 'error'

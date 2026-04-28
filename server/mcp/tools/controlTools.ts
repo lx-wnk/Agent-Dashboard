@@ -120,7 +120,6 @@ export function registerControlTools(
         broadcast(run.taskId)
         return ok({ ...resolved, resumed: true })
       }
-      // Stage run not found — permission recorded but agent cannot be signalled
       if (outcome === 'granted') {
         console.warn(`[controlTools] resolve_permission_request: stage run ${req.stageRunId} not found; agent not resumed`)
       }
