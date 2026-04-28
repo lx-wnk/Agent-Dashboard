@@ -14,7 +14,7 @@ const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -35,6 +35,12 @@ const copyHint = ref<string | null>(null)
 
 // Revoke confirmation
 const confirmRevokeId = ref<string | null>(null)
+
+// Permission presets
+const presets = ref<{ cwd: string, count: number }[]>([])
+const presetsLoading = ref(false)
+const presetsError = ref<string | null>(null)
+const confirmResetCwd = ref<string | null>(null)
 
 // --- Group → scopes mapping ---
 const GROUP_SCOPES: Record<string, McpScope[]> = {
@@ -67,11 +73,52 @@ watch(() => props.open, (val) => {
     loadKeys()
 })
 
+// --- Permission presets ---
+async function loadPresets() {
+  presetsLoading.value = true
+  presetsError.value = null
+  try {
+    const res = await fetch('/api/settings/permission-presets')
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    presets.value = await res.json()
+  }
+  catch (e) {
+    presetsError.value = e instanceof Error ? e.message : 'Failed to load'
+  }
+  finally {
+    presetsLoading.value = false
+  }
+}
+
+async function resetPresets(cwd: string) {
+  try {
+    const res = await fetch('/api/settings/permission-presets', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd }),
+    })
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    confirmResetCwd.value = null
+    await loadPresets()
+  }
+  catch (e) {
+    presetsError.value = e instanceof Error ? e.message : 'Failed to reset'
+  }
+}
+
+watch(activeSection, (val) => {
+  if (val === 'permissionPresets')
+    loadPresets()
+})
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
-    if (showCreateDialog.value || confirmRevokeId.value) {
+    if (showCreateDialog.value || confirmRevokeId.value || confirmResetCwd.value) {
       showCreateDialog.value = false
       confirmRevokeId.value = null
+      confirmResetCwd.value = null
     }
     else {
       emit('close')
@@ -228,6 +275,18 @@ function formatDate(iso: string | null) {
               @click="activeSection = 'remotes'"
             >
               <span class="text-sm flex-shrink-0">⌂</span> Meine Remotes
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'permissionPresets'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'permissionPresets'"
+            >
+              <span class="text-sm flex-shrink-0">⚿</span> Berechtigungen
             </button>
           </li>
         </ul>
@@ -417,6 +476,63 @@ function formatDate(iso: string | null) {
         <!-- Remotes -->
         <section v-else-if="activeSection === 'remotes' && authEnabled">
           <RemoteSettings />
+        </section>
+
+        <!-- Permission presets -->
+        <section v-else-if="activeSection === 'permissionPresets'">
+          <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+            Berechtigungen
+          </h3>
+          <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
+            Automatisch gespeicherte Tool-Genehmigungen pro Projekt. Zurücksetzen entfernt alle gespeicherten Genehmigungen für dieses Projekt.
+          </p>
+          <div v-if="presetsLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+            Lade...
+          </div>
+          <p v-else-if="presetsError" class="text-xs text-red-600 dark:text-red-400 mb-3">
+            {{ presetsError }}
+          </p>
+          <div v-else-if="presets.length === 0" class="text-center py-8 text-slate-400 dark:text-slate-600 text-sm">
+            Keine gespeicherten Genehmigungen.
+          </div>
+          <table v-else class="w-full border-collapse text-[13px]">
+            <thead>
+              <tr>
+                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                  Projekt
+                </th>
+                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                  Anzahl
+                </th>
+                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                  Aktionen
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in presets" :key="p.cwd">
+                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-mono text-xs break-all">
+                  {{ p.cwd }}
+                </td>
+                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                  {{ p.count }} {{ p.count === 1 ? 'Tool' : 'Tools' }}
+                </td>
+                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                  <template v-if="confirmResetCwd === p.cwd">
+                    <AppButton variant="danger" size="sm" class="mr-1" @click="resetPresets(p.cwd)">
+                      Ja, zurücksetzen
+                    </AppButton>
+                    <AppButton variant="secondary" size="sm" @click="confirmResetCwd = null">
+                      Abbrechen
+                    </AppButton>
+                  </template>
+                  <button v-else type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmResetCwd = p.cwd">
+                    Zurücksetzen
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </section>
       </div>
     </div>
