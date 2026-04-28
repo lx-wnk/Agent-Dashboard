@@ -119,7 +119,7 @@ Manage keys via **Settings → API Keys** in the UI or `GET/POST/DELETE /api/set
 The dashboard can send instructions to agents that were started with the Channel MCP server. Agents spawned from the dashboard get this automatically. For manually started agents:
 
 ```bash
-claude --mcp-config '{"mcpServers":{"dashboard-channel":{"command":"node","args":["--import","tsx/esm","/path/to/channel/dashboard-channel.ts"]}}}'
+claude --mcp-config '{"mcpServers":{"dashboard-channel":{"command":"bun","args":["/path/to/channel/dashboard-channel.ts"]}}}'
 ```
 
 When an agent has a channel active, a green **CH** badge appears in the agent table. Click the agent to open the detail panel — the **Channel** section lets you send messages and see replies.
@@ -204,20 +204,34 @@ done
 ## Development
 
 ```bash
-pnpm dev           # Express + Vite with hot reload on :13120
-pnpm build         # Production build via Vite
-pnpm lint          # ESLint check
-pnpm test          # Vitest unit tests
-pnpm test:e2e      # Playwright E2E tests
-pnpm typecheck     # vue-tsc type checking
+pnpm dev             # Bun + Vite with hot reload on :13120
+pnpm build           # Production build via Vite (frontend)
+pnpm build:server    # Compile server to self-contained binary (bun build --compile)
+pnpm lint            # ESLint check
+pnpm test            # Vitest (frontend) + bun test (server)
+pnpm test:server     # Server-only tests via bun test
+pnpm test:e2e        # Playwright E2E tests
+pnpm typecheck       # vue-tsc type checking
 ```
 
 ### Prerequisites
 
-- Node.js 22+
+- [Bun](https://bun.sh) 1.x (`curl -fsSL https://bun.sh/install | bash`)
 - Claude Code installed and running (at least one agent process for the dashboard to display)
 - For channel control: agents started with `--mcp-config with the dashboard-channel server`
 - **Platform:** macOS and Linux. CPU monitoring uses `top` on macOS and `/proc/stat` on Linux. Windows is unsupported.
+
+### Single Binary Deployment
+
+For team servers or self-contained distribution, compile the backend into a single executable:
+
+```bash
+pnpm build                                          # Build Vue frontend → dist/
+bun build --compile server/index.ts --outfile=dashboard  # Compile server (~67 MB)
+NODE_ENV=production ./dashboard                     # Start — no node_modules needed
+```
+
+The compiled binary embeds the Bun runtime and all server-side dependencies. Deploy by copying `dashboard` + `dist/` to the target machine. No Node.js or npm install required.
 
 ### Key Conventions
 

@@ -1,5 +1,5 @@
-import type { Database } from 'better-sqlite3'
 import type { AuditEntry } from '../../src/types.js'
+import type { Database } from './client.js'
 import type { AuditRow } from './rowMappers.js'
 import { randomUUID } from 'node:crypto'
 import { getDb } from './client.js'

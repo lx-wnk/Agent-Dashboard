@@ -1,36 +1,29 @@
 import type { TaskEvent } from './routes/taskRoutes.js'
-import { Buffer } from 'node:buffer'
-import { timingSafeEqual } from 'node:crypto'
 import { fstatSync, mkdirSync, openSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { consola } from 'consola'
 import cookieParser from 'cookie-parser'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
-import { exchangeCodeForToken, getGitHubUser, isOrgMember } from './auth/githubOAuth.js'
-import { signJwt } from './auth/jwtUtils.js'
 import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
-import { getChannelMap } from './channelDiscovery.js'
 import { getDb } from './db/client.js'
 import { listRemoteRegistrationsForUser } from './db/remoteRegistrationsRepo.js'
 import { getTaskById } from './db/tasksRepo.js'
-import { upsertUser } from './db/usersRepo.js'
-import { parseFullSession } from './jsonlParser.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
+import { createRejectCrossOrigin, requireApiToken } from './middleware.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
-import { aggregateAgents, getEnvRemoteTargets, isRemoteFetch } from './remoteAggregator.js'
+import { aggregateAgents, getEnvRemoteTargets } from './remoteAggregator.js'
+import { createAgentRouter } from './routes/agentRoutes.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
+import { createAuthRouter } from './routes/authRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
+import { createSystemRouter } from './routes/systemRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
-import { getSessions } from './sessionScanner.js'
 import { SpawnManager } from './spawnManager.js'
-import { getSystemInfo } from './systemMonitor.js'
 
 // Ensure FDs 0–2 are open. When spawned by tsx watch or similar tools, stdio FDs
 // can be closed. If they are, the OS reuses those low numbers for new pipes, which
@@ -61,7 +54,6 @@ const SSE_INTERVAL_MS = (() => {
   }
   return val
 })()
-const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 
 // Spawn state + logic (rate limit, stderr ring-buffer, reply store,
 // channel message forwarding) lives in SpawnManager.
@@ -77,119 +69,15 @@ async function start() {
 
   // ─── Auth routes (public — before requireAuth) ───────────
 
-  app.get('/auth/login', (_req, res) => {
-    if (!isAuthEnabled()) {
-      res.redirect('/')
-      return
-    }
-    const params = new URLSearchParams({
-      client_id: process.env.GITHUB_CLIENT_ID!,
-      scope: 'read:org',
-      redirect_uri: `http://${HOST}:${PORT}/auth/callback`,
-    })
-    res.redirect(`https://github.com/login/oauth/authorize?${params}`)
-  })
-
-  app.get('/auth/callback', async (req, res) => {
-    const code = req.query.code as string | undefined
-    if (!code) {
-      res.status(400).send('Missing code')
-      return
-    }
-    try {
-      const accessToken = await exchangeCodeForToken(code)
-      const ghUser = await getGitHubUser(accessToken)
-      const member = await isOrgMember(ghUser.login, accessToken)
-      if (!member) {
-        res.status(403).send('You must be a member of the required GitHub org to access this dashboard.')
-        return
-      }
-      const jwtSecret = process.env.JWT_SECRET
-      if (!jwtSecret) {
-        console.error('[auth] JWT_SECRET is not set — refusing to issue session token')
-        res.status(500).send('Server misconfiguration: JWT_SECRET is not set')
-        return
-      }
-      const user = upsertUser({ id: ghUser.id, githubLogin: ghUser.login, displayName: ghUser.name, avatarUrl: ghUser.avatar_url })
-      const token = signJwt(
-        { sub: user.id, login: user.githubLogin, isAdmin: user.isAdmin },
-        jwtSecret,
-        8 * 3600,
-      )
-      res.cookie('dashboard_session', token, { httpOnly: true, sameSite: 'lax', maxAge: 8 * 3600 * 1000 })
-      res.redirect('/')
-    }
-    catch (err) {
-      console.error('[auth] OAuth callback error:', err)
-      res.status(500).send('Authentication failed')
-    }
-  })
-
-  app.post('/auth/logout', (_req, res) => {
-    res.clearCookie('dashboard_session')
-    res.redirect('/auth/login')
-  })
-
-  app.get('/api/me', requireAuth, (req, res) => {
-    if (!isAuthEnabled()) {
-      res.json({ user: null, isAdmin: true, authEnabled: false })
-      return
-    }
-    res.json({ user: req.user, isAdmin: req.user?.isAdmin ?? false, authEnabled: true })
-  })
+  app.use(createAuthRouter({ host: HOST, port: PORT }))
 
   // All /api/* routes (except /auth/* and /api/me above) require authentication
   app.use('/api', requireAuth)
 
   // ─── API routes (before Vite middleware) ────────────────
 
-  // Dashboard config (script path, home dir)
-  app.get('/api/config', (_req, res) => {
-    const home = homedir()
-    const scriptAbsolute = join(import.meta.dirname, '..', 'scripts', 'claude-with-channel.sh')
-    const scriptPath = scriptAbsolute.startsWith(home)
-      ? `~${scriptAbsolute.slice(home.length)}`
-      : scriptAbsolute
-    res.json({ scriptPath, homedir: home })
-  })
-
-  function requireApiToken(req: express.Request, res: express.Response, next: express.NextFunction): void {
-    const apiToken = process.env.DASHBOARD_API_TOKEN
-    if (!apiToken) {
-      next()
-      return
-    }
-    const auth = req.headers.authorization
-    if (!auth?.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'Missing Authorization header' })
-      return
-    }
-    const provided = Buffer.from(auth.slice(7))
-    const expected = Buffer.from(apiToken)
-    if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
-      res.status(403).json({ error: 'Invalid token' })
-      return
-    }
-    next()
-  }
-
-  app.get('/api/agents', requireApiToken, async (req, res) => {
-    try {
-      const localAgents = await getAgents()
-      // If this request comes from another dashboard (X-Dashboard-Origin), return local-only to prevent chains
-      if (isRemoteFetch(req.headers)) {
-        res.json(localAgents)
-        return
-      }
-      const remotes = getEnvRemoteTargets()
-      const agents = remotes.length > 0 ? await aggregateAgents(localAgents, remotes) : localAgents
-      res.json(agents)
-    }
-    catch (err) {
-      console.error('Error fetching agents:', err)
-      res.status(500).json({ error: 'Failed to fetch agents' })
-    }
-  })
+  // System routes: /api/config, /api/system
+  app.use('/api', createSystemRouter({ serverDir: import.meta.dirname }))
 
   // SSE stream for real-time agent updates (replaces client-side polling)
   interface SseClient { res: express.Response, userId: string, isAdmin: boolean }
@@ -319,17 +207,6 @@ async function start() {
     }
   }
 
-  app.get('/api/sessions', async (_req, res) => {
-    try {
-      const sessions = await getSessions()
-      res.json(sessions)
-    }
-    catch (err) {
-      console.error('Error fetching sessions:', err)
-      res.status(500).json({ error: 'Failed to fetch sessions' })
-    }
-  })
-
   // ─── Task Pipeline SSE + Router ────────────────
 
   const taskSseClients = new Set<express.Response>()
@@ -427,27 +304,7 @@ async function start() {
   })
   orchestrator.start()
 
-  // CSRF protection for mutation endpoints
-  function rejectCrossOrigin(req: express.Request, res: express.Response): boolean {
-    const origin = req.headers.origin || ''
-    const referer = req.headers.referer || ''
-    // Allow requests with no origin (non-browser clients like curl)
-    if (!origin && !referer)
-      return false
-    const allowed = (s: string) => {
-      try {
-        const url = new URL(s)
-        return (url.hostname === HOST || url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.port === String(PORT)
-      }
-      catch {
-        return false
-      }
-    }
-    if (allowed(origin) || allowed(referer))
-      return false
-    res.status(403).json({ error: 'Cross-origin request blocked' })
-    return true
-  }
+  const rejectCrossOrigin = createRejectCrossOrigin(HOST, PORT)
 
   // API key management routes (browser-facing, CSRF-guarded, no bearer token required)
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin }))
@@ -477,188 +334,8 @@ async function start() {
     },
   ))
 
-  // Spawn a new Claude agent process
-  app.post('/api/agents/spawn', (req, res) => {
-    if (rejectCrossOrigin(req, res))
-      return
-
-    if (!spawnManager.isSpawnAllowed()) {
-      const windowSecs = Math.round(spawnManager.getRateLimitConfig().windowMs / 1000)
-      const { max } = spawnManager.getRateLimitConfig()
-      res.status(429).json({ error: `Too many spawn requests. Max ${max} per ${windowSecs} seconds.` })
-      return
-    }
-
-    const result = spawnManager.spawnAgent(req.body)
-    if (!result.ok) {
-      res.status(result.status).json({ error: result.error })
-      return
-    }
-    res.json({ ok: true, pid: result.pid })
-  })
-
-  // Get status of a spawned agent
-  app.get('/api/agents/spawn/:pid/status', (req, res) => {
-    const pid = Number.parseInt(req.params.pid, 10)
-    if (Number.isNaN(pid) || String(pid) !== req.params.pid) {
-      res.status(400).json({ error: 'Invalid PID' })
-      return
-    }
-    const status = spawnManager.getStatus(pid)
-    if (!status) {
-      res.status(404).json({ error: 'Unknown spawn PID' })
-      return
-    }
-    res.json(status)
-  })
-
-  app.get('/api/agents/:sessionId/output', async (req, res) => {
-    try {
-      const { sessionId } = req.params
-      if (!UUID_RE.test(sessionId)) {
-        res.status(400).json({ error: 'Invalid sessionId format' })
-        return
-      }
-      const lastOnly = req.query.last === '1'
-      const messages = await parseFullSession(sessionId, lastOnly)
-      res.json({ messages })
-    }
-    catch {
-      res.status(500).json({ error: 'Failed to read session output' })
-    }
-  })
-
-  // Send a message to a running agent via its channel
-  app.post('/api/agents/:sessionId/message', async (req, res) => {
-    if (rejectCrossOrigin(req, res))
-      return
-    try {
-      const { sessionId } = req.params
-      if (!UUID_RE.test(sessionId)) {
-        res.status(400).json({ error: 'Invalid sessionId format' })
-        return
-      }
-      const { message } = req.body
-
-      if (!message || typeof message !== 'string') {
-        res.status(400).json({ error: 'Missing "message" field' })
-        return
-      }
-
-      const agents = await getAgents()
-      const agent = agents.find(a => a.sessionId === sessionId)
-      if (!agent) {
-        res.status(404).json({ error: 'Agent not found' })
-        return
-      }
-      if (!agent.channelAvailable) {
-        res.status(404).json({ error: 'Channel not available' })
-        return
-      }
-
-      const channelMap = await getChannelMap()
-      const result = await spawnManager.sendMessageToChannel(agent, message, channelMap)
-
-      switch (result.kind) {
-        case 'not_found':
-          res.status(404).json({ error: 'Channel not available' })
-          return
-        case 'timeout':
-          res.status(504).json({ error: 'Channel request timed out' })
-          return
-        case 'unreachable':
-          res.status(502).json({ error: `Channel unreachable: ${result.message}` })
-          return
-        case 'response':
-          res.status(result.status).json(result.body)
-      }
-    }
-    catch (err) {
-      console.error('Error sending message:', err)
-      res.status(500).json({ error: 'Internal error' })
-    }
-  })
-
-  // Receive a reply FROM a channel MCP server (called by dashboard_reply tool)
-  app.post('/api/channel-reply', async (req, res) => {
-    try {
-      const { parentPid, message, timestamp } = req.body
-
-      if (!parentPid || !message || !timestamp) {
-        res.status(400).json({ error: 'Missing required fields' })
-        return
-      }
-
-      // Validate token against discovery file
-      const authHeader = req.headers.authorization
-      if (!authHeader?.startsWith('Bearer ')) {
-        res.status(401).json({ error: 'Missing authorization' })
-        return
-      }
-      const token = authHeader.slice(7)
-
-      try {
-        const discoveryPath = join(DISCOVERY_DIR, `${parentPid}.json`)
-        const raw = await readFile(discoveryPath, 'utf-8')
-        const discovery = JSON.parse(raw)
-        const expected = Buffer.from(String(discovery.token))
-        const provided = Buffer.from(token)
-        if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
-          res.status(403).json({ error: 'Invalid token' })
-          return
-        }
-      }
-      catch {
-        res.status(403).json({ error: 'Invalid token' })
-        return
-      }
-
-      spawnManager.storeReply(parentPid, message, timestamp)
-      res.json({ ok: true })
-    }
-    catch (err) {
-      console.error('Error handling channel reply:', err)
-      res.status(500).json({ error: 'Internal error' })
-    }
-  })
-
-  // Get replies from a specific agent
-  app.get('/api/agents/:sessionId/replies', async (req, res) => {
-    try {
-      const { sessionId } = req.params
-      if (!UUID_RE.test(sessionId)) {
-        res.status(400).json({ error: 'Invalid sessionId format' })
-        return
-      }
-      const since = req.query.since as string | undefined
-
-      const agents = await getAgents()
-      const agent = agents.find(a => a.sessionId === sessionId)
-      if (!agent) {
-        res.status(404).json({ error: 'Agent not found' })
-        return
-      }
-
-      const replies = spawnManager.getReplies(agent.pid, since)
-
-      res.json({ replies })
-    }
-    catch (err) {
-      console.error('Error fetching replies:', err)
-      res.status(500).json({ error: 'Internal error' })
-    }
-  })
-
-  app.get('/api/system', async (_req, res) => {
-    try {
-      const info = await getSystemInfo()
-      res.json(info)
-    }
-    catch (err) {
-      console.error('Error fetching system info:', err)
-      res.status(500).json({ error: 'Failed to fetch system info' })
-    }
-  })
+  // Agent routes (REST endpoints — non-SSE; SSE stream stays above)
+  app.use('/api', createAgentRouter({ spawnManager, requireApiToken, rejectCrossOrigin }))
 
   // ─── HTTP server ───────────────────────────────────────
 
@@ -669,7 +346,7 @@ async function start() {
     const distPath = join(import.meta.dirname, '..', 'dist')
     app.use(express.static(distPath))
     // SPA fallback: serve index.html for all non-API routes
-    app.get('*', (_req, res) => {
+    app.get('/{*splat}', (_req, res) => {
       res.sendFile(join(distPath, 'index.html'))
     })
   }
