@@ -41,12 +41,14 @@ Summarise the complete spec and plan. Ask the user to confirm. When confirmed, o
 \`\`\`
 Then end with: __phase_done: approval`
 
+function fmtTurn(t: RefinementTurn): string {
+  return `${t.role === 'user' ? 'Human' : 'Assistant'}: ${t.content}`
+}
+
 export function serializeHistory(turns: RefinementTurn[]): string {
   if (turns.length === 0)
     return ''
-  const lines = turns.map(t =>
-    `${t.role === 'user' ? 'Human' : 'Assistant'}: ${t.content}`,
-  )
+  const lines = turns.map(fmtTurn)
   return `Previous conversation:\n${lines.join('\n\n')}\n\n`
 }
 
@@ -56,9 +58,11 @@ const PHASE_DONE_RE = /(?:^|\n)__phase_done:\s*\w+/
  * Phase-aware windowing of refinement history to keep prompts within context limits.
  *
  * Always preserves assistant turns containing `__phase_done: <phase>` anchors
- * (so the model retains its commitments from completed phases) plus the most
- * recent user/assistant exchange. If the resulting prompt still exceeds
- * `maxChars`, it falls back to the must-keep set: anchors + last exchange only.
+ * (so the model retains its commitments from completed phases). The candidate
+ * set additionally keeps the last 2 regular turns of every phase group
+ * (regular turns between two anchors, or after the last anchor). If the
+ * resulting prompt still exceeds `maxChars`, it falls back to the must-keep
+ * set: anchors + the globally-last 2 regular turns only.
  */
 export function buildWindowedHistory(turns: RefinementTurn[], maxChars = 40_000): string {
   if (turns.length === 0)
@@ -74,25 +78,41 @@ export function buildWindowedHistory(turns: RefinementTurn[], maxChars = 40_000)
       regularTurns.push(t)
   }
 
-  // Step 2: keep last 2 regular turns (user + assistant pair)
-  const recentRegular = regularTurns.slice(-2)
+  // Step 2: walk through turns in order, grouping regular turns by phase
+  // boundary (anchor turns separate the groups). For each phase group, keep
+  // the last 2 regular turns. Concatenate the kept turns from every group.
+  const recentRegular: RefinementTurn[] = []
+  let currentGroup: RefinementTurn[] = []
+  const flushGroup = (): void => {
+    if (currentGroup.length > 0)
+      recentRegular.push(...currentGroup.slice(-2))
+    currentGroup = []
+  }
+  for (const t of turns) {
+    if (t.role === 'assistant' && PHASE_DONE_RE.test(t.content))
+      flushGroup()
+    else
+      currentGroup.push(t)
+  }
+  flushGroup()
 
-  // Step 3: build candidate set: all anchors + recent regular turns
-  // Preserve original ordering by filtering the original turns array
-  const keepSet = new Set<RefinementTurn>([...anchorTurns, ...recentRegular])
-  const candidate = turns.filter(t => keepSet.has(t))
+  // Step 3: build candidate set: all anchors + per-group recent regular turns.
+  // Preserve original ordering by filtering the original turns array, and use
+  // id-based set matching to avoid object-identity brittleness.
+  const keepIds = new Set([...anchorTurns, ...recentRegular].map(t => t.id))
+  const candidate = turns.filter(t => keepIds.has(t.id))
 
   // Step 4: serialize and check against maxChars
-  const serialized = candidate.map(t => `${t.role}: ${t.content}`).join('\n\n')
+  const serialized = candidate.map(fmtTurn).join('\n\n')
   if (serialized.length <= maxChars)
     return serialized
 
-  // Step 5: if over limit, keep only anchors + last user+assistant exchange (mustKeep)
-  const mustKeep = turns.filter(t =>
-    anchorTurns.includes(t)
-    || recentRegular.slice(-2).includes(t),
-  )
-  return mustKeep.map(t => `${t.role}: ${t.content}`).join('\n\n')
+  // Step 5: if over limit, keep only anchors + the globally-last 2 regular
+  // turns (mustKeep ⊆ candidate, so this fallback can actually drop content).
+  const globalLastTwo = regularTurns.slice(-2)
+  const mustKeepIds = new Set([...anchorTurns, ...globalLastTwo].map(t => t.id))
+  const mustKeep = turns.filter(t => mustKeepIds.has(t.id))
+  return mustKeep.map(fmtTurn).join('\n\n')
 }
 
 export interface SpawnRefinementResult {
