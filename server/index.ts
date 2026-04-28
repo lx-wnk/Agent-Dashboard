@@ -20,6 +20,7 @@ import { aggregateAgents, getEnvRemoteTargets } from './remoteAggregator.js'
 import { createAgentRouter } from './routes/agentRoutes.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createAuthRouter } from './routes/authRoutes.js'
+import { createPresetRouter } from './routes/presetRoutes.js'
 import { createRefineRouter } from './routes/refineRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
 import { createSystemRouter } from './routes/systemRoutes.js'
@@ -309,6 +310,9 @@ async function start() {
 
   // API key management routes (browser-facing, CSRF-guarded, no bearer token required)
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin }))
+
+  // Permission preset management routes (list/delete remembered tool grants per project)
+  app.use('/api', createPresetRouter(rejectCrossOrigin))
 
   // Task pipeline routes (must come after rejectCrossOrigin definition)
   app.use('/api', createTaskRouter({
