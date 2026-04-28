@@ -1,4 +1,5 @@
 import type { RefinementTurn } from '../db/refinementTurnsRepo.js'
+import type { ChildProcess } from 'node:child_process'
 import type { Readable } from 'node:stream'
 import { spawn } from 'node:child_process'
 
@@ -50,6 +51,7 @@ export function serializeHistory(turns: RefinementTurn[]): string {
 }
 
 export interface SpawnRefinementResult {
+  child: ChildProcess
   stdout: Readable
   waitForExit: () => Promise<void>
   getStderr: () => string
@@ -91,5 +93,5 @@ export function spawnRefinementTurn(
 
   if (!child.stdout)
     throw new Error('refinement spawn: stdout pipe missing')
-  return { stdout: child.stdout, waitForExit, getStderr: () => stderrBuf }
+  return { child, stdout: child.stdout, waitForExit, getStderr: () => stderrBuf }
 }

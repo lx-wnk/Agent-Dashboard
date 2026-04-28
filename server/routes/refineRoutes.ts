@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 import { unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { Router } from 'express'
 import { appendAudit } from '../db/auditRepo.js'
 import { insertTurn, listTurns } from '../db/refinementTurnsRepo.js'
@@ -19,6 +20,8 @@ type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolea
 
 const PHASE_DONE_RE = /(?:^|\n)__phase_done:\s*(\w+)\s*$/
 const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/g
+
+const REFINEMENT_TIMEOUT_MS = Number(process.env.REFINEMENT_TIMEOUT_MS ?? '') || 5 * 60 * 1000
 
 const activeTurns = new Set<string>()
 
@@ -97,10 +100,34 @@ export function createRefineRouter(
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    const { stdout, waitForExit, getStderr } = spawnRefinementTurn(spawnMessage, history, task.cwd)
+    const { child, stdout, waitForExit, getStderr } = spawnRefinementTurn(spawnMessage, history, task.cwd)
 
     let fullResponse = ''
     let turnFinalized = false
+
+    let guardTriggered = false
+
+    const onClose = () => {
+      if (guardTriggered || turnFinalized)
+        return
+      guardTriggered = true
+      child.kill('SIGTERM')
+      activeTurns.delete(task.id)
+      insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[connection closed]' })
+    }
+    res.on('close', onClose)
+
+    const timeoutHandle = setTimeout(() => {
+      if (guardTriggered || turnFinalized)
+        return
+      guardTriggered = true
+      child.kill('SIGTERM')
+      activeTurns.delete(task.id)
+      insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[timeout]' })
+      res.write(`event: error\ndata: ${JSON.stringify({ error: 'refinement turn timed out' })}\n\n`)
+      res.end()
+    }, REFINEMENT_TIMEOUT_MS)
+
     stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString()
       fullResponse += text
@@ -165,6 +192,8 @@ export function createRefineRouter(
       res.end()
     }
     finally {
+      clearTimeout(timeoutHandle)
+      res.removeListener('close', onClose)
       activeTurns.delete(task.id)
       for (const f of tempFiles) {
         try { unlinkSync(f) } catch {}
