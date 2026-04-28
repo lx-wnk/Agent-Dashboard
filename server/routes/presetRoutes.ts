@@ -8,6 +8,8 @@ export function createPresetRouter(rejectCrossOrigin: RejectCrossOrigin): Router
   const router = Router()
 
   router.get('/settings/permission-presets', (req, res) => {
+    if (rejectCrossOrigin(req, res))
+      return
     const userId = (req as express.Request & { user?: { id: string } }).user?.id ?? null
     const summaries = listPresetProjectSummaries(userId)
     res.json(summaries)
