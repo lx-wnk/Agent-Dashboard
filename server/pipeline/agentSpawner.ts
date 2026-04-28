@@ -18,6 +18,7 @@ import { spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
+import consola from 'consola'
 import { buildDashboardChannelMcpConfig } from '../channelConfig.js'
 import { SYSTEM_PROMPT_MAX_CHARS } from '../constants.js'
 
@@ -158,6 +159,10 @@ export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
   child.stderr?.on('error', () => { /* child exit may trigger EPIPE */ })
 
   child.unref()
+
+  child.on('error', (err) => {
+    consola.error(`[agentSpawner] spawn failed: ${err.message}`)
+  })
 
   return {
     child,
