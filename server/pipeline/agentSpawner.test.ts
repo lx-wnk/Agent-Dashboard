@@ -1,7 +1,15 @@
 import type { PipelineTask, StageRun, TaskPermission } from '../../src/types.js'
 import type { SpawnAgentOptions } from './agentSpawner.js'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { buildAllowList, buildSpawnArgs, buildSpawnEnv } from './agentSpawner.js'
+import {
+  buildAllowList,
+  buildSpawnArgs,
+  buildSpawnEnv,
+  shouldCleanSettingsFile,
+} from './agentSpawner.js'
 
 function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
   return {
@@ -224,5 +232,61 @@ describe('buildSpawnEnv', () => {
   it('omits DASHBOARD_MCP_URL when mcpUrl is absent', () => {
     const env = buildSpawnEnv(baseOpts)
     expect(env.DASHBOARD_MCP_URL).toBeUndefined()
+  })
+})
+
+describe('shouldCleanSettingsFile', () => {
+  let tmp: string
+  let settingsPath: string
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'settings-test-'))
+    mkdirSync(join(tmp, '.claude'), { recursive: true })
+    settingsPath = join(tmp, '.claude', 'settings.json')
+  })
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true })
+  })
+
+  it('returns false when the file does not exist', () => {
+    expect(shouldCleanSettingsFile(settingsPath)).toBe(false)
+  })
+
+  it('returns true for files stamped with _dashboardManaged: true', () => {
+    writeFileSync(settingsPath, JSON.stringify({ _dashboardManaged: true, permissions: { allow: [] } }))
+    expect(shouldCleanSettingsFile(settingsPath)).toBe(true)
+  })
+
+  it('returns false for user-authored files without the stamp', () => {
+    writeFileSync(settingsPath, JSON.stringify({ permissions: { allow: ['Read'] } }))
+    expect(shouldCleanSettingsFile(settingsPath)).toBe(false)
+  })
+
+  it('returns false when the file contains invalid JSON', () => {
+    writeFileSync(settingsPath, '{ not json')
+    expect(shouldCleanSettingsFile(settingsPath)).toBe(false)
+  })
+
+  it('returns false when _dashboardManaged is anything other than true', () => {
+    writeFileSync(settingsPath, JSON.stringify({ _dashboardManaged: false }))
+    expect(shouldCleanSettingsFile(settingsPath)).toBe(false)
+    writeFileSync(settingsPath, JSON.stringify({ _dashboardManaged: 'yes' }))
+    expect(shouldCleanSettingsFile(settingsPath)).toBe(false)
+  })
+
+  it('does not consider a sibling user file with the stamp inside permissions', () => {
+    // Stamp must live at the top level — nested fields don't count.
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({ permissions: { allow: [], _dashboardManaged: true } }),
+    )
+    expect(shouldCleanSettingsFile(settingsPath)).toBe(false)
+  })
+
+  it('leaves the readFileSync semantics deterministic across calls', () => {
+    writeFileSync(settingsPath, JSON.stringify({ _dashboardManaged: true }))
+    expect(readFileSync(settingsPath, 'utf8')).toContain('_dashboardManaged')
+    expect(shouldCleanSettingsFile(settingsPath)).toBe(true)
   })
 })

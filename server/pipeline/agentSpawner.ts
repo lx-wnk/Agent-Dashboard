@@ -15,7 +15,7 @@
 import type { ChildProcess } from 'node:child_process'
 import type { PipelineTask, StageRun, TaskPermission } from '../../src/types.js'
 import { spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 import consola from 'consola'
@@ -44,6 +44,14 @@ export interface SpawnResult {
   pid: number
   cwd: string
   settingsPath: string | null
+  /**
+   * Removes the `.claude/settings.json` file iff it was created by this
+   * spawn (i.e. carries the `_dashboardManaged: true` stamp). Idempotent
+   * and safe to call when no file was written. Callers should invoke this
+   * after the stage run is finalized so a user-authored settings file is
+   * never overwritten or deleted.
+   */
+  cleanup: () => void
 }
 
 // Channel MCP tools are always pre-approved when the dashboard channel is injected.
@@ -115,18 +123,58 @@ export function buildSpawnEnv(opts: SpawnAgentOptions): NodeJS.ProcessEnv {
 /**
  * Write a .claude/settings.json into the worktree (or cwd) with the
  * pre-approved tool permissions converted to Claude Code allowlist format.
+ *
+ * Refuses to overwrite an existing settings.json — a user-authored file
+ * must never be clobbered. Returns `{ path, wrote }` so the caller can
+ * gate cleanup on whether *we* created the file. Files we create carry a
+ * `_dashboardManaged: true` stamp so cleanup can verify ownership without
+ * relying on transient state.
  */
-function writeSettingsFile(cwd: string, permissions: TaskPermission[], enableChannel: boolean): string | null {
+function writeSettingsFile(
+  cwd: string,
+  permissions: TaskPermission[],
+  enableChannel: boolean,
+): { path: string | null, wrote: boolean } {
   const allow = buildAllowList(permissions, enableChannel)
   if (allow.length === 0)
-    return null
+    return { path: null, wrote: false }
 
   const settingsDir = join(cwd, '.claude')
-  mkdirSync(settingsDir, { recursive: true })
   const settingsPath = join(settingsDir, 'settings.json')
-  const settings = { permissions: { allow } }
+
+  if (existsSync(settingsPath)) {
+    // A settings.json already exists — never overwrite it. The agent will
+    // run with whatever permissions are already configured there. Surface
+    // a warning so operators see why pre-approval may not be in effect.
+    consola.warn(
+      `[agentSpawner] ${settingsPath} already exists — leaving it untouched.`
+      + ' Pre-approved tool allow-list will not be applied for this run.',
+    )
+    return { path: settingsPath, wrote: false }
+  }
+
+  mkdirSync(settingsDir, { recursive: true })
+  const settings = { permissions: { allow }, _dashboardManaged: true }
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
-  return settingsPath
+  return { path: settingsPath, wrote: true }
+}
+
+/**
+ * Returns true iff `settingsPath` exists and carries the
+ * `_dashboardManaged: true` stamp. Used by callers that need to decide
+ * whether to delete a leftover settings.json without holding the
+ * SpawnResult closure (e.g. orchestrator finalization after restart).
+ */
+export function shouldCleanSettingsFile(settingsPath: string): boolean {
+  if (!existsSync(settingsPath))
+    return false
+  try {
+    const parsed = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>
+    return parsed._dashboardManaged === true
+  }
+  catch {
+    return false
+  }
 }
 
 /**
@@ -137,7 +185,11 @@ function writeSettingsFile(cwd: string, permissions: TaskPermission[], enableCha
 export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
   const cwd = opts.task.worktreePath || opts.task.cwd
   const enableChannel = opts.enableChannel !== false
-  const settingsPath = writeSettingsFile(cwd, opts.permissions, enableChannel)
+  const { path: settingsPath, wrote: wroteSettingsFile } = writeSettingsFile(
+    cwd,
+    opts.permissions,
+    enableChannel,
+  )
 
   const args = buildSpawnArgs(opts)
 
@@ -169,5 +221,18 @@ export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
     pid: child.pid ?? 0,
     cwd,
     settingsPath,
+    cleanup: () => {
+      // Only delete if we wrote it AND the on-disk file still carries the
+      // dashboard-managed stamp. Guards against deleting a file the user
+      // has since replaced with their own.
+      if (!wroteSettingsFile || !settingsPath)
+        return
+      if (!shouldCleanSettingsFile(settingsPath))
+        return
+      try {
+        unlinkSync(settingsPath)
+      }
+      catch { /* already gone, race with another cleanup, or read-only fs */ }
+    },
   }
 }

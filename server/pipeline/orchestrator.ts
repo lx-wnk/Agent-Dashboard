@@ -1,5 +1,7 @@
 import type { PipelineStage, PipelineTask, StageRun } from '../../src/types.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
+import { unlinkSync } from 'node:fs'
+import { join } from 'node:path'
 import process from 'node:process'
 import { consola } from 'consola'
 import { revokeApiKeyByName } from '../db/apiKeysRepo.js'
@@ -17,6 +19,7 @@ import {
 } from '../db/stageRunsRepo.js'
 import { getDependentsOf, hasOtherBlockingDeps } from '../db/taskDependenciesRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
+import { shouldCleanSettingsFile } from './agentSpawner.js'
 import { detectCompletion } from './completionDetector.js'
 import { attachSessionId, buildSessionName, decideRecovery } from './sessionManager.js'
 import { findNewestSessionId } from './sessionOutputReader.js'
@@ -486,6 +489,20 @@ export class PipelineOrchestrator {
     // updates on permission requests and failures, missing healthy
     // stage transitions.
     this.onTaskChanged?.(task.id, { transitionKind: transition.kind })
+
+    // Clean up the dashboard-managed `.claude/settings.json` when no
+    // agent is about to run in this cwd. Skipped for `next`/`iterate`
+    // (next agent will reuse the file) and `async_running` (agent is
+    // still running). The cleanup is gated by the `_dashboardManaged`
+    // stamp so a user-authored settings.json is never deleted.
+    const reachedTaskTerminal
+      = transition.kind === 'done'
+        || transition.kind === 'wait_user'
+        || transition.kind === 'fail'
+        || transition.kind === 'on_hold'
+        || (transition.kind === 'iterate' && stageRun.iteration + 1 >= task.maxIterations)
+    if (reachedTaskTerminal)
+      cleanupDashboardSettings(task.worktreePath || task.cwd)
 
     // Cascade terminal stage to dependents AFTER onTaskChanged so the
     // kanban first reflects this task's new state before dependents change.
@@ -976,6 +993,26 @@ function comparePickOrder(a: PipelineTask, b: PipelineTask): number {
   if (prA !== prB)
     return prB - prA
   return a.createdAt.localeCompare(b.createdAt)
+}
+
+/**
+ * Delete the dashboard-managed `.claude/settings.json` in the given
+ * cwd if (and only if) it carries the `_dashboardManaged: true` stamp
+ * we wrote during spawn. Idempotent and safe when no file exists.
+ * Called after a stage_run finalizes to a state where no agent will
+ * run in this cwd, so a user-authored settings.json from outside the
+ * pipeline is never collateral damage.
+ */
+function cleanupDashboardSettings(cwd: string): void {
+  const settingsPath = join(cwd, '.claude', 'settings.json')
+  if (!shouldCleanSettingsFile(settingsPath))
+    return
+  try {
+    unlinkSync(settingsPath)
+  }
+  catch (err) {
+    consola.warn(`[orchestrator] failed to clean up ${settingsPath}: ${(err as Error).message}`)
+  }
 }
 
 /**

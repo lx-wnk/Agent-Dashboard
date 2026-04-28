@@ -57,7 +57,7 @@ function fakeSpawn(pid = 9999) {
   const calls: Array<{ prompt: string, systemPrompt?: string }> = []
   const spawn = ((opts: { prompt: string, systemPrompt?: string }): SpawnResult => {
     calls.push({ prompt: opts.prompt, systemPrompt: opts.systemPrompt })
-    return { child: {} as any, pid, cwd: '/tmp/x', settingsPath: null }
+    return { child: {} as any, pid, cwd: '/tmp/x', settingsPath: null, cleanup: () => {} }
   }) as any
   return { spawn, calls }
 }
