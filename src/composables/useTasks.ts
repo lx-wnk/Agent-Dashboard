@@ -229,6 +229,14 @@ export async function fetchStageRuns(taskId: string): Promise<StageRun[]> {
   return await res.json() as StageRun[]
 }
 
+export async function fetchStageRunAgentOutput(taskId: string, runId: string): Promise<string | null> {
+  const res = await fetch(`/api/tasks/${taskId}/stage-runs/${runId}/agent-output`)
+  if (!res.ok)
+    return null
+  const data = await res.json() as { text: string | null }
+  return data.text
+}
+
 export async function fetchTaskPermissions(taskId: string): Promise<TaskPermission[]> {
   const res = await fetch(`/api/tasks/${taskId}/permissions`)
   if (!res.ok)

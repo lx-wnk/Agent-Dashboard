@@ -10,6 +10,7 @@ import {
   fetchDependencies,
   fetchDependents,
   fetchPendingPermissionRequests,
+  fetchStageRunAgentOutput,
   fetchStageRuns,
   fetchTaskFeedback,
   fetchTaskPermissions,
@@ -168,6 +169,26 @@ const latestRunAgentMessage = computed<string | null>(() => {
   return typeof msg === 'string' ? msg : null
 })
 
+const latestRunError = computed<string | null>(() => {
+  const out = latestStageRun.value?.output
+  if (!out)
+    return null
+  const e = (out as Record<string, unknown>).error
+  return typeof e === 'string' ? e : null
+})
+
+// Session text fetched lazily for failed/timed-out runs that have no agentMessage
+const sessionAgentText = ref<string | null>(null)
+const sessionAgentTextLoading = ref(false)
+
+async function fetchSessionText(run: StageRun) {
+  if (!props.task || latestRunAgentMessage.value)
+    return
+  sessionAgentTextLoading.value = true
+  sessionAgentText.value = await fetchStageRunAgentOutput(props.task.id, run.id)
+  sessionAgentTextLoading.value = false
+}
+
 async function onAnalyze() {
   if (!props.task)
     return
@@ -180,10 +201,14 @@ async function onAnalyze() {
 async function loadDetails() {
   if (!props.task)
     return
+  sessionAgentText.value = null
   stageRuns.value = await fetchStageRuns(props.task.id)
   permissions.value = await fetchTaskPermissions(props.task.id)
   pendingRequests.value = await fetchPendingPermissionRequests(props.task.id)
   feedbackHistory.value = await fetchTaskFeedback(props.task.id)
+  const latest = stageRuns.value[stageRuns.value.length - 1]
+  if (latest && (latest.status === 'failed' || latest.status === 'done'))
+    fetchSessionText(latest)
 }
 
 async function onRequestChanges() {
@@ -389,18 +414,40 @@ function formatDate(iso: string | null): string {
               :local-messages="[]"
               class="border-t border-slate-200 dark:border-slate-700 mt-2 pt-3 min-h-[200px] max-h-[40vh] px-0 py-3"
             />
-            <div v-else-if="latestRunAgentMessage" class="mt-1.5">
-              <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
-                Agent output
+            <template v-else>
+              <!-- Error banner (timeout, schema failure, etc.) -->
+              <div v-if="latestRunError" class="mt-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 px-3 py-2 flex items-start gap-2">
+                <span class="text-red-500 dark:text-red-400 text-sm leading-none mt-0.5">✗</span>
+                <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">{{ latestRunError }}</p>
               </div>
-              <pre class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ latestRunAgentMessage }}</pre>
-            </div>
-            <details v-else-if="latestStageRun.output">
-              <summary class="cursor-pointer text-[11px] text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
-                Stage output
-              </summary>
-              <StageOutputView :stage="latestStageRun.stage" :output="latestStageRun.output" />
-            </details>
+
+              <!-- Agent prose captured at completion (e.g. "no json block") -->
+              <div v-if="latestRunAgentMessage" class="mt-2">
+                <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
+                  Agent output
+                </div>
+                <pre class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ latestRunAgentMessage }}</pre>
+              </div>
+
+              <!-- Session text fetched from JSONL (failed/done runs without embedded agentMessage) -->
+              <div v-else-if="sessionAgentText || sessionAgentTextLoading" class="mt-2">
+                <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
+                  Agent output
+                </div>
+                <div v-if="sessionAgentTextLoading" class="text-[11px] text-slate-400 dark:text-slate-600 animate-pulse">
+                  Loading…
+                </div>
+                <pre v-else class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[400px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ sessionAgentText }}</pre>
+              </div>
+
+              <!-- Structured stage output (successful run with parsed fields) -->
+              <details v-else-if="latestStageRun.output && !latestRunError" class="mt-1.5">
+                <summary class="cursor-pointer text-[11px] text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
+                  Stage output
+                </summary>
+                <StageOutputView :stage="latestStageRun.stage" :output="latestStageRun.output" :status="latestStageRun.status" />
+              </details>
+            </template>
           </div>
 
           <div v-if="approvalMeta" class="bg-green-400/[.08] border border-green-400/35 rounded-md px-3.5 py-3 mb-4">
@@ -621,12 +668,9 @@ function formatDate(iso: string | null): string {
             <div class="text-[11px] text-slate-400 dark:text-slate-600 mt-0.5">
               started {{ formatDate(run.startedAt) }} · ended {{ formatDate(run.endedAt) }}
             </div>
-            <details v-if="run.output" class="mt-1.5 text-[11px]">
-              <summary class="cursor-pointer text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
-                Output
-              </summary>
-              <StageOutputView :stage="run.stage" :output="run.output" />
-            </details>
+            <div v-if="run.output" class="mt-1.5 text-[11px]">
+              <StageOutputView :stage="run.stage" :output="run.output" :status="run.status" />
+            </div>
           </div>
         </section>
 

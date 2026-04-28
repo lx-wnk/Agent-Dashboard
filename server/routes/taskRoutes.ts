@@ -38,7 +38,8 @@ import {
   listTasksForUser,
   updateTask,
 } from '../db/tasksRepo.js'
-import { resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
+import { isAuthEnabled } from '../auth/requireAuth.js'
+import { findNewestSessionId, readLastStageJsonOutput, resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
 import { spawnAnalysisAgent } from '../services/analysisSpawner.js'
 import { recommendParallelism } from '../services/resourceRecommender.js'
 import { createWorktree, removeWorktree } from '../services/worktreeManager.js'
@@ -230,7 +231,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         silverBullet: silverBullet === true,
         priority: (priority === 'high' || priority === 'medium' || priority === 'low') ? priority : undefined,
         currentStage: (typeof stage === 'string' && VALID_STAGES.has(stage as PipelineStage)) ? (stage as PipelineStage) : 'konzept',
-        userId: req.user!.id,
+        userId: isAuthEnabled() ? req.user!.id : null,
       })
       deps.broadcastTaskEvent({ type: 'task_created', taskId: task.id, payload: enrichTask(task) })
       res.status(201).json(enrichTask(task))
@@ -578,6 +579,27 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       return
     }
     res.json(listStageRunsForTask(req.params.id))
+  })
+
+  router.get('/tasks/:id/stage-runs/:runId/agent-output', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const run = getStageRunById(req.params.runId)
+    if (!run || run.taskId !== req.params.id) {
+      res.status(404).json({ error: 'Stage run not found' })
+      return
+    }
+    const cwd = task.worktreePath || task.cwd
+    const sessionId = run.sessionId ?? await findNewestSessionId(cwd, run.startedAt)
+    if (!sessionId) {
+      res.json({ text: null })
+      return
+    }
+    const { rawText } = await readLastStageJsonOutput(cwd, sessionId)
+    res.json({ text: rawText ?? null })
   })
 
   router.get('/tasks/:id/audit', (req, res) => {

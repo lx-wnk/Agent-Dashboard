@@ -74,7 +74,7 @@ describe('buildAllowList', () => {
     const list = buildAllowList([
       permission({ tool: 'Bash', pattern: 'npm *' }),
       permission({ tool: 'Bash', pattern: 'git status' }),
-    ])
+    ], false)
     expect(list).toEqual(['Bash(npm *)', 'Bash(git status)'])
   })
 
@@ -82,7 +82,7 @@ describe('buildAllowList', () => {
     const list = buildAllowList([
       permission({ tool: 'Read', pattern: null }),
       permission({ tool: 'Grep', pattern: null }),
-    ])
+    ], false)
     expect(list).toEqual(['Read', 'Grep'])
   })
 
@@ -90,7 +90,7 @@ describe('buildAllowList', () => {
     const list = buildAllowList([
       permission({ tool: 'Read', granted: true }),
       permission({ tool: 'WebFetch', granted: false }),
-    ])
+    ], false)
     expect(list).toEqual(['Read'])
     expect(list).not.toContain('WebFetch')
   })
@@ -99,7 +99,7 @@ describe('buildAllowList', () => {
     const list = buildAllowList([
       permission({ tool: 'Bash', granted: false }),
       permission({ tool: 'WebFetch', granted: false }),
-    ])
+    ], false)
     expect(list).toEqual([])
   })
 
@@ -108,9 +108,16 @@ describe('buildAllowList', () => {
       permission({ tool: 'Bash', pattern: 'git push *' }),
       permission({ tool: 'Bash', pattern: 'git push origin main' }),
       permission({ tool: 'Bash', pattern: 'git commit -m *' }),
-    ])
+    ], false)
     expect(list).toEqual(['Bash(git commit -m *)'])
     expect(list.some(e => e.includes('git push'))).toBe(false)
+  })
+
+  it('prepends channel tools when enableChannel is true', () => {
+    const list = buildAllowList([permission({ tool: 'Read', pattern: null })], true)
+    expect(list[0]).toBe('mcp__dashboard-channel__dashboard_reply')
+    expect(list[1]).toBe('mcp__dashboard-channel__request_permission')
+    expect(list).toContain('Read')
   })
 })
 
