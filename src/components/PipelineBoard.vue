@@ -72,21 +72,25 @@ const columnsWithTasks = computed(() =>
 </script>
 
 <template>
-  <div class="pipeline-board">
+  <div class="flex gap-3 overflow-x-auto pb-4 min-h-[calc(100vh-200px)]">
     <div
       v-for="{ col, tasks } in columnsWithTasks"
       :key="col.id"
-      class="swimlane"
-      :class="`swimlane-${col.group}`"
+      class="flex-[1_1_260px] min-w-[240px] rounded-lg flex flex-col max-h-[calc(100vh-220px)]"
+      :class="col.group === 'needs-you'
+        ? 'bg-yellow-50/30 dark:bg-yellow-950/10 border border-yellow-300/60 dark:border-yellow-700/40'
+        : col.group === 'terminal'
+          ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 opacity-70'
+          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700'"
     >
-      <div class="swimlane-header">
-        <span class="swimlane-label">{{ col.label }}</span>
-        <span class="swimlane-count">{{ tasks.length }}</span>
+      <div class="flex justify-between items-center px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+        <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ col.label }}</span>
+        <span class="text-[11px] text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-950 px-2 py-px rounded-full font-mono">{{ tasks.length }}</span>
       </div>
-      <div v-if="col.hint" class="swimlane-hint">
+      <div v-if="col.hint" class="text-[10px] text-yellow-600 dark:text-yellow-400 px-3 pb-1.5 uppercase tracking-wider font-semibold">
         {{ col.hint }}
       </div>
-      <div class="swimlane-body">
+      <div class="p-2.5 flex flex-col gap-2 overflow-y-auto">
         <TaskCard
           v-for="task in tasks"
           :key="task.id"
@@ -94,81 +98,10 @@ const columnsWithTasks = computed(() =>
           @select="(t) => emit('select', t)"
           @open-chat="(t) => emit('openChat', t)"
         />
-        <div v-if="!tasks.length" class="empty-hint">
+        <div v-if="!tasks.length" class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5">
           —
         </div>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.pipeline-board {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 16px;
-  min-height: calc(100vh - 200px);
-}
-.swimlane {
-  flex: 1 1 260px;
-  min-width: 240px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 220px);
-}
-.swimlane-needs-you {
-  border: 1px solid rgba(234, 179, 8, 0.6);
-  background: rgba(234, 179, 8, 0.08);
-  flex-basis: 300px;
-}
-.swimlane-terminal {
-  opacity: 0.7;
-}
-.swimlane-hint {
-  font-size: 10px;
-  color: rgb(234, 179, 8);
-  padding: 0 12px 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-}
-.swimlane-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.swimlane-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.swimlane-count {
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg-primary);
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-family: var(--font-mono);
-}
-.swimlane-body {
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow-y: auto;
-}
-.empty-hint {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 11px;
-  padding: 20px 0;
-}
-</style>

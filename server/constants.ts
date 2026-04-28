@@ -21,3 +21,5 @@ export const SYSTEM_PROMPT_MAX_CHARS = 10_000
 
 export const DEPENDENCY_REQUIRED_STAGES = ['done', 'cancelled'] as const
 export const DEPENDENCY_CANCEL_ACTIONS = ['cancel', 'start', 'on_hold'] as const
+
+export const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i

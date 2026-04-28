@@ -85,35 +85,22 @@ function toggleSubagents(pid: number) {
 </script>
 
 <template>
-  <div class="table-container">
-    <table class="agent-table">
+  <div class="overflow-x-auto">
+    <table class="w-full border-collapse">
       <thead>
         <tr>
-          <th class="sortable" tabindex="0" @click="toggleSort('status')" @keydown.enter="toggleSort('status')" @keydown.space.prevent="toggleSort('status')">
-            Status{{ sortIndicator('status') }}
+          <th
+            v-for="[field, label] in ([['status', 'Status'], ['projectName', 'Project'], ['currentAction', 'Current Action'], ['model', 'Model'], ['tokens', 'Tokens'], ['costEstimate', 'Cost'], ['uptime', 'Uptime'], ['pid', 'PID']] as const)"
+            :key="field"
+            class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 sticky top-0 z-[1] cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400 transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+            tabindex="0"
+            @click="toggleSort(field as SortField)"
+            @keydown.enter="toggleSort(field as SortField)"
+            @keydown.space.prevent="toggleSort(field as SortField)"
+          >
+            {{ label }}{{ sortIndicator(field as SortField) }}
           </th>
-          <th class="sortable" tabindex="0" @click="toggleSort('projectName')" @keydown.enter="toggleSort('projectName')" @keydown.space.prevent="toggleSort('projectName')">
-            Project{{ sortIndicator('projectName') }}
-          </th>
-          <th class="sortable" tabindex="0" @click="toggleSort('currentAction')" @keydown.enter="toggleSort('currentAction')" @keydown.space.prevent="toggleSort('currentAction')">
-            Current Action{{ sortIndicator('currentAction') }}
-          </th>
-          <th class="sortable" tabindex="0" @click="toggleSort('model')" @keydown.enter="toggleSort('model')" @keydown.space.prevent="toggleSort('model')">
-            Model{{ sortIndicator('model') }}
-          </th>
-          <th class="sortable" tabindex="0" @click="toggleSort('tokens')" @keydown.enter="toggleSort('tokens')" @keydown.space.prevent="toggleSort('tokens')">
-            Tokens{{ sortIndicator('tokens') }}
-          </th>
-          <th class="sortable" tabindex="0" @click="toggleSort('costEstimate')" @keydown.enter="toggleSort('costEstimate')" @keydown.space.prevent="toggleSort('costEstimate')">
-            Cost{{ sortIndicator('costEstimate') }}
-          </th>
-          <th class="sortable" tabindex="0" @click="toggleSort('uptime')" @keydown.enter="toggleSort('uptime')" @keydown.space.prevent="toggleSort('uptime')">
-            Uptime{{ sortIndicator('uptime') }}
-          </th>
-          <th class="sortable" tabindex="0" @click="toggleSort('pid')" @keydown.enter="toggleSort('pid')" @keydown.space.prevent="toggleSort('pid')">
-            PID{{ sortIndicator('pid') }}
-          </th>
-          <th />
+          <th class="px-3 py-2 bg-slate-50 dark:bg-slate-950 sticky top-0 z-[1] border-b border-slate-200 dark:border-slate-800" />
         </tr>
       </thead>
       <tbody>
@@ -134,56 +121,8 @@ function toggleSubagents(pid: number) {
         </template>
       </tbody>
     </table>
-    <p v-if="agents.length === 0" class="empty">
+    <p v-if="agents.length === 0" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
       No running Claude agents found.
     </p>
   </div>
 </template>
-
-<style scoped>
-.table-container {
-  overflow-x: auto;
-}
-
-.agent-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.agent-table th {
-  padding: 8px 12px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-primary);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.agent-table th.sortable {
-  cursor: pointer;
-  user-select: none;
-  transition: color 0.15s;
-}
-
-.agent-table th.sortable:hover {
-  color: var(--text-secondary);
-}
-
-.agent-table th.sortable:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: -2px;
-}
-
-.empty {
-  text-align: center;
-  padding: 48px;
-  color: var(--text-muted);
-  font-size: 14px;
-}
-</style>

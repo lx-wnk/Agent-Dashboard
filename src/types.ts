@@ -141,6 +141,9 @@ export interface PipelineTask {
   silverBullet: boolean
   /** Soft priority used after silver-bullet and stage-furthest-first. */
   priority: TaskPriority
+  // Owning user (multi-user mode). Null for legacy/system tasks created
+  // before multi-user was introduced; only admins see those.
+  userId: string | null
   // Computed at read time by the API — not stored in DB.
   // True when the latest stage_run is paused waiting for user input,
   // regardless of what currentStage is.

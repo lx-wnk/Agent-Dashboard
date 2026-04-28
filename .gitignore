@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.worktrees/
 package-lock.json
 .superpowers/
 *.log
@@ -17,6 +18,9 @@ package-lock.json
 .claude/skills/
 .agents/skills/
 .claude/worktrees/
+
+# Compiled single-binary (bun build --compile)
+/dashboard
 
 # Local settings contain tokens — never commit
 .claude/settings.local.json

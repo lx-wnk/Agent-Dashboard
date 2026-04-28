@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDb, getDb } from '../db/client.js'
 import { addDependency } from '../db/taskDependenciesRepo.js'
 import { createTask, updateTask } from '../db/tasksRepo.js'
+import { upsertUser } from '../db/usersRepo.js'
 import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import { createTaskRouter } from './taskRoutes.js'
 
@@ -33,10 +34,19 @@ beforeEach(async () => {
   process.env.DASHBOARD_DB_PATH = join(tmpDir, 'test.db')
   getDb()
 
+  // Ensure the test user exists for tasks.user_id FK
+  upsertUser({ id: 'test-user', githubLogin: 'tester', displayName: null, avatarUrl: null })
+
   events = []
   orchestrator = new PipelineOrchestrator()
   const app = expressLib()
   app.use(expressLib.json())
+  // Stand in for requireAuth middleware (T8) — tests don't exercise auth,
+  // so just inject an admin user so route handlers can read req.user.
+  app.use((req, _res, next) => {
+    req.user = { id: 'test-user', login: 'tester', isAdmin: true }
+    next()
+  })
   app.use('/api', createTaskRouter({
     rejectCrossOrigin: () => false, // allow everything in tests
     orchestrator,

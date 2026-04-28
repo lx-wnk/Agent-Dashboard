@@ -1,6 +1,6 @@
 import { readdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { encodePath, headRead, parseJsonlLines, readSessionMeta } from './jsonlParser.js'
+import { encodePath, headRead, parseJsonlLines, readSessionMeta, tailRead } from './jsonlParser.js'
 import { CLAUDE_PROJECTS_DIR } from './paths.js'
 import { estimateCost } from './pricing.js'
 import { scanProcesses } from './processScanner.js'
@@ -12,6 +12,7 @@ export interface SessionInfo {
   lastModified: string // ISO timestamp
   model: string | null
   firstPrompt: string | null
+  lastResponse: string | null
   totalInputTokens: number
   totalOutputTokens: number
   costEstimate: number
@@ -20,22 +21,29 @@ export interface SessionInfo {
 
 const MAX_SESSIONS = 100
 
-/**
- * Decode an encoded project directory name back to an absolute path.
- *
- * Claude Code encodes paths by replacing `/` and `_` with `-`, which is
- * ambiguous on decode. We restore the leading `/` and replace remaining
- * `-` with `/`. This won't be perfect for every edge case (e.g. directory
- * names that originally contained `-`), but it gives a reasonable
- * human-readable project path most of the time.
- */
 export function decodeProjectDir(encoded: string): string {
-  // On macOS, paths look like -Users-username-code-project
-  // Restore leading `/` and try to rebuild the path
-  if (encoded.startsWith('-')) {
-    return `/${encoded.slice(1).replace(/-/g, '/')}`
-  }
+  // Return the raw encoded string — decoding is lossy since `/`, `.`, `_`
+  // are all encoded as `-`. The call site already prefers headInfo.cwd
+  // (the actual filesystem path from JSONL); this fallback is only reached
+  // for sessions with unreadable JSONL where showing the encoded form is
+  // better than fabricating a wrong path.
   return encoded
+}
+
+function extractLastAssistantText(entries: any[]): string | null {
+  let last: string | null = null
+  for (const entry of entries) {
+    if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
+      const text = entry.message.content
+        .filter((c: any) => c.type === 'text')
+        .map((c: any) => (c.text as string))
+        .join('')
+        .trim()
+      if (text)
+        last = text
+    }
+  }
+  return last ? last.slice(0, 1000) : null
 }
 
 interface HeadInfo {
@@ -133,15 +141,20 @@ export async function getSessions(): Promise<SessionInfo[]> {
       // Read session-meta for token counts and first prompt
       const meta = await readSessionMeta(entry.sessionId)
 
-      // Head-read the JSONL for model and cwd
+      // Head-read the JSONL for model and cwd; tail-read for last assistant response
       let headInfo: HeadInfo = { model: null, cwd: null }
+      let lastResponse: string | null = null
       try {
-        const headRaw = await headRead(entry.filePath)
+        const [headRaw, tailRaw] = await Promise.all([
+          headRead(entry.filePath),
+          tailRead(entry.filePath),
+        ])
         const headParsed = parseJsonlLines(headRaw)
         headInfo = extractHeadInfo(headParsed)
+        lastResponse = extractLastAssistantText(parseJsonlLines(tailRaw))
       }
       catch {
-        // head-read failed, proceed with nulls
+        // read failed, proceed with nulls
       }
 
       // Determine model from head-read of JSONL
@@ -160,6 +173,7 @@ export async function getSessions(): Promise<SessionInfo[]> {
         lastModified: entry.mtime.toISOString(),
         model,
         firstPrompt: meta?.firstPrompt || null,
+        lastResponse,
         totalInputTokens: inputTokens,
         totalOutputTokens: outputTokens,
         costEstimate: estimateCost({ inputTokens, outputTokens, cacheCreationTokens: 0, cacheReadTokens: 0 }, model),

@@ -1,11 +1,12 @@
+import type { Mock } from 'bun:test'
 import type { Agent } from '../src/types'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, mock, setSystemTime } from 'bun:test'
 
 import { calculateStatus, enrichWithPipelineTask } from './agentMerger'
 import { findTasksBySessionIds } from './db/stageRunsRepo.js'
 
-vi.mock('./db/stageRunsRepo.js', () => ({
-  findTasksBySessionIds: vi.fn(),
+mock.module('./db/stageRunsRepo.js', () => ({
+  findTasksBySessionIds: mock(),
 }))
 
 // Thresholds from agentMerger.ts:
@@ -16,12 +17,11 @@ const FIXED_NOW = new Date('2024-06-01T12:00:00.000Z').getTime()
 
 describe('calculateStatus', () => {
   beforeEach(() => {
-    vi.useFakeTimers()
-    vi.setSystemTime(FIXED_NOW)
+    setSystemTime(FIXED_NOW)
   })
 
   afterEach(() => {
-    vi.useRealTimers()
+    setSystemTime() // reset to real time
   })
 
   it('returns "active" when last activity is less than 30 seconds ago', () => {
@@ -71,9 +71,9 @@ describe('calculateStatus', () => {
 })
 
 describe('enrichWithPipelineTask', () => {
-  const mockFindTasks = vi.mocked(findTasksBySessionIds)
+  const mockFindTasks = findTasksBySessionIds as unknown as Mock<typeof findTasksBySessionIds>
 
-  afterEach(() => vi.clearAllMocks())
+  afterEach(() => mockFindTasks.mockReset())
 
   function makeAgent(sessionId: string): Agent {
     return {

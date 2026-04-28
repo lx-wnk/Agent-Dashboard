@@ -24,6 +24,7 @@ function makeContext(overrides: Partial<StageContext> = {}): StageContext {
     metadata: null,
     silverBullet: false,
     priority: 'medium' as const,
+    userId: null,
   }
   const stageRun = {
     id: 'run-1',

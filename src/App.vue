@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { Agent, PipelineTask } from './types'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import CostTrend from './components/CostTrend.vue'
+import LoginPage from './components/LoginPage.vue'
 import PipelineBoard from './components/PipelineBoard.vue'
 import RefinementChat from './components/RefinementChat.vue'
 import ResourceBar from './components/ResourceBar.vue'
@@ -14,12 +15,26 @@ import SpawnDialog from './components/SpawnDialog.vue'
 import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
 import { createTask, useTasks } from './composables/useTasks'
-import { useTheme } from './composables/useTheme'
+import { useUser } from './composables/useUser'
 import { formatTokens, totalTokenCount } from './utils/format'
 
-const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent } = useAgents()
-const { theme, toggleTheme } = useTheme()
-const { tasks, selectedTask, selectTask } = useTasks()
+const { user, authEnabled, loaded, loadUser } = useUser()
+const showLogin = computed(() => authEnabled.value && !user.value)
+
+onMounted(() => {
+  loadUser()
+})
+
+const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
+const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
+
+// Start data streams only after auth is confirmed — avoids 401 flood while login page is shown
+watch(loaded, (isLoaded) => {
+  if (isLoaded && !showLogin.value) {
+    startAgents()
+    startTasks()
+  }
+}, { immediate: true })
 const showSpawnDialog = ref(false)
 const activeKonzeptTask = ref<PipelineTask | null>(null)
 const showSessions = ref(false)
@@ -93,450 +108,164 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
 </script>
 
 <template>
-  <div class="app">
-    <header class="app-header">
-      <h1>Claude Agent Overview</h1>
-      <span v-if="!showSettings && viewMode !== 'pipeline'" class="agent-count">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</span>
-      <span v-else-if="!showSettings" class="agent-count">{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
-      <span v-if="totalCost > 0" class="header-stat">${{ totalCost.toFixed(2) }}</span>
-      <span v-if="totalTokens > 0" class="header-stat">{{ formatTokens(totalTokens) }} tokens</span>
+  <LoginPage v-if="loaded && showLogin" />
+  <div v-else-if="loaded" class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+    <header class="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+      <h1 class="text-[18px] font-semibold text-slate-900 dark:text-slate-100">
+        Claude Agent Overview
+      </h1>
+      <span class="text-xs text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+        <template v-if="viewMode !== 'pipeline'">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</template>
+        <template v-else>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</template>
+      </span>
+      <span v-if="totalCost > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">${{ totalCost.toFixed(2) }}</span>
+      <span v-if="totalTokens > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">{{ formatTokens(totalTokens) }} tokens</span>
       <input
-        v-if="!showSettings"
         v-model="searchQuery"
-        class="header-search"
         type="text"
         :placeholder="viewMode === 'pipeline' ? 'Search tasks...' : 'Search agents...'"
+        class="ml-auto bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-1.5 text-[13px] text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 w-[200px] focus:outline-none focus:border-blue-500 focus:w-[260px] transition-[width] duration-200"
       >
-      <div class="view-toggle">
+      <div class="flex bg-slate-100 dark:bg-slate-800 rounded-md overflow-hidden">
         <button
-          class="toggle-btn"
-          :class="{ active: !showSettings && viewMode !== 'pipeline' }"
+          type="button"
+          class="px-3 py-1.5 text-[13px] font-sans border-none cursor-pointer transition-all"
+          :class="viewMode !== 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300'"
           title="Agent monitoring dashboard"
-          @click="showSettings = false; viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
+          @click="viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
         >
           Dashboard
         </button>
         <button
-          class="toggle-btn"
-          :class="{ active: !showSettings && viewMode === 'pipeline' }"
+          type="button"
+          class="px-3 py-1.5 text-[13px] font-sans border-none cursor-pointer transition-all"
+          :class="viewMode === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300'"
           title="Task pipeline kanban"
-          @click="showSettings = false; viewMode = 'pipeline'"
+          @click="viewMode = 'pipeline'"
         >
           Kanban
         </button>
-        <button
-          class="toggle-btn"
-          :class="{ active: showSettings }"
-          title="Settings"
-          @click="showSettings = true"
-        >
-          Settings
-        </button>
       </div>
-      <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
-        {{ theme === 'dark' ? '☀' : '☾' }}
-      </button>
-      <a
-        class="issue-btn"
-        href="https://github.com/lx-wnk/Agent-Dashboard/issues/new/choose"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Report a bug or request a feature"
-      >Issue</a>
-      <button class="sessions-btn" @click="showSessions = true">
+      <button
+        type="button"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        @click="showSessions = true"
+      >
         Sessions
       </button>
       <button
         v-if="viewMode === 'pipeline'"
-        class="spawn-btn"
+        type="button"
+        class="bg-green-600 text-white border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
         @click="openNewTask"
       >
         + New Task
       </button>
-      <button v-else class="spawn-btn" @click="showSpawnDialog = true">
+      <button
+        v-else
+        type="button"
+        class="bg-green-600 text-white border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
+        @click="showSpawnDialog = true"
+      >
         + New Agent
       </button>
+      <button
+        type="button"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-none rounded-md px-2.5 py-1.5 text-base cursor-pointer leading-none hover:text-slate-700 dark:hover:text-slate-300 hover:brightness-110"
+        title="Settings"
+        @click="showSettings = true"
+      >
+        ⚙
+      </button>
     </header>
+
     <ResourceBar />
     <CostTrend :trend="costTrend" />
-    <div v-if="scriptPath" class="script-banner">
-      <span class="script-label">Channel script:</span>
-      <code class="script-path" tabindex="0" role="button" :title="copied ? 'Copied!' : 'Click to copy'" @click="copyScript" @keydown.enter="copyScript" @keydown.space.prevent="copyScript">{{ scriptPath }}</code>
-      <span v-if="copied" class="copied-hint">Copied!</span>
+
+    <div v-if="scriptPath" class="flex items-center gap-2 px-6 py-1.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-xs">
+      <span class="text-slate-400 dark:text-slate-600 whitespace-nowrap">Channel script:</span>
+      <code
+        class="font-mono text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded cursor-pointer select-all transition-colors hover:text-green-600 dark:hover:text-green-400 focus-visible:outline-2 focus-visible:outline-blue-500"
+        tabindex="0"
+        role="button"
+        :title="copied ? 'Copied!' : 'Click to copy'"
+        @click="copyScript"
+        @keydown.enter="copyScript"
+        @keydown.space.prevent="copyScript"
+      >{{ scriptPath }}</code>
+      <span v-if="copied" class="text-green-600 dark:text-green-400 text-[11px]">Copied!</span>
     </div>
-    <div v-if="!showSettings && viewMode !== 'pipeline'" class="sub-toolbar">
+
+    <div
+      class="flex items-center gap-1 px-6 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+      :class="{ 'invisible pointer-events-none': viewMode === 'pipeline' }"
+    >
       <button
-        class="sub-toggle-btn"
-        :class="{ active: viewMode === 'cards' }"
+        type="button"
+        class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
+        :class="viewMode === 'cards' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400'"
         title="Card view"
         @click="viewMode = 'cards'"
       >
         ⊞ Cards
       </button>
       <button
-        class="sub-toggle-btn"
-        :class="{ active: viewMode === 'list' }"
+        type="button"
+        class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
+        :class="viewMode === 'list' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400'"
         title="List view"
         @click="viewMode = 'list'"
       >
         ≡ List
       </button>
     </div>
-    <main>
-      <ApiKeySettings v-if="showSettings" />
-      <template v-else>
-        <p v-if="isLoading" class="loading">
-          Loading agents...
-        </p>
-        <p v-else-if="error" class="error">
-          Error: {{ error }}
-        </p>
-        <AgentTable
-          v-else-if="viewMode === 'list'"
-          :agents="filteredAgents"
-          @select="selectAgent"
-        />
-        <PipelineBoard
-          v-else-if="viewMode === 'pipeline'"
-          @select="selectTask"
-          @open-chat="activeKonzeptTask = $event"
-        />
-        <AgentCardGrid
-          v-else
-          :agents="filteredAgents"
-          @select="selectAgent"
-        />
-      </template>
+    <main class="p-6">
+      <p v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600">
+        Loading agents...
+      </p>
+      <p v-else-if="error" class="text-center py-12 text-red-600 dark:text-red-400">
+        Error: {{ error }}
+      </p>
+      <AgentTable v-else-if="viewMode === 'list'" :agents="filteredAgents" @select="selectAgent" />
+      <PipelineBoard
+        v-else-if="viewMode === 'pipeline'"
+        @select="selectTask"
+        @open-chat="activeKonzeptTask = $event"
+      />
+      <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
     </main>
-    <AgentModal
-      :agent="selectedAgent"
-      @close="selectAgent(null)"
-      @navigate="(taskId: string) => navigateTo({ taskId })"
-    />
+
+    <AgentModal :agent="selectedAgent" @close="selectAgent(null)" @navigate="(taskId: string) => navigateTo({ taskId })" />
     <TaskModal
       :task="selectedTask"
       @close="selectTask(null)"
       @navigate="(agent: Agent) => navigateTo({ agent })"
       @open-chat="(t) => { selectTask(null); activeKonzeptTask = t }"
     />
+
+
     <Transition name="toast">
-      <div v-if="toastMessage" class="toast-notification">
+      <div
+        v-if="toastMessage"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)] pointer-events-none"
+      >
         {{ toastMessage }}
       </div>
     </Transition>
-    <SpawnDialog
-      :open="showSpawnDialog"
-      @close="showSpawnDialog = false"
-    />
+    <SpawnDialog :open="showSpawnDialog" @close="showSpawnDialog = false" />
     <RefinementChat
       :open="activeKonzeptTask !== null"
       :task="activeKonzeptTask"
       @close="activeKonzeptTask = null"
       @confirmed="activeKonzeptTask = null"
     />
-    <SessionList
-      :open="showSessions"
-      :home-dir="homeDir"
-      @close="showSessions = false"
-    />
+    <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
+    <ApiKeySettings :open="showSettings" @close="showSettings = false" />
   </div>
+  <div v-else class="min-h-screen bg-slate-50 dark:bg-slate-950" />
 </template>
 
 <style>
-:root {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --accent-green: #4ade80;
-  --accent-yellow: #facc15;
-  --accent-gray: #64748b;
-  --accent-blue: #3b82f6;
-  --accent-red: #f87171;
-  --border: #1e293b;
-  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
-}
-
-[data-theme="light"] {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #e2e8f0;
-  --bg-tertiary: #cbd5e1;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --accent-green: #16a34a;
-  --accent-yellow: #ca8a04;
-  --accent-gray: #94a3b8;
-  --accent-blue: #2563eb;
-  --accent-red: #dc2626;
-  --border: #cbd5e1;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  min-height: 100vh;
-}
-
-.app-header {
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.app-header h1 {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.agent-count {
-  font-size: 12px;
-  color: var(--text-muted);
-  background: var(--bg-secondary);
-  padding: 2px 10px;
-  border-radius: 12px;
-}
-
-.header-stat {
-  font-size: 12px;
-  color: var(--accent-green);
-  background: var(--bg-secondary);
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-family: var(--font-mono);
-}
-
-.theme-btn {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  border: none;
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 16px;
-  cursor: pointer;
-  line-height: 1;
-  transition: filter 0.15s;
-}
-
-.theme-btn:hover {
-  filter: brightness(1.2);
-}
-
-.issue-btn {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: none;
-  border-radius: 6px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  text-decoration: none;
-}
-
-.issue-btn:hover {
-  color: var(--text-primary);
-  filter: brightness(1.15);
-}
-
-.issue-btn:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 2px;
-}
-
-.sessions-btn {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: none;
-  border-radius: 6px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-}
-
-.sessions-btn:hover {
-  color: var(--text-primary);
-  filter: brightness(1.15);
-}
-
-.spawn-btn {
-  margin-left: 0;
-  background: var(--accent-green);
-  color: var(--bg-primary);
-  border: none;
-  border-radius: 6px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-}
-
-.spawn-btn:hover {
-  filter: brightness(1.1);
-}
-
-.header-search {
-  margin-left: auto;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
-  color: var(--text-primary);
-  font-family: inherit;
-  width: 200px;
-  transition: border-color 0.15s, width 0.2s;
-}
-.header-search::placeholder { color: var(--text-muted); }
-.header-search:focus {
-  outline: none;
-  border-color: var(--accent-blue);
-  width: 260px;
-}
-
-.view-toggle {
-  display: flex;
-  background: var(--bg-tertiary);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.toggle-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  padding: 6px 12px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  font-family: inherit;
-  white-space: nowrap;
-}
-.toggle-btn.active {
-  background: var(--accent-blue);
-  color: white;
-}
-.toggle-btn:not(.active):hover {
-  color: var(--text-primary);
-}
-
-.sub-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-secondary);
-}
-.sub-toggle-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  padding: 4px 10px;
-  font-size: 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  font-family: inherit;
-  transition: background 0.15s, color 0.15s;
-}
-.sub-toggle-btn.active {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-.sub-toggle-btn:not(.active):hover {
-  color: var(--text-secondary);
-}
-
-.loading, .error {
-  text-align: center;
-  padding: 48px;
-  color: var(--text-muted);
-}
-
-.script-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 24px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-}
-
-.script-label {
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.script-path {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--bg-primary);
-  padding: 2px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  user-select: all;
-  transition: color 0.15s;
-}
-
-.script-path:hover {
-  color: var(--accent-green);
-}
-
-.script-path:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 2px;
-}
-
-.copied-hint {
-  color: var(--accent-green);
-  font-size: 11px;
-}
-
-main {
-  padding: 24px;
-}
-
-.toast-notification {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-secondary);
-  border: 1px solid var(--bg-tertiary);
-  color: var(--text-primary);
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 13px;
-  z-index: 2000;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  pointer-events: none;
-}
-.toast-enter-active,
-.toast-leave-active {
-  transition: opacity 0.2s, transform 0.2s;
-}
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(8px);
-}
+.toast-enter-active, .toast-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(8px); }
 </style>

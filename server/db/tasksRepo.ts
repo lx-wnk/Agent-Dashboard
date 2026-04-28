@@ -1,5 +1,5 @@
-import type { Database } from 'better-sqlite3'
 import type { PipelineStage, PipelineTask, TaskPriority } from '../../src/types.js'
+import type { Database } from './client.js'
 import type { TaskRow } from './rowMappers.js'
 import { randomUUID } from 'node:crypto'
 import { getDb } from './client.js'
@@ -22,6 +22,7 @@ export interface CreateTaskInput {
   silverBullet?: boolean
   priority?: TaskPriority
   currentStage?: PipelineStage
+  userId?: string | null
 }
 
 export interface UpdateTaskInput {
@@ -90,12 +91,12 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
       id, slug, title, description, cwd, worktree_path,
       source_branch, target_branch, current_stage, parent_task_id,
       max_iterations, token_budget, cost_budget_cents, stage_timeout_seconds,
-      created_at, updated_at, metadata, silver_bullet, priority
+      created_at, updated_at, metadata, silver_bullet, priority, user_id
     ) VALUES (
       @id, @slug, @title, @description, @cwd, @worktree_path,
       @source_branch, @target_branch, @current_stage, @parent_task_id,
       @max_iterations, @token_budget, @cost_budget_cents, @stage_timeout_seconds,
-      @created_at, @updated_at, @metadata, @silver_bullet, @priority
+      @created_at, @updated_at, @metadata, @silver_bullet, @priority, @user_id
     )
   `).run({
     id,
@@ -117,6 +118,7 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
     metadata: input.metadata ? JSON.stringify(input.metadata) : null,
     silver_bullet: input.silverBullet ? 1 : 0,
     priority: input.priority ?? 'medium',
+    user_id: input.userId ?? null,
   })
 
   return getTaskById(id, db)!
@@ -140,6 +142,21 @@ export function listTasks(db: Database = getDb()): PipelineTask[] {
   const rows = db
     .prepare(`SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks ORDER BY tasks.created_at DESC`)
     .all() as TaskRow[]
+  return rows.map(rowToTask)
+}
+
+/**
+ * Lists tasks visible to a user.
+ * Admins see all tasks. Regular users see only their own tasks (by user_id).
+ * Tasks with user_id = NULL are only visible to admins (system/legacy tasks).
+ */
+export function listTasksForUser(userId: string, isAdmin: boolean, db: Database = getDb()): PipelineTask[] {
+  const query = isAdmin
+    ? `SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks ORDER BY tasks.created_at DESC`
+    : `SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks WHERE tasks.user_id = ? ORDER BY tasks.created_at DESC`
+  const rows = isAdmin
+    ? (db.prepare(query).all() as TaskRow[])
+    : (db.prepare(query).all(userId) as TaskRow[])
   return rows.map(rowToTask)
 }
 
@@ -241,7 +258,10 @@ export function updateTask(id: string, input: UpdateTaskInput, db: Database = ge
     return existing
 
   updates.push('updated_at = @updated_at')
-  db.prepare(`UPDATE tasks SET ${updates.join(', ')} WHERE id = @id`).run(params)
+  // The compat shim in client.ts rewrites bare keys into `@key` bindings, so
+  // `Record<string, unknown>` is safe at runtime even though bun:sqlite's
+  // declared `SQLQueryBindings` only accepts primitive value types.
+  db.prepare(`UPDATE tasks SET ${updates.join(', ')} WHERE id = @id`).run(params as never)
   return getTaskById(id, db)
 }
 

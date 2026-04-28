@@ -1,29 +1,30 @@
 import type { TaskEvent } from './routes/taskRoutes.js'
-import { Buffer } from 'node:buffer'
-import { timingSafeEqual } from 'node:crypto'
 import { fstatSync, mkdirSync, openSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { consola } from 'consola'
+import cookieParser from 'cookie-parser'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
-import { getChannelMap } from './channelDiscovery.js'
+import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
+import { getDb } from './db/client.js'
+import { listRemoteRegistrationsForUser } from './db/remoteRegistrationsRepo.js'
 import { getTaskById } from './db/tasksRepo.js'
-import { parseFullSession } from './jsonlParser.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
+import { createRejectCrossOrigin, requireApiToken } from './middleware.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
-import { aggregateAgents, getRemoteUrls, isRemoteFetch } from './remoteAggregator.js'
+import { aggregateAgents, getEnvRemoteTargets } from './remoteAggregator.js'
+import { createAgentRouter } from './routes/agentRoutes.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
+import { createAuthRouter } from './routes/authRoutes.js'
 import { createRefineRouter } from './routes/refineRoutes.js'
+import { createRemoteRouter } from './routes/remoteRoutes.js'
+import { createSystemRouter } from './routes/systemRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
-import { getSessions } from './sessionScanner.js'
 import { SpawnManager } from './spawnManager.js'
-import { getSystemInfo } from './systemMonitor.js'
 
 // Ensure FDs 0–2 are open. When spawned by tsx watch or similar tools, stdio FDs
 // can be closed. If they are, the OS reuses those low numbers for new pipes, which
@@ -54,7 +55,6 @@ const SSE_INTERVAL_MS = (() => {
   }
   return val
 })()
-const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 
 // Spawn state + logic (rate limit, stderr ring-buffer, reply store,
 // channel message forwarding) lives in SpawnManager.
@@ -66,41 +66,25 @@ async function start() {
 
   const app = express()
   app.use(express.json({ limit: '10mb' }))
+  app.use(cookieParser())
+
+  // ─── Auth routes (public — before requireAuth) ───────────
+
+  app.use(createAuthRouter({ host: HOST, port: PORT }))
+
+  // All /api/* routes (except /auth/* and /api/me above) require authentication
+  app.use('/api', requireAuth)
 
   // ─── API routes (before Vite middleware) ────────────────
 
-  // Dashboard config (script path, home dir)
-  app.get('/api/config', (_req, res) => {
-    const home = homedir()
-    const scriptAbsolute = join(import.meta.dirname, '..', 'scripts', 'claude-with-channel.sh')
-    const scriptPath = scriptAbsolute.startsWith(home)
-      ? `~${scriptAbsolute.slice(home.length)}`
-      : scriptAbsolute
-    res.json({ scriptPath, homedir: home })
-  })
-
-  app.get('/api/agents', async (req, res) => {
-    try {
-      const localAgents = await getAgents()
-      // If this request comes from another dashboard (X-Dashboard-Origin), return local-only to prevent chains
-      if (isRemoteFetch(req.headers)) {
-        res.json(localAgents)
-        return
-      }
-      const remoteUrls = getRemoteUrls()
-      const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
-      res.json(agents)
-    }
-    catch (err) {
-      console.error('Error fetching agents:', err)
-      res.status(500).json({ error: 'Failed to fetch agents' })
-    }
-  })
+  // System routes: /api/config, /api/system
+  app.use('/api', createSystemRouter({ serverDir: import.meta.dirname }))
 
   // SSE stream for real-time agent updates (replaces client-side polling)
-  const sseClients = new Set<express.Response>()
+  interface SseClient { res: express.Response, userId: string, isAdmin: boolean }
+  const sseClients = new Set<SseClient>()
 
-  app.get('/api/agents/stream', (_req, res) => {
+  app.get('/api/agents/stream', requireApiToken, (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -109,17 +93,59 @@ async function start() {
     })
     res.flushHeaders()
 
-    sseClients.add(res)
+    const client: SseClient = { res, userId: req.user!.id, isAdmin: req.user!.isAdmin }
+    sseClients.add(client)
     startSSEBroadcast()
-    _req.on('close', () => {
-      sseClients.delete(res)
+    req.on('close', () => {
+      sseClients.delete(client)
       stopSSEBroadcast()
     })
   })
 
   // Cost trend history: ring buffer, 1h at 3s interval = 1200 entries
   const MAX_TREND_POINTS = 1200
-  const costTrend: Array<{ t: number, cost: number, tokens: number }> = []
+
+  // Track the last persisted timestamp to only insert new points on each interval
+  let persistedUpTo = 0
+
+  // Load persisted trend on startup (best-effort)
+  const costTrend: Array<{ t: number, cost: number, tokens: number }> = (() => {
+    try {
+      const db = getDb()
+      const rows = db.prepare(
+        'SELECT t, cost, tokens FROM agent_cost_trend ORDER BY t ASC',
+      ).all() as Array<{ t: number, cost: number, tokens: number }>
+      if (rows.length > 0)
+        persistedUpTo = rows[rows.length - 1].t
+      return rows.slice(-MAX_TREND_POINTS)
+    }
+    catch {
+      return []
+    }
+  })()
+
+  // Persist new trend points every 60s (best-effort — never crash the server)
+  const persistTrendId = setInterval(() => {
+    const newPoints = costTrend.filter(p => p.t > persistedUpTo)
+    if (newPoints.length === 0)
+      return
+    try {
+      const db = getDb()
+      const insert = db.prepare('INSERT OR IGNORE INTO agent_cost_trend (t, cost, tokens) VALUES (?, ?, ?)')
+      db.transaction(() => {
+        for (const p of newPoints)
+          insert.run(p.t, p.cost, p.tokens)
+        db.prepare(
+          'DELETE FROM agent_cost_trend WHERE t NOT IN (SELECT t FROM agent_cost_trend ORDER BY t DESC LIMIT ?)',
+        ).run(MAX_TREND_POINTS)
+      })()
+      persistedUpTo = newPoints[newPoints.length - 1].t
+    }
+    catch (err) {
+      console.warn('[cost-trend] persist failed:', err)
+    }
+  }, 60_000)
+  persistTrendId.unref()
 
   // SSE broadcast + cost trend recording: only scan processes when clients are connected
   let sseBroadcastId: ReturnType<typeof setInterval> | null = null
@@ -130,32 +156,44 @@ async function start() {
     sseBroadcastId = setInterval(async () => {
       try {
         const localAgents = await getAgents()
-        const remoteUrls = getRemoteUrls()
-        const agents = remoteUrls.length > 0 ? await aggregateAgents(localAgents, remoteUrls) : localAgents
+        const envRemotes = getEnvRemoteTargets()
 
-        // Record cost trend point
-        const totalCost = agents.reduce((sum, a) => sum + a.costEstimate, 0)
-        const totalTokens = agents.reduce((sum, a) => {
+        // Baseline aggregation for cost trend (env remotes only — shared across all users)
+        const baselineAgents = await aggregateAgents(localAgents, envRemotes)
+        const totalCost = baselineAgents.reduce((sum, a) => sum + a.costEstimate, 0)
+        const totalTokens = baselineAgents.reduce((sum, a) => {
           const u = a.tokenUsage
           return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
         }, 0)
         costTrend.push({ t: Date.now(), cost: totalCost, tokens: totalTokens })
-        if (costTrend.length > MAX_TREND_POINTS) {
+        if (costTrend.length > MAX_TREND_POINTS)
           costTrend.shift()
-        }
 
-        // Send agents + trend data in a single SSE event
-        const payload = JSON.stringify({ agents, trend: costTrend.slice(-60) })
-        const data = `data: ${payload}\n\n`
-        for (const client of sseClients) {
+        const trendSlice = costTrend.slice(-60)
+
+        // Fan out: each client gets local agents + their own remotes
+        await Promise.all([...sseClients].map(async (client) => {
           try {
-            if (!client.writableEnded)
-              client.write(data)
+            if (client.res.writableEnded)
+              return
+
+            const userRemotes = isAuthEnabled()
+              ? listRemoteRegistrationsForUser(client.userId).map(r => ({
+                  url: r.url,
+                  bearerKey: r.bearerKey,
+                  name: r.name,
+                }))
+              : []
+
+            const allRemotes = [...envRemotes, ...userRemotes]
+            const agents = await aggregateAgents(localAgents, allRemotes)
+            const payload = JSON.stringify({ agents, trend: trendSlice })
+            client.res.write(`data: ${payload}\n\n`)
           }
           catch {
             sseClients.delete(client)
           }
-        }
+        }))
       }
       catch (err) {
         console.error('SSE broadcast error:', err)
@@ -169,17 +207,6 @@ async function start() {
       sseBroadcastId = null
     }
   }
-
-  app.get('/api/sessions', async (_req, res) => {
-    try {
-      const sessions = await getSessions()
-      res.json(sessions)
-    }
-    catch (err) {
-      console.error('Error fetching sessions:', err)
-      res.status(500).json({ error: 'Failed to fetch sessions' })
-    }
-  })
 
   // ─── Task Pipeline SSE + Router ────────────────
 
@@ -278,27 +305,7 @@ async function start() {
   })
   orchestrator.start()
 
-  // CSRF protection for mutation endpoints
-  function rejectCrossOrigin(req: express.Request, res: express.Response): boolean {
-    const origin = req.headers.origin || ''
-    const referer = req.headers.referer || ''
-    // Allow requests with no origin (non-browser clients like curl)
-    if (!origin && !referer)
-      return false
-    const allowed = (s: string) => {
-      try {
-        const url = new URL(s)
-        return (url.hostname === HOST || url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.port === String(PORT)
-      }
-      catch {
-        return false
-      }
-    }
-    if (allowed(origin) || allowed(referer))
-      return false
-    res.status(403).json({ error: 'Cross-origin request blocked' })
-    return true
-  }
+  const rejectCrossOrigin = createRejectCrossOrigin(HOST, PORT)
 
   // API key management routes (browser-facing, CSRF-guarded, no bearer token required)
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin }))
@@ -321,6 +328,9 @@ async function start() {
     rejectCrossOrigin,
   ))
 
+  // Remote dashboard registration routes (per-user CRUD)
+  app.use('/api/remotes', createRemoteRouter())
+
   // MCP endpoint — stateless, bearer-token authenticated, mounted before
   // the Vite catch-all so POST /api/mcp is never swallowed by the SPA.
   app.use('/api', createMcpRouter(
@@ -335,188 +345,8 @@ async function start() {
     },
   ))
 
-  // Spawn a new Claude agent process
-  app.post('/api/agents/spawn', (req, res) => {
-    if (rejectCrossOrigin(req, res))
-      return
-
-    if (!spawnManager.isSpawnAllowed()) {
-      const windowSecs = Math.round(spawnManager.getRateLimitConfig().windowMs / 1000)
-      const { max } = spawnManager.getRateLimitConfig()
-      res.status(429).json({ error: `Too many spawn requests. Max ${max} per ${windowSecs} seconds.` })
-      return
-    }
-
-    const result = spawnManager.spawnAgent(req.body)
-    if (!result.ok) {
-      res.status(result.status).json({ error: result.error })
-      return
-    }
-    res.json({ ok: true, pid: result.pid })
-  })
-
-  // Get status of a spawned agent
-  app.get('/api/agents/spawn/:pid/status', (req, res) => {
-    const pid = Number.parseInt(req.params.pid, 10)
-    if (Number.isNaN(pid) || String(pid) !== req.params.pid) {
-      res.status(400).json({ error: 'Invalid PID' })
-      return
-    }
-    const status = spawnManager.getStatus(pid)
-    if (!status) {
-      res.status(404).json({ error: 'Unknown spawn PID' })
-      return
-    }
-    res.json(status)
-  })
-
-  app.get('/api/agents/:sessionId/output', async (req, res) => {
-    try {
-      const { sessionId } = req.params
-      if (!UUID_RE.test(sessionId)) {
-        res.status(400).json({ error: 'Invalid sessionId format' })
-        return
-      }
-      const lastOnly = req.query.last === '1'
-      const messages = await parseFullSession(sessionId, lastOnly)
-      res.json({ messages })
-    }
-    catch {
-      res.status(500).json({ error: 'Failed to read session output' })
-    }
-  })
-
-  // Send a message to a running agent via its channel
-  app.post('/api/agents/:sessionId/message', async (req, res) => {
-    if (rejectCrossOrigin(req, res))
-      return
-    try {
-      const { sessionId } = req.params
-      if (!UUID_RE.test(sessionId)) {
-        res.status(400).json({ error: 'Invalid sessionId format' })
-        return
-      }
-      const { message } = req.body
-
-      if (!message || typeof message !== 'string') {
-        res.status(400).json({ error: 'Missing "message" field' })
-        return
-      }
-
-      const agents = await getAgents()
-      const agent = agents.find(a => a.sessionId === sessionId)
-      if (!agent) {
-        res.status(404).json({ error: 'Agent not found' })
-        return
-      }
-      if (!agent.channelAvailable) {
-        res.status(404).json({ error: 'Channel not available' })
-        return
-      }
-
-      const channelMap = await getChannelMap()
-      const result = await spawnManager.sendMessageToChannel(agent, message, channelMap)
-
-      switch (result.kind) {
-        case 'not_found':
-          res.status(404).json({ error: 'Channel not available' })
-          return
-        case 'timeout':
-          res.status(504).json({ error: 'Channel request timed out' })
-          return
-        case 'unreachable':
-          res.status(502).json({ error: `Channel unreachable: ${result.message}` })
-          return
-        case 'response':
-          res.status(result.status).json(result.body)
-      }
-    }
-    catch (err) {
-      console.error('Error sending message:', err)
-      res.status(500).json({ error: 'Internal error' })
-    }
-  })
-
-  // Receive a reply FROM a channel MCP server (called by dashboard_reply tool)
-  app.post('/api/channel-reply', async (req, res) => {
-    try {
-      const { parentPid, message, timestamp } = req.body
-
-      if (!parentPid || !message || !timestamp) {
-        res.status(400).json({ error: 'Missing required fields' })
-        return
-      }
-
-      // Validate token against discovery file
-      const authHeader = req.headers.authorization
-      if (!authHeader?.startsWith('Bearer ')) {
-        res.status(401).json({ error: 'Missing authorization' })
-        return
-      }
-      const token = authHeader.slice(7)
-
-      try {
-        const discoveryPath = join(DISCOVERY_DIR, `${parentPid}.json`)
-        const raw = await readFile(discoveryPath, 'utf-8')
-        const discovery = JSON.parse(raw)
-        const expected = Buffer.from(String(discovery.token))
-        const provided = Buffer.from(token)
-        if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
-          res.status(403).json({ error: 'Invalid token' })
-          return
-        }
-      }
-      catch {
-        res.status(403).json({ error: 'Invalid token' })
-        return
-      }
-
-      spawnManager.storeReply(parentPid, message, timestamp)
-      res.json({ ok: true })
-    }
-    catch (err) {
-      console.error('Error handling channel reply:', err)
-      res.status(500).json({ error: 'Internal error' })
-    }
-  })
-
-  // Get replies from a specific agent
-  app.get('/api/agents/:sessionId/replies', async (req, res) => {
-    try {
-      const { sessionId } = req.params
-      if (!UUID_RE.test(sessionId)) {
-        res.status(400).json({ error: 'Invalid sessionId format' })
-        return
-      }
-      const since = req.query.since as string | undefined
-
-      const agents = await getAgents()
-      const agent = agents.find(a => a.sessionId === sessionId)
-      if (!agent) {
-        res.status(404).json({ error: 'Agent not found' })
-        return
-      }
-
-      const replies = spawnManager.getReplies(agent.pid, since)
-
-      res.json({ replies })
-    }
-    catch (err) {
-      console.error('Error fetching replies:', err)
-      res.status(500).json({ error: 'Internal error' })
-    }
-  })
-
-  app.get('/api/system', async (_req, res) => {
-    try {
-      const info = await getSystemInfo()
-      res.json(info)
-    }
-    catch (err) {
-      console.error('Error fetching system info:', err)
-      res.status(500).json({ error: 'Failed to fetch system info' })
-    }
-  })
+  // Agent routes (REST endpoints — non-SSE; SSE stream stays above)
+  app.use('/api', createAgentRouter({ spawnManager, requireApiToken, rejectCrossOrigin }))
 
   // ─── HTTP server ───────────────────────────────────────
 
@@ -527,7 +357,7 @@ async function start() {
     const distPath = join(import.meta.dirname, '..', 'dist')
     app.use(express.static(distPath))
     // SPA fallback: serve index.html for all non-API routes
-    app.get('*', (_req, res) => {
+    app.get('/{*splat}', (_req, res) => {
       res.sendFile(join(distPath, 'index.html'))
     })
   }
