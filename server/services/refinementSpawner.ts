@@ -52,6 +52,7 @@ export function serializeHistory(turns: RefinementTurn[]): string {
 export interface SpawnRefinementResult {
   stdout: Readable
   waitForExit: () => Promise<void>
+  getStderr: () => string
 }
 
 export function spawnRefinementTurn(
@@ -71,7 +72,11 @@ export function spawnRefinementTurn(
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-  child.stderr?.on('data', () => { /* drain to prevent pipe buffer fill */ })
+  let stderrBuf = ''
+  child.stderr?.on('data', (chunk: Buffer) => {
+    if (stderrBuf.length < 500)
+      stderrBuf += chunk.toString().slice(0, 500 - stderrBuf.length)
+  })
   child.stderr?.on('error', () => { /* swallow EPIPE on exit */ })
 
   const waitForExit = (): Promise<void> =>
@@ -86,5 +91,5 @@ export function spawnRefinementTurn(
 
   if (!child.stdout)
     throw new Error('refinement spawn: stdout pipe missing')
-  return { stdout: child.stdout, waitForExit }
+  return { stdout: child.stdout, waitForExit, getStderr: () => stderrBuf }
 }

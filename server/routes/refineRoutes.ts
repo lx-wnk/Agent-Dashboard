@@ -97,7 +97,7 @@ export function createRefineRouter(
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    const { stdout, waitForExit } = spawnRefinementTurn(spawnMessage, history, task.cwd)
+    const { stdout, waitForExit, getStderr } = spawnRefinementTurn(spawnMessage, history, task.cwd)
 
     let fullResponse = ''
     let turnFinalized = false
@@ -112,7 +112,8 @@ export function createRefineRouter(
         return
       turnFinalized = true
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[stream error]' })
-      res.write(`event: error\ndata: ${JSON.stringify({ error: String(streamErr) })}\n\n`)
+      const stderrSnippet = getStderr()
+      res.write(`event: error\ndata: ${JSON.stringify({ error: String(streamErr), stderr: stderrSnippet || undefined })}\n\n`)
       res.end()
     })
 
@@ -159,7 +160,8 @@ export function createRefineRouter(
         return
       turnFinalized = true
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[error]' })
-      res.write(`event: error\ndata: ${JSON.stringify({ error: err instanceof Error ? err.message : 'spawn failed' })}\n\n`)
+      const stderrSnippet = getStderr()
+      res.write(`event: error\ndata: ${JSON.stringify({ error: err instanceof Error ? err.message : 'spawn failed', stderr: stderrSnippet || undefined })}\n\n`)
       res.end()
     }
     finally {
