@@ -24,6 +24,7 @@ function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
     metadata: null,
     silverBullet: false,
     priority: 'medium',
+    userId: null,
     ...overrides,
   }
 }

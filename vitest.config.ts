@@ -10,9 +10,10 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.test.ts', 'server/**/*.test.ts'],
-    environmentMatchGlobs: [
-      ['server/**/*.test.ts', 'node'],
-    ],
+    // Server tests transitively import `bun:sqlite` (via server/db/client.ts).
+    // Vitest runs under Node's ESM loader, which cannot resolve the `bun:`
+    // protocol — even when marked external. Server tests are run separately
+    // via `bun test` (see the `test:server` npm script).
+    include: ['src/**/*.test.ts'],
   },
 })
