@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { PipelineStage, StageRunStatus } from '../types'
+import type { StageRunStatus } from '../types'
 import { computed } from 'vue'
 
 const props = defineProps<{
-  stage: PipelineStage
+  stage: string
   output: unknown
   status?: StageRunStatus | null
 }>()

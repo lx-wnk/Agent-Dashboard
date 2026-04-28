@@ -17,8 +17,8 @@ interface ImageAttachment {
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
-const PHASE_DONE_RE = /__phase_done:\s*(\w+)/
-const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/
+const PHASE_DONE_RE = /(?:^|\n)__phase_done:\s*(\w+)\s*$/
+const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/g
 
 const activeTurns = new Set<string>()
 
@@ -41,6 +41,11 @@ export function createRefineRouter(
     const task = getTaskById(req.params.taskId)
     if (!task || task.currentStage !== 'konzept') {
       res.status(404).json({ error: 'Task not found or not in konzept stage' })
+      return
+    }
+
+    if (activeTurns.has(task.id)) {
+      res.status(409).json({ error: 'A turn is already in progress for this task' })
       return
     }
 
@@ -121,8 +126,10 @@ export function createRefineRouter(
       const phaseMatch = fullResponse.match(PHASE_DONE_RE)
       const detectedPhase = phaseMatch ? phaseMatch[1] : undefined
 
-      // Update task title from refinedTitle whenever the agent emits it
-      const jsonMatch = fullResponse.match(JSON_BLOCK_RE)
+      // Update task title from refinedTitle whenever the agent emits it.
+      // Use the LAST json block in case earlier turns also contained examples.
+      const jsonMatches = [...fullResponse.matchAll(JSON_BLOCK_RE)]
+      const jsonMatch = jsonMatches.at(-1)
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>
@@ -177,7 +184,8 @@ export function createRefineRouter(
       return
     }
 
-    const jsonMatch = lastAssistant.content.match(JSON_BLOCK_RE)
+    const jsonMatches = [...lastAssistant.content.matchAll(JSON_BLOCK_RE)]
+    const jsonMatch = jsonMatches.at(-1)
     if (!jsonMatch) {
       res.status(409).json({ error: 'No JSON block found in last assistant message' })
       return

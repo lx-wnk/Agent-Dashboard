@@ -1,23 +1,20 @@
 <script setup lang="ts">
-import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
+import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskPermission } from '../types'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
   addTaskDependency,
   analyzeTask,
-  approveTask,
   cancelTask,
   fetchDependencies,
   fetchDependents,
   fetchPendingPermissionRequests,
   fetchStageRunAgentOutput,
   fetchStageRuns,
-  fetchTaskFeedback,
   fetchTaskPermissions,
   grantTaskPermission,
   progressTask,
   removeTaskDependency,
-  requestChanges,
   resolvePermissionRequest,
   resumeStageTask,
   retryTask,
@@ -39,8 +36,6 @@ const activeTab = ref<Tab>('overview')
 const stageRuns = ref<StageRun[]>([])
 const permissions = ref<TaskPermission[]>([])
 const pendingRequests = ref<PermissionRequest[]>([])
-const feedbackHistory = ref<TaskFeedback[]>([])
-const feedbackInput = ref('')
 const actionError = ref('')
 const isActing = ref(false)
 const newPermTool = ref('')
@@ -127,31 +122,6 @@ function isFailedRun(task: { latestStageRunStatus?: string | null } | null | und
   return task?.latestStageRunStatus === 'failed'
 }
 
-// Per approval-gate, tell the UI which prior stage_run holds the artifact
-// to review and what label belongs on the green "Approve" button.
-const approvalMeta = computed(() => {
-  const stage = props.task?.currentStage
-  if (stage === 'approval1')
-    return { label: 'Approve Plan', reviewStage: 'planning' as const, sectionTitle: 'Plan for Approval' }
-  if (stage === 'approval2')
-    return { label: 'Approve Concept', reviewStage: 'umsetzungskonzept' as const, sectionTitle: 'Concept for Approval' }
-  return null
-})
-
-const approvalContent = computed(() => {
-  if (!approvalMeta.value)
-    return null
-  const reviewStage = approvalMeta.value.reviewStage
-  // Walk newest → oldest for the last successful run of the reviewed stage.
-  // stageRuns.value is ordered ascending by start time from fetchStageRuns.
-  for (let i = stageRuns.value.length - 1; i >= 0; i--) {
-    const run = stageRuns.value[i]
-    if (run.stage === reviewStage && run.status === 'done' && run.output)
-      return run.output
-  }
-  return null
-})
-
 const isOnHoldStage = computed(() => props.task?.currentStage === 'on_hold')
 
 const analysisInfo = ref<{ pid: number, cwd: string } | null>(null)
@@ -206,20 +176,9 @@ async function loadDetails() {
   stageRuns.value = await fetchStageRuns(props.task.id)
   permissions.value = await fetchTaskPermissions(props.task.id)
   pendingRequests.value = await fetchPendingPermissionRequests(props.task.id)
-  feedbackHistory.value = await fetchTaskFeedback(props.task.id)
   const latest = stageRuns.value[stageRuns.value.length - 1]
   if (latest && (latest.status === 'failed' || latest.status === 'done'))
     fetchSessionText(latest)
-}
-
-async function onRequestChanges() {
-  const text = feedbackInput.value.trim()
-  if (!text || !props.task)
-    return
-  await handleAction(async () => {
-    await requestChanges(props.task!.id, text)
-    feedbackInput.value = ''
-  })
 }
 
 // Reset modal-local state when the user opens a different task.
@@ -227,8 +186,6 @@ watch(() => props.task?.id, (id, prevId) => {
   if (id && id !== prevId) {
     activeTab.value = 'overview'
     actionError.value = ''
-    feedbackInput.value = ''
-    feedbackHistory.value = []
     void loadDetails()
     void loadDependencies()
   }
@@ -442,8 +399,8 @@ function formatDate(iso: string | null): string {
             </AppButton>
           </div>
 
-          <!-- Latest stage run summary (non-approval states) -->
-          <div v-if="!approvalMeta && latestStageRun" class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3.5 py-3 mb-4">
+          <!-- Latest stage run summary -->
+          <div v-if="latestStageRun" class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3.5 py-3 mb-4">
             <div class="flex items-center gap-2 flex-wrap mb-2">
               <span class="font-mono text-[10px] uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded font-semibold">{{ latestStageRun.stage }}</span>
               <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">iter {{ latestStageRun.iteration }}</span>
@@ -495,66 +452,6 @@ function formatDate(iso: string | null): string {
             </template>
           </div>
 
-          <div v-if="approvalMeta" class="bg-green-400/[.08] border border-green-400/35 rounded-md px-3.5 py-3 mb-4">
-            <h3 class="text-[11px] uppercase text-green-400 tracking-[0.5px] mb-2">
-              {{ approvalMeta.sectionTitle }}
-            </h3>
-            <StageOutputView
-              v-if="approvalContent"
-              :stage="approvalMeta.reviewStage"
-              :output="approvalContent"
-            />
-            <div v-else class="text-slate-400 dark:text-slate-600 text-xs text-center py-8">
-              No output from stage <code>{{ approvalMeta.reviewStage }}</code> found.
-            </div>
-
-            <div v-if="feedbackHistory.length > 0" class="mt-3.5 pt-3 border-t border-green-400/25">
-              <h4 class="text-[11px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-2">
-                Feedback History
-              </h4>
-              <div
-                v-for="fb in feedbackHistory"
-                :key="fb.id"
-                class="rounded px-2.5 py-2 mb-1.5"
-                :class="fb.resolvedAt !== null ? 'border-l-2 border-green-400 opacity-70 bg-slate-50 dark:bg-slate-950' : 'border-l-2 border-yellow-500 bg-slate-50 dark:bg-slate-950'"
-              >
-                <div class="flex items-center gap-2 text-[10px] text-slate-400 dark:text-slate-600 mb-1 flex-wrap">
-                  <span class="font-mono bg-slate-100 dark:bg-slate-800 px-[5px] py-px rounded text-blue-600 dark:text-blue-400 font-semibold">#{{ fb.iteration }}</span>
-                  <span class="font-mono">{{ fb.stage }}</span>
-                  <span class="ml-auto">{{ formatDate(fb.createdAt) }}</span>
-                  <span v-if="fb.resolvedAt" class="text-[9px] font-bold uppercase px-[5px] py-px rounded bg-green-400/[.18] text-green-400">✓ addressed</span>
-                  <span v-else class="text-[9px] font-bold uppercase px-[5px] py-px rounded bg-yellow-500/[.18] text-yellow-500">open</span>
-                </div>
-                <p class="text-xs leading-relaxed text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
-                  {{ fb.feedback }}
-                </p>
-              </div>
-            </div>
-
-            <div class="mt-3.5 pt-3 border-t border-green-400/25">
-              <label for="feedback-textarea" class="block text-[11px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1.5">Request Changes</label>
-              <textarea
-                id="feedback-textarea"
-                v-model="feedbackInput"
-                class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-blue-500 resize-y leading-snug"
-                rows="3"
-                placeholder="What should the agent change in the next iteration?"
-                :disabled="isActing"
-                maxlength="4000"
-              />
-              <div class="flex justify-between items-center mt-1.5">
-                <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">{{ feedbackInput.length }} / 4000</span>
-                <AppButton
-                  variant="danger"
-                  size="sm"
-                  :disabled="isActing || feedbackInput.trim().length === 0"
-                  @click="onRequestChanges"
-                >
-                  Request Changes
-                </AppButton>
-              </div>
-            </div>
-          </div>
           <dl class="grid grid-cols-[auto_1fr] gap-y-1.5 gap-x-4 text-[13px] mb-4">
             <div class="contents">
               <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
@@ -850,16 +747,7 @@ function formatDate(iso: string | null): string {
             Analyze Failure
           </AppButton>
           <AppButton
-            v-if="approvalMeta"
-            variant="primary"
-            :disabled="isActing"
-            :title="`Advance past ${task.currentStage} gate`"
-            @click="handleAction(() => approveTask(task!.id))"
-          >
-            {{ approvalMeta.label }}
-          </AppButton>
-          <AppButton
-            v-else-if="!isTerminal(task.currentStage) && !isOnHoldStage && !isFailedRun(task)"
+            v-if="!isTerminal(task.currentStage) && !isOnHoldStage && !isFailedRun(task)"
             variant="secondary"
             :disabled="isActing"
             title="Manually advance to the next stage (skips approval gates)"
