@@ -111,6 +111,7 @@ export function createRefineRouter(
       if (guardTriggered || turnFinalized)
         return
       guardTriggered = true
+      turnFinalized = true
       child.kill('SIGTERM')
       activeTurns.delete(task.id)
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[connection closed]' })
@@ -121,6 +122,7 @@ export function createRefineRouter(
       if (guardTriggered || turnFinalized)
         return
       guardTriggered = true
+      turnFinalized = true
       child.kill('SIGTERM')
       activeTurns.delete(task.id)
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[timeout]' })
@@ -129,6 +131,8 @@ export function createRefineRouter(
     }, REFINEMENT_TIMEOUT_MS)
 
     stdout.on('data', (chunk: Buffer) => {
+      if (turnFinalized)
+        return
       const text = chunk.toString()
       fullResponse += text
       res.write(`data: ${JSON.stringify({ text })}\n\n`)
