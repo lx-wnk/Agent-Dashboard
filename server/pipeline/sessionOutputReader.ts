@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { encodePath, parseJsonlLines, tailRead } from '../jsonlParser.js'
 import { CLAUDE_PROJECTS_DIR } from '../paths.js'
 
-const JSON_BLOCK_RE = /```json\b([\s\S]*?)```/i
+const JSON_BLOCK_RE_G = /```json\b([\s\S]*?)```/gi
 const JSONL_SUFFIX_RE = /\.jsonl$/
 
 /**
@@ -60,12 +60,17 @@ export async function resolveSessionFile(cwd: string, sessionId: string): Promis
 }
 
 /**
- * Extract the first ```json ... ``` fenced block from an assistant text
+ * Extract the last ```json ... ``` fenced block from an assistant text
  * blob and JSON.parse it. Returns null on any structural failure so the
  * caller can decide how to react (retry, fail, etc.).
+ *
+ * We pick the LAST block (not the first) because agents sometimes include
+ * an example JSON block earlier in their prose before emitting the final
+ * answer block — the final block is the contractual output.
  */
 export function extractJsonBlock(text: string): Record<string, unknown> | null {
-  const match = text.match(JSON_BLOCK_RE)
+  const matches = [...text.matchAll(JSON_BLOCK_RE_G)]
+  const match = matches.at(-1)
   if (!match)
     return null
   try {

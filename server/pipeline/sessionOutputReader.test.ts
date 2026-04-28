@@ -83,9 +83,9 @@ describe('extractJsonBlock', () => {
     expect(extractJsonBlock('```json\n42\n```')).toBeNull()
   })
 
-  it('extracts only the first block when multiple are present', () => {
+  it('extracts the last JSON block when multiple are present', () => {
     const text = '```json\n{"a": 1}\n```\n```json\n{"b": 2}\n```'
-    expect(extractJsonBlock(text)).toEqual({ a: 1 })
+    expect(extractJsonBlock(text)).toEqual({ b: 2 })
   })
 })
 
