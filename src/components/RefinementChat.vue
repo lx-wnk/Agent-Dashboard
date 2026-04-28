@@ -149,25 +149,48 @@ function isPhaseMarker(idx: number): string | null {
 </script>
 
 <template>
-  <div v-if="open" class="chat-backdrop" @click.self="emit('close')">
-    <div class="chat-modal">
-      <div class="chat-header">
-        <span class="chat-title">{{ chatTitle }}</span>
-        <button class="chat-close" @click="emit('close')">✕</button>
+  <div
+    v-if="open"
+    class="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] backdrop-blur-sm"
+    @click.self="emit('close')"
+  >
+    <div
+      class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl flex flex-col overflow-hidden shadow-2xl"
+      style="width: min(900px, 96vw); height: min(88vh, 92vh)"
+    >
+      <!-- Header -->
+      <div class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+        <span class="text-base font-semibold tracking-tight text-slate-800 dark:text-slate-200">{{ chatTitle }}</span>
+        <button
+          class="bg-transparent border-none cursor-pointer text-base text-slate-400 dark:text-slate-500 px-2 py-1 rounded-md transition-all hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+          @click="emit('close')"
+        >
+          ✕
+        </button>
       </div>
 
-      <div ref="chatEl" class="chat-messages" :class="{ empty: messages.length === 0 }">
-        <div v-if="messages.length === 0" class="chat-empty">
-          <div class="empty-icon">✦</div>
-          <div class="empty-text">
-            <p class="chat-greeting">Was möchtest du umsetzen?</p>
-            <p class="chat-subtitle">Beschreibe deine Idee — ich führe dich durch Analyse, Spec und Umsetzungskonzept.</p>
+      <!-- Messages -->
+      <div
+        ref="chatEl"
+        class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-2"
+        :class="{ 'justify-center': messages.length === 0 }"
+      >
+        <!-- Empty state -->
+        <div v-if="messages.length === 0" class="flex flex-col items-center gap-5 text-center px-6">
+          <div class="text-3xl opacity-30 leading-none">✦</div>
+          <div class="flex flex-col gap-2">
+            <p class="text-xl font-bold tracking-tight m-0 text-slate-800 dark:text-slate-100">
+              Was möchtest du umsetzen?
+            </p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed m-0 max-w-[380px]">
+              Beschreibe deine Idee — ich führe dich durch Analyse, Spec und Umsetzungskonzept.
+            </p>
           </div>
-          <div class="chip-row">
+          <div class="flex flex-wrap gap-2 justify-center max-w-[480px]">
             <button
               v-for="chip in EXAMPLE_CHIPS"
               :key="chip"
-              class="chip"
+              class="px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 cursor-pointer text-sm font-medium text-slate-600 dark:text-slate-400 transition-all hover:border-blue-400 dark:hover:border-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:-translate-y-px active:translate-y-0"
               @click="inputText = chip"
             >
               {{ chip }}
@@ -175,51 +198,85 @@ function isPhaseMarker(idx: number): string | null {
           </div>
         </div>
 
+        <!-- Message list -->
         <template v-for="(msg, idx) in messages" :key="idx">
           <div v-if="isPhaseMarker(idx)" class="phase-marker">
             ✓ {{ phaseLabel(isPhaseMarker(idx)!) }} abgeschlossen
           </div>
 
-          <div v-if="msg.role === 'user'" class="bubble user">
-            <div v-if="msg.images?.length" class="bubble-images">
-              <img v-for="(img, i) in msg.images" :key="i" :src="img.dataUrl" class="bubble-img" alt="attachment" />
+          <div
+            v-if="msg.role === 'user'"
+            class="self-end max-w-[85%] px-3 py-2 rounded-xl rounded-br-sm bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 leading-relaxed break-words text-[13px] font-mono whitespace-pre-wrap"
+          >
+            <div v-if="msg.images?.length" class="flex flex-wrap gap-1.5 mb-1.5">
+              <img
+                v-for="(img, i) in msg.images"
+                :key="i"
+                :src="img.dataUrl"
+                class="max-w-[180px] max-h-[120px] rounded-md object-cover border border-slate-200 dark:border-slate-700"
+                alt="attachment"
+              />
             </div>
             {{ msg.content }}
           </div>
           <div
             v-else-if="msg.content"
-            class="bubble assistant markdown-body"
+            class="assistant-bubble markdown-body"
             v-html="renderMarkdown(msg.content)"
           />
         </template>
 
-        <div v-if="isStreaming && !messages.at(-1)?.content" class="bubble assistant streaming">
+        <!-- Streaming indicator -->
+        <div
+          v-if="isStreaming && !messages.at(-1)?.content"
+          class="self-start min-w-[52px] px-3 py-2 rounded-xl rounded-bl-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500"
+        >
           <span class="dot-pulse"><span /><span /><span /></span>
         </div>
       </div>
 
-      <div v-if="error" class="chat-error">{{ error }}</div>
+      <!-- Error -->
+      <div v-if="error" class="px-5 py-2 text-red-500 text-[0.82rem] shrink-0">
+        {{ error }}
+      </div>
 
-      <div v-if="approvalReady" class="confirm-bar">
-        <button class="btn-confirm" @click="handleConfirm">
+      <!-- Confirm bar -->
+      <div v-if="approvalReady" class="px-5 py-3 border-t border-slate-200 dark:border-slate-700 shrink-0">
+        <button
+          class="w-full py-3 px-4 rounded-xl bg-green-500 text-black font-bold text-[0.95rem] tracking-tight border-none cursor-pointer transition-all hover:opacity-90 hover:-translate-y-px"
+          @click="handleConfirm"
+        >
           Task erstellen →
         </button>
       </div>
 
-      <div v-if="pendingImages.length > 0" class="image-preview-row">
-        <div v-for="(img, idx) in pendingImages" :key="idx" class="image-preview">
-          <img :src="img.dataUrl" alt="attachment" />
-          <button class="remove-img" @click="removeImage(idx)">✕</button>
+      <!-- Image previews -->
+      <div v-if="pendingImages.length > 0" class="flex flex-wrap gap-2 px-5 pt-2.5 shrink-0">
+        <div v-for="(img, idx) in pendingImages" :key="idx" class="relative inline-flex">
+          <img
+            :src="img.dataUrl"
+            class="max-w-[80px] max-h-[60px] rounded-md object-cover border border-slate-200 dark:border-slate-700"
+            alt="attachment"
+          />
+          <button
+            class="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 text-[10px] cursor-pointer flex items-center justify-center leading-none p-0 hover:bg-red-500 hover:text-white hover:border-red-500"
+            @click="removeImage(idx)"
+          >
+            ✕
+          </button>
         </div>
       </div>
 
-      <div class="chat-input-bar">
+      <!-- Input bar -->
+      <div class="flex gap-2 px-5 py-2.5 pb-3.5 border-t border-slate-200 dark:border-slate-700 shrink-0 items-end">
         <button
-          class="btn-attach"
+          class="w-9 h-9 rounded-xl shrink-0 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 text-lg cursor-pointer flex items-center justify-center transition-colors hover:enabled:border-blue-400 hover:enabled:text-blue-400 disabled:opacity-35 disabled:cursor-default"
           title="Bild anhängen"
           :disabled="isStreaming || approvalReady"
           @click="fileInputEl?.click()"
-        >⊕</button>
+        >
+          ⊕
+        </button>
         <input
           ref="fileInputEl"
           type="file"
@@ -231,7 +288,7 @@ function isPhaseMarker(idx: number): string | null {
         <textarea
           ref="textareaEl"
           v-model="inputText"
-          class="chat-input"
+          class="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
           placeholder="Nachricht..."
           rows="1"
           :disabled="isStreaming || approvalReady"
@@ -240,247 +297,134 @@ function isPhaseMarker(idx: number): string | null {
         />
         <button
           v-if="messages.length > 0 && !approvalReady"
-          class="btn-ok"
+          class="w-10 h-10 rounded-xl shrink-0 bg-green-500 text-black border-none cursor-pointer text-base font-bold flex items-center justify-center transition-all hover:enabled:opacity-85 hover:enabled:-translate-y-px disabled:opacity-35 disabled:cursor-default"
           title="Ja, passt so — weiter"
           :disabled="isStreaming"
           @click="sendMessage('Ja, passt so. Mach weiter.')"
-        >✓</button>
+        >
+          ✓
+        </button>
         <button
-          class="btn-send"
+          class="w-10 h-10 rounded-xl bg-blue-500 text-white border-none cursor-pointer text-base flex items-center justify-center transition-all hover:enabled:opacity-85 hover:enabled:-translate-y-px disabled:opacity-35 disabled:cursor-default shrink-0"
           :disabled="isStreaming || (!inputText.trim() && !pendingImages.length) || approvalReady"
           @click="handleSend"
-        >→</button>
+        >
+          →
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.chat-backdrop {
-  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
-  display: flex; align-items: center; justify-content: center; z-index: 100;
-  backdrop-filter: blur(2px);
-}
-.chat-modal {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 16px; width: min(680px, 95vw);
-  height: min(720px, 90vh);
-  display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
-}
-.chat-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 18px 22px; border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.chat-title { font-size: 1rem; font-weight: 600; letter-spacing: 0.01em; opacity: 0.9; }
-.chat-close {
-  background: none; border: none; cursor: pointer;
-  font-size: 1rem; opacity: 0.5; padding: 4px 8px; border-radius: 6px;
-  transition: opacity 0.15s, background 0.15s;
-}
-.chat-close:hover { opacity: 1; background: var(--bg-secondary); }
-
-.chat-messages {
-  flex: 1; overflow-y: auto; padding: 16px 20px;
-  display: flex; flex-direction: column; gap: 6px;
-  font-family: var(--font-mono); font-size: 13px;
-}
-.chat-messages.empty { justify-content: center; }
-
-/* ── Empty state ─────────────────────────────── */
-.chat-empty {
-  display: flex; flex-direction: column;
-  align-items: center; gap: 20px;
-  text-align: center; padding: 0 24px;
-}
-.empty-icon {
-  font-size: 2rem; opacity: 0.35;
-  line-height: 1;
-}
-.empty-text { display: flex; flex-direction: column; gap: 8px; }
-.chat-greeting {
-  font-size: 1.35rem; font-weight: 700;
-  letter-spacing: -0.02em; margin: 0;
-}
-.chat-subtitle {
-  font-size: 0.875rem; opacity: 0.5;
-  line-height: 1.55; margin: 0;
-  max-width: 380px;
-}
-.chip-row {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  justify-content: center; max-width: 460px;
-}
-.chip {
-  padding: 8px 16px; border-radius: 20px;
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
-  cursor: pointer; font-size: 0.85rem; font-weight: 500;
-  color: inherit;
-  transition: border-color 0.15s, background 0.15s, transform 0.1s;
-}
-.chip:hover {
-  border-color: var(--accent-blue);
-  background: var(--bg-tertiary);
-  transform: translateY(-1px);
-}
-.chip:active { transform: translateY(0); }
-
-/* ── Message bubbles ──────────────────────────── */
-.bubble {
-  max-width: 80%; padding: 8px 12px; border-radius: 12px;
-  line-height: 1.5; word-break: break-word;
-  font-size: 13px; font-family: var(--font-mono);
-}
-.bubble.user {
-  align-self: flex-end;
-  background: var(--bg-tertiary); color: var(--text-muted);
-  border-bottom-right-radius: 4px;
-  white-space: pre-wrap;
-}
-.bubble-images {
-  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;
-}
-.bubble-img {
-  max-width: 180px; max-height: 120px; border-radius: 6px;
-  object-fit: cover; border: 1px solid var(--border);
-}
-.bubble.assistant {
+/* ── Assistant bubble ─────────────────────────── */
+.assistant-bubble {
   align-self: flex-start;
-  background: var(--bg-tertiary); color: var(--text-secondary);
-  border-bottom-left-radius: 4px;
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 12px 12px 12px 4px;
+  line-height: 1.65;
+  word-break: break-word;
+  font-size: 13.5px;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+.dark .assistant-bubble {
+  background: rgba(30, 41, 59, 0.45);
+  color: #cbd5e1;
+  border-color: rgba(51, 65, 85, 0.5);
 }
 
-/* ── Markdown body ────────────────────────────── */
+/* ── Markdown overrides (must stay here for :deep()) ── */
 .markdown-body { white-space: normal; }
-.markdown-body :deep(p) { margin: 0 0 0.4em; }
+.markdown-body :deep(p) { margin: 0 0 0.5em; }
 .markdown-body :deep(p:last-child) { margin-bottom: 0; }
 .markdown-body :deep(code) {
-  background: var(--bg-primary); padding: 1px 5px;
-  border-radius: 4px; font-size: 0.9em;
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: var(--font-mono);
 }
+.dark .markdown-body :deep(code) { background: rgba(15, 23, 42, 0.8); }
 .markdown-body :deep(pre) {
-  background: var(--bg-primary); padding: 10px 12px;
-  border-radius: 6px; overflow-x: auto; margin: 6px 0;
+  background: #f1f5f9;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 6px 0;
 }
+.dark .markdown-body :deep(pre) { background: #0f172a; }
 .markdown-body :deep(pre code) { background: none; padding: 0; }
 .markdown-body :deep(ul), .markdown-body :deep(ol) { margin: 4px 0; padding-left: 1.4em; }
 .markdown-body :deep(li) { margin: 2px 0; }
-.markdown-body :deep(strong) { color: var(--text-primary); }
-.markdown-body :deep(a) { color: var(--accent-blue); }
+.markdown-body :deep(strong) { color: #1e293b; font-weight: 600; }
+.dark .markdown-body :deep(strong) { color: #f1f5f9; }
+.markdown-body :deep(a) { color: #3b82f6; }
+.dark .markdown-body :deep(a) { color: #60a5fa; }
 .markdown-body :deep(h1), .markdown-body :deep(h2), .markdown-body :deep(h3) {
-  color: var(--text-primary); margin: 0.5em 0 0.25em;
-  font-size: 1em; font-weight: 700;
+  color: #1e293b;
+  margin: 0.6em 0 0.3em;
+  font-size: 1em;
+  font-weight: 700;
 }
+.dark .markdown-body :deep(h1),
+.dark .markdown-body :deep(h2),
+.dark .markdown-body :deep(h3) { color: #f1f5f9; }
 .markdown-body :deep(blockquote) {
-  border-left: 3px solid var(--border); padding-left: 10px;
-  margin: 6px 0; color: var(--text-muted);
+  border-left: 3px solid #cbd5e1;
+  padding-left: 10px;
+  margin: 6px 0;
+  color: #64748b;
 }
-.markdown-body :deep(hr) { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+.dark .markdown-body :deep(blockquote) { border-left-color: #475569; color: #94a3b8; }
+.markdown-body :deep(hr) { border: none; border-top: 1px solid #e2e8f0; margin: 8px 0; }
+.dark .markdown-body :deep(hr) { border-top-color: #334155; }
+.markdown-body :deep(table) { border-collapse: collapse; width: 100%; margin: 6px 0; font-size: 12px; }
+.markdown-body :deep(th), .markdown-body :deep(td) {
+  border: 1px solid #e2e8f0;
+  padding: 4px 8px;
+  text-align: left;
+}
+.dark .markdown-body :deep(th), .dark .markdown-body :deep(td) { border-color: #334155; }
+.markdown-body :deep(th) { background: #f1f5f9; color: #1e293b; font-weight: 600; }
+.dark .markdown-body :deep(th) { background: #1e293b; color: #f1f5f9; }
 
 /* ── Phase milestone ──────────────────────────── */
 .phase-marker {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 0.75rem; color: var(--accent-green);
-  opacity: 0.75; padding: 4px 0; justify-content: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #22c55e;
+  opacity: 0.75;
+  padding: 4px 0;
+  justify-content: center;
 }
 .phase-marker::before,
 .phase-marker::after {
-  content: ''; flex: 1; max-width: 60px;
-  height: 1px; background: var(--accent-green); opacity: 0.4;
+  content: '';
+  flex: 1;
+  max-width: 60px;
+  height: 1px;
+  background: #22c55e;
+  opacity: 0.4;
 }
 
-/* ── Footer areas ─────────────────────────────── */
-.chat-error {
-  padding: 8px 20px; color: var(--accent-red);
-  font-size: 0.82rem; flex-shrink: 0;
-}
-.confirm-bar {
-  padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
-}
-.btn-confirm {
-  width: 100%; padding: 13px; border-radius: 10px;
-  background: var(--accent-green); color: #000;
-  border: none; cursor: pointer; font-size: 0.95rem; font-weight: 700;
-  letter-spacing: 0.01em;
-  transition: opacity 0.15s, transform 0.1s;
-}
-.btn-confirm:hover { opacity: 0.9; transform: translateY(-1px); }
-/* ── Image preview row ────────────────────────── */
-.image-preview-row {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  padding: 10px 20px 0; flex-shrink: 0;
-}
-.image-preview {
-  position: relative; display: inline-flex;
-}
-.image-preview img {
-  max-width: 80px; max-height: 60px; border-radius: 6px;
-  object-fit: cover; border: 1px solid var(--border);
-}
-.remove-img {
-  position: absolute; top: -6px; right: -6px;
-  width: 18px; height: 18px; border-radius: 50%;
-  background: var(--bg-tertiary); border: 1px solid var(--border);
-  color: var(--text-muted); font-size: 10px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  line-height: 1; padding: 0;
-}
-.remove-img:hover { background: var(--accent-red); color: white; border-color: var(--accent-red); }
-
-.chat-input-bar {
-  display: flex; gap: 8px; padding: 10px 20px 14px;
-  border-top: 1px solid var(--border); flex-shrink: 0;
-  align-items: flex-end;
-}
-.btn-attach {
-  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
-  background: var(--bg-secondary); border: 1px solid var(--border);
-  color: var(--text-muted); font-size: 1.1rem; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: border-color 0.15s, color 0.15s;
-}
-.btn-attach:hover:not(:disabled) { border-color: var(--accent-blue); color: var(--accent-blue); }
-.btn-attach:disabled { opacity: 0.35; cursor: default; }
-.chat-input {
-  flex: 1; padding: 8px 12px; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--bg-secondary);
-  color: var(--text-primary); font-size: 13px; font-family: var(--font-mono);
-  line-height: 1.5; resize: none; overflow-y: auto;
-  min-height: 38px; max-height: 160px;
-  transition: border-color 0.15s;
-}
-.chat-input:focus { outline: none; border-color: var(--accent-blue); }
-.chat-input:disabled { opacity: 0.45; }
-.btn-send {
-  width: 40px; height: 40px; border-radius: 10px;
-  background: var(--accent-blue); color: white;
-  border: none; cursor: pointer; font-size: 1rem;
-  display: flex; align-items: center; justify-content: center;
-  transition: opacity 0.15s, transform 0.1s; flex-shrink: 0;
-}
-.btn-send:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
-.btn-send:disabled { opacity: 0.35; cursor: default; }
-.btn-ok {
-  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
-  background: var(--accent-green); color: #000;
-  border: none; cursor: pointer; font-size: 1rem; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  transition: opacity 0.15s, transform 0.1s;
-}
-.btn-ok:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
-.btn-ok:disabled { opacity: 0.35; cursor: default; }
-
-/* ── Streaming indicator ──────────────────────── */
-.bubble.streaming { min-width: 52px; }
+/* ── Streaming dots ───────────────────────────── */
 .dot-pulse {
-  display: inline-flex; gap: 5px; align-items: center; padding: 2px 0;
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 2px 0;
 }
 .dot-pulse span {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor; opacity: 0.35;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
   animation: dotbounce 1.2s ease-in-out infinite;
 }
 .dot-pulse span:nth-child(2) { animation-delay: 0.15s; }
@@ -489,8 +433,5 @@ function isPhaseMarker(idx: number): string | null {
 @keyframes dotbounce {
   0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
   40% { opacity: 0.9; transform: translateY(-3px); }
-}
-@keyframes pulse {
-  0%, 100% { opacity: 0.3; } 50% { opacity: 1; }
 }
 </style>
