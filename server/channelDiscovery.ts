@@ -1,11 +1,18 @@
 import { execFile } from 'node:child_process'
-import { readdir, readFile, unlink } from 'node:fs/promises'
+import { readdir, readFile, stat, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
 import { promisify } from 'node:util'
 import { DISCOVERY_DIR, WHITESPACE_RE } from './paths.js'
 
 const execFileAsync = promisify(execFile)
+
+interface ChannelCacheEntry {
+  mtimeMs: number
+  pid: number | null // resolved Claude ancestor PID
+}
+
+const channelCache = new Map<string, ChannelCacheEntry>()
 
 interface DiscoveryEntry {
   port: number
@@ -86,16 +93,35 @@ export async function getChannelMap(): Promise<Map<number, ChannelInfo>> {
 
       if (!isAlive(entry.parentPid)) {
         await unlink(filePath).catch(() => {})
+        channelCache.delete(filePath)
         return
       }
 
       const info: ChannelInfo = { port: entry.port, token: entry.token, cwd: entry.cwd }
 
-      // Try to find the actual claude process by walking up the tree.
-      // process.ppid in the MCP server points to the tsx/node wrapper,
-      // not the claude process itself. We need the claude PID to match
-      // against what processScanner reports.
-      const claudePid = await findClaudeAncestor(entry.parentPid)
+      // mtime cache: avoid forking `ps` per discovery file when the file
+      // hasn't changed since the last walk. Discovery files are written
+      // once at MCP server startup, so the mtime almost never changes.
+      let claudePid: number | null = null
+      try {
+        const fileStat = await stat(filePath)
+        const cached = channelCache.get(filePath)
+        if (cached && cached.mtimeMs === fileStat.mtimeMs) {
+          claudePid = cached.pid
+        }
+        else {
+          // Try to find the actual claude process by walking up the tree.
+          // process.ppid in the MCP server points to the tsx/node wrapper,
+          // not the claude process itself. We need the claude PID to match
+          // against what processScanner reports.
+          claudePid = await findClaudeAncestor(entry.parentPid)
+          channelCache.set(filePath, { mtimeMs: fileStat.mtimeMs, pid: claudePid })
+        }
+      }
+      catch {
+        claudePid = await findClaudeAncestor(entry.parentPid)
+      }
+
       if (claudePid !== null) {
         result.set(claudePid, info)
       }

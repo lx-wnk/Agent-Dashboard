@@ -37,6 +37,15 @@ export interface SubAgentData {
 const TAIL_BYTES = 32768 // read last 32KB
 const HEAD_BYTES = 8192 // read first 8KB for model/version
 
+interface SessionCacheEntry {
+  mtimeMs: number
+  size: number
+  result: SessionData
+}
+
+const sessionCache = new Map<string, SessionCacheEntry>()
+const SESSION_CACHE_MAX = 100 // evict oldest when exceeded
+
 export function encodePath(absolutePath: string): string {
   // Claude Code encodes /, ., and _ all as -. The dot is load-bearing:
   // `.claude` inside a realpath becomes `--claude` (the leading / and the
@@ -332,6 +341,13 @@ export async function findSessionForProject(
   const selectedFile = pickBestJsonlFile(jsonlFiles, processUptimeSeconds)
   const sessionFilePath = join(projectDir, selectedFile.name)
 
+  // mtime+size cache: skip the tail-read / parse / extract path when the
+  // session JSONL hasn't changed since the last call.
+  const fileStat = await stat(sessionFilePath)
+  const cached = sessionCache.get(sessionFilePath)
+  if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size)
+    return cached.result
+
   const raw = await tailRead(sessionFilePath)
   const parsed = parseJsonlLines(raw)
   const info = extractSessionInfo(parsed)
@@ -365,7 +381,7 @@ export async function findSessionForProject(
     tokenUsage.outputTokens = meta.outputTokens
   }
 
-  return {
+  const result: SessionData = {
     sessionId: info.sessionId || sessionId,
     projectPath: cwd,
     entrypoint: info.entrypoint || 'unknown',
@@ -383,6 +399,15 @@ export async function findSessionForProject(
     toolCounts: info.toolCounts || {},
     meta,
   }
+
+  if (sessionCache.size >= SESSION_CACHE_MAX) {
+    const firstKey = sessionCache.keys().next().value
+    if (firstKey)
+      sessionCache.delete(firstKey)
+  }
+  sessionCache.set(sessionFilePath, { mtimeMs: fileStat.mtimeMs, size: fileStat.size, result })
+
+  return result
 }
 
 async function findSubagents(subagentDir: string): Promise<SubAgentData[]> {
