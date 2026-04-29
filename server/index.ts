@@ -69,6 +69,24 @@ async function start() {
   app.use(express.json({ limit: '10mb' }))
   app.use(cookieParser())
 
+  // Security headers — applied to every response before any route handler
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Frame-Options', 'DENY')
+    const isDev = process.env.NODE_ENV !== 'production'
+    const csp = [
+      `default-src 'self'`,
+      isDev ? `script-src 'self' 'unsafe-eval'` : `script-src 'self'`,
+      `style-src 'self' 'unsafe-inline'`,
+      `connect-src 'self' ${isDev ? 'ws: wss:' : ''}`.trim(),
+      `img-src 'self' data:`,
+      `font-src 'self'`,
+      `frame-ancestors 'none'`,
+    ].join('; ')
+    res.setHeader('Content-Security-Policy', csp)
+    next()
+  })
+
   // ─── Auth routes (public — before requireAuth) ───────────
 
   app.use(createAuthRouter({ host: HOST, port: PORT }))
