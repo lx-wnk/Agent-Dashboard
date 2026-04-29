@@ -41,7 +41,17 @@ for (let fd = 0; fd <= 2; fd++) {
 
 // SECURITY: This server exposes session data (prompts, tool outputs, file paths).
 // Always bind to 127.0.0.1 — never expose to the network.
-const PORT = Number.parseInt(process.env.DASHBOARD_PORT || '13120', 10)
+const PORT = (() => {
+  const raw = process.env.DASHBOARD_PORT
+  if (!raw)
+    return 13120
+  const val = Number.parseInt(raw, 10)
+  if (!Number.isInteger(val) || val < 1 || val > 65535) {
+    console.warn(`[config] DASHBOARD_PORT invalid (got: ${raw}); using 13120 default`)
+    return 13120
+  }
+  return val
+})()
 const HOST = process.env.DASHBOARD_HOST ?? '127.0.0.1'
 if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
   console.warn(
@@ -190,23 +200,30 @@ async function start() {
 
         const trendSlice = costTrend.slice(-60)
 
-        // Fan out: each client gets local agents + their own remotes
+        // Fan out: each client gets local agents + their own remotes.
+        // Deduplicate: build per-userId payload cache so multiple browser tabs
+        // from the same user don't trigger duplicate remote-agent fetches.
+        const userPayloadCache = new Map<string, string>()
+
         await Promise.all([...sseClients].map(async (client) => {
           try {
             if (client.res.writableEnded)
               return
 
-            const userRemotes = isAuthEnabled()
-              ? listRemoteRegistrationsForUser(client.userId).map(r => ({
-                  url: r.url,
-                  bearerKey: r.bearerKey,
-                  name: r.name,
-                }))
-              : []
+            if (!userPayloadCache.has(client.userId)) {
+              const userRemotes = isAuthEnabled()
+                ? listRemoteRegistrationsForUser(client.userId).map(r => ({
+                    url: r.url,
+                    bearerKey: r.bearerKey,
+                    name: r.name,
+                  }))
+                : []
+              const allRemotes = [...envRemotes, ...userRemotes]
+              const agents = await aggregateAgents(localAgents, allRemotes)
+              userPayloadCache.set(client.userId, JSON.stringify({ agents, trend: trendSlice }))
+            }
 
-            const allRemotes = [...envRemotes, ...userRemotes]
-            const agents = await aggregateAgents(localAgents, allRemotes)
-            const payload = JSON.stringify({ agents, trend: trendSlice })
+            const payload = userPayloadCache.get(client.userId)!
             client.res.write(`data: ${payload}\n\n`)
           }
           catch {
