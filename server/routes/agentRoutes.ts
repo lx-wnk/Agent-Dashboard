@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { consola } from 'consola'
 import { Router } from 'express'
 import { getAgents } from '../agentMerger.js'
 import { getChannelMap } from '../channelDiscovery.js'
@@ -57,8 +58,10 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
       return
 
     if (!spawnManager.isSpawnAllowed()) {
-      const windowSecs = Math.round(spawnManager.getRateLimitConfig().windowMs / 1000)
-      const { max } = spawnManager.getRateLimitConfig()
+      const { windowMs, max } = spawnManager.getRateLimitConfig()
+      const windowSecs = Math.round(windowMs / 1000)
+      const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
+      consola.warn(`[spawnManager] rate limit hit from ${ip} (max ${max}/${windowSecs}s)`)
       res.status(429).json({ error: `Too many spawn requests. Max ${max} per ${windowSecs} seconds.` })
       return
     }

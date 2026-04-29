@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from 'express'
 import type { z, ZodRawShape } from 'zod'
 import type { McpScope } from '../../src/types.js'
 import { createHash } from 'node:crypto'
+import { consola } from 'consola'
 import { getApiKeyByHash, touchApiKey } from '../db/apiKeysRepo.js'
 
 // Runtime scope enforcement: every tool is registered via makeToolRegistrar(),
@@ -70,6 +71,8 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
   const hash = createHash('sha256').update(token).digest('hex')
   const key = getApiKeyByHash(hash)
   if (!key) {
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
+    consola.warn(`[mcpAuth] invalid token from ${ip}`)
     res.status(401).json({ error: 'Invalid or revoked API key' })
     return
   }
