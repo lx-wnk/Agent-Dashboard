@@ -786,7 +786,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     // Kill the idle stage agent BEFORE the DB transaction — process signaling
     // is not a DB operation and must stay outside the atomic write block.
     const shouldRestartRun = outcome === 'granted' && run.status === 'awaiting_user'
-    if (shouldRestartRun && run.pid !== null) {
+    if (shouldRestartRun && run.pid !== null && run.pid > 1) {
       try {
         process.kill(run.pid, 'SIGTERM')
       }
@@ -967,6 +967,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         return
       }
       setPipelineConfig('maxParallelOrchestrators', String(Math.floor(n)))
+      deps.orchestrator.invalidateConfigCache()
     }
     res.json({
       maxParallelOrchestrators: getPipelineConfigNumber('maxParallelOrchestrators', 3),

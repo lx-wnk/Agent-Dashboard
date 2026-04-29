@@ -102,6 +102,11 @@ export class PipelineOrchestrator {
     return value
   }
 
+  /** Clears the in-memory pipeline_config TTL cache. Call after any REST write to pipeline_config. */
+  invalidateConfigCache(): void {
+    this._configCache.clear()
+  }
+
   constructor(options: OrchestratorOptions | number = {}) {
     // Backwards-compatible: constructor used to accept a plain pollIntervalMs.
     if (typeof options === 'number') {
