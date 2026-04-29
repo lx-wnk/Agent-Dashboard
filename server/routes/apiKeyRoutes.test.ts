@@ -20,6 +20,11 @@ beforeEach(async () => {
 
   const app = expressLib()
   app.use(expressLib.json())
+  // Inject admin user — POST/DELETE require req.user.isAdmin
+  app.use((req, _res, next) => {
+    ;(req as unknown as { user: { id: string, isAdmin: boolean } }).user = { id: 'test-admin', isAdmin: true }
+    next()
+  })
   app.use('/api', createApiKeyRouter({
     rejectCrossOrigin: () => false, // allow everything in tests
   }))

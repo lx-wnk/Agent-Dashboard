@@ -20,6 +20,7 @@ import { aggregateAgents, getEnvRemoteTargets } from './remoteAggregator.js'
 import { createAgentRouter } from './routes/agentRoutes.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createAuthRouter } from './routes/authRoutes.js'
+import { createPresetRouter } from './routes/presetRoutes.js'
 import { createRefineRouter } from './routes/refineRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
 import { createSystemRouter } from './routes/systemRoutes.js'
@@ -40,7 +41,17 @@ for (let fd = 0; fd <= 2; fd++) {
 
 // SECURITY: This server exposes session data (prompts, tool outputs, file paths).
 // Always bind to 127.0.0.1 — never expose to the network.
-const PORT = Number.parseInt(process.env.DASHBOARD_PORT || '13120', 10)
+const PORT = (() => {
+  const raw = process.env.DASHBOARD_PORT
+  if (!raw)
+    return 13120
+  const val = Number.parseInt(raw, 10)
+  if (!Number.isInteger(val) || val < 1 || val > 65535) {
+    console.warn(`[config] DASHBOARD_PORT invalid (got: ${raw}); using 13120 default`)
+    return 13120
+  }
+  return val
+})()
 const HOST = process.env.DASHBOARD_HOST ?? '127.0.0.1'
 if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
   console.warn(
@@ -67,6 +78,24 @@ async function start() {
   const app = express()
   app.use(express.json({ limit: '10mb' }))
   app.use(cookieParser())
+
+  // Security headers — applied to every response before any route handler
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Frame-Options', 'DENY')
+    const isDev = process.env.NODE_ENV !== 'production'
+    const csp = [
+      `default-src 'self'`,
+      isDev ? `script-src 'self' 'unsafe-eval'` : `script-src 'self'`,
+      `style-src 'self' 'unsafe-inline'`,
+      `connect-src 'self' ${isDev ? 'ws: wss:' : ''}`.trim(),
+      `img-src 'self' data:`,
+      `font-src 'self'`,
+      `frame-ancestors 'none'`,
+    ].join('; ')
+    res.setHeader('Content-Security-Policy', csp)
+    next()
+  })
 
   // ─── Auth routes (public — before requireAuth) ───────────
 
@@ -171,23 +200,30 @@ async function start() {
 
         const trendSlice = costTrend.slice(-60)
 
-        // Fan out: each client gets local agents + their own remotes
+        // Fan out: each client gets local agents + their own remotes.
+        // Deduplicate: build per-userId payload cache so multiple browser tabs
+        // from the same user don't trigger duplicate remote-agent fetches.
+        const userPayloadCache = new Map<string, string>()
+
         await Promise.all([...sseClients].map(async (client) => {
           try {
             if (client.res.writableEnded)
               return
 
-            const userRemotes = isAuthEnabled()
-              ? listRemoteRegistrationsForUser(client.userId).map(r => ({
-                  url: r.url,
-                  bearerKey: r.bearerKey,
-                  name: r.name,
-                }))
-              : []
+            if (!userPayloadCache.has(client.userId)) {
+              const userRemotes = isAuthEnabled()
+                ? listRemoteRegistrationsForUser(client.userId).map(r => ({
+                    url: r.url,
+                    bearerKey: r.bearerKey,
+                    name: r.name,
+                  }))
+                : []
+              const allRemotes = [...envRemotes, ...userRemotes]
+              const agents = await aggregateAgents(localAgents, allRemotes)
+              userPayloadCache.set(client.userId, JSON.stringify({ agents, trend: trendSlice }))
+            }
 
-            const allRemotes = [...envRemotes, ...userRemotes]
-            const agents = await aggregateAgents(localAgents, allRemotes)
-            const payload = JSON.stringify({ agents, trend: trendSlice })
+            const payload = userPayloadCache.get(client.userId)!
             client.res.write(`data: ${payload}\n\n`)
           }
           catch {
@@ -210,13 +246,22 @@ async function start() {
 
   // ─── Task Pipeline SSE + Router ────────────────
 
-  const taskSseClients = new Set<express.Response>()
+  const taskSseClients = new Set<SseClient>()
   function broadcastTaskEvent(event: TaskEvent) {
     const data = `data: ${JSON.stringify(event)}\n\n`
+    const task = getTaskById(event.taskId)
+    // task_deleted: row already gone — fall back to userId embedded in event payload by taskRoutes
+    const ownerId: string | null
+      = task?.userId
+      ?? (event.type === 'task_deleted' && event.payload != null && typeof event.payload === 'object' && 'userId' in event.payload
+        ? String((event.payload as Record<string, unknown>).userId)
+        : null)
     for (const client of taskSseClients) {
+      if (!client.isAdmin && ownerId !== null && ownerId !== client.userId)
+        continue
       try {
-        if (!client.writableEnded)
-          client.write(data)
+        if (!client.res.writableEnded)
+          client.res.write(data)
       }
       catch {
         taskSseClients.delete(client)
@@ -224,7 +269,7 @@ async function start() {
     }
   }
 
-  app.get('/api/tasks/stream', (_req, res) => {
+  app.get('/api/tasks/stream', (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -232,9 +277,10 @@ async function start() {
       'X-Accel-Buffering': 'no',
     })
     res.flushHeaders()
-    taskSseClients.add(res)
-    _req.on('close', () => {
-      taskSseClients.delete(res)
+    const client: SseClient = { res, userId: req.user!.id, isAdmin: req.user!.isAdmin }
+    taskSseClients.add(client)
+    req.on('close', () => {
+      taskSseClients.delete(client)
     })
   })
 
@@ -310,6 +356,9 @@ async function start() {
   // API key management routes (browser-facing, CSRF-guarded, no bearer token required)
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin }))
 
+  // Permission preset management routes (list/delete remembered tool grants per project)
+  app.use('/api', createPresetRouter(rejectCrossOrigin))
+
   // Task pipeline routes (must come after rejectCrossOrigin definition)
   app.use('/api', createTaskRouter({
     rejectCrossOrigin,
@@ -373,10 +422,13 @@ async function start() {
   // Global Express error middleware — must come after all routes/middleware.
   // Express detects error handlers by their 4-parameter signature.
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    const message = err instanceof Error ? err.message : 'Internal server error'
     consola.error('Unhandled route error', err)
-    if (!res.headersSent)
+    if (!res.headersSent) {
+      const message = process.env.NODE_ENV === 'production'
+        ? 'Internal server error'
+        : (err instanceof Error ? err.message : 'Internal server error')
       res.status(500).json({ error: message })
+    }
   })
 
   httpServer.listen(PORT, HOST, () => {

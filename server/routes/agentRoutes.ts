@@ -4,14 +4,19 @@ import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { consola } from 'consola'
 import { Router } from 'express'
 import { getAgents } from '../agentMerger.js'
+import { isAuthEnabled } from '../auth/requireAuth.js'
 import { getChannelMap } from '../channelDiscovery.js'
 import { UUID_RE } from '../constants.js'
+import { findStageRunBySessionId } from '../db/stageRunsRepo.js'
+import { getTaskById } from '../db/tasksRepo.js'
 import { parseFullSession } from '../jsonlParser.js'
 import { DISCOVERY_DIR } from '../paths.js'
 import { aggregateAgents, getEnvRemoteTargets, isRemoteFetch } from '../remoteAggregator.js'
 import { getSessions } from '../sessionScanner.js'
+import { canAccessTask } from './taskRoutes.js'
 
 interface AgentRouterDeps {
   spawnManager: SpawnManager
@@ -56,9 +61,16 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
     if (rejectCrossOrigin(req, res))
       return
 
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ error: 'Admin access required to spawn agents' })
+      return
+    }
+
     if (!spawnManager.isSpawnAllowed()) {
-      const windowSecs = Math.round(spawnManager.getRateLimitConfig().windowMs / 1000)
-      const { max } = spawnManager.getRateLimitConfig()
+      const { windowMs, max } = spawnManager.getRateLimitConfig()
+      const windowSecs = Math.round(windowMs / 1000)
+      const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
+      consola.warn(`[spawnManager] rate limit hit from ${ip} (max ${max}/${windowSecs}s)`)
       res.status(429).json({ error: `Too many spawn requests. Max ${max} per ${windowSecs} seconds.` })
       return
     }
@@ -93,6 +105,27 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
         res.status(400).json({ error: 'Invalid sessionId format' })
         return
       }
+
+      // In multi-user mode, verify the requesting user can access this session.
+      // Pipeline sessions are linked to tasks via stage_runs; check task ownership.
+      // Non-pipeline sessions (manual spawns) are admin-only in multi-user mode.
+      if (isAuthEnabled() && req.user && !req.user.isAdmin) {
+        const stageRun = findStageRunBySessionId(sessionId)
+        if (stageRun) {
+          const task = getTaskById(stageRun.taskId)
+          if (!task || !canAccessTask(task, req.user)) {
+            res.status(404).json({ error: 'Session not found' })
+            return
+          }
+        }
+        else {
+          // Session not linked to any pipeline task — only admins can read these
+          // (they may be manual spawns that belong to another user's agent)
+          res.status(404).json({ error: 'Session not found' })
+          return
+        }
+      }
+
       const lastOnly = req.query.last === '1'
       const messages = await parseFullSession(sessionId, lastOnly)
       res.json({ messages })

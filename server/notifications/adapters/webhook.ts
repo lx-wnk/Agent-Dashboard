@@ -18,20 +18,78 @@ export const webhookAdapter: NotificationAdapter = {
     if (!url)
       throw new Error('webhook adapter missing webhook_url')
 
+    if (!isSafeWebhookUrl(url))
+      throw new Error(`webhook_url blocked by SSRF guard: ${url}`)
+
     const format = getConfig('webhook_format') || 'generic'
     const body = buildBody(format, payload)
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+    }
+    finally {
+      clearTimeout(timeoutId)
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       throw new Error(`webhook returned ${res.status}: ${text.slice(0, 200)}`)
     }
   },
+}
+
+function isSafeWebhookUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:')
+      return false
+    const host = u.hostname.toLowerCase()
+
+    // Block by hostname patterns (pre-resolution defense)
+    if (host === 'localhost' || host === '::1' || host === '[::1]')
+      return false
+
+    // Block if the hostname is a bare IP address that falls in a blocked range
+    const ipv4Match = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+    if (ipv4Match) {
+      const [, a, b, c] = ipv4Match.map(Number)
+      if (
+        a === 127 // loopback
+        || a === 10 // RFC1918 10.0.0.0/8
+        || (a === 172 && b >= 16 && b <= 31) // RFC1918 172.16.0.0/12
+        || (a === 192 && b === 168) // RFC1918 192.168.0.0/16
+        || (a === 169 && b === 254) // link-local
+        || a === 0 // 0.0.0.0
+        || a >= 240 // reserved/multicast
+      )
+        return false
+    }
+
+    // Block IPv6 private ranges by prefix
+    if (host.startsWith('[')) {
+      const bare = host.slice(1, -1).toLowerCase()
+      if (
+        bare === '::1'
+        || bare.startsWith('fc') // ULA fc00::/7
+        || bare.startsWith('fd')
+        || bare.startsWith('fe80') // link-local
+      )
+        return false
+    }
+
+    return true
+  }
+  catch {
+    return false
+  }
 }
 
 function buildBody(format: string, payload: NotificationPayload): Record<string, unknown> {

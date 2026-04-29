@@ -3,12 +3,15 @@ import { Buffer } from 'node:buffer'
 import { unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { Router } from 'express'
+import { jsonrepair } from 'jsonrepair'
 import { appendAudit } from '../db/auditRepo.js'
 import { insertTurn, listTurns } from '../db/refinementTurnsRepo.js'
 import { getTaskById, updateTask } from '../db/tasksRepo.js'
-import { spawnRefinementTurn } from '../pipeline/refinementSpawner.js'
-import { bulkGrantAgentFilePermissions, bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
+import { spawnRefinementTurn } from '../services/refinementSpawner.js'
+import { applyPresetPermissions, bulkGrantKonzeptPermissions, saveGrantsToPresets } from '../services/approvalUtils.js'
+import { canAccessTask } from './taskRoutes.js'
 
 interface ImageAttachment {
   dataUrl: string
@@ -17,8 +20,10 @@ interface ImageAttachment {
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
-const PHASE_DONE_RE = /__phase_done:\s*(\w+)/
-const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/
+const PHASE_DONE_RE = /(?:^|\n)__phase_done:\s*(\w+)\s*$/
+const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/g
+
+const REFINEMENT_TIMEOUT_MS = Number(process.env.REFINEMENT_TIMEOUT_MS ?? '') || 5 * 60 * 1000
 
 const activeTurns = new Set<string>()
 
@@ -44,9 +49,22 @@ export function createRefineRouter(
       return
     }
 
+    if (!canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found or not in konzept stage' })
+      return
+    }
+
+    if (activeTurns.has(task.id)) {
+      res.status(409).json({ error: 'A turn is already in progress for this task' })
+      return
+    }
+    activeTurns.add(task.id) // Reserve the slot before any async I/O — closes TOCTOU window
+
+
     const body = req.body as { message?: unknown, images?: unknown }
     const message = typeof body.message === 'string' ? body.message.trim() : ''
     if (!message) {
+      activeTurns.delete(task.id) // release the reserved slot on validation failure
       res.status(400).json({ error: 'message is required' })
       return
     }
@@ -86,17 +104,44 @@ export function createRefineRouter(
 
     insertTurn({ taskId: task.id, role: 'user', content: message })
 
-    activeTurns.add(task.id)
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    const { stdout, waitForExit } = spawnRefinementTurn(spawnMessage, history, task.cwd)
+    const { child, stdout, waitForExit, getStderr } = spawnRefinementTurn(spawnMessage, history, task.cwd)
 
     let fullResponse = ''
     let turnFinalized = false
+
+    let guardTriggered = false
+
+    const onClose = () => {
+      if (guardTriggered || turnFinalized)
+        return
+      guardTriggered = true
+      turnFinalized = true
+      child.kill('SIGTERM')
+      activeTurns.delete(task.id)
+      insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[connection closed]' })
+    }
+    res.on('close', onClose)
+
+    const timeoutHandle = setTimeout(() => {
+      if (guardTriggered || turnFinalized)
+        return
+      guardTriggered = true
+      turnFinalized = true
+      child.kill('SIGTERM')
+      activeTurns.delete(task.id)
+      insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[timeout]' })
+      res.write(`event: error\ndata: ${JSON.stringify({ error: 'refinement turn timed out' })}\n\n`)
+      res.end()
+    }, REFINEMENT_TIMEOUT_MS)
+
     stdout.on('data', (chunk: Buffer) => {
+      if (turnFinalized)
+        return
       const text = chunk.toString()
       fullResponse += text
       res.write(`data: ${JSON.stringify({ text })}\n\n`)
@@ -107,7 +152,8 @@ export function createRefineRouter(
         return
       turnFinalized = true
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[stream error]' })
-      res.write(`event: error\ndata: ${JSON.stringify({ error: String(streamErr) })}\n\n`)
+      const stderrSnippet = getStderr()
+      res.write(`event: error\ndata: ${JSON.stringify({ error: String(streamErr), stderr: stderrSnippet || undefined })}\n\n`)
       res.end()
     })
 
@@ -121,11 +167,13 @@ export function createRefineRouter(
       const phaseMatch = fullResponse.match(PHASE_DONE_RE)
       const detectedPhase = phaseMatch ? phaseMatch[1] : undefined
 
-      // Update task title from refinedTitle whenever the agent emits it
-      const jsonMatch = fullResponse.match(JSON_BLOCK_RE)
+      // Update task title from refinedTitle whenever the agent emits it.
+      // Use the LAST json block in case earlier turns also contained examples.
+      const jsonMatches = [...fullResponse.matchAll(JSON_BLOCK_RE)]
+      const jsonMatch = jsonMatches.at(-1)
       if (jsonMatch) {
         try {
-          const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>
+          const parsed = JSON.parse(jsonrepair(jsonMatch[1])) as Record<string, unknown>
           if (typeof parsed.refinedTitle === 'string' && parsed.refinedTitle.trim()) {
             updateTask(task.id, { title: parsed.refinedTitle.trim() })
             broadcastEnrichedUpdate(task.id)
@@ -152,10 +200,13 @@ export function createRefineRouter(
         return
       turnFinalized = true
       insertTurn({ taskId: task.id, role: 'assistant', content: fullResponse || '[error]' })
-      res.write(`event: error\ndata: ${JSON.stringify({ error: err instanceof Error ? err.message : 'spawn failed' })}\n\n`)
+      const stderrSnippet = getStderr()
+      res.write(`event: error\ndata: ${JSON.stringify({ error: err instanceof Error ? err.message : 'spawn failed', stderr: stderrSnippet || undefined })}\n\n`)
       res.end()
     }
     finally {
+      clearTimeout(timeoutHandle)
+      res.removeListener('close', onClose)
       activeTurns.delete(task.id)
       for (const f of tempFiles) {
         try { unlinkSync(f) } catch {}
@@ -170,6 +221,11 @@ export function createRefineRouter(
       return
     }
 
+    if (!canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found or not in konzept stage' })
+      return
+    }
+
     const turns = listTurns(req.params.taskId)
     const lastAssistant = [...turns].reverse().find(t => t.role === 'assistant')
     if (!lastAssistant) {
@@ -177,7 +233,8 @@ export function createRefineRouter(
       return
     }
 
-    const jsonMatch = lastAssistant.content.match(JSON_BLOCK_RE)
+    const jsonMatches = [...lastAssistant.content.matchAll(JSON_BLOCK_RE)]
+    const jsonMatch = jsonMatches.at(-1)
     if (!jsonMatch) {
       res.status(409).json({ error: 'No JSON block found in last assistant message' })
       return
@@ -185,7 +242,7 @@ export function createRefineRouter(
 
     let konzeptOutput: Record<string, unknown>
     try {
-      konzeptOutput = JSON.parse(jsonMatch[1])
+      konzeptOutput = JSON.parse(jsonrepair(jsonMatch[1]))
     }
     catch {
       res.status(409).json({ error: 'Invalid JSON in assistant output' })
@@ -208,7 +265,10 @@ export function createRefineRouter(
     })
 
     bulkGrantKonzeptPermissions(task.id)
-    bulkGrantAgentFilePermissions(task.id, typeof konzeptOutput.cwd === 'string' ? konzeptOutput.cwd : task.cwd)
+    const userId = task.userId ?? null
+    const cwd = typeof konzeptOutput.cwd === 'string' ? konzeptOutput.cwd : task.cwd
+    applyPresetPermissions(task.id, userId, cwd)
+    saveGrantsToPresets(task.id, userId, cwd)
     broadcastEnrichedUpdate(task.id)
     appendAudit({ taskId: task.id, actor: 'user', action: 'refine_confirmed', details: { cwd: konzeptOutput.cwd } })
 
@@ -218,6 +278,10 @@ export function createRefineRouter(
   router.get('/:taskId/turns', (req, res) => {
     const task = getTaskById(req.params.taskId)
     if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    if (!canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }

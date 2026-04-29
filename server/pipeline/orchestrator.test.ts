@@ -426,6 +426,50 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     expect(reloaded?.metadata?.review_feedback).toBeUndefined()
   })
 
+  describe('selbstreview cycle cap', () => {
+    it('escalates to awaiting_user after maxReviewCycles failed reviews', async () => {
+      setPipelineConfig('maxReviewCycles', '2')
+      const task = createTask({ slug: 'rc', title: 'RC', cwd: '/rc' })
+      const { updateTask } = await import('../db/tasksRepo.js')
+      updateTask(task.id, { currentStage: 'selbstreview' })
+
+      parkAllAgentStages(orchestrator)
+      orchestrator.setCompletionDetector(async () => ({
+        kind: 'completed',
+        output: {
+          passed: false,
+          findings: [{ severity: 'high', description: 'still broken', file: 'a.ts' }],
+          summary: 'needs another pass',
+        },
+      }))
+
+      // Cycle 1: selbstreview fails → loop back to umsetzung, review_cycles=1.
+      const run1 = createStageRun({ taskId: task.id, stage: 'selbstreview' })
+      updateStageRun(run1.id, { status: 'running', pid: 9001 })
+      await orchestrator.tick()
+      await new Promise(r => setImmediate(r))
+
+      expect(getTaskById(task.id)?.currentStage).toBe('umsetzung')
+      expect(getTaskById(task.id)?.metadata?.review_cycles).toBe(1)
+
+      // Reset task to selbstreview to simulate a second review pass after
+      // umsetzung re-runs. Iteration count on the new run is independent
+      // from review_cycles — that's the point of the cap.
+      updateTask(task.id, { currentStage: 'selbstreview' })
+      const run2 = createStageRun({ taskId: task.id, stage: 'selbstreview', iteration: 1 })
+      updateStageRun(run2.id, { status: 'running', pid: 9002 })
+
+      // Cycle 2: review_cycles would become 2 ≥ maxReviewCycles → wait_user.
+      await orchestrator.tick()
+      await new Promise(r => setImmediate(r))
+
+      const finalRun = getLatestStageRun(task.id, 'selbstreview')
+      expect(finalRun?.status).toBe('awaiting_user')
+      // wait_user does NOT change currentStage — task stays on selbstreview.
+      expect(getTaskById(task.id)?.currentStage).toBe('selbstreview')
+    })
+  })
+
   it('prefers silver-bullet tasks over newer high-priority tasks', async () => {
     setPipelineConfig('maxParallelOrchestrators', '1')
     const older = createTask({ slug: 'o', title: 'O', cwd: '/o', priority: 'low' })

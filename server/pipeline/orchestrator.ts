@@ -1,5 +1,7 @@
 import type { PipelineStage, PipelineTask, StageRun } from '../../src/types.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
+import { unlinkSync } from 'node:fs'
+import { join } from 'node:path'
 import process from 'node:process'
 import { consola } from 'consola'
 import { revokeApiKeyByName } from '../db/apiKeysRepo.js'
@@ -17,9 +19,11 @@ import {
 } from '../db/stageRunsRepo.js'
 import { getDependentsOf, hasOtherBlockingDeps } from '../db/taskDependenciesRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
+import { cleanupLocalSettingsEntries, shouldCleanSettingsFile } from './agentSpawner.js'
 import { detectCompletion } from './completionDetector.js'
 import { attachSessionId, buildSessionName, decideRecovery } from './sessionManager.js'
-import { findNewestSessionId } from './sessionOutputReader.js'
+import { estimateCost } from '../pricing.js'
+import { findNewestSessionId, readSessionTokenSummary } from './sessionOutputReader.js'
 import { getHandlerForStage } from './stageHandlers.js'
 import { STAGE_ORDER } from './types.js'
 
@@ -87,6 +91,21 @@ export class PipelineOrchestrator {
   private readonly onPermissionRequest: PermissionRequestNotifier | null
   private readonly onStageFailed: StageFailedNotifier | null
   private readonly onTaskChanged: TaskChangedNotifier | null
+  private readonly _configCache = new Map<string, { value: number, expiresAt: number }>()
+
+  private getCachedPipelineConfigNumber(key: string, fallback: number): number {
+    const cached = this._configCache.get(key)
+    if (cached && cached.expiresAt > Date.now())
+      return cached.value
+    const value = getPipelineConfigNumber(key, fallback)
+    this._configCache.set(key, { value, expiresAt: Date.now() + 5000 })
+    return value
+  }
+
+  /** Clears the in-memory pipeline_config TTL cache. Call after any REST write to pipeline_config. */
+  invalidateConfigCache(): void {
+    this._configCache.clear()
+  }
 
   constructor(options: OrchestratorOptions | number = {}) {
     // Backwards-compatible: constructor used to accept a plain pollIntervalMs.
@@ -171,7 +190,7 @@ export class PipelineOrchestrator {
    */
   async progressTask(
     taskId: string,
-    opts?: { resumeSessionId?: string },
+    opts?: { resumeSessionId?: string, userAdditionalPrompt?: string },
   ): Promise<StageRun | null> {
     const prev = this.taskLocks.get(taskId) ?? Promise.resolve(null)
     const next = prev
@@ -190,7 +209,7 @@ export class PipelineOrchestrator {
 
   private async runProgressTaskLocked(
     taskId: string,
-    opts?: { resumeSessionId?: string },
+    opts?: { resumeSessionId?: string, userAdditionalPrompt?: string },
   ): Promise<StageRun | null> {
     const task = getTaskById(taskId)
     if (!task)
@@ -211,7 +230,7 @@ export class PipelineOrchestrator {
     const stageRun = this.ensureStageRun(task)
     updateStageRun(stageRun.id, { status: 'running', startedAt: new Date().toISOString() })
 
-    const ctx = this.buildContext(task, stageRun, opts?.resumeSessionId)
+    const ctx = this.buildContext(task, stageRun, opts?.resumeSessionId, opts?.userAdditionalPrompt)
     let transition: StageTransition
     try {
       transition = await handler.execute(ctx)
@@ -240,6 +259,7 @@ export class PipelineOrchestrator {
     task: PipelineTask,
     stageRun: StageRun,
     resumeSessionId?: string,
+    userAdditionalPrompt?: string,
   ): StageContext {
     const permissions = listTaskPermissions(task.id)
     const previousOutput = this.getPreviousStageOutput(task)
@@ -253,6 +273,7 @@ export class PipelineOrchestrator {
       previousOutput,
       priorIterationOutput,
       resumeSessionId,
+      userAdditionalPrompt,
       recordAudit: (action, details) => {
         appendAudit({ taskId: task.id, actor: 'orchestrator', action, details: details ?? null })
       },
@@ -487,6 +508,20 @@ export class PipelineOrchestrator {
     // stage transitions.
     this.onTaskChanged?.(task.id, { transitionKind: transition.kind })
 
+    // Clean up the dashboard-managed `.claude/settings.json` when no
+    // agent is about to run in this cwd. Skipped for `next`/`iterate`
+    // (next agent will reuse the file) and `async_running` (agent is
+    // still running). The cleanup is gated by the `_dashboardManaged`
+    // stamp so a user-authored settings.json is never deleted.
+    const reachedTaskTerminal
+      = transition.kind === 'done'
+        || transition.kind === 'wait_user'
+        || transition.kind === 'fail'
+        || transition.kind === 'on_hold'
+        || (transition.kind === 'iterate' && stageRun.iteration + 1 >= task.maxIterations)
+    if (reachedTaskTerminal)
+      cleanupDashboardSettings(task.worktreePath || task.cwd)
+
     // Cascade terminal stage to dependents AFTER onTaskChanged so the
     // kanban first reflects this task's new state before dependents change.
     if (transition.kind === 'done')
@@ -537,12 +572,13 @@ export class PipelineOrchestrator {
    * async run frees its slot before we count free slots for the picker.
    */
   private async progressPendingTasks(): Promise<void> {
-    await this.finalizeCompletedAsyncRuns()
-    this.pickNextTasksForFreeSlots()
+    const allRunning = listRunningStageRuns()
+    await this.finalizeCompletedAsyncRuns(allRunning)
+    this.pickNextTasksForFreeSlots(allRunning)
   }
 
-  private async finalizeCompletedAsyncRuns(): Promise<void> {
-    const running = listRunningStageRuns().filter(r => r.status === 'running' && r.pid !== null)
+  private async finalizeCompletedAsyncRuns(allRunning?: StageRun[]): Promise<void> {
+    const running = (allRunning ?? listRunningStageRuns()).filter(r => r.status === 'running' && r.pid !== null)
     for (const run of running) {
       const task = getTaskById(run.taskId)
       if (!task)
@@ -575,7 +611,7 @@ export class PipelineOrchestrator {
         // frontend cross-link banner and live session tab work without waiting
         // for the completion detector (which only runs after the PID exits).
         if (!run.sessionId && run.startedAt)
-          void this.tryAttachSessionId(run.id, cwd, run.startedAt)
+          void this.tryAttachSessionId(run.id, run.taskId, cwd, run.startedAt)
 
         // Don't kill the agent while it's blocked waiting for a user
         // permission decision — the PID is alive but it's idle on the
@@ -588,7 +624,7 @@ export class PipelineOrchestrator {
         // Enforce stage timeout: a PID-alive run that has exceeded the
         // configured limit is killed and failed so it doesn't hold a runner
         // slot indefinitely (infinite tool loop, network hang, etc.).
-        const timeoutSeconds = getPipelineConfigNumber(STAGE_TIMEOUT_KEY, DEFAULT_STAGE_TIMEOUT_SECONDS)
+        const timeoutSeconds = this.getCachedPipelineConfigNumber(STAGE_TIMEOUT_KEY, DEFAULT_STAGE_TIMEOUT_SECONDS)
         if (timeoutSeconds > 0 && run.startedAt) {
           const elapsedMs = Date.now() - new Date(run.startedAt).getTime()
           if (elapsedMs > timeoutSeconds * 1000) {
@@ -617,6 +653,21 @@ export class PipelineOrchestrator {
       const fresh = getStageRunById(run.id)
       if (!fresh || fresh.status !== 'running')
         continue
+
+      // Persist token usage + estimated cost from the session JSONL so the
+      // dashboard can display per-stage and aggregate totals.
+      if (fresh.sessionId) {
+        void readSessionTokenSummary(cwd, fresh.sessionId).then((summary) => {
+          const totalTokens = summary.inputTokens + summary.outputTokens + summary.cacheCreationTokens + summary.cacheReadTokens
+          if (totalTokens > 0) {
+            const costUsd = estimateCost(summary, summary.model)
+            updateStageRun(fresh.id, {
+              tokensUsed: totalTokens,
+              costCents: Math.round(costUsd * 100),
+            })
+          }
+        }).catch(() => { /* non-critical — token write failure must not block stage completion */ })
+      }
 
       if (result.kind === 'completed') {
         const transition = this.decideCompletedTransition(task, fresh, result.output ?? {})
@@ -663,11 +714,15 @@ export class PipelineOrchestrator {
     }
   }
 
-  private async tryAttachSessionId(stageRunId: string, cwd: string, startedAt: string): Promise<void> {
+  private async tryAttachSessionId(stageRunId: string, taskId: string, cwd: string, startedAt: string): Promise<void> {
     try {
       const sid = await findNewestSessionId(cwd, startedAt)
-      if (sid)
-        attachSessionId(stageRunId, sid)
+      if (!sid)
+        return
+      attachSessionId(stageRunId, sid)
+      // Broadcast so the frontend receives the updated activeSessionId immediately —
+      // without this the live-output pane stays dark until the next real transition.
+      this.onTaskChanged?.(taskId, { transitionKind: 'async_running' })
     }
     catch { /* non-critical: completion detector will attach it after the run ends */ }
   }
@@ -700,13 +755,39 @@ export class PipelineOrchestrator {
       const passed = output.passed === true
       if (!passed) {
         const feedback = summarizeReviewFindings(output)
-        const nextMeta = { ...(task.metadata ?? {}), review_feedback: feedback }
+        const prevCycles = typeof task.metadata?.review_cycles === 'number'
+          ? task.metadata.review_cycles
+          : 0
+        const cycles = prevCycles + 1
+        const perTaskCap = typeof task.metadata?.maxReviewCycles === 'number'
+          ? task.metadata.maxReviewCycles
+          : undefined
+        const maxCycles = perTaskCap ?? this.getCachedPipelineConfigNumber('maxReviewCycles', 3)
+
+        if (cycles >= maxCycles) {
+          return {
+            kind: 'wait_user',
+            reason: `review cycle limit (${maxCycles}) reached`,
+            output,
+          }
+        }
+
+        const nextMeta = {
+          ...(task.metadata ?? {}),
+          review_feedback: feedback,
+          review_cycles: cycles,
+        }
         return { kind: 'next', toStage: 'umsetzung', output, taskMetadataPatch: nextMeta }
       }
-      // Passed — clear any lingering feedback so the finalisierung
-      // handler doesn't read stale review notes from metadata.
-      if (task.metadata && typeof task.metadata === 'object' && 'review_feedback' in task.metadata) {
-        const { review_feedback: _drop, ...rest } = task.metadata
+      // Passed — clear any lingering feedback and the cycle counter so
+      // the finalisierung handler doesn't read stale review notes and a
+      // future re-entry into selbstreview starts from zero.
+      if (
+        task.metadata
+        && typeof task.metadata === 'object'
+        && ('review_feedback' in task.metadata || 'review_cycles' in task.metadata)
+      ) {
+        const { review_feedback: _drop1, review_cycles: _drop2, ...rest } = task.metadata
         const cleared = Object.keys(rest).length > 0 ? rest : null
         return { kind: 'next', toStage: 'finalisierung', output, taskMetadataPatch: cleared }
       }
@@ -721,11 +802,10 @@ export class PipelineOrchestrator {
    * running run) and promote them to fill free runner slots. Uses the
    * project_task_pipeline_runner_model priority order.
    */
-  private pickNextTasksForFreeSlots(): void {
-    const max = getPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
-    // Single DB scan, reused for both the busy-count and the per-task
-    // "has running run" check below — avoids N×M full-table scans.
-    const running = listRunningStageRuns().filter(r => r.status === 'running')
+  private pickNextTasksForFreeSlots(allRunning?: StageRun[]): void {
+    const max = this.getCachedPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
+    // Single DB scan per tick, passed from progressPendingTasks to avoid N×M scans.
+    const running = (allRunning ?? listRunningStageRuns()).filter(r => r.status === 'running')
     const busyTaskIds = new Set(running.map(r => r.taskId))
     const freeSlots = max - busyTaskIds.size
     if (freeSlots <= 0)
@@ -763,7 +843,7 @@ export class PipelineOrchestrator {
    * that's about to spawn its next stage doesn't consume a slot twice.
    */
   private hasFreeRunnerSlot(exceptTaskId?: string): boolean {
-    const max = getPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
+    const max = this.getCachedPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
     const busy = countBusyRunners(exceptTaskId)
     return busy < max
   }
@@ -950,6 +1030,29 @@ function comparePickOrder(a: PipelineTask, b: PipelineTask): number {
   if (prA !== prB)
     return prB - prA
   return a.createdAt.localeCompare(b.createdAt)
+}
+
+/**
+ * Delete the dashboard-managed `.claude/settings.json` in the given
+ * cwd if (and only if) it carries the `_dashboardManaged: true` stamp
+ * we wrote during spawn. Idempotent and safe when no file exists.
+ * Called after a stage_run finalizes to a state where no agent will
+ * run in this cwd, so a user-authored settings.json from outside the
+ * pipeline is never collateral damage.
+ */
+function cleanupDashboardSettings(cwd: string): void {
+  const claudeDir = join(cwd, '.claude')
+  const settingsPath = join(claudeDir, 'settings.json')
+  if (shouldCleanSettingsFile(settingsPath)) {
+    try {
+      unlinkSync(settingsPath)
+    }
+    catch (err) {
+      consola.warn(`[orchestrator] failed to clean up ${settingsPath}: ${(err as Error).message}`)
+    }
+  }
+  // Also remove any allow entries we merged into settings.local.json.
+  cleanupLocalSettingsEntries(join(claudeDir, 'settings.local.json'))
 }
 
 /**

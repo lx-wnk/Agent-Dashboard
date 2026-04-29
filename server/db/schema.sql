@@ -209,6 +209,25 @@ CREATE TABLE IF NOT EXISTS refinement_turns (
 CREATE INDEX IF NOT EXISTS idx_refinement_turns_task
   ON refinement_turns(task_id, created_at);
 
+-- Per-(user, project-cwd) tool permission presets. Captured when a user
+-- confirms a refinement chat: the granted tool permissions for that task
+-- are remembered so the next task in the same project starts with the
+-- same allow-list. user_id NULL means "any user in this project".
+CREATE TABLE IF NOT EXISTS permission_presets (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT,              -- NULL means any user in this project
+  project_cwd TEXT NOT NULL,
+  tool        TEXT NOT NULL,
+  pattern     TEXT,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+-- Expression-based unique index (COALESCE not allowed in CREATE TABLE UNIQUE).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_permission_presets_unique
+  ON permission_presets(COALESCE(user_id, ''), project_cwd, tool, COALESCE(pattern, ''));
+CREATE INDEX IF NOT EXISTS idx_permission_presets_lookup
+  ON permission_presets(user_id, project_cwd);
+
+
 -- Dashboard users (populated on first GitHub OAuth login)
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,   -- GitHub numeric user ID (stable across username renames)

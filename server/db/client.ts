@@ -162,6 +162,25 @@ function migrateV1BaseSchema(db: Database): void {
     )
   `)
   db.exec('CREATE INDEX IF NOT EXISTS idx_agent_cost_trend_t ON agent_cost_trend(t)')
+
+  // permission_presets was added after some DBs were initialised. The inline
+  // UNIQUE(COALESCE(...)) in schema.sql caused db.exec(schemaSql) to throw,
+  // leaving this table absent. Create it explicitly here as a safe catch-up.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS permission_presets (
+      id          TEXT PRIMARY KEY,
+      user_id     TEXT,
+      project_cwd TEXT NOT NULL,
+      tool        TEXT NOT NULL,
+      pattern     TEXT,
+      created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    )
+  `)
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_permission_presets_unique
+      ON permission_presets(COALESCE(user_id, ''), project_cwd, tool, COALESCE(pattern, ''))
+  `)
+  db.exec('CREATE INDEX IF NOT EXISTS idx_permission_presets_lookup ON permission_presets(user_id, project_cwd)')
 }
 
 function migrateV2MultiUser(db: Database): void {

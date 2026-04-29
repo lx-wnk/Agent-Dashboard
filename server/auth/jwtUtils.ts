@@ -30,6 +30,18 @@ export function verifyJwt(token: string, secret: string): JwtPayload | null {
     if (parts.length !== 3)
       return null
     const [header, body, sig] = parts
+
+    // Validate header claims: reject non-HS256 and non-JWT tokens
+    let headerClaims: Record<string, unknown>
+    try {
+      headerClaims = JSON.parse(Buffer.from(header, 'base64url').toString())
+    }
+    catch {
+      return null
+    }
+    if (headerClaims.alg !== 'HS256' || headerClaims.typ !== 'JWT')
+      return null
+
     const expected = sign(`${header}.${body}`, secret)
     const expectedBuf = Buffer.from(expected)
     const sigBuf = Buffer.from(sig)

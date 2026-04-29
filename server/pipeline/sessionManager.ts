@@ -1,5 +1,7 @@
 import type { PipelineStage, PipelineTask, StageRun } from '../../src/types.js'
+import { execFileSync } from 'node:child_process'
 import process from 'node:process'
+import { IS_LINUX } from '../platform.js'
 import { findStageRunBySessionId, updateStageRun } from '../db/stageRunsRepo.js'
 
 /**
@@ -20,12 +22,30 @@ export function buildSessionName(task: PipelineTask, stage: PipelineStage, itera
  * a foreign process) would then be misclassified as alive — the recovery
  * path gates further on session_id existence to recover safely.
  */
+function isPidZombie(pid: number): boolean {
+  try {
+    if (IS_LINUX) {
+      const stat = execFileSync('cat', [`/proc/${pid}/status`], { encoding: 'utf8', timeout: 500 })
+      return /^State:\s+Z/m.test(stat)
+    }
+    else {
+      // macOS: ps -p PID -o stat= returns the state character(s); 'Z' = zombie
+      const stat = execFileSync('ps', ['-p', String(pid), '-o', 'stat='], { encoding: 'utf8', timeout: 500 }).trim()
+      return stat.startsWith('Z')
+    }
+  }
+  catch {
+    return false
+  }
+}
+
 export function isPidAlive(pid: number | null): boolean {
   if (pid === null || pid <= 0)
     return false
   try {
     process.kill(pid, 0)
-    return true
+    // kill(0) succeeds for zombie processes too — verify the process isn't defunct
+    return !isPidZombie(pid)
   }
   catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EPERM')

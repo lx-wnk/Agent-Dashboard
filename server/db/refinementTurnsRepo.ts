@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './client.js'
 import { randomUUID } from 'node:crypto'
 import { getDb } from './client.js'
 

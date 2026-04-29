@@ -12,7 +12,7 @@ const mockOrchestrator = {} as unknown as PipelineOrchestrator
 
 function getRegisteredToolNames(): Set<string> {
   const scopes = new Set<never>()
-  const server = buildMcpServer(mockOrchestrator, scopes, () => {}, () => {})
+  const server = buildMcpServer(mockOrchestrator, scopes, () => {}, () => {}, null)
   // _registeredTools is a private field but is a plain object at runtime.
   // Casting through `any` is intentional here: we are testing the SDK's
   // internal registration map, which has no public API for listing names.
