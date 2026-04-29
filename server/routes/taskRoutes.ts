@@ -5,8 +5,9 @@ import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import process from 'node:process'
 import { consola } from 'consola'
 import { Router } from 'express'
-import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, VALID_STAGES } from '../constants.js'
+import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, UUID_RE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
+import { getDb } from '../db/client.js'
 import {
   listFeedbackForTask,
 } from '../db/feedbackRepo.js'
@@ -138,6 +139,16 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     next()
   })
 
+  const uuidParamGuard: express.RequestParamHandler = (_req, res, next, value) => {
+    if (!UUID_RE.test(value)) {
+      res.status(400).json({ error: 'Invalid task ID format' })
+      return
+    }
+    next()
+  }
+  router.param('id', uuidParamGuard)
+  mutationRouter.param('id', uuidParamGuard)
+
   // Convenience: broadcast a task_updated with a freshly enriched payload.
   // Plain getTaskById() returns un-enriched rows missing latestStageRunStatus
   // and needsUser — the kanban then drops the run-status chip on every event.
@@ -200,6 +211,24 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     if (stage !== undefined && (typeof stage !== 'string' || !VALID_STAGES.has(stage as PipelineStage))) {
       res.status(400).json({ error: 'invalid stage' })
       return
+    }
+    if (typeof title === 'string' && title.length > 200)
+      return void res.status(400).json({ error: 'title must be ≤ 200 characters' })
+    if (typeof description === 'string' && description.length > 10_000)
+      return void res.status(400).json({ error: 'description must be ≤ 10,000 characters' })
+    if (typeof cwd === 'string' && cwd.length > 4096)
+      return void res.status(400).json({ error: 'cwd must be ≤ 4096 characters' })
+    if (maxIterations !== undefined && maxIterations !== null) {
+      if (!Number.isInteger(maxIterations) || maxIterations < 1 || maxIterations > 100)
+        return void res.status(400).json({ error: 'maxIterations must be an integer between 1 and 100' })
+    }
+    if (tokenBudget !== undefined && tokenBudget !== null) {
+      if (!Number.isFinite(tokenBudget) || tokenBudget < 0)
+        return void res.status(400).json({ error: 'tokenBudget must be a non-negative number' })
+    }
+    if (costBudgetCents !== undefined && costBudgetCents !== null) {
+      if (!Number.isFinite(costBudgetCents) || costBudgetCents < 0)
+        return void res.status(400).json({ error: 'costBudgetCents must be a non-negative number' })
     }
 
     let initialWorktreePath: string | null = typeof worktreePath === 'string' ? worktreePath : null
@@ -285,6 +314,22 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
     // Whitelist the fields clients are allowed to update. Anything else
     // (cwd, parentTaskId, worktreePath, etc.) is intentionally off-limits.
+    if (typeof body.title === 'string' && body.title.length > 200)
+      return void res.status(400).json({ error: 'title must be ≤ 200 characters' })
+    if (typeof body.description === 'string' && body.description.length > 10_000)
+      return void res.status(400).json({ error: 'description must be ≤ 10,000 characters' })
+    if (body.maxIterations !== undefined && body.maxIterations !== null) {
+      if (!Number.isInteger(body.maxIterations) || body.maxIterations < 1 || body.maxIterations > 100)
+        return void res.status(400).json({ error: 'maxIterations must be an integer between 1 and 100' })
+    }
+    if (body.tokenBudget !== undefined && body.tokenBudget !== null) {
+      if (!Number.isFinite(body.tokenBudget) || body.tokenBudget < 0)
+        return void res.status(400).json({ error: 'tokenBudget must be a non-negative number' })
+    }
+    if (body.costBudgetCents !== undefined && body.costBudgetCents !== null) {
+      if (!Number.isFinite(body.costBudgetCents) || body.costBudgetCents < 0)
+        return void res.status(400).json({ error: 'costBudgetCents must be a non-negative number' })
+    }
     const allowed: Record<string, unknown> = {}
     if (typeof body.title === 'string')
       allowed.title = body.title
@@ -329,7 +374,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     // Broadcast + respond first so the UI updates immediately. Worktree
     // cleanup happens after — a stale directory is a cleanup concern, not
     // a UX concern, and `git worktree remove` can block on lock files.
-    deps.broadcastTaskEvent({ type: 'task_deleted', taskId: req.params.id })
+    deps.broadcastTaskEvent({ type: 'task_deleted', taskId: req.params.id, payload: { userId: task.userId } })
     res.status(204).end()
 
     if (task.worktreePath) {
@@ -705,8 +750,20 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'request not found' })
       return
     }
-    const resolved = resolvePermissionRequest(req.params.id, outcome)
-    if (run) {
+    // Kill the idle stage agent BEFORE the DB transaction — process signaling
+    // is not a DB operation and must stay outside the atomic write block.
+    const shouldRestartRun = outcome === 'granted' && run.status === 'awaiting_user'
+    if (shouldRestartRun && run.pid !== null) {
+      try {
+        process.kill(run.pid, 'SIGTERM')
+      }
+      catch { /* already dead */ }
+    }
+
+    let resolved: ReturnType<typeof resolvePermissionRequest> | null = null
+    const db = getDb()
+    db.transaction(() => {
+      resolved = resolvePermissionRequest(req.params.id, outcome)
       // If granted, persist a permission row so the tool stays unlocked for the task
       if (outcome === 'granted') {
         createTaskPermission({
@@ -721,18 +778,13 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         // Resume-after-grant pattern: when the run was paused at awaiting_user
         // for this permission, the spawned claude process cannot pick the
         // newly-granted permission up mid-conversation — its
-        // .claude/settings.json was written at spawn time. Kill the idle
-        // process, mark the stage_run failed, then re-spawn with --resume
-        // pointing at the same session so the agent continues exactly where
-        // it left off (with the just-granted permission now in settings.json).
-        // If session_id is null (not yet attached), falls back to a fresh spawn.
-        if (run.status === 'awaiting_user') {
-          if (run.pid !== null) {
-            try {
-              process.kill(run.pid, 'SIGTERM')
-            }
-            catch { /* already dead */ }
-          }
+        // .claude/settings.json was written at spawn time. The SIGTERM above
+        // killed the idle process; here we mark the stage_run failed so the
+        // re-spawn (below, after the transaction) can pick up with --resume
+        // pointing at the same session and the just-granted permission now
+        // in settings.json. If session_id is null (not yet attached), falls
+        // back to a fresh spawn.
+        if (shouldRestartRun) {
           updateStageRun(run.id, {
             status: 'failed',
             output: { error: 'restarting after permission grant' },
@@ -749,24 +801,29 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
               stageRunId: run.id,
             },
           })
-          const handoffNote = `[PERMISSION GRANTED] You requested permission for "${existing.tool}"${existing.pattern ? ` (${existing.pattern})` : ''}. It has been granted. Resume exactly where you left off.`
-          await deps.orchestrator.progressTask(run.taskId, {
-            resumeSessionId: run.sessionId ?? undefined,
-            userAdditionalPrompt: handoffNote,
-          })
         }
-        else {
-          // Normal resume path — agent never paused (race) or already finished.
-          await deps.orchestrator.resumeFromUser(run.taskId)
-        }
+      }
+    })()
+
+    if (outcome === 'granted') {
+      if (shouldRestartRun) {
+        const handoffNote = `[PERMISSION GRANTED] You requested permission for "${existing.tool}"${existing.pattern ? ` (${existing.pattern})` : ''}. It has been granted. Resume exactly where you left off.`
+        await deps.orchestrator.progressTask(run.taskId, {
+          resumeSessionId: run.sessionId ?? undefined,
+          userAdditionalPrompt: handoffNote,
+        })
       }
       else {
-        // outcome === 'denied' — leave the run in awaiting_user; the agent
-        // will see the denial via channel and either replan or give up.
+        // Normal resume path — agent never paused (race) or already finished.
         await deps.orchestrator.resumeFromUser(run.taskId)
       }
-      broadcastEnrichedUpdate(run.taskId)
     }
+    else {
+      // outcome === 'denied' — leave the run in awaiting_user; the agent
+      // will see the denial via channel and either replan or give up.
+      await deps.orchestrator.resumeFromUser(run.taskId)
+    }
+    broadcastEnrichedUpdate(run.taskId)
     res.json(resolved)
   })
 
@@ -835,7 +892,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         res.status(409).json({ error: 'Dependency already exists' })
         return
       }
-      throw err
+      consola.error('[taskRoutes] addDependency failed:', err)
+      res.status(500).json({ error: 'Internal error' })
     }
   })
 
