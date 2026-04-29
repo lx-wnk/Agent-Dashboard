@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import expressLib from 'express'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDb, getDb } from '../db/client.js'
 import { addDependency } from '../db/taskDependenciesRepo.js'
 import { createTask, updateTask } from '../db/tasksRepo.js'
@@ -312,6 +312,68 @@ describe('permission request resolution', () => {
     })
     expect(status).toBe(400)
   })
+
+  it('passes resumeSessionId and handoff note to progressTask when session is attached', async () => {
+    const spy = vi.spyOn(orchestrator, 'progressTask')
+    try {
+      const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+        slug: 'rs',
+        title: 'RS',
+        cwd: '/rs',
+      })
+
+      const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      updateStageRun(run.id, { status: 'awaiting_user', sessionId: 'test-session-xyz' })
+
+      const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
+        stageRunId: run.id,
+        tool: 'Bash',
+        pattern: 'git *',
+      })
+
+      await api('POST', `/permission-requests/${reqRow.id}/resolve`, { outcome: 'granted' })
+
+      expect(spy).toHaveBeenCalledWith(
+        task.id,
+        expect.objectContaining({
+          resumeSessionId: 'test-session-xyz',
+          userAdditionalPrompt: expect.stringContaining('[PERMISSION GRANTED]'),
+        }),
+      )
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('passes only handoff note (no resumeSessionId) when session_id is null', async () => {
+    const spy = vi.spyOn(orchestrator, 'progressTask')
+    try {
+      const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+        slug: 'rn',
+        title: 'RN',
+        cwd: '/rn',
+      })
+
+      const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      updateStageRun(run.id, { status: 'awaiting_user' }) // sessionId remains null
+
+      const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
+        stageRunId: run.id,
+        tool: 'WebFetch',
+      })
+
+      await api('POST', `/permission-requests/${reqRow.id}/resolve`, { outcome: 'granted' })
+
+      expect(spy).toHaveBeenCalledOnce()
+      const [, opts] = spy.mock.calls[0]!
+      expect(opts?.resumeSessionId).toBeUndefined()
+      expect(opts?.userAdditionalPrompt).toContain('[PERMISSION GRANTED]')
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })
 
 describe('pipeline config', () => {
@@ -499,7 +561,7 @@ describe('dependency routes', () => {
   })
 
   it('pOST /tasks/:id/dependencies returns 404 when task not found', async () => {
-    const { status } = await api('POST', '/tasks/nonexistent-id/dependencies', { dependsOnId: 'other-id' })
+    const { status } = await api('POST', '/tasks/00000000-0000-4000-8000-000000000000/dependencies', { dependsOnId: '00000000-0000-4000-8000-000000000001' })
     expect(status).toBe(404)
   })
 

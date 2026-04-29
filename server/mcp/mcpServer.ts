@@ -13,13 +13,14 @@ export function buildMcpServer(
   scopes: Set<McpScope>,
   broadcast: (taskId: string) => void,
   broadcastDeleted: (taskId: string) => void,
+  callerUserId: string | null,
 ): McpServer {
   const server = new McpServer({ name: 'dashboard-tasks', version: '1.0.0' })
   const tool = makeToolRegistrar(server, scopes)
 
-  registerReadTools(tool)
-  registerWriteTools(tool, broadcast, broadcastDeleted)
-  registerControlTools(tool, orchestrator, broadcast)
+  registerReadTools(tool, callerUserId)
+  registerWriteTools(tool, broadcast, broadcastDeleted, callerUserId)
+  registerControlTools(tool, orchestrator, broadcast, callerUserId)
   registerDependencyTools(tool, broadcast)
   registerKeyTools(tool)
 

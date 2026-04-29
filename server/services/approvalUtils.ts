@@ -3,7 +3,17 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { appendAudit } from '../db/auditRepo.js'
 import { createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
+import { listPresets, upsertPreset } from '../db/permissionPresetsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
+
+// Matches Bash patterns that could fetch or execute remote code — used to
+// block automatic pre-approval of potentially dangerous commands from
+// agent-emitted toolRequests. Operators can still grant these manually.
+const DANGEROUS_BASH_RE = /curl|wget|nc\b|netcat|python\s+-c|perl\s+-e|ruby\s+-e|eval\b|base64\s+-d|[;&|`]|\$\(|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/i
+
+function isDangerousBashPattern(pattern: string): boolean {
+  return DANGEROUS_BASH_RE.test(pattern)
+}
 
 // Kept here (not in src/types.ts) because it is a runtime enforcement concern
 // for pipeline permission gates, not a shared type contract.
@@ -46,6 +56,8 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
     const patternTrimmed = typeof r.pattern === 'string' ? r.pattern.trim() : ''
     const pattern = patternTrimmed ? patternTrimmed : null
     if (!tool || !ALLOWED_TOOLS.has(tool))
+      continue
+    if (tool === 'Bash' && pattern && isDangerousBashPattern(pattern))
       continue
     const alreadyGranted = existing.some(p => p.tool === tool && (p.pattern ?? null) === pattern && p.granted)
     if (alreadyGranted)
@@ -197,4 +209,70 @@ export function bulkGrantAgentFilePermissions(taskId: string, cwd: string): void
     action: 'bulk_granted_agent_file_permissions',
     details: { sources: usedSources, count: granted },
   })
+}
+
+/**
+ * Applies (user, project) preset permissions onto a task. Skips entries
+ * that are already granted on the task and tools outside ALLOWED_TOOLS.
+ * Returns the number of newly-created grants.
+ */
+export function applyPresetPermissions(
+  taskId: string,
+  userId: string | null,
+  projectCwd: string,
+): number {
+  const presets = listPresets(userId, projectCwd)
+  if (presets.length === 0)
+    return 0
+
+  const existing = listTaskPermissions(taskId)
+  let granted = 0
+  for (const entry of presets) {
+    if (!ALLOWED_TOOLS.has(entry.tool))
+      continue
+    const pattern = entry.pattern
+    const alreadyGranted = existing.some(
+      p => p.tool === entry.tool && (p.pattern ?? null) === pattern && p.granted,
+    )
+    if (alreadyGranted)
+      continue
+    createTaskPermission({
+      taskId,
+      tool: entry.tool,
+      pattern,
+      granted: true,
+      preApproved: true,
+      decidedBy: 'user',
+    })
+    granted++
+  }
+
+  if (granted > 0) {
+    appendAudit({
+      taskId,
+      actor: 'user',
+      action: 'applied_permission_presets',
+      details: { projectCwd, userId, count: granted },
+    })
+  }
+
+  return granted
+}
+
+/**
+ * Persists the task's currently-granted tool permissions as presets for
+ * the (user, project) pair. Idempotent: re-confirming a task with the same
+ * grants is a no-op. Skips denied/revoked entries (granted === false).
+ */
+export function saveGrantsToPresets(
+  taskId: string,
+  userId: string | null,
+  projectCwd: string,
+): void {
+  const grants = listTaskPermissions(taskId)
+  for (const p of grants) {
+    if (p.granted !== true)
+      continue
+    upsertPreset(userId, projectCwd, p.tool, p.pattern ?? null)
+  }
 }

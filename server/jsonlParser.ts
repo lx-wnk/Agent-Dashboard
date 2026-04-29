@@ -2,6 +2,7 @@ import type { OutputMessage, SessionMeta, TokenUsage } from '../src/types.js'
 import { Buffer } from 'node:buffer'
 import { open, readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { UUID_RE } from './constants.js'
 import { CLAUDE_PROJECTS_DIR, SESSION_META_DIR } from './paths.js'
 
 export type TokenUsageData = TokenUsage
@@ -36,6 +37,15 @@ export interface SubAgentData {
 
 const TAIL_BYTES = 32768 // read last 32KB
 const HEAD_BYTES = 8192 // read first 8KB for model/version
+
+interface SessionCacheEntry {
+  mtimeMs: number
+  size: number
+  result: SessionData
+}
+
+const sessionCache = new Map<string, SessionCacheEntry>()
+const SESSION_CACHE_MAX = 100 // evict oldest when exceeded
 
 export function encodePath(absolutePath: string): string {
   // Claude Code encodes /, ., and _ all as -. The dot is load-bearing:
@@ -332,6 +342,13 @@ export async function findSessionForProject(
   const selectedFile = pickBestJsonlFile(jsonlFiles, processUptimeSeconds)
   const sessionFilePath = join(projectDir, selectedFile.name)
 
+  // mtime+size cache: skip the tail-read / parse / extract path when the
+  // session JSONL hasn't changed since the last call.
+  const fileStat = await stat(sessionFilePath)
+  const cached = sessionCache.get(sessionFilePath)
+  if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size)
+    return cached.result
+
   const raw = await tailRead(sessionFilePath)
   const parsed = parseJsonlLines(raw)
   const info = extractSessionInfo(parsed)
@@ -365,7 +382,7 @@ export async function findSessionForProject(
     tokenUsage.outputTokens = meta.outputTokens
   }
 
-  return {
+  const result: SessionData = {
     sessionId: info.sessionId || sessionId,
     projectPath: cwd,
     entrypoint: info.entrypoint || 'unknown',
@@ -383,6 +400,15 @@ export async function findSessionForProject(
     toolCounts: info.toolCounts || {},
     meta,
   }
+
+  if (sessionCache.size >= SESSION_CACHE_MAX) {
+    const firstKey = sessionCache.keys().next().value
+    if (firstKey)
+      sessionCache.delete(firstKey)
+  }
+  sessionCache.set(sessionFilePath, { mtimeMs: fileStat.mtimeMs, size: fileStat.size, result })
+
+  return result
 }
 
 async function findSubagents(subagentDir: string): Promise<SubAgentData[]> {
@@ -394,53 +420,46 @@ async function findSubagents(subagentDir: string): Promise<SubAgentData[]> {
     return []
   }
 
-  const subagents: SubAgentData[] = []
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.jsonl'))
-      continue
+  const results = await Promise.all(
+    entries
+      .filter(entry => entry.isFile() && entry.name.endsWith('.jsonl'))
+      .map(async (entry) => {
+        const filePath = join(subagentDir, entry.name)
+        const s = await stat(filePath)
+        const raw = await tailRead(filePath)
+        const parsed = parseJsonlLines(raw)
 
-    const filePath = join(subagentDir, entry.name)
-    const s = await stat(filePath)
-    const raw = await tailRead(filePath)
-    const parsed = parseJsonlLines(raw)
-
-    // Extract subagent type from first user message (usually contains the task description)
-    let type = 'unknown'
-    let currentAction: string | null = null
-    for (const e of parsed) {
-      if (e.type === 'user' && e.message?.content) {
-        const text = typeof e.message.content === 'string'
-          ? e.message.content
-          : Array.isArray(e.message.content)
-            ? e.message.content.find((b: any) => b.type === 'text')?.text || ''
-            : ''
-        if (text.length > 0) {
-          type = text.substring(0, 80)
-        }
-      }
-      if (e.type === 'assistant' && e.message?.content && Array.isArray(e.message.content)) {
-        for (const block of e.message.content) {
-          if (block.type === 'tool_use') {
-            currentAction = block.name
+        let type = 'unknown'
+        let currentAction: string | null = null
+        for (const e of parsed) {
+          if (e.type === 'user' && e.message?.content) {
+            const text = typeof e.message.content === 'string'
+              ? e.message.content
+              : Array.isArray(e.message.content)
+                ? e.message.content.find((b: any) => b.type === 'text')?.text || ''
+                : ''
+            if (text.length > 0)
+              type = text.substring(0, 80)
+          }
+          if (e.type === 'assistant' && e.message?.content && Array.isArray(e.message.content)) {
+            for (const block of e.message.content) {
+              if (block.type === 'tool_use')
+                currentAction = block.name
+            }
           }
         }
-      }
-    }
 
-    // Subagent is "active" if file was modified recently (within 60s)
-    const age = Date.now() - s.mtime.getTime()
-    const status = age < 60000 ? 'active' : 'completed'
-
-    subagents.push({
-      id: entry.name.replace('.jsonl', ''),
-      type,
-      status,
-      currentAction,
-      sessionFile: filePath,
-    })
-  }
-
-  return subagents
+        const age = Date.now() - s.mtime.getTime()
+        return {
+          id: entry.name.replace('.jsonl', ''),
+          type,
+          status: (age < 60000 ? 'active' : 'completed') as 'active' | 'completed',
+          currentAction,
+          sessionFile: filePath,
+        } satisfies SubAgentData
+      }),
+  )
+  return results
 }
 
 /**
@@ -469,6 +488,8 @@ function stripSystemTags(text: string): string {
 }
 
 export async function parseFullSession(sessionId: string, lastOnly: boolean = false): Promise<OutputMessage[]> {
+  if (!UUID_RE.test(sessionId))
+    return []
   const projectDirs = await readdir(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
   let sessionFilePath: string | null = null
 

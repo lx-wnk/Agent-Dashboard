@@ -1,7 +1,7 @@
 import type { makeToolRegistrar } from '../mcpAuth.js'
 import { z } from 'zod'
 import { SLUG_PATTERN_MESSAGE, SLUG_RE } from '../../constants.js'
-import { createTask, deleteTask, getTaskBySlug, updateTask } from '../../db/tasksRepo.js'
+import { createTask, deleteTask, getTaskById, getTaskBySlug, updateTask } from '../../db/tasksRepo.js'
 import { mcpError, ok } from '../mcpAuth.js'
 
 type ToolFn = ReturnType<typeof makeToolRegistrar>
@@ -10,6 +10,7 @@ export function registerWriteTools(
   tool: ToolFn,
   broadcast: (taskId: string) => void,
   broadcastDeleted: (taskId: string) => void,
+  callerUserId: string | null,
 ): void {
   tool(
     'create_task',
@@ -65,6 +66,11 @@ export function registerWriteTools(
       metadata: z.record(z.string(), z.unknown()).nullable().optional(),
     },
     async ({ id, ...fields }) => {
+      const existing = getTaskById(id)
+      if (!existing)
+        mcpError(`Task not found: ${id}`)
+      if (callerUserId !== null && existing.userId !== null && existing.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       const task = updateTask(id, fields)
       if (!task)
         mcpError(`Task not found: ${id}`)
@@ -77,6 +83,11 @@ export function registerWriteTools(
     'delete_task',
     { id: z.string() },
     async ({ id }) => {
+      const existing = getTaskById(id)
+      if (!existing)
+        mcpError(`Task not found: ${id}`)
+      if (callerUserId !== null && existing.userId !== null && existing.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       const deleted = deleteTask(id)
       if (!deleted)
         mcpError(`Task not found: ${id}`)

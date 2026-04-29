@@ -10,14 +10,17 @@ import { mcpError, ok } from '../mcpAuth.js'
 
 type ToolFn = ReturnType<typeof makeToolRegistrar>
 
-export function registerReadTools(tool: ToolFn): void {
+export function registerReadTools(tool: ToolFn, callerUserId: string | null): void {
   tool(
     'list_tasks',
     { stage: z.string().optional().describe('Filter by pipeline stage') },
     async ({ stage }) => {
       if (stage && !VALID_STAGES.has(stage as PipelineStage))
         mcpError(`Invalid stage: ${stage}`)
-      const tasks = stage ? listTasksByStage(stage as PipelineStage) : listTasks()
+      const all = stage ? listTasksByStage(stage as PipelineStage) : listTasks()
+      const tasks = callerUserId === null
+        ? all
+        : all.filter(t => t.userId === callerUserId || t.userId === null)
       return ok(tasks)
     },
   )
@@ -29,6 +32,8 @@ export function registerReadTools(tool: ToolFn): void {
       const task = getTaskById(id_or_slug) ?? getTaskBySlug(id_or_slug)
       if (!task)
         mcpError(`Task not found: ${id_or_slug}`)
+      if (callerUserId !== null && task.userId !== null && task.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       return ok(task)
     },
   )
@@ -37,8 +42,11 @@ export function registerReadTools(tool: ToolFn): void {
     'list_stage_runs',
     { task_id: z.string() },
     async ({ task_id }) => {
-      if (!getTaskById(task_id))
+      const task = getTaskById(task_id)
+      if (!task)
         mcpError(`Task not found: ${task_id}`)
+      if (callerUserId !== null && task.userId !== null && task.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       return ok(listStageRunsForTask(task_id))
     },
   )
@@ -47,8 +55,11 @@ export function registerReadTools(tool: ToolFn): void {
     'list_audit',
     { task_id: z.string() },
     async ({ task_id }) => {
-      if (!getTaskById(task_id))
+      const task = getTaskById(task_id)
+      if (!task)
         mcpError(`Task not found: ${task_id}`)
+      if (callerUserId !== null && task.userId !== null && task.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       return ok(listAuditForTask(task_id))
     },
   )
@@ -57,8 +68,11 @@ export function registerReadTools(tool: ToolFn): void {
     'list_permission_requests',
     { task_id: z.string() },
     async ({ task_id }) => {
-      if (!getTaskById(task_id))
+      const task = getTaskById(task_id)
+      if (!task)
         mcpError(`Task not found: ${task_id}`)
+      if (callerUserId !== null && task.userId !== null && task.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       const runs = listStageRunsForTask(task_id)
       const requests = runs.flatMap(r => listPendingPermissionRequests(r.id))
       return ok(requests)

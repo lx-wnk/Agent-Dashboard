@@ -5,8 +5,9 @@ import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import process from 'node:process'
 import { consola } from 'consola'
 import { Router } from 'express'
-import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, VALID_STAGES } from '../constants.js'
+import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, UUID_RE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
+import { getDb } from '../db/client.js'
 import {
   listFeedbackForTask,
 } from '../db/feedbackRepo.js'
@@ -22,6 +23,7 @@ import {
 } from '../db/permissionsRepo.js'
 import {
   getLatestStageRunForTask,
+  getLatestStageRunsForTasks,
   getStageRunById,
   listStageRunsForTask,
   updateStageRun,
@@ -125,6 +127,36 @@ export function enrichTask(task: PipelineTask): PipelineTask {
   }
 }
 
+/**
+ * Bulk version of enrichTask — fetches all latest stage runs in one DB query.
+ * Use this for list endpoints; use enrichTask for single-task responses.
+ */
+export function enrichTasksBulk(tasks: PipelineTask[]): PipelineTask[] {
+  if (tasks.length === 0)
+    return []
+  const latestRunMap = getLatestStageRunsForTasks(tasks.map(t => t.id))
+  return tasks.map((task) => {
+    const latest = latestRunMap.get(task.id) ?? null
+    const latestBelongsToCurrent = latest?.stage === task.currentStage
+    const latestStatus = latestBelongsToCurrent ? (latest?.status ?? null) : null
+    const currentIteration = latestBelongsToCurrent ? (latest?.iteration ?? 0) : 0
+    const hasPendingPermissions
+      = latestBelongsToCurrent
+      && latestStatus === 'running'
+      && latest != null
+      && listPendingPermissionRequests(latest.id).length > 0
+    const needsUser
+      = USER_WAIT_STAGES.has(task.currentStage)
+      || latestStatus === 'awaiting_user'
+      || latestStatus === 'on_hold'
+      || latestStatus === 'failed'
+      || hasPendingPermissions
+    const activeSessionId = latest?.sessionId ?? null
+    const activePid = latest?.status === 'running' ? (latest?.pid ?? null) : null
+    return { ...task, needsUser, latestStageRunStatus: latestStatus, currentIteration, activeSessionId, activePid }
+  })
+}
+
 export function createTaskRouter(deps: TaskRouterDeps): Router {
   const router = Router()
 
@@ -137,6 +169,16 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       return
     next()
   })
+
+  const uuidParamGuard: express.RequestParamHandler = (_req, res, next, value) => {
+    if (!UUID_RE.test(value)) {
+      res.status(400).json({ error: 'Invalid task ID format' })
+      return
+    }
+    next()
+  }
+  router.param('id', uuidParamGuard)
+  mutationRouter.param('id', uuidParamGuard)
 
   // Convenience: broadcast a task_updated with a freshly enriched payload.
   // Plain getTaskById() returns un-enriched rows missing latestStageRunStatus
@@ -159,10 +201,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         return
       }
       const all = listTasksForUser(user.id, user.isAdmin)
-      res.json(all.filter(t => t.currentStage === stage).map(enrichTask))
+      res.json(enrichTasksBulk(all.filter(t => t.currentStage === stage)))
       return
     }
-    res.json(listTasksForUser(user.id, user.isAdmin).map(enrichTask))
+    res.json(enrichTasksBulk(listTasksForUser(user.id, user.isAdmin)))
   })
 
   router.get('/tasks/:id', (req, res) => {
@@ -201,6 +243,24 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(400).json({ error: 'invalid stage' })
       return
     }
+    if (typeof title === 'string' && title.length > 200)
+      return void res.status(400).json({ error: 'title must be ≤ 200 characters' })
+    if (typeof description === 'string' && description.length > 10_000)
+      return void res.status(400).json({ error: 'description must be ≤ 10,000 characters' })
+    if (typeof cwd === 'string' && cwd.length > 4096)
+      return void res.status(400).json({ error: 'cwd must be ≤ 4096 characters' })
+    if (maxIterations !== undefined && maxIterations !== null) {
+      if (!Number.isInteger(maxIterations) || maxIterations < 1 || maxIterations > 100)
+        return void res.status(400).json({ error: 'maxIterations must be an integer between 1 and 100' })
+    }
+    if (tokenBudget !== undefined && tokenBudget !== null) {
+      if (!Number.isFinite(tokenBudget) || tokenBudget < 0)
+        return void res.status(400).json({ error: 'tokenBudget must be a non-negative number' })
+    }
+    if (costBudgetCents !== undefined && costBudgetCents !== null) {
+      if (!Number.isFinite(costBudgetCents) || costBudgetCents < 0)
+        return void res.status(400).json({ error: 'costBudgetCents must be a non-negative number' })
+    }
 
     let initialWorktreePath: string | null = typeof worktreePath === 'string' ? worktreePath : null
     let weCreatedWorktree = false
@@ -217,8 +277,9 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         weCreatedWorktree = true
       }
       catch (err) {
+        consola.error('[task] worktree creation failed:', err)
         res.status(400).json({
-          error: `worktree creation failed: ${(err as Error).message}`,
+          error: 'Failed to create worktree',
         })
         return
       }
@@ -261,7 +322,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
           )
         }
       }
-      res.status(500).json({ error: (err as Error).message })
+      consola.error('[task] createTask failed:', err)
+      res.status(500).json({ error: 'Internal error' })
     }
   })
 
@@ -285,6 +347,22 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
     // Whitelist the fields clients are allowed to update. Anything else
     // (cwd, parentTaskId, worktreePath, etc.) is intentionally off-limits.
+    if (typeof body.title === 'string' && body.title.length > 200)
+      return void res.status(400).json({ error: 'title must be ≤ 200 characters' })
+    if (typeof body.description === 'string' && body.description.length > 10_000)
+      return void res.status(400).json({ error: 'description must be ≤ 10,000 characters' })
+    if (body.maxIterations !== undefined && body.maxIterations !== null) {
+      if (!Number.isInteger(body.maxIterations) || body.maxIterations < 1 || body.maxIterations > 100)
+        return void res.status(400).json({ error: 'maxIterations must be an integer between 1 and 100' })
+    }
+    if (body.tokenBudget !== undefined && body.tokenBudget !== null) {
+      if (!Number.isFinite(body.tokenBudget) || body.tokenBudget < 0)
+        return void res.status(400).json({ error: 'tokenBudget must be a non-negative number' })
+    }
+    if (body.costBudgetCents !== undefined && body.costBudgetCents !== null) {
+      if (!Number.isFinite(body.costBudgetCents) || body.costBudgetCents < 0)
+        return void res.status(400).json({ error: 'costBudgetCents must be a non-negative number' })
+    }
     const allowed: Record<string, unknown> = {}
     if (typeof body.title === 'string')
       allowed.title = body.title
@@ -329,7 +407,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     // Broadcast + respond first so the UI updates immediately. Worktree
     // cleanup happens after — a stale directory is a cleanup concern, not
     // a UX concern, and `git worktree remove` can block on lock files.
-    deps.broadcastTaskEvent({ type: 'task_deleted', taskId: req.params.id })
+    deps.broadcastTaskEvent({ type: 'task_deleted', taskId: req.params.id, payload: { userId: task.userId } })
     res.status(204).end()
 
     if (task.worktreePath) {
@@ -361,105 +439,6 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     const task = getTaskById(req.params.id)
     broadcastEnrichedUpdate(req.params.id)
     res.json({ task, stageRun: run })
-  })
-
-  mutationRouter.post('/tasks/:id/approve', async (req, res) => {
-    const task = getTaskById(req.params.id)
-    if (!task || !canAccessTask(task, req.user!)) {
-      res.status(404).json({ error: 'Task not found' })
-      return
-    }
-    // Approve advances the task past an awaiting_user gate.
-    const nextMap: Record<string, PipelineStage> = {
-      approval1: 'umsetzungskonzept',
-      approval2: 'umsetzung',
-    }
-    const next = nextMap[task.currentStage]
-    if (!next) {
-      res.status(409).json({ error: `Task in stage ${task.currentStage} cannot be approved` })
-      return
-    }
-
-    // approval2 → umsetzung: bulk-grant the tool permissions the agent
-    // declared in its umsetzungskonzept output. This converts the agent's
-    // own planning ("I will need Bash(npm run *) and Write") into pre-approved
-    // entries that writeSettingsFile picks up when spawning the umsetzung
-    // agent — so the agent doesn't hit an interactive permission wall.
-    //
-    // Deduplication: skip any (tool, pattern) pair that is already granted
-    // so a double-click or re-approve doesn't create ghost rows.
-    if (task.currentStage === 'approval2')
-      bulkGrantKonzeptPermissions(task.id)
-
-    updateTask(req.params.id, { currentStage: next })
-    const updated = getTaskById(req.params.id)
-    broadcastEnrichedUpdate(req.params.id)
-    res.json(updated)
-  })
-
-  // ─── Request changes on an approval gate ────────────────
-  //
-  // The user rejected the artifact under review (plan or umsetzungskonzept)
-  // and supplied feedback text. We:
-  //   1. store the feedback in task_feedback (linked to the latest done
-  //      stage_run on the reviewed stage for audit)
-  //   2. regress task.currentStage to the reviewed stage so the
-  //      orchestrator's tick() spawns a fresh iteration
-  //   3. write an audit entry
-  // The orchestrator's next applyTransition on that stage will mark all
-  // unresolved feedback as resolved via resolveFeedbackForStage.
-  mutationRouter.post('/tasks/:id/request-changes', (req, res) => {
-    const task = getTaskById(req.params.id)
-    if (!task || !canAccessTask(task, req.user!)) {
-      res.status(404).json({ error: 'Task not found' })
-      return
-    }
-    const stageMap: Record<string, 'planning' | 'umsetzungskonzept'> = {
-      approval1: 'planning',
-      approval2: 'umsetzungskonzept',
-    }
-    const regressionStage = stageMap[task.currentStage]
-    if (!regressionStage) {
-      res.status(409).json({ error: `Task in stage ${task.currentStage} cannot receive change requests` })
-      return
-    }
-    const body = (req.body ?? {}) as { feedback?: unknown }
-    const feedbackText = typeof body.feedback === 'string' ? body.feedback.trim() : ''
-    if (feedbackText.length === 0) {
-      res.status(400).json({ error: 'feedback is required' })
-      return
-    }
-    if (feedbackText.length > 4000) {
-      res.status(400).json({ error: 'feedback too long (max 4000 chars)' })
-      return
-    }
-    // Link the feedback to the stage_run whose output was rejected, so
-    // the audit trail can answer "which plan did the user push back on?"
-    const priorRuns = listStageRunsForTask(task.id)
-      .filter(r => r.stage === regressionStage && r.status === 'done')
-    const priorRun = priorRuns.length > 0 ? priorRuns[priorRuns.length - 1] : null
-
-    const feedbackRow = createFeedback({
-      taskId: task.id,
-      stage: regressionStage,
-      stageRunId: priorRun?.id ?? null,
-      feedback: feedbackText,
-    })
-    updateTask(req.params.id, { currentStage: regressionStage })
-    appendAudit({
-      taskId: task.id,
-      actor: 'user',
-      action: 'request_changes',
-      details: {
-        fromStage: task.currentStage,
-        toStage: regressionStage,
-        feedbackId: feedbackRow.id,
-        iteration: feedbackRow.iteration,
-      },
-    })
-    const updated = getTaskById(req.params.id)
-    broadcastEnrichedUpdate(req.params.id)
-    res.json({ task: updated, feedback: feedbackRow })
   })
 
   router.get('/tasks/:id/feedback', (req, res) => {
@@ -506,13 +485,16 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(409).json({ error: 'Task has no failed stage run to retry on its current stage' })
       return
     }
+    const { additionalPrompt } = req.body ?? {}
     appendAudit({
       taskId: task.id,
       actor: 'user',
       action: 'retry_requested',
       details: { stage: latest.stage, iteration: latest.iteration },
     })
-    const run = await deps.orchestrator.progressTask(task.id)
+    const run = await deps.orchestrator.progressTask(task.id, {
+      userAdditionalPrompt: typeof additionalPrompt === 'string' && additionalPrompt.trim() ? additionalPrompt.trim() : undefined,
+    })
     if (!run) {
       res.status(409).json({ error: 'Task could not progress (slot full, no handler, or terminal)' })
       return
@@ -547,6 +529,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(409).json({ error: 'Failed stage run has no session_id to resume from' })
       return
     }
+    const { additionalPrompt: resumeAdditionalPrompt } = req.body ?? {}
     appendAudit({
       taskId: task.id,
       actor: 'user',
@@ -559,6 +542,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     })
     const run = await deps.orchestrator.progressTask(task.id, {
       resumeSessionId: latest.sessionId,
+      userAdditionalPrompt: typeof resumeAdditionalPrompt === 'string' && resumeAdditionalPrompt.trim() ? resumeAdditionalPrompt.trim() : undefined,
     })
     if (!run) {
       res.status(409).json({ error: 'Task could not progress (slot full, no handler, or terminal)' })
@@ -623,8 +607,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(202).json({ pid: result.pid, cwd: result.cwd })
     }
     catch (err) {
-      consola.error('[taskRoutes] analysis spawn failed:', err)
-      res.status(500).json({ error: (err as Error).message })
+      consola.error('[task] analyze failed:', err)
+      res.status(500).json({ error: 'Internal error' })
     }
   })
 
@@ -734,6 +718,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'stage run not found' })
       return
     }
+    const task = getTaskById(run.taskId)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'stage run not found' })
+      return
+    }
     const reqRow = createPermissionRequest({
       stageRunId,
       tool,
@@ -784,9 +773,30 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'request not found' })
       return
     }
-    const resolved = resolvePermissionRequest(req.params.id, outcome)
     const run = getStageRunById(existing.stageRunId)
-    if (run) {
+    if (!run) {
+      res.status(404).json({ error: 'request not found' })
+      return
+    }
+    const task = getTaskById(run.taskId)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'request not found' })
+      return
+    }
+    // Kill the idle stage agent BEFORE the DB transaction — process signaling
+    // is not a DB operation and must stay outside the atomic write block.
+    const shouldRestartRun = outcome === 'granted' && run.status === 'awaiting_user'
+    if (shouldRestartRun && run.pid !== null && run.pid > 1) {
+      try {
+        process.kill(run.pid, 'SIGTERM')
+      }
+      catch { /* already dead */ }
+    }
+
+    let resolved: ReturnType<typeof resolvePermissionRequest> | null = null
+    const db = getDb()
+    db.transaction(() => {
+      resolved = resolvePermissionRequest(req.params.id, outcome)
       // If granted, persist a permission row so the tool stays unlocked for the task
       if (outcome === 'granted') {
         createTaskPermission({
@@ -798,20 +808,16 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
           decidedBy: 'user',
         })
 
-        // Auto-restart pattern: when the run was paused at awaiting_user
-        // for this permission, the spawned claude process can't pick the
+        // Resume-after-grant pattern: when the run was paused at awaiting_user
+        // for this permission, the spawned claude process cannot pick the
         // newly-granted permission up mid-conversation — its
-        // .claude/settings.json was written at spawn time. Kill the idle
-        // process, mark the stage_run failed, and trigger a fresh
-        // iteration which will re-read permissions and re-render the
-        // settings file with the just-granted entry.
-        if (run.status === 'awaiting_user') {
-          if (run.pid !== null) {
-            try {
-              process.kill(run.pid, 'SIGTERM')
-            }
-            catch { /* already dead */ }
-          }
+        // .claude/settings.json was written at spawn time. The SIGTERM above
+        // killed the idle process; here we mark the stage_run failed so the
+        // re-spawn (below, after the transaction) can pick up with --resume
+        // pointing at the same session and the just-granted permission now
+        // in settings.json. If session_id is null (not yet attached), falls
+        // back to a fresh spawn.
+        if (shouldRestartRun) {
           updateStageRun(run.id, {
             status: 'failed',
             output: { error: 'restarting after permission grant' },
@@ -828,20 +834,29 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
               stageRunId: run.id,
             },
           })
-          await deps.orchestrator.progressTask(run.taskId)
         }
-        else {
-          // Normal resume path — agent never paused (race) or already finished.
-          await deps.orchestrator.resumeFromUser(run.taskId)
-        }
+      }
+    })()
+
+    if (outcome === 'granted') {
+      if (shouldRestartRun) {
+        const handoffNote = `[PERMISSION GRANTED] You requested permission for "${existing.tool}"${existing.pattern ? ` (${existing.pattern})` : ''}. It has been granted. Resume exactly where you left off.`
+        await deps.orchestrator.progressTask(run.taskId, {
+          resumeSessionId: run.sessionId ?? undefined,
+          userAdditionalPrompt: handoffNote,
+        })
       }
       else {
-        // outcome === 'denied' — leave the run in awaiting_user; the agent
-        // will see the denial via channel and either replan or give up.
+        // Normal resume path — agent never paused (race) or already finished.
         await deps.orchestrator.resumeFromUser(run.taskId)
       }
-      broadcastEnrichedUpdate(run.taskId)
     }
+    else {
+      // outcome === 'denied' — leave the run in awaiting_user; the agent
+      // will see the denial via channel and either replan or give up.
+      await deps.orchestrator.resumeFromUser(run.taskId)
+    }
+    broadcastEnrichedUpdate(run.taskId)
     res.json(resolved)
   })
 
@@ -910,7 +925,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         res.status(409).json({ error: 'Dependency already exists' })
         return
       }
-      throw err
+      consola.error('[taskRoutes] addDependency failed:', err)
+      res.status(500).json({ error: 'Internal error' })
     }
   })
 
@@ -951,6 +967,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         return
       }
       setPipelineConfig('maxParallelOrchestrators', String(Math.floor(n)))
+      deps.orchestrator.invalidateConfigCache()
     }
     res.json({
       maxParallelOrchestrators: getPipelineConfigNumber('maxParallelOrchestrators', 3),

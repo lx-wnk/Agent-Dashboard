@@ -1,11 +1,18 @@
 import { execFile } from 'node:child_process'
-import { readdir, readFile, unlink } from 'node:fs/promises'
+import { readdir, readFile, stat, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
 import { promisify } from 'node:util'
 import { DISCOVERY_DIR, WHITESPACE_RE } from './paths.js'
 
 const execFileAsync = promisify(execFile)
+
+interface ChannelCacheEntry {
+  mtimeMs: number
+  pid: number | null // resolved Claude ancestor PID
+}
+
+const channelCache = new Map<string, ChannelCacheEntry>()
 
 interface DiscoveryEntry {
   port: number
@@ -33,36 +40,41 @@ function isAlive(pid: number): boolean {
 }
 
 /**
- * Walk up the process tree from `startPid` to find the nearest ancestor
- * whose command ends with `/claude` or equals `claude`.
+ * Build a process-info map from a single `ps -A` invocation.
+ * Returns Map<pid, { ppid, comm }> for all visible processes.
+ */
+async function getProcessMap(): Promise<Map<number, { ppid: number, comm: string }>> {
+  const map = new Map<number, { ppid: number, comm: string }>()
+  try {
+    const { stdout } = await execFileAsync('ps', ['-A', '-o', 'pid=,ppid=,comm='])
+    for (const line of stdout.split('\n')) {
+      const parts = line.trim().split(WHITESPACE_RE)
+      if (parts.length < 3)
+        continue
+      const pid = Number.parseInt(parts[0], 10)
+      const ppid = Number.parseInt(parts[1], 10)
+      const comm = parts.slice(2).join(' ')
+      if (!Number.isNaN(pid) && !Number.isNaN(ppid))
+        map.set(pid, { ppid, comm })
+    }
+  }
+  catch { /* ps unavailable */ }
+  return map
+}
+
+/**
+ * Walk up the process tree (in memory) to find the nearest claude ancestor.
  * Returns the ancestor PID or null if not found within 5 levels.
  */
-async function findClaudeAncestor(startPid: number): Promise<number | null> {
+function findClaudeAncestorInMap(startPid: number, processMap: Map<number, { ppid: number, comm: string }>): number | null {
   let currentPid = startPid
   for (let depth = 0; depth < 5; depth++) {
-    try {
-      // ps -p <pid> -o ppid=,comm= outputs the ppid and comm of <pid>
-      const { stdout } = await execFileAsync('ps', ['-p', String(currentPid), '-o', 'ppid=,comm='])
-      const trimmed = stdout.trim()
-      if (!trimmed)
-        return null
-
-      const parts = trimmed.split(WHITESPACE_RE)
-      const ppid = Number.parseInt(parts[0], 10)
-      const comm = parts.slice(1).join(' ')
-
-      if (Number.isNaN(ppid) || ppid <= 1)
-        return null
-
-      // comm belongs to currentPid, so return currentPid when it matches
-      if (comm.endsWith('/claude') || comm === 'claude')
-        return currentPid
-
-      currentPid = ppid
-    }
-    catch {
+    const info = processMap.get(currentPid)
+    if (!info || info.ppid <= 1)
       return null
-    }
+    if (info.comm.endsWith('/claude') || info.comm === 'claude')
+      return currentPid
+    currentPid = info.ppid
   }
   return null
 }
@@ -78,6 +90,8 @@ export async function getChannelMap(): Promise<Map<number, ChannelInfo>> {
     return result
   }
 
+  const processMap = await getProcessMap()
+
   await Promise.all(files.map(async (file) => {
     const filePath = join(DISCOVERY_DIR, file)
     try {
@@ -86,16 +100,36 @@ export async function getChannelMap(): Promise<Map<number, ChannelInfo>> {
 
       if (!isAlive(entry.parentPid)) {
         await unlink(filePath).catch(() => {})
+        channelCache.delete(filePath)
         return
       }
 
       const info: ChannelInfo = { port: entry.port, token: entry.token, cwd: entry.cwd }
 
-      // Try to find the actual claude process by walking up the tree.
-      // process.ppid in the MCP server points to the tsx/node wrapper,
-      // not the claude process itself. We need the claude PID to match
-      // against what processScanner reports.
-      const claudePid = await findClaudeAncestor(entry.parentPid)
+      // mtime cache: avoid re-walking the in-memory process tree per
+      // discovery file when the file hasn't changed since the last walk.
+      // Discovery files are written once at MCP server startup, so the
+      // mtime almost never changes.
+      let claudePid: number | null = null
+      try {
+        const fileStat = await stat(filePath)
+        const cached = channelCache.get(filePath)
+        if (cached && cached.mtimeMs === fileStat.mtimeMs) {
+          claudePid = cached.pid
+        }
+        else {
+          // Try to find the actual claude process by walking up the tree.
+          // process.ppid in the MCP server points to the tsx/node wrapper,
+          // not the claude process itself. We need the claude PID to match
+          // against what processScanner reports.
+          claudePid = findClaudeAncestorInMap(entry.parentPid, processMap)
+          channelCache.set(filePath, { mtimeMs: fileStat.mtimeMs, pid: claudePid })
+        }
+      }
+      catch {
+        claudePid = findClaudeAncestorInMap(entry.parentPid, processMap)
+      }
+
       if (claudePid !== null) {
         result.set(claudePid, info)
       }

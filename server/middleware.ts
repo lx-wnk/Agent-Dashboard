@@ -2,10 +2,17 @@ import type { NextFunction, Request, Response } from 'express'
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
 import process from 'node:process'
+import { consola } from 'consola'
+
+let _warnedNoApiToken = false
 
 export function requireApiToken(req: Request, res: Response, next: NextFunction): void {
   const apiToken = process.env.DASHBOARD_API_TOKEN
   if (!apiToken) {
+    if (!_warnedNoApiToken) {
+      consola.warn('[config] DASHBOARD_API_TOKEN is not set — API endpoints are unprotected')
+      _warnedNoApiToken = true
+    }
     next()
     return
   }

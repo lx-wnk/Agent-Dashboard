@@ -18,10 +18,15 @@ export function createAuthRouter({ host, port }: AuthRouterDeps): Router {
       res.redirect('/')
       return
     }
+    // DASHBOARD_PUBLIC_URL allows reverse-proxy deployments to use https://
+    const publicBase = process.env.DASHBOARD_PUBLIC_URL?.replace(/\/$/, '')
+    const redirectUri = publicBase
+      ? `${publicBase}/auth/callback`
+      : `http://${host}:${port}/auth/callback`
     const params = new URLSearchParams({
       client_id: process.env.GITHUB_CLIENT_ID!,
       scope: 'read:org',
-      redirect_uri: `http://${host}:${port}/auth/callback`,
+      redirect_uri: redirectUri,
     })
     res.redirect(`https://github.com/login/oauth/authorize?${params}`)
   })
@@ -52,7 +57,18 @@ export function createAuthRouter({ host, port }: AuthRouterDeps): Router {
         jwtSecret,
         8 * 3600,
       )
-      res.cookie('dashboard_session', token, { httpOnly: true, sameSite: 'lax', maxAge: 8 * 3600 * 1000 })
+      // Set secure flag when using a public HTTPS URL or a non-loopback host,
+      // so the JWT session token is never transmitted over plain HTTP in production.
+      const isSecureContext = !!(
+        process.env.DASHBOARD_PUBLIC_URL?.startsWith('https://')
+        || (host !== '127.0.0.1' && host !== 'localhost')
+      )
+      res.cookie('dashboard_session', token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 8 * 3600 * 1000,
+        secure: isSecureContext,
+      })
       res.redirect('/')
     }
     catch (err) {

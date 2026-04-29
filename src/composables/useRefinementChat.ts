@@ -124,6 +124,7 @@ export function useRefinementChat(taskId: () => string | null) {
 
       if (!res.ok || !res.body) {
         error.value = `Server error: ${res.status}`
+        messages.value.splice(assistantIdx, 1)
         return
       }
 
@@ -195,7 +196,11 @@ export function useRefinementChat(taskId: () => string | null) {
 
   watch(taskId, () => {
     stopPolling()
+    messages.value = []
+    completedPhases.value = new Set()
     isStreaming.value = false
+    approvalReady.value = false
+    error.value = null
   })
 
   onUnmounted(() => {

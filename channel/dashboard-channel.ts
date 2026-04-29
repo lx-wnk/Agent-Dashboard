@@ -323,6 +323,7 @@ function writeDiscovery(port: number) {
       token: TOKEN,
       startedAt: new Date().toISOString(),
     }),
+    { mode: 0o600 },
   )
 }
 

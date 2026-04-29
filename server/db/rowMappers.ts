@@ -204,6 +204,7 @@ export interface ApiKeyRow {
   key_hash: string
   scopes: string // JSON array stored as string
   active: number // 0 | 1 (SQLite bool)
+  user_id: string | null
   created_at: string
   last_used_at: string | null
 }
@@ -214,6 +215,7 @@ export function rowToApiKey(row: ApiKeyRow): ApiKey {
     name: row.name,
     scopes: JSON.parse(row.scopes) as McpScope[],
     active: row.active === 1,
+    userId: row.user_id ?? null,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
   }

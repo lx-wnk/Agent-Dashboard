@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify'
 import { Marked } from 'marked'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
+import { createTask } from '../composables/useTasks'
 
 const md = new Marked({ breaks: true, gfm: true })
 
@@ -20,7 +21,10 @@ function renderMarkdown(text: string): string {
 }
 
 const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
-const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
+const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask], taskCreated: [task: PipelineTask] }>()
+
+const currentTask = ref<PipelineTask | null>(props.task)
+watch(() => props.task, (t) => { currentTask.value = t })
 
 const inputText = ref('')
 const chatEl = ref<HTMLElement | null>(null)
@@ -37,11 +41,10 @@ function autoResize() {
 
 watch(inputText, () => nextTick(autoResize))
 
-const taskId = computed(() => props.task?.id ?? null)
 const {
   messages, completedPhases, isStreaming, error,
   approvalReady, loadHistory, sendMessage, confirm, phaseLabel,
-} = useRefinementChat(() => taskId.value)
+} = useRefinementChat(() => currentTask.value?.id ?? null)
 
 const EXAMPLE_CHIPS = [
   'Ein neues Feature implementieren',
@@ -112,13 +115,13 @@ function removeImage(idx: number) {
 }
 
 watch(() => props.open, async (val) => {
-  if (val && props.task) {
+  if (val && currentTask.value) {
     await loadHistory()
   }
 })
 
 onMounted(() => {
-  if (props.open && props.task) loadHistory()
+  if (props.open && currentTask.value) loadHistory()
 })
 
 watch(messages, async () => {
@@ -133,6 +136,16 @@ async function handleSend() {
   inputText.value = ''
   pendingImages.value = []
   await nextTick(autoResize)
+  if (currentTask.value === null) {
+    const newTask = await createTask({
+      slug: `konzept-${Date.now()}`,
+      title: 'New Task',
+      cwd: '/',
+      stage: 'konzept',
+    })
+    currentTask.value = newTask
+    emit('taskCreated', newTask)
+  }
   await sendMessage(msg, images)
 }
 

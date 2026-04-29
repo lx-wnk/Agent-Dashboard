@@ -1,26 +1,35 @@
+import type { Mock } from 'bun:test'
 import type { PipelineTask } from '../../src/types.js'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, mock } from 'bun:test'
 
-vi.mock('../db/tasksRepo.js', () => ({ getTaskById: vi.fn() }))
-vi.mock('../db/permissionsRepo.js', () => ({
-  listTaskPermissions: vi.fn(() => []),
-  createTaskPermission: vi.fn(),
+mock.module('../db/tasksRepo.js', () => ({ getTaskById: mock() }))
+mock.module('../db/permissionsRepo.js', () => ({
+  listTaskPermissions: mock(() => []),
+  createTaskPermission: mock(),
 }))
-vi.mock('../db/auditRepo.js', () => ({ appendAudit: vi.fn() }))
+mock.module('../db/auditRepo.js', () => ({ appendAudit: mock() }))
 
 import { getTaskById } from '../db/tasksRepo.js'
 import { createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
 import { appendAudit } from '../db/auditRepo.js'
 import { bulkGrantKonzeptPermissions } from './approvalUtils.js'
 
+const mockGetTaskById = getTaskById as unknown as Mock<typeof getTaskById>
+const mockListTaskPermissions = listTaskPermissions as unknown as Mock<typeof listTaskPermissions>
+const mockCreateTaskPermission = createTaskPermission as unknown as Mock<typeof createTaskPermission>
+const mockAppendAudit = appendAudit as unknown as Mock<typeof appendAudit>
+
 beforeEach(() => {
-  vi.clearAllMocks()
-  vi.mocked(listTaskPermissions).mockReturnValue([])
+  mockGetTaskById.mockReset()
+  mockListTaskPermissions.mockReset()
+  mockCreateTaskPermission.mockReset()
+  mockAppendAudit.mockReset()
+  mockListTaskPermissions.mockReturnValue([])
 })
 
 describe('bulkGrantKonzeptPermissions', () => {
   it('reads toolRequests from task.metadata.konzeptOutput', () => {
-    vi.mocked(getTaskById).mockReturnValue({
+    mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: {
         konzeptOutput: {
@@ -31,28 +40,28 @@ describe('bulkGrantKonzeptPermissions', () => {
 
     bulkGrantKonzeptPermissions('task-1')
 
-    expect(vi.mocked(createTaskPermission)).toHaveBeenCalledWith(
+    expect(mockCreateTaskPermission).toHaveBeenCalledWith(
       expect.objectContaining({ tool: 'Read', granted: true }),
     )
   })
 
   it('does nothing when task has no toolRequests', () => {
-    vi.mocked(getTaskById).mockReturnValue({ id: 'task-1', metadata: {} } as unknown as PipelineTask)
+    mockGetTaskById.mockReturnValue({ id: 'task-1', metadata: {} } as unknown as PipelineTask)
     bulkGrantKonzeptPermissions('task-1')
-    expect(vi.mocked(createTaskPermission)).not.toHaveBeenCalled()
+    expect(mockCreateTaskPermission).not.toHaveBeenCalled()
   })
 
   it('skips unknown tools', () => {
-    vi.mocked(getTaskById).mockReturnValue({
+    mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: { konzeptOutput: { toolRequests: [{ tool: 'NotARealTool', pattern: null, reason: 'x' }] } },
     } as unknown as PipelineTask)
     bulkGrantKonzeptPermissions('task-1')
-    expect(vi.mocked(createTaskPermission)).not.toHaveBeenCalled()
+    expect(mockCreateTaskPermission).not.toHaveBeenCalled()
   })
 
   it('skips duplicate: already-granted same tool+pattern', () => {
-    vi.mocked(getTaskById).mockReturnValue({
+    mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: {
         konzeptOutput: {
@@ -60,7 +69,7 @@ describe('bulkGrantKonzeptPermissions', () => {
         },
       },
     } as unknown as PipelineTask)
-    vi.mocked(listTaskPermissions).mockReturnValue([
+    mockListTaskPermissions.mockReturnValue([
       {
         id: 'perm-1',
         taskId: 'task-1',
@@ -75,11 +84,11 @@ describe('bulkGrantKonzeptPermissions', () => {
 
     bulkGrantKonzeptPermissions('task-1')
 
-    expect(vi.mocked(createTaskPermission)).not.toHaveBeenCalled()
+    expect(mockCreateTaskPermission).not.toHaveBeenCalled()
   })
 
   it('writes audit entry on success', () => {
-    vi.mocked(getTaskById).mockReturnValue({
+    mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: {
         konzeptOutput: {
@@ -90,23 +99,23 @@ describe('bulkGrantKonzeptPermissions', () => {
 
     bulkGrantKonzeptPermissions('task-1')
 
-    expect(vi.mocked(appendAudit)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(appendAudit)).toHaveBeenCalledWith(
+    expect(mockAppendAudit).toHaveBeenCalledTimes(1)
+    expect(mockAppendAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'bulk_granted_tool_permissions', taskId: 'task-1' }),
     )
   })
 
   it('is a no-op when task does not exist', () => {
-    vi.mocked(getTaskById).mockReturnValue(null)
+    mockGetTaskById.mockReturnValue(null)
 
     bulkGrantKonzeptPermissions('missing-task')
 
-    expect(vi.mocked(createTaskPermission)).not.toHaveBeenCalled()
-    expect(vi.mocked(appendAudit)).not.toHaveBeenCalled()
+    expect(mockCreateTaskPermission).not.toHaveBeenCalled()
+    expect(mockAppendAudit).not.toHaveBeenCalled()
   })
 
   it('skips null entries in toolRequests array', () => {
-    vi.mocked(getTaskById).mockReturnValue({
+    mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: {
         konzeptOutput: {
@@ -117,8 +126,8 @@ describe('bulkGrantKonzeptPermissions', () => {
 
     bulkGrantKonzeptPermissions('task-1')
 
-    expect(vi.mocked(createTaskPermission)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(createTaskPermission)).toHaveBeenCalledWith(
+    expect(mockCreateTaskPermission).toHaveBeenCalledTimes(1)
+    expect(mockCreateTaskPermission).toHaveBeenCalledWith(
       expect.objectContaining({ tool: 'Read' }),
     )
   })

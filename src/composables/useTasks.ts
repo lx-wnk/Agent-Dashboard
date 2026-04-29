@@ -1,13 +1,14 @@
 import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, shallowRef } from 'vue'
 
-const tasks = ref<PipelineTask[]>([])
+const tasks = shallowRef<PipelineTask[]>([])
 const selectedTask = ref<PipelineTask | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
 
 let eventSource: EventSource | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
 let subscriberCount = 0
 
 // Safety-net poll cadence. SSE is the primary live channel; this catches
@@ -36,6 +37,18 @@ async function fetchTasks() {
   }
 }
 
+async function refreshTask(taskId: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}`)
+  if (!res.ok)
+    return
+  const task = await res.json() as PipelineTask
+  if (!task?.id)
+    return
+  tasks.value = tasks.value.map(t => t.id === task.id ? task : t)
+  if (selectedTask.value?.id === task.id)
+    selectedTask.value = task
+}
+
 function startSSE() {
   if (eventSource)
     return
@@ -50,7 +63,16 @@ function startSSE() {
     }
   }
   eventSource.onerror = () => {
-    // browser auto-reconnects; nothing to do
+    if (eventSource?.readyState === EventSource.CLOSED) {
+      // Permanent failure — fall back to polling, retry SSE after 30s
+      stopSSE()
+      startPolling()
+      sseRetryTimer = setTimeout(() => {
+        stopPolling()
+        startSSE()
+      }, 30000)
+    }
+    // Transient error — EventSource reconnects automatically
   }
 }
 
@@ -101,8 +123,7 @@ function applyEvent(event: TaskEvent) {
     }
     case 'permission_request':
     case 'stage_run_updated':
-      // Refetch the task to get fresh data
-      void fetchTasks()
+      void refreshTask(event.taskId)
       break
   }
 }
@@ -158,14 +179,6 @@ export async function progressTask(taskId: string): Promise<void> {
   }
 }
 
-export async function approveTask(taskId: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/approve`, { method: 'POST' })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(err.error || 'Failed to approve task')
-  }
-}
-
 export async function cancelTask(taskId: string): Promise<void> {
   const res = await fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' })
   if (!res.ok) {
@@ -179,8 +192,12 @@ export async function cancelTask(taskId: string): Promise<void> {
  * creates a fresh iteration of the same stage and lets the orchestrator
  * pick it up. Only valid when latestStageRunStatus === 'failed'.
  */
-export async function retryTask(taskId: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/retry`, { method: 'POST' })
+export async function retryTask(taskId: string, additionalPrompt?: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/retry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ additionalPrompt: additionalPrompt?.trim() || undefined }),
+  })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
     throw new Error(err.error || 'Failed to retry task')
@@ -192,8 +209,12 @@ export async function retryTask(taskId: string): Promise<void> {
  * session via `--resume`. Picks up where the agent stopped (e.g. after a
  * permission grant). Requires the latest stage_run to have a sessionId.
  */
-export async function resumeStageTask(taskId: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/resume-stage`, { method: 'POST' })
+export async function resumeStageTask(taskId: string, additionalPrompt?: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/resume-stage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ additionalPrompt: additionalPrompt?.trim() || undefined }),
+  })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
     throw new Error(err.error || 'Failed to resume task')
@@ -214,18 +235,6 @@ export async function analyzeTask(taskId: string): Promise<{ pid: number, cwd: s
     throw new Error(err.error || 'Failed to start analysis session')
   }
   return await res.json() as { pid: number, cwd: string }
-}
-
-export async function requestChanges(taskId: string, feedback: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/request-changes`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ feedback }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(err.error || 'Failed to request changes')
-  }
 }
 
 export async function fetchTaskFeedback(taskId: string): Promise<TaskFeedback[]> {
@@ -334,7 +343,6 @@ function startStream() {
   if (subscriberCount === 1) {
     void fetchTasks()
     startSSE()
-    startPolling()
   }
 }
 
@@ -347,6 +355,10 @@ export function useTasks(options?: { autoStart?: boolean }) {
     if (subscriberCount === 0) {
       stopSSE()
       stopPolling()
+      if (sseRetryTimer) {
+        clearTimeout(sseRetryTimer)
+        sseRetryTimer = null
+      }
     }
   })
 
