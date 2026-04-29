@@ -561,7 +561,7 @@ describe('dependency routes', () => {
   })
 
   it('pOST /tasks/:id/dependencies returns 404 when task not found', async () => {
-    const { status } = await api('POST', '/tasks/nonexistent-id/dependencies', { dependsOnId: 'other-id' })
+    const { status } = await api('POST', '/tasks/00000000-0000-4000-8000-000000000000/dependencies', { dependsOnId: '00000000-0000-4000-8000-000000000001' })
     expect(status).toBe(404)
   })
 
