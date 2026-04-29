@@ -5,9 +5,11 @@
  * completionDetector and applies the appropriate next/iterate/wait_user
  * transition.
  *
- * Agent-less stages (backlog, approval1, approval2) produce their
- * transitions inline without spawning — they exist only as bookkeeping
- * gates in the pipeline.
+ * Agent-less stages (konzept, backlog) produce their transitions inline
+ * without spawning. `konzept` is handled by an interactive chat flow
+ * outside the orchestrator — the handler below is a safety net only.
+ * `backlog` is the "Ready for Doing" gate that transitions immediately
+ * into `umsetzung`.
  */
 import type { PipelineStage } from '../../src/types.js'
 import type { SpawnAgentOptions, SpawnResult } from './agentSpawner.js'
@@ -15,17 +17,12 @@ import type { PromptBundle } from './stagePrompts.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
 import process from 'node:process'
 import { generateApiToken, hashApiToken, upsertStageRunApiKey } from '../db/apiKeysRepo.js'
-import { listUnresolvedFeedbackForStage } from '../db/feedbackRepo.js'
 import { listStageRunsForTask } from '../db/stageRunsRepo.js'
 import { spawnStageAgent } from './agentSpawner.js'
 import {
   finalisierungPrompt,
-  planningPrompt,
-  pruefungPrompt,
-  refinementPrompt,
   selbstreviewPrompt,
   umsetzungPrompt,
-  umsetzungskonzeptPrompt,
 } from './stagePrompts.js'
 
 export type SpawnFn = (opts: SpawnAgentOptions) => SpawnResult
@@ -97,6 +94,7 @@ export function createAgentStage(
         systemPrompt: bundle.systemPrompt,
         prompt: feedback + bundle.userPrompt,
         permissions: ctx.permissions,
+        resumeSessionId: ctx.resumeSessionId ?? null,
         mcpToken: rawToken,
         mcpUrl: `http://127.0.0.1:${port}/api/mcp`,
       })
@@ -104,6 +102,7 @@ export function createAgentStage(
         pid: result.pid,
         iteration: ctx.stageRun.iteration,
         hasFeedback: feedback.length > 0,
+        resumedSessionId: ctx.resumeSessionId ?? null,
       })
       return { kind: 'async_running', pid: result.pid }
     },
@@ -115,30 +114,21 @@ export function createAgentStage(
 // task metadata for the umsetzung feedback loop) and delegates to the
 // corresponding builder in stagePrompts.ts.
 
-const pruefungBuilder: PromptBuilder = ctx => pruefungPrompt(ctx.task)
-
-const refinementBuilder: PromptBuilder = ctx => refinementPrompt(ctx.task, ctx.previousOutput)
-
-const planningBuilder: PromptBuilder = (ctx) => {
-  const userFeedback = listUnresolvedFeedbackForStage(ctx.task.id, 'planning')
-  return planningPrompt(ctx.task, ctx.previousOutput, userFeedback)
-}
-
-const umsetzungskonzeptBuilder: PromptBuilder = (ctx) => {
-  const userFeedback = listUnresolvedFeedbackForStage(ctx.task.id, 'umsetzungskonzept')
-  return umsetzungskonzeptPrompt(ctx.task, ctx.previousOutput, userFeedback)
-}
-
 /**
  * Umsetzung reads optional `review_feedback` from task.metadata — the
  * orchestrator writes it there when a selbstreview iteration rejects the
  * prior implementation. First-run tasks see an empty feedback string.
+ *
+ * Konzept output (spec, plan, toolRequests) is stored in task.metadata by
+ * `POST /api/refine/:taskId/confirm` when the user confirms the refinement
+ * chat — there is no longer a prior stage_run whose output we read.
  */
 const umsetzungBuilder: PromptBuilder = (ctx) => {
   const feedback = typeof ctx.task.metadata?.review_feedback === 'string'
     ? ctx.task.metadata.review_feedback as string
     : undefined
-  return umsetzungPrompt(ctx.task, ctx.previousOutput, feedback)
+  const konzeptOutput = (ctx.task.metadata ?? {}) as Record<string, unknown>
+  return umsetzungPrompt(ctx.task, konzeptOutput, feedback)
 }
 
 const selbstreviewBuilder: PromptBuilder = ctx =>
@@ -150,55 +140,41 @@ const finalisierungBuilder: PromptBuilder = ctx =>
 // ───── Agent-less stages: handlers that transition synchronously without
 // spawning a process. These are the pipeline's plumbing gates.
 
+/**
+ * konzeptHandler — agent-less safety net; orchestrator never picks up
+ * konzept tasks in the normal path (they are excluded from
+ * `listPickableTasks`). The interactive refinement chat runs outside the
+ * state machine; when the user confirms, the task is advanced to
+ * `backlog` by the refine-confirm route. This handler exists only so the
+ * handler map stays exhaustive.
+ */
+export const konzeptHandler: StageHandler = {
+  stage: 'konzept',
+  requiresAgent: false,
+  async execute(ctx: StageContext): Promise<StageTransition> {
+    ctx.recordAudit('konzept_chat_pending')
+    return { kind: 'wait_user', reason: 'Refinement chat in progress' }
+  },
+}
+
 export const backlogHandler: StageHandler = {
   stage: 'backlog',
   requiresAgent: false,
   async execute(ctx: StageContext): Promise<StageTransition> {
     ctx.recordAudit('backlog_entered')
-    return { kind: 'next', toStage: 'pruefung' }
+    return { kind: 'next', toStage: 'umsetzung' }
   },
-}
-
-function approvalStage(stage: PipelineStage, reason: string): StageHandler {
-  return {
-    stage,
-    requiresAgent: false,
-    async execute(ctx: StageContext): Promise<StageTransition> {
-      ctx.recordAudit(`${stage}_awaiting_user`, { reason })
-      return { kind: 'wait_user', reason }
-    },
-  }
 }
 
 // ───── Real agent stages.
 
-export const pruefungHandler = createAgentStage('pruefung', pruefungBuilder)
-export const refinementHandler = createAgentStage('refinement', refinementBuilder)
-export const planningHandler = createAgentStage('planning', planningBuilder)
-export const approval1Handler = approvalStage('approval1', 'Bitte Plan freigeben')
-export const umsetzungskonzeptHandler = createAgentStage('umsetzungskonzept', umsetzungskonzeptBuilder)
-export const approval2Handler = approvalStage(
-  'approval2',
-  'Bitte Umsetzungskonzept + Tool-Permissions freigeben',
-)
 export const umsetzungHandler = createAgentStage('umsetzung', umsetzungBuilder)
 export const selbstreviewHandler = createAgentStage('selbstreview', selbstreviewBuilder)
 export const finalisierungHandler = createAgentStage('finalisierung', finalisierungBuilder)
 
-// ───── Backwards-compatible named factory for the pruefung handler.
-// Tests that predate the generic factory import this directly.
-export function createPruefungHandler(spawn: SpawnFn = spawnStageAgent): StageHandler {
-  return createAgentStage('pruefung', pruefungBuilder, spawn)
-}
-
 export const handlersByStage: Record<string, StageHandler> = {
+  konzept: konzeptHandler,
   backlog: backlogHandler,
-  pruefung: pruefungHandler,
-  refinement: refinementHandler,
-  planning: planningHandler,
-  approval1: approval1Handler,
-  umsetzungskonzept: umsetzungskonzeptHandler,
-  approval2: approval2Handler,
   umsetzung: umsetzungHandler,
   selbstreview: selbstreviewHandler,
   finalisierung: finalisierungHandler,

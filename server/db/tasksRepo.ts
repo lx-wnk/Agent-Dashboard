@@ -21,12 +21,14 @@ export interface CreateTaskInput {
   metadata?: Record<string, unknown> | null
   silverBullet?: boolean
   priority?: TaskPriority
+  currentStage?: PipelineStage
   userId?: string | null
 }
 
 export interface UpdateTaskInput {
   title?: string
   description?: string | null
+  cwd?: string
   worktreePath?: string | null
   currentStage?: PipelineStage
   maxIterations?: number
@@ -92,7 +94,7 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
       created_at, updated_at, metadata, silver_bullet, priority, user_id
     ) VALUES (
       @id, @slug, @title, @description, @cwd, @worktree_path,
-      @source_branch, @target_branch, 'backlog', @parent_task_id,
+      @source_branch, @target_branch, @current_stage, @parent_task_id,
       @max_iterations, @token_budget, @cost_budget_cents, @stage_timeout_seconds,
       @created_at, @updated_at, @metadata, @silver_bullet, @priority, @user_id
     )
@@ -105,6 +107,7 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
     worktree_path: input.worktreePath ?? null,
     source_branch: input.sourceBranch ?? null,
     target_branch: input.targetBranch ?? null,
+    current_stage: input.currentStage ?? 'backlog',
     parent_task_id: input.parentTaskId ?? null,
     max_iterations: input.maxIterations ?? 20,
     token_budget: input.tokenBudget ?? null,
@@ -165,18 +168,19 @@ export function listTasksByStage(stage: PipelineStage, db: Database = getDb()): 
 }
 
 /**
- * List tasks eligible for runner pickup: excludes terminal (done/cancelled)
- * and orchestrator-paused (on_hold, approval1, approval2) stages, AND tasks
- * with at least one unmet dependency. Tasks with a failed latest stage_run
- * are filtered separately by the orchestrator (pickNextTasksForFreeSlots) —
- * they stay on their stage but require explicit user-triggered retry via
+ * List tasks eligible for runner pickup: excludes terminal (done/cancelled),
+ * orchestrator-paused (on_hold), and chat-driven (konzept — advanced only
+ * by POST /api/refine/:taskId/confirm) stages, AND tasks with at least one
+ * unmet dependency. Tasks with a failed latest stage_run are filtered
+ * separately by the orchestrator (pickNextTasksForFreeSlots) — they stay on
+ * their stage but require explicit user-triggered retry via
  * POST /tasks/:id/retry.
  */
 export function listPickableTasks(db: Database = getDb()): PipelineTask[] {
   const rows = db
     .prepare(`
       SELECT tasks.*, ${IS_BLOCKED_EXPR}, ${IS_UNSATISFIABLE_EXPR} FROM tasks
-      WHERE tasks.current_stage NOT IN ('done','cancelled','on_hold','approval1','approval2')
+      WHERE tasks.current_stage NOT IN ('konzept','done','cancelled','on_hold')
         AND NOT EXISTS (
           SELECT 1 FROM task_dependencies td
           JOIN tasks t2 ON t2.id = td.depends_on_id
@@ -208,6 +212,10 @@ export function updateTask(id: string, input: UpdateTaskInput, db: Database = ge
   if (input.description !== undefined) {
     updates.push('description = @description')
     params.description = input.description
+  }
+  if (input.cwd !== undefined) {
+    updates.push('cwd = @cwd')
+    params.cwd = input.cwd
   }
   if (input.worktreePath !== undefined) {
     updates.push('worktree_path = @worktree_path')

@@ -20,6 +20,7 @@ import { aggregateAgents, getEnvRemoteTargets } from './remoteAggregator.js'
 import { createAgentRouter } from './routes/agentRoutes.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createAuthRouter } from './routes/authRoutes.js'
+import { createRefineRouter } from './routes/refineRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
 import { createSystemRouter } from './routes/systemRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
@@ -64,7 +65,7 @@ async function start() {
   mkdirSync(DISCOVERY_DIR, { recursive: true })
 
   const app = express()
-  app.use(express.json())
+  app.use(express.json({ limit: '10mb' }))
   app.use(cookieParser())
 
   // ─── Auth routes (public — before requireAuth) ───────────
@@ -316,6 +317,16 @@ async function start() {
     broadcastTaskEvent,
     dispatcher,
   }))
+
+  // Refine routes (agent-based ticket refinement)
+  app.use('/api/refine', createRefineRouter(
+    (taskId) => {
+      const task = getTaskById(taskId)
+      if (task)
+        broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
+    },
+    rejectCrossOrigin,
+  ))
 
   // Remote dashboard registration routes (per-user CRUD)
   app.use('/api/remotes', createRemoteRouter())

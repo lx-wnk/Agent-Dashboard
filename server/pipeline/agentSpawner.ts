@@ -45,13 +45,21 @@ export interface SpawnResult {
   settingsPath: string | null
 }
 
+// Channel MCP tools are always pre-approved when the dashboard channel is injected.
+// Without these entries the spawned agent hits Claude Code's permission gate on first
+// dashboard_reply call and stalls waiting for approval that never surfaces in the UI.
+const CHANNEL_ALLOW = [
+  'mcp__dashboard-channel__dashboard_reply',
+  'mcp__dashboard-channel__request_permission',
+]
+
 /**
  * Convert TaskPermission rows into the Claude Code `permissions.allow`
  * array format. Denied permissions are filtered out. Pure function —
  * exported for testing.
  */
-export function buildAllowList(permissions: TaskPermission[]): string[] {
-  const allow: string[] = []
+export function buildAllowList(permissions: TaskPermission[], enableChannel = true): string[] {
+  const allow: string[] = enableChannel ? [...CHANNEL_ALLOW] : []
   for (const p of permissions) {
     if (!p.granted)
       continue
@@ -107,8 +115,8 @@ export function buildSpawnEnv(opts: SpawnAgentOptions): NodeJS.ProcessEnv {
  * Write a .claude/settings.json into the worktree (or cwd) with the
  * pre-approved tool permissions converted to Claude Code allowlist format.
  */
-function writeSettingsFile(cwd: string, permissions: TaskPermission[]): string | null {
-  const allow = buildAllowList(permissions)
+function writeSettingsFile(cwd: string, permissions: TaskPermission[], enableChannel: boolean): string | null {
+  const allow = buildAllowList(permissions, enableChannel)
   if (allow.length === 0)
     return null
 
@@ -127,11 +135,12 @@ function writeSettingsFile(cwd: string, permissions: TaskPermission[]): string |
  */
 export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
   const cwd = opts.task.worktreePath || opts.task.cwd
-  const settingsPath = writeSettingsFile(cwd, opts.permissions)
+  const enableChannel = opts.enableChannel !== false
+  const settingsPath = writeSettingsFile(cwd, opts.permissions, enableChannel)
 
   const args = buildSpawnArgs(opts)
 
-  if (opts.enableChannel !== false) {
+  if (enableChannel) {
     args.push('--mcp-config', buildDashboardChannelMcpConfig())
   }
 

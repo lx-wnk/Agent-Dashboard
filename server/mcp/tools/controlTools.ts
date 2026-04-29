@@ -1,14 +1,12 @@
-import type { PipelineStage } from '../../../src/types.js'
 import type { PipelineOrchestrator } from '../../pipeline/orchestrator.js'
 import type { makeToolRegistrar } from '../mcpAuth.js'
 import { z } from 'zod'
 import { appendAudit } from '../../db/auditRepo.js'
 import { getDb } from '../../db/client.js'
-import { createFeedback } from '../../db/feedbackRepo.js'
 import { createTaskPermission, getPermissionRequestById, resolvePermissionRequest } from '../../db/permissionsRepo.js'
-import { getLatestStageRunForTask, getStageRunById, listStageRunsForTask } from '../../db/stageRunsRepo.js'
+import { getLatestStageRunForTask, getStageRunById } from '../../db/stageRunsRepo.js'
 import { getTaskById, updateTask } from '../../db/tasksRepo.js'
-import { ALLOWED_TOOLS, bulkGrantKonzeptPermissions } from '../../services/approvalUtils.js'
+import { ALLOWED_TOOLS } from '../../services/approvalUtils.js'
 import { mcpError, ok } from '../mcpAuth.js'
 
 type ToolFn = ReturnType<typeof makeToolRegistrar>
@@ -28,73 +26,6 @@ export function registerControlTools(
       broadcast(id)
       const task = getTaskById(id)
       return ok({ task, stageRun })
-    },
-  )
-
-  tool(
-    'approve_task',
-    { id: z.string() },
-    async ({ id }) => {
-      const task = getTaskById(id)
-      if (!task)
-        mcpError(`Task not found: ${id}`)
-      const nextMap: Partial<Record<PipelineStage, PipelineStage>> = {
-        approval1: 'umsetzungskonzept',
-        approval2: 'umsetzung',
-      }
-      const next = nextMap[task.currentStage]
-      if (!next)
-        mcpError(`Task in stage ${task.currentStage} cannot be approved`)
-
-      getDb().transaction(() => {
-        // approval2: bulk-grant tool permissions declared in umsetzungskonzept output
-        if (task.currentStage === 'approval2')
-          bulkGrantKonzeptPermissions(task.id)
-        updateTask(id, { currentStage: next })
-        appendAudit({ taskId: id, actor: 'user', action: 'approved', details: { from: task.currentStage, to: next } })
-      })()
-      broadcast(id)
-      // Returns plain task row; SSE broadcast is separately enriched via index.ts
-      return ok({ task: getTaskById(id) })
-    },
-  )
-
-  tool(
-    'request_changes',
-    { id: z.string(), feedback: z.string().min(1).max(4000) },
-    async ({ id, feedback }) => {
-      const task = getTaskById(id)
-      if (!task)
-        mcpError(`Task not found: ${id}`)
-      const stageMap: Partial<Record<PipelineStage, 'planning' | 'umsetzungskonzept'>> = {
-        approval1: 'planning',
-        approval2: 'umsetzungskonzept',
-      }
-      const regressionStage = stageMap[task.currentStage]
-      if (!regressionStage)
-        mcpError(`Task in stage ${task.currentStage} cannot receive change requests`)
-
-      const priorRun = listStageRunsForTask(task.id)
-        .filter(r => r.stage === regressionStage && r.status === 'done')
-        .at(-1) ?? null
-
-      const feedbackRow = createFeedback({
-        taskId: task.id,
-        stage: regressionStage,
-        stageRunId: priorRun?.id ?? null,
-        feedback,
-      })
-      getDb().transaction(() => {
-        updateTask(id, { currentStage: regressionStage })
-        appendAudit({
-          taskId: task.id,
-          actor: 'user',
-          action: 'request_changes',
-          details: { fromStage: task.currentStage, toStage: regressionStage, feedbackId: feedbackRow.id, iteration: feedbackRow.iteration },
-        })
-      })()
-      broadcast(id)
-      return ok({ task: getTaskById(id) })
     },
   )
 

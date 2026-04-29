@@ -44,13 +44,13 @@ afterEach(() => {
 })
 
 describe('pipelineOrchestrator.progressTask', () => {
-  it('transitions from backlog → pruefung and writes audit entries', async () => {
+  it('transitions from backlog → umsetzung and writes audit entries', async () => {
     const task = createTask({ slug: 'next', title: 'N', cwd: '/n' })
 
     await orchestrator.progressTask(task.id)
 
     const updated = getTaskById(task.id)
-    expect(updated?.currentStage).toBe('pruefung')
+    expect(updated?.currentStage).toBe('umsetzung')
 
     const audit = listAuditForTask(task.id)
     const actions = audit.map(a => a.action)
@@ -64,19 +64,6 @@ describe('pipelineOrchestrator.progressTask', () => {
     const backlogRun = getLatestStageRun(task.id, 'backlog')
     expect(backlogRun?.status).toBe('done')
     expect(backlogRun?.endedAt).toBeTruthy()
-  })
-
-  it('respects wait_user transition from approval stage', async () => {
-    const task = createTask({ slug: 'ap', title: 'AP', cwd: '/ap' })
-    // Move task to approval1 manually
-    const { updateTask } = await import('../db/tasksRepo.js')
-    updateTask(task.id, { currentStage: 'approval1' })
-
-    const run = await orchestrator.progressTask(task.id)
-    expect(run?.status).toBe('awaiting_user')
-
-    // Task stage should NOT advance until user action
-    expect(getTaskById(task.id)?.currentStage).toBe('approval1')
   })
 
   it('applies fail transition on handler errors', async () => {
@@ -250,7 +237,7 @@ describe('pipelineOrchestrator.progressTask', () => {
       requiresAgent: false,
       async execute(ctx) {
         receivedPermissions = ctx.permissions
-        return { kind: 'next', toStage: 'pruefung' }
+        return { kind: 'next', toStage: 'umsetzung' }
       },
     })
 
@@ -291,7 +278,7 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
   // loop's eager pickup. Park every agent stage on wait_user so tests can
   // exercise the finalizer branches without ENOENTing on child_process.
   function parkAllAgentStages(o: PipelineOrchestrator): void {
-    for (const stage of ['pruefung', 'refinement', 'planning', 'umsetzungskonzept', 'umsetzung', 'selbstreview', 'finalisierung'] as const) {
+    for (const stage of ['umsetzung', 'selbstreview', 'finalisierung'] as const) {
       o.setHandler(stage, {
         stage,
         requiresAgent: true,
@@ -302,7 +289,7 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     }
   }
 
-  it('auto-promotes a backlog task to pruefung on tick', async () => {
+  it('auto-promotes a backlog task to umsetzung on tick', async () => {
     const task = createTask({ slug: 'bp', title: 'BP', cwd: '/bp' })
     parkAllAgentStages(orchestrator)
 
@@ -310,81 +297,84 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     // Allow the fire-and-forget progressTask chain a microtask to flush.
     await new Promise(r => setImmediate(r))
 
-    expect(getTaskById(task.id)?.currentStage).toBe('pruefung')
+    expect(getTaskById(task.id)?.currentStage).toBe('umsetzung')
   })
 
   it('finalizes a completed async stage_run and advances to the next stage', async () => {
     const task = createTask({ slug: 'ok', title: 'OK', cwd: '/ok' })
     const { updateTask } = await import('../db/tasksRepo.js')
-    updateTask(task.id, { currentStage: 'pruefung' })
-    const run = createStageRun({ taskId: task.id, stage: 'pruefung' })
+    updateTask(task.id, { currentStage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
     updateStageRun(run.id, { status: 'running', pid: 9999 })
 
     parkAllAgentStages(orchestrator)
+    // Park umsetzung but override its completion: the completion detector
+    // returns 'completed', so the orchestrator will advance to the next
+    // stage (selbstreview) regardless of the parked handler.
     orchestrator.setCompletionDetector(async () => ({
       kind: 'completed',
-      output: { wellDefined: true, risks: [], complexity: 'M', blockers: [], recommendation: 'proceed' },
+      output: { changed: ['file.ts'] },
     }))
 
     await orchestrator.tick()
     await new Promise(r => setImmediate(r))
 
-    expect(getTaskById(task.id)?.currentStage).toBe('refinement')
-    const updatedRun = getLatestStageRun(task.id, 'pruefung')
+    expect(getTaskById(task.id)?.currentStage).toBe('selbstreview')
+    const updatedRun = getLatestStageRun(task.id, 'umsetzung')
     expect(updatedRun?.status).toBe('done')
   })
 
   it('iterates with validation feedback on the first schema rejection', async () => {
     const task = createTask({ slug: 'vr', title: 'VR', cwd: '/vr' })
     const { updateTask } = await import('../db/tasksRepo.js')
-    updateTask(task.id, { currentStage: 'pruefung' })
-    const run = createStageRun({ taskId: task.id, stage: 'pruefung' })
+    updateTask(task.id, { currentStage: 'selbstreview' })
+    const run = createStageRun({ taskId: task.id, stage: 'selbstreview' })
     updateStageRun(run.id, { status: 'running', pid: 9999 })
 
     parkAllAgentStages(orchestrator)
     orchestrator.setCompletionDetector(async () => ({
       kind: 'failed',
-      error: 'missing required field: recommendation',
-      output: { wellDefined: true },
+      error: 'missing required field: summary',
+      output: { passed: true, findings: [] },
       retryable: true,
     }))
 
     await orchestrator.tick()
     await new Promise(r => setImmediate(r))
 
-    // Task stays on pruefung; old run is done with validation_error payload;
+    // Task stays on selbstreview; old run is done with validation_error payload;
     // a new iteration row has been inserted.
-    expect(getTaskById(task.id)?.currentStage).toBe('pruefung')
-    const runs = listStageRunsForTask(task.id).filter(r => r.stage === 'pruefung')
+    expect(getTaskById(task.id)?.currentStage).toBe('selbstreview')
+    const runs = listStageRunsForTask(task.id).filter(r => r.stage === 'selbstreview')
     expect(runs.length).toBe(2)
     const oldRun = runs.find(r => r.iteration === 0)
     expect(oldRun?.status).toBe('done')
     const oldOutput = oldRun?.output as Record<string, unknown> | null
-    expect(oldOutput?.validation_error).toContain('recommendation')
+    expect(oldOutput?.validation_error).toContain('summary')
   })
 
   it('escalates to awaiting_user on the second schema rejection', async () => {
     const task = createTask({ slug: 'es', title: 'ES', cwd: '/es' })
     const { updateTask } = await import('../db/tasksRepo.js')
-    updateTask(task.id, { currentStage: 'pruefung' })
-    const run = createStageRun({ taskId: task.id, stage: 'pruefung', iteration: 1 })
+    updateTask(task.id, { currentStage: 'selbstreview' })
+    const run = createStageRun({ taskId: task.id, stage: 'selbstreview', iteration: 1 })
     updateStageRun(run.id, { status: 'running', pid: 9999 })
 
     parkAllAgentStages(orchestrator)
     orchestrator.setCompletionDetector(async () => ({
       kind: 'failed',
-      error: 'missing required field: recommendation',
-      output: { wellDefined: true },
+      error: 'missing required field: summary',
+      output: { passed: true, findings: [] },
       retryable: true,
     }))
 
     await orchestrator.tick()
     await new Promise(r => setImmediate(r))
 
-    const updatedRun = getLatestStageRun(task.id, 'pruefung')
+    const updatedRun = getLatestStageRun(task.id, 'selbstreview')
     expect(updatedRun?.status).toBe('awaiting_user')
     // Task must NOT move to 'failed' — this is a pause, not a hard fail.
-    expect(getTaskById(task.id)?.currentStage).toBe('pruefung')
+    expect(getTaskById(task.id)?.currentStage).toBe('selbstreview')
   })
 
   it('loops selbstreview back to umsetzung with review_feedback on passed=false', async () => {
@@ -449,7 +439,8 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     await new Promise(r => setImmediate(r))
 
     // Silver bullet must win despite being neither oldest nor highest priority.
-    expect(getTaskById(silver.id)?.currentStage).toBe('pruefung')
+    // The silver-bullet task advances from backlog → umsetzung on tick.
+    expect(getTaskById(silver.id)?.currentStage).toBe('umsetzung')
     expect(getTaskById(older.id)?.currentStage).toBe('backlog')
     expect(getTaskById(highPrio.id)?.currentStage).toBe('backlog')
   })
@@ -459,7 +450,7 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     const { updateTask } = await import('../db/tasksRepo.js')
     const ahead = createTask({ slug: 'a', title: 'A', cwd: '/a' })
     const fresh = createTask({ slug: 'f', title: 'F', cwd: '/f' })
-    updateTask(ahead.id, { currentStage: 'planning' })
+    updateTask(ahead.id, { currentStage: 'selbstreview' })
 
     parkAllAgentStages(orchestrator)
     await orchestrator.tick()
@@ -467,10 +458,10 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
 
     // Ahead task gets the single slot; fresh stays in backlog.
     const aheadAfter = getTaskById(ahead.id)
-    expect(aheadAfter?.currentStage).toBe('planning')
-    // parkAllAgentStages makes planning return wait_user, which leaves
+    expect(aheadAfter?.currentStage).toBe('selbstreview')
+    // parkAllAgentStages makes selbstreview return wait_user, which leaves
     // currentStage unchanged and marks the run awaiting_user.
-    const aheadRun = getLatestStageRun(ahead.id, 'planning')
+    const aheadRun = getLatestStageRun(ahead.id, 'selbstreview')
     expect(aheadRun?.status).toBe('awaiting_user')
     expect(getTaskById(fresh.id)?.currentStage).toBe('backlog')
   })
@@ -478,8 +469,8 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
   it('hard-fails when the agent produced no parseable output', async () => {
     const task = createTask({ slug: 'hf', title: 'HF', cwd: '/hf' })
     const { updateTask } = await import('../db/tasksRepo.js')
-    updateTask(task.id, { currentStage: 'pruefung' })
-    const run = createStageRun({ taskId: task.id, stage: 'pruefung' })
+    updateTask(task.id, { currentStage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
     updateStageRun(run.id, { status: 'running', pid: 9999 })
 
     parkAllAgentStages(orchestrator)
@@ -491,16 +482,16 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     await orchestrator.tick()
     await new Promise(r => setImmediate(r))
 
-    // Task stays on `pruefung`; the stage_run carries the failure.
-    expect(getTaskById(task.id)?.currentStage).toBe('pruefung')
-    const updatedRun = getLatestStageRun(task.id, 'pruefung')
+    // Task stays on `umsetzung`; the stage_run carries the failure.
+    expect(getTaskById(task.id)?.currentStage).toBe('umsetzung')
+    const updatedRun = getLatestStageRun(task.id, 'umsetzung')
     expect(updatedRun?.status).toBe('failed')
   })
 
   it('kills and fails a stage_run that exceeds the configured timeout', async () => {
     const task = createTask({ slug: 'to', title: 'TO', cwd: '/to' })
-    updateTask(task.id, { currentStage: 'pruefung' })
-    const run = createStageRun({ taskId: task.id, stage: 'pruefung' })
+    updateTask(task.id, { currentStage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
     updateStageRun(run.id, { status: 'running', pid: 9999, startedAt: twoHoursAgo })
 
@@ -511,7 +502,7 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     await orchestrator.tick()
     await new Promise(r => setImmediate(r))
 
-    const updatedRun = getLatestStageRun(task.id, 'pruefung')
+    const updatedRun = getLatestStageRun(task.id, 'umsetzung')
     expect(updatedRun?.status).toBe('failed')
     const output = updatedRun?.output as Record<string, unknown> | null
     expect(typeof output?.error).toBe('string')
@@ -520,8 +511,8 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
 
   it('does not kill a stage_run within the configured timeout', async () => {
     const task = createTask({ slug: 'nto', title: 'NTO', cwd: '/nto' })
-    updateTask(task.id, { currentStage: 'pruefung' })
-    const run = createStageRun({ taskId: task.id, stage: 'pruefung' })
+    updateTask(task.id, { currentStage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
     updateStageRun(run.id, { status: 'running', pid: 9999 })
 
     setPipelineConfig('stageTimeoutSeconds', '3600')
@@ -531,7 +522,7 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
     await orchestrator.tick()
     await new Promise(r => setImmediate(r))
 
-    const updatedRun = getLatestStageRun(task.id, 'pruefung')
+    const updatedRun = getLatestStageRun(task.id, 'umsetzung')
     expect(updatedRun?.status).toBe('running')
   })
 })

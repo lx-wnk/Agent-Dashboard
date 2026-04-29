@@ -3,7 +3,7 @@ import type { PipelineStage, PipelineTask, StageRunStatus } from '../types'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
 
 defineProps<{ task: PipelineTask }>()
-defineEmits<{ select: [task: PipelineTask] }>()
+const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -23,13 +23,8 @@ function runStatusLabel(status: StageRunStatus): string {
 }
 
 const STAGE_LABELS: Record<PipelineStage, string> = {
+  konzept: 'Konzept',
   backlog: 'Backlog',
-  pruefung: 'Prüfung',
-  refinement: 'Refinement',
-  planning: 'Planung',
-  approval1: 'Freigabe 1',
-  umsetzungskonzept: 'Konzept',
-  approval2: 'Freigabe 2',
   umsetzung: 'Umsetzung',
   selbstreview: 'Selbstreview',
   finalisierung: 'Finalisierung',
@@ -64,6 +59,13 @@ function stageLabel(stage: PipelineStage): string {
     <div v-if="task.description" class="text-[11px] text-slate-400 dark:text-slate-600 leading-snug line-clamp-2">
       {{ task.description }}
     </div>
+    <button
+      v-if="task.currentStage === 'konzept'"
+      class="self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+      @click.stop="emit('openChat', task)"
+    >
+      Chat fortsetzen →
+    </button>
     <div class="flex flex-wrap gap-1 mt-0.5">
       <span
         class="text-[10px] font-mono px-1.5 py-px rounded border"
@@ -75,6 +77,11 @@ function stageLabel(stage: PipelineStage): string {
         :class="runStatusChipClass(task.latestStageRunStatus)"
         :title="`Latest stage run: ${runStatusLabel(task.latestStageRunStatus)}`"
       >{{ runStatusLabel(task.latestStageRunStatus) }}</span>
+      <span
+        v-if="task.needsUser && task.latestStageRunStatus === 'awaiting_user'"
+        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-yellow-100 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700/60"
+        title="Agent is paused and waiting for a permission grant"
+      >⚠ Needs Permission</span>
       <span v-if="task.worktreePath" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Has worktree">WT</span>
       <span v-if="task.sourceBranch" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700">{{ task.sourceBranch }}</span>
       <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Follow-up task">↳</span>

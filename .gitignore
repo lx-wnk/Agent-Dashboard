@@ -13,11 +13,6 @@ package-lock.json
 .mcp.json
 !.mcp.json.example
 
-# Plans and specs are local-only artefacts (already implemented; never version)
-/docs/plans/*
-/docs/specs/*
-
-/docs/superpowers/*
 
 # Agent skills (installed from skills-lock.json)
 .claude/skills/

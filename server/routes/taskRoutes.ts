@@ -1,13 +1,13 @@
 import type express from 'express'
-import type { NotificationEventType, PipelineStage, PipelineTask, StageRunStatus } from '../../src/types.js'
+import type { NotificationEventType, PipelineStage, PipelineTask } from '../../src/types.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
+import process from 'node:process'
 import { consola } from 'consola'
 import { Router } from 'express'
 import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import {
-  createFeedback,
   listFeedbackForTask,
 } from '../db/feedbackRepo.js'
 import { getAllConfig, getPipelineConfigNumber, listPreferences, setConfig, setPipelineConfig, setPreference } from '../db/notificationConfigRepo.js'
@@ -24,6 +24,7 @@ import {
   getLatestStageRunForTask,
   getStageRunById,
   listStageRunsForTask,
+  updateStageRun,
 } from '../db/stageRunsRepo.js'
 import {
   addDependency,
@@ -39,9 +40,9 @@ import {
   listTasksForUser,
   updateTask,
 } from '../db/tasksRepo.js'
-import { resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
+import { isAuthEnabled } from '../auth/requireAuth.js'
+import { findNewestSessionId, readLastStageJsonOutput, resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
 import { spawnAnalysisAgent } from '../services/analysisSpawner.js'
-import { bulkGrantKonzeptPermissions } from '../services/approvalUtils.js'
 import { recommendParallelism } from '../services/resourceRecommender.js'
 import { createWorktree, removeWorktree } from '../services/worktreeManager.js'
 
@@ -69,7 +70,7 @@ const VALID_EVENT_TYPES = new Set<NotificationEventType>([
   'iteration_warning',
 ])
 
-const USER_WAIT_STAGES = new Set<PipelineStage>(['on_hold', 'approval1', 'approval2'])
+const USER_WAIT_STAGES = new Set<PipelineStage>(['on_hold'])
 
 /**
  * Decorate a task with live stage_run status so the frontend can show
@@ -88,17 +89,16 @@ export function canAccessTask(task: PipelineTask, user: { id: string, isAdmin: b
 export function enrichTask(task: PipelineTask): PipelineTask {
   const latest = getLatestStageRunForTask(task.id)
   const latestBelongsToCurrent = latest?.stage === task.currentStage
-  // Agent-less wait-gates (approval1/approval2) never produce a stage_run,
-  // so the guard above would null out their status. Surface `awaiting_user`
-  // so the card's run-status chip reflects the gate state.
-  const syntheticGateStatus: StageRunStatus | null
-    = (task.currentStage === 'approval1' || task.currentStage === 'approval2')
-      ? 'awaiting_user'
-      : null
-  const latestStatus = latestBelongsToCurrent
-    ? (latest?.status ?? null)
-    : syntheticGateStatus
+  const latestStatus = latestBelongsToCurrent ? (latest?.status ?? null) : null
   const currentIteration = latestBelongsToCurrent ? (latest?.iteration ?? 0) : 0
+  // A `running` stage run that has open permission requests is effectively
+  // user-blocked even though its DB status hasn't flipped yet — surface it
+  // in the Needs You column so the user sees the pending decision.
+  const hasPendingPermissions
+    = latestBelongsToCurrent
+      && latestStatus === 'running'
+      && latest != null
+      && listPendingPermissionRequests(latest.id).length > 0
   const needsUser
     = USER_WAIT_STAGES.has(task.currentStage)
       || latestStatus === 'awaiting_user'
@@ -107,6 +107,7 @@ export function enrichTask(task: PipelineTask): PipelineTask {
       // the task stays on its current stage and the UI surfaces it in
       // the Needs You column with Retry + Analyze actions.
       || latestStatus === 'failed'
+      || hasPendingPermissions
   // Live session surfacing: the modal's "follow along" pane needs the
   // session_id of whichever stage_run the user would most like to watch.
   // Prefer a currently-running run on the current stage; otherwise fall
@@ -174,7 +175,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   })
 
   mutationRouter.post('/tasks', async (req, res) => {
-    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree, silverBullet, priority } = req.body ?? {}
+    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree, silverBullet, priority, stage } = req.body ?? {}
 
     if (!slug || typeof slug !== 'string' || !SLUG_RE.test(slug)) {
       res.status(400).json({ error: SLUG_PATTERN_MESSAGE })
@@ -194,6 +195,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     if (priority !== undefined && priority !== 'high' && priority !== 'medium' && priority !== 'low') {
       res.status(400).json({ error: 'priority must be one of high|medium|low' })
+      return
+    }
+    if (stage !== undefined && (typeof stage !== 'string' || !VALID_STAGES.has(stage as PipelineStage))) {
+      res.status(400).json({ error: 'invalid stage' })
       return
     }
 
@@ -236,7 +241,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         metadata: typeof metadata === 'object' && metadata !== null ? metadata : null,
         silverBullet: silverBullet === true,
         priority: (priority === 'high' || priority === 'medium' || priority === 'low') ? priority : undefined,
-        userId: req.user!.id,
+        currentStage: (typeof stage === 'string' && VALID_STAGES.has(stage as PipelineStage)) ? (stage as PipelineStage) : 'konzept',
+        userId: isAuthEnabled() ? req.user!.id : null,
       })
       deps.broadcastTaskEvent({ type: 'task_created', taskId: task.id, payload: enrichTask(task) })
       res.status(201).json(enrichTask(task))
@@ -268,11 +274,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     const body = req.body ?? {}
 
     // Clients must NOT write currentStage directly — stage transitions go
-    // through /progress, /approve, /cancel so the state machine and
-    // notifications stay consistent.
+    // through /progress, /cancel, or /api/refine/:id/confirm so the state
+    // machine and notifications stay consistent.
     if (body.currentStage !== undefined) {
       res.status(400).json({
-        error: 'currentStage cannot be set via PATCH — use /progress, /approve, or /cancel',
+        error: 'currentStage cannot be set via PATCH — use /progress, /cancel, or /api/refine/:id/confirm',
       })
       return
     }
@@ -516,6 +522,53 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json({ task: updated, stageRun: run })
   })
 
+  // ─── Resume the latest failed stage from its prior session ───────────
+  //
+  // Like /retry, but instead of starting a fresh conversation we pass the
+  // failed run's session_id to the orchestrator so the spawned claude
+  // process is launched with `--resume <sessionId>`. Useful when the agent
+  // got a long way in but hit a permission wall or a transient error —
+  // the resumed conversation keeps its tool history intact.
+  //
+  // Only valid when the latest stage_run on the task's current stage is
+  // `failed` AND has a session_id attached.
+  mutationRouter.post('/tasks/:id/resume-stage', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const latest = getLatestStageRunForTask(req.params.id)
+    if (!latest || latest.stage !== task.currentStage || latest.status !== 'failed') {
+      res.status(409).json({ error: 'Task has no failed stage run to resume on its current stage' })
+      return
+    }
+    if (!latest.sessionId) {
+      res.status(409).json({ error: 'Failed stage run has no session_id to resume from' })
+      return
+    }
+    appendAudit({
+      taskId: task.id,
+      actor: 'user',
+      action: 'resume_stage_requested',
+      details: {
+        stage: latest.stage,
+        iteration: latest.iteration,
+        sessionId: latest.sessionId,
+      },
+    })
+    const run = await deps.orchestrator.progressTask(task.id, {
+      resumeSessionId: latest.sessionId,
+    })
+    if (!run) {
+      res.status(409).json({ error: 'Task could not progress (slot full, no handler, or terminal)' })
+      return
+    }
+    const updated = getTaskById(task.id)
+    broadcastEnrichedUpdate(task.id)
+    res.json({ task: updated, stageRun: run })
+  })
+
   // ─── Launch an ad-hoc analysis session ────────────────
   //
   // Spawns an independent Claude CLI session in the task's worktree with
@@ -584,6 +637,27 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       return
     }
     res.json(listStageRunsForTask(req.params.id))
+  })
+
+  router.get('/tasks/:id/stage-runs/:runId/agent-output', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const run = getStageRunById(req.params.runId)
+    if (!run || run.taskId !== req.params.id) {
+      res.status(404).json({ error: 'Stage run not found' })
+      return
+    }
+    const cwd = task.worktreePath || task.cwd
+    const sessionId = run.sessionId ?? await findNewestSessionId(cwd, run.startedAt)
+    if (!sessionId) {
+      res.json({ text: null })
+      return
+    }
+    const { rawText } = await readLastStageJsonOutput(cwd, sessionId)
+    res.json({ text: rawText ?? null })
   })
 
   router.get('/tasks/:id/audit', (req, res) => {
@@ -668,6 +742,16 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     })
     deps.broadcastTaskEvent({ type: 'permission_request', taskId: run.taskId, payload: reqRow })
 
+    // Flip the stage_run to awaiting_user so the orchestrator's tick loop
+    // stops counting elapsed time toward the stage timeout (see
+    // hasPendingPerms guard in orchestrator.finalizeCompletedAsyncRuns).
+    // The agent process stays alive and idle on the channel waiting for
+    // the user's decision; without this, a slow user response would race
+    // the timeout and the agent would be SIGTERM'd mid-question.
+    if (run.status === 'running')
+      updateStageRun(run.id, { status: 'awaiting_user' })
+    broadcastEnrichedUpdate(run.taskId)
+
     // Fire-and-forget notification for ON HOLD state — catch rejections so
     // an adapter failure never becomes an unhandled promise rejection.
     if (deps.dispatcher) {
@@ -713,9 +797,49 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
           preApproved: false,
           decidedBy: 'user',
         })
+
+        // Auto-restart pattern: when the run was paused at awaiting_user
+        // for this permission, the spawned claude process can't pick the
+        // newly-granted permission up mid-conversation — its
+        // .claude/settings.json was written at spawn time. Kill the idle
+        // process, mark the stage_run failed, and trigger a fresh
+        // iteration which will re-read permissions and re-render the
+        // settings file with the just-granted entry.
+        if (run.status === 'awaiting_user') {
+          if (run.pid !== null) {
+            try {
+              process.kill(run.pid, 'SIGTERM')
+            }
+            catch { /* already dead */ }
+          }
+          updateStageRun(run.id, {
+            status: 'failed',
+            output: { error: 'restarting after permission grant' },
+            endedAt: new Date().toISOString(),
+          })
+          appendAudit({
+            taskId: run.taskId,
+            actor: 'user',
+            action: 'permission_granted_restart',
+            details: {
+              permissionRequestId: existing.id,
+              tool: existing.tool,
+              pattern: existing.pattern,
+              stageRunId: run.id,
+            },
+          })
+          await deps.orchestrator.progressTask(run.taskId)
+        }
+        else {
+          // Normal resume path — agent never paused (race) or already finished.
+          await deps.orchestrator.resumeFromUser(run.taskId)
+        }
       }
-      // Try to resume the task
-      await deps.orchestrator.resumeFromUser(run.taskId)
+      else {
+        // outcome === 'denied' — leave the run in awaiting_user; the agent
+        // will see the denial via channel and either replan or give up.
+        await deps.orchestrator.resumeFromUser(run.taskId)
+      }
       broadcastEnrichedUpdate(run.taskId)
     }
     res.json(resolved)
