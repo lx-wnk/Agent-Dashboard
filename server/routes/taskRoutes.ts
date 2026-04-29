@@ -407,13 +407,16 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(409).json({ error: 'Task has no failed stage run to retry on its current stage' })
       return
     }
+    const { additionalPrompt } = req.body ?? {}
     appendAudit({
       taskId: task.id,
       actor: 'user',
       action: 'retry_requested',
       details: { stage: latest.stage, iteration: latest.iteration },
     })
-    const run = await deps.orchestrator.progressTask(task.id)
+    const run = await deps.orchestrator.progressTask(task.id, {
+      userAdditionalPrompt: typeof additionalPrompt === 'string' && additionalPrompt.trim() ? additionalPrompt.trim() : undefined,
+    })
     if (!run) {
       res.status(409).json({ error: 'Task could not progress (slot full, no handler, or terminal)' })
       return
@@ -448,6 +451,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(409).json({ error: 'Failed stage run has no session_id to resume from' })
       return
     }
+    const { additionalPrompt: resumeAdditionalPrompt } = req.body ?? {}
     appendAudit({
       taskId: task.id,
       actor: 'user',
@@ -460,6 +464,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     })
     const run = await deps.orchestrator.progressTask(task.id, {
       resumeSessionId: latest.sessionId,
+      userAdditionalPrompt: typeof resumeAdditionalPrompt === 'string' && resumeAdditionalPrompt.trim() ? resumeAdditionalPrompt.trim() : undefined,
     })
     if (!run) {
       res.status(409).json({ error: 'Task could not progress (slot full, no handler, or terminal)' })
@@ -729,7 +734,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
               stageRunId: run.id,
             },
           })
-          await deps.orchestrator.progressTask(run.taskId)
+          const handoffNote = `[PERMISSION GRANTED] You requested permission for "${existing.tool}"${existing.pattern ? ` (${existing.pattern})` : ''}. It has been granted. Resume exactly where you left off.`
+          await deps.orchestrator.progressTask(run.taskId, {
+            resumeSessionId: run.sessionId ?? undefined,
+            userAdditionalPrompt: handoffNote,
+          })
         }
         else {
           // Normal resume path — agent never paused (race) or already finished.
