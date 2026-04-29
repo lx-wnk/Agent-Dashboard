@@ -704,13 +704,14 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
           decidedBy: 'user',
         })
 
-        // Auto-restart pattern: when the run was paused at awaiting_user
-        // for this permission, the spawned claude process can't pick the
+        // Resume-after-grant pattern: when the run was paused at awaiting_user
+        // for this permission, the spawned claude process cannot pick the
         // newly-granted permission up mid-conversation — its
         // .claude/settings.json was written at spawn time. Kill the idle
-        // process, mark the stage_run failed, and trigger a fresh
-        // iteration which will re-read permissions and re-render the
-        // settings file with the just-granted entry.
+        // process, mark the stage_run failed, then re-spawn with --resume
+        // pointing at the same session so the agent continues exactly where
+        // it left off (with the just-granted permission now in settings.json).
+        // If session_id is null (not yet attached), falls back to a fresh spawn.
         if (run.status === 'awaiting_user') {
           if (run.pid !== null) {
             try {
