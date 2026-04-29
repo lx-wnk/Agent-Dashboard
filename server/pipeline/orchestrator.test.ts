@@ -456,7 +456,7 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
       // umsetzung re-runs. Iteration count on the new run is independent
       // from review_cycles — that's the point of the cap.
       updateTask(task.id, { currentStage: 'selbstreview' })
-      const run2 = createStageRun({ taskId: task.id, stage: 'selbstreview' })
+      const run2 = createStageRun({ taskId: task.id, stage: 'selbstreview', iteration: 1 })
       updateStageRun(run2.id, { status: 'running', pid: 9002 })
 
       // Cycle 2: review_cycles would become 2 ≥ maxReviewCycles → wait_user.
