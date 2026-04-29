@@ -1,6 +1,9 @@
 import type { NextFunction, Request, Response } from 'express'
+import { Buffer } from 'node:buffer'
 import process from 'node:process'
 import { verifyJwt } from './jwtUtils.js'
+
+let _warnedWeakSecret = false
 
 declare global {
   // eslint-disable-next-line ts/no-namespace
@@ -31,6 +34,10 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     console.error('[auth] JWT_SECRET is not set — rejecting all requests')
     res.status(500).json({ error: 'Server misconfiguration' })
     return
+  }
+  if (!_warnedWeakSecret && Buffer.from(secret).length < 32) {
+    console.warn('[auth] JWT_SECRET is shorter than 32 bytes — use a longer secret in production (e.g. openssl rand -hex 32)')
+    _warnedWeakSecret = true
   }
   const payload = verifyJwt(token, secret)
   if (!payload) {
