@@ -27,14 +27,18 @@ const MAX_STDERR_BYTES = 4096
 // Rate limit: sliding window, max spawn requests
 const RATE_LIMIT_WINDOW_MS = (() => {
   const val = Number(process.env.DASHBOARD_SPAWN_RATE_WINDOW_MS ?? 60_000)
-  if (!Number.isFinite(val) || val <= 0)
-    throw new Error(`DASHBOARD_SPAWN_RATE_WINDOW_MS must be a positive integer (got: ${process.env.DASHBOARD_SPAWN_RATE_WINDOW_MS})`)
+  if (!Number.isFinite(val) || val <= 0) {
+    consola.warn(`[config] DASHBOARD_SPAWN_RATE_WINDOW_MS invalid (got: ${process.env.DASHBOARD_SPAWN_RATE_WINDOW_MS}); using 60000ms default`)
+    return 60_000
+  }
   return val
 })()
 const RATE_LIMIT_MAX = (() => {
   const val = Number(process.env.DASHBOARD_SPAWN_RATE_LIMIT ?? 5)
-  if (!Number.isFinite(val) || val <= 0)
-    throw new Error(`DASHBOARD_SPAWN_RATE_LIMIT must be a positive integer (got: ${process.env.DASHBOARD_SPAWN_RATE_LIMIT})`)
+  if (!Number.isFinite(val) || val <= 0) {
+    consola.warn(`[config] DASHBOARD_SPAWN_RATE_LIMIT invalid (got: ${process.env.DASHBOARD_SPAWN_RATE_LIMIT}); using 5 default`)
+    return 5
+  }
   return val
 })()
 

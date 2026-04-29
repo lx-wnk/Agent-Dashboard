@@ -58,11 +58,13 @@ export function createRefineRouter(
       res.status(409).json({ error: 'A turn is already in progress for this task' })
       return
     }
+    activeTurns.add(task.id) // Reserve the slot before any async I/O — closes TOCTOU window
 
 
     const body = req.body as { message?: unknown, images?: unknown }
     const message = typeof body.message === 'string' ? body.message.trim() : ''
     if (!message) {
+      activeTurns.delete(task.id) // release the reserved slot on validation failure
       res.status(400).json({ error: 'message is required' })
       return
     }
@@ -102,7 +104,6 @@ export function createRefineRouter(
 
     insertTurn({ taskId: task.id, role: 'user', content: message })
 
-    activeTurns.add(task.id)
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
