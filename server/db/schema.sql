@@ -219,9 +219,11 @@ CREATE TABLE IF NOT EXISTS permission_presets (
   project_cwd TEXT NOT NULL,
   tool        TEXT NOT NULL,
   pattern     TEXT,
-  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  UNIQUE(COALESCE(user_id, ''), project_cwd, tool, COALESCE(pattern, ''))
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+-- Expression-based unique index (COALESCE not allowed in CREATE TABLE UNIQUE).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_permission_presets_unique
+  ON permission_presets(COALESCE(user_id, ''), project_cwd, tool, COALESCE(pattern, ''));
 CREATE INDEX IF NOT EXISTS idx_permission_presets_lookup
   ON permission_presets(user_id, project_cwd);
 

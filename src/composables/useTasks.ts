@@ -179,8 +179,12 @@ export async function cancelTask(taskId: string): Promise<void> {
  * creates a fresh iteration of the same stage and lets the orchestrator
  * pick it up. Only valid when latestStageRunStatus === 'failed'.
  */
-export async function retryTask(taskId: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/retry`, { method: 'POST' })
+export async function retryTask(taskId: string, additionalPrompt?: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/retry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ additionalPrompt: additionalPrompt?.trim() || undefined }),
+  })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
     throw new Error(err.error || 'Failed to retry task')
@@ -192,8 +196,12 @@ export async function retryTask(taskId: string): Promise<void> {
  * session via `--resume`. Picks up where the agent stopped (e.g. after a
  * permission grant). Requires the latest stage_run to have a sessionId.
  */
-export async function resumeStageTask(taskId: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/resume-stage`, { method: 'POST' })
+export async function resumeStageTask(taskId: string, additionalPrompt?: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/resume-stage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ additionalPrompt: additionalPrompt?.trim() || undefined }),
+  })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
     throw new Error(err.error || 'Failed to resume task')

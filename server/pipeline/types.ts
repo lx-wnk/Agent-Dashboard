@@ -39,6 +39,11 @@ export interface StageContext {
    * Used by the resume-stage endpoint after a permission grant.
    */
   resumeSessionId?: string
+  /**
+   * Optional free-text instruction appended to the stage's user prompt.
+   * Set when the user clicks Resume/Retry with an additional note in the UI.
+   */
+  userAdditionalPrompt?: string
   // Injected by orchestrator for side effects:
   recordAudit: (action: string, details?: Record<string, unknown>) => void
   requestPermission: (tool: string, pattern: string | null, reason: string) => PermissionRequest

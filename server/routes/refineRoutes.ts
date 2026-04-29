@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { Router } from 'express'
+import { jsonrepair } from 'jsonrepair'
 import { appendAudit } from '../db/auditRepo.js'
 import { insertTurn, listTurns } from '../db/refinementTurnsRepo.js'
 import { getTaskById, updateTask } from '../db/tasksRepo.js'
@@ -164,7 +165,7 @@ export function createRefineRouter(
       const jsonMatch = jsonMatches.at(-1)
       if (jsonMatch) {
         try {
-          const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>
+          const parsed = JSON.parse(jsonrepair(jsonMatch[1])) as Record<string, unknown>
           if (typeof parsed.refinedTitle === 'string' && parsed.refinedTitle.trim()) {
             updateTask(task.id, { title: parsed.refinedTitle.trim() })
             broadcastEnrichedUpdate(task.id)
@@ -228,7 +229,7 @@ export function createRefineRouter(
 
     let konzeptOutput: Record<string, unknown>
     try {
-      konzeptOutput = JSON.parse(jsonMatch[1])
+      konzeptOutput = JSON.parse(jsonrepair(jsonMatch[1]))
     }
     catch {
       res.status(409).json({ error: 'Invalid JSON in assistant output' })

@@ -173,6 +173,14 @@ export interface StageOutputRead {
   rawText: string | null
 }
 
+export interface SessionTokenSummary {
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+  model: string | null
+}
+
 export async function readLastStageJsonOutput(
   cwd: string,
   sessionId: string,
@@ -195,4 +203,48 @@ export async function readLastStageJsonOutput(
     return { output: null, rawText: null }
 
   return { output: extractJsonBlock(text), rawText: text }
+}
+
+/**
+ * Read token usage totals and the model name from a session JSONL file.
+ * Sums across all assistant turns (the JSONL records a usage block per turn).
+ * Returns zeroed summary if the file cannot be read.
+ */
+export async function readSessionTokenSummary(
+  cwd: string,
+  sessionId: string,
+): Promise<SessionTokenSummary> {
+  const zero: SessionTokenSummary = { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, model: null }
+  const filePath = await resolveSessionFile(cwd, sessionId)
+  if (!filePath)
+    return zero
+
+  let raw: string
+  try {
+    raw = await tailRead(filePath)
+  }
+  catch {
+    return zero
+  }
+
+  const entries = parseJsonlLines(raw) as Array<JsonlEntry & { message?: { model?: string, usage?: { input_tokens?: number, output_tokens?: number, cache_creation_input_tokens?: number, cache_read_input_tokens?: number } } }>
+  const summary: SessionTokenSummary = { ...zero }
+
+  for (const entry of entries) {
+    if (entry.type !== 'assistant')
+      continue
+    const msg = entry.message
+    if (!msg)
+      continue
+    if (msg.model && !summary.model)
+      summary.model = msg.model
+    const u = msg.usage
+    if (u) {
+      summary.inputTokens += u.input_tokens ?? 0
+      summary.outputTokens += u.output_tokens ?? 0
+      summary.cacheCreationTokens += u.cache_creation_input_tokens ?? 0
+      summary.cacheReadTokens += u.cache_read_input_tokens ?? 0
+    }
+  }
+  return summary
 }

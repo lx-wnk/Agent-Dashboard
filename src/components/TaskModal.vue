@@ -38,6 +38,7 @@ const permissions = ref<TaskPermission[]>([])
 const pendingRequests = ref<PermissionRequest[]>([])
 const actionError = ref('')
 const isActing = ref(false)
+const additionalPrompt = ref('')
 const newPermTool = ref('')
 const newPermPattern = ref('')
 const permError = ref('')
@@ -148,9 +149,18 @@ const latestRunError = computed<string | null>(() => {
   return typeof e === 'string' ? e : null
 })
 
-// Session text fetched lazily for failed/timed-out runs that have no agentMessage
+// Session text fetched lazily for failed/timed-out runs that have no agentMessage.
+// Also polled every 5s for running stages when no live pipelineAgent is matched.
 const sessionAgentText = ref<string | null>(null)
 const sessionAgentTextLoading = ref(false)
+let runningOutputPoll: ReturnType<typeof setInterval> | null = null
+
+function stopRunningPoll(): void {
+  if (runningOutputPoll) {
+    clearInterval(runningOutputPoll)
+    runningOutputPoll = null
+  }
+}
 
 async function fetchSessionText(run: StageRun) {
   if (!props.task || latestRunAgentMessage.value)
@@ -172,14 +182,24 @@ async function onAnalyze() {
 async function loadDetails() {
   if (!props.task)
     return
+  stopRunningPoll()
   sessionAgentText.value = null
   stageRuns.value = await fetchStageRuns(props.task.id)
   permissions.value = await fetchTaskPermissions(props.task.id)
   pendingRequests.value = await fetchPendingPermissionRequests(props.task.id)
   const latest = stageRuns.value[stageRuns.value.length - 1]
-  if (latest && (latest.status === 'failed' || latest.status === 'done'))
+  if (latest && (latest.status === 'failed' || latest.status === 'done')) {
     fetchSessionText(latest)
+  }
+  else if (latest && latest.status === 'running') {
+    // Fallback output for running stages: poll the JSONL directly so the
+    // overview pane shows something even before the agent scanner links the PID.
+    fetchSessionText(latest)
+    runningOutputPoll = setInterval(() => { void fetchSessionText(latest) }, 5000)
+  }
 }
+
+onUnmounted(stopRunningPoll)
 
 // Reset modal-local state when the user opens a different task.
 watch(() => props.task?.id, (id, prevId) => {
@@ -274,6 +294,40 @@ function formatDate(iso: string | null): string {
     return '—'
   return new Date(iso).toLocaleString()
 }
+
+const totalTokensUsed = computed(() =>
+  stageRuns.value.reduce((sum, r) => sum + (r.tokensUsed ?? 0), 0),
+)
+
+const totalCostCents = computed(() =>
+  stageRuns.value.reduce((sum, r) => sum + (r.costCents ?? 0), 0),
+)
+
+function formatCost(cents: number): string {
+  if (cents === 0)
+    return '—'
+  if (cents < 100)
+    return `${cents}¢`
+  return `$${(cents / 100).toFixed(2)}`
+}
+
+const runtime = computed(() => {
+  if (!props.task)
+    return '—'
+  const start = new Date(props.task.createdAt).getTime()
+  const end = props.task.currentStage === 'done' || props.task.currentStage === 'cancelled'
+    ? new Date(props.task.updatedAt).getTime()
+    : Date.now()
+  const ms = end - start
+  const h = Math.floor(ms / 3_600_000)
+  const m = Math.floor((ms % 3_600_000) / 60_000)
+  const s = Math.floor((ms % 60_000) / 1_000)
+  if (h > 0)
+    return `${h}h ${m}m`
+  if (m > 0)
+    return `${m}m ${s}s`
+  return `${s}s`
+})
 </script>
 
 <template>
@@ -399,71 +453,19 @@ function formatDate(iso: string | null): string {
             </AppButton>
           </div>
 
-          <!-- Latest stage run summary -->
-          <div v-if="latestStageRun" class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3.5 py-3 mb-4">
-            <div class="flex items-center gap-2 flex-wrap mb-2">
-              <span class="font-mono text-[10px] uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded font-semibold">{{ latestStageRun.stage }}</span>
-              <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">iter {{ latestStageRun.iteration }}</span>
-              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="runStatusChipClass(latestStageRun.status)">{{ latestStageRun.status }}</span>
-              <span class="text-[11px] text-slate-400 dark:text-slate-600 ml-auto">
-                {{ formatDate(latestStageRun.startedAt) }}
-                <template v-if="latestStageRun.endedAt"> → {{ formatDate(latestStageRun.endedAt) }}</template>
-              </span>
-            </div>
-            <AgentChatStream
-              v-if="latestStageRun.status === 'running' && pipelineAgent"
-              :agent="pipelineAgent"
-              :local-messages="[]"
-              class="border-t border-slate-200 dark:border-slate-700 mt-2 pt-3 min-h-[200px] max-h-[40vh] px-0 py-3"
-            />
-            <template v-else>
-              <!-- Error banner (timeout, schema failure, etc.) -->
-              <div v-if="latestRunError" class="mt-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 px-3 py-2 flex items-start gap-2">
-                <span class="text-red-500 dark:text-red-400 text-sm leading-none mt-0.5">✗</span>
-                <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">{{ latestRunError }}</p>
-              </div>
-
-              <!-- Agent prose captured at completion (e.g. "no json block") -->
-              <div v-if="latestRunAgentMessage" class="mt-2">
-                <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
-                  Agent output
-                </div>
-                <pre class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ latestRunAgentMessage }}</pre>
-              </div>
-
-              <!-- Session text fetched from JSONL (failed/done runs without embedded agentMessage) -->
-              <div v-else-if="sessionAgentText || sessionAgentTextLoading" class="mt-2">
-                <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
-                  Agent output
-                </div>
-                <div v-if="sessionAgentTextLoading" class="text-[11px] text-slate-400 dark:text-slate-600 animate-pulse">
-                  Loading…
-                </div>
-                <pre v-else class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[400px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ sessionAgentText }}</pre>
-              </div>
-
-              <!-- Structured stage output (successful run with parsed fields) -->
-              <details v-else-if="latestStageRun.output && !latestRunError" class="mt-1.5">
-                <summary class="cursor-pointer text-[11px] text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
-                  Stage output
-                </summary>
-                <StageOutputView :stage="latestStageRun.stage" :output="latestStageRun.output" :status="latestStageRun.status" />
-              </details>
-            </template>
-          </div>
-
-          <dl class="grid grid-cols-[auto_1fr] gap-y-1.5 gap-x-4 text-[13px] mb-4">
+          <!-- 1. Info grid -->
+          <dl class="grid grid-cols-[auto_1fr] gap-y-1.5 gap-x-4 text-[13px] mb-2">
             <div class="contents">
               <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
                 CWD
-              </dt><dd class="font-mono text-xs text-slate-900 dark:text-slate-100">
+              </dt><dd class="font-mono text-xs text-slate-900 dark:text-slate-100 truncate">
                 {{ task.cwd }}
               </dd>
             </div>
             <div v-if="task.worktreePath" class="contents">
               <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
                 Worktree
-              </dt><dd class="font-mono text-xs text-slate-900 dark:text-slate-100">
+              </dt><dd class="font-mono text-xs text-slate-900 dark:text-slate-100 truncate">
                 {{ task.worktreePath }}
               </dd>
             </div>
@@ -483,16 +485,9 @@ function formatDate(iso: string | null): string {
             </div>
             <div class="contents">
               <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
-                Max Iter
+                Iter
               </dt><dd class="text-slate-900 dark:text-slate-100">
-                {{ task.maxIterations }}
-              </dd>
-            </div>
-            <div v-if="task.tokenBudget" class="contents">
-              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
-                Token Budget
-              </dt><dd class="text-slate-900 dark:text-slate-100">
-                {{ task.tokenBudget.toLocaleString() }}
+                {{ task.currentIteration ?? 0 }} / {{ task.maxIterations }}
               </dd>
             </div>
             <div class="contents">
@@ -500,6 +495,34 @@ function formatDate(iso: string | null): string {
                 Created
               </dt><dd class="text-slate-900 dark:text-slate-100">
                 {{ formatDate(task.createdAt) }}
+              </dd>
+            </div>
+            <div class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Runtime
+              </dt><dd class="text-slate-900 dark:text-slate-100 font-mono text-xs">
+                {{ runtime }}
+              </dd>
+            </div>
+            <div v-if="totalTokensUsed > 0" class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Tokens
+              </dt><dd class="text-slate-900 dark:text-slate-100 font-mono text-xs">
+                {{ totalTokensUsed.toLocaleString() }}
+              </dd>
+            </div>
+            <div v-if="totalCostCents > 0" class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Kosten
+              </dt><dd class="text-slate-900 dark:text-slate-100 font-mono text-xs">
+                {{ formatCost(totalCostCents) }}
+              </dd>
+            </div>
+            <div v-if="task.tokenBudget" class="contents">
+              <dt class="text-slate-400 dark:text-slate-600 text-[11px] uppercase tracking-[0.5px]">
+                Token Budget
+              </dt><dd class="text-slate-900 dark:text-slate-100">
+                {{ task.tokenBudget.toLocaleString() }}
               </dd>
             </div>
             <div v-if="task.parentTaskId" class="contents">
@@ -510,18 +533,10 @@ function formatDate(iso: string | null): string {
               </dd>
             </div>
           </dl>
-          <details v-if="task.description" class="mt-3 text-xs">
-            <summary class="cursor-pointer text-slate-400 dark:text-slate-600 py-1.5 select-none hover:text-slate-500 dark:hover:text-slate-400">
-              Origin Prompt
-            </summary>
-            <div class="mt-1.5 px-3 py-3 bg-slate-50 dark:bg-slate-950 rounded-md text-[13px] leading-relaxed whitespace-pre-wrap text-slate-600 dark:text-slate-400">
-              {{ task.description }}
-            </div>
-          </details>
 
           <!-- Dependencies section -->
-          <section class="mt-4 border-t border-slate-200 dark:border-slate-700 pt-3">
-            <h4 class="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">
+          <section class="mb-3 border-t border-slate-200 dark:border-slate-700 pt-3">
+            <h4 class="text-[11px] font-semibold uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-2">
               Abhängigkeiten
             </h4>
 
@@ -591,6 +606,77 @@ function formatDate(iso: string | null): string {
               {{ depError }}
             </p>
           </section>
+
+          <!-- 2. Origin Prompt (collapsed) -->
+          <details v-if="task.description" class="mb-3 text-xs border-t border-slate-200 dark:border-slate-700 pt-3">
+            <summary class="cursor-pointer text-slate-400 dark:text-slate-600 py-1.5 select-none hover:text-slate-500 dark:hover:text-slate-400">
+              Origin Prompt
+            </summary>
+            <div class="mt-1.5 px-3 py-3 bg-slate-50 dark:bg-slate-950 rounded-md text-[13px] leading-relaxed whitespace-pre-wrap text-slate-600 dark:text-slate-400">
+              {{ task.description }}
+            </div>
+          </details>
+
+          <!-- 3. Aktuelle Ausgabe -->
+          <div v-if="latestStageRun" class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3.5 py-3 border-t border-slate-200 dark:border-slate-700 pt-3">
+            <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 font-semibold mb-2">
+              Aktuelle Ausgabe
+            </div>
+            <div class="flex items-center gap-2 flex-wrap mb-2">
+              <span class="font-mono text-[10px] uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded font-semibold">{{ latestStageRun.stage }}</span>
+              <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">iter {{ latestStageRun.iteration }}</span>
+              <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="runStatusChipClass(latestStageRun.status)">{{ latestStageRun.status }}</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-600 ml-auto">
+                {{ formatDate(latestStageRun.startedAt) }}
+                <template v-if="latestStageRun.endedAt"> → {{ formatDate(latestStageRun.endedAt) }}</template>
+              </span>
+            </div>
+            <AgentChatStream
+              v-if="latestStageRun.status === 'running' && pipelineAgent"
+              :agent="pipelineAgent"
+              :local-messages="[]"
+              class="border-t border-slate-200 dark:border-slate-700 mt-2 pt-3 min-h-[200px] max-h-[40vh] px-0 py-3"
+            />
+            <template v-else>
+              <!-- Error banner (timeout, schema failure, etc.) -->
+              <div v-if="latestRunError" class="mt-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 px-3 py-2 flex items-start gap-2">
+                <span class="text-red-500 dark:text-red-400 text-sm leading-none mt-0.5">✗</span>
+                <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">{{ latestRunError }}</p>
+              </div>
+
+              <!-- Agent prose captured at completion (e.g. "no json block") -->
+              <div v-if="latestRunAgentMessage" class="mt-2">
+                <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
+                  Agent output
+                </div>
+                <pre class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ latestRunAgentMessage }}</pre>
+              </div>
+
+              <!-- Session text fetched from JSONL (failed/done runs, or running without live pipelineAgent) -->
+              <div v-else-if="sessionAgentText || sessionAgentTextLoading" class="mt-2">
+                <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
+                  Agent output
+                </div>
+                <div v-if="sessionAgentTextLoading" class="text-[11px] text-slate-400 dark:text-slate-600 animate-pulse">
+                  Loading…
+                </div>
+                <pre v-else class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[400px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ sessionAgentText }}</pre>
+              </div>
+
+              <!-- Running stage: no live stream yet and no session text available -->
+              <div v-else-if="latestStageRun.status === 'running'" class="mt-2 text-[11px] text-slate-400 dark:text-slate-600 animate-pulse">
+                Agent is running…
+              </div>
+
+              <!-- Structured stage output (successful run with parsed fields) -->
+              <details v-else-if="latestStageRun.output && !latestRunError" class="mt-1.5">
+                <summary class="cursor-pointer text-[11px] text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
+                  Stage output
+                </summary>
+                <StageOutputView :stage="latestStageRun.stage" :output="latestStageRun.output" :status="latestStageRun.status" />
+              </details>
+            </template>
+          </div>
         </section>
 
         <!-- Stages tab -->
@@ -718,13 +804,22 @@ function formatDate(iso: string | null): string {
         <p v-if="analysisInfo" class="text-green-600 dark:text-green-400 text-xs mb-2">
           Analysis agent spawned · PID <code>{{ analysisInfo.pid }}</code> · look for it in the agents list.
         </p>
+        <!-- Optional instruction for Resume/Retry -->
+        <div v-if="isFailedRun(task)" class="mb-2">
+          <textarea
+            v-model="additionalPrompt"
+            rows="2"
+            class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-slate-900 dark:text-slate-100 text-xs resize-none focus:outline-none focus:border-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
+            placeholder="Optionale Anweisung für Resume / Retry (z.B. Logik-Änderung oder Hinweis)…"
+          />
+        </div>
         <div class="flex gap-2 justify-end">
           <AppButton
             v-if="isFailedRun(task) && latestStageRun?.sessionId"
             variant="secondary"
             :disabled="isActing"
             title="Continue the agent's last session from where it stopped"
-            @click="handleAction(() => resumeStageTask(task!.id))"
+            @click="handleAction(() => resumeStageTask(task!.id, additionalPrompt || undefined))"
           >
             Resume Session
           </AppButton>
@@ -733,7 +828,7 @@ function formatDate(iso: string | null): string {
             variant="info"
             :disabled="isActing"
             title="Start a fresh iteration of this stage"
-            @click="handleAction(() => retryTask(task!.id))"
+            @click="handleAction(() => retryTask(task!.id, additionalPrompt || undefined))"
           >
             Retry Stage
           </AppButton>

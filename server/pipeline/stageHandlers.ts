@@ -92,7 +92,7 @@ export function createAgentStage(
         task: ctx.task,
         stageRun: ctx.stageRun,
         systemPrompt: bundle.systemPrompt,
-        prompt: feedback + bundle.userPrompt,
+        prompt: feedback + bundle.userPrompt + (ctx.userAdditionalPrompt ? `\n\n---\nAdditional instruction from user: ${ctx.userAdditionalPrompt}` : ''),
         permissions: ctx.permissions,
         resumeSessionId: ctx.resumeSessionId ?? null,
         mcpToken: rawToken,

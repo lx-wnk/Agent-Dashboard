@@ -19,10 +19,11 @@ import {
 } from '../db/stageRunsRepo.js'
 import { getDependentsOf, hasOtherBlockingDeps } from '../db/taskDependenciesRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
-import { shouldCleanSettingsFile } from './agentSpawner.js'
+import { cleanupLocalSettingsEntries, shouldCleanSettingsFile } from './agentSpawner.js'
 import { detectCompletion } from './completionDetector.js'
 import { attachSessionId, buildSessionName, decideRecovery } from './sessionManager.js'
-import { findNewestSessionId } from './sessionOutputReader.js'
+import { estimateCost } from '../pricing.js'
+import { findNewestSessionId, readSessionTokenSummary } from './sessionOutputReader.js'
 import { getHandlerForStage } from './stageHandlers.js'
 import { STAGE_ORDER } from './types.js'
 
@@ -174,7 +175,7 @@ export class PipelineOrchestrator {
    */
   async progressTask(
     taskId: string,
-    opts?: { resumeSessionId?: string },
+    opts?: { resumeSessionId?: string, userAdditionalPrompt?: string },
   ): Promise<StageRun | null> {
     const prev = this.taskLocks.get(taskId) ?? Promise.resolve(null)
     const next = prev
@@ -193,7 +194,7 @@ export class PipelineOrchestrator {
 
   private async runProgressTaskLocked(
     taskId: string,
-    opts?: { resumeSessionId?: string },
+    opts?: { resumeSessionId?: string, userAdditionalPrompt?: string },
   ): Promise<StageRun | null> {
     const task = getTaskById(taskId)
     if (!task)
@@ -214,7 +215,7 @@ export class PipelineOrchestrator {
     const stageRun = this.ensureStageRun(task)
     updateStageRun(stageRun.id, { status: 'running', startedAt: new Date().toISOString() })
 
-    const ctx = this.buildContext(task, stageRun, opts?.resumeSessionId)
+    const ctx = this.buildContext(task, stageRun, opts?.resumeSessionId, opts?.userAdditionalPrompt)
     let transition: StageTransition
     try {
       transition = await handler.execute(ctx)
@@ -243,6 +244,7 @@ export class PipelineOrchestrator {
     task: PipelineTask,
     stageRun: StageRun,
     resumeSessionId?: string,
+    userAdditionalPrompt?: string,
   ): StageContext {
     const permissions = listTaskPermissions(task.id)
     const previousOutput = this.getPreviousStageOutput(task)
@@ -256,6 +258,7 @@ export class PipelineOrchestrator {
       previousOutput,
       priorIterationOutput,
       resumeSessionId,
+      userAdditionalPrompt,
       recordAudit: (action, details) => {
         appendAudit({ taskId: task.id, actor: 'orchestrator', action, details: details ?? null })
       },
@@ -592,7 +595,7 @@ export class PipelineOrchestrator {
         // frontend cross-link banner and live session tab work without waiting
         // for the completion detector (which only runs after the PID exits).
         if (!run.sessionId && run.startedAt)
-          void this.tryAttachSessionId(run.id, cwd, run.startedAt)
+          void this.tryAttachSessionId(run.id, run.taskId, cwd, run.startedAt)
 
         // Don't kill the agent while it's blocked waiting for a user
         // permission decision — the PID is alive but it's idle on the
@@ -634,6 +637,21 @@ export class PipelineOrchestrator {
       const fresh = getStageRunById(run.id)
       if (!fresh || fresh.status !== 'running')
         continue
+
+      // Persist token usage + estimated cost from the session JSONL so the
+      // dashboard can display per-stage and aggregate totals.
+      if (fresh.sessionId) {
+        void readSessionTokenSummary(cwd, fresh.sessionId).then((summary) => {
+          const totalTokens = summary.inputTokens + summary.outputTokens + summary.cacheCreationTokens + summary.cacheReadTokens
+          if (totalTokens > 0) {
+            const costUsd = estimateCost(summary, summary.model)
+            updateStageRun(fresh.id, {
+              tokensUsed: totalTokens,
+              costCents: Math.round(costUsd * 100),
+            })
+          }
+        }).catch(() => { /* non-critical — token write failure must not block stage completion */ })
+      }
 
       if (result.kind === 'completed') {
         const transition = this.decideCompletedTransition(task, fresh, result.output ?? {})
@@ -680,11 +698,15 @@ export class PipelineOrchestrator {
     }
   }
 
-  private async tryAttachSessionId(stageRunId: string, cwd: string, startedAt: string): Promise<void> {
+  private async tryAttachSessionId(stageRunId: string, taskId: string, cwd: string, startedAt: string): Promise<void> {
     try {
       const sid = await findNewestSessionId(cwd, startedAt)
-      if (sid)
-        attachSessionId(stageRunId, sid)
+      if (!sid)
+        return
+      attachSessionId(stageRunId, sid)
+      // Broadcast so the frontend receives the updated activeSessionId immediately —
+      // without this the live-output pane stays dark until the next real transition.
+      this.onTaskChanged?.(taskId, { transitionKind: 'async_running' })
     }
     catch { /* non-critical: completion detector will attach it after the run ends */ }
   }
@@ -1004,15 +1026,18 @@ function comparePickOrder(a: PipelineTask, b: PipelineTask): number {
  * pipeline is never collateral damage.
  */
 function cleanupDashboardSettings(cwd: string): void {
-  const settingsPath = join(cwd, '.claude', 'settings.json')
-  if (!shouldCleanSettingsFile(settingsPath))
-    return
-  try {
-    unlinkSync(settingsPath)
+  const claudeDir = join(cwd, '.claude')
+  const settingsPath = join(claudeDir, 'settings.json')
+  if (shouldCleanSettingsFile(settingsPath)) {
+    try {
+      unlinkSync(settingsPath)
+    }
+    catch (err) {
+      consola.warn(`[orchestrator] failed to clean up ${settingsPath}: ${(err as Error).message}`)
+    }
   }
-  catch (err) {
-    consola.warn(`[orchestrator] failed to clean up ${settingsPath}: ${(err as Error).message}`)
-  }
+  // Also remove any allow entries we merged into settings.local.json.
+  cleanupLocalSettingsEntries(join(claudeDir, 'settings.local.json'))
 }
 
 /**
