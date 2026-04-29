@@ -232,12 +232,15 @@ async function start() {
   const taskSseClients = new Set<SseClient>()
   function broadcastTaskEvent(event: TaskEvent) {
     const data = `data: ${JSON.stringify(event)}\n\n`
-    // For task_deleted the row is already gone — fall through to owner-check
-    // using the cached task; broadcast to admins at minimum so their view stays
-    // consistent. Non-admins receive only events for their own tasks.
     const task = getTaskById(event.taskId)
+    // task_deleted: row already gone — fall back to userId embedded in event payload by taskRoutes
+    const ownerId: string | null
+      = task?.userId
+      ?? (event.type === 'task_deleted' && event.payload != null && typeof event.payload === 'object' && 'userId' in event.payload
+        ? String((event.payload as Record<string, unknown>).userId)
+        : null)
     for (const client of taskSseClients) {
-      if (!client.isAdmin && task && task.userId !== client.userId)
+      if (!client.isAdmin && ownerId !== null && ownerId !== client.userId)
         continue
       try {
         if (!client.res.writableEnded)

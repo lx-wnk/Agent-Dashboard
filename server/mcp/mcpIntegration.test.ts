@@ -26,6 +26,11 @@ beforeEach(async () => {
   orchestrator = new PipelineOrchestrator()
   const app = expressLib()
   app.use(expressLib.json())
+  // Inject admin user — POST/DELETE on api-keys require req.user.isAdmin
+  app.use((req, _res, next) => {
+    ;(req as unknown as { user: { id: string, isAdmin: boolean } }).user = { id: 'test-admin', isAdmin: true }
+    next()
+  })
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin: () => false }))
   app.use('/api', createMcpRouter(orchestrator, () => {}, id => broadcastedDeletedIds.push(id)))
 

@@ -27,6 +27,8 @@ export function createApiKeyRouter(deps: ApiKeyRouterDeps): Router {
   router.post('/settings/api-keys', (req, res) => {
     if (deps.rejectCrossOrigin(req, res))
       return
+    if (!req.user?.isAdmin)
+      return void res.status(403).json({ error: 'Admin access required to create API keys' })
     const { name, scopes } = req.body as { name?: string, scopes?: McpScope[] }
 
     if (!name || typeof name !== 'string' || !name.trim())
@@ -56,6 +58,8 @@ export function createApiKeyRouter(deps: ApiKeyRouterDeps): Router {
   router.delete('/settings/api-keys/:id', (req, res) => {
     if (deps.rejectCrossOrigin(req, res))
       return
+    if (!req.user?.isAdmin)
+      return void res.status(403).json({ error: 'Admin access required to revoke API keys' })
     const key = getApiKeyById(req.params.id)
     if (!key)
       return void res.status(404).json({ error: 'API key not found' })
