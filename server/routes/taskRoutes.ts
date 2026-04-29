@@ -640,6 +640,11 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'stage run not found' })
       return
     }
+    const task = getTaskById(run.taskId)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'stage run not found' })
+      return
+    }
     const reqRow = createPermissionRequest({
       stageRunId,
       tool,
@@ -690,8 +695,17 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(404).json({ error: 'request not found' })
       return
     }
-    const resolved = resolvePermissionRequest(req.params.id, outcome)
     const run = getStageRunById(existing.stageRunId)
+    if (!run) {
+      res.status(404).json({ error: 'request not found' })
+      return
+    }
+    const task = getTaskById(run.taskId)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'request not found' })
+      return
+    }
+    const resolved = resolvePermissionRequest(req.params.id, outcome)
     if (run) {
       // If granted, persist a permission row so the tool stays unlocked for the task
       if (outcome === 'granted') {
