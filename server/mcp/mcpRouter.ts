@@ -12,8 +12,8 @@ export function createMcpRouter(
   const router = Router()
 
   router.post('/mcp', mcpAuthMiddleware, async (req, res) => {
-    const { effectiveScopes } = req.mcpAuth!
-    const server = buildMcpServer(orchestrator, effectiveScopes, broadcast, broadcastDeleted)
+    const { effectiveScopes, userId } = req.mcpAuth!
+    const server = buildMcpServer(orchestrator, effectiveScopes, broadcast, broadcastDeleted, userId)
     // Stateless mode: sessionIdGenerator: undefined means every POST is
     // self-contained — no server-side session map is maintained.
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })

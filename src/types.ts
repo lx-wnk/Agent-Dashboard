@@ -250,6 +250,7 @@ export interface ApiKey {
   // key_hash is intentionally absent — never send the hash over the wire
   scopes: McpScope[]
   active: boolean
+  userId: string | null
   createdAt: string
   lastUsedAt: string | null
 }

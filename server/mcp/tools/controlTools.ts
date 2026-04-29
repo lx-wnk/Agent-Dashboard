@@ -15,11 +15,17 @@ export function registerControlTools(
   tool: ToolFn,
   orchestrator: PipelineOrchestrator,
   broadcast: (taskId: string) => void,
+  callerUserId: string | null,
 ): void {
   tool(
     'progress_task',
     { id: z.string() },
     async ({ id }) => {
+      const existing = getTaskById(id)
+      if (!existing)
+        mcpError(`Task not found: ${id}`)
+      if (callerUserId !== null && existing.userId !== null && existing.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       const stageRun = await orchestrator.progressTask(id)
       if (!stageRun)
         mcpError('Task cannot progress (terminal, not found, or no free runner slot)')
@@ -36,6 +42,8 @@ export function registerControlTools(
       const task = getTaskById(id)
       if (!task)
         mcpError(`Task not found: ${id}`)
+      if (callerUserId !== null && task.userId !== null && task.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       if (task.currentStage === 'done' || task.currentStage === 'cancelled')
         mcpError(`Task is already ${task.currentStage}`)
       getDb().transaction(() => {
@@ -56,6 +64,8 @@ export function registerControlTools(
       const task = getTaskById(id)
       if (!task)
         mcpError(`Task not found: ${id}`)
+      if (callerUserId !== null && task.userId !== null && task.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       const latest = getLatestStageRunForTask(id)
       if (!latest || latest.stage !== task.currentStage || latest.status !== 'failed')
         mcpError('Task has no failed stage run to retry on its current stage')
@@ -83,8 +93,11 @@ export function registerControlTools(
       pattern: z.string().max(256).optional(),
     },
     async ({ task_id, tool, pattern }) => {
-      if (!getTaskById(task_id))
+      const existing = getTaskById(task_id)
+      if (!existing)
         mcpError(`Task not found: ${task_id}`)
+      if (callerUserId !== null && existing.userId !== null && existing.userId !== callerUserId)
+        mcpError('Access denied: task belongs to a different user')
       const perm = createTaskPermission({
         taskId: task_id,
         tool,

@@ -55,7 +55,7 @@ declare global {
   // eslint-disable-next-line ts/no-namespace
   namespace Express {
     interface Request {
-      mcpAuth?: { keyId: string, effectiveScopes: Set<McpScope> }
+      mcpAuth?: { keyId: string, effectiveScopes: Set<McpScope>, userId: string | null }
     }
   }
 }
@@ -73,7 +73,7 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
     res.status(401).json({ error: 'Invalid or revoked API key' })
     return
   }
-  req.mcpAuth = { keyId: key.id, effectiveScopes: resolveScopes(key.scopes) }
+  req.mcpAuth = { keyId: key.id, effectiveScopes: resolveScopes(key.scopes), userId: key.userId }
   // Fire-and-forget — last_used_at update must not block the request
   setImmediate(() => {
     try {
