@@ -1,7 +1,7 @@
 import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, shallowRef } from 'vue'
 
-const tasks = ref<PipelineTask[]>([])
+const tasks = shallowRef<PipelineTask[]>([])
 const selectedTask = ref<PipelineTask | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
