@@ -57,6 +57,11 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
     if (rejectCrossOrigin(req, res))
       return
 
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ error: 'Admin access required to spawn agents' })
+      return
+    }
+
     if (!spawnManager.isSpawnAllowed()) {
       const { windowMs, max } = spawnManager.getRateLimitConfig()
       const windowSecs = Math.round(windowMs / 1000)

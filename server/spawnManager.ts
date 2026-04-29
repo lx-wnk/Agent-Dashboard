@@ -57,7 +57,6 @@ export interface SpawnRequest {
   model?: unknown
   systemPrompt?: unknown
   enableChannel?: unknown
-  skipPermissions?: unknown
   resumeSessionId?: unknown
 }
 
@@ -84,6 +83,13 @@ export interface AgentForChannel {
   pid: number
   cwd: string
   channelAvailable: boolean
+}
+
+function getAllowedCwds(): string[] | null {
+  const raw = process.env.DASHBOARD_ALLOWED_CWDS
+  if (!raw || !raw.trim())
+    return null // no allow-list → accept any existing dir (admin gate is primary protection)
+  return raw.split(':').map(p => p.trim()).filter(Boolean)
 }
 
 export class SpawnManager {
@@ -125,7 +131,7 @@ export class SpawnManager {
     // where even requests that fail validation counted against the window.
     this.recordSpawnAttempt()
 
-    const { prompt, cwd, model, systemPrompt, enableChannel, skipPermissions, resumeSessionId } = body
+    const { prompt, cwd, model, systemPrompt, enableChannel, resumeSessionId } = body
 
     if (!prompt || typeof prompt !== 'string') {
       return { ok: false, status: 400, error: 'Missing or invalid "prompt" field' }
@@ -135,6 +141,10 @@ export class SpawnManager {
     }
     if (!existsSync(cwd)) {
       return { ok: false, status: 400, error: `Directory does not exist: ${cwd}` }
+    }
+    const allowedCwds = getAllowedCwds()
+    if (allowedCwds !== null && !allowedCwds.some(allowed => cwd === allowed || cwd.startsWith(`${allowed}/`))) {
+      return { ok: false, status: 403, error: `cwd is not in the configured allow-list (DASHBOARD_ALLOWED_CWDS)` }
     }
     if (model !== undefined && model !== null && model !== '' && typeof model !== 'string') {
       return { ok: false, status: 400, error: 'Invalid model' }
@@ -150,9 +160,6 @@ export class SpawnManager {
 
     try {
       const args: string[] = []
-      if (skipPermissions) {
-        args.push('--dangerously-skip-permissions')
-      }
       if (typeof resumeSessionId === 'string' && resumeSessionId) {
         args.push('--resume', resumeSessionId)
       }
