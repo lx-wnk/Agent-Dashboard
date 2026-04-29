@@ -315,59 +315,64 @@ describe('permission request resolution', () => {
 
   it('passes resumeSessionId and handoff note to progressTask when session is attached', async () => {
     const spy = vi.spyOn(orchestrator, 'progressTask')
+    try {
+      const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+        slug: 'rs',
+        title: 'RS',
+        cwd: '/rs',
+      })
 
-    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
-      slug: 'rs',
-      title: 'RS',
-      cwd: '/rs',
-    })
+      const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      updateStageRun(run.id, { status: 'awaiting_user', sessionId: 'test-session-xyz' })
 
-    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
-    updateStageRun(run.id, { status: 'awaiting_user', sessionId: 'test-session-xyz' })
+      const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
+        stageRunId: run.id,
+        tool: 'Bash',
+        pattern: 'git *',
+      })
 
-    const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
-      stageRunId: run.id,
-      tool: 'Bash',
-      pattern: 'git *',
-    })
+      await api('POST', `/permission-requests/${reqRow.id}/resolve`, { outcome: 'granted' })
 
-    await api('POST', `/permission-requests/${reqRow.id}/resolve`, { outcome: 'granted' })
-
-    expect(spy).toHaveBeenCalledWith(
-      task.id,
-      expect.objectContaining({
-        resumeSessionId: 'test-session-xyz',
-        userAdditionalPrompt: expect.stringContaining('[PERMISSION GRANTED]'),
-      }),
-    )
-    spy.mockRestore()
+      expect(spy).toHaveBeenCalledWith(
+        task.id,
+        expect.objectContaining({
+          resumeSessionId: 'test-session-xyz',
+          userAdditionalPrompt: expect.stringContaining('[PERMISSION GRANTED]'),
+        }),
+      )
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('passes only handoff note (no resumeSessionId) when session_id is null', async () => {
     const spy = vi.spyOn(orchestrator, 'progressTask')
+    try {
+      const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+        slug: 'rn',
+        title: 'RN',
+        cwd: '/rn',
+      })
 
-    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
-      slug: 'rn',
-      title: 'RN',
-      cwd: '/rn',
-    })
+      const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      updateStageRun(run.id, { status: 'awaiting_user' }) // sessionId remains null
 
-    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
-    updateStageRun(run.id, { status: 'awaiting_user' }) // sessionId remains null
+      const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
+        stageRunId: run.id,
+        tool: 'WebFetch',
+      })
 
-    const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
-      stageRunId: run.id,
-      tool: 'WebFetch',
-    })
+      await api('POST', `/permission-requests/${reqRow.id}/resolve`, { outcome: 'granted' })
 
-    await api('POST', `/permission-requests/${reqRow.id}/resolve`, { outcome: 'granted' })
-
-    const [, opts] = spy.mock.calls[0]!
-    expect(opts?.resumeSessionId).toBeUndefined()
-    expect(opts?.userAdditionalPrompt).toContain('[PERMISSION GRANTED]')
-    spy.mockRestore()
+      expect(spy).toHaveBeenCalledOnce()
+      const [, opts] = spy.mock.calls[0]!
+      expect(opts?.resumeSessionId).toBeUndefined()
+      expect(opts?.userAdditionalPrompt).toContain('[PERMISSION GRANTED]')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 
