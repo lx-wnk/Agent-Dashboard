@@ -11,6 +11,7 @@ import { insertTurn, listTurns } from '../db/refinementTurnsRepo.js'
 import { getTaskById, updateTask } from '../db/tasksRepo.js'
 import { spawnRefinementTurn } from '../services/refinementSpawner.js'
 import { applyPresetPermissions, bulkGrantKonzeptPermissions, saveGrantsToPresets } from '../services/approvalUtils.js'
+import { canAccessTask } from './taskRoutes.js'
 
 interface ImageAttachment {
   dataUrl: string
@@ -44,6 +45,11 @@ export function createRefineRouter(
   mutationRouter.post('/:taskId/turn', async (req, res) => {
     const task = getTaskById(req.params.taskId)
     if (!task || task.currentStage !== 'konzept') {
+      res.status(404).json({ error: 'Task not found or not in konzept stage' })
+      return
+    }
+
+    if (!canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found or not in konzept stage' })
       return
     }
@@ -214,6 +220,11 @@ export function createRefineRouter(
       return
     }
 
+    if (!canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found or not in konzept stage' })
+      return
+    }
+
     const turns = listTurns(req.params.taskId)
     const lastAssistant = [...turns].reverse().find(t => t.role === 'assistant')
     if (!lastAssistant) {
@@ -266,6 +277,10 @@ export function createRefineRouter(
   router.get('/:taskId/turns', (req, res) => {
     const task = getTaskById(req.params.taskId)
     if (!task) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    if (!canAccessTask(task, req.user!)) {
       res.status(404).json({ error: 'Task not found' })
       return
     }

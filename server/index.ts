@@ -211,13 +211,19 @@ async function start() {
 
   // ─── Task Pipeline SSE + Router ────────────────
 
-  const taskSseClients = new Set<express.Response>()
+  const taskSseClients = new Set<SseClient>()
   function broadcastTaskEvent(event: TaskEvent) {
     const data = `data: ${JSON.stringify(event)}\n\n`
+    // For task_deleted the row is already gone — fall through to owner-check
+    // using the cached task; broadcast to admins at minimum so their view stays
+    // consistent. Non-admins receive only events for their own tasks.
+    const task = getTaskById(event.taskId)
     for (const client of taskSseClients) {
+      if (!client.isAdmin && task && task.userId !== client.userId)
+        continue
       try {
-        if (!client.writableEnded)
-          client.write(data)
+        if (!client.res.writableEnded)
+          client.res.write(data)
       }
       catch {
         taskSseClients.delete(client)
@@ -225,7 +231,7 @@ async function start() {
     }
   }
 
-  app.get('/api/tasks/stream', (_req, res) => {
+  app.get('/api/tasks/stream', (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -233,9 +239,10 @@ async function start() {
       'X-Accel-Buffering': 'no',
     })
     res.flushHeaders()
-    taskSseClients.add(res)
-    _req.on('close', () => {
-      taskSseClients.delete(res)
+    const client: SseClient = { res, userId: req.user!.id, isAdmin: req.user!.isAdmin }
+    taskSseClients.add(client)
+    req.on('close', () => {
+      taskSseClients.delete(client)
     })
   })
 

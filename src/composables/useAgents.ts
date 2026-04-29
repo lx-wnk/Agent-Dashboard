@@ -1,5 +1,5 @@
 import type { Agent } from '../types'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 
 export interface TrendPoint {
   t: number
@@ -9,7 +9,7 @@ export interface TrendPoint {
 
 type ViewMode = 'list' | 'cards' | 'pipeline'
 
-const agents = ref<Agent[]>([])
+const agents = shallowRef<Agent[]>([])
 const costTrend = ref<TrendPoint[]>([])
 const selectedAgent = ref<Agent | null>(null)
 const isLoading = ref(true)

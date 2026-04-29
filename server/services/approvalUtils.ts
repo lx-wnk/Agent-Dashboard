@@ -6,6 +6,15 @@ import { createTaskPermission, listTaskPermissions } from '../db/permissionsRepo
 import { listPresets, upsertPreset } from '../db/permissionPresetsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
 
+// Matches Bash patterns that could fetch or execute remote code — used to
+// block automatic pre-approval of potentially dangerous commands from
+// agent-emitted toolRequests. Operators can still grant these manually.
+const DANGEROUS_BASH_RE = /curl|wget|nc\b|netcat|python\s+-c|perl\s+-e|ruby\s+-e|eval\b|base64\s+-d|[;&|`]|\$\(|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/i
+
+function isDangerousBashPattern(pattern: string): boolean {
+  return DANGEROUS_BASH_RE.test(pattern)
+}
+
 // Kept here (not in src/types.ts) because it is a runtime enforcement concern
 // for pipeline permission gates, not a shared type contract.
 export const ALLOWED_TOOLS = new Set([
@@ -47,6 +56,8 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
     const patternTrimmed = typeof r.pattern === 'string' ? r.pattern.trim() : ''
     const pattern = patternTrimmed ? patternTrimmed : null
     if (!tool || !ALLOWED_TOOLS.has(tool))
+      continue
+    if (tool === 'Bash' && pattern && isDangerousBashPattern(pattern))
       continue
     const alreadyGranted = existing.some(p => p.tool === tool && (p.pattern ?? null) === pattern && p.granted)
     if (alreadyGranted)
