@@ -33,17 +33,6 @@ const DEFAULT_MAX_PARALLEL = 3
 const STAGE_TIMEOUT_KEY = 'stageTimeoutSeconds'
 const DEFAULT_STAGE_TIMEOUT_SECONDS = 1800
 
-const _configCache = new Map<string, { value: number, expiresAt: number }>()
-
-function getCachedPipelineConfigNumber(key: string, fallback: number): number {
-  const cached = _configCache.get(key)
-  if (cached && cached.expiresAt > Date.now())
-    return cached.value
-  const value = getPipelineConfigNumber(key, fallback)
-  _configCache.set(key, { value, expiresAt: Date.now() + 5000 })
-  return value
-}
-
 /**
  * Callback invoked when a stage handler creates a runtime permission request.
  * Injected by the server so the orchestrator stays decoupled from SSE / the
@@ -102,6 +91,16 @@ export class PipelineOrchestrator {
   private readonly onPermissionRequest: PermissionRequestNotifier | null
   private readonly onStageFailed: StageFailedNotifier | null
   private readonly onTaskChanged: TaskChangedNotifier | null
+  private readonly _configCache = new Map<string, { value: number, expiresAt: number }>()
+
+  private getCachedPipelineConfigNumber(key: string, fallback: number): number {
+    const cached = this._configCache.get(key)
+    if (cached && cached.expiresAt > Date.now())
+      return cached.value
+    const value = getPipelineConfigNumber(key, fallback)
+    this._configCache.set(key, { value, expiresAt: Date.now() + 5000 })
+    return value
+  }
 
   constructor(options: OrchestratorOptions | number = {}) {
     // Backwards-compatible: constructor used to accept a plain pollIntervalMs.
@@ -620,7 +619,7 @@ export class PipelineOrchestrator {
         // Enforce stage timeout: a PID-alive run that has exceeded the
         // configured limit is killed and failed so it doesn't hold a runner
         // slot indefinitely (infinite tool loop, network hang, etc.).
-        const timeoutSeconds = getCachedPipelineConfigNumber(STAGE_TIMEOUT_KEY, DEFAULT_STAGE_TIMEOUT_SECONDS)
+        const timeoutSeconds = this.getCachedPipelineConfigNumber(STAGE_TIMEOUT_KEY, DEFAULT_STAGE_TIMEOUT_SECONDS)
         if (timeoutSeconds > 0 && run.startedAt) {
           const elapsedMs = Date.now() - new Date(run.startedAt).getTime()
           if (elapsedMs > timeoutSeconds * 1000) {
@@ -758,7 +757,7 @@ export class PipelineOrchestrator {
         const perTaskCap = typeof task.metadata?.maxReviewCycles === 'number'
           ? task.metadata.maxReviewCycles
           : undefined
-        const maxCycles = perTaskCap ?? getCachedPipelineConfigNumber('maxReviewCycles', 3)
+        const maxCycles = perTaskCap ?? this.getCachedPipelineConfigNumber('maxReviewCycles', 3)
 
         if (cycles >= maxCycles) {
           return {
@@ -799,7 +798,7 @@ export class PipelineOrchestrator {
    * project_task_pipeline_runner_model priority order.
    */
   private pickNextTasksForFreeSlots(allRunning?: StageRun[]): void {
-    const max = getCachedPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
+    const max = this.getCachedPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
     // Single DB scan per tick, passed from progressPendingTasks to avoid N×M scans.
     const running = (allRunning ?? listRunningStageRuns()).filter(r => r.status === 'running')
     const busyTaskIds = new Set(running.map(r => r.taskId))
@@ -839,7 +838,7 @@ export class PipelineOrchestrator {
    * that's about to spawn its next stage doesn't consume a slot twice.
    */
   private hasFreeRunnerSlot(exceptTaskId?: string): boolean {
-    const max = getCachedPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
+    const max = this.getCachedPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
     const busy = countBusyRunners(exceptTaskId)
     return busy < max
   }
