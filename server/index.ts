@@ -359,6 +359,13 @@ async function start() {
   // Agent routes (REST endpoints — non-SSE; SSE stream stays above)
   app.use('/api', createAgentRouter({ spawnManager, requireApiToken, rejectCrossOrigin }))
 
+  // Generic error handler — avoid leaking stack traces / internal error messages in production
+  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('Unhandled error:', err)
+    const msg = process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message
+    res.status(500).json({ error: msg })
+  })
+
   // ─── HTTP server ───────────────────────────────────────
 
   const httpServer = createHttpServer(app)

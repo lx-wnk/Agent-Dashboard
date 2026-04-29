@@ -18,6 +18,9 @@ export const webhookAdapter: NotificationAdapter = {
     if (!url)
       throw new Error('webhook adapter missing webhook_url')
 
+    if (!isSafeWebhookUrl(url))
+      throw new Error(`webhook_url blocked by SSRF guard: ${url}`)
+
     const format = getConfig('webhook_format') || 'generic'
     const body = buildBody(format, payload)
 
@@ -32,6 +35,24 @@ export const webhookAdapter: NotificationAdapter = {
       throw new Error(`webhook returned ${res.status}: ${text.slice(0, 200)}`)
     }
   },
+}
+
+function isSafeWebhookUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:')
+      return false
+    const host = u.hostname.toLowerCase()
+    // Block loopback and link-local — same rules as remoteRoutes
+    if (/^127\.\d+\.\d+\.\d+$/.test(host) || /^169\.254\.\d+\.\d+$/.test(host))
+      return false
+    if (host === 'localhost' || host === '::1' || host === '[::1]')
+      return false
+    return true
+  }
+  catch {
+    return false
+  }
 }
 
 function buildBody(format: string, payload: NotificationPayload): Record<string, unknown> {
