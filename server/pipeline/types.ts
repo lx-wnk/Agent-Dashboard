@@ -32,6 +32,13 @@ export interface StageContext {
    *  prompt so the agent can self-correct a rejected schema.
    */
   priorIterationOutput: Record<string, unknown> | null
+  /**
+   * If set, the stage handler should pass this through to the agent spawn
+   * as `--resume <sessionId>` so the new claude process continues from the
+   * prior session's transcript instead of starting a fresh conversation.
+   * Used by the resume-stage endpoint after a permission grant.
+   */
+  resumeSessionId?: string
   // Injected by orchestrator for side effects:
   recordAudit: (action: string, details?: Record<string, unknown>) => void
   requestPermission: (tool: string, pattern: string | null, reason: string) => PermissionRequest
@@ -45,13 +52,8 @@ export interface StageHandler {
 
 // Canonical stage order for auto-transitions
 export const STAGE_ORDER: PipelineStage[] = [
+  'konzept',
   'backlog',
-  'pruefung',
-  'refinement',
-  'planning',
-  'approval1',
-  'umsetzungskonzept',
-  'approval2',
   'umsetzung',
   'selbstreview',
   'finalisierung',

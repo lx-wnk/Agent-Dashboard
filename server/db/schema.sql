@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- stage_runs.status — the task stays on the stage where the run died
   -- so the UI can surface retry/analyze actions on the same stage.
   current_stage TEXT NOT NULL CHECK (current_stage IN (
-    'backlog','pruefung','refinement','planning','approval1',
+    'konzept','backlog','pruefung','refinement','planning','approval1',
     'umsetzungskonzept','approval2','umsetzung','selbstreview',
     'finalisierung','done','on_hold','cancelled'
   )),
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS stage_runs (
   id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   stage TEXT NOT NULL CHECK (stage IN (
-    'backlog','pruefung','refinement','planning','approval1',
+    'konzept','backlog','pruefung','refinement','planning','approval1',
     'umsetzungskonzept','approval2','umsetzung','selbstreview',
     'finalisierung','done','on_hold','cancelled'
   )),
@@ -194,6 +194,20 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
 
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_id);
+
+-- Conversation turns for the konzept-stage refinement chat.
+-- Each user/assistant exchange is one row.
+CREATE TABLE IF NOT EXISTS refinement_turns (
+  id          TEXT PRIMARY KEY,
+  task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  role        TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content     TEXT NOT NULL,
+  phase       TEXT,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_refinement_turns_task
+  ON refinement_turns(task_id, created_at);
 
 -- Dashboard users (populated on first GitHub OAuth login)
 CREATE TABLE IF NOT EXISTS users (

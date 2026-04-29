@@ -5,9 +5,8 @@ import { consola } from 'consola'
 import { revokeApiKeyByName } from '../db/apiKeysRepo.js'
 import { appendAudit } from '../db/auditRepo.js'
 import { getDb } from '../db/client.js'
-import { resolveFeedbackForStage } from '../db/feedbackRepo.js'
 import { getPipelineConfigNumber } from '../db/notificationConfigRepo.js'
-import { createPermissionRequest, listTaskPermissions } from '../db/permissionsRepo.js'
+import { createPermissionRequest, listPendingPermissionRequests, listTaskPermissions } from '../db/permissionsRepo.js'
 import {
   createStageRun,
   getLatestStageRun,
@@ -170,11 +169,14 @@ export class PipelineOrchestrator {
    * two concurrent callers can read the same `prev`, each build a new
    * chain head, and parallel execution returns. Keep this block atomic.
    */
-  async progressTask(taskId: string): Promise<StageRun | null> {
+  async progressTask(
+    taskId: string,
+    opts?: { resumeSessionId?: string },
+  ): Promise<StageRun | null> {
     const prev = this.taskLocks.get(taskId) ?? Promise.resolve(null)
     const next = prev
       .catch(() => null)
-      .then(() => this.runProgressTaskLocked(taskId))
+      .then(() => this.runProgressTaskLocked(taskId, opts))
     this.taskLocks.set(taskId, next)
     try {
       return await next
@@ -186,7 +188,10 @@ export class PipelineOrchestrator {
     }
   }
 
-  private async runProgressTaskLocked(taskId: string): Promise<StageRun | null> {
+  private async runProgressTaskLocked(
+    taskId: string,
+    opts?: { resumeSessionId?: string },
+  ): Promise<StageRun | null> {
     const task = getTaskById(taskId)
     if (!task)
       return null
@@ -206,7 +211,7 @@ export class PipelineOrchestrator {
     const stageRun = this.ensureStageRun(task)
     updateStageRun(stageRun.id, { status: 'running', startedAt: new Date().toISOString() })
 
-    const ctx = this.buildContext(task, stageRun)
+    const ctx = this.buildContext(task, stageRun, opts?.resumeSessionId)
     let transition: StageTransition
     try {
       transition = await handler.execute(ctx)
@@ -231,7 +236,11 @@ export class PipelineOrchestrator {
 
   // -------- private helpers --------
 
-  private buildContext(task: PipelineTask, stageRun: StageRun): StageContext {
+  private buildContext(
+    task: PipelineTask,
+    stageRun: StageRun,
+    resumeSessionId?: string,
+  ): StageContext {
     const permissions = listTaskPermissions(task.id)
     const previousOutput = this.getPreviousStageOutput(task)
     const priorIterationOutput = stageRun.iteration > 0
@@ -243,6 +252,7 @@ export class PipelineOrchestrator {
       permissions,
       previousOutput,
       priorIterationOutput,
+      resumeSessionId,
       recordAudit: (action, details) => {
         appendAudit({ taskId: task.id, actor: 'orchestrator', action, details: details ?? null })
       },
@@ -263,9 +273,7 @@ export class PipelineOrchestrator {
 
   private getPreviousStageOutput(task: PipelineTask): Record<string, unknown> | null {
     // Walk back through the canonical order and return the first prior
-    // stage that produced a non-null output. Approval1/approval2 stages
-    // are agent-less wait_user gates that store null output — skipping
-    // them lets agent handlers see the real previous meaningful result.
+    // stage that produced a non-null output.
     const idx = STAGE_ORDER.indexOf(task.currentStage)
     if (idx <= 0)
       return null
@@ -324,11 +332,6 @@ export class PipelineOrchestrator {
           if (transition.taskMetadataPatch !== undefined)
             patch.metadata = transition.taskMetadataPatch
           updateTask(task.id, patch, db)
-          // Resolve any user feedback that was pending on this stage —
-          // a successful next-transition means the agent has produced a
-          // fresh artifact that supersedes the prior reviewed output.
-          if (stageRun.stage === 'planning' || stageRun.stage === 'umsetzungskonzept')
-            resolveFeedbackForStage(task.id, stageRun.stage, stageRun.id, db)
           appendAudit({
             taskId: task.id,
             actor: 'orchestrator',
@@ -481,7 +484,7 @@ export class PipelineOrchestrator {
     // happy path too — `next`, `wait_user`, `iterate`, `on_hold`, `done`,
     // `async_running`, `fail`. Without this callback the kanban only
     // updates on permission requests and failures, missing healthy
-    // stage transitions like planning→approval1.
+    // stage transitions.
     this.onTaskChanged?.(task.id, { transitionKind: transition.kind })
 
     // Cascade terminal stage to dependents AFTER onTaskChanged so the
@@ -573,6 +576,14 @@ export class PipelineOrchestrator {
         // for the completion detector (which only runs after the PID exits).
         if (!run.sessionId && run.startedAt)
           void this.tryAttachSessionId(run.id, cwd, run.startedAt)
+
+        // Don't kill the agent while it's blocked waiting for a user
+        // permission decision — the PID is alive but it's idle on the
+        // channel, not consuming work. Counting that idle time toward the
+        // timeout would kill the agent before the user can respond.
+        const hasPendingPerms = listPendingPermissionRequests(run.id).length > 0
+        if (hasPendingPerms)
+          continue
 
         // Enforce stage timeout: a PID-alive run that has exceeded the
         // configured limit is killed and failed so it doesn't hold a runner
@@ -821,7 +832,6 @@ export class PipelineOrchestrator {
             break
           case 'start': {
             // Move on_hold tasks to backlog so they become pickable.
-            // approval1/2 stay put — they need a human decision regardless.
             const depTask = getTaskById(dep.taskId)
             if (depTask?.currentStage === 'on_hold') {
               updateTask(dep.taskId, { currentStage: 'backlog' })

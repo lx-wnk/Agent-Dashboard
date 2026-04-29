@@ -43,44 +43,6 @@ export function buildUserFeedbackPrefix(feedbacks: TaskFeedback[]): string {
   return `${header}\n\nA human reviewer rejected your prior output on this stage. Address the items below in your next attempt. Each item below blocks approval until resolved.\n\n${items}\n\n**Acknowledgement contract:** in your output, briefly state how each numbered item was addressed (one sentence each is fine). The reviewer uses this to verify nothing was silently skipped.\n\n---\n\n`
 }
 
-export function refinementPrompt(task: PipelineTask, prevOutput: unknown): PromptBundle {
-  return {
-    systemPrompt: SHARED_CONTEXT,
-    userPrompt: `## Task: ${task.title}\n\n${task.description || '(no description provided)'}\n\n## Feasibility Report From Pruefung\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`\n\n## Your Job: Refine\n\nRewrite the task into a crisp, unambiguous specification. Resolve the risks and blockers the feasibility report raised. Produce a refined title, a clarified description, and explicit success criteria.\n\nRespond with a \`\`\`json\`\`\` block: {"refinedTitle": string, "refinedDescription": string, "successCriteria": string[], "assumptions": string[], "outOfScope": string[]}.`,
-  }
-}
-
-export function pruefungPrompt(task: PipelineTask): PromptBundle {
-  return {
-    systemPrompt: SHARED_CONTEXT,
-    userPrompt: `## Task: ${task.title}\n\n${task.description || '(no description provided)'}\n\n## Working Directory\n${task.cwd}\n\n## Your Job: Feasibility Check\n\nAnalyze the task and produce a short feasibility report. Answer:\n1. Is this task well-defined or does it need refinement?\n2. What are the obvious risks or unknowns?\n3. Rough complexity estimate (XS / S / M / L / XL).\n4. Any immediate blockers?\n\nRespond with a \`\`\`json\`\`\` block containing {"wellDefined": bool, "risks": string[], "complexity": "XS"|"S"|"M"|"L"|"XL", "blockers": string[], "recommendation": "proceed"|"refine"|"reject"}.`,
-  }
-}
-
-export function planningPrompt(
-  task: PipelineTask,
-  prevOutput: unknown,
-  userFeedback: TaskFeedback[] = [],
-): PromptBundle {
-  const feedbackPrefix = buildUserFeedbackPrefix(userFeedback)
-  return {
-    systemPrompt: SHARED_CONTEXT,
-    userPrompt: `${feedbackPrefix}## Task: ${task.title}\n\n${task.description || ''}\n\n## Previous Stage Output\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`\n\n## Your Job: Breakdown\n\nDecompose the task into concrete subtasks. List:\n- Files likely to be touched\n- External dependencies or APIs involved\n- Order of operations\n- Acceptance criteria\n\nRespond with a \`\`\`json\`\`\` block: {"subtasks": [{"id": string, "title": string, "files": string[]}], "acceptanceCriteria": string[]}.`,
-  }
-}
-
-export function umsetzungskonzeptPrompt(
-  task: PipelineTask,
-  prevOutput: unknown,
-  userFeedback: TaskFeedback[] = [],
-): PromptBundle {
-  const feedbackPrefix = buildUserFeedbackPrefix(userFeedback)
-  return {
-    systemPrompt: SHARED_CONTEXT,
-    userPrompt: `${feedbackPrefix}## Task: ${task.title}\n\n${task.description || ''}\n\n## Plan From Previous Stage\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`\n\n## Your Job: Implementation Plan + Tool Inventory\n\nProduce the concrete implementation plan AND a complete list of tool permissions you will need during umsetzung. Be exhaustive — any missing tool will force a mid-run ON HOLD pause.\n\nRespond with a \`\`\`json\`\`\` block: {"steps": [{"n": number, "description": string}], "toolRequests": [{"tool": string, "pattern": string|null, "reason": string}]}. \n\nCommon tools: Read, Grep, Glob, Write, Edit, Bash. For Bash, always include a pattern (e.g. "npm *", "git status"). NEVER request Bash(git push *) — pushing is always the user's responsibility, never yours. Do NOT request WebFetch unless you know you need network access.`,
-  }
-}
-
 export function umsetzungPrompt(task: PipelineTask, prevOutput: unknown, feedback?: string): PromptBundle {
   const systemPrompt = `${SHARED_CONTEXT}
 
@@ -88,7 +50,7 @@ You are the Opus orchestrator for this task's implementation phase. Use the Task
 
 ## Permission handling — CRITICAL
 
-The tools you need were pre-approved from your umsetzungskonzept toolRequests. If you try a tool and it is denied (permission error / interactive prompt), you MUST:
+The tools you need were pre-approved from the konzept refinement chat's toolRequests. If you try a tool and it is denied (permission error / interactive prompt), you MUST:
 1. Call the \`request_permission\` MCP tool with the exact tool name and pattern (e.g. tool="Bash", pattern="npm run *").
 2. Stop immediately after calling it — do NOT write prose asking the user, do NOT continue guessing alternatives.
 3. The task will pause on_hold. The user will grant or deny the request and resume you.
@@ -101,7 +63,7 @@ Never write a message like "please grant me write permission to X" — that mess
 
   return {
     systemPrompt,
-    userPrompt: `## Task: ${task.title}\n\n${task.description || ''}\n\n## Approved Plan\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`${feedbackBlock}\n\n## Your Job: Implement\n\nWork step-by-step through the approved plan. Commit each logical change via git. When finished, write a short summary to dashboard_reply and stop.`,
+    userPrompt: `## Task: ${task.title}\n\n${task.description || ''}\n\n## Konzept (spec, plan, toolRequests)\n\`\`\`json\n${JSON.stringify(prevOutput, null, 2)}\n\`\`\`${feedbackBlock}\n\n## Your Job: Implement\n\nWork step-by-step through the konzept plan. Commit each logical change via git.\n\nWhen finished, produce a \`\`\`json\`\`\` block as your final output:\n{"summary": string, "commits": string[], "openItems": string[]}\n\nOptionally also call dashboard_reply with the summary text.`,
   }
 }
 

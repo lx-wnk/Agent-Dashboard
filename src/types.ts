@@ -80,13 +80,8 @@ export interface OutputMessage {
 
 // Task Pipeline Types
 export type PipelineStage
-  = | 'backlog'
-    | 'pruefung'
-    | 'refinement'
-    | 'planning'
-    | 'approval1'
-    | 'umsetzungskonzept'
-    | 'approval2'
+  = | 'konzept'
+    | 'backlog'
     | 'umsetzung'
     | 'selbstreview'
     | 'finalisierung'
@@ -207,7 +202,7 @@ export interface PermissionRequest {
   outcome: 'granted' | 'denied' | 'timeout' | null
 }
 
-export type FeedbackStage = 'planning' | 'umsetzungskonzept'
+export type FeedbackStage = PipelineStage
 
 export interface TaskFeedback {
   id: string

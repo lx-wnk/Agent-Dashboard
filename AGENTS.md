@@ -37,3 +37,13 @@ When compacting context, always preserve:
 - List of modified/created files in this session
 - Active test/lint commands and their last results
 - Unfinished tasks and next steps
+
+## Pipeline Permissions
+
+Default tool permissions for pipeline stage agents running in this project.
+
+```json
+{
+  "allow": ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "Bash", "WebFetch"]
+}
+```

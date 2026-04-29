@@ -63,21 +63,13 @@ export function validateStageOutput(
   output: Record<string, unknown>,
 ): ValidationResult {
   switch (stage) {
-    case 'pruefung':
-      return validatePruefung(output)
-    case 'refinement':
-      return validateRefinement(output)
-    case 'planning':
-      return validatePlanning(output)
-    case 'umsetzungskonzept':
-      return validateUmsetzungskonzept(output)
     case 'selbstreview':
       return validateSelbstreview(output)
     case 'finalisierung':
       return validateFinalisierung(output)
     default:
-      // Stages without a structured schema (backlog, approvals,
-      // umsetzung) just need to be a parseable object. No further checks.
+      // Stages without a structured schema (backlog, umsetzung) just
+      // need to be a parseable object. No further checks.
       return { ok: true }
   }
 }
@@ -85,50 +77,6 @@ export function validateStageOutput(
 function missing(field: string): ValidationResult {
   return { ok: false, error: `missing required field: ${field}` }
 }
-function wrongType(field: string, expected: string): ValidationResult {
-  return { ok: false, error: `field ${field} must be ${expected}` }
-}
-
-function validatePruefung(o: Record<string, unknown>): ValidationResult {
-  if (typeof o.wellDefined !== 'boolean')
-    return missing('wellDefined (boolean)')
-  if (!Array.isArray(o.risks))
-    return missing('risks (string array)')
-  if (typeof o.complexity !== 'string' || !['XS', 'S', 'M', 'L', 'XL'].includes(o.complexity))
-    return wrongType('complexity', 'one of XS|S|M|L|XL')
-  if (!Array.isArray(o.blockers))
-    return missing('blockers (string array)')
-  if (typeof o.recommendation !== 'string' || !['proceed', 'refine', 'reject'].includes(o.recommendation))
-    return wrongType('recommendation', 'one of proceed|refine|reject')
-  return { ok: true }
-}
-
-function validateRefinement(o: Record<string, unknown>): ValidationResult {
-  if (typeof o.refinedTitle !== 'string')
-    return missing('refinedTitle (string)')
-  if (typeof o.refinedDescription !== 'string')
-    return missing('refinedDescription (string)')
-  if (!Array.isArray(o.successCriteria))
-    return missing('successCriteria (string array)')
-  return { ok: true }
-}
-
-function validatePlanning(o: Record<string, unknown>): ValidationResult {
-  if (!Array.isArray(o.subtasks))
-    return missing('subtasks (array)')
-  if (!Array.isArray(o.acceptanceCriteria))
-    return missing('acceptanceCriteria (string array)')
-  return { ok: true }
-}
-
-function validateUmsetzungskonzept(o: Record<string, unknown>): ValidationResult {
-  if (!Array.isArray(o.steps))
-    return missing('steps (array)')
-  if (!Array.isArray(o.toolRequests))
-    return missing('toolRequests (array)')
-  return { ok: true }
-}
-
 function validateSelbstreview(o: Record<string, unknown>): ValidationResult {
   if (typeof o.passed !== 'boolean')
     return missing('passed (boolean)')

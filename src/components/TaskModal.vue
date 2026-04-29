@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { Agent, OutputMessage, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
   addTaskDependency,
@@ -10,6 +10,7 @@ import {
   fetchDependencies,
   fetchDependents,
   fetchPendingPermissionRequests,
+  fetchStageRunAgentOutput,
   fetchStageRuns,
   fetchTaskFeedback,
   fetchTaskPermissions,
@@ -18,23 +19,22 @@ import {
   removeTaskDependency,
   requestChanges,
   resolvePermissionRequest,
+  resumeStageTask,
   retryTask,
 } from '../composables/useTasks'
-import { agentSessionStatusClass, runStatusChipClass } from '../utils/statusColors'
+import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
-import CrossLinkBanner from './CrossLinkBanner.vue'
-import PromptInput from './PromptInput.vue'
 import StageOutputView from './StageOutputView.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
-const emit = defineEmits<{ close: [], navigate: [agent: Agent] }>()
+const emit = defineEmits<{ close: [], navigate: [agent: Agent], openChat: [task: PipelineTask] }>()
 
 const { agents } = useAgents()
 
-type Tab = 'overview' | 'session' | 'stages' | 'permissions' | 'audit'
+type Tab = 'overview' | 'stages' | 'permissions' | 'audit'
 const activeTab = ref<Tab>('overview')
 const stageRuns = ref<StageRun[]>([])
 const permissions = ref<TaskPermission[]>([])
@@ -107,9 +107,6 @@ async function handleRemoveDependency(depId: string): Promise<void> {
 // immediately when the agent starts before session_id is persisted to the DB.
 // The backend enriches tasks with `activeSessionId` of the most relevant
 // stage_run. If that session is also discovered by the agent scanner (it will
-// be, for any running detached claude process), we get a live Agent object
-// with channelAvailable/status, which we pass into AgentChatStream +
-// PromptInput unchanged.
 const pipelineAgent = computed(() => {
   const sid = props.task?.activeSessionId
   if (sid)
@@ -120,30 +117,6 @@ const pipelineAgent = computed(() => {
   return null
 })
 
-const sessionLocalMessages = ref<OutputMessage[]>([])
-const sessionChatRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
-
-// Stage-aware empty state for the Session tab: explains WHY there's no
-// live agent right now and what (if anything) the user should do next.
-const sessionEmptyHint = computed<{ title: string, body: string }>(() => {
-  const stage = props.task?.currentStage
-  if (stage === 'backlog' || stage === 'pruefung')
-    return { title: 'No agent started yet', body: 'This task is waiting to be picked up by the pipeline.' }
-  if (stage === 'approval1' || stage === 'approval2')
-    return { title: 'Waiting for approval', body: 'The previous stage is complete — review the output in the Overview tab and approve or request changes.' }
-  if (stage === 'on_hold')
-    return { title: 'Task paused', body: 'The task was put on hold and needs a decision before an agent can continue.' }
-  if (stage === 'done')
-    return { title: 'Task completed', body: 'No more sessions running. Find the history in the Stages tab.' }
-  if (stage === 'cancelled')
-    return { title: 'Task cancelled', body: 'No sessions — the task was cancelled.' }
-  return { title: 'No active session', body: 'Between stage runs — the next agent will start shortly.' }
-})
-
-function onSessionMessageSent(msg: OutputMessage) {
-  sessionLocalMessages.value.push(msg)
-  nextTick(() => sessionChatRef.value?.scrollToBottom())
-}
 
 function isTerminal(stage: string | undefined) {
   // `failed` is intentionally excluded — failed tasks are actionable
@@ -197,6 +170,26 @@ const latestRunAgentMessage = computed<string | null>(() => {
   return typeof msg === 'string' ? msg : null
 })
 
+const latestRunError = computed<string | null>(() => {
+  const out = latestStageRun.value?.output
+  if (!out)
+    return null
+  const e = (out as Record<string, unknown>).error
+  return typeof e === 'string' ? e : null
+})
+
+// Session text fetched lazily for failed/timed-out runs that have no agentMessage
+const sessionAgentText = ref<string | null>(null)
+const sessionAgentTextLoading = ref(false)
+
+async function fetchSessionText(run: StageRun) {
+  if (!props.task || latestRunAgentMessage.value)
+    return
+  sessionAgentTextLoading.value = true
+  sessionAgentText.value = await fetchStageRunAgentOutput(props.task.id, run.id)
+  sessionAgentTextLoading.value = false
+}
+
 async function onAnalyze() {
   if (!props.task)
     return
@@ -209,10 +202,14 @@ async function onAnalyze() {
 async function loadDetails() {
   if (!props.task)
     return
+  sessionAgentText.value = null
   stageRuns.value = await fetchStageRuns(props.task.id)
   permissions.value = await fetchTaskPermissions(props.task.id)
   pendingRequests.value = await fetchPendingPermissionRequests(props.task.id)
   feedbackHistory.value = await fetchTaskFeedback(props.task.id)
+  const latest = stageRuns.value[stageRuns.value.length - 1]
+  if (latest && (latest.status === 'failed' || latest.status === 'done'))
+    fetchSessionText(latest)
 }
 
 async function onRequestChanges() {
@@ -232,18 +229,11 @@ watch(() => props.task?.id, (id, prevId) => {
     actionError.value = ''
     feedbackInput.value = ''
     feedbackHistory.value = []
-    sessionLocalMessages.value = []
     void loadDetails()
     void loadDependencies()
   }
 })
 
-// Auto-switch to session tab when a live agent appears for this task.
-// Only fires once per task open (guarded by the activeTab reset above).
-watch(pipelineAgent, (agent, prev) => {
-  if (agent && !prev && activeTab.value === 'overview')
-    activeTab.value = 'session'
-})
 
 // Live refresh: when the SSE store pushes updated task fields (stage,
 // iteration, run status, active session), re-fetch the dependent details
@@ -368,23 +358,6 @@ function formatDate(iso: string | null): string {
         <button
           type="button"
           class="px-4 py-2.5 text-xs font-semibold bg-transparent border-none border-b-2 border-transparent cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-          :class="activeTab === 'session' ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' : 'text-slate-400 dark:text-slate-600'"
-          @click="activeTab = 'session'"
-        >
-          Session
-          <span
-            v-if="pipelineAgent"
-            class="inline-block w-1.5 h-1.5 rounded-full ml-[5px] align-middle"
-            :class="{
-              'bg-green-400 animate-[pulse_2s_ease-in-out_infinite]': pipelineAgent.status === 'active',
-              'bg-yellow-500': pipelineAgent.status === 'waiting',
-              'bg-slate-400 dark:bg-slate-500': pipelineAgent.status !== 'active' && pipelineAgent.status !== 'waiting',
-            }"
-          />
-        </button>
-        <button
-          type="button"
-          class="px-4 py-2.5 text-xs font-semibold bg-transparent border-none border-b-2 border-transparent cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
           :class="activeTab === 'stages' ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' : 'text-slate-400 dark:text-slate-600'"
           @click="activeTab = 'stages'"
         >
@@ -411,6 +384,64 @@ function formatDate(iso: string | null): string {
       <div class="flex-1 overflow-y-auto">
         <!-- Overview tab -->
         <section v-if="activeTab === 'overview'" class="flex-1 overflow-y-auto p-5 flex flex-col gap-4 min-h-0">
+          <!-- Pending permission requests banner -->
+          <div
+            v-if="pendingRequests.length > 0"
+            class="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-700/60 rounded-md px-3.5 py-3"
+          >
+            <h3 class="text-[11px] uppercase tracking-[0.5px] text-yellow-700 dark:text-yellow-400 font-semibold mb-2 flex items-center gap-1.5">
+              <span aria-hidden="true">⚠</span> Waiting for Permission
+            </h3>
+            <div
+              v-for="req in pendingRequests"
+              :key="req.id"
+              class="border-t border-yellow-200 dark:border-yellow-800/50 first:border-t-0 first:pt-0 pt-2 mt-2 first:mt-0"
+            >
+              <div class="flex items-baseline gap-2 flex-wrap">
+                <strong class="text-sm text-slate-900 dark:text-slate-100">{{ req.tool }}</strong>
+                <span
+                  v-if="req.pattern"
+                  class="font-mono text-xs text-slate-700 dark:text-slate-300 bg-yellow-100/60 dark:bg-yellow-900/40 px-1.5 py-px rounded"
+                >{{ req.pattern }}</span>
+              </div>
+              <p v-if="req.reason" class="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                {{ req.reason }}
+              </p>
+              <div class="flex gap-1.5 mt-2">
+                <AppButton
+                  variant="primary"
+                  size="sm"
+                  :disabled="isActing"
+                  @click="onResolve(req, 'granted')"
+                >
+                  Grant
+                </AppButton>
+                <AppButton
+                  variant="danger"
+                  size="sm"
+                  :disabled="isActing"
+                  @click="onResolve(req, 'denied')"
+                >
+                  Deny
+                </AppButton>
+              </div>
+            </div>
+          </div>
+
+          <!-- Konzept refinement banner -->
+          <div
+            v-if="task.currentStage === 'konzept'"
+            class="flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md px-3.5 py-3 mb-2"
+          >
+            <div class="flex flex-col gap-0.5">
+              <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">Dieses Ticket wartet auf Refinement</span>
+              <span class="text-[11px] text-blue-600/80 dark:text-blue-400/80">Führe das Gespräch mit dem Refinement-Assistenten weiter</span>
+            </div>
+            <AppButton variant="primary" size="sm" @click="emit('openChat', task)">
+              Chat fortsetzen →
+            </AppButton>
+          </div>
+
           <!-- Latest stage run summary (non-approval states) -->
           <div v-if="!approvalMeta && latestStageRun" class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3.5 py-3 mb-4">
             <div class="flex items-center gap-2 flex-wrap mb-2">
@@ -428,18 +459,40 @@ function formatDate(iso: string | null): string {
               :local-messages="[]"
               class="border-t border-slate-200 dark:border-slate-700 mt-2 pt-3 min-h-[200px] max-h-[40vh] px-0 py-3"
             />
-            <div v-else-if="latestRunAgentMessage" class="mt-1.5">
-              <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
-                Agent output
+            <template v-else>
+              <!-- Error banner (timeout, schema failure, etc.) -->
+              <div v-if="latestRunError" class="mt-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 px-3 py-2 flex items-start gap-2">
+                <span class="text-red-500 dark:text-red-400 text-sm leading-none mt-0.5">✗</span>
+                <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">{{ latestRunError }}</p>
               </div>
-              <pre class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ latestRunAgentMessage }}</pre>
-            </div>
-            <details v-else-if="latestStageRun.output">
-              <summary class="cursor-pointer text-[11px] text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
-                Stage output
-              </summary>
-              <StageOutputView :stage="latestStageRun.stage" :output="latestStageRun.output" />
-            </details>
+
+              <!-- Agent prose captured at completion (e.g. "no json block") -->
+              <div v-if="latestRunAgentMessage" class="mt-2">
+                <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
+                  Agent output
+                </div>
+                <pre class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ latestRunAgentMessage }}</pre>
+              </div>
+
+              <!-- Session text fetched from JSONL (failed/done runs without embedded agentMessage) -->
+              <div v-else-if="sessionAgentText || sessionAgentTextLoading" class="mt-2">
+                <div class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1">
+                  Agent output
+                </div>
+                <div v-if="sessionAgentTextLoading" class="text-[11px] text-slate-400 dark:text-slate-600 animate-pulse">
+                  Loading…
+                </div>
+                <pre v-else class="font-mono text-[11px] bg-white dark:bg-slate-900 rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[400px] overflow-y-auto text-slate-600 dark:text-slate-400 leading-relaxed">{{ sessionAgentText }}</pre>
+              </div>
+
+              <!-- Structured stage output (successful run with parsed fields) -->
+              <details v-else-if="latestStageRun.output && !latestRunError" class="mt-1.5">
+                <summary class="cursor-pointer text-[11px] text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
+                  Stage output
+                </summary>
+                <StageOutputView :stage="latestStageRun.stage" :output="latestStageRun.output" :status="latestStageRun.status" />
+              </details>
+            </template>
           </div>
 
           <div v-if="approvalMeta" class="bg-green-400/[.08] border border-green-400/35 rounded-md px-3.5 py-3 mb-4">
@@ -643,56 +696,6 @@ function formatDate(iso: string | null): string {
           </section>
         </section>
 
-        <!-- Session tab: live chat stream against the active stage-run's agent -->
-        <section v-if="activeTab === 'session'" class="flex flex-col gap-2 p-0 h-full min-h-[400px]">
-          <div v-if="!task.activeSessionId" class="text-slate-400 dark:text-slate-600 text-xs text-center px-5 py-[60px]">
-            <p class="text-[13px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5">
-              {{ sessionEmptyHint.title }}
-            </p>
-            <p class="text-xs text-slate-400 dark:text-slate-600 max-w-[420px] mx-auto leading-relaxed">
-              {{ sessionEmptyHint.body }}
-            </p>
-          </div>
-          <template v-else>
-            <CrossLinkBanner
-              v-if="pipelineAgent"
-              label="Running as session in"
-              :target-name="pipelineAgent.projectName"
-              button-text="Open session →"
-              @click="emit('navigate', pipelineAgent)"
-            />
-            <div class="flex items-center gap-2.5 px-5 py-2.5 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
-              <span class="text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600">Active Session</span>
-              <code class="font-mono text-[11px] bg-slate-100 dark:bg-slate-800 px-1.5 py-px rounded text-blue-600 dark:text-blue-400">{{ task.activeSessionId.slice(0, 8) }}</code>
-              <span
-                v-if="pipelineAgent"
-                class="text-[10px] uppercase px-2 py-0.5 rounded font-bold ml-auto"
-                :class="agentSessionStatusClass(pipelineAgent.status)"
-              >
-                {{ pipelineAgent.status }}
-              </span>
-              <span v-else class="text-[10px] uppercase px-2 py-0.5 rounded font-bold ml-auto bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600">
-                offline
-              </span>
-            </div>
-            <AgentChatStream
-              ref="sessionChatRef"
-              :agent="pipelineAgent"
-              :local-messages="sessionLocalMessages"
-              class="flex-1 px-5 py-3 min-h-[280px] max-h-[50vh]"
-            />
-            <PromptInput
-              v-if="pipelineAgent"
-              :agent="pipelineAgent"
-              variant="full"
-              @message-sent="onSessionMessageSent"
-            />
-            <p v-else class="px-5 py-2.5 text-xs text-slate-400 dark:text-slate-600 border-t border-slate-200 dark:border-slate-700">
-              The agent is not currently active — you can chat here once a new stage run starts.
-            </p>
-          </template>
-        </section>
-
         <!-- Stages tab -->
         <section v-if="activeTab === 'stages'" class="p-5">
           <div v-if="stageRuns.length === 0" class="text-slate-400 dark:text-slate-600 text-xs text-center py-8">
@@ -710,12 +713,9 @@ function formatDate(iso: string | null): string {
             <div class="text-[11px] text-slate-400 dark:text-slate-600 mt-0.5">
               started {{ formatDate(run.startedAt) }} · ended {{ formatDate(run.endedAt) }}
             </div>
-            <details v-if="run.output" class="mt-1.5 text-[11px]">
-              <summary class="cursor-pointer text-slate-400 dark:text-slate-600 py-0.5 select-none hover:text-slate-500">
-                Output
-              </summary>
-              <StageOutputView :stage="run.stage" :output="run.output" />
-            </details>
+            <div v-if="run.output" class="mt-1.5 text-[11px]">
+              <StageOutputView :stage="run.stage" :output="run.output" :status="run.status" />
+            </div>
           </div>
         </section>
 
@@ -822,6 +822,15 @@ function formatDate(iso: string | null): string {
           Analysis agent spawned · PID <code>{{ analysisInfo.pid }}</code> · look for it in the agents list.
         </p>
         <div class="flex gap-2 justify-end">
+          <AppButton
+            v-if="isFailedRun(task) && latestStageRun?.sessionId"
+            variant="secondary"
+            :disabled="isActing"
+            title="Continue the agent's last session from where it stopped"
+            @click="handleAction(() => resumeStageTask(task!.id))"
+          >
+            Resume Session
+          </AppButton>
           <AppButton
             v-if="isFailedRun(task)"
             variant="info"

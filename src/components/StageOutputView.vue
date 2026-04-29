@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { PipelineStage } from '../types'
+import type { PipelineStage, StageRunStatus } from '../types'
 import { computed } from 'vue'
 
 const props = defineProps<{
   stage: PipelineStage
   output: unknown
+  status?: StageRunStatus | null
 }>()
 
 interface PlanningSubtask { id?: string, title?: string, files?: string[] }
@@ -17,6 +18,16 @@ function asRecord(o: unknown): Record<string, unknown> | null {
 }
 
 const record = computed(() => asRecord(props.output))
+const outputError = computed(() => {
+  const r = record.value
+  const e = r?.error
+  return typeof e === 'string' ? e : null
+})
+const agentMessage = computed(() => {
+  const r = record.value
+  const m = r?.agentMessage
+  return typeof m === 'string' ? m : null
+})
 
 const pretty = computed(() => {
   const r = record.value
@@ -310,12 +321,31 @@ function shortPath(full: string): string {
       </div>
     </template>
 
-    <!-- Fallback: raw JSON for unknown/malformed shapes -->
-    <details v-else>
-      <summary class="cursor-pointer text-slate-400 dark:text-slate-600 text-[11px]">
-        Raw output
-      </summary>
-      <pre class="bg-slate-100 dark:bg-slate-800 p-2 rounded text-[11px] max-h-60 overflow-auto mt-1.5">{{ JSON.stringify(output, null, 2) }}</pre>
-    </details>
+    <!-- Error / unrecognized output -->
+    <template v-else>
+      <!-- Error banner -->
+      <div v-if="outputError" class="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 px-3 py-2.5 mb-2">
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-red-500 dark:text-red-400 mb-1">
+          Stage error
+        </div>
+        <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">{{ outputError }}</p>
+      </div>
+
+      <!-- Agent prose captured alongside the error (e.g. "no json block" failure) -->
+      <div v-if="agentMessage" class="mb-2">
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
+          Agent output
+        </div>
+        <pre class="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words bg-slate-50 dark:bg-slate-900/50 rounded px-3 py-2.5">{{ agentMessage }}</pre>
+      </div>
+
+      <!-- Raw JSON collapse (only when there's something beyond error+agentMessage) -->
+      <details v-if="!outputError && !agentMessage" class="mt-1">
+        <summary class="cursor-pointer text-slate-400 dark:text-slate-600 text-[11px] select-none hover:text-slate-500">
+          Raw output
+        </summary>
+        <pre class="bg-slate-100 dark:bg-slate-800/60 p-2 rounded text-[11px] text-slate-700 dark:text-slate-300 max-h-60 overflow-auto mt-1.5 whitespace-pre-wrap break-words">{{ JSON.stringify(output, null, 2) }}</pre>
+      </details>
+    </template>
   </div>
 </template>
