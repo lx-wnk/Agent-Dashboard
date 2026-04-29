@@ -8,6 +8,7 @@ const error = ref<string | null>(null)
 
 let eventSource: EventSource | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
 let subscriberCount = 0
 
 // Safety-net poll cadence. SSE is the primary live channel; this catches
@@ -36,6 +37,18 @@ async function fetchTasks() {
   }
 }
 
+async function refreshTask(taskId: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}`)
+  if (!res.ok)
+    return
+  const task = await res.json() as PipelineTask
+  if (!task?.id)
+    return
+  tasks.value = tasks.value.map(t => t.id === task.id ? task : t)
+  if (selectedTask.value?.id === task.id)
+    selectedTask.value = task
+}
+
 function startSSE() {
   if (eventSource)
     return
@@ -50,7 +63,16 @@ function startSSE() {
     }
   }
   eventSource.onerror = () => {
-    // browser auto-reconnects; nothing to do
+    if (eventSource?.readyState === EventSource.CLOSED) {
+      // Permanent failure — fall back to polling, retry SSE after 30s
+      stopSSE()
+      startPolling()
+      sseRetryTimer = setTimeout(() => {
+        stopPolling()
+        startSSE()
+      }, 30000)
+    }
+    // Transient error — EventSource reconnects automatically
   }
 }
 
@@ -101,8 +123,7 @@ function applyEvent(event: TaskEvent) {
     }
     case 'permission_request':
     case 'stage_run_updated':
-      // Refetch the task to get fresh data
-      void fetchTasks()
+      void refreshTask(event.taskId)
       break
   }
 }
@@ -322,7 +343,6 @@ function startStream() {
   if (subscriberCount === 1) {
     void fetchTasks()
     startSSE()
-    startPolling()
   }
 }
 
@@ -335,6 +355,10 @@ export function useTasks(options?: { autoStart?: boolean }) {
     if (subscriberCount === 0) {
       stopSSE()
       stopPolling()
+      if (sseRetryTimer) {
+        clearTimeout(sseRetryTimer)
+        sseRetryTimer = null
+      }
     }
   })
 
