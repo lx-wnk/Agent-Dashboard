@@ -33,6 +33,17 @@ const DEFAULT_MAX_PARALLEL = 3
 const STAGE_TIMEOUT_KEY = 'stageTimeoutSeconds'
 const DEFAULT_STAGE_TIMEOUT_SECONDS = 1800
 
+const _configCache = new Map<string, { value: number, expiresAt: number }>()
+
+function getCachedPipelineConfigNumber(key: string, fallback: number): number {
+  const cached = _configCache.get(key)
+  if (cached && cached.expiresAt > Date.now())
+    return cached.value
+  const value = getPipelineConfigNumber(key, fallback)
+  _configCache.set(key, { value, expiresAt: Date.now() + 5000 })
+  return value
+}
+
 /**
  * Callback invoked when a stage handler creates a runtime permission request.
  * Injected by the server so the orchestrator stays decoupled from SSE / the
@@ -557,12 +568,13 @@ export class PipelineOrchestrator {
    * async run frees its slot before we count free slots for the picker.
    */
   private async progressPendingTasks(): Promise<void> {
-    await this.finalizeCompletedAsyncRuns()
-    this.pickNextTasksForFreeSlots()
+    const allRunning = listRunningStageRuns()
+    await this.finalizeCompletedAsyncRuns(allRunning)
+    this.pickNextTasksForFreeSlots(allRunning)
   }
 
-  private async finalizeCompletedAsyncRuns(): Promise<void> {
-    const running = listRunningStageRuns().filter(r => r.status === 'running' && r.pid !== null)
+  private async finalizeCompletedAsyncRuns(allRunning?: StageRun[]): Promise<void> {
+    const running = (allRunning ?? listRunningStageRuns()).filter(r => r.status === 'running' && r.pid !== null)
     for (const run of running) {
       const task = getTaskById(run.taskId)
       if (!task)
@@ -608,7 +620,7 @@ export class PipelineOrchestrator {
         // Enforce stage timeout: a PID-alive run that has exceeded the
         // configured limit is killed and failed so it doesn't hold a runner
         // slot indefinitely (infinite tool loop, network hang, etc.).
-        const timeoutSeconds = getPipelineConfigNumber(STAGE_TIMEOUT_KEY, DEFAULT_STAGE_TIMEOUT_SECONDS)
+        const timeoutSeconds = getCachedPipelineConfigNumber(STAGE_TIMEOUT_KEY, DEFAULT_STAGE_TIMEOUT_SECONDS)
         if (timeoutSeconds > 0 && run.startedAt) {
           const elapsedMs = Date.now() - new Date(run.startedAt).getTime()
           if (elapsedMs > timeoutSeconds * 1000) {
@@ -746,7 +758,7 @@ export class PipelineOrchestrator {
         const perTaskCap = typeof task.metadata?.maxReviewCycles === 'number'
           ? task.metadata.maxReviewCycles
           : undefined
-        const maxCycles = perTaskCap ?? getPipelineConfigNumber('maxReviewCycles', 3)
+        const maxCycles = perTaskCap ?? getCachedPipelineConfigNumber('maxReviewCycles', 3)
 
         if (cycles >= maxCycles) {
           return {
@@ -786,11 +798,10 @@ export class PipelineOrchestrator {
    * running run) and promote them to fill free runner slots. Uses the
    * project_task_pipeline_runner_model priority order.
    */
-  private pickNextTasksForFreeSlots(): void {
-    const max = getPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
-    // Single DB scan, reused for both the busy-count and the per-task
-    // "has running run" check below — avoids N×M full-table scans.
-    const running = listRunningStageRuns().filter(r => r.status === 'running')
+  private pickNextTasksForFreeSlots(allRunning?: StageRun[]): void {
+    const max = getCachedPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
+    // Single DB scan per tick, passed from progressPendingTasks to avoid N×M scans.
+    const running = (allRunning ?? listRunningStageRuns()).filter(r => r.status === 'running')
     const busyTaskIds = new Set(running.map(r => r.taskId))
     const freeSlots = max - busyTaskIds.size
     if (freeSlots <= 0)
@@ -828,7 +839,7 @@ export class PipelineOrchestrator {
    * that's about to spawn its next stage doesn't consume a slot twice.
    */
   private hasFreeRunnerSlot(exceptTaskId?: string): boolean {
-    const max = getPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
+    const max = getCachedPipelineConfigNumber(MAX_PARALLEL_KEY, DEFAULT_MAX_PARALLEL)
     const busy = countBusyRunners(exceptTaskId)
     return busy < max
   }
