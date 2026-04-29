@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskPermission } from '../types'
+import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
@@ -11,6 +11,7 @@ import {
   fetchPendingPermissionRequests,
   fetchStageRunAgentOutput,
   fetchStageRuns,
+  fetchTaskFeedback,
   fetchTaskPermissions,
   grantTaskPermission,
   progressTask,
@@ -162,6 +163,9 @@ function stopRunningPoll(): void {
   }
 }
 
+const feedbackInput = ref('')
+const feedbackHistory = ref<TaskFeedback[]>([])
+
 async function fetchSessionText(run: StageRun) {
   if (!props.task || latestRunAgentMessage.value)
     return
@@ -187,6 +191,7 @@ async function loadDetails() {
   stageRuns.value = await fetchStageRuns(props.task.id)
   permissions.value = await fetchTaskPermissions(props.task.id)
   pendingRequests.value = await fetchPendingPermissionRequests(props.task.id)
+  feedbackHistory.value = await fetchTaskFeedback(props.task.id)
   const latest = stageRuns.value[stageRuns.value.length - 1]
   if (latest && (latest.status === 'failed' || latest.status === 'done')) {
     fetchSessionText(latest)
@@ -206,6 +211,8 @@ watch(() => props.task?.id, (id, prevId) => {
   if (id && id !== prevId) {
     activeTab.value = 'overview'
     actionError.value = ''
+    feedbackInput.value = ''
+    feedbackHistory.value = []
     void loadDetails()
     void loadDependencies()
   }

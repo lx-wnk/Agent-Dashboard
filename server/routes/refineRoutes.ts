@@ -53,6 +53,7 @@ export function createRefineRouter(
       return
     }
 
+
     const body = req.body as { message?: unknown, images?: unknown }
     const message = typeof body.message === 'string' ? body.message.trim() : ''
     if (!message) {

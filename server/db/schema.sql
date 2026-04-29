@@ -227,6 +227,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_permission_presets_unique
 CREATE INDEX IF NOT EXISTS idx_permission_presets_lookup
   ON permission_presets(user_id, project_cwd);
 
+
 -- Dashboard users (populated on first GitHub OAuth login)
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,   -- GitHub numeric user ID (stable across username renames)
