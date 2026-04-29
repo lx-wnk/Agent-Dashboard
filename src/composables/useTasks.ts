@@ -158,14 +158,6 @@ export async function progressTask(taskId: string): Promise<void> {
   }
 }
 
-export async function approveTask(taskId: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/approve`, { method: 'POST' })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(err.error || 'Failed to approve task')
-  }
-}
-
 export async function cancelTask(taskId: string): Promise<void> {
   const res = await fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' })
   if (!res.ok) {
@@ -222,18 +214,6 @@ export async function analyzeTask(taskId: string): Promise<{ pid: number, cwd: s
     throw new Error(err.error || 'Failed to start analysis session')
   }
   return await res.json() as { pid: number, cwd: string }
-}
-
-export async function requestChanges(taskId: string, feedback: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/request-changes`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ feedback }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(err.error || 'Failed to request changes')
-  }
 }
 
 export async function fetchTaskFeedback(taskId: string): Promise<TaskFeedback[]> {
