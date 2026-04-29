@@ -100,6 +100,38 @@ export function getLatestStageRunForTask(taskId: string, db: Database = getDb())
 }
 
 /**
+ * Batch version of getLatestStageRunForTask — returns a Map<taskId, StageRun>
+ * with the same ordering semantics as the single-task variant.
+ * Uses a window function to avoid N+1 queries on the task list endpoint.
+ */
+export function getLatestStageRunsForTasks(
+  taskIds: string[],
+  db: Database = getDb(),
+): Map<string, StageRun> {
+  if (taskIds.length === 0)
+    return new Map()
+  const rows = db
+    .prepare(`
+      WITH ranked AS (
+        SELECT sr.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY sr.task_id
+            ORDER BY sr.iteration DESC,
+                     (sr.started_at IS NULL) DESC,
+                     sr.started_at DESC,
+                     sr.rowid DESC
+          ) AS rn
+        FROM stage_runs sr
+        INNER JOIN tasks t ON t.id = sr.task_id AND sr.stage = t.current_stage
+        WHERE sr.task_id IN (SELECT value FROM json_each(?))
+      )
+      SELECT * FROM ranked WHERE rn = 1
+    `)
+    .all(JSON.stringify(taskIds)) as StageRunRow[]
+  return new Map(rows.map(row => [row.task_id, rowToStageRun(row)]))
+}
+
+/**
  * Fetch a specific iteration of a stage_run by (task, stage, iteration).
  * Used by the orchestrator to surface the prior iteration's output as
  * validation feedback when retrying a schema-failed stage.

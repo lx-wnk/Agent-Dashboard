@@ -23,6 +23,7 @@ import {
 } from '../db/permissionsRepo.js'
 import {
   getLatestStageRunForTask,
+  getLatestStageRunsForTasks,
   getStageRunById,
   listStageRunsForTask,
   updateStageRun,
@@ -126,6 +127,36 @@ export function enrichTask(task: PipelineTask): PipelineTask {
   }
 }
 
+/**
+ * Bulk version of enrichTask — fetches all latest stage runs in one DB query.
+ * Use this for list endpoints; use enrichTask for single-task responses.
+ */
+export function enrichTasksBulk(tasks: PipelineTask[]): PipelineTask[] {
+  if (tasks.length === 0)
+    return []
+  const latestRunMap = getLatestStageRunsForTasks(tasks.map(t => t.id))
+  return tasks.map((task) => {
+    const latest = latestRunMap.get(task.id) ?? null
+    const latestBelongsToCurrent = latest?.stage === task.currentStage
+    const latestStatus = latestBelongsToCurrent ? (latest?.status ?? null) : null
+    const currentIteration = latestBelongsToCurrent ? (latest?.iteration ?? 0) : 0
+    const hasPendingPermissions
+      = latestBelongsToCurrent
+      && latestStatus === 'running'
+      && latest != null
+      && listPendingPermissionRequests(latest.id).length > 0
+    const needsUser
+      = USER_WAIT_STAGES.has(task.currentStage)
+      || latestStatus === 'awaiting_user'
+      || latestStatus === 'on_hold'
+      || latestStatus === 'failed'
+      || hasPendingPermissions
+    const activeSessionId = latest?.sessionId ?? null
+    const activePid = latest?.status === 'running' ? (latest?.pid ?? null) : null
+    return { ...task, needsUser, latestStageRunStatus: latestStatus, currentIteration, activeSessionId, activePid }
+  })
+}
+
 export function createTaskRouter(deps: TaskRouterDeps): Router {
   const router = Router()
 
@@ -170,10 +201,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         return
       }
       const all = listTasksForUser(user.id, user.isAdmin)
-      res.json(all.filter(t => t.currentStage === stage).map(enrichTask))
+      res.json(enrichTasksBulk(all.filter(t => t.currentStage === stage)))
       return
     }
-    res.json(listTasksForUser(user.id, user.isAdmin).map(enrichTask))
+    res.json(enrichTasksBulk(listTasksForUser(user.id, user.isAdmin)))
   })
 
   router.get('/tasks/:id', (req, res) => {
@@ -246,8 +277,9 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         weCreatedWorktree = true
       }
       catch (err) {
+        consola.error('[task] worktree creation failed:', err)
         res.status(400).json({
-          error: `worktree creation failed: ${(err as Error).message}`,
+          error: 'Failed to create worktree',
         })
         return
       }
@@ -290,7 +322,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
           )
         }
       }
-      res.status(500).json({ error: (err as Error).message })
+      consola.error('[task] createTask failed:', err)
+      res.status(500).json({ error: 'Internal error' })
     }
   })
 
@@ -574,8 +607,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       res.status(202).json({ pid: result.pid, cwd: result.cwd })
     }
     catch (err) {
-      consola.error('[taskRoutes] analysis spawn failed:', err)
-      res.status(500).json({ error: (err as Error).message })
+      consola.error('[task] analyze failed:', err)
+      res.status(500).json({ error: 'Internal error' })
     }
   })
 
