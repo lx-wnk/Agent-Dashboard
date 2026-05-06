@@ -238,7 +238,7 @@ function shortPath(full: string): string {
       </div>
     </template>
 
-    <!-- Selbstreview -->
+    <!-- Self-review -->
     <template v-else-if="pretty?.kind === 'selbstreview'">
       <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs mb-1">
         <div class="contents">
@@ -279,7 +279,7 @@ function shortPath(full: string): string {
       </div>
     </template>
 
-    <!-- Finalisierung -->
+    <!-- Finalization -->
     <template v-else-if="pretty?.kind === 'finalisierung'">
       <div class="mb-4 last:mb-0">
         <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">

@@ -25,7 +25,7 @@ const COLUMNS: ColumnDef[] = [
     stages: [],
     group: 'needs-you',
   },
-  { id: 'konzept', label: 'Konzept', stages: ['konzept'], group: 'active' },
+  { id: 'konzept', label: 'Concept', stages: ['konzept'], group: 'active' },
   { id: 'backlog', label: 'Backlog', stages: ['backlog'], group: 'active' },
   {
     id: 'umsetzung',

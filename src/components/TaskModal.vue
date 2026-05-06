@@ -65,7 +65,7 @@ async function loadDependencies(): Promise<void> {
     dependents.value = depts
   }
   catch {
-    depError.value = 'Abhängigkeiten konnten nicht geladen werden'
+    depError.value = 'Failed to load dependencies'
   }
 }
 
@@ -446,17 +446,17 @@ const runtime = computed(() => {
             </div>
           </div>
 
-          <!-- Konzept refinement banner -->
+          <!-- Concept-stage refinement banner -->
           <div
             v-if="task.currentStage === 'konzept'"
             class="flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md px-3.5 py-3 mb-2"
           >
             <div class="flex flex-col gap-0.5">
-              <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">Dieses Ticket wartet auf Refinement</span>
-              <span class="text-[11px] text-blue-600/80 dark:text-blue-400/80">Führe das Gespräch mit dem Refinement-Assistenten weiter</span>
+              <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">This ticket is waiting for refinement</span>
+              <span class="text-[11px] text-blue-600/80 dark:text-blue-400/80">Continue the conversation with the refinement assistant</span>
             </div>
             <AppButton variant="primary" size="sm" @click="emit('openChat', task)">
-              Chat fortsetzen →
+              Continue Chat →
             </AppButton>
           </div>
 
@@ -544,12 +544,12 @@ const runtime = computed(() => {
           <!-- Dependencies section -->
           <section class="mb-3 border-t border-slate-200 dark:border-slate-700 pt-3">
             <h4 class="text-[11px] font-semibold uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-2">
-              Abhängigkeiten
+              Dependencies
             </h4>
 
             <div v-if="dependencies.length > 0" class="mb-2.5">
               <p class="text-[11px] text-slate-400 dark:text-slate-600 font-semibold uppercase tracking-[0.3px] mb-1">
-                Wartet auf:
+                Waiting for:
               </p>
               <div
                 v-for="dep in dependencies"
@@ -572,7 +572,7 @@ const runtime = computed(() => {
 
             <div v-if="dependents.length > 0" class="mb-2.5">
               <p class="text-[11px] text-slate-400 dark:text-slate-600 font-semibold uppercase tracking-[0.3px] mb-1">
-                Wird benötigt von:
+                Needed by:
               </p>
               <div v-for="dep in dependents" :key="dep.id" class="flex items-center gap-2 py-1 text-xs">
                 <span class="flex-1 text-slate-900 dark:text-slate-100">{{ dep.taskTitle || dep.taskId }}</span>
@@ -583,7 +583,7 @@ const runtime = computed(() => {
               <AppInput
                 v-model="newDepId"
                 class="flex-1 min-w-0"
-                placeholder="Vorgänger Task-ID"
+                placeholder="Predecessor Task ID"
                 :disabled="isAddingDep"
               />
               <select v-model="newDepStage" class="px-1.5 py-1 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-[11px]">
@@ -596,17 +596,17 @@ const runtime = computed(() => {
               </select>
               <select v-model="newDepCancelAction" class="px-1.5 py-1 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-[11px]">
                 <option value="on_hold">
-                  On Hold (bei Cancel)
+                  On Hold (on cancel)
                 </option>
                 <option value="cancel">
-                  Cancel (bei Cancel)
+                  Cancel (on cancel)
                 </option>
                 <option value="start">
-                  Start (bei Cancel)
+                  Start (on cancel)
                 </option>
               </select>
               <button type="submit" class="px-2.5 py-1 bg-blue-600 text-white border-none rounded text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110" :disabled="isAddingDep || !newDepId.trim()">
-                Hinzufügen
+                Add
               </button>
             </form>
             <p v-if="depError" class="text-[11px] text-red-600 dark:text-red-400 mt-1">
@@ -819,7 +819,7 @@ const runtime = computed(() => {
             v-model="additionalPrompt"
             rows="2"
             class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-slate-900 dark:text-slate-100 text-xs resize-none focus:outline-none focus:border-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
-            placeholder="Optionale Anweisung für Resume / Retry (z.B. Logik-Änderung oder Hinweis)…"
+            placeholder="Optional instruction for Resume / Retry (e.g. logic change or hint)…"
           />
         </div>
         <div class="flex gap-2 justify-end">

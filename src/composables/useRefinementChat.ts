@@ -14,9 +14,9 @@ export interface ChatMessage {
 }
 
 const PHASE_LABELS: Record<string, string> = {
-  analyse: 'Analyse',
+  analyse: 'Analysis',
   spec: 'Spec',
-  umsetzungskonzept: 'Umsetzungskonzept',
+  umsetzungskonzept: 'Implementation Plan',
   approval: 'Approval',
 }
 

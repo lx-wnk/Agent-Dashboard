@@ -115,11 +115,11 @@ export function createAgentStage(
 // corresponding builder in stagePrompts.ts.
 
 /**
- * Umsetzung reads optional `review_feedback` from task.metadata — the
+ * Implementation stage reads optional `review_feedback` from task.metadata — the
  * orchestrator writes it there when a selbstreview iteration rejects the
  * prior implementation. First-run tasks see an empty feedback string.
  *
- * Konzept output (spec, plan, toolRequests) is stored in task.metadata by
+ * Concept-stage output (spec, plan, toolRequests) is stored in task.metadata by
  * `POST /api/refine/:taskId/confirm` when the user confirms the refinement
  * chat — there is no longer a prior stage_run whose output we read.
  */

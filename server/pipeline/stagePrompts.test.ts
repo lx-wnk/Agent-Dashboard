@@ -50,10 +50,10 @@ describe('stagePrompts', () => {
     expect(userPrompt).toContain('missing tests for auth middleware')
   })
 
-  it('umsetzungPrompt embeds the konzept output as the plan', () => {
+  it('umsetzungPrompt embeds the concept-stage output as the plan', () => {
     const konzept = { spec: 'rewrite auth', steps: [{ n: 1, description: 'rm old' }] }
     const { userPrompt } = umsetzungPrompt(makeTask(), konzept)
-    expect(userPrompt).toContain('Konzept')
+    expect(userPrompt).toContain('Concept')
     expect(userPrompt).toContain('rewrite auth')
     expect(userPrompt).toContain('rm old')
   })

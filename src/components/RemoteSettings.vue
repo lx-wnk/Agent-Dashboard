@@ -60,10 +60,10 @@ onMounted(load)
 <template>
   <div class="flex flex-col gap-4">
     <h3 class="text-sm font-semibold text-text-primary">
-      Meine lokalen Dashboard-Instanzen
+      My Local Dashboard Instances
     </h3>
     <p class="text-xs text-text-muted">
-      Registriere deine lokale Dashboard-Instanz, damit deine lokalen Claude-Sessions hier angezeigt werden. Die lokale Instanz muss über Netzwerk erreichbar sein.
+      Register your local dashboard instance so your local Claude sessions show up here. The local instance must be reachable over the network.
     </p>
 
     <div v-if="remotes.length" class="flex flex-col gap-2">
@@ -84,19 +84,19 @@ onMounted(load)
             class="text-xs"
             :class="r.connectionOk ? 'text-green-500' : 'text-red-500'"
           >
-            {{ r.connectionOk ? '● Verbunden' : '● Nicht erreichbar' }}
+            {{ r.connectionOk ? '● Connected' : '● Unreachable' }}
           </span>
         </div>
         <button
           class="text-xs text-red-400 hover:text-red-300 transition-colors"
           @click="remove(r.id)"
         >
-          Entfernen
+          Remove
         </button>
       </div>
     </div>
     <p v-else class="text-xs text-text-muted">
-      Keine Registrierungen.
+      No registrations.
     </p>
 
     <form class="flex flex-col gap-2" @submit.prevent="add">
@@ -110,7 +110,7 @@ onMounted(load)
       <input
         v-model="form.name"
         type="text"
-        placeholder="Name (z.B. MacBook)"
+        placeholder="Name (e.g. MacBook)"
         class="input-field text-sm"
       >
       <input
@@ -123,7 +123,7 @@ onMounted(load)
         {{ error }}
       </p>
       <button type="submit" :disabled="saving" class="btn-primary text-sm self-start">
-        {{ saving ? 'Wird gespeichert…' : 'Hinzufügen & testen' }}
+        {{ saving ? 'Saving…' : 'Add & test' }}
       </button>
     </form>
   </div>

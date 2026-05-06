@@ -23,11 +23,11 @@ function runStatusLabel(status: StageRunStatus): string {
 }
 
 const STAGE_LABELS: Record<PipelineStage, string> = {
-  konzept: 'Konzept',
+  konzept: 'Concept',
   backlog: 'Backlog',
-  umsetzung: 'Umsetzung',
-  selbstreview: 'Selbstreview',
-  finalisierung: 'Finalisierung',
+  umsetzung: 'Implementation',
+  selbstreview: 'Self-Review',
+  finalisierung: 'Finalization',
   done: 'Done',
   on_hold: 'Permission',
   cancelled: 'Cancelled',
@@ -64,7 +64,7 @@ function stageLabel(stage: PipelineStage): string {
       class="self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
       @click.stop="emit('openChat', task)"
     >
-      Chat fortsetzen →
+      Continue Chat →
     </button>
     <div class="flex flex-wrap gap-1 mt-0.5">
       <span

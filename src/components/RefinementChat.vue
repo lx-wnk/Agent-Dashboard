@@ -61,10 +61,10 @@ const {
 } = useRefinementChat(() => currentTask.value?.id ?? null)
 
 const EXAMPLE_CHIPS = [
-  'Ein neues Feature implementieren',
-  'Einen Bug beheben',
-  'Code refactoren',
-  'Eine neue API-Integration',
+  'Implement a new feature',
+  'Fix a bug',
+  'Refactor code',
+  'A new API integration',
 ]
 
 // ── Dynamic title ─────────────────────────────
@@ -221,10 +221,10 @@ function isPhaseMarker(idx: number): string | null {
           </div>
           <div class="flex flex-col gap-2">
             <p class="text-xl font-bold tracking-tight m-0 text-slate-800 dark:text-slate-100">
-              Was möchtest du umsetzen?
+              What would you like to build?
             </p>
             <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed m-0 max-w-[380px]">
-              Beschreibe deine Idee — ich führe dich durch Analyse, Spec und Umsetzungskonzept.
+              Describe your idea — I'll guide you through analysis, spec, and implementation plan.
             </p>
           </div>
           <div class="flex flex-wrap gap-2 justify-center max-w-[480px]">
@@ -242,7 +242,7 @@ function isPhaseMarker(idx: number): string | null {
         <!-- Message list -->
         <template v-for="(msg, idx) in messages" :key="idx">
           <div v-if="isPhaseMarker(idx)" class="phase-marker">
-            ✓ {{ phaseLabel(isPhaseMarker(idx)!) }} abgeschlossen
+            ✓ {{ phaseLabel(isPhaseMarker(idx)!) }} complete
           </div>
 
           <div
@@ -287,7 +287,7 @@ function isPhaseMarker(idx: number): string | null {
           class="w-full py-3 px-4 rounded-xl bg-green-500 text-black font-bold text-[0.95rem] tracking-tight border-none cursor-pointer transition-all hover:opacity-90 hover:-translate-y-px"
           @click="handleConfirm"
         >
-          Task erstellen →
+          Create Task →
         </button>
       </div>
 
@@ -312,7 +312,7 @@ function isPhaseMarker(idx: number): string | null {
       <div class="flex gap-2 px-5 py-2.5 pb-3.5 border-t border-slate-200 dark:border-slate-700 shrink-0 items-end">
         <button
           class="w-9 h-9 rounded-xl shrink-0 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 text-lg cursor-pointer flex items-center justify-center transition-colors hover:enabled:border-blue-400 hover:enabled:text-blue-400 disabled:opacity-35 disabled:cursor-default"
-          title="Bild anhängen"
+          title="Attach image"
           :disabled="isStreaming || approvalReady"
           @click="fileInputEl?.click()"
         >
@@ -330,7 +330,7 @@ function isPhaseMarker(idx: number): string | null {
           ref="textareaEl"
           v-model="inputText"
           class="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
-          placeholder="Nachricht..."
+          placeholder="Message..."
           rows="1"
           :disabled="isStreaming || approvalReady"
           @keydown.enter.exact.prevent="handleSend"

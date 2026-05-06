@@ -99,7 +99,7 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
   if (!Array.isArray(rawRequests))
     return
 
-  // Konzept-emitted entries take precedence over the baseline. We collect
+  // Concept-stage-emitted entries take precedence over the baseline. We collect
   // them first, then merge the baseline on top, skipping any (tool, pattern)
   // pair already produced by konzept.
   interface PendingEntry { tool: string, pattern: string | null, source: 'konzept' | 'baseline' }
