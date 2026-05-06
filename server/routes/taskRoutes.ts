@@ -44,6 +44,7 @@ import {
   listTasksForUser,
   updateTask,
 } from '../db/tasksRepo.js'
+import { isPidAlive } from '../pipeline/sessionManager.js'
 import { findNewestSessionId, readLastStageJsonOutput, resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
 import { spawnAnalysisAgent } from '../services/analysisSpawner.js'
 import { applyPermissionTemplateByName, bulkGrantPermissions, inheritParentPermissions, validatePermissionEntry } from '../services/approvalUtils.js'
@@ -90,6 +91,15 @@ const USER_WAIT_STAGES = new Set<PipelineStage>(['on_hold'])
 export function canAccessTask(task: PipelineTask, user: { id: string, isAdmin: boolean }): boolean {
   return user.isAdmin || task.userId === user.id
 }
+
+/**
+ * Per-task dedup map for ad-hoc analysis sessions spawned via
+ * `POST /tasks/:id/analyze`. See the route handler for full rationale.
+ * Module-level so the in-memory state survives across requests within the
+ * same dashboard process. Exported for tests; do not write from outside the
+ * route handler in production code.
+ */
+export const activeAnalysisTasks = new Map<string, number>()
 
 /**
  * Builds the resume prompt the orchestrator passes to the re-spawned stage
@@ -641,6 +651,17 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   // pointers to the last session JSONLs. The session is NOT tracked as a
   // stage_run — it shows up in the dashboard's normal agent-monitoring
   // view via processScanner finding a `claude` PID in the task's cwd.
+  //
+  // Per-task dedup: the route maintains an in-memory `taskId → pid` map so
+  // repeated clicks of the dashboard's "Analyze" button do not spawn
+  // multiple analysis agents for the same task (each one would burn tokens
+  // independently, mirror the same failure context, and confuse the agent-
+  // monitoring view's PID→task linking). The map is purged when the
+  // tracked PID exits — both via the child's `exit` event and lazily on
+  // every new request via `isPidAlive`. State is process-local; a
+  // dashboard restart loses the map but each spawn is detached, so the
+  // agent itself is unaffected and a one-off duplicate after restart is
+  // acceptable.
   mutationRouter.post('/tasks/:id/analyze', async (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task || !canAccessTask(task, req.user!)) {
@@ -651,6 +672,20 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     if (!latest) {
       res.status(409).json({ error: 'Task has no stage runs to analyze' })
       return
+    }
+
+    // Lazy purge of dead entries (covers crashes / SIGKILLs that bypass the
+    // `exit` listener) and conflict-check against any live analysis agent.
+    const existingPid = activeAnalysisTasks.get(task.id)
+    if (existingPid !== undefined) {
+      if (isPidAlive(existingPid)) {
+        res.status(409).json({
+          error: 'Analysis session already running for this task',
+          pid: existingPid,
+        })
+        return
+      }
+      activeAnalysisTasks.delete(task.id)
     }
 
     // Gather the error summary and pointers to the JSONLs on disk. Both
@@ -678,6 +713,13 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         failedRun: latest,
         errorSummary,
         sessionLogPaths,
+      })
+      activeAnalysisTasks.set(task.id, result.pid)
+      // Best-effort cleanup so a fast-exiting analysis agent frees its
+      // dedup slot without waiting for the next click's lazy purge.
+      result.child.once('exit', () => {
+        if (activeAnalysisTasks.get(task.id) === result.pid)
+          activeAnalysisTasks.delete(task.id)
       })
       appendAudit({
         taskId: task.id,

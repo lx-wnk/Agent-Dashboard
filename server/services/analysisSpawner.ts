@@ -14,6 +14,7 @@
  * chats with it via the existing AgentModal prompt input, which resumes
  * the same session id.
  */
+import type { ChildProcess } from 'node:child_process'
 import type { PipelineTask, StageRun } from '../../src/types.js'
 import { spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
@@ -31,6 +32,13 @@ export interface AnalysisSpawnOptions {
 export interface AnalysisSpawnResult {
   pid: number
   cwd: string
+  /**
+   * Detached child handle. Callers may attach a one-shot `exit` listener for
+   * cleanup (e.g. clearing per-task dedup state) without touching the child's
+   * stdio (which is intentionally `'ignore'` so the parent process is not
+   * blocked by the long-running analysis session).
+   */
+  child: ChildProcess
 }
 
 /**
@@ -130,5 +138,5 @@ export function spawnAnalysisAgent(opts: AnalysisSpawnOptions): AnalysisSpawnRes
   child.stderr?.on('error', () => { /* EPIPE on exit is fine */ })
   child.unref()
 
-  return { pid: child.pid ?? 0, cwd }
+  return { pid: child.pid ?? 0, cwd, child }
 }

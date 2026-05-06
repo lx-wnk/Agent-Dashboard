@@ -8,11 +8,12 @@ import process from 'node:process'
 import expressLib from 'express'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDb, getDb } from '../db/client.js'
+import { createStageRun, updateStageRun } from '../db/stageRunsRepo.js'
 import { addDependency } from '../db/taskDependenciesRepo.js'
 import { createTask, updateTask } from '../db/tasksRepo.js'
 import { upsertUser } from '../db/usersRepo.js'
 import { PipelineOrchestrator } from '../pipeline/orchestrator.js'
-import { createTaskRouter } from './taskRoutes.js'
+import { activeAnalysisTasks, createTaskRouter } from './taskRoutes.js'
 
 /**
  * Test helper — bypasses PATCH's stage-write block which exists for
@@ -669,5 +670,49 @@ describe('dependency routes', () => {
     await api('POST', `/tasks/${b.id}/dependencies`, { dependsOnId: a.id })
     const { status } = await api('POST', `/tasks/${b.id}/dependencies`, { dependsOnId: a.id })
     expect(status).toBe(409)
+  })
+})
+
+describe('pOST /api/tasks/:id/analyze (dedup)', () => {
+  afterEach(() => {
+    activeAnalysisTasks.clear()
+  })
+
+  it('returns 409 when an analysis agent is already alive for this task', async () => {
+    const t = createTask({ slug: 'analyze-dup', title: 'A', cwd: '/ad' })
+    forceStage(t.id, 'umsetzung')
+    const run = createStageRun({ taskId: t.id, stage: 'umsetzung' })
+    updateStageRun(run.id, { status: 'failed' })
+
+    // Pre-populate dedup map with a PID that is guaranteed alive — the test
+    // process itself. This makes the route's `isPidAlive` check pass without
+    // having to actually spawn an analysis agent.
+    activeAnalysisTasks.set(t.id, process.pid)
+
+    const { status, data } = await api<{ error: string, pid: number }>('POST', `/tasks/${t.id}/analyze`)
+    expect(status).toBe(409)
+    expect(data.error).toMatch(/already running/i)
+    expect(data.pid).toBe(process.pid)
+  })
+
+  it('lazy-purges a dead PID from the dedup map and lets the request through', async () => {
+    const t = createTask({ slug: 'analyze-stale', title: 'AS', cwd: '/as' })
+    forceStage(t.id, 'umsetzung')
+    const run = createStageRun({ taskId: t.id, stage: 'umsetzung' })
+    updateStageRun(run.id, { status: 'failed' })
+
+    // 999999 is reserved per POSIX and effectively never assigned — isPidAlive
+    // returns false, the route should treat the slot as free and proceed to
+    // spawn (which we don't actually want in tests, so we mock it).
+    activeAnalysisTasks.set(t.id, 999999)
+
+    const spawnSpy = vi.spyOn(await import('../services/analysisSpawner.js'), 'spawnAnalysisAgent')
+      .mockReturnValue({ pid: 12345, cwd: '/as', child: { once: () => undefined } as never })
+
+    const { status } = await api<{ pid: number }>('POST', `/tasks/${t.id}/analyze`)
+    expect(status).toBe(202)
+    expect(spawnSpy).toHaveBeenCalledOnce()
+    expect(activeAnalysisTasks.get(t.id)).toBe(12345)
+    spawnSpy.mockRestore()
   })
 })
