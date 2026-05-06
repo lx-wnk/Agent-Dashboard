@@ -161,3 +161,19 @@ export function resolvePermissionRequest(
   `).run(outcome, new Date().toISOString(), id)
   return getPermissionRequestById(id, db)
 }
+
+/**
+ * Counts every permission_request row for a stage_run (any outcome —
+ * including pending). Used by the bulk endpoint and the resolve handler to
+ * detect a re-request loop and inject forward-scan guidance into the
+ * handoff prompt.
+ */
+export function countPermissionRequestsForStageRun(
+  stageRunId: string,
+  db: Database = getDb(),
+): number {
+  const row = db
+    .prepare('SELECT COUNT(*) AS c FROM permission_requests WHERE stage_run_id = ?')
+    .get(stageRunId) as { c: number } | undefined
+  return row?.c ?? 0
+}

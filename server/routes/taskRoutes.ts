@@ -14,6 +14,7 @@ import {
 } from '../db/feedbackRepo.js'
 import { getAllConfig, getPipelineConfigNumber, listPreferences, setConfig, setPipelineConfig, setPreference } from '../db/notificationConfigRepo.js'
 import {
+  countPermissionRequestsForStageRun,
   createPermissionRequest,
   createTaskPermission,
   deleteTaskPermission,
@@ -88,6 +89,34 @@ const USER_WAIT_STAGES = new Set<PipelineStage>(['on_hold'])
 // Returns 404 (not 403) at call sites to avoid leaking task existence.
 export function canAccessTask(task: PipelineTask, user: { id: string, isAdmin: boolean }): boolean {
   return user.isAdmin || task.userId === user.id
+}
+
+/**
+ * Builds the resume prompt the orchestrator passes to the re-spawned stage
+ * agent after the user grants a permission. The note must:
+ *   1. Acknowledge the specific grant so the agent knows the pause is over.
+ *   2. Force a forward-scan of remaining work — the agent's previous
+ *      `request_permission` call clearly missed something, so we instruct
+ *      it to enumerate ALL still-needed tools in a single bulk call before
+ *      continuing. This breaks the per-tool kill/restart loop.
+ *   3. When this is the 2nd or later cycle on the same stage_run, escalate
+ *      the wording so the agent treats forward-scan as mandatory rather
+ *      than nice-to-have.
+ *
+ * Exported for unit-testing the wording — the actual loop check lives in
+ * the resolve route.
+ */
+export function buildPermissionGrantHandoffNote(input: {
+  tool: string
+  pattern: string | null
+  cycleCount: number
+}): string {
+  const { tool, pattern, cycleCount } = input
+  const toolStr = pattern ? `${tool} (${pattern})` : tool
+  const ordinal = cycleCount >= 2
+    ? `\n\nThis is permission cycle #${cycleCount} on this stage_run — your prior request_permission call did not cover everything you actually needed. STOP and forward-scan the entire remaining plan now.`
+    : ''
+  return `[PERMISSION GRANTED] You requested permission for "${toolStr}". It has been granted.${ordinal}\n\nBefore your next tool call, scan ALL remaining work in this stage and request_permission ONCE in a single bulk call with every additional tool/pattern you anticipate needing. Pre-granted entries auto-resolve silently; only genuinely new ones surface as ON HOLD. Do not request piecemeal — every missed tool restarts this stage.\n\nThen resume exactly where you left off.`
 }
 
 export function enrichTask(task: PipelineTask): PipelineTask {
@@ -925,6 +954,12 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       })
     }
 
+    // B3: count permission_requests already on this stage_run BEFORE we add
+    // the new ones. This becomes the cycleCount returned to the agent — when
+    // > 0 the agent has been here before and is asked to forward-scan
+    // everything still missing instead of trickling.
+    const cycleCount = countPermissionRequestsForStageRun(stageRunId)
+
     const autoResolved: Array<{ tool: string, pattern: string | null }> = []
     const pending: Array<{ id: string, tool: string, pattern: string | null }> = []
 
@@ -977,7 +1012,28 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
     broadcastEnrichedUpdate(run.taskId)
 
-    res.status(200).json({ autoResolved, pending })
+    // B3: when this is the 2nd+ bulk on the same stage_run AND new entries
+    // had to be created, emit a forward-scan warning. The MCP channel
+    // surfaces this in the agent's tool response so the agent treats the
+    // pause as a signal to broaden, not retry-by-trickle.
+    const loopWarning = (cycleCount > 0 && pending.length > 0)
+      ? `Re-request loop detected: this is permission cycle #${cycleCount + 1} on this stage_run. Forward-scan ALL remaining work and request_permission ONCE with everything still missing — every kill/restart costs the user real time.`
+      : null
+
+    if (loopWarning) {
+      appendAudit({
+        taskId: task.id,
+        actor: 'system',
+        action: 'permission_loop_detected',
+        details: {
+          stageRunId,
+          cycleCount: cycleCount + 1,
+          newPending: pending.length,
+        },
+      })
+    }
+
+    res.status(200).json({ autoResolved, pending, cycleCount, loopWarning })
   })
 
   mutationRouter.post('/permission-requests/:id/resolve', async (req, res) => {
@@ -1058,7 +1114,14 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
 
     if (outcome === 'granted') {
       if (shouldRestartRun) {
-        const handoffNote = `[PERMISSION GRANTED] You requested permission for "${existing.tool}"${existing.pattern ? ` (${existing.pattern})` : ''}. It has been granted. Resume exactly where you left off.`
+        // Count cycles BEFORE building the note so the message references
+        // the current attempt number (the resolved row counts toward total).
+        const cycleCount = countPermissionRequestsForStageRun(run.id)
+        const handoffNote = buildPermissionGrantHandoffNote({
+          tool: existing.tool,
+          pattern: existing.pattern,
+          cycleCount,
+        })
         await deps.orchestrator.progressTask(run.taskId, {
           resumeSessionId: run.sessionId ?? undefined,
           userAdditionalPrompt: handoffNote,

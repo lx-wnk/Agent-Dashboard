@@ -265,6 +265,59 @@ describe('task permissions endpoints', () => {
   })
 })
 
+describe('permission-requests/bulk loop detection (B3)', () => {
+  it('returns cycleCount=0 and no loopWarning on the very first bulk request', async () => {
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'lc1',
+      title: 'LC1',
+      cwd: '/lc1',
+    })
+    const { createStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+
+    const { status, data } = await api<{ cycleCount: number, loopWarning: string | null }>(
+      'POST',
+      '/permission-requests/bulk',
+      {
+        stageRunId: run.id,
+        entries: [{ tool: 'WebFetch', reason: 'fetch docs' }],
+      },
+    )
+
+    expect(status).toBe(200)
+    expect(data.cycleCount).toBe(0)
+    expect(data.loopWarning).toBeNull()
+  })
+
+  it('returns cycleCount > 0 and loopWarning text on subsequent re-request cycles', async () => {
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'lc2',
+      title: 'LC2',
+      cwd: '/lc2',
+    })
+    const { createStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+
+    // first bulk — single new entry, no prior count
+    await api('POST', '/permission-requests/bulk', {
+      stageRunId: run.id,
+      entries: [{ tool: 'Bash', pattern: 'pnpm test*' }],
+    })
+    // second bulk — prior count 1, this is now a loop
+    const { data } = await api<{ cycleCount: number, loopWarning: string | null }>(
+      'POST',
+      '/permission-requests/bulk',
+      {
+        stageRunId: run.id,
+        entries: [{ tool: 'Bash', pattern: 'pnpm lint*' }],
+      },
+    )
+    expect(data.cycleCount).toBeGreaterThanOrEqual(1)
+    expect(data.loopWarning).not.toBeNull()
+    expect(data.loopWarning).toMatch(/scan|forward|all remaining|enumerate/i)
+  })
+})
+
 describe('permission request resolution', () => {
   it('granting a permission request creates a task permission and resumes', async () => {
     const { data: task } = await api<{ id: string }>('POST', '/tasks', {
@@ -341,6 +394,49 @@ describe('permission request resolution', () => {
           userAdditionalPrompt: expect.stringContaining('[PERMISSION GRANTED]'),
         }),
       )
+      // B1: handoff must instruct forward-scan
+      const note = (spy.mock.calls[0]![1]!).userAdditionalPrompt as string
+      expect(note).toMatch(/scan|forward|all remaining|every remaining|enumerate/i)
+      expect(note).toMatch(/single bulk call|one bulk call|in one batch|request_permission ONCE/)
+    }
+    finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('escalates re-request count in the handoff note (B3 loop detection)', async () => {
+    const spy = vi.spyOn(orchestrator, 'progressTask')
+    try {
+      const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+        slug: 'esc',
+        title: 'ESC',
+        cwd: '/esc',
+      })
+
+      const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      updateStageRun(run.id, { status: 'awaiting_user', sessionId: 'sid' })
+
+      // first cycle
+      const { data: r1 } = await api<{ id: string }>('POST', '/permission-requests', {
+        stageRunId: run.id,
+        tool: 'Bash',
+        pattern: 'pnpm test*',
+      })
+      await api('POST', `/permission-requests/${r1.id}/resolve`, { outcome: 'granted' })
+
+      // second cycle — should mention this is repeated
+      updateStageRun(run.id, { status: 'awaiting_user', sessionId: 'sid' })
+      const { data: r2 } = await api<{ id: string }>('POST', '/permission-requests', {
+        stageRunId: run.id,
+        tool: 'Bash',
+        pattern: 'pnpm lint*',
+      })
+      await api('POST', `/permission-requests/${r2.id}/resolve`, { outcome: 'granted' })
+
+      const lastCall = spy.mock.calls.at(-1)!
+      const note = (lastCall[1]!).userAdditionalPrompt as string
+      expect(note).toMatch(/2(nd)?|second|repeated|re-?request/i)
     }
     finally {
       spy.mockRestore()

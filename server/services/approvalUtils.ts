@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { appendAudit } from '../db/auditRepo.js'
+import { getPipelineConfig } from '../db/notificationConfigRepo.js'
 import { listPresets, upsertPreset } from '../db/permissionPresetsRepo.js'
 import { bulkCreateTaskPermissions, createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
-import { isPermissionTemplate, resolveTemplate } from './permissionTemplates.js'
+import { DEFAULT_KONZEPT_BASELINE_TEMPLATE, isPermissionTemplate, resolveTemplate } from './permissionTemplates.js'
 
 // Matches Bash patterns that could fetch or execute remote code — used to
 // block automatic pre-approval of potentially dangerous commands from
@@ -69,6 +70,19 @@ export function validatePermissionEntry(
   return { ok: true }
 }
 
+/**
+ * Resolves the pipeline-config-driven baseline template. Falls back to
+ * `konzept_baseline` when the config key is unset or names a non-existent
+ * template. Returns `[]` if (theoretically) the resolved template is empty.
+ */
+function resolveBaselineTemplate(): PermissionTemplateEntry[] {
+  const configured = getPipelineConfig('defaultPermissionTemplate')
+  const name = configured && isPermissionTemplate(configured)
+    ? configured
+    : DEFAULT_KONZEPT_BASELINE_TEMPLATE
+  return resolveTemplate(name)
+}
+
 export function bulkGrantKonzeptPermissions(taskId: string): void {
   const task = getTaskById(taskId)
   if (!task)
@@ -79,8 +93,14 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
   if (!Array.isArray(rawRequests))
     return
 
-  const existing = listTaskPermissions(taskId)
-  let granted = 0
+  // Konzept-emitted entries take precedence over the baseline. We collect
+  // them first, then merge the baseline on top, skipping any (tool, pattern)
+  // pair already produced by konzept.
+  interface PendingEntry { tool: string, pattern: string | null, source: 'konzept' | 'baseline' }
+  const pending: PendingEntry[] = []
+  const seen = new Set<string>()
+  const keyOf = (tool: string, pattern: string | null): string => `${tool}::${pattern ?? ''}`
+
   for (const req of rawRequests) {
     if (typeof req !== 'object' || req === null)
       continue
@@ -93,18 +113,70 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
     const validation = validatePermissionEntry(tool, pattern)
     if (!validation.ok)
       continue
-    const alreadyGranted = existing.some(p => p.tool === tool && (p.pattern ?? null) === pattern && p.granted)
+    const k = keyOf(tool, pattern)
+    if (seen.has(k))
+      continue
+    seen.add(k)
+    pending.push({ tool, pattern, source: 'konzept' })
+  }
+
+  // Merge baseline unless task opts out (per-task override). Baseline entries
+  // are already-validated constants, but we run them through
+  // validatePermissionEntry anyway so a future baseline change with an unsafe
+  // pattern is caught at runtime.
+  const skipBaseline = metadata?.skipBaseline === true
+  if (!skipBaseline) {
+    const baseline = resolveBaselineTemplate()
+    for (const entry of baseline) {
+      const tool = entry.tool
+      const pattern = entry.pattern ?? null
+      const validation = validatePermissionEntry(tool, pattern)
+      if (!validation.ok)
+        continue
+      const k = keyOf(tool, pattern)
+      if (seen.has(k))
+        continue
+      seen.add(k)
+      pending.push({ tool, pattern, source: 'baseline' })
+    }
+  }
+
+  const existing = listTaskPermissions(taskId)
+  let granted = 0
+  let baselineGranted = 0
+  let konzeptGranted = 0
+  for (const entry of pending) {
+    const alreadyGranted = existing.some(p =>
+      p.tool === entry.tool && (p.pattern ?? null) === entry.pattern && p.granted,
+    )
     if (alreadyGranted)
       continue
-    createTaskPermission({ taskId, tool, pattern, granted: true, preApproved: true, decidedBy: 'user' })
+    createTaskPermission({
+      taskId,
+      tool: entry.tool,
+      pattern: entry.pattern,
+      granted: true,
+      preApproved: true,
+      decidedBy: 'user',
+    })
     granted++
+    if (entry.source === 'baseline')
+      baselineGranted++
+    else
+      konzeptGranted++
   }
 
   appendAudit({
     taskId,
     actor: 'user',
     action: 'bulk_granted_tool_permissions',
-    details: { source: 'konzept_metadata_toolRequests', count: granted },
+    details: {
+      source: 'konzept_metadata_toolRequests',
+      count: granted,
+      konzeptCount: konzeptGranted,
+      baselineCount: baselineGranted,
+      baselineSkipped: skipBaseline,
+    },
   })
 }
 

@@ -116,4 +116,21 @@ describe('rEFINEMENT_SYSTEM_PROMPT', () => {
   it('includes __phase_done signal instructions', () => {
     expect(REFINEMENT_SYSTEM_PROMPT).toContain('__phase_done:')
   })
+
+  it('forces per-step enumeration of every distinct Bash pattern', () => {
+    expect(REFINEMENT_SYSTEM_PROMPT).toMatch(/walk.+each step.+Bash|enumerate.+every.+Bash|each.+step.+Bash pattern/i)
+  })
+
+  it('lists concrete common Bash patterns the agent should consider', () => {
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('pnpm test')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('pnpm typecheck')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('pnpm lint')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('git commit')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('git diff')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('git status')
+  })
+
+  it('warns konzept will be merged with baseline so under-enumeration causes loop', () => {
+    expect(REFINEMENT_SYSTEM_PROMPT).toMatch(/under-?enumerat|missing.+pattern.+loop|incomplete.+permission/i)
+  })
 })

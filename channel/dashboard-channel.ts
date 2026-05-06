@@ -128,7 +128,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'request_permission',
       description:
-        'Request one or more tool permissions. STRONGLY PREFERRED PATTERN: as your FIRST action in a task, scan the work ahead, build the full list of tools you will need (Bash patterns, WebFetch, Write outside worktree, etc.), and call this once with `permissions: [...]`. Pre-granted entries auto-resolve silently; only entries the user has not already granted surface as ON HOLD. This avoids per-tool round-trips.\n\nAlso usable mid-task for a single permission via the legacy `tool` + `pattern` form (kept for backward compat).',
+        'Request one or more tool permissions. CRITICAL: every missed permission triggers a kill-and-restart of this stage agent — request piecemeal and you will burn through the task in restart loops. Forward-scan the ENTIRE remaining plan before each call.\n\nMandatory pattern (do NOT deviate):\n  1. As your FIRST action in a task, walk through the plan step-by-step and enumerate every distinct tool you will touch — Bash patterns (e.g. `pnpm test*`, `pnpm lint*`, `pnpm typecheck*`, `git add*`, `git commit*`, `git diff*`, `git status*`, `git checkout*`), WebFetch URLs, Writes outside the worktree, etc.\n  2. Call this tool ONCE with the full `permissions: [...]` array. Pre-granted entries auto-resolve silently; only genuinely new entries surface as ON HOLD.\n  3. If you receive a `[PERMISSION GRANTED]` resume note mid-task, treat it as a signal that you under-enumerated — re-scan the rest of the work and bulk-request EVERYTHING else you anticipate, then continue.\n\nThe legacy single-tool form (`tool` + `pattern`) is kept for compatibility but is strongly discouraged — every single-tool request that lands here counts as a re-request cycle and is logged.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -261,6 +261,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       const body = (await res.json()) as {
         autoResolved: Array<{ tool: string, pattern: string | null }>
         pending: Array<{ id: string, tool: string, pattern: string | null }>
+        cycleCount?: number
+        loopWarning?: string | null
       }
       const autoMsg = body.autoResolved.length > 0
         ? `${body.autoResolved.length} auto-resolved (already granted): ${body.autoResolved.map(e => e.tool + (e.pattern ? `(${e.pattern})` : '')).join(', ')}`
@@ -268,8 +270,9 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       const pendMsg = body.pending.length > 0
         ? `${body.pending.length} ON HOLD awaiting user: ${body.pending.map(e => e.tool + (e.pattern ? `(${e.pattern})` : '')).join(', ')}`
         : 'all granted — proceed'
+      const loopMsg = body.loopWarning ? `\n\n⚠️ ${body.loopWarning}` : ''
       return {
-        content: [{ type: 'text', text: `${autoMsg}. ${pendMsg}.` }],
+        content: [{ type: 'text', text: `${autoMsg}. ${pendMsg}.${loopMsg}` }],
       }
     }
     catch (err) {
