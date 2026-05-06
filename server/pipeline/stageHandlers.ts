@@ -15,7 +15,7 @@ import type { PipelineStage } from '../../src/types.js'
 import type { SpawnAgentOptions, SpawnResult } from './agentSpawner.js'
 import type { PromptBundle } from './stagePrompts.js'
 import type { StageContext, StageHandler, StageTransition } from './types.js'
-import process from 'node:process'
+import { LOOPBACK_HOST, MCP_API_PATH, resolveDashboardPort } from '../constants.js'
 import { generateApiToken, hashApiToken, upsertStageRunApiKey } from '../db/apiKeysRepo.js'
 import { listStageRunsForTask } from '../db/stageRunsRepo.js'
 import { spawnStageAgent } from './agentSpawner.js'
@@ -87,7 +87,6 @@ export function createAgentStage(
         scopes: ['tasks:read'],
       })
 
-      const port = process.env.DASHBOARD_PORT || '13120'
       const result = spawn({
         task: ctx.task,
         stageRun: ctx.stageRun,
@@ -96,7 +95,7 @@ export function createAgentStage(
         permissions: ctx.permissions,
         resumeSessionId: ctx.resumeSessionId ?? null,
         mcpToken: rawToken,
-        mcpUrl: `http://127.0.0.1:${port}/api/mcp`,
+        mcpUrl: `http://${LOOPBACK_HOST}:${resolveDashboardPort()}${MCP_API_PATH}`,
       })
       ctx.recordAudit(`${stage}_spawned`, {
         pid: result.pid,

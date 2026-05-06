@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
+import { DEFAULT_DASHBOARD_PORT, LOOPBACK_HOST, resolveDashboardPort } from './constants.js'
 import { getDb } from './db/client.js'
 import { listRemoteRegistrationsForUser } from './db/remoteRegistrationsRepo.js'
 import { getTaskById } from './db/tasksRepo.js'
@@ -40,20 +41,15 @@ for (let fd = 0; fd <= 2; fd++) {
 }
 
 // SECURITY: This server exposes session data (prompts, tool outputs, file paths).
-// Always bind to 127.0.0.1 — never expose to the network.
+// Always bind to LOOPBACK_HOST — never expose to the network.
 const PORT = (() => {
   const raw = process.env.DASHBOARD_PORT
-  if (!raw)
-    return 13120
-  const val = Number.parseInt(raw, 10)
-  if (!Number.isInteger(val) || val < 1 || val > 65535) {
-    console.warn(`[config] DASHBOARD_PORT invalid (got: ${raw}); using 13120 default`)
-    return 13120
-  }
-  return val
+  if (raw && (!Number.isInteger(Number.parseInt(raw, 10)) || Number.parseInt(raw, 10) < 1 || Number.parseInt(raw, 10) > 65535))
+    console.warn(`[config] DASHBOARD_PORT invalid (got: ${raw}); using ${DEFAULT_DASHBOARD_PORT} default`)
+  return resolveDashboardPort()
 })()
-const HOST = process.env.DASHBOARD_HOST ?? '127.0.0.1'
-if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+const HOST = process.env.DASHBOARD_HOST ?? LOOPBACK_HOST
+if (HOST !== LOOPBACK_HOST && HOST !== 'localhost') {
   console.warn(
     `[security] Dashboard bound to ${HOST} — ensure this host is on a trusted network or VPN. Never expose to the public internet.`,
   )

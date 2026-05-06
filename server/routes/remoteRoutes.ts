@@ -1,13 +1,17 @@
 import type { Router } from 'express'
 import { Router as createRouter } from 'express'
+import { DEFAULT_REMOTE_TIMEOUT_MS } from '../constants.js'
 import {
   createRemoteRegistration,
   deleteRemoteRegistration,
   listRemoteRegistrationsForUser,
 } from '../db/remoteRegistrationsRepo.js'
 
-const REMOTE_TIMEOUT_MS = 5000
+const REMOTE_TIMEOUT_MS = DEFAULT_REMOTE_TIMEOUT_MS
 
+// Note: BLOCKED_HOSTNAMES is intentionally narrower than `SELF_HOSTNAMES` in
+// constants.ts (omits `[::1]`'s bracketed form) because URL.hostname has
+// already stripped the brackets by the time we look it up here.
 const BLOCKED_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0'])
 const LOOPBACK_RE = /^127\.\d+\.\d+\.\d+$/
 const LINK_LOCAL_RE = /^169\.254\.\d+\.\d+$/

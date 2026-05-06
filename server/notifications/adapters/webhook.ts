@@ -1,4 +1,5 @@
 import type { NotificationAdapter, NotificationPayload } from '../types.js'
+import { DEFAULT_REMOTE_TIMEOUT_MS } from '../../constants.js'
 import { getConfig } from '../../db/notificationConfigRepo.js'
 
 const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
@@ -27,7 +28,7 @@ export const webhookAdapter: NotificationAdapter = {
     const body = buildBody(format, payload)
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_REMOTE_TIMEOUT_MS)
     let res: Response
     try {
       res = await fetch(url, {
