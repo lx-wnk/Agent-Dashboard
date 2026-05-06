@@ -1,0 +1,1 @@
+- [bun:sqlite compatibility shims](project_bun_sqlite_compat_shims.md) — Why client.ts wraps every statement: named-param key prefix + null→undefined normalization for .get()
