@@ -182,7 +182,27 @@ A stateless StreamableHTTP MCP server at `POST /api/mcp` — each request is sel
 - Path alias: `@/*` maps to `./src/*` (configured in tsconfig.json and vite.config.ts)
 - Server binds to `127.0.0.1` only — never expose to network (reads sensitive session data). **Multi-machine mode** (`DASHBOARD_REMOTES` env var) requires remote instances to be network-accessible; use a VPN or SSH tunnel — never bind to `0.0.0.0` on an untrusted network.
 - **Dual persistence model:** agent monitoring is filesystem-derived (no database), task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (override via `DASHBOARD_DB_PATH`; see ADR-0001). One deliberate crossing: `server/agentMerger.ts` performs an opportunistic read-only pipeline lookup (`enrichWithPipelineTask`) to annotate agents with their linked task ID/title. This is one-way (pipeline → agent annotation only) and fails gracefully if the DB is unavailable.
-- **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge), `DASHBOARD_MCP_TOKEN` + `DASHBOARD_MCP_URL` (injected for MCP callback access), `DASHBOARD_HOST` (bind address, default `127.0.0.1`; logs a security warning if non-loopback), `DASHBOARD_SSE_INTERVAL_MS` (agent SSE broadcast interval ms, default `3000`), `DASHBOARD_SPAWN_RATE_LIMIT` (max user-initiated spawns per window, default `5`; must be positive integer), `DASHBOARD_SPAWN_RATE_WINDOW_MS` (spawn rate-limit window ms, default `60000`; must be positive integer).
+- **Pipeline env vars:** `DASHBOARD_DB_PATH` (SQLite path), `DASHBOARD_WORKTREE_ROOT` (per-task git worktree root, default `~/.claude/dashboard-worktrees`), `DASHBOARD_STAGE_RUN_ID` + `DASHBOARD_TASK_ID` (injected into spawned stage agents for the channel bridge), `DASHBOARD_MCP_TOKEN` + `DASHBOARD_MCP_URL` (injected for MCP callback access), `DASHBOARD_HOST` (bind address, default `127.0.0.1`; logs a security warning if non-loopback), `DASHBOARD_SSE_INTERVAL_MS` (agent SSE broadcast interval ms, default `3000`), `DASHBOARD_SPAWN_RATE_LIMIT` (max user-initiated spawns per window, default `5`; must be positive integer), `DASHBOARD_SPAWN_RATE_WINDOW_MS` (spawn rate-limit window ms, default `60000`; must be positive integer), `DASHBOARD_ALLOW_GIT_PUSH` (`true|false`, default `false`; when `true`, removes the global `git push` filter from spawned-agent allow-lists — a per-task override is also available via `metadata.allowGitPush=true`).
+
+## Permissions Model
+
+Stage agents run with a `permissions.allow` list derived from `task_permissions` rows. The dashboard funnels every grant path through `bulkGrantPermissions()` in `server/services/approvalUtils.ts`, which validates each entry against `ALLOWED_TOOLS` and the `DANGEROUS_BASH_RE` block-list (curl/wget/eval/shell-substitution/etc.).
+
+**Grant sources, by precedence at create time:**
+1. **`template`** — predefined sets in `server/services/permissionTemplates.ts` (`feature_implementation`, `research_only`, `test_only`, `review_only`).
+2. **`permissions[]`** — explicit `[{tool, pattern?, expiresAt?}]` array. Time-bound grants expire at `expiresAt` (ISO timestamp).
+3. **`inheritPermissions: true`** — when set with `parentTaskId`, copy effective (granted, non-expired) parent permissions onto the child. Only kicks in when no explicit `permissions[]` provided.
+
+**Retroactive management** via MCP `manage_task` tool:
+- `action: "grant_permissions"` — bulk-add by template/list (same shape as create_task).
+- `action: "revoke_permission"` — remove by `permission_id`.
+- `action: "list_permissions"` — inspect current grants (`effective_only: true` filters expired/denied).
+- `action: "inherit_from_parent"` — pull parent's grants onto this task.
+- `action: "set_metadata"` / `set_priority` / `set_budget` — non-permission edits.
+
+REST mirror: `POST /api/tasks/:id/permissions/bulk` accepts the same `{template?, permissions?[]}` body.
+
+**Channel-bridge bulk request:** spawned agents must call `request_permission` with `permissions: [...]` as their first action. The server's `POST /api/permission-requests/bulk` auto-resolves any entries already covered by granted task_permissions (silent, no UI prompt) and only surfaces uncovered entries as ON HOLD. Single-tool legacy form still works.
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
 - Cost estimation uses `MODEL_PRICING` lookup table in `server/pricing.ts`
 - **Platform:** macOS and Linux. `server/systemMonitor.ts` uses `top` on macOS and `/proc/stat` on Linux for CPU; `server/processScanner.ts` uses `lsof` on macOS and `/proc/<pid>/cwd` on Linux. Windows is unsupported.

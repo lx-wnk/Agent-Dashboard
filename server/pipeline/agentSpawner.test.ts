@@ -66,6 +66,7 @@ function permission(overrides: Partial<TaskPermission>): TaskPermission {
     requestedAt: '2026-04-12T10:00:00Z',
     decidedAt: '2026-04-12T10:00:00Z',
     decidedBy: 'user',
+    expiresAt: null,
     ...overrides,
   }
 }

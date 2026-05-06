@@ -189,6 +189,8 @@ export interface TaskPermission {
   requestedAt: string
   decidedAt: string | null
   decidedBy: 'user' | 'auto' | null
+  /** ISO timestamp; null = never expires. */
+  expiresAt: string | null
 }
 
 export interface PermissionRequest {

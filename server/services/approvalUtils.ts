@@ -1,17 +1,21 @@
+import type { TaskPermission } from '../../src/types.js'
+import type { PermissionTemplateEntry, PermissionTemplateName } from './permissionTemplates.js'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { appendAudit } from '../db/auditRepo.js'
-import { createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
 import { listPresets, upsertPreset } from '../db/permissionPresetsRepo.js'
+import { bulkCreateTaskPermissions, createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
+import { isPermissionTemplate, resolveTemplate } from './permissionTemplates.js'
 
 // Matches Bash patterns that could fetch or execute remote code — used to
 // block automatic pre-approval of potentially dangerous commands from
-// agent-emitted toolRequests. Operators can still grant these manually.
+// agent-emitted toolRequests. Operators can still grant these manually via
+// the UI, where the warning surfaces explicitly.
 const DANGEROUS_BASH_RE = /curl|wget|nc\b|netcat|python\s+-c|perl\s+-e|ruby\s+-e|eval\b|base64\s+-d|[;&|`]|\$\(|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/i
 
-function isDangerousBashPattern(pattern: string): boolean {
+export function isDangerousBashPattern(pattern: string): boolean {
   return DANGEROUS_BASH_RE.test(pattern)
 }
 
@@ -36,6 +40,35 @@ export const ALLOWED_TOOLS = new Set([
   'NotebookEdit',
 ])
 
+export interface PermissionValidationResult {
+  ok: boolean
+  reason?: string
+}
+
+/**
+ * Single source of truth for "can this grant be auto-applied?". Used by:
+ *   - bulkGrantKonzeptPermissions / bulkGrantAgentFilePermissions
+ *   - applyPresetPermissions
+ *   - MCP create_task / manage_task / grant_permission tools
+ *   - REST POST /api/tasks (permissions[])
+ *
+ * Returns ok=false when the entry would be unsafe to silently allow-list.
+ * Operators can still force-grant via UI (they see the warning), but every
+ * code path that auto-creates permissions MUST check this first.
+ */
+export function validatePermissionEntry(
+  tool: string,
+  pattern: string | null | undefined,
+): PermissionValidationResult {
+  if (typeof tool !== 'string' || tool.trim().length === 0)
+    return { ok: false, reason: 'tool name is empty' }
+  if (!ALLOWED_TOOLS.has(tool))
+    return { ok: false, reason: `tool '${tool}' is not in ALLOWED_TOOLS` }
+  if (tool === 'Bash' && pattern && isDangerousBashPattern(pattern))
+    return { ok: false, reason: `Bash pattern matches dangerous-pattern allowlist (curl/wget/eval/shell-substitution/etc.): '${pattern}'` }
+  return { ok: true }
+}
+
 export function bulkGrantKonzeptPermissions(taskId: string): void {
   const task = getTaskById(taskId)
   if (!task)
@@ -54,10 +87,11 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
     const r = req as Record<string, unknown>
     const tool = typeof r.tool === 'string' ? r.tool.trim() : null
     const patternTrimmed = typeof r.pattern === 'string' ? r.pattern.trim() : ''
-    const pattern = patternTrimmed ? patternTrimmed : null
-    if (!tool || !ALLOWED_TOOLS.has(tool))
+    const pattern = patternTrimmed || null
+    if (!tool)
       continue
-    if (tool === 'Bash' && pattern && isDangerousBashPattern(pattern))
+    const validation = validatePermissionEntry(tool, pattern)
+    if (!validation.ok)
       continue
     const alreadyGranted = existing.some(p => p.tool === tool && (p.pattern ?? null) === pattern && p.granted)
     if (alreadyGranted)
@@ -83,9 +117,13 @@ interface ParsedPermission {
 const PIPELINE_PERMISSIONS_HEADING_RE = /^##\s+pipeline\s+permissions\s*$/im
 // Matches the first fenced code block (```json or ```) after a heading,
 // stopping at the next `##` heading.
-const FENCED_BLOCK_RE = /```(?:json)?\s*\n([\s\S]*?)\n```/i
+// `[ \t]*` (not `\s*`) before the newline avoids super-linear backtracking
+// against the following `[\s\S]*?` — `\s` would otherwise overlap with `\n`.
+const FENCED_BLOCK_RE = /```(?:json)?[ \t]*\n([\s\S]*?)\n```/i
 // Matches `Tool(pattern)` where pattern may contain anything except an unbalanced paren.
-const TOOL_PATTERN_RE = /^([A-Za-z][\w]*)\(([\s\S]*)\)\s*$/
+const TOOL_PATTERN_RE = /^([A-Z]\w*)\(([\s\S]*)\)\s*$/i
+// Used to slice an `## Pipeline Permissions` section up to the next `##` heading.
+const NEXT_HEADING_RE = /\n##\s+/
 
 function parsePermissionEntry(entry: unknown): ParsedPermission | null {
   if (typeof entry === 'string') {
@@ -126,7 +164,7 @@ export function parseDefaultPermissionsFromFile(filePath: string): ParsedPermiss
 
   // Slice from the end of the heading match to the next `##` heading (if any).
   const afterHeading = content.slice(headingMatch.index + headingMatch[0].length)
-  const nextHeadingIdx = afterHeading.search(/\n##\s+/)
+  const nextHeadingIdx = afterHeading.search(NEXT_HEADING_RE)
   const section = nextHeadingIdx >= 0 ? afterHeading.slice(0, nextHeadingIdx) : afterHeading
 
   const fencedMatch = FENCED_BLOCK_RE.exec(section)
@@ -275,4 +313,120 @@ export function saveGrantsToPresets(
       continue
     upsertPreset(userId, projectCwd, p.tool, p.pattern ?? null)
   }
+}
+
+export interface BulkGrantEntry {
+  tool: string
+  pattern?: string | null
+  expiresAt?: string | null
+}
+
+export interface BulkGrantResult {
+  granted: TaskPermission[]
+  skipped: Array<{ tool: string, pattern: string | null, reason: string }>
+}
+
+/**
+ * Grant a list of permissions to a task in one transaction. Validates each
+ * entry against ALLOWED_TOOLS + DANGEROUS_BASH_RE. Skips already-granted
+ * (taskId, tool, pattern) tuples idempotently. Used by:
+ *   - MCP create_task `permissions[]` and `template`
+ *   - MCP manage_task `grant_permissions` action
+ *   - REST POST /api/tasks
+ *   - Subagent inheritance (inheritParentPermissions)
+ */
+export function bulkGrantPermissions(
+  taskId: string,
+  entries: BulkGrantEntry[],
+  opts: { decidedBy?: 'user' | 'auto', preApproved?: boolean, source?: string } = {},
+): BulkGrantResult {
+  const existing = listTaskPermissions(taskId)
+  const skipped: BulkGrantResult['skipped'] = []
+  const toInsert: Parameters<typeof bulkCreateTaskPermissions>[0] = []
+
+  for (const entry of entries) {
+    const tool = entry.tool?.trim?.() ?? ''
+    const pattern = entry.pattern && entry.pattern.trim().length > 0 ? entry.pattern.trim() : null
+    const validation = validatePermissionEntry(tool, pattern)
+    if (!validation.ok) {
+      skipped.push({ tool, pattern, reason: validation.reason ?? 'rejected' })
+      continue
+    }
+    const alreadyGranted = existing.some(p => p.tool === tool && (p.pattern ?? null) === pattern && p.granted)
+    if (alreadyGranted) {
+      skipped.push({ tool, pattern, reason: 'already granted' })
+      continue
+    }
+    toInsert.push({
+      taskId,
+      tool,
+      pattern,
+      granted: true,
+      preApproved: opts.preApproved ?? true,
+      decidedBy: opts.decidedBy ?? 'user',
+      expiresAt: entry.expiresAt ?? null,
+    })
+  }
+
+  const granted = bulkCreateTaskPermissions(toInsert)
+
+  if (granted.length > 0) {
+    appendAudit({
+      taskId,
+      actor: opts.decidedBy === 'auto' ? 'system' : 'user',
+      action: 'bulk_grant_permissions',
+      details: {
+        source: opts.source ?? 'unspecified',
+        granted: granted.length,
+        skipped: skipped.length,
+        skippedDetail: skipped,
+      },
+    })
+  }
+
+  return { granted, skipped }
+}
+
+/**
+ * Apply a named template to a task (e.g. `feature_implementation`).
+ * Wraps bulkGrantPermissions with template-resolution and audit metadata.
+ */
+export function applyPermissionTemplate(
+  taskId: string,
+  templateName: PermissionTemplateName,
+): BulkGrantResult {
+  const entries: PermissionTemplateEntry[] = resolveTemplate(templateName)
+  return bulkGrantPermissions(
+    taskId,
+    entries.map(e => ({ tool: e.tool, pattern: e.pattern ?? null })),
+    { source: `template:${templateName}` },
+  )
+}
+
+export function applyPermissionTemplateByName(
+  taskId: string,
+  name: string,
+): BulkGrantResult | null {
+  if (!isPermissionTemplate(name))
+    return null
+  return applyPermissionTemplate(taskId, name)
+}
+
+/**
+ * Copy effective (granted, non-expired) permissions from a parent task to a
+ * child. Used when an agent spawns a subtask via Task/Agent tool — the child
+ * inherits the parent's grant set unless its own `permissions[]` is provided.
+ */
+export function inheritParentPermissions(
+  childTaskId: string,
+  parentTaskId: string,
+): BulkGrantResult {
+  const parentPerms = listTaskPermissions(parentTaskId)
+  const entries: BulkGrantEntry[] = parentPerms
+    .filter(p => p.granted && (p.expiresAt === null || p.expiresAt > new Date().toISOString()))
+    .map(p => ({ tool: p.tool, pattern: p.pattern, expiresAt: p.expiresAt }))
+  return bulkGrantPermissions(childTaskId, entries, {
+    decidedBy: 'auto',
+    source: `inherited_from:${parentTaskId}`,
+  })
 }

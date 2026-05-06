@@ -146,7 +146,8 @@ describe('mCP integration', () => {
     expect(createBody.error).toBeUndefined()
     expect(createBody.result?.content).toBeDefined()
 
-    const createdTask = JSON.parse(createBody.result!.content![0].text) as { id: string, slug: string }
+    const createdPayload = JSON.parse(createBody.result!.content![0].text) as { task: { id: string, slug: string } }
+    const createdTask = createdPayload.task
     expect(createdTask.slug).toBe('test-task')
     expect(typeof createdTask.id).toBe('string')
 
@@ -166,9 +167,9 @@ describe('mCP integration', () => {
     const token = await createAdminKey('delete-test-admin')
 
     const createRes = await mcpToolCall(token, 'create_task', { slug: 'to-delete', title: 'Task to Delete', cwd: '/tmp' })
-    const created = JSON.parse(
+    const created = (JSON.parse(
       (createRes.body as { result?: { content?: Array<{ text: string }> } }).result!.content![0].text,
-    ) as { id: string }
+    ) as { task: { id: string } }).task
 
     const deleteRes = await mcpToolCall(token, 'delete_task', { id: created.id })
     expect(deleteRes.status).toBe(200)

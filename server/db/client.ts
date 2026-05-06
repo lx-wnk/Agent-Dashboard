@@ -197,6 +197,18 @@ function migrateV2MultiUser(db: Database): void {
   db.run('CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)')
 }
 
+/**
+ * Adds optional `expires_at` to task_permissions so grants can be time-bound.
+ * Indexed alongside task_id so listEffectiveTaskPermissions stays cheap when
+ * the table grows. NULL = never expires (existing rows behave unchanged).
+ */
+function migrateV3PermissionExpiry(db: Database): void {
+  const cols = db.prepare('PRAGMA table_info(task_permissions)').all() as Array<{ name: string }>
+  if (!cols.some(c => c.name === 'expires_at'))
+    db.run('ALTER TABLE task_permissions ADD COLUMN expires_at TEXT')
+  db.run('CREATE INDEX IF NOT EXISTS idx_task_permissions_effective ON task_permissions(task_id, granted, expires_at)')
+}
+
 function runMigrations(db: Database): void {
   migrateV1BaseSchema(db)
 
@@ -213,6 +225,13 @@ function runMigrations(db: Database): void {
   if ((version.v ?? 0) < 2) {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(2, new Date().toISOString())
+  }
+
+  migrateV3PermissionExpiry(db)
+
+  if ((version.v ?? 0) < 3) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(3, new Date().toISOString())
   }
 }
 

@@ -341,7 +341,8 @@ describe('permission request resolution', () => {
           userAdditionalPrompt: expect.stringContaining('[PERMISSION GRANTED]'),
         }),
       )
-    } finally {
+    }
+    finally {
       spy.mockRestore()
     }
   })
@@ -370,7 +371,8 @@ describe('permission request resolution', () => {
       const [, opts] = spy.mock.calls[0]!
       expect(opts?.resumeSessionId).toBeUndefined()
       expect(opts?.userAdditionalPrompt).toContain('[PERMISSION GRANTED]')
-    } finally {
+    }
+    finally {
       spy.mockRestore()
     }
   })

@@ -2,17 +2,17 @@ import type { Mock } from 'bun:test'
 import type { PipelineTask } from '../../src/types.js'
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
 
+import { appendAudit } from '../db/auditRepo.js'
+import { createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
+import { getTaskById } from '../db/tasksRepo.js'
+import { bulkGrantKonzeptPermissions } from './approvalUtils.js'
+
 mock.module('../db/tasksRepo.js', () => ({ getTaskById: mock() }))
 mock.module('../db/permissionsRepo.js', () => ({
   listTaskPermissions: mock(() => []),
   createTaskPermission: mock(),
 }))
 mock.module('../db/auditRepo.js', () => ({ appendAudit: mock() }))
-
-import { getTaskById } from '../db/tasksRepo.js'
-import { createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
-import { appendAudit } from '../db/auditRepo.js'
-import { bulkGrantKonzeptPermissions } from './approvalUtils.js'
 
 const mockGetTaskById = getTaskById as unknown as Mock<typeof getTaskById>
 const mockListTaskPermissions = listTaskPermissions as unknown as Mock<typeof listTaskPermissions>

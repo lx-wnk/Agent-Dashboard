@@ -66,6 +66,7 @@ export interface TaskPermissionRow {
   requested_at: string
   decided_at: string | null
   decided_by: string | null
+  expires_at: string | null
 }
 
 export interface PermissionRequestRow {
@@ -163,6 +164,7 @@ export function rowToTaskPermission(row: TaskPermissionRow): TaskPermission {
     requestedAt: row.requested_at,
     decidedAt: row.decided_at,
     decidedBy: row.decided_by as 'user' | 'auto' | null,
+    expiresAt: row.expires_at ?? null,
   }
 }
 

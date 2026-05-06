@@ -5,6 +5,7 @@ import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import process from 'node:process'
 import { consola } from 'consola'
 import { Router } from 'express'
+import { isAuthEnabled } from '../auth/requireAuth.js'
 import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, UUID_RE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import { getDb } from '../db/client.js'
@@ -42,9 +43,10 @@ import {
   listTasksForUser,
   updateTask,
 } from '../db/tasksRepo.js'
-import { isAuthEnabled } from '../auth/requireAuth.js'
 import { findNewestSessionId, readLastStageJsonOutput, resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
 import { spawnAnalysisAgent } from '../services/analysisSpawner.js'
+import { applyPermissionTemplateByName, bulkGrantPermissions, inheritParentPermissions, validatePermissionEntry } from '../services/approvalUtils.js'
+import { listTemplateNames } from '../services/permissionTemplates.js'
 import { recommendParallelism } from '../services/resourceRecommender.js'
 import { createWorktree, removeWorktree } from '../services/worktreeManager.js'
 
@@ -142,15 +144,15 @@ export function enrichTasksBulk(tasks: PipelineTask[]): PipelineTask[] {
     const currentIteration = latestBelongsToCurrent ? (latest?.iteration ?? 0) : 0
     const hasPendingPermissions
       = latestBelongsToCurrent
-      && latestStatus === 'running'
-      && latest != null
-      && listPendingPermissionRequests(latest.id).length > 0
+        && latestStatus === 'running'
+        && latest != null
+        && listPendingPermissionRequests(latest.id).length > 0
     const needsUser
       = USER_WAIT_STAGES.has(task.currentStage)
-      || latestStatus === 'awaiting_user'
-      || latestStatus === 'on_hold'
-      || latestStatus === 'failed'
-      || hasPendingPermissions
+        || latestStatus === 'awaiting_user'
+        || latestStatus === 'on_hold'
+        || latestStatus === 'failed'
+        || hasPendingPermissions
     const activeSessionId = latest?.sessionId ?? null
     const activePid = latest?.status === 'running' ? (latest?.pid ?? null) : null
     return { ...task, needsUser, latestStageRunStatus: latestStatus, currentIteration, activeSessionId, activePid }
@@ -217,7 +219,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
   })
 
   mutationRouter.post('/tasks', async (req, res) => {
-    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree, silverBullet, priority, stage } = req.body ?? {}
+    const { slug, title, description, cwd, worktreePath, sourceBranch, targetBranch, parentTaskId, maxIterations, tokenBudget, costBudgetCents, stageTimeoutSeconds, metadata, useWorktree, silverBullet, priority, stage, permissions, template, inheritPermissions } = req.body ?? {}
 
     if (!slug || typeof slug !== 'string' || !SLUG_RE.test(slug)) {
       res.status(400).json({ error: SLUG_PATTERN_MESSAGE })
@@ -260,6 +262,24 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     if (costBudgetCents !== undefined && costBudgetCents !== null) {
       if (!Number.isFinite(costBudgetCents) || costBudgetCents < 0)
         return void res.status(400).json({ error: 'costBudgetCents must be a non-negative number' })
+    }
+    if (template !== undefined && template !== null) {
+      if (typeof template !== 'string' || !listTemplateNames().includes(template as never)) {
+        return void res.status(400).json({
+          error: `template must be one of: ${listTemplateNames().join(', ')}`,
+        })
+      }
+    }
+    if (permissions !== undefined && permissions !== null) {
+      if (!Array.isArray(permissions))
+        return void res.status(400).json({ error: 'permissions must be an array' })
+      for (const p of permissions) {
+        if (typeof p !== 'object' || p === null || typeof (p as { tool?: unknown }).tool !== 'string')
+          return void res.status(400).json({ error: 'permissions[i].tool is required (string)' })
+        const v = validatePermissionEntry((p as { tool: string }).tool, (p as { pattern?: string | null }).pattern ?? null)
+        if (!v.ok)
+          return void res.status(400).json({ error: `permission rejected: ${v.reason}` })
+      }
     }
 
     let initialWorktreePath: string | null = typeof worktreePath === 'string' ? worktreePath : null
@@ -305,6 +325,38 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         currentStage: (typeof stage === 'string' && VALID_STAGES.has(stage as PipelineStage)) ? (stage as PipelineStage) : 'konzept',
         userId: isAuthEnabled() ? req.user!.id : null,
       })
+
+      // Permission seeding: template → explicit permissions[] → parent inheritance.
+      // Order matters: template first so explicit permissions[] can extend
+      // (or in dup case, the existing-grant skip kicks in). Parent inheritance
+      // is opt-in via inheritPermissions=true; skipped if explicit perms set.
+      const permissionAuditDetail: Record<string, unknown> = {}
+      if (typeof template === 'string') {
+        const tplResult = applyPermissionTemplateByName(task.id, template)
+        if (tplResult)
+          permissionAuditDetail.template = { name: template, granted: tplResult.granted.length, skipped: tplResult.skipped.length }
+      }
+      if (Array.isArray(permissions) && permissions.length > 0) {
+        const result = bulkGrantPermissions(
+          task.id,
+          permissions.map((p: { tool: string, pattern?: string | null, expiresAt?: string | null }) => ({
+            tool: p.tool,
+            pattern: p.pattern ?? null,
+            expiresAt: p.expiresAt ?? null,
+          })),
+          { source: 'create_task:permissions[]' },
+        )
+        permissionAuditDetail.explicit = { granted: result.granted.length, skipped: result.skipped.length }
+      }
+      if (
+        inheritPermissions === true
+        && (!Array.isArray(permissions) || permissions.length === 0)
+        && typeof parentTaskId === 'string'
+      ) {
+        const inhResult = inheritParentPermissions(task.id, parentTaskId)
+        permissionAuditDetail.inherited = { fromParent: parentTaskId, granted: inhResult.granted.length }
+      }
+
       deps.broadcastTaskEvent({ type: 'task_created', taskId: task.id, payload: enrichTask(task) })
       res.status(201).json(enrichTask(task))
     }
@@ -760,6 +812,172 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
 
     res.status(201).json(reqRow)
+  })
+
+  /**
+   * Bulk-grant permissions to a task post-creation. Mirrors what create_task
+   * accepts: explicit `permissions[]` and/or `template`. Both can be combined.
+   * Available retroactively for tasks already in flight.
+   */
+  mutationRouter.post('/tasks/:id/permissions/bulk', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const { permissions, template } = req.body ?? {}
+    if (template !== undefined && template !== null && (typeof template !== 'string' || !listTemplateNames().includes(template as never))) {
+      res.status(400).json({ error: `template must be one of: ${listTemplateNames().join(', ')}` })
+      return
+    }
+    if (permissions !== undefined && permissions !== null && !Array.isArray(permissions)) {
+      res.status(400).json({ error: 'permissions must be an array' })
+      return
+    }
+
+    const result: { templateGranted?: number, templateSkipped?: number, explicitGranted?: number, explicitSkipped?: number } = {}
+
+    if (typeof template === 'string') {
+      const tplRes = applyPermissionTemplateByName(task.id, template)
+      if (tplRes) {
+        result.templateGranted = tplRes.granted.length
+        result.templateSkipped = tplRes.skipped.length
+      }
+    }
+    if (Array.isArray(permissions) && permissions.length > 0) {
+      for (const p of permissions) {
+        if (typeof p !== 'object' || p === null || typeof (p as { tool?: unknown }).tool !== 'string') {
+          res.status(400).json({ error: 'permissions[i].tool is required (string)' })
+          return
+        }
+      }
+      const explicitRes = bulkGrantPermissions(
+        task.id,
+        permissions.map((p: { tool: string, pattern?: string | null, expiresAt?: string | null }) => ({
+          tool: p.tool,
+          pattern: p.pattern ?? null,
+          expiresAt: p.expiresAt ?? null,
+        })),
+        { source: 'rest_bulk_grant' },
+      )
+      result.explicitGranted = explicitRes.granted.length
+      result.explicitSkipped = explicitRes.skipped.length
+    }
+
+    deps.broadcastTaskEvent({ type: 'task_updated', taskId: task.id, payload: enrichTask(task) })
+    res.status(200).json(result)
+  })
+
+  /**
+   * Bulk variant of POST /permission-requests. Accepts an array of
+   * {tool, pattern?, reason?} entries. For each entry:
+   *   - If a granted, non-expired task_permission already covers it,
+   *     auto-resolve silently (no UI prompt).
+   *   - Else, create a permission_request row and surface as ON HOLD.
+   *
+   * Response shape:
+   *   {
+   *     autoResolved: Array<{tool, pattern}>,
+   *     pending:      Array<{id, tool, pattern}>
+   *   }
+   *
+   * Stage status is flipped to awaiting_user only if at least one entry is
+   * pending — if all entries auto-resolve, the agent keeps running.
+   */
+  mutationRouter.post('/permission-requests/bulk', (req, res) => {
+    const { stageRunId, entries } = req.body ?? {}
+    if (!stageRunId || typeof stageRunId !== 'string') {
+      res.status(400).json({ error: 'stageRunId is required' })
+      return
+    }
+    if (!Array.isArray(entries) || entries.length === 0) {
+      res.status(400).json({ error: 'entries must be a non-empty array' })
+      return
+    }
+    const run = getStageRunById(stageRunId)
+    if (!run) {
+      res.status(404).json({ error: 'stage run not found' })
+      return
+    }
+    const task = getTaskById(run.taskId)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'stage run not found' })
+      return
+    }
+
+    const grants = listTaskPermissions(task.id)
+    const nowIso = new Date().toISOString()
+    const isCovered = (tool: string, pattern: string | null): boolean => {
+      return grants.some((p) => {
+        if (!p.granted)
+          return false
+        if (p.expiresAt && p.expiresAt <= nowIso)
+          return false
+        if (p.tool !== tool)
+          return false
+        // Coverage rule: a "tool only" grant (pattern === null) covers
+        // every pattern of that tool. A specific-pattern grant covers only
+        // exact-string-equal pattern matches (no glob expansion — Claude
+        // Code semantics handle the matching at runtime).
+        if (p.pattern === null)
+          return true
+        return (p.pattern ?? null) === pattern
+      })
+    }
+
+    const autoResolved: Array<{ tool: string, pattern: string | null }> = []
+    const pending: Array<{ id: string, tool: string, pattern: string | null }> = []
+
+    for (const raw of entries) {
+      if (typeof raw !== 'object' || raw === null)
+        continue
+      const e = raw as { tool?: unknown, pattern?: unknown, reason?: unknown }
+      const tool = typeof e.tool === 'string' ? e.tool.trim() : ''
+      const pattern = typeof e.pattern === 'string' && e.pattern.trim().length > 0 ? e.pattern.trim() : null
+      const reason = typeof e.reason === 'string' ? e.reason : null
+      if (!tool)
+        continue
+
+      if (isCovered(tool, pattern)) {
+        autoResolved.push({ tool, pattern })
+        appendAudit({
+          taskId: task.id,
+          actor: 'system',
+          action: 'permission_auto_resolved',
+          details: { tool, pattern, source: 'bulk_request' },
+        })
+        continue
+      }
+
+      const reqRow = createPermissionRequest({
+        stageRunId,
+        tool,
+        pattern,
+        reason,
+      })
+      pending.push({ id: reqRow.id, tool, pattern })
+      deps.broadcastTaskEvent({ type: 'permission_request', taskId: run.taskId, payload: reqRow })
+
+      if (deps.dispatcher) {
+        deps.dispatcher
+          .dispatch({
+            eventType: 'on_hold',
+            title: `Task "${task.title}" needs permission`,
+            body: `Agent requests ${tool}${pattern ? ` (${pattern})` : ''}${reason ? `\nReason: ${reason}` : ''}`,
+            taskId: task.id,
+            taskSlug: task.slug,
+            severity: 'warning',
+          })
+          .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
+      }
+    }
+
+    if (pending.length > 0 && run.status === 'running')
+      updateStageRun(run.id, { status: 'awaiting_user' })
+
+    broadcastEnrichedUpdate(run.taskId)
+
+    res.status(200).json({ autoResolved, pending })
   })
 
   mutationRouter.post('/permission-requests/:id/resolve', async (req, res) => {
