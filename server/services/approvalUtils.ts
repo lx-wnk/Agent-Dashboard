@@ -10,11 +10,17 @@ import { bulkCreateTaskPermissions, createTaskPermission, listTaskPermissions } 
 import { getTaskById } from '../db/tasksRepo.js'
 import { DEFAULT_KONZEPT_BASELINE_TEMPLATE, isPermissionTemplate, resolveTemplate } from './permissionTemplates.js'
 
-// Matches Bash patterns that could fetch or execute remote code — used to
-// block automatic pre-approval of potentially dangerous commands from
-// agent-emitted toolRequests. Operators can still grant these manually via
-// the UI, where the warning surfaces explicitly.
-const DANGEROUS_BASH_RE = /curl|wget|nc\b|netcat|python\s+-c|perl\s+-e|ruby\s+-e|eval\b|base64\s+-d|[;&|`]|\$\(|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/i
+// Matches Bash patterns that could fetch or execute remote code, or that
+// implement busy-wait polling loops (which agents have been observed to
+// generate as a permission-gate workaround, burning tokens indefinitely).
+// Used to block automatic pre-approval of potentially dangerous commands
+// from agent-emitted toolRequests. Operators can still grant these
+// manually via the UI, where the warning surfaces explicitly.
+//
+// Polling-loop patterns matched: `until [...]; do sleep N; done`,
+// `while [...]; do sleep N; done`, and any while/until paired with a
+// sleep call inside the same pattern string.
+const DANGEROUS_BASH_RE = /curl|wget|nc\b|netcat|python\s+-c|perl\s+-e|ruby\s+-e|eval\b|base64\s+-d|[;&|`]|\$\(|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\b(?:until|while)\b[\s\S]+?\bsleep\s+\d+/i
 
 export function isDangerousBashPattern(pattern: string): boolean {
   return DANGEROUS_BASH_RE.test(pattern)

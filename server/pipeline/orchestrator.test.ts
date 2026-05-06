@@ -1,4 +1,5 @@
 import type { StageHandler, StageTransition } from './types.js'
+import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -568,6 +569,248 @@ describe('pipelineOrchestrator.tick - driver loop', () => {
 
     const updatedRun = getLatestStageRun(task.id, 'umsetzung')
     expect(updatedRun?.status).toBe('running')
+  })
+
+  it('reaps awaiting_user run whose PID is dead', async () => {
+    const task = createTask({ slug: 'reap', title: 'REAP', cwd: '/reap' })
+    updateTask(task.id, { currentStage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    // PID 1 is init — kill(1, 0) returns EPERM, NOT ESRCH; isPidAlive treats
+    // EPERM as alive. Use an unused PID so isPidAlive returns false.
+    updateStageRun(run.id, { status: 'awaiting_user', pid: 999999, startedAt: new Date().toISOString() })
+
+    parkAllAgentStages(orchestrator)
+    await orchestrator.tick()
+    await new Promise(r => setImmediate(r))
+
+    const reaped = getLatestStageRun(task.id, 'umsetzung')
+    expect(reaped?.status).toBe('failed')
+    const output = reaped?.output as Record<string, unknown> | null
+    expect(typeof output?.error).toBe('string')
+    expect(output?.error as string).toMatch(/awaiting_user reaper/)
+  })
+
+  it('kills awaiting_user run that exceeds awaitingUserTimeoutSeconds', async () => {
+    // Spawn a real child (sleep) so isPidAlive returns true and the
+    // orchestrator's SIGTERM hits the child, not the test runner.
+    const child = spawn('sleep', ['30'], { detached: false, stdio: 'ignore' })
+    try {
+      const task = createTask({ slug: 'busywait', title: 'BW', cwd: '/bw' })
+      updateTask(task.id, { currentStage: 'umsetzung' })
+      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
+      updateStageRun(run.id, { status: 'awaiting_user', pid: child.pid!, startedAt: fiveHoursAgo })
+
+      setPipelineConfig('awaitingUserTimeoutSeconds', '1')
+      parkAllAgentStages(orchestrator)
+      await orchestrator.tick()
+      await new Promise(r => setImmediate(r))
+
+      const killed = getLatestStageRun(task.id, 'umsetzung')
+      expect(killed?.status).toBe('failed')
+      const output = killed?.output as Record<string, unknown> | null
+      expect(output?.error as string).toMatch(/awaiting_user timeout/)
+    }
+    finally {
+      try {
+        child.kill('SIGKILL')
+      }
+      catch { /* already dead */ }
+    }
+  })
+
+  it('does not touch awaiting_user run with live PID within timeout', async () => {
+    const child = spawn('sleep', ['30'], { detached: false, stdio: 'ignore' })
+    try {
+      const task = createTask({ slug: 'wait-ok', title: 'OK', cwd: '/ok2' })
+      updateTask(task.id, { currentStage: 'umsetzung' })
+      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      updateStageRun(run.id, { status: 'awaiting_user', pid: child.pid!, startedAt: new Date().toISOString() })
+
+      setPipelineConfig('awaitingUserTimeoutSeconds', '14400')
+      parkAllAgentStages(orchestrator)
+      await orchestrator.tick()
+      await new Promise(r => setImmediate(r))
+
+      const fresh = getLatestStageRun(task.id, 'umsetzung')
+      expect(fresh?.status).toBe('awaiting_user')
+    }
+    finally {
+      try {
+        child.kill('SIGKILL')
+      }
+      catch { /* already dead */ }
+    }
+  })
+
+  it('sweepOrphanRuns: reaps non-terminal stage_run whose task is cancelled', async () => {
+    const task = createTask({ slug: 'cancelled-orphan', title: 'CO', cwd: '/co' })
+    updateTask(task.id, { currentStage: 'cancelled' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    updateStageRun(run.id, { status: 'pending', startedAt: new Date().toISOString() })
+
+    parkAllAgentStages(orchestrator)
+    await orchestrator.tick()
+    await new Promise(r => setImmediate(r))
+
+    const reaped = getLatestStageRun(task.id, 'umsetzung')
+    expect(reaped?.status).toBe('failed')
+    const output = reaped?.output as Record<string, unknown> | null
+    expect(output?.error as string).toMatch(/orphan reaper/)
+  })
+
+  it('sweepOrphanRuns: reaps on_hold run with dead PID', async () => {
+    const task = createTask({ slug: 'on-hold-dead', title: 'OD', cwd: '/od' })
+    updateTask(task.id, { currentStage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    updateStageRun(run.id, { status: 'on_hold', pid: 999999, startedAt: new Date().toISOString() })
+
+    parkAllAgentStages(orchestrator)
+    await orchestrator.tick()
+    await new Promise(r => setImmediate(r))
+
+    const reaped = getLatestStageRun(task.id, 'umsetzung')
+    expect(reaped?.status).toBe('failed')
+    expect((reaped?.output as Record<string, unknown>)?.error as string).toMatch(/on_hold agent exited/)
+  })
+
+  it('sweepOrphanRuns: reaps stale pending run with no PID', async () => {
+    const task = createTask({ slug: 'stale-pending', title: 'SP', cwd: '/sp' })
+    updateTask(task.id, { currentStage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    updateStageRun(run.id, { status: 'pending', pid: null, startedAt: tenMinAgo })
+
+    parkAllAgentStages(orchestrator)
+    await orchestrator.tick()
+    await new Promise(r => setImmediate(r))
+
+    const reaped = getLatestStageRun(task.id, 'umsetzung')
+    expect(reaped?.status).toBe('failed')
+    expect((reaped?.output as Record<string, unknown>)?.error as string).toMatch(/never promoted/)
+  })
+
+  it('sweepOrphanRuns: leaves fresh pending run alone', async () => {
+    const task = createTask({ slug: 'fresh-pending', title: 'FP', cwd: '/fp' })
+    updateTask(task.id, { currentStage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    updateStageRun(run.id, { status: 'pending', pid: null, startedAt: new Date().toISOString() })
+
+    // Park umsetzung specifically — but the picker will then promote this
+    // pending run to running via progressTask. To isolate the sweep test we
+    // disable the picker by making the stage handler return wait_user, AND
+    // we do NOT call tick (which would also pick up). Instead we call the
+    // sweep indirectly by ticking and then asserting status.
+    parkAllAgentStages(orchestrator)
+    await orchestrator.tick()
+    await new Promise(r => setImmediate(r))
+
+    // The pending run will be promoted by the picker (parkAllAgentStages
+    // returns wait_user, which transitions to awaiting_user). Either way,
+    // the sweep does not fail it because elapsed < 5 min.
+    const fresh = getLatestStageRun(task.id, 'umsetzung')
+    expect(fresh?.status).not.toBe('failed')
+  })
+
+  it('sweepOrphanRuns: reaps running stage_run whose task was cascade-moved to on_hold', async () => {
+    // Repro: dependency cascade flipped task currentStage to on_hold while a
+    // running stage_run on selbstreview was in flight. Without on_hold in the
+    // parked-task check this leaks the agent until next sweep boundary.
+    const child = spawn('sleep', ['30'], { detached: false, stdio: 'ignore' })
+    try {
+      const task = createTask({ slug: 'cascaded-hold', title: 'CH', cwd: '/ch' })
+      updateTask(task.id, { currentStage: 'on_hold' })
+      const run = createStageRun({ taskId: task.id, stage: 'selbstreview' })
+      updateStageRun(run.id, { status: 'running', pid: child.pid!, startedAt: new Date().toISOString() })
+
+      parkAllAgentStages(orchestrator)
+      orchestrator.setCompletionDetector(async () => ({ kind: 'still_running' }))
+      await orchestrator.tick()
+      await new Promise(r => setImmediate(r))
+
+      const reaped = getLatestStageRun(task.id, 'selbstreview')
+      expect(reaped?.status).toBe('failed')
+      expect((reaped?.output as Record<string, unknown>)?.error as string).toMatch(/task reached on_hold/)
+    }
+    finally {
+      try {
+        child.kill('SIGKILL')
+      }
+      catch { /* race */ }
+    }
+  })
+
+  it.each(['umsetzung', 'selbstreview', 'finalisierung'] as const)(
+    'defenses are stage-agnostic: %s also gets re-entry guard + sweeps',
+    async (stage) => {
+      const child = spawn('sleep', ['30'], { detached: false, stdio: 'ignore' })
+      try {
+        const task = createTask({ slug: `stage-${stage}`, title: `S-${stage}`, cwd: `/s${stage}` })
+        updateTask(task.id, { currentStage: stage })
+        const run = createStageRun({ taskId: task.id, stage })
+        const originalStart = new Date(Date.now() - 60_000).toISOString()
+        updateStageRun(run.id, { status: 'running', pid: child.pid!, startedAt: originalStart })
+
+        let spawnCount = 0
+        orchestrator.setHandler(stage, {
+          stage,
+          requiresAgent: true,
+          async execute() {
+            spawnCount++
+            return { kind: 'async_running', pid: child.pid! }
+          },
+        })
+
+        await orchestrator.progressTask(task.id)
+        expect(spawnCount).toBe(0)
+        const fresh = getLatestStageRun(task.id, stage)
+        expect(fresh?.startedAt).toBe(originalStart)
+      }
+      finally {
+        try {
+          child.kill('SIGKILL')
+        }
+        catch { /* race */ }
+      }
+    },
+  )
+
+  it('progressTask re-entry guard: skips spawn when stage_run is already running with live PID', async () => {
+    // Repro the user-grants-many-permissions cascade: after the kill+restart
+    // path produces a running stage_run, additional resumeFromUser → progressTask
+    // calls (one per remaining grant) MUST NOT spawn fresh agents on top.
+    const child = spawn('sleep', ['30'], { detached: false, stdio: 'ignore' })
+    try {
+      const task = createTask({ slug: 're-entry', title: 'RE', cwd: '/re' })
+      updateTask(task.id, { currentStage: 'umsetzung' })
+      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      const originalStart = new Date(Date.now() - 60_000).toISOString()
+      updateStageRun(run.id, { status: 'running', pid: child.pid!, startedAt: originalStart })
+
+      let spawnCount = 0
+      orchestrator.setHandler('umsetzung', {
+        stage: 'umsetzung',
+        requiresAgent: true,
+        async execute() {
+          spawnCount++
+          return { kind: 'async_running', pid: child.pid! }
+        },
+      })
+
+      const result = await orchestrator.progressTask(task.id)
+      expect(spawnCount).toBe(0)
+      expect(result?.id).toBe(run.id)
+      // started_at must NOT be bumped — busy-wait/timeout windows count from
+      // the original spawn, not from re-entry attempts.
+      const fresh = getLatestStageRun(task.id, 'umsetzung')
+      expect(fresh?.startedAt).toBe(originalStart)
+    }
+    finally {
+      try {
+        child.kill('SIGKILL')
+      }
+      catch { /* already dead */ }
+    }
   })
 })
 

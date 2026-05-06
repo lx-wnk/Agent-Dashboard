@@ -14,6 +14,7 @@ import {
   getLatestStageRun,
   getStageRunById,
   getStageRunByIteration,
+  listPendingStaleStageRuns,
   listRunningStageRuns,
   updateStageRun,
 } from '../db/stageRunsRepo.js'
@@ -22,7 +23,7 @@ import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
 import { estimateCost } from '../pricing.js'
 import { cleanupLocalSettingsEntries, shouldCleanSettingsFile } from './agentSpawner.js'
 import { detectCompletion } from './completionDetector.js'
-import { attachSessionId, buildSessionName, decideRecovery } from './sessionManager.js'
+import { attachSessionId, buildSessionName, decideRecovery, isPidAlive } from './sessionManager.js'
 import { findNewestSessionId, readSessionTokenSummary } from './sessionOutputReader.js'
 import { getHandlerForStage } from './stageHandlers.js'
 import { STAGE_ORDER } from './types.js'
@@ -32,6 +33,17 @@ const MAX_PARALLEL_KEY = 'maxParallelOrchestrators'
 const DEFAULT_MAX_PARALLEL = 3
 const STAGE_TIMEOUT_KEY = 'stageTimeoutSeconds'
 const DEFAULT_STAGE_TIMEOUT_SECONDS = 1800
+// Awaiting-user runs are NOT subject to the regular stage timeout because the
+// user may need hours to respond. But two failure modes still require a sweep:
+//   1. PID gone — agent crashed/exited while pending permissions remained, so
+//      the stage_run is a zombie (status=awaiting_user, no live process). Reap
+//      immediately on detection.
+//   2. PID alive but elapsed time > AWAITING_USER_TIMEOUT — the agent is
+//      busy-waiting (e.g. via shell `until [ -e ... ]; do sleep N; done`
+//      polling loops) instead of yielding to the request_permission MCP gate.
+//      Kill it.
+const AWAITING_USER_TIMEOUT_KEY = 'awaitingUserTimeoutSeconds'
+const DEFAULT_AWAITING_USER_TIMEOUT_SECONDS = 14400 // 4h
 
 /**
  * Callback invoked when a stage handler creates a runtime permission request.
@@ -228,6 +240,36 @@ export class PipelineOrchestrator {
       return null
 
     const stageRun = this.ensureStageRun(task)
+
+    // Re-entrancy guard: when an agent-driven stage already has a running
+    // stage_run with a live PID, do NOT spawn a second agent on top of it.
+    // This protects against the user-grants-many-permissions cascade:
+    //   1. bulk request creates N pending permission_requests on run R1
+    //   2. user grants P1 → R1 SIGTERMed + failed → progressTask spawns R2
+    //   3. R2 is alive and asking its own permissions
+    //   4. user grants P2/P3/… (still attached to R1, now failed) → resolve
+    //      route falls into the `else` branch (shouldRestartRun=false because
+    //      R1 is failed), calls resumeFromUser → progressTask
+    //   5. without this guard: ensureStageRun returns the running R2, the
+    //      handler.execute below spawns ANOTHER claude process for the same
+    //      stage_run, multiplying token burn for every extra grant click.
+    //
+    // We also intentionally do NOT bump `started_at` when returning early so
+    // the awaiting-user / stage timeout continues to count from the original
+    // spawn, not from the most recent re-entry attempt.
+    if (
+      handler.requiresAgent
+      && stageRun.status === 'running'
+      && stageRun.pid !== null
+      && isPidAlive(stageRun.pid)
+    ) {
+      consola.info(
+        `[orchestrator] progressTask re-entry skipped: stage ${stageRun.stage}`
+        + ` (run ${stageRun.id}) already running with live PID ${stageRun.pid}`,
+      )
+      return stageRun
+    }
+
     updateStageRun(stageRun.id, { status: 'running', startedAt: new Date().toISOString() })
 
     const ctx = this.buildContext(task, stageRun, opts?.resumeSessionId, opts?.userAdditionalPrompt)
@@ -574,7 +616,161 @@ export class PipelineOrchestrator {
   private async progressPendingTasks(): Promise<void> {
     const allRunning = listRunningStageRuns()
     await this.finalizeCompletedAsyncRuns(allRunning)
+    await this.sweepAwaitingUserRuns(allRunning)
+    await this.sweepOrphanRuns(allRunning)
     this.pickNextTasksForFreeSlots(allRunning)
+  }
+
+  /**
+   * Sweep stage_runs whose state has diverged from their parent task or whose
+   * PID is gone. Complements the status-specific sweepers above:
+   *
+   *   - **Terminal-task orphan**: any non-terminal stage_run whose task
+   *     reached `done`/`cancelled` is a leak (the task moved on without
+   *     reaping its in-flight runs). Kill any live PID and mark failed.
+   *   - **on_hold + dead PID**: same logic as awaiting_user but for the
+   *     `on_hold` status, which `sweepAwaitingUserRuns` does not touch.
+   *   - **pending stuck > 5 min** with no live PID: a `pending` run is the
+   *     transient state between createStageRun and the next progressTask
+   *     pickup. If it sits with no PID for minutes, the orchestrator missed
+   *     it (e.g. crash after createStageRun) — reap so retry/UI is honest.
+   *
+   * Includes `running` and `awaiting_user` runs IF their task is parked
+   * (currentStage is done/cancelled/on_hold). The status-specific sweepers
+   * above otherwise handle those statuses for non-parked tasks.
+   */
+  private async sweepOrphanRuns(allRunning?: StageRun[]): Promise<void> {
+    // Scan ALL non-terminal statuses — finalize / sweepAwaitingUserRuns
+    // handle the happy paths, but the parked-task check below must run
+    // across every status to catch cascade leaks.
+    const candidates = allRunning ?? listRunningStageRuns()
+    const pendings = listPendingStaleStageRuns()
+    const all = [...candidates, ...pendings]
+
+    const PENDING_STALE_SECONDS = 300 // 5 min
+    for (const run of all) {
+      const task = getTaskById(run.taskId)
+      if (!task)
+        continue
+
+      // Case 1: task is in a parked/terminal stage but stage_run is not.
+      // Leaked from a cancel-cascade, on_hold-cascade, or process race.
+      // `on_hold` is included because the dependency cascade sets task
+      // currentStage='on_hold' without touching the in-flight stage_run —
+      // any live agent on such a task is now working off a parked task
+      // and should be reaped.
+      if (
+        task.currentStage === 'done'
+        || task.currentStage === 'cancelled'
+        || task.currentStage === 'on_hold'
+      ) {
+        if (run.pid !== null && isPidAlive(run.pid)) {
+          try {
+            process.kill(run.pid, 'SIGTERM')
+          }
+          catch { /* race */ }
+        }
+        consola.warn(
+          `[orchestrator] orphan stage_run ${run.id} (${run.stage}, status=${run.status})`
+          + ` belongs to parked task ${task.id} (${task.currentStage}) — reaping as failed`,
+        )
+        this.applyTransition(task, run, {
+          kind: 'fail',
+          error: `orphan reaper: task reached ${task.currentStage} with stage_run still ${run.status}`,
+        })
+        continue
+      }
+
+      // Case 2: on_hold with dead PID — agent died while task was held.
+      if (run.status === 'on_hold' && run.pid !== null && !isPidAlive(run.pid)) {
+        consola.warn(
+          `[orchestrator] on_hold run ${run.id} (${run.stage}) has dead PID ${run.pid} — reaping as failed`,
+        )
+        this.applyTransition(task, run, {
+          kind: 'fail',
+          error: 'orphan reaper: on_hold agent exited',
+        })
+        continue
+      }
+
+      // Case 3: pending with no PID and stale startedAt. progressTask never
+      // promoted it (orchestrator was down at the moment, or createStageRun
+      // happened in a code path that didn't follow up with a spawn).
+      if (run.status === 'pending' && run.pid === null && run.startedAt) {
+        const elapsedMs = Date.now() - new Date(run.startedAt).getTime()
+        if (elapsedMs > PENDING_STALE_SECONDS * 1000) {
+          consola.warn(
+            `[orchestrator] pending run ${run.id} (${run.stage}) stuck ${Math.round(elapsedMs / 1000)}s`
+            + ` without spawn — reaping as failed`,
+          )
+          this.applyTransition(task, run, {
+            kind: 'fail',
+            error: `orphan reaper: pending stage_run never promoted to running (${Math.round(elapsedMs / 1000)}s elapsed)`,
+          })
+        }
+      }
+    }
+  }
+
+  /**
+   * Sweep stuck awaiting_user runs. Two failure modes are reaped here:
+   *
+   *   1. **Dead PID with awaiting_user status**: agent crashed/exited while
+   *      permission requests were still pending. Without this sweep the run
+   *      sits forever as a zombie because `finalizeCompletedAsyncRuns`
+   *      filters to status=running.
+   *   2. **Live PID exceeding the awaiting-user wallclock**: agent is
+   *      busy-waiting (observed in the wild as `until [ -e /tmp/x ]; do
+   *      sleep N; done` shell polling loops generated as a permission-gate
+   *      workaround). Kill the agent and fail the run so the slot frees.
+   *
+   * Runs in `pickable` listings already exclude awaiting_user via
+   * `pickNextTasksForFreeSlots`, so this sweep only writes terminal status.
+   */
+  private async sweepAwaitingUserRuns(allRunning?: StageRun[]): Promise<void> {
+    const awaiting = (allRunning ?? listRunningStageRuns()).filter(r => r.status === 'awaiting_user')
+    if (awaiting.length === 0)
+      return
+    const timeoutSeconds = this.getCachedPipelineConfigNumber(
+      AWAITING_USER_TIMEOUT_KEY,
+      DEFAULT_AWAITING_USER_TIMEOUT_SECONDS,
+    )
+    for (const run of awaiting) {
+      const task = getTaskById(run.taskId)
+      if (!task)
+        continue
+      const pidAlive = run.pid !== null && isPidAlive(run.pid)
+      if (!pidAlive) {
+        consola.warn(
+          `[orchestrator] awaiting_user run ${run.id} (${run.stage}) has dead PID ${run.pid} — reaping as failed`,
+        )
+        this.applyTransition(task, run, {
+          kind: 'fail',
+          error: 'awaiting_user reaper: stage agent exited while permissions pending',
+        })
+        continue
+      }
+      if (timeoutSeconds > 0 && run.startedAt) {
+        const elapsedMs = Date.now() - new Date(run.startedAt).getTime()
+        if (elapsedMs > timeoutSeconds * 1000) {
+          consola.warn(
+            `[orchestrator] awaiting_user run ${run.id} (${run.stage}) exceeded ${timeoutSeconds}s`
+            + ` (elapsed ${Math.round(elapsedMs / 1000)}s) with live PID ${run.pid} — agent is likely busy-waiting; killing.`,
+          )
+          try {
+            process.kill(run.pid!, 'SIGTERM')
+          }
+          catch { /* race with exit */ }
+          const fresh = getStageRunById(run.id)
+          if (fresh && fresh.status === 'awaiting_user') {
+            this.applyTransition(task, fresh, {
+              kind: 'fail',
+              error: `awaiting_user timeout: ran ${Math.round(elapsedMs / 1000)}s (limit ${timeoutSeconds}s) — agent likely busy-waiting`,
+            })
+          }
+        }
+      }
+    }
   }
 
   private async finalizeCompletedAsyncRuns(allRunning?: StageRun[]): Promise<void> {

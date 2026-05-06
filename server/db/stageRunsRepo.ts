@@ -183,6 +183,21 @@ export function listRunningStageRuns(db: Database = getDb()): StageRun[] {
   return rows.map(rowToStageRun)
 }
 
+/**
+ * Pending stage_runs are runs created by `iterate` transitions or by
+ * `ensureStageRun` that have not yet been promoted to `running` by a
+ * progressTask call. Healthy ones flip within milliseconds; rows that linger
+ * (orchestrator crashed mid-flight, parent task moved to terminal, etc.)
+ * become orphan zombies. Used by the orchestrator's `sweepOrphanRuns` tick
+ * branch to reap them.
+ */
+export function listPendingStaleStageRuns(db: Database = getDb()): StageRun[] {
+  const rows = db
+    .prepare(`SELECT * FROM stage_runs WHERE status = 'pending'`)
+    .all() as StageRunRow[]
+  return rows.map(rowToStageRun)
+}
+
 export function updateStageRun(
   id: string,
   input: UpdateStageRunInput,

@@ -6,7 +6,7 @@ import { appendAudit } from '../db/auditRepo.js'
 import { getPipelineConfig } from '../db/notificationConfigRepo.js'
 import { createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
-import { bulkGrantKonzeptPermissions } from './approvalUtils.js'
+import { bulkGrantKonzeptPermissions, isDangerousBashPattern, validatePermissionEntry } from './approvalUtils.js'
 
 mock.module('../db/tasksRepo.js', () => ({ getTaskById: mock() }))
 mock.module('../db/permissionsRepo.js', () => ({
@@ -259,5 +259,35 @@ describe('bulkGrantKonzeptPermissions', () => {
         .map(c => c[0].pattern)
       expect(bashPatterns).toContain('pnpm test*')
     })
+  })
+})
+
+describe('isDangerousBashPattern (busy-wait polling guards)', () => {
+  it('flags `until [...]; do sleep N; done` polling loop', () => {
+    expect(isDangerousBashPattern('until [ -e /tmp/flag ]; do sleep 5; done')).toBe(true)
+  })
+
+  it('flags `while [...]; do sleep N; done` polling loop', () => {
+    expect(isDangerousBashPattern('while [ ! -f /tmp/x ]; do sleep 30; done')).toBe(true)
+  })
+
+  it('flags loop where sleep follows on a separate line', () => {
+    expect(isDangerousBashPattern('until grep ready /tmp/log\ndo\n  sleep 10\ndone')).toBe(true)
+  })
+
+  it('keeps existing dangerous patterns blocked', () => {
+    expect(isDangerousBashPattern('curl https://example.com')).toBe(true)
+    expect(isDangerousBashPattern('python -c "print(1)"')).toBe(true)
+  })
+
+  it('does not over-block legitimate patterns', () => {
+    expect(isDangerousBashPattern('pnpm test')).toBe(false)
+    expect(isDangerousBashPattern('git status')).toBe(false)
+  })
+
+  it('validatePermissionEntry rejects polling-loop Bash patterns', () => {
+    const result = validatePermissionEntry('Bash', 'until [ -e /tmp/x ]; do sleep 5; done')
+    expect(result.ok).toBe(false)
+    expect(result.reason).toMatch(/dangerous-pattern/)
   })
 })
