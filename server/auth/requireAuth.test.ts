@@ -88,7 +88,9 @@ describe('requireAuth — auth disabled', () => {
 
   it('sets req.user as local admin and calls next() when auth is off', () => {
     let nextCalled = false
-    const next = () => { nextCalled = true }
+    const next = () => {
+      nextCalled = true
+    }
 
     const req = makeReq()
     const res = makeRes()
@@ -120,7 +122,9 @@ describe('requireAuth — auth enabled', () => {
 
   it('returns 401 when no dashboard_session cookie is present', () => {
     let nextCalled = false
-    const next = () => { nextCalled = true }
+    const next = () => {
+      nextCalled = true
+    }
 
     const req = makeReq({})
     const res = makeRes()
@@ -135,7 +139,9 @@ describe('requireAuth — auth enabled', () => {
     delete process.env.JWT_SECRET
 
     let nextCalled = false
-    const next = () => { nextCalled = true }
+    const next = () => {
+      nextCalled = true
+    }
 
     const token = signJwt({ sub: '1', login: 'alex', isAdmin: false }, JWT_SECRET, 3600)
     const req = makeReq({ dashboard_session: token })
@@ -149,7 +155,9 @@ describe('requireAuth — auth enabled', () => {
 
   it('returns 401 and clears cookie when token is invalid', () => {
     let nextCalled = false
-    const next = () => { nextCalled = true }
+    const next = () => {
+      nextCalled = true
+    }
 
     const req = makeReq({ dashboard_session: 'not.a.valid.jwt' })
     const res = makeRes()
@@ -163,7 +171,9 @@ describe('requireAuth — auth enabled', () => {
 
   it('returns 401 and clears cookie when token is expired', () => {
     let nextCalled = false
-    const next = () => { nextCalled = true }
+    const next = () => {
+      nextCalled = true
+    }
 
     const expired = signJwt({ sub: '1', login: 'alex', isAdmin: false }, JWT_SECRET, -60)
     const req = makeReq({ dashboard_session: expired })
@@ -178,7 +188,9 @@ describe('requireAuth — auth enabled', () => {
 
   it('sets req.user and calls next() for a valid JWT', () => {
     let nextCalled = false
-    const next = () => { nextCalled = true }
+    const next = () => {
+      nextCalled = true
+    }
 
     const token = signJwt({ sub: '42', login: 'testuser', isAdmin: true }, JWT_SECRET, 3600)
     const req = makeReq({ dashboard_session: token })
@@ -193,7 +205,9 @@ describe('requireAuth — auth enabled', () => {
 
   it('sets isAdmin: false correctly for non-admin users', () => {
     let nextCalled = false
-    const next = () => { nextCalled = true }
+    const next = () => {
+      nextCalled = true
+    }
 
     const token = signJwt({ sub: '99', login: 'normaluser', isAdmin: false }, JWT_SECRET, 3600)
     const req = makeReq({ dashboard_session: token })

@@ -1,6 +1,7 @@
-import type { RefinementTurn } from '../db/refinementTurnsRepo.js'
+import type { Buffer } from 'node:buffer'
 import type { ChildProcess } from 'node:child_process'
 import type { Readable } from 'node:stream'
+import type { RefinementTurn } from '../db/refinementTurnsRepo.js'
 import { spawn } from 'node:child_process'
 
 export const REFINEMENT_SYSTEM_PROMPT = `You are a ticket refinement assistant that helps software teams create well-defined tasks through structured dialogue. Work through exactly four phases in strict order. Never skip phases.
@@ -132,9 +133,12 @@ export function spawnRefinementTurn(
   const fullPrompt = `${historyBlock}Human: ${message}\n\nContinue the conversation as the assistant. Follow the phase instructions exactly.`
 
   const child = spawn('claude', [
-    '-p', fullPrompt,
-    '--system-prompt', REFINEMENT_SYSTEM_PROMPT,
-    '--allowedTools', 'Read,Glob,Grep',
+    '-p',
+    fullPrompt,
+    '--system-prompt',
+    REFINEMENT_SYSTEM_PROMPT,
+    '--allowedTools',
+    'Read,Glob,Grep',
   ], {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -152,8 +156,7 @@ export function spawnRefinementTurn(
       child.on('close', (code, signal) =>
         code === 0
           ? resolve()
-          : reject(new Error(`refinement spawn exited code=${code} signal=${signal}`)),
-      )
+          : reject(new Error(`refinement spawn exited code=${code} signal=${signal}`)))
       child.on('error', reject)
     })
 

@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { serializeHistory, buildWindowedHistory, REFINEMENT_SYSTEM_PROMPT } from './refinementSpawner'
 import type { RefinementTurn } from '../db/refinementTurnsRepo'
+import { describe, expect, it } from 'vitest'
+import { buildWindowedHistory, REFINEMENT_SYSTEM_PROMPT, serializeHistory } from './refinementSpawner'
 
 describe('serializeHistory', () => {
   it('returns empty string for no history', () => {
@@ -105,7 +105,7 @@ describe('buildWindowedHistory', () => {
   })
 })
 
-describe('REFINEMENT_SYSTEM_PROMPT', () => {
+describe('rEFINEMENT_SYSTEM_PROMPT', () => {
   it('mentions all four phases', () => {
     expect(REFINEMENT_SYSTEM_PROMPT).toContain('ANALYSE')
     expect(REFINEMENT_SYSTEM_PROMPT).toContain('SPEC')

@@ -253,9 +253,9 @@ async function start() {
     // task_deleted: row already gone — fall back to userId embedded in event payload by taskRoutes
     const ownerId: string | null
       = task?.userId
-      ?? (event.type === 'task_deleted' && event.payload != null && typeof event.payload === 'object' && 'userId' in event.payload
-        ? String((event.payload as Record<string, unknown>).userId)
-        : null)
+        ?? (event.type === 'task_deleted' && event.payload != null && typeof event.payload === 'object' && 'userId' in event.payload
+          ? String((event.payload as Record<string, unknown>).userId)
+          : null)
     for (const client of taskSseClients) {
       if (!client.isAdmin && ownerId !== null && ownerId !== client.userId)
         continue

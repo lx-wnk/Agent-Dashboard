@@ -114,7 +114,6 @@ const pipelineAgent = computed(() => {
   return null
 })
 
-
 function isTerminal(stage: string | undefined) {
   // `failed` is intentionally excluded — failed tasks are actionable
   // (Retry / Analyze) rather than terminal.
@@ -200,7 +199,9 @@ async function loadDetails() {
     // Fallback output for running stages: poll the JSONL directly so the
     // overview pane shows something even before the agent scanner links the PID.
     fetchSessionText(latest)
-    runningOutputPoll = setInterval(() => { void fetchSessionText(latest) }, 5000)
+    runningOutputPoll = setInterval(() => {
+      void fetchSessionText(latest)
+    }, 5000)
   }
 }
 
@@ -217,7 +218,6 @@ watch(() => props.task?.id, (id, prevId) => {
     void loadDependencies()
   }
 })
-
 
 // Live refresh: when the SSE store pushes updated task fields (stage,
 // iteration, run status, active session), re-fetch the dependent details
@@ -648,7 +648,9 @@ const runtime = computed(() => {
               <!-- Error banner (timeout, schema failure, etc.) -->
               <div v-if="latestRunError" class="mt-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 px-3 py-2 flex items-start gap-2">
                 <span class="text-red-500 dark:text-red-400 text-sm leading-none mt-0.5">✗</span>
-                <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">{{ latestRunError }}</p>
+                <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">
+                  {{ latestRunError }}
+                </p>
               </div>
 
               <!-- Agent prose captured at completion (e.g. "no json block") -->

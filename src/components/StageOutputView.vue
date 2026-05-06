@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PipelineStage, StageRunStatus } from '../types'
+import type { StageRunStatus } from '../types'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -328,7 +328,9 @@ function shortPath(full: string): string {
         <div class="text-[10px] font-semibold uppercase tracking-wider text-red-500 dark:text-red-400 mb-1">
           Stage error
         </div>
-        <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">{{ outputError }}</p>
+        <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">
+          {{ outputError }}
+        </p>
       </div>
 
       <!-- Agent prose captured alongside the error (e.g. "no json block" failure) -->

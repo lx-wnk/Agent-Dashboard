@@ -14,7 +14,7 @@ import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
-import { createTask, useTasks } from './composables/useTasks'
+import { useTasks } from './composables/useTasks'
 import { useUser } from './composables/useUser'
 import { formatTokens, totalTokenCount } from './utils/format'
 
@@ -232,7 +232,6 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       @navigate="(agent: Agent) => navigateTo({ agent })"
       @open-chat="(t) => { selectTask(null); activeKonzeptTask = t; showRefinementChat = true }"
     />
-
 
     <Transition name="toast">
       <div

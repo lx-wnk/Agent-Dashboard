@@ -33,7 +33,6 @@ function isSafeRemoteUrl(raw: string): boolean {
   }
 }
 
-
 async function testRemoteConnection(url: string, bearerKey: string | null): Promise<boolean> {
   try {
     const controller = new AbortController()

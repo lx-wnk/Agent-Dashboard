@@ -47,13 +47,16 @@ export function useRefinementChat(taskId: () => string | null) {
       phase: t.phase,
     }))
     for (const t of turns) {
-      if (t.phase) completedPhases.value.add(t.phase)
+      if (t.phase)
+        completedPhases.value.add(t.phase)
     }
-    if (completedPhases.value.has('approval')) approvalReady.value = true
+    if (completedPhases.value.has('approval'))
+      approvalReady.value = true
   }
 
   function startPolling(id: string) {
-    if (pollingTimer.value !== null) return
+    if (pollingTimer.value !== null)
+      return
 
     const poll = async () => {
       try {
@@ -82,9 +85,11 @@ export function useRefinementChat(taskId: () => string | null) {
 
   async function loadHistory() {
     const id = taskId()
-    if (!id) return
+    if (!id)
+      return
     // If an SSE stream is active in this tab, don't overwrite live state
-    if (isStreaming.value) return
+    if (isStreaming.value)
+      return
     try {
       const res = await fetch(`/api/refine/${id}/turns`)
       if (!res.ok) {
@@ -107,7 +112,8 @@ export function useRefinementChat(taskId: () => string | null) {
 
   async function sendMessage(message: string, images?: ImageAttachment[]) {
     const id = taskId()
-    if (!id || isStreaming.value) return
+    if (!id || isStreaming.value)
+      return
     messages.value.push({ role: 'user', content: message, images })
     isStreaming.value = true
     error.value = null
@@ -134,7 +140,8 @@ export function useRefinementChat(taskId: () => string | null) {
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done)
+          break
         buffer += decoder.decode(value, { stream: true })
         const parts = buffer.split('\n\n')
         buffer = parts.pop() ?? ''
@@ -143,7 +150,8 @@ export function useRefinementChat(taskId: () => string | null) {
           const lines = part.split('\n')
           const eventLine = lines.find(l => l.startsWith('event:'))
           const dataLine = lines.find(l => l.startsWith('data:'))
-          if (!dataLine) continue
+          if (!dataLine)
+            continue
           let data: any
           try {
             data = JSON.parse(dataLine.slice(5).trimStart())
@@ -156,7 +164,8 @@ export function useRefinementChat(taskId: () => string | null) {
           if (event === 'phase_change' && data.phase) {
             completedPhases.value.add(data.phase)
             messages.value[assistantIdx].phase = data.phase
-            if (data.phase === 'approval') approvalReady.value = true
+            if (data.phase === 'approval')
+              approvalReady.value = true
           }
           else if (data.text) {
             assistantContent += data.text
@@ -175,7 +184,8 @@ export function useRefinementChat(taskId: () => string | null) {
 
   async function confirm(): Promise<PipelineTask | null> {
     const id = taskId()
-    if (!id) return null
+    if (!id)
+      return null
     try {
       const res = await fetch(`/api/refine/${id}/confirm`, { method: 'POST' })
       if (!res.ok) {

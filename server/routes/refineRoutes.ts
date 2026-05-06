@@ -9,8 +9,8 @@ import { jsonrepair } from 'jsonrepair'
 import { appendAudit } from '../db/auditRepo.js'
 import { insertTurn, listTurns } from '../db/refinementTurnsRepo.js'
 import { getTaskById, updateTask } from '../db/tasksRepo.js'
-import { spawnRefinementTurn } from '../services/refinementSpawner.js'
 import { applyPresetPermissions, bulkGrantKonzeptPermissions, saveGrantsToPresets } from '../services/approvalUtils.js'
+import { spawnRefinementTurn } from '../services/refinementSpawner.js'
 import { canAccessTask } from './taskRoutes.js'
 
 interface ImageAttachment {
@@ -59,7 +59,6 @@ export function createRefineRouter(
       return
     }
     activeTurns.add(task.id) // Reserve the slot before any async I/O — closes TOCTOU window
-
 
     const body = req.body as { message?: unknown, images?: unknown }
     const message = typeof body.message === 'string' ? body.message.trim() : ''
@@ -209,7 +208,10 @@ export function createRefineRouter(
       res.removeListener('close', onClose)
       activeTurns.delete(task.id)
       for (const f of tempFiles) {
-        try { unlinkSync(f) } catch {}
+        try {
+          unlinkSync(f)
+        }
+        catch {}
       }
     }
   })

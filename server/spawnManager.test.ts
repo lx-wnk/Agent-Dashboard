@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { beforeEach, describe, expect, it } from 'bun:test'
 import { SpawnManager } from './spawnManager.js'
 
 // The module reads DASHBOARD_SPAWN_RATE_LIMIT and DASHBOARD_SPAWN_RATE_WINDOW_MS via IIFEs
