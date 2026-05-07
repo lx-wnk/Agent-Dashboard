@@ -219,7 +219,6 @@ export function useRefinementChat(taskId: () => string | null) {
 
   return {
     messages,
-    completedPhases,
     isStreaming,
     error,
     approvalReady,
