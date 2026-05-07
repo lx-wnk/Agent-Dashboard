@@ -88,7 +88,7 @@ const chatTitle = computed(() => {
   // Fall back to first user message
   const firstUser = messages.value.find(m => m.role === 'user')
   if (!firstUser?.content)
-    return 'Neues Ticket'
+    return 'New Ticket'
   const t = firstUser.content.replace(/\s+/g, ' ').trim()
   return t.length > 30 ? `${t.slice(0, 27)}…` : t
 })
