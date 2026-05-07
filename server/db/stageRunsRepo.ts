@@ -26,15 +26,22 @@ export interface UpdateStageRunInput {
 
 export function createStageRun(input: CreateStageRunInput, db: Database = getDb()): StageRun {
   const id = randomUUID()
+  // `started_at` is stamped at row creation so the orphan reaper's pending-stale
+  // branch (orchestrator.ts `sweepOrphanRuns` case 3) has a timestamp to compare
+  // against; the running-promotion transition overwrites this with the actual
+  // run start, so display logic that reads `startedAt` for "started X ago" still
+  // shows run duration once the row leaves `pending`.
+  const now = new Date().toISOString()
   db.prepare(`
-    INSERT INTO stage_runs (id, task_id, stage, session_name, status, iteration)
-    VALUES (@id, @task_id, @stage, @session_name, 'pending', @iteration)
+    INSERT INTO stage_runs (id, task_id, stage, session_name, status, iteration, started_at)
+    VALUES (@id, @task_id, @stage, @session_name, 'pending', @iteration, @started_at)
   `).run({
     id,
     task_id: input.taskId,
     stage: input.stage,
     session_name: input.sessionName ?? null,
     iteration: input.iteration ?? 0,
+    started_at: now,
   })
   return getStageRunById(id, db)!
 }
@@ -191,7 +198,7 @@ export function listRunningStageRuns(db: Database = getDb()): StageRun[] {
  * become orphan zombies. Used by the orchestrator's `sweepOrphanRuns` tick
  * branch to reap them.
  */
-export function listPendingStaleStageRuns(db: Database = getDb()): StageRun[] {
+export function listPendingStageRuns(db: Database = getDb()): StageRun[] {
   const rows = db
     .prepare(`SELECT * FROM stage_runs WHERE status = 'pending'`)
     .all() as StageRunRow[]

@@ -14,7 +14,7 @@ import {
   getLatestStageRun,
   getStageRunById,
   getStageRunByIteration,
-  listPendingStaleStageRuns,
+  listPendingStageRuns,
   listRunningStageRuns,
   updateStageRun,
 } from '../db/stageRunsRepo.js'
@@ -644,7 +644,7 @@ export class PipelineOrchestrator {
     // handle the happy paths, but the parked-task check below must run
     // across every status to catch cascade leaks.
     const candidates = allRunning ?? listRunningStageRuns()
-    const pendings = listPendingStaleStageRuns()
+    const pendings = listPendingStageRuns()
     const all = [...candidates, ...pendings]
 
     const PENDING_STALE_SECONDS = 300 // 5 min
@@ -664,29 +664,40 @@ export class PipelineOrchestrator {
         || task.currentStage === 'cancelled'
         || task.currentStage === 'on_hold'
       ) {
-        if (run.pid !== null && isPidAlive(run.pid)) {
+        // Re-fetch in case `finalizeCompletedAsyncRuns` (or another
+        // tick branch in the same pass) already transitioned this run
+        // to a terminal status — without this guard the orphan reaper
+        // would overwrite `done`/`failed` with a fresh `failed` row
+        // and append a misleading audit entry.
+        const fresh = getStageRunById(run.id)
+        if (!fresh || fresh.status === 'done' || fresh.status === 'failed')
+          continue
+        if (fresh.pid !== null && isPidAlive(fresh.pid)) {
           try {
-            process.kill(run.pid, 'SIGTERM')
+            process.kill(fresh.pid, 'SIGTERM')
           }
           catch { /* race */ }
         }
         consola.warn(
-          `[orchestrator] orphan stage_run ${run.id} (${run.stage}, status=${run.status})`
+          `[orchestrator] orphan stage_run ${fresh.id} (${fresh.stage}, status=${fresh.status})`
           + ` belongs to parked task ${task.id} (${task.currentStage}) — reaping as failed`,
         )
-        this.applyTransition(task, run, {
+        this.applyTransition(task, fresh, {
           kind: 'fail',
-          error: `orphan reaper: task reached ${task.currentStage} with stage_run still ${run.status}`,
+          error: `orphan reaper: task reached ${task.currentStage} with stage_run still ${fresh.status}`,
         })
         continue
       }
 
       // Case 2: on_hold with dead PID — agent died while task was held.
       if (run.status === 'on_hold' && run.pid !== null && !isPidAlive(run.pid)) {
+        const fresh = getStageRunById(run.id)
+        if (!fresh || fresh.status === 'done' || fresh.status === 'failed')
+          continue
         consola.warn(
-          `[orchestrator] on_hold run ${run.id} (${run.stage}) has dead PID ${run.pid} — reaping as failed`,
+          `[orchestrator] on_hold run ${fresh.id} (${fresh.stage}) has dead PID ${fresh.pid} — reaping as failed`,
         )
-        this.applyTransition(task, run, {
+        this.applyTransition(task, fresh, {
           kind: 'fail',
           error: 'orphan reaper: on_hold agent exited',
         })
@@ -699,11 +710,14 @@ export class PipelineOrchestrator {
       if (run.status === 'pending' && run.pid === null && run.startedAt) {
         const elapsedMs = Date.now() - new Date(run.startedAt).getTime()
         if (elapsedMs > PENDING_STALE_SECONDS * 1000) {
+          const fresh = getStageRunById(run.id)
+          if (!fresh || fresh.status !== 'pending')
+            continue
           consola.warn(
-            `[orchestrator] pending run ${run.id} (${run.stage}) stuck ${Math.round(elapsedMs / 1000)}s`
+            `[orchestrator] pending run ${fresh.id} (${fresh.stage}) stuck ${Math.round(elapsedMs / 1000)}s`
             + ` without spawn — reaping as failed`,
           )
-          this.applyTransition(task, run, {
+          this.applyTransition(task, fresh, {
             kind: 'fail',
             error: `orphan reaper: pending stage_run never promoted to running (${Math.round(elapsedMs / 1000)}s elapsed)`,
           })
