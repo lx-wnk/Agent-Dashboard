@@ -27,3 +27,6 @@ package-lock.json
 
 # local docs
 /docs/local
+
+# Per-branch local todo / handoff scratch — not for shared history
+/TODOS.md
