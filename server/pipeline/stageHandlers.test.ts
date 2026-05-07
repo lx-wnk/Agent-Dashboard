@@ -40,6 +40,7 @@ function makeContext(overrides: Partial<StageContext> = {}): StageContext {
     output: null,
     tokensUsed: 0,
     costCents: 0,
+    lastGrantAt: null,
   }
   return {
     task,

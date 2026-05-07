@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS stage_runs (
   iteration INTEGER NOT NULL DEFAULT 0,
   output TEXT, -- JSON: stage result
   tokens_used INTEGER NOT NULL DEFAULT 0,
-  cost_cents INTEGER NOT NULL DEFAULT 0
+  cost_cents INTEGER NOT NULL DEFAULT 0,
+  last_grant_at TEXT -- ISO8601; last time a permission was resolved on this run (V6)
 );
 
 CREATE INDEX IF NOT EXISTS idx_stage_runs_task ON stage_runs(task_id);
@@ -88,7 +89,8 @@ CREATE TABLE IF NOT EXISTS task_permissions (
   pre_approved INTEGER NOT NULL, -- 0 or 1
   requested_at TEXT NOT NULL,
   decided_at TEXT,
-  decided_by TEXT -- 'user' | 'auto'
+  decided_by TEXT, -- 'user' | 'auto'
+  expires_at TEXT -- ISO8601; null = never expires (V3 added column)
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_permissions_task ON task_permissions(task_id);

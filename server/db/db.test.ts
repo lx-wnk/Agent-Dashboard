@@ -772,19 +772,24 @@ describe('legacy DB migration', () => {
     expect(() => db.prepare(`UPDATE tasks SET current_stage = 'konzept' WHERE id = 'legacy-v5-1'`).run()).toThrow()
     expect(() => db.prepare(`UPDATE stage_runs SET stage = 'umsetzung' WHERE id = 'sr-v5-1'`).run()).toThrow()
 
-    // Audit_log batch-rename: action and details JSON token replacements.
+    // Audit_log batch-rename: only action is rewritten — `details` is
+    // free-form JSON and intentionally left untouched (see V5 migration).
     const audit = db.prepare(`SELECT action, details FROM audit_log WHERE id = 'au-v5-1'`).get() as { action: string, details: string }
     expect(audit.action).toBe('implementation_spawned')
-    expect(audit.details).toBe('{"from":"concept","to":"implementation"}')
+    expect(audit.details).toBe('{"from":"konzept","to":"umsetzung"}')
 
-    // schema_version bumped to 5.
+    // schema_version bumped to current head (V6 = last_grant_at column on stage_runs).
     const version = db.prepare(`SELECT MAX(version) as v FROM schema_version`).get() as { v: number }
-    expect(version.v).toBe(5)
+    expect(version.v).toBe(6)
 
-    // Idempotency: re-running migrations on an already-narrow DB must be a no-op.
+    // V6 must have added last_grant_at to stage_runs.
+    const srCols = db.prepare(`PRAGMA table_info(stage_runs)`).all() as Array<{ name: string }>
+    expect(srCols.some(c => c.name === 'last_grant_at')).toBe(true)
+
+    // Idempotency: re-running migrations on an already-current DB must be a no-op.
     closeDb()
     const reopened = getDb()
     const versionAgain = reopened.prepare(`SELECT MAX(version) as v FROM schema_version`).get() as { v: number }
-    expect(versionAgain.v).toBe(5)
+    expect(versionAgain.v).toBe(6)
   })
 })

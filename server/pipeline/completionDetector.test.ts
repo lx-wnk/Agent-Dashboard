@@ -17,6 +17,7 @@ function makeRun(overrides: Partial<StageRun> = {}): StageRun {
     output: null,
     tokensUsed: 0,
     costCents: 0,
+    lastGrantAt: null,
     ...overrides,
   }
 }

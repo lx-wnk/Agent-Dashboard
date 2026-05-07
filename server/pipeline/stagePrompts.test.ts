@@ -81,6 +81,7 @@ describe('stagePrompts', () => {
         output: null,
         tokensUsed: 0,
         costCents: 0,
+        lastGrantAt: null,
       },
       {
         id: 'r2',
@@ -96,6 +97,7 @@ describe('stagePrompts', () => {
         output: null,
         tokensUsed: 0,
         costCents: 0,
+        lastGrantAt: null,
       },
     ]
     const { userPrompt } = finalizationPrompt(makeTask(), runs)

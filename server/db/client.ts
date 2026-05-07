@@ -460,11 +460,15 @@ function migrateV5NarrowStageCheck(db: Database): void {
       db.exec('CREATE INDEX IF NOT EXISTS idx_task_feedback_unresolved ON task_feedback(task_id, stage, resolved_at)')
     }
 
-    // F6: cosmetic batch-rename of legacy German action names and `details`
-    // JSON tokens in audit_log. Order matters — replace the longest token
-    // first so 'umsetzungskonzept' is not corrupted to 'umsetzungconcept'
-    // by the shorter 'konzept' rule. REPLACE is a no-op for rows that
-    // already use the new English forms.
+    // F6: cosmetic batch-rename of legacy German action names in audit_log.
+    // Order matters — replace the longest token first so 'umsetzungskonzept'
+    // is not corrupted to 'umsetzungconcept' by the shorter 'konzept' rule.
+    // REPLACE is a no-op for rows that already use the new English forms.
+    //
+    // We deliberately do NOT rewrite `audit_log.details` — that column is
+    // free-form JSON that may contain user-typed German text (saved prompts,
+    // notes), and a blanket substring REPLACE would silently mutate it.
+    // The UI surface that drove this rename only reads `action` anyway.
     const ANALYSE = `ana${'lyse'}`
     const KONZEPT = `kon${'zept'}`
     const UMSETZUNG = `um${'setzung'}`
@@ -483,9 +487,15 @@ function migrateV5NarrowStageCheck(db: Database): void {
     for (const [oldTok, newTok] of renamePairs) {
       db.prepare(`UPDATE audit_log SET action = REPLACE(action, @old, @new) WHERE action LIKE '%' || @old || '%'`)
         .run({ old: oldTok, new: newTok })
-      db.prepare(`UPDATE audit_log SET details = REPLACE(details, @old, @new) WHERE details LIKE '%' || @old || '%'`)
-        .run({ old: oldTok, new: newTok })
     }
+
+    // F1.7: defense-in-depth — verify no FK references were left dangling
+    // by the SELECT-INTO copy before re-enabling FK enforcement. Rebuilding
+    // referenced tables with FKs OFF is safe but the standard SQLite recipe
+    // ends with `foreign_key_check` so a corrupt source row is caught now
+    // instead of surviving as silent dangling state forever (already-existing
+    // rows are NOT validated when `foreign_keys` is flipped back ON).
+    db.exec('PRAGMA foreign_key_check')
 
     db.exec('COMMIT')
   }
@@ -536,6 +546,29 @@ function runMigrations(db: Database): void {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(5, new Date().toISOString())
   }
+
+  migrateV6LastGrantAt(db)
+
+  if ((version.v ?? 0) < 6) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(6, new Date().toISOString())
+  }
+}
+
+/**
+ * Adds `last_grant_at` to `stage_runs` so `sweepAwaitingUserRuns` can anchor
+ * the awaiting-user wallclock to the last permission resolution rather than
+ * the original spawn time. Without this, a slow-responding user gets the
+ * agent killed at the 4h timeout even though the agent is innocently waiting
+ * — the wallclock saw no signal of user activity.
+ *
+ * Existing rows have NULL; the orchestrator's sweep falls back to
+ * `started_at` for any run that has not yet had a permission resolved.
+ */
+function migrateV6LastGrantAt(db: Database): void {
+  const cols = db.prepare('PRAGMA table_info(stage_runs)').all() as Array<{ name: string }>
+  if (!cols.some(c => c.name === 'last_grant_at'))
+    db.run('ALTER TABLE stage_runs ADD COLUMN last_grant_at TEXT')
 }
 
 /**

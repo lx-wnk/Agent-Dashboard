@@ -22,6 +22,7 @@ export interface UpdateStageRunInput {
   output?: Record<string, unknown> | null
   tokensUsed?: number
   costCents?: number
+  lastGrantAt?: string | null
 }
 
 export function createStageRun(input: CreateStageRunInput, db: Database = getDb()): StageRun {
@@ -252,6 +253,10 @@ export function updateStageRun(
   if (input.costCents !== undefined) {
     updates.push('cost_cents = @cost_cents')
     params.cost_cents = input.costCents
+  }
+  if (input.lastGrantAt !== undefined) {
+    updates.push('last_grant_at = @last_grant_at')
+    params.last_grant_at = input.lastGrantAt
   }
 
   if (updates.length === 0)

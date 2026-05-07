@@ -259,13 +259,13 @@ export class PipelineOrchestrator {
     // spawn, not from the most recent re-entry attempt.
     if (
       handler.requiresAgent
-      && stageRun.status === 'running'
+      && (stageRun.status === 'running' || stageRun.status === 'awaiting_user')
       && stageRun.pid !== null
       && isPidAlive(stageRun.pid)
     ) {
       consola.info(
         `[orchestrator] progressTask re-entry skipped: stage ${stageRun.stage}`
-        + ` (run ${stageRun.id}) already running with live PID ${stageRun.pid}`,
+        + ` (run ${stageRun.id}, status=${stageRun.status}) has live PID ${stageRun.pid}`,
       )
       return stageRun
     }
@@ -352,6 +352,21 @@ export class PipelineOrchestrator {
     const existing = getLatestStageRun(task.id, task.currentStage)
     if (existing && (existing.status === 'pending' || existing.status === 'running'))
       return existing
+
+    // `awaiting_user` with a LIVE pid is a still-alive agent blocked in the
+    // channel bridge waiting for the user response — creating a fresh iter+1
+    // row here would let the re-entry guard miss the running PID and spawn a
+    // second agent on top of the awaiting one. Zombie awaiting_user (dead
+    // PID) falls through to iter+1 so `sweepAwaitingUserRuns` can reap the
+    // dead row and progress restarts cleanly on the next iteration.
+    if (
+      existing
+      && existing.status === 'awaiting_user'
+      && existing.pid !== null
+      && isPidAlive(existing.pid)
+    ) {
+      return existing
+    }
 
     const iteration = existing ? existing.iteration + 1 : 0
     return createStageRun({
@@ -764,11 +779,18 @@ export class PipelineOrchestrator {
         })
         continue
       }
-      if (timeoutSeconds > 0 && run.startedAt) {
-        const elapsedMs = Date.now() - new Date(run.startedAt).getTime()
+      // Anchor the wallclock to the last user-driven permission resolution
+      // (lastGrantAt) when it exists, falling back to spawn time. Without
+      // this, a slow-responding user gets the agent killed at the timeout
+      // even though the agent is innocently blocked. Once a single grant
+      // has landed, the budget restarts from that point.
+      const wallclockAnchor = run.lastGrantAt ?? run.startedAt
+      if (timeoutSeconds > 0 && wallclockAnchor) {
+        const elapsedMs = Date.now() - new Date(wallclockAnchor).getTime()
         if (elapsedMs > timeoutSeconds * 1000) {
           consola.warn(
             `[orchestrator] awaiting_user run ${run.id} (${run.stage}) exceeded ${timeoutSeconds}s`
+            + ` since ${run.lastGrantAt ? 'last grant' : 'spawn'}`
             + ` (elapsed ${Math.round(elapsedMs / 1000)}s) with live PID ${run.pid} — agent is likely busy-waiting; killing.`,
           )
           try {

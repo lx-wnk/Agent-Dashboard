@@ -1113,6 +1113,15 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     const db = getDb()
     db.transaction(() => {
       resolved = resolvePermissionRequest(req.params.id, outcome)
+      // Stamp `last_grant_at` on the run so `sweepAwaitingUserRuns` resets
+      // its wallclock budget. Applies to both granted AND denied outcomes
+      // because either is user activity that proves the agent is not
+      // busy-waiting in a polling loop. Skipped only when the run already
+      // moved past awaiting_user (race with kill+restart cascade — the new
+      // run will get its own stamp on the next resolution).
+      if (run.status === 'awaiting_user') {
+        updateStageRun(run.id, { lastGrantAt: new Date().toISOString() })
+      }
       // If granted, persist a permission row so the tool stays unlocked for the task
       if (outcome === 'granted') {
         createTaskPermission({

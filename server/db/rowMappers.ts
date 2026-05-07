@@ -54,6 +54,7 @@ export interface StageRunRow {
   output: string | null
   tokens_used: number
   cost_cents: number
+  last_grant_at: string | null
 }
 
 export interface TaskPermissionRow {
@@ -150,6 +151,7 @@ export function rowToStageRun(row: StageRunRow): StageRun {
     output: parseJson<Record<string, unknown>>(row.output, row.id),
     tokensUsed: row.tokens_used,
     costCents: row.cost_cents,
+    lastGrantAt: row.last_grant_at ?? null,
   }
 }
 

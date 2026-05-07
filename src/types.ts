@@ -177,6 +177,12 @@ export interface StageRun {
   output: Record<string, unknown> | null
   tokensUsed: number
   costCents: number
+  // Timestamp of the most recent user resolution of a permission_request
+  // tied to this run. Used by `sweepAwaitingUserRuns` to anchor the
+  // wallclock budget to user activity rather than spawn time, so a slow-
+  // responding user does not get the agent killed at the 4h timeout.
+  // Null until at least one permission has been resolved on this run.
+  lastGrantAt: string | null
 }
 
 export interface TaskPermission {
@@ -204,7 +210,12 @@ export interface PermissionRequest {
   outcome: 'granted' | 'denied' | 'timeout' | null
 }
 
-export type FeedbackStage = PipelineStage
+// `FeedbackStage` is the subset of stages on which user-authored feedback
+// can be recorded — currently the two approval-gated artifact stages.
+// Distinct from `PipelineStage` so the type matches the `task_feedback.stage`
+// CHECK constraint exactly: any caller passing a non-feedback PipelineStage
+// is rejected at compile time instead of failing the CHECK at INSERT time.
+export type FeedbackStage = 'planning' | 'implementation_plan'
 
 export interface TaskFeedback {
   id: string

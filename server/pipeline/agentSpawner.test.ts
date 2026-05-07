@@ -52,6 +52,7 @@ function makeStageRun(): StageRun {
     output: null,
     tokensUsed: 0,
     costCents: 0,
+    lastGrantAt: null,
   }
 }
 
