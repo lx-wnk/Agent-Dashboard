@@ -685,4 +685,106 @@ describe('legacy DB migration', () => {
     // Cleanup handled by the describe-local afterEach — do NOT close
     // or rm here, or a thrown assertion above would bypass teardown.
   })
+
+  it('v5: narrows CHECK to canonical English tokens, audit_log batch-renames, schema bumps to 5', async () => {
+    closeDb()
+    legacyDir = mkdtempSync(join(tmpdir(), 'dashboard-db-v5-'))
+    const legacyPath = join(legacyDir, 'legacy-v5.db')
+
+    const { Database } = await import('bun:sqlite')
+    const legacy = new Database(legacyPath)
+    legacy.exec(`
+      CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+      INSERT INTO schema_version (version, applied_at) VALUES (3, '2026-04-01');
+      CREATE TABLE tasks (
+        id TEXT PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        cwd TEXT NOT NULL,
+        worktree_path TEXT,
+        source_branch TEXT,
+        target_branch TEXT,
+        current_stage TEXT NOT NULL CHECK (current_stage IN (
+          'concept','implementation','self_review','finalization',
+          'konzept','umsetzung','selbstreview','finalisierung',
+          'backlog','pruefung','refinement','planning','approval1',
+          'umsetzungskonzept','approval2','done','on_hold','cancelled'
+        )),
+        parent_task_id TEXT,
+        max_iterations INTEGER NOT NULL DEFAULT 20,
+        token_budget INTEGER,
+        cost_budget_cents INTEGER,
+        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        metadata TEXT,
+        silver_bullet INTEGER NOT NULL DEFAULT 0,
+        priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('high','medium','low'))
+      );
+      CREATE TABLE stage_runs (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        stage TEXT NOT NULL CHECK (stage IN (
+          'concept','implementation','self_review','finalization',
+          'konzept','umsetzung','selbstreview','finalisierung',
+          'backlog','pruefung','refinement','planning','approval1',
+          'umsetzungskonzept','approval2','done','on_hold','cancelled'
+        )),
+        session_id TEXT,
+        session_name TEXT,
+        pid INTEGER,
+        status TEXT NOT NULL CHECK (status IN ('pending','running','awaiting_user','on_hold','done','failed')),
+        started_at TEXT,
+        ended_at TEXT,
+        iteration INTEGER NOT NULL DEFAULT 0,
+        output TEXT,
+        tokens_used INTEGER NOT NULL DEFAULT 0,
+        cost_cents INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE audit_log (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        action TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        details TEXT
+      );
+      INSERT INTO tasks (id, slug, title, cwd, current_stage, created_at, updated_at)
+        VALUES ('legacy-v5-1', 'legacy-v5', 'Legacy V5', '/x', 'konzept', '2026-04-01', '2026-04-01');
+      INSERT INTO stage_runs (id, task_id, stage, status, iteration)
+        VALUES ('sr-v5-1', 'legacy-v5-1', 'umsetzung', 'done', 0);
+      INSERT INTO audit_log (id, task_id, actor, action, timestamp, details)
+        VALUES ('au-v5-1', 'legacy-v5-1', 'orchestrator', 'umsetzung_spawned', '2026-04-01', '{"from":"konzept","to":"umsetzung"}');
+    `)
+    legacy.close()
+
+    process.env.DASHBOARD_DB_PATH = legacyPath
+    const db = getDb()
+
+    // V4 must have translated the legacy row from German → English.
+    const taskRow = db.prepare(`SELECT current_stage FROM tasks WHERE id = 'legacy-v5-1'`).get() as { current_stage: string }
+    expect(taskRow.current_stage).toBe('concept')
+    const srRow = db.prepare(`SELECT stage FROM stage_runs WHERE id = 'sr-v5-1'`).get() as { stage: string }
+    expect(srRow.stage).toBe('implementation')
+
+    // V5 must reject any legacy German token going forward — narrow CHECK.
+    expect(() => db.prepare(`UPDATE tasks SET current_stage = 'konzept' WHERE id = 'legacy-v5-1'`).run()).toThrow()
+    expect(() => db.prepare(`UPDATE stage_runs SET stage = 'umsetzung' WHERE id = 'sr-v5-1'`).run()).toThrow()
+
+    // Audit_log batch-rename: action and details JSON token replacements.
+    const audit = db.prepare(`SELECT action, details FROM audit_log WHERE id = 'au-v5-1'`).get() as { action: string, details: string }
+    expect(audit.action).toBe('implementation_spawned')
+    expect(audit.details).toBe('{"from":"concept","to":"implementation"}')
+
+    // schema_version bumped to 5.
+    const version = db.prepare(`SELECT MAX(version) as v FROM schema_version`).get() as { v: number }
+    expect(version.v).toBe(5)
+
+    // Idempotency: re-running migrations on an already-narrow DB must be a no-op.
+    closeDb()
+    const reopened = getDb()
+    const versionAgain = reopened.prepare(`SELECT MAX(version) as v FROM schema_version`).get() as { v: number }
+    expect(versionAgain.v).toBe(5)
+  })
 })

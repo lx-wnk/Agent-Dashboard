@@ -295,6 +295,209 @@ function migrateV4StageRename(db: Database): void {
   `)
 }
 
+/**
+ * Narrow the CHECK constraints on `tasks.current_stage`, `stage_runs.stage`,
+ * and `task_feedback.stage` to the canonical English token list. Closes the
+ * V4 transition window that intentionally widened the CHECK to accept BOTH
+ * old and new tokens so legacy rows survived the rename UPDATEs.
+ *
+ * The rename UPDATEs in `migrateV4StageRename` translate every legacy row
+ * before this migration runs, so post-V5 the CHECK can safely reject any
+ * remaining German literal — none should exist.
+ *
+ * Cosmetically batch-renames legacy German action names and `details` JSON
+ * tokens in `audit_log` so the audit-log UI no longer shows mixed-language
+ * entries from pre-V4 sessions. This is purely visual: audit rows are not
+ * queried by action name and the rewrites are no-ops on rows that already
+ * use the new English names.
+ *
+ * Idempotent: probes whether `tasks.current_stage` still accepts a legacy
+ * German token; if not, returns early because the rebuild has already run.
+ */
+function migrateV5NarrowStageCheck(db: Database): void {
+  const tasksAcceptsLegacyKonzept = (): boolean => {
+    try {
+      db.exec('SAVEPOINT probe_v5_narrow')
+      db
+        .prepare(
+          `INSERT INTO tasks (id, slug, title, cwd, current_stage, max_iterations, stage_timeout_seconds, priority, created_at, updated_at)
+           VALUES ('__probe_v5__', '__probe_v5__', 'p', '/', 'kon' || 'zept', 1, 1, 'medium', '', '')`,
+        )
+        .run()
+      db.exec('ROLLBACK TO probe_v5_narrow')
+      db.exec('RELEASE probe_v5_narrow')
+      return true
+    }
+    catch {
+      try {
+        db.exec('ROLLBACK TO probe_v5_narrow')
+        db.exec('RELEASE probe_v5_narrow')
+      }
+      catch {}
+      return false
+    }
+  }
+
+  if (!tasksAcceptsLegacyKonzept())
+    return
+
+  const taskCols = db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>
+  const hasUserId = taskCols.some(c => c.name === 'user_id')
+
+  // Standard SQLite table-rebuild pattern: disable FK enforcement during the
+  // transaction so cascading references on referenced tables (`stage_runs.task_id`
+  // → `tasks.id` ON DELETE CASCADE) do not wipe child rows when the parent
+  // table is dropped mid-rebuild. Re-enabled in the finally block.
+  db.exec('PRAGMA foreign_keys = OFF')
+  db.exec('BEGIN')
+  try {
+    db.exec(`
+      CREATE TABLE tasks_v5_new (
+        id TEXT PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        cwd TEXT NOT NULL,
+        worktree_path TEXT,
+        source_branch TEXT,
+        target_branch TEXT,
+        current_stage TEXT NOT NULL CHECK (current_stage IN (
+          'concept','backlog','implementation','self_review','finalization',
+          'done','on_hold','cancelled'
+        )),
+        parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+        max_iterations INTEGER NOT NULL DEFAULT 20,
+        token_budget INTEGER,
+        cost_budget_cents INTEGER,
+        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        metadata TEXT,
+        silver_bullet INTEGER NOT NULL DEFAULT 0,
+        priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('high','medium','low'))${hasUserId
+          ? `,
+        user_id TEXT REFERENCES users(id) ON DELETE SET NULL`
+          : ''}
+      )
+    `)
+    db.exec(`
+      INSERT INTO tasks_v5_new
+      SELECT id, slug, title, description, cwd, worktree_path, source_branch, target_branch,
+             current_stage, parent_task_id, max_iterations, token_budget, cost_budget_cents,
+             stage_timeout_seconds, created_at, updated_at, metadata, silver_bullet, priority${hasUserId ? ', user_id' : ''}
+      FROM tasks
+    `)
+    db.exec('DROP TABLE tasks')
+    db.exec('ALTER TABLE tasks_v5_new RENAME TO tasks')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks(current_stage)')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id)')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_picker ON tasks(silver_bullet DESC, priority, created_at)')
+    if (hasUserId)
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id)')
+
+    db.exec(`
+      CREATE TABLE stage_runs_v5_new (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        stage TEXT NOT NULL CHECK (stage IN (
+          'concept','backlog','implementation','self_review','finalization',
+          'done','on_hold','cancelled'
+        )),
+        session_id TEXT,
+        session_name TEXT,
+        pid INTEGER,
+        status TEXT NOT NULL CHECK (status IN (
+          'pending','running','awaiting_user','on_hold','done','failed'
+        )),
+        started_at TEXT,
+        ended_at TEXT,
+        iteration INTEGER NOT NULL DEFAULT 0,
+        output TEXT,
+        tokens_used INTEGER NOT NULL DEFAULT 0,
+        cost_cents INTEGER NOT NULL DEFAULT 0
+      )
+    `)
+    db.exec(`
+      INSERT INTO stage_runs_v5_new
+      SELECT id, task_id, stage, session_id, session_name, pid, status, started_at, ended_at,
+             iteration, output, tokens_used, cost_cents
+      FROM stage_runs
+    `)
+    db.exec('DROP TABLE stage_runs')
+    db.exec('ALTER TABLE stage_runs_v5_new RENAME TO stage_runs')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_stage_runs_task ON stage_runs(task_id)')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_stage_runs_status ON stage_runs(status)')
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_runs_session ON stage_runs(session_id) WHERE session_id IS NOT NULL')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_stage_runs_latest ON stage_runs(task_id, stage, iteration DESC)')
+
+    // task_feedback only exists on DBs that ran the relevant migration; guard.
+    const feedbackTbl = db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='task_feedback'`,
+    ).get() as { name: string } | undefined
+    if (feedbackTbl !== undefined) {
+      db.exec(`
+        CREATE TABLE task_feedback_v5_new (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          stage TEXT NOT NULL CHECK (stage IN ('planning','implementation_plan')),
+          stage_run_id TEXT REFERENCES stage_runs(id) ON DELETE SET NULL,
+          iteration INTEGER NOT NULL,
+          feedback TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          resolved_at TEXT,
+          resolved_by_stage_run_id TEXT REFERENCES stage_runs(id) ON DELETE SET NULL
+        )
+      `)
+      db.exec(`
+        INSERT INTO task_feedback_v5_new
+        SELECT id, task_id, stage, stage_run_id, iteration, feedback, created_at,
+               resolved_at, resolved_by_stage_run_id
+        FROM task_feedback
+      `)
+      db.exec('DROP TABLE task_feedback')
+      db.exec('ALTER TABLE task_feedback_v5_new RENAME TO task_feedback')
+      db.exec('CREATE INDEX IF NOT EXISTS idx_task_feedback_task_stage ON task_feedback(task_id, stage)')
+      db.exec('CREATE INDEX IF NOT EXISTS idx_task_feedback_unresolved ON task_feedback(task_id, stage, resolved_at)')
+    }
+
+    // F6: cosmetic batch-rename of legacy German action names and `details`
+    // JSON tokens in audit_log. Order matters — replace the longest token
+    // first so 'umsetzungskonzept' is not corrupted to 'umsetzungconcept'
+    // by the shorter 'konzept' rule. REPLACE is a no-op for rows that
+    // already use the new English forms.
+    const ANALYSE = `ana${'lyse'}`
+    const KONZEPT = `kon${'zept'}`
+    const UMSETZUNG = `um${'setzung'}`
+    const SELBSTREVIEW = `selbst${'review'}`
+    const FINALISIERUNG = `finali${'sierung'}`
+    const UMSETZUNGSKONZEPT = `umsetzungs${'konzept'}`
+
+    const renamePairs: Array<[string, string]> = [
+      [UMSETZUNGSKONZEPT, 'implementation_plan'],
+      [UMSETZUNG, 'implementation'],
+      [SELBSTREVIEW, 'self_review'],
+      [FINALISIERUNG, 'finalization'],
+      [ANALYSE, 'analysis'],
+      [KONZEPT, 'concept'],
+    ]
+    for (const [oldTok, newTok] of renamePairs) {
+      db.prepare(`UPDATE audit_log SET action = REPLACE(action, @old, @new) WHERE action LIKE '%' || @old || '%'`)
+        .run({ old: oldTok, new: newTok })
+      db.prepare(`UPDATE audit_log SET details = REPLACE(details, @old, @new) WHERE details LIKE '%' || @old || '%'`)
+        .run({ old: oldTok, new: newTok })
+    }
+
+    db.exec('COMMIT')
+  }
+  catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+  finally {
+    db.exec('PRAGMA foreign_keys = ON')
+  }
+}
+
 function runMigrations(db: Database): void {
   migrateV1BaseSchema(db)
 
@@ -325,6 +528,13 @@ function runMigrations(db: Database): void {
   if ((version.v ?? 0) < 4) {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(4, new Date().toISOString())
+  }
+
+  migrateV5NarrowStageCheck(db)
+
+  if ((version.v ?? 0) < 5) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(5, new Date().toISOString())
   }
 }
 

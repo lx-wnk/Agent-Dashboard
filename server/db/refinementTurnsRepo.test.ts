@@ -24,7 +24,7 @@ function insertTask(id: string) {
   getDb().prepare(`
     INSERT INTO tasks (id, slug, title, cwd, current_stage, max_iterations,
       stage_timeout_seconds, silver_bullet, priority, created_at, updated_at)
-    VALUES (?, ?, 'T', '/tmp', 'refinement', 20, 1800, 0, 'medium', '2026-01-01', '2026-01-01')
+    VALUES (?, ?, 'T', '/tmp', 'concept', 20, 1800, 0, 'medium', '2026-01-01', '2026-01-01')
   `).run(id, id)
 }
 

@@ -24,17 +24,11 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- stage_runs.status — the task stays on the stage where the run died
   -- so the UI can surface retry/analyze actions on the same stage.
   current_stage TEXT NOT NULL CHECK (current_stage IN (
-    -- Canonical stages used by the orchestrator + types: concept, backlog,
-    -- implementation, self_review, finalization, done, on_hold, cancelled.
-    -- The legacy entries (pruefung/refinement/planning/approval1/approval2/
-    -- umsetzungskonzept and the German originals konzept/umsetzung/
-    -- selbstreview/finalisierung) stay listed so legacy DBs that survived
-    -- migrations before V4 are not rejected at write time. Migration V4
-    -- translates legacy rows on first boot.
-    'concept','implementation','self_review','finalization',
-    'konzept','umsetzung','selbstreview','finalisierung',
-    'backlog','pruefung','refinement','planning','approval1',
-    'umsetzungskonzept','approval2','done','on_hold','cancelled'
+    -- Canonical stages, narrowed in migration V5. The wider list that
+    -- V4 used during the German→English transition lived here previously;
+    -- legacy DBs are rebuilt to this same narrow form by migrateV5.
+    'concept','backlog','implementation','self_review','finalization',
+    'done','on_hold','cancelled'
   )),
   parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
   max_iterations INTEGER NOT NULL DEFAULT 20,
@@ -61,10 +55,8 @@ CREATE TABLE IF NOT EXISTS stage_runs (
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   stage TEXT NOT NULL CHECK (stage IN (
     -- Same allow-list as tasks.current_stage — see comment there.
-    'concept','implementation','self_review','finalization',
-    'konzept','umsetzung','selbstreview','finalisierung',
-    'backlog','pruefung','refinement','planning','approval1',
-    'umsetzungskonzept','approval2','done','on_hold','cancelled'
+    'concept','backlog','implementation','self_review','finalization',
+    'done','on_hold','cancelled'
   )),
   session_id TEXT,
   session_name TEXT,
@@ -162,7 +154,7 @@ CREATE TABLE IF NOT EXISTS pipeline_config (
 CREATE TABLE IF NOT EXISTS task_feedback (
   id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  stage TEXT NOT NULL CHECK (stage IN ('planning','umsetzungskonzept','implementation_plan')),
+  stage TEXT NOT NULL CHECK (stage IN ('planning','implementation_plan')),
   stage_run_id TEXT REFERENCES stage_runs(id) ON DELETE SET NULL,
   iteration INTEGER NOT NULL,
   feedback TEXT NOT NULL,
