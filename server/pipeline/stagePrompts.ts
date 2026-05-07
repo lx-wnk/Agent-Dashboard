@@ -60,8 +60,8 @@ export function implementationPrompt(task: PipelineTask, prevOutput: unknown, fe
   const meta = (task.metadata ?? null) as Record<string, unknown> | null
   const allowGitPush = (meta && meta.allowGitPush === true) || process.env.DASHBOARD_ALLOW_GIT_PUSH === 'true'
   const pushPolicyLine = allowGitPush
-    ? 'Commit AND push (\`git push\`) are permitted for this task — push your feature branch when work is complete.'
-    : 'Commit your work via git when done — but NEVER \`git push\`; pushing is the user\'s responsibility.'
+    ? 'Commit AND push (`git push`) are permitted for this task — push your feature branch when work is complete.'
+    : 'Commit your work via git when done — but NEVER `git push`; pushing is the user\'s responsibility.'
 
   const systemPrompt = `${SHARED_CONTEXT}
 
