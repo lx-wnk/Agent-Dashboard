@@ -7,8 +7,6 @@ import type { PipelineStage, StageRunStatus } from '../types'
 export function stageChipClass(stage: PipelineStage | string): string {
   switch (stage) {
     case 'on_hold':
-    case 'approval1':
-    case 'approval2':
       return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/60'
     case 'implementation':
       return 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700'
