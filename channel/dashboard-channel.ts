@@ -244,18 +244,29 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         body: JSON.stringify({ stageRunId, entries }),
       })
       if (!res.ok) {
-        // Graceful fallback for older dashboards: try legacy single-entry route per item
-        const fallbackResults: string[] = []
-        for (const e of entries) {
-          const single = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/permission-requests`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
-            body: JSON.stringify({ stageRunId, tool: e.tool, pattern: e.pattern, reason: e.reason }),
-          })
-          fallbackResults.push(`${e.tool}${e.pattern ? `(${e.pattern})` : ''}: ${single.status}`)
+        // Graceful fallback ONLY when the dashboard does not implement the
+        // bulk endpoint (HTTP 404). Any other non-OK status (4xx validation,
+        // expired token, 5xx) is a real error — falling back to N legacy
+        // single-tool requests would silently inflate the re-request cycle
+        // counter and look like a permission-loop in telemetry.
+        if (res.status === 404) {
+          const fallbackResults: string[] = []
+          for (const e of entries) {
+            const single = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/permission-requests`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+              body: JSON.stringify({ stageRunId, tool: e.tool, pattern: e.pattern, reason: e.reason }),
+            })
+            fallbackResults.push(`${e.tool}${e.pattern ? `(${e.pattern})` : ''}: ${single.status}`)
+          }
+          return {
+            content: [{ type: 'text', text: `Bulk endpoint returned 404; fell back to single-request: ${fallbackResults.join('; ')}` }],
+          }
         }
+        const errBody = await res.text().catch(() => '')
         return {
-          content: [{ type: 'text', text: `Bulk endpoint returned ${res.status}; fell back to single-request: ${fallbackResults.join('; ')}` }],
+          content: [{ type: 'text', text: `Bulk endpoint returned ${res.status}: ${errBody.slice(0, 500)}` }],
+          isError: true,
         }
       }
       const body = (await res.json()) as {
