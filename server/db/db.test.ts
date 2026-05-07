@@ -98,7 +98,7 @@ describe('tasksRepo', () => {
   it('lists tasks and filters by stage', () => {
     const t1 = createTask({ slug: 'a', title: 'A', cwd: '/a' })
     const t2 = createTask({ slug: 'b', title: 'B', cwd: '/b' })
-    updateTask(t2.id, { currentStage: 'umsetzung' })
+    updateTask(t2.id, { currentStage: 'implementation' })
 
     const all = listTasks()
     expect(all).toHaveLength(2)
@@ -106,7 +106,7 @@ describe('tasksRepo', () => {
     const backlog = listTasksByStage('backlog')
     expect(backlog.map(t => t.id)).toEqual([t1.id])
 
-    const impl = listTasksByStage('umsetzung')
+    const impl = listTasksByStage('implementation')
     expect(impl.map(t => t.id)).toEqual([t2.id])
   })
 
@@ -136,7 +136,7 @@ describe('tasksRepo', () => {
 
   it('deletes tasks and cascades to stage_runs', () => {
     const task = createTask({ slug: 'temp', title: 'Temp', cwd: '/t' })
-    createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    createStageRun({ taskId: task.id, stage: 'implementation' })
     expect(listStageRunsForTask(task.id)).toHaveLength(1)
 
     deleteTask(task.id)
@@ -146,7 +146,7 @@ describe('tasksRepo', () => {
 
   it('cascades delete to permissions, permission_requests, and audit_log', () => {
     const task = createTask({ slug: 'casc', title: 'Cascade', cwd: '/c' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
     createTaskPermission({
       taskId: task.id,
       tool: 'Bash',
@@ -191,7 +191,7 @@ describe('tasksRepo', () => {
 
   it('rejects invalid stage_run status via CHECK constraint', () => {
     const task = createTask({ slug: 'chk2', title: 'CHK2', cwd: '/chk2' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
     expect(() => updateStageRun(run.id, { status: 'bogus' as 'running' })).toThrow()
   })
 
@@ -237,13 +237,13 @@ describe('tasksRepo', () => {
 describe('stageRunsRepo', () => {
   it('creates and updates stage runs', () => {
     const task = createTask({ slug: 'sr', title: 'SR', cwd: '/sr' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung', iteration: 1 })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation', iteration: 1 })
     expect(run.status).toBe('pending')
     expect(run.iteration).toBe(1)
 
     const updated = updateStageRun(run.id, {
       sessionId: 'session-abc',
-      sessionName: 'sr-umsetzung-iter-1',
+      sessionName: 'sr-implementation-iter-1',
       pid: 12345,
       status: 'running',
       startedAt: new Date().toISOString(),
@@ -255,18 +255,18 @@ describe('stageRunsRepo', () => {
 
   it('finds latest stage run by task and stage', () => {
     const task = createTask({ slug: 'ls', title: 'LS', cwd: '/ls' })
-    createStageRun({ taskId: task.id, stage: 'umsetzung', iteration: 0 })
-    const r2 = createStageRun({ taskId: task.id, stage: 'umsetzung', iteration: 1 })
-    const r3 = createStageRun({ taskId: task.id, stage: 'umsetzung', iteration: 2 })
+    createStageRun({ taskId: task.id, stage: 'implementation', iteration: 0 })
+    const r2 = createStageRun({ taskId: task.id, stage: 'implementation', iteration: 1 })
+    const r3 = createStageRun({ taskId: task.id, stage: 'implementation', iteration: 2 })
     expect(r2.id).toBeDefined()
 
-    const latest = getLatestStageRun(task.id, 'umsetzung')
+    const latest = getLatestStageRun(task.id, 'implementation')
     expect(latest?.id).toBe(r3.id)
   })
 
   it('finds stage run by session id', () => {
     const task = createTask({ slug: 'sid', title: 'SID', cwd: '/sid' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
     updateStageRun(run.id, { sessionId: 'uuid-123' })
     const found = findStageRunBySessionId('uuid-123')
     expect(found?.id).toBe(run.id)
@@ -274,11 +274,11 @@ describe('stageRunsRepo', () => {
 
   it('lists running stage runs for restart recovery', () => {
     const task = createTask({ slug: 'rr', title: 'RR', cwd: '/rr' })
-    const r1 = createStageRun({ taskId: task.id, stage: 'umsetzung' })
-    const r2 = createStageRun({ taskId: task.id, stage: 'selbstreview' })
+    const r1 = createStageRun({ taskId: task.id, stage: 'implementation' })
+    const r2 = createStageRun({ taskId: task.id, stage: 'self_review' })
     updateStageRun(r1.id, { status: 'running' })
     updateStageRun(r2.id, { status: 'on_hold' })
-    createStageRun({ taskId: task.id, stage: 'finalisierung' }) // stays pending
+    createStageRun({ taskId: task.id, stage: 'finalization' }) // stays pending
 
     const running = listRunningStageRuns()
     expect(running).toHaveLength(2)
@@ -287,9 +287,9 @@ describe('stageRunsRepo', () => {
 
   it('stores output JSON correctly', () => {
     const task = createTask({ slug: 'out', title: 'Out', cwd: '/out' })
-    const run = createStageRun({ taskId: task.id, stage: 'selbstreview' })
+    const run = createStageRun({ taskId: task.id, stage: 'self_review' })
     updateStageRun(run.id, { output: { findings: ['a', 'b'], score: 0.9 } })
-    const fetched = findStageRunBySessionId(run.sessionId || '') || getLatestStageRun(task.id, 'selbstreview')
+    const fetched = findStageRunBySessionId(run.sessionId || '') || getLatestStageRun(task.id, 'self_review')
     expect(fetched?.output).toEqual({ findings: ['a', 'b'], score: 0.9 })
   })
 })
@@ -314,7 +314,7 @@ describe('permissionsRepo', () => {
 
   it('handles runtime permission requests with resolution', () => {
     const task = createTask({ slug: 'rq', title: 'RQ', cwd: '/rq' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
     const req = createPermissionRequest({
       stageRunId: run.id,
       tool: 'WebFetch',
@@ -341,13 +341,13 @@ describe('auditRepo', () => {
       taskId: task.id,
       actor: 'orchestrator',
       action: 'stage_transition',
-      details: { from: 'backlog', to: 'umsetzung' },
+      details: { from: 'backlog', to: 'implementation' },
     })
 
     const log = listAuditForTask(task.id)
     expect(log).toHaveLength(2)
     expect(log[0].action).toBe('created')
-    expect(log[1].details).toEqual({ from: 'backlog', to: 'umsetzung' })
+    expect(log[1].details).toEqual({ from: 'backlog', to: 'implementation' })
   })
 })
 

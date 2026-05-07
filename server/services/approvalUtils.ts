@@ -8,7 +8,7 @@ import { getPipelineConfig } from '../db/notificationConfigRepo.js'
 import { listPresets, upsertPreset } from '../db/permissionPresetsRepo.js'
 import { bulkCreateTaskPermissions, createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
-import { DEFAULT_KONZEPT_BASELINE_TEMPLATE, isPermissionTemplate, resolveTemplate } from './permissionTemplates.js'
+import { DEFAULT_CONCEPT_BASELINE_TEMPLATE, isPermissionTemplate, resolveTemplate } from './permissionTemplates.js'
 
 // Matches Bash patterns that could fetch or execute remote code, or that
 // implement busy-wait polling loops (which agents have been observed to
@@ -54,7 +54,7 @@ export interface PermissionValidationResult {
 
 /**
  * Single source of truth for "can this grant be auto-applied?". Used by:
- *   - bulkGrantKonzeptPermissions / bulkGrantAgentFilePermissions
+ *   - bulkGrantConceptStagePermissions / bulkGrantAgentFilePermissions
  *   - applyPresetPermissions
  *   - MCP create_task / manage_task / grant_permission tools
  *   - REST POST /api/tasks (permissions[])
@@ -78,31 +78,31 @@ export function validatePermissionEntry(
 
 /**
  * Resolves the pipeline-config-driven baseline template. Falls back to
- * `konzept_baseline` when the config key is unset or names a non-existent
+ * `concept_baseline` when the config key is unset or names a non-existent
  * template. Returns `[]` if (theoretically) the resolved template is empty.
  */
 function resolveBaselineTemplate(): PermissionTemplateEntry[] {
   const configured = getPipelineConfig('defaultPermissionTemplate')
   const name = configured && isPermissionTemplate(configured)
     ? configured
-    : DEFAULT_KONZEPT_BASELINE_TEMPLATE
+    : DEFAULT_CONCEPT_BASELINE_TEMPLATE
   return resolveTemplate(name)
 }
 
-export function bulkGrantKonzeptPermissions(taskId: string): void {
+export function bulkGrantConceptStagePermissions(taskId: string): void {
   const task = getTaskById(taskId)
   if (!task)
     return
   const metadata = task?.metadata as Record<string, unknown> | null
-  const konzeptOutput = metadata?.konzeptOutput as Record<string, unknown> | undefined
-  const rawRequests = konzeptOutput?.toolRequests ?? metadata?.toolRequests
+  const conceptOutput = metadata?.conceptOutput as Record<string, unknown> | undefined
+  const rawRequests = conceptOutput?.toolRequests ?? metadata?.toolRequests
   if (!Array.isArray(rawRequests))
     return
 
   // Concept-stage-emitted entries take precedence over the baseline. We collect
   // them first, then merge the baseline on top, skipping any (tool, pattern)
-  // pair already produced by konzept.
-  interface PendingEntry { tool: string, pattern: string | null, source: 'konzept' | 'baseline' }
+  // pair already produced by concept.
+  interface PendingEntry { tool: string, pattern: string | null, source: 'concept' | 'baseline' }
   const pending: PendingEntry[] = []
   const seen = new Set<string>()
   const keyOf = (tool: string, pattern: string | null): string => `${tool}::${pattern ?? ''}`
@@ -123,7 +123,7 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
     if (seen.has(k))
       continue
     seen.add(k)
-    pending.push({ tool, pattern, source: 'konzept' })
+    pending.push({ tool, pattern, source: 'concept' })
   }
 
   // Merge baseline unless task opts out (per-task override). Baseline entries
@@ -150,7 +150,7 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
   const existing = listTaskPermissions(taskId)
   let granted = 0
   let baselineGranted = 0
-  let konzeptGranted = 0
+  let conceptGranted = 0
   for (const entry of pending) {
     const alreadyGranted = existing.some(p =>
       p.tool === entry.tool && (p.pattern ?? null) === entry.pattern && p.granted,
@@ -169,7 +169,7 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
     if (entry.source === 'baseline')
       baselineGranted++
     else
-      konzeptGranted++
+      conceptGranted++
   }
 
   appendAudit({
@@ -177,9 +177,9 @@ export function bulkGrantKonzeptPermissions(taskId: string): void {
     actor: 'user',
     action: 'bulk_granted_tool_permissions',
     details: {
-      source: 'konzept_metadata_toolRequests',
+      source: 'concept_stage_metadata_toolRequests',
       count: granted,
-      konzeptCount: konzeptGranted,
+      conceptCount: conceptGranted,
       baselineCount: baselineGranted,
       baselineSkipped: skipBaseline,
     },

@@ -23,11 +23,11 @@ function runStatusLabel(status: StageRunStatus): string {
 }
 
 const STAGE_LABELS: Record<PipelineStage, string> = {
-  konzept: 'Concept',
+  concept: 'Concept',
   backlog: 'Backlog',
-  umsetzung: 'Implementation',
-  selbstreview: 'Self-Review',
-  finalisierung: 'Finalization',
+  implementation: 'Implementation',
+  self_review: 'Self-Review',
+  finalization: 'Finalization',
   done: 'Done',
   on_hold: 'Permission',
   cancelled: 'Cancelled',
@@ -60,7 +60,7 @@ function stageLabel(stage: PipelineStage): string {
       {{ task.description }}
     </div>
     <button
-      v-if="task.currentStage === 'konzept'"
+      v-if="task.currentStage === 'concept'"
       class="self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
       @click.stop="emit('openChat', task)"
     >
@@ -87,7 +87,7 @@ function stageLabel(stage: PipelineStage): string {
       <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Follow-up task">↳</span>
       <span v-if="task.isUnsatisfiable" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50" title="Unsatisfiable dep">⚠ Unsatisfiable dep</span>
       <span v-else-if="task.isBlocked" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700/50" title="Waiting for prerequisite">🔒 Blocked</span>
-      <span v-if="task.currentStage === 'umsetzung'" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50">
+      <span v-if="task.currentStage === 'implementation'" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50">
         max iter {{ task.maxIterations }}
       </span>
     </div>

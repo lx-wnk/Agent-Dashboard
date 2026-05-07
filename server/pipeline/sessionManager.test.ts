@@ -25,7 +25,7 @@ afterEach(() => {
 describe('buildSessionName', () => {
   it('formats slug-stage-iter-n', () => {
     const task = createTask({ slug: 'fix-login-bug', title: 'X', cwd: '/x' })
-    expect(buildSessionName(task, 'umsetzung', 3)).toBe('fix-login-bug-umsetzung-iter-3')
+    expect(buildSessionName(task, 'implementation', 3)).toBe('fix-login-bug-implementation-iter-3')
   })
 })
 
@@ -49,7 +49,7 @@ describe('isPidAlive', () => {
 describe('decideRecovery', () => {
   it('returns alive for live pid', () => {
     const task = createTask({ slug: 'a', title: 'A', cwd: '/a' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
     updateStageRun(run.id, { pid: process.pid, status: 'running' })
     const updated = { ...run, pid: process.pid, status: 'running' as const }
     expect(decideRecovery(updated).kind).toBe('alive')
@@ -57,7 +57,7 @@ describe('decideRecovery', () => {
 
   it('returns resume when pid is dead but session_id exists', () => {
     const task = createTask({ slug: 'b', title: 'B', cwd: '/b' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
     updateStageRun(run.id, { pid: 2147483647, sessionId: 'sess-1', status: 'running' })
     const updated = {
       ...run,
@@ -70,7 +70,7 @@ describe('decideRecovery', () => {
 
   it('returns restart when neither pid nor session exist', () => {
     const task = createTask({ slug: 'c', title: 'C', cwd: '/c' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
     expect(decideRecovery(run).kind).toBe('restart')
   })
 })
@@ -78,7 +78,7 @@ describe('decideRecovery', () => {
 describe('attachSessionId', () => {
   it('persists a session id to a stage run', () => {
     const task = createTask({ slug: 'd', title: 'D', cwd: '/d' })
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
     attachSessionId(run.id, 'uuid-xyz')
     // Re-read via a direct query to verify.
     const db = getDb()

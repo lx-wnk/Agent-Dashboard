@@ -2,17 +2,17 @@ import { describe, expect, it } from 'bun:test'
 import { isPermissionTemplate, listTemplateNames, PERMISSION_TEMPLATES, resolveTemplate } from './permissionTemplates.js'
 
 describe('permissionTemplates', () => {
-  it('exposes konzept_baseline alongside the existing four templates', () => {
+  it('exposes concept_baseline alongside the existing four templates', () => {
     const names = listTemplateNames()
-    expect(names).toContain('konzept_baseline')
+    expect(names).toContain('concept_baseline')
     expect(names).toContain('feature_implementation')
     expect(names).toContain('research_only')
     expect(names).toContain('test_only')
     expect(names).toContain('review_only')
   })
 
-  it('konzept_baseline includes file-ops + safe Bash patterns and EXCLUDES git push and curl', () => {
-    const baseline = resolveTemplate('konzept_baseline')
+  it('concept_baseline includes file-ops + safe Bash patterns and EXCLUDES git push and curl', () => {
+    const baseline = resolveTemplate('concept_baseline')
     const tools = new Set(baseline.map(e => e.tool))
     expect(tools.has('Read')).toBe(true)
     expect(tools.has('Write')).toBe(true)
@@ -40,12 +40,12 @@ describe('permissionTemplates', () => {
     expect(bashPatterns.some(p => p.includes('wget'))).toBe(false)
   })
 
-  it('isPermissionTemplate accepts konzept_baseline', () => {
-    expect(isPermissionTemplate('konzept_baseline')).toBe(true)
+  it('isPermissionTemplate accepts concept_baseline', () => {
+    expect(isPermissionTemplate('concept_baseline')).toBe(true)
     expect(isPermissionTemplate('not_a_template')).toBe(false)
   })
 
-  it('PERMISSION_TEMPLATES.konzept_baseline is non-empty', () => {
-    expect(PERMISSION_TEMPLATES.konzept_baseline.length).toBeGreaterThan(0)
+  it('PERMISSION_TEMPLATES.concept_baseline is non-empty', () => {
+    expect(PERMISSION_TEMPLATES.concept_baseline.length).toBeGreaterThan(0)
   })
 })

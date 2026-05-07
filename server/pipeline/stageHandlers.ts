@@ -5,11 +5,11 @@
  * completionDetector and applies the appropriate next/iterate/wait_user
  * transition.
  *
- * Agent-less stages (konzept, backlog) produce their transitions inline
- * without spawning. `konzept` is handled by an interactive chat flow
+ * Agent-less stages (concept, backlog) produce their transitions inline
+ * without spawning. `concept` is handled by an interactive chat flow
  * outside the orchestrator — the handler below is a safety net only.
  * `backlog` is the "Ready for Doing" gate that transitions immediately
- * into `umsetzung`.
+ * into `implementation`.
  */
 import type { PipelineStage } from '../../src/types.js'
 import type { SpawnAgentOptions, SpawnResult } from './agentSpawner.js'
@@ -20,9 +20,9 @@ import { generateApiToken, hashApiToken, upsertStageRunApiKey } from '../db/apiK
 import { listStageRunsForTask } from '../db/stageRunsRepo.js'
 import { spawnStageAgent } from './agentSpawner.js'
 import {
-  finalisierungPrompt,
-  selbstreviewPrompt,
-  umsetzungPrompt,
+  finalizationPrompt,
+  implementationPrompt,
+  selfReviewPrompt,
 } from './stagePrompts.js'
 
 export type SpawnFn = (opts: SpawnAgentOptions) => SpawnResult
@@ -30,7 +30,7 @@ export type PromptBuilder = (ctx: StageContext) => PromptBundle
 
 /**
  * Upper bound on the rejected-output JSON embedded in the retry prompt.
- *  Large umsetzung outputs could otherwise blow the model's context window
+ *  Large implementation outputs could otherwise blow the model's context window
  *  on the retry — exactly the failure mode that caused the first rejection.
  *  The error message plus the schema description already convey the shape
  *  expected; the rejected payload is only there for concrete reference.
@@ -110,48 +110,48 @@ export function createAgentStage(
 
 // ───── Prompt adapters — bridge `stagePrompts.ts` to the PromptBuilder shape.
 // Each adapter reads what it needs from the context (task, previousOutput,
-// task metadata for the umsetzung feedback loop) and delegates to the
+// task metadata for the implementation feedback loop) and delegates to the
 // corresponding builder in stagePrompts.ts.
 
 /**
  * Implementation stage reads optional `review_feedback` from task.metadata — the
- * orchestrator writes it there when a selbstreview iteration rejects the
+ * orchestrator writes it there when a self_review iteration rejects the
  * prior implementation. First-run tasks see an empty feedback string.
  *
  * Concept-stage output (spec, plan, toolRequests) is stored in task.metadata by
  * `POST /api/refine/:taskId/confirm` when the user confirms the refinement
  * chat — there is no longer a prior stage_run whose output we read.
  */
-const umsetzungBuilder: PromptBuilder = (ctx) => {
+const implementationBuilder: PromptBuilder = (ctx) => {
   const feedback = typeof ctx.task.metadata?.review_feedback === 'string'
     ? ctx.task.metadata.review_feedback as string
     : undefined
-  const konzeptOutput = (ctx.task.metadata ?? {}) as Record<string, unknown>
-  return umsetzungPrompt(ctx.task, konzeptOutput, feedback)
+  const conceptOutput = (ctx.task.metadata ?? {}) as Record<string, unknown>
+  return implementationPrompt(ctx.task, conceptOutput, feedback)
 }
 
-const selbstreviewBuilder: PromptBuilder = ctx =>
-  selbstreviewPrompt(ctx.task, ctx.previousOutput)
+const selfReviewBuilder: PromptBuilder = ctx =>
+  selfReviewPrompt(ctx.task, ctx.previousOutput)
 
-const finalisierungBuilder: PromptBuilder = ctx =>
-  finalisierungPrompt(ctx.task, listStageRunsForTask(ctx.task.id))
+const finalizationBuilder: PromptBuilder = ctx =>
+  finalizationPrompt(ctx.task, listStageRunsForTask(ctx.task.id))
 
 // ───── Agent-less stages: handlers that transition synchronously without
 // spawning a process. These are the pipeline's plumbing gates.
 
 /**
- * konzeptHandler — agent-less safety net; orchestrator never picks up
- * konzept tasks in the normal path (they are excluded from
+ * conceptHandler — agent-less safety net; orchestrator never picks up
+ * concept tasks in the normal path (they are excluded from
  * `listPickableTasks`). The interactive refinement chat runs outside the
  * state machine; when the user confirms, the task is advanced to
  * `backlog` by the refine-confirm route. This handler exists only so the
  * handler map stays exhaustive.
  */
-export const konzeptHandler: StageHandler = {
-  stage: 'konzept',
+export const conceptHandler: StageHandler = {
+  stage: 'concept',
   requiresAgent: false,
   async execute(ctx: StageContext): Promise<StageTransition> {
-    ctx.recordAudit('konzept_chat_pending')
+    ctx.recordAudit('concept_chat_pending')
     return { kind: 'wait_user', reason: 'Refinement chat in progress' }
   },
 }
@@ -161,22 +161,22 @@ export const backlogHandler: StageHandler = {
   requiresAgent: false,
   async execute(ctx: StageContext): Promise<StageTransition> {
     ctx.recordAudit('backlog_entered')
-    return { kind: 'next', toStage: 'umsetzung' }
+    return { kind: 'next', toStage: 'implementation' }
   },
 }
 
 // ───── Real agent stages.
 
-export const umsetzungHandler = createAgentStage('umsetzung', umsetzungBuilder)
-export const selbstreviewHandler = createAgentStage('selbstreview', selbstreviewBuilder)
-export const finalisierungHandler = createAgentStage('finalisierung', finalisierungBuilder)
+export const implementationHandler = createAgentStage('implementation', implementationBuilder)
+export const selfReviewHandler = createAgentStage('self_review', selfReviewBuilder)
+export const finalizationHandler = createAgentStage('finalization', finalizationBuilder)
 
 export const handlersByStage: Record<string, StageHandler> = {
-  konzept: konzeptHandler,
+  concept: conceptHandler,
   backlog: backlogHandler,
-  umsetzung: umsetzungHandler,
-  selbstreview: selbstreviewHandler,
-  finalisierung: finalisierungHandler,
+  implementation: implementationHandler,
+  self_review: selfReviewHandler,
+  finalization: finalizationHandler,
 }
 
 export function getHandlerForStage(stage: PipelineStage): StageHandler | null {

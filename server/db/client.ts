@@ -131,7 +131,7 @@ function migrateV1BaseSchema(db: Database): void {
   db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_runs_session ON stage_runs(session_id) WHERE session_id IS NOT NULL')
 
   // Runtime migration: older DBs have a CHECK constraint on tasks.current_stage
-  // and stage_runs.stage that does not include 'konzept'. SQLite can't ALTER a
+  // and stage_runs.stage that does not include 'concept'. SQLite can't ALTER a
   // CHECK constraint in place, so probe with a disposable INSERT/ROLLBACK and,
   // if rejected, rebuild both tables preserving rows and indexes.
   migrateKonzeptCheckConstraint(db)
@@ -209,6 +209,92 @@ function migrateV3PermissionExpiry(db: Database): void {
   db.run('CREATE INDEX IF NOT EXISTS idx_task_permissions_effective ON task_permissions(task_id, granted, expires_at)')
 }
 
+/**
+ * Translate the four German stage tokens (and the two refinement-phase
+ * tokens) to their English equivalents in every place they live:
+ *
+ *   - tasks.current_stage     ('konzept'/'umsetzung'/'selbstreview'/'finalisierung' → English)
+ *   - stage_runs.stage        (same)
+ *   - refinement_turns.phase  ('analyse' → 'analysis', 'umsetzungskonzept' → 'implementation_plan')
+ *   - task_feedback.stage     ('umsetzungskonzept' → 'implementation_plan')
+ *   - task.metadata JSON: legacy `konzeptOutput` key → canonical `conceptOutput`
+ *
+ * The CHECK constraint on tasks/stage_runs already accepts both old and
+ * new tokens (see schema.sql comment), so the UPDATEs below succeed
+ * without rebuilding tables. After translation, `VALID_STAGES` and the
+ * `PipelineStage` union narrow runtime/typecheck enforcement to the new
+ * names; legacy rows that survived earlier migrations are repaired here.
+ *
+ * Idempotent: each UPDATE is a no-op once a DB has already been
+ * translated (the WHEN clauses match nothing).
+ */
+function migrateV4StageRename(db: Database): void {
+  // Use string concatenation so a future codebase-wide rename pass that
+  // rewrites bare German tokens to English doesn't accidentally clobber
+  // these legacy literals — they MUST stay German, that's the whole point.
+  const LEGACY_KONZEPT = `kon${'zept'}`
+  const LEGACY_UMSETZUNG = `um${'setzung'}`
+  const LEGACY_SELBSTREVIEW = `selbst${'review'}`
+  const LEGACY_FINALISIERUNG = `finali${'sierung'}`
+  const LEGACY_ANALYSE = `ana${'lyse'}`
+  const LEGACY_UMSETZUNGSKONZEPT = `umsetzungs${'konzept'}`
+  const LEGACY_KONZEPT_OUTPUT_KEY = `kon${'zeptOutput'}`
+
+  db.exec(`
+    UPDATE tasks SET current_stage = CASE current_stage
+      WHEN '${LEGACY_KONZEPT}' THEN 'concept'
+      WHEN '${LEGACY_UMSETZUNG}' THEN 'implementation'
+      WHEN '${LEGACY_SELBSTREVIEW}' THEN 'self_review'
+      WHEN '${LEGACY_FINALISIERUNG}' THEN 'finalization'
+      ELSE current_stage
+    END
+    WHERE current_stage IN ('${LEGACY_KONZEPT}','${LEGACY_UMSETZUNG}','${LEGACY_SELBSTREVIEW}','${LEGACY_FINALISIERUNG}')
+  `)
+  db.exec(`
+    UPDATE stage_runs SET stage = CASE stage
+      WHEN '${LEGACY_KONZEPT}' THEN 'concept'
+      WHEN '${LEGACY_UMSETZUNG}' THEN 'implementation'
+      WHEN '${LEGACY_SELBSTREVIEW}' THEN 'self_review'
+      WHEN '${LEGACY_FINALISIERUNG}' THEN 'finalization'
+      ELSE stage
+    END
+    WHERE stage IN ('${LEGACY_KONZEPT}','${LEGACY_UMSETZUNG}','${LEGACY_SELBSTREVIEW}','${LEGACY_FINALISIERUNG}')
+  `)
+  db.exec(`
+    UPDATE refinement_turns SET phase = CASE phase
+      WHEN '${LEGACY_ANALYSE}' THEN 'analysis'
+      WHEN '${LEGACY_UMSETZUNGSKONZEPT}' THEN 'implementation_plan'
+      ELSE phase
+    END
+    WHERE phase IN ('${LEGACY_ANALYSE}','${LEGACY_UMSETZUNGSKONZEPT}')
+  `)
+  // task_feedback only exists on DBs that ran the relevant migration; guard.
+  const feedbackTbl = db.prepare(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='task_feedback'`,
+  ).get() as { name: string } | undefined
+  if (feedbackTbl !== undefined) {
+    db.exec(`
+      UPDATE task_feedback SET stage = 'implementation_plan'
+      WHERE stage = '${LEGACY_UMSETZUNGSKONZEPT}'
+    `)
+  }
+  // task.metadata JSON key migration — legacy konzeptOutput → conceptOutput.
+  // SQLite json_set/json_remove require the metadata column to be valid
+  // JSON; rows with NULL or non-JSON metadata are skipped via the
+  // json_valid + json_extract guard so a corrupt blob doesn't abort the
+  // whole migration.
+  db.exec(`
+    UPDATE tasks
+    SET metadata = json_remove(
+      json_set(metadata, '$.conceptOutput', json_extract(metadata, '$.${LEGACY_KONZEPT_OUTPUT_KEY}')),
+      '$.${LEGACY_KONZEPT_OUTPUT_KEY}'
+    )
+    WHERE metadata IS NOT NULL
+      AND json_valid(metadata)
+      AND json_extract(metadata, '$.${LEGACY_KONZEPT_OUTPUT_KEY}') IS NOT NULL
+  `)
+}
+
 function runMigrations(db: Database): void {
   migrateV1BaseSchema(db)
 
@@ -233,11 +319,18 @@ function runMigrations(db: Database): void {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(3, new Date().toISOString())
   }
+
+  migrateV4StageRename(db)
+
+  if ((version.v ?? 0) < 4) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(4, new Date().toISOString())
+  }
 }
 
 /**
  * Probe-and-rebuild: does the current CHECK constraint on `tasks.current_stage`
- * accept 'konzept'? If not, drop-and-recreate the table with the updated CHECK,
+ * accept 'concept'? If not, drop-and-recreate the table with the updated CHECK,
  * preserving all rows. Same for `stage_runs.stage`.
  *
  * CREATE TABLE IF NOT EXISTS is a no-op on an existing table, so CHECK changes
@@ -245,7 +338,7 @@ function runMigrations(db: Database): void {
  */
 function migrateKonzeptCheckConstraint(connection: Database): void {
   // Probe the `tasks` CHECK constraint only — both tables were created
-  // together, so if `tasks` rejects 'konzept' the stage_runs CHECK is
+  // together, so if `tasks` rejects 'concept' the stage_runs CHECK is
   // equally stale and both get rebuilt below in the same transaction.
   const tasksAcceptsKonzept = (): boolean => {
     // Use savepoint so a failed INSERT doesn't poison any outer transaction.
@@ -254,7 +347,7 @@ function migrateKonzeptCheckConstraint(connection: Database): void {
       connection
         .prepare(
           `INSERT INTO tasks (id, slug, title, cwd, current_stage, max_iterations, stage_timeout_seconds, priority, created_at, updated_at)
-           VALUES ('__probe__', '__probe__', 'p', '/', 'konzept', 1, 1, 'medium', '', '')`,
+           VALUES ('__probe__', '__probe__', 'p', '/', 'concept', 1, 1, 'medium', '', '')`,
         )
         .run()
       connection.exec('ROLLBACK TO probe_konzept')
@@ -290,9 +383,10 @@ function migrateKonzeptCheckConstraint(connection: Database): void {
         source_branch TEXT,
         target_branch TEXT,
         current_stage TEXT NOT NULL CHECK (current_stage IN (
-          'konzept','backlog','pruefung','refinement','planning','approval1',
-          'umsetzungskonzept','approval2','umsetzung','selbstreview',
-          'finalisierung','done','on_hold','cancelled'
+          'concept','implementation','self_review','finalization',
+          'konzept','umsetzung','selbstreview','finalisierung',
+          'backlog','pruefung','refinement','planning','approval1',
+          'umsetzungskonzept','implementation_plan','approval2','done','on_hold','cancelled'
         )),
         parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
         max_iterations INTEGER NOT NULL DEFAULT 20,
@@ -325,9 +419,10 @@ function migrateKonzeptCheckConstraint(connection: Database): void {
         id TEXT PRIMARY KEY,
         task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
         stage TEXT NOT NULL CHECK (stage IN (
-          'konzept','backlog','pruefung','refinement','planning','approval1',
-          'umsetzungskonzept','approval2','umsetzung','selbstreview',
-          'finalisierung','done','on_hold','cancelled'
+          'concept','implementation','self_review','finalization',
+          'konzept','umsetzung','selbstreview','finalisierung',
+          'backlog','pruefung','refinement','planning','approval1',
+          'umsetzungskonzept','implementation_plan','approval2','done','on_hold','cancelled'
         )),
         session_id TEXT,
         session_name TEXT,

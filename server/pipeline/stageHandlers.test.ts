@@ -1,7 +1,7 @@
 import type { SpawnResult } from './agentSpawner.js'
 import type { StageContext } from './types.js'
 import { describe, expect, it } from 'vitest'
-import { backlogHandler, createAgentStage, konzeptHandler } from './stageHandlers.js'
+import { backlogHandler, conceptHandler, createAgentStage } from './stageHandlers.js'
 
 function makeContext(overrides: Partial<StageContext> = {}): StageContext {
   const task = {
@@ -13,7 +13,7 @@ function makeContext(overrides: Partial<StageContext> = {}): StageContext {
     worktreePath: null,
     sourceBranch: null,
     targetBranch: null,
-    currentStage: 'umsetzung' as const,
+    currentStage: 'implementation' as const,
     parentTaskId: null,
     maxIterations: 20,
     tokenBudget: null,
@@ -29,7 +29,7 @@ function makeContext(overrides: Partial<StageContext> = {}): StageContext {
   const stageRun = {
     id: 'run-1',
     taskId: 'task-1',
-    stage: 'umsetzung' as const,
+    stage: 'implementation' as const,
     sessionId: null,
     sessionName: null,
     pid: null,
@@ -63,7 +63,7 @@ function fakeSpawn(pid = 9999) {
 }
 
 describe('backlogHandler', () => {
-  it('transitions immediately to umsetzung without spawning an agent', async () => {
+  it('transitions immediately to implementation without spawning an agent', async () => {
     expect(backlogHandler.requiresAgent).toBe(false)
     const audits: Array<{ action: string }> = []
     const ctx = makeContext({
@@ -72,23 +72,23 @@ describe('backlogHandler', () => {
 
     const transition = await backlogHandler.execute(ctx)
 
-    expect(transition).toEqual({ kind: 'next', toStage: 'umsetzung' })
+    expect(transition).toEqual({ kind: 'next', toStage: 'implementation' })
     expect(audits[0].action).toBe('backlog_entered')
   })
 })
 
-describe('konzeptHandler', () => {
+describe('conceptHandler', () => {
   it('is agent-less and returns wait_user as a safety net', async () => {
-    expect(konzeptHandler.requiresAgent).toBe(false)
+    expect(conceptHandler.requiresAgent).toBe(false)
     const audits: Array<{ action: string }> = []
     const ctx = makeContext({
       recordAudit: action => audits.push({ action }),
     })
 
-    const transition = await konzeptHandler.execute(ctx)
+    const transition = await conceptHandler.execute(ctx)
 
     expect(transition.kind).toBe('wait_user')
-    expect(audits[0].action).toBe('konzept_chat_pending')
+    expect(audits[0].action).toBe('concept_chat_pending')
   })
 })
 
@@ -96,7 +96,7 @@ describe('createAgentStage', () => {
   it('spawns with the provided prompt and returns async_running carrying the PID', async () => {
     const { spawn, calls } = fakeSpawn(4242)
     const handler = createAgentStage(
-      'umsetzung',
+      'implementation',
       () => ({ systemPrompt: 'sys', userPrompt: 'Implement the thing' }),
       spawn,
     )
@@ -111,7 +111,7 @@ describe('createAgentStage', () => {
   it('omits the correction prefix on iteration 0', async () => {
     const { spawn, calls } = fakeSpawn()
     const handler = createAgentStage(
-      'umsetzung',
+      'implementation',
       () => ({ systemPrompt: 'sys', userPrompt: 'body' }),
       spawn,
     )
@@ -124,7 +124,7 @@ describe('createAgentStage', () => {
   it('prepends a correction block when a prior iteration had a validation error', async () => {
     const { spawn, calls } = fakeSpawn()
     const handler = createAgentStage(
-      'umsetzung',
+      'implementation',
       () => ({ systemPrompt: 'sys', userPrompt: 'body' }),
       spawn,
     )
@@ -146,7 +146,7 @@ describe('createAgentStage', () => {
   it('records an audit entry with the spawned pid and iteration', async () => {
     const { spawn } = fakeSpawn(7777)
     const handler = createAgentStage(
-      'umsetzung',
+      'implementation',
       () => ({ systemPrompt: 'sys', userPrompt: 'body' }),
       spawn,
     )
@@ -158,7 +158,7 @@ describe('createAgentStage', () => {
     await handler.execute(ctx)
 
     expect(audits).toHaveLength(1)
-    expect(audits[0].action).toBe('umsetzung_spawned')
+    expect(audits[0].action).toBe('implementation_spawned')
     expect(audits[0].details).toMatchObject({ pid: 7777, iteration: 0, hasFeedback: false })
   })
 })

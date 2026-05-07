@@ -56,7 +56,7 @@ export function buildUserFeedbackPrefix(feedbacks: TaskFeedback[]): string {
   return `${header}\n\nA human reviewer rejected your prior output on this stage. Address the items below in your next attempt. Each item below blocks approval until resolved.\n\n${items}\n\n**Acknowledgement contract:** in your output, briefly state how each numbered item was addressed (one sentence each is fine). The reviewer uses this to verify nothing was silently skipped.\n\n---\n\n`
 }
 
-export function umsetzungPrompt(task: PipelineTask, prevOutput: unknown, feedback?: string): PromptBundle {
+export function implementationPrompt(task: PipelineTask, prevOutput: unknown, feedback?: string): PromptBundle {
   const meta = (task.metadata ?? null) as Record<string, unknown> | null
   const allowGitPush = (meta && meta.allowGitPush === true) || process.env.DASHBOARD_ALLOW_GIT_PUSH === 'true'
   const pushPolicyLine = allowGitPush
@@ -79,14 +79,14 @@ ${UPFRONT_PERMISSIONS_DIRECTIVE}`
   }
 }
 
-export function selbstreviewPrompt(task: PipelineTask, umsetzungOutput: unknown): PromptBundle {
+export function selfReviewPrompt(task: PipelineTask, implementationOutput: unknown): PromptBundle {
   return {
     systemPrompt: `${SHARED_CONTEXT}\n\n${UPFRONT_PERMISSIONS_DIRECTIVE}`,
-    userPrompt: `## Task: ${task.title}\n\n${task.description || ''}\n\n## Implementation Output\n\`\`\`json\n${JSON.stringify(umsetzungOutput, null, 2)}\n\`\`\`\n\n## Your Job: Self-Review\n\nReview the implementation against:\n1. Original task requirements — are they all met?\n2. Security — any injection, XSS, SQL, auth bypass, secrets leaked?\n3. Code quality — DRY violations, dead code, missing error handling?\n4. Test coverage — are the changes tested?\n\nRespond with a \`\`\`json\`\`\` block: {"passed": bool, "findings": [{"severity": "high"|"medium"|"low", "description": string, "file": string|null}], "summary": string}.`,
+    userPrompt: `## Task: ${task.title}\n\n${task.description || ''}\n\n## Implementation Output\n\`\`\`json\n${JSON.stringify(implementationOutput, null, 2)}\n\`\`\`\n\n## Your Job: Self-Review\n\nReview the implementation against:\n1. Original task requirements — are they all met?\n2. Security — any injection, XSS, SQL, auth bypass, secrets leaked?\n3. Code quality — DRY violations, dead code, missing error handling?\n4. Test coverage — are the changes tested?\n\nRespond with a \`\`\`json\`\`\` block: {"passed": bool, "findings": [{"severity": "high"|"medium"|"low", "description": string, "file": string|null}], "summary": string}.`,
   }
 }
 
-export function finalisierungPrompt(task: PipelineTask, stageRuns: StageRun[]): PromptBundle {
+export function finalizationPrompt(task: PipelineTask, stageRuns: StageRun[]): PromptBundle {
   const history = stageRuns.map(r => `${r.stage} (iter ${r.iteration}): ${r.status}`).join('\n')
   return {
     systemPrompt: `${SHARED_CONTEXT}\n\n${UPFRONT_PERMISSIONS_DIRECTIVE}`,

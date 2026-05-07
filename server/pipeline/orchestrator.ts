@@ -234,7 +234,7 @@ export class PipelineOrchestrator {
       return null
 
     // Global runner-slot cap — applies to every agent-driven stage, not
-    // just umsetzung. Protects against spawning more concurrent Claude
+    // just implementation. Protects against spawning more concurrent Claude
     // agents than maxParallelOrchestrators allows.
     if (handler.requiresAgent && !this.hasFreeRunnerSlot(task.id))
       return null
@@ -385,8 +385,8 @@ export class PipelineOrchestrator {
             endedAt: now,
             output: transition.output ?? null,
           }, db)
-          // Optional atomic task.metadata patch — e.g. selbstreview loop
-          // stashing review_feedback when jumping back to umsetzung. Must
+          // Optional atomic task.metadata patch — e.g. self_review loop
+          // stashing review_feedback when jumping back to implementation. Must
           // land in the same transaction as the stage transition or a
           // crash between the two leaves task state inconsistent.
           const patch: { currentStage: PipelineStage, metadata?: Record<string, unknown> | null } = {
@@ -598,9 +598,9 @@ export class PipelineOrchestrator {
    * 1. **Finalize async agents**: for every stage_run with status='running'
    *    and a PID, ask the completionDetector whether the agent is done.
    *    On success the per-stage routing decides the next transition:
-   *    most stages go to their canonical next stage; selbstreview inspects
-   *    `passed` and loops back to umsetzung with review feedback stored
-   *    on task.metadata; finalisierung transitions to `done`.
+   *    most stages go to their canonical next stage; self_review inspects
+   *    `passed` and loops back to implementation with review feedback stored
+   *    on task.metadata; finalization transitions to `done`.
    *    On schema-validation failure → retry once via `iterate` carrying
    *    the error as feedback, then escalate to `wait_user` on the second
    *    failure. Hard failure (no session, no output) → fail fast.
@@ -927,11 +927,11 @@ export class PipelineOrchestrator {
    * Decide which transition to apply after an async stage completes.
    * Most stages route to the canonical next stage, but two special cases:
    *
-   *   - **selbstreview**: if `passed: false`, loop back to umsetzung with
+   *   - **self_review**: if `passed: false`, loop back to implementation with
    *     the review findings stored on task.metadata.review_feedback so
-   *     the next umsetzung iteration sees them. If `passed: true`,
-   *     advance to finalisierung and clear any stale review_feedback.
-   *   - **finalisierung**: the terminal agent stage — always `{done}`.
+   *     the next implementation iteration sees them. If `passed: true`,
+   *     advance to finalization and clear any stale review_feedback.
+   *   - **finalization**: the terminal agent stage — always `{done}`.
    *
    * Metadata mutations are returned as part of the `next` transition
    * (`taskMetadataPatch`) so they land in the same SQLite transaction
@@ -944,10 +944,10 @@ export class PipelineOrchestrator {
     run: StageRun,
     output: Record<string, unknown>,
   ): StageTransition {
-    if (run.stage === 'finalisierung')
+    if (run.stage === 'finalization')
       return { kind: 'done', output }
 
-    if (run.stage === 'selbstreview') {
+    if (run.stage === 'self_review') {
       const passed = output.passed === true
       if (!passed) {
         const feedback = summarizeReviewFindings(output)
@@ -973,11 +973,11 @@ export class PipelineOrchestrator {
           review_feedback: feedback,
           review_cycles: cycles,
         }
-        return { kind: 'next', toStage: 'umsetzung', output, taskMetadataPatch: nextMeta }
+        return { kind: 'next', toStage: 'implementation', output, taskMetadataPatch: nextMeta }
       }
       // Passed — clear any lingering feedback and the cycle counter so
-      // the finalisierung handler doesn't read stale review notes and a
-      // future re-entry into selbstreview starts from zero.
+      // the finalization handler doesn't read stale review notes and a
+      // future re-entry into self_review starts from zero.
       if (
         task.metadata
         && typeof task.metadata === 'object'
@@ -985,9 +985,9 @@ export class PipelineOrchestrator {
       ) {
         const { review_feedback: _drop1, review_cycles: _drop2, ...rest } = task.metadata
         const cleared = Object.keys(rest).length > 0 ? rest : null
-        return { kind: 'next', toStage: 'finalisierung', output, taskMetadataPatch: cleared }
+        return { kind: 'next', toStage: 'finalization', output, taskMetadataPatch: cleared }
       }
-      return { kind: 'next', toStage: 'finalisierung', output }
+      return { kind: 'next', toStage: 'finalization', output }
     }
 
     return { kind: 'next', toStage: nextStageOrDone(run.stage), output }
@@ -1252,8 +1252,8 @@ function cleanupDashboardSettings(cwd: string): void {
 }
 
 /**
- * Extract a short, actionable review-feedback string from a selbstreview
- * output payload for injection into the next umsetzung iteration prompt.
+ * Extract a short, actionable review-feedback string from a self_review
+ * output payload for injection into the next implementation iteration prompt.
  */
 function summarizeReviewFindings(output: Record<string, unknown>): string {
   const findings = Array.isArray(output.findings) ? output.findings : []

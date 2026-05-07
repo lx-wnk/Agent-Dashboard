@@ -126,14 +126,14 @@ describe('pOST /api/tasks', () => {
     expect(data.currentStage).toBe('backlog')
   })
 
-  it('defaults to konzept when stage is omitted', async () => {
+  it('defaults to concept when stage is omitted', async () => {
     const { status, data } = await api<{ currentStage: string }>('POST', '/tasks', {
       slug: 'dk',
       title: 'Default stage',
       cwd: '/dk',
     })
     expect(status).toBe(201)
-    expect(data.currentStage).toBe('konzept')
+    expect(data.currentStage).toBe('concept')
   })
 })
 
@@ -145,12 +145,12 @@ describe('gET /api/tasks', () => {
       title: 'B',
       cwd: '/b',
     })
-    forceStage(b.id, 'umsetzung')
+    forceStage(b.id, 'implementation')
 
     const all = await api<unknown[]>('GET', '/tasks')
     expect(all.data).toHaveLength(2)
 
-    const impl = await api<unknown[]>('GET', '/tasks?stage=umsetzung')
+    const impl = await api<unknown[]>('GET', '/tasks?stage=implementation')
     expect(impl.data).toHaveLength(1)
 
     const invalid = await api('GET', '/tasks?stage=nope')
@@ -206,7 +206,7 @@ describe('pATCH /api/tasks', () => {
 })
 
 describe('pOST /api/tasks/:id/progress', () => {
-  it('advances a task through the backlog → umsetzung transition', async () => {
+  it('advances a task through the backlog → implementation transition', async () => {
     const { data: task } = await api<{ id: string }>('POST', '/tasks', {
       slug: 'prog',
       title: 'P',
@@ -219,7 +219,7 @@ describe('pOST /api/tasks/:id/progress', () => {
       `/tasks/${task.id}/progress`,
     )
     expect(status).toBe(200)
-    expect(data.task.currentStage).toBe('umsetzung')
+    expect(data.task.currentStage).toBe('implementation')
     expect(events.some(e => e.type === 'task_updated')).toBe(true)
   })
 })
@@ -274,7 +274,7 @@ describe('permission-requests/bulk loop detection (B3)', () => {
       cwd: '/lc1',
     })
     const { createStageRun } = await import('../db/stageRunsRepo.js')
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
 
     const { status, data } = await api<{ cycleCount: number, loopWarning: string | null }>(
       'POST',
@@ -297,7 +297,7 @@ describe('permission-requests/bulk loop detection (B3)', () => {
       cwd: '/lc2',
     })
     const { createStageRun } = await import('../db/stageRunsRepo.js')
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
 
     // first bulk — single new entry, no prior count
     await api('POST', '/permission-requests/bulk', {
@@ -328,7 +328,7 @@ describe('permission request resolution', () => {
     })
 
     const { createStageRun } = await import('../db/stageRunsRepo.js')
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
 
     const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
       stageRunId: run.id,
@@ -356,7 +356,7 @@ describe('permission request resolution', () => {
       cwd: '/ix',
     })
     const { createStageRun } = await import('../db/stageRunsRepo.js')
-    const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
     const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
       stageRunId: run.id,
       tool: 'WebFetch',
@@ -377,7 +377,7 @@ describe('permission request resolution', () => {
       })
 
       const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
-      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      const run = createStageRun({ taskId: task.id, stage: 'implementation' })
       updateStageRun(run.id, { status: 'awaiting_user', sessionId: 'test-session-xyz' })
 
       const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
@@ -415,7 +415,7 @@ describe('permission request resolution', () => {
       })
 
       const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
-      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      const run = createStageRun({ taskId: task.id, stage: 'implementation' })
       updateStageRun(run.id, { status: 'awaiting_user', sessionId: 'sid' })
 
       // first cycle
@@ -454,7 +454,7 @@ describe('permission request resolution', () => {
       })
 
       const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
-      const run = createStageRun({ taskId: task.id, stage: 'umsetzung' })
+      const run = createStageRun({ taskId: task.id, stage: 'implementation' })
       updateStageRun(run.id, { status: 'awaiting_user' }) // sessionId remains null
 
       const { data: reqRow } = await api<{ id: string }>('POST', '/permission-requests', {
@@ -499,9 +499,9 @@ describe('task enrichment (needsUser)', () => {
       title: 'AU',
       cwd: '/au',
     })
-    forceStage(t.id, 'umsetzung')
+    forceStage(t.id, 'implementation')
     const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
-    const run = createStageRun({ taskId: t.id, stage: 'umsetzung' })
+    const run = createStageRun({ taskId: t.id, stage: 'implementation' })
     updateStageRun(run.id, { status: 'awaiting_user', startedAt: new Date().toISOString() })
 
     const { data } = await api<{ needsUser: boolean }>('GET', `/tasks/${t.id}`)
@@ -517,18 +517,18 @@ describe('task enrichment (needsUser)', () => {
       title: 'ITR',
       cwd: '/itr',
     })
-    forceStage(t.id, 'umsetzung')
+    forceStage(t.id, 'implementation')
     const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
 
     // Old iteration 0 paused at awaiting_user
-    const oldRun = createStageRun({ taskId: t.id, stage: 'umsetzung', iteration: 0 })
+    const oldRun = createStageRun({ taskId: t.id, stage: 'implementation', iteration: 0 })
     updateStageRun(oldRun.id, {
       status: 'awaiting_user',
       startedAt: '2026-04-11T10:00:00Z',
     })
 
     // New iteration 1 just enqueued — no started_at yet
-    createStageRun({ taskId: t.id, stage: 'umsetzung', iteration: 1 })
+    createStageRun({ taskId: t.id, stage: 'implementation', iteration: 1 })
 
     const { data } = await api<{ needsUser: boolean, currentIteration: number }>(
       'GET',
@@ -546,8 +546,8 @@ describe('task enrichment (needsUser)', () => {
     })
     const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
 
-    // Task was paused at umsetzung with awaiting_user at some past point
-    const oldRun = createStageRun({ taskId: t.id, stage: 'umsetzung' })
+    // Task was paused at implementation with awaiting_user at some past point
+    const oldRun = createStageRun({ taskId: t.id, stage: 'implementation' })
     updateStageRun(oldRun.id, { status: 'awaiting_user', startedAt: '2026-04-11T10:00:00Z' })
 
     // Then it advanced to backlog (unusual but this is the stale-run scenario)
@@ -680,8 +680,8 @@ describe('pOST /api/tasks/:id/analyze (dedup)', () => {
 
   it('returns 409 when an analysis agent is already alive for this task', async () => {
     const t = createTask({ slug: 'analyze-dup', title: 'A', cwd: '/ad' })
-    forceStage(t.id, 'umsetzung')
-    const run = createStageRun({ taskId: t.id, stage: 'umsetzung' })
+    forceStage(t.id, 'implementation')
+    const run = createStageRun({ taskId: t.id, stage: 'implementation' })
     updateStageRun(run.id, { status: 'failed' })
 
     // Pre-populate dedup map with a PID that is guaranteed alive — the test
@@ -697,8 +697,8 @@ describe('pOST /api/tasks/:id/analyze (dedup)', () => {
 
   it('lazy-purges a dead PID from the dedup map and lets the request through', async () => {
     const t = createTask({ slug: 'analyze-stale', title: 'AS', cwd: '/as' })
-    forceStage(t.id, 'umsetzung')
-    const run = createStageRun({ taskId: t.id, stage: 'umsetzung' })
+    forceStage(t.id, 'implementation')
+    const run = createStageRun({ taskId: t.id, stage: 'implementation' })
     updateStageRun(run.id, { status: 'failed' })
 
     // 999999 is reserved per POSIX and effectively never assigned — isPidAlive

@@ -6,7 +6,7 @@ import { appendAudit } from '../db/auditRepo.js'
 import { getPipelineConfig } from '../db/notificationConfigRepo.js'
 import { createTaskPermission, listTaskPermissions } from '../db/permissionsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
-import { bulkGrantKonzeptPermissions, isDangerousBashPattern, validatePermissionEntry } from './approvalUtils.js'
+import { bulkGrantConceptStagePermissions, isDangerousBashPattern, validatePermissionEntry } from './approvalUtils.js'
 
 mock.module('../db/tasksRepo.js', () => ({ getTaskById: mock() }))
 mock.module('../db/permissionsRepo.js', () => ({
@@ -36,18 +36,18 @@ beforeEach(() => {
   mockGetPipelineConfig.mockReturnValue(null)
 })
 
-describe('bulkGrantKonzeptPermissions', () => {
-  it('reads toolRequests from task.metadata.konzeptOutput', () => {
+describe('bulkGrantConceptStagePermissions', () => {
+  it('reads toolRequests from task.metadata.conceptOutput', () => {
     mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: {
-        konzeptOutput: {
+        conceptOutput: {
           toolRequests: [{ tool: 'Read', pattern: null, reason: 'read files' }],
         },
       },
     } as unknown as PipelineTask)
 
-    bulkGrantKonzeptPermissions('task-1')
+    bulkGrantConceptStagePermissions('task-1')
 
     expect(mockCreateTaskPermission).toHaveBeenCalledWith(
       expect.objectContaining({ tool: 'Read', granted: true }),
@@ -56,28 +56,28 @@ describe('bulkGrantKonzeptPermissions', () => {
 
   it('does nothing when task has no toolRequests', () => {
     mockGetTaskById.mockReturnValue({ id: 'task-1', metadata: {} } as unknown as PipelineTask)
-    bulkGrantKonzeptPermissions('task-1')
+    bulkGrantConceptStagePermissions('task-1')
     expect(mockCreateTaskPermission).not.toHaveBeenCalled()
   })
 
-  it('skips unknown tools (konzept side; baseline still applies)', () => {
+  it('skips unknown tools (concept side; baseline still applies)', () => {
     mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: {
-        skipBaseline: true, // isolate konzept-side behavior
-        konzeptOutput: { toolRequests: [{ tool: 'NotARealTool', pattern: null, reason: 'x' }] },
+        skipBaseline: true, // isolate concept-side behavior
+        conceptOutput: { toolRequests: [{ tool: 'NotARealTool', pattern: null, reason: 'x' }] },
       },
     } as unknown as PipelineTask)
-    bulkGrantKonzeptPermissions('task-1')
+    bulkGrantConceptStagePermissions('task-1')
     expect(mockCreateTaskPermission).not.toHaveBeenCalled()
   })
 
-  it('skips konzept duplicate when same tool+pattern already granted (baseline opted out)', () => {
+  it('skips concept duplicate when same tool+pattern already granted (baseline opted out)', () => {
     mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: {
         skipBaseline: true,
-        konzeptOutput: {
+        conceptOutput: {
           toolRequests: [{ tool: 'Read', pattern: 'src/**', reason: 'read source' }],
         },
       },
@@ -95,7 +95,7 @@ describe('bulkGrantKonzeptPermissions', () => {
       } as unknown as ReturnType<typeof listTaskPermissions>[number],
     ])
 
-    bulkGrantKonzeptPermissions('task-1')
+    bulkGrantConceptStagePermissions('task-1')
 
     expect(mockCreateTaskPermission).not.toHaveBeenCalled()
   })
@@ -104,13 +104,13 @@ describe('bulkGrantKonzeptPermissions', () => {
     mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: {
-        konzeptOutput: {
+        conceptOutput: {
           toolRequests: [{ tool: 'Read', pattern: null, reason: 'r' }],
         },
       },
     } as unknown as PipelineTask)
 
-    bulkGrantKonzeptPermissions('task-1')
+    bulkGrantConceptStagePermissions('task-1')
 
     expect(mockAppendAudit).toHaveBeenCalledTimes(1)
     expect(mockAppendAudit).toHaveBeenCalledWith(
@@ -121,7 +121,7 @@ describe('bulkGrantKonzeptPermissions', () => {
   it('is a no-op when task does not exist', () => {
     mockGetTaskById.mockReturnValue(null)
 
-    bulkGrantKonzeptPermissions('missing-task')
+    bulkGrantConceptStagePermissions('missing-task')
 
     expect(mockCreateTaskPermission).not.toHaveBeenCalled()
     expect(mockAppendAudit).not.toHaveBeenCalled()
@@ -131,16 +131,16 @@ describe('bulkGrantKonzeptPermissions', () => {
     mockGetTaskById.mockReturnValue({
       id: 'task-1',
       metadata: {
-        konzeptOutput: {
+        conceptOutput: {
           toolRequests: [null, { tool: 'Read', pattern: null, reason: 'r' }],
         },
       },
     } as unknown as PipelineTask)
 
-    bulkGrantKonzeptPermissions('task-1')
+    bulkGrantConceptStagePermissions('task-1')
 
     // baseline tools are also granted on top — Read is in the baseline so it
-    // would normally appear once (deduplicated against the konzept output).
+    // would normally appear once (deduplicated against the concept output).
     // We assert it was called at least once with Read; baseline merge
     // (covered separately) handles the rest.
     const readCalls = mockCreateTaskPermission.mock.calls.filter(c => c[0].tool === 'Read')
@@ -148,13 +148,13 @@ describe('bulkGrantKonzeptPermissions', () => {
   })
 
   describe('baseline merge (A3)', () => {
-    it('grants the konzept_baseline template entries even when toolRequests is empty', () => {
+    it('grants the concept_baseline template entries even when toolRequests is empty', () => {
       mockGetTaskById.mockReturnValue({
         id: 'task-base',
-        metadata: { konzeptOutput: { toolRequests: [] } },
+        metadata: { conceptOutput: { toolRequests: [] } },
       } as unknown as PipelineTask)
 
-      bulkGrantKonzeptPermissions('task-base')
+      bulkGrantConceptStagePermissions('task-base')
 
       const tools = mockCreateTaskPermission.mock.calls.map(c => c[0].tool)
       expect(tools).toContain('Read')
@@ -171,7 +171,7 @@ describe('bulkGrantKonzeptPermissions', () => {
     it('does NOT grant a baseline entry that is already present in task_permissions', () => {
       mockGetTaskById.mockReturnValue({
         id: 'task-dup',
-        metadata: { konzeptOutput: { toolRequests: [] } },
+        metadata: { conceptOutput: { toolRequests: [] } },
       } as unknown as PipelineTask)
       mockListTaskPermissions.mockReturnValue([
         {
@@ -186,24 +186,24 @@ describe('bulkGrantKonzeptPermissions', () => {
         } as unknown as ReturnType<typeof listTaskPermissions>[number],
       ])
 
-      bulkGrantKonzeptPermissions('task-dup')
+      bulkGrantConceptStagePermissions('task-dup')
 
       const readCalls = mockCreateTaskPermission.mock.calls.filter(c => c[0].tool === 'Read')
       expect(readCalls.length).toBe(0)
     })
 
-    it('konzept-emitted entry takes precedence — baseline does not duplicate it', () => {
+    it('concept-emitted entry takes precedence — baseline does not duplicate it', () => {
       mockGetTaskById.mockReturnValue({
         id: 'task-precedence',
         metadata: {
-          konzeptOutput: {
+          conceptOutput: {
             // Konzept already emitted Read; baseline must not re-emit
-            toolRequests: [{ tool: 'Read', pattern: null, reason: 'konzept-said' }],
+            toolRequests: [{ tool: 'Read', pattern: null, reason: 'concept-said' }],
           },
         },
       } as unknown as PipelineTask)
 
-      bulkGrantKonzeptPermissions('task-precedence')
+      bulkGrantConceptStagePermissions('task-precedence')
 
       const readCalls = mockCreateTaskPermission.mock.calls.filter(c => c[0].tool === 'Read')
       expect(readCalls.length).toBe(1)
@@ -214,11 +214,11 @@ describe('bulkGrantKonzeptPermissions', () => {
         id: 'task-optout',
         metadata: {
           skipBaseline: true,
-          konzeptOutput: { toolRequests: [{ tool: 'Read', pattern: null, reason: 'r' }] },
+          conceptOutput: { toolRequests: [{ tool: 'Read', pattern: null, reason: 'r' }] },
         },
       } as unknown as PipelineTask)
 
-      bulkGrantKonzeptPermissions('task-optout')
+      bulkGrantConceptStagePermissions('task-optout')
 
       const tools = mockCreateTaskPermission.mock.calls.map(c => c[0].tool)
       expect(tools).toEqual(['Read'])
@@ -232,10 +232,10 @@ describe('bulkGrantKonzeptPermissions', () => {
       )
       mockGetTaskById.mockReturnValue({
         id: 'task-cfg',
-        metadata: { konzeptOutput: { toolRequests: [] } },
+        metadata: { conceptOutput: { toolRequests: [] } },
       } as unknown as PipelineTask)
 
-      bulkGrantKonzeptPermissions('task-cfg')
+      bulkGrantConceptStagePermissions('task-cfg')
 
       const tools = mockCreateTaskPermission.mock.calls.map(c => c[0].tool)
       // research_only includes WebSearch but no Bash
@@ -243,16 +243,16 @@ describe('bulkGrantKonzeptPermissions', () => {
       expect(tools).not.toContain('Bash')
     })
 
-    it('falls back to konzept_baseline when defaultPermissionTemplate is unknown', () => {
+    it('falls back to concept_baseline when defaultPermissionTemplate is unknown', () => {
       mockGetPipelineConfig.mockImplementation((key: string) =>
         key === 'defaultPermissionTemplate' ? 'not_a_template' : null,
       )
       mockGetTaskById.mockReturnValue({
         id: 'task-bad-cfg',
-        metadata: { konzeptOutput: { toolRequests: [] } },
+        metadata: { conceptOutput: { toolRequests: [] } },
       } as unknown as PipelineTask)
 
-      bulkGrantKonzeptPermissions('task-bad-cfg')
+      bulkGrantConceptStagePermissions('task-bad-cfg')
 
       const bashPatterns = mockCreateTaskPermission.mock.calls
         .filter(c => c[0].tool === 'Bash')

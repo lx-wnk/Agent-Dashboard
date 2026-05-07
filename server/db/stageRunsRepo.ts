@@ -74,8 +74,8 @@ export function getLatestStageRun(
  *
  * The earlier cross-stage version sorted `iteration DESC` first, which
  * broke tasks whose current stage has iter 0 but whose history contains
- * iter 1 runs on earlier stages (e.g. umsetzungskonzept iter 1 done →
- * umsetzung iter 0 failed): the failed current-stage run was hidden behind
+ * iter 1 runs on earlier stages (e.g. implementation_plan iter 1 done →
+ * implementation iter 0 failed): the failed current-stage run was hidden behind
  * the older done row, and the Retry button disappeared.
  *
  * Pending iterate-rows (started_at = NULL) on the current stage still win

@@ -1,9 +1,9 @@
 import type { PipelineTask, StageRun } from '../../src/types.js'
 import { describe, expect, it } from 'vitest'
 import {
-  finalisierungPrompt,
-  selbstreviewPrompt,
-  umsetzungPrompt,
+  finalizationPrompt,
+  implementationPrompt,
+  selfReviewPrompt,
 } from './stagePrompts.js'
 
 function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
@@ -16,7 +16,7 @@ function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
     worktreePath: null,
     sourceBranch: 'main',
     targetBranch: null,
-    currentStage: 'umsetzung',
+    currentStage: 'implementation',
     parentTaskId: null,
     maxIterations: 20,
     tokenBudget: null,
@@ -33,15 +33,15 @@ function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
 }
 
 describe('stagePrompts', () => {
-  it('umsetzungPrompt has an orchestrator system prompt and omits feedback when absent', () => {
-    const { systemPrompt, userPrompt } = umsetzungPrompt(makeTask(), { steps: [] })
+  it('implementationPrompt has an orchestrator system prompt and omits feedback when absent', () => {
+    const { systemPrompt, userPrompt } = implementationPrompt(makeTask(), { steps: [] })
     expect(systemPrompt).toContain('Opus orchestrator')
     expect(systemPrompt).toContain('Task tool')
     expect(userPrompt).not.toContain('Review Feedback')
   })
 
-  it('umsetzungPrompt includes feedback when provided for iteration', () => {
-    const { userPrompt } = umsetzungPrompt(
+  it('implementationPrompt includes feedback when provided for iteration', () => {
+    const { userPrompt } = implementationPrompt(
       makeTask(),
       { steps: [] },
       'missing tests for auth middleware',
@@ -50,27 +50,27 @@ describe('stagePrompts', () => {
     expect(userPrompt).toContain('missing tests for auth middleware')
   })
 
-  it('umsetzungPrompt embeds the concept-stage output as the plan', () => {
-    const konzept = { spec: 'rewrite auth', steps: [{ n: 1, description: 'rm old' }] }
-    const { userPrompt } = umsetzungPrompt(makeTask(), konzept)
+  it('implementationPrompt embeds the concept-stage output as the plan', () => {
+    const concept = { spec: 'rewrite auth', steps: [{ n: 1, description: 'rm old' }] }
+    const { userPrompt } = implementationPrompt(makeTask(), concept)
     expect(userPrompt).toContain('Concept')
     expect(userPrompt).toContain('rewrite auth')
     expect(userPrompt).toContain('rm old')
   })
 
-  it('selbstreviewPrompt requests a findings array with severities', () => {
-    const { userPrompt } = selbstreviewPrompt(makeTask(), { diff: 'patch' })
+  it('selfReviewPrompt requests a findings array with severities', () => {
+    const { userPrompt } = selfReviewPrompt(makeTask(), { diff: 'patch' })
     expect(userPrompt).toContain('findings')
     expect(userPrompt).toContain('severity')
     expect(userPrompt).toContain('passed')
   })
 
-  it('finalisierungPrompt renders the stage-run history', () => {
+  it('finalizationPrompt renders the stage-run history', () => {
     const runs: StageRun[] = [
       {
         id: 'r1',
         taskId: 't-1',
-        stage: 'umsetzung',
+        stage: 'implementation',
         sessionId: null,
         sessionName: null,
         pid: null,
@@ -85,7 +85,7 @@ describe('stagePrompts', () => {
       {
         id: 'r2',
         taskId: 't-1',
-        stage: 'selbstreview',
+        stage: 'self_review',
         sessionId: null,
         sessionName: null,
         pid: null,
@@ -98,9 +98,9 @@ describe('stagePrompts', () => {
         costCents: 0,
       },
     ]
-    const { userPrompt } = finalisierungPrompt(makeTask(), runs)
-    expect(userPrompt).toContain('umsetzung (iter 0): done')
-    expect(userPrompt).toContain('selbstreview (iter 0): done')
+    const { userPrompt } = finalizationPrompt(makeTask(), runs)
+    expect(userPrompt).toContain('implementation (iter 0): done')
+    expect(userPrompt).toContain('self_review (iter 0): done')
     expect(userPrompt).toContain('testPlan')
   })
 })

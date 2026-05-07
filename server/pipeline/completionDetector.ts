@@ -63,12 +63,12 @@ export function validateStageOutput(
   output: Record<string, unknown>,
 ): ValidationResult {
   switch (stage) {
-    case 'selbstreview':
+    case 'self_review':
       return validateSelbstreview(output)
-    case 'finalisierung':
+    case 'finalization':
       return validateFinalisierung(output)
     default:
-      // Stages without a structured schema (backlog, umsetzung) just
+      // Stages without a structured schema (backlog, implementation) just
       // need to be a parseable object. No further checks.
       return { ok: true }
   }

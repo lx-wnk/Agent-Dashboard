@@ -6,7 +6,7 @@ function makeRun(overrides: Partial<StageRun> = {}): StageRun {
   return {
     id: 'run-1',
     taskId: 'task-1',
-    stage: 'selbstreview',
+    stage: 'self_review',
     sessionId: 'sess-1',
     sessionName: null,
     pid: 1234,
@@ -27,45 +27,45 @@ const validSelbstreview = {
   summary: 'looks good',
 }
 
-describe('validateStageOutput - selbstreview', () => {
+describe('validateStageOutput - self_review', () => {
   it('accepts a well-formed payload', () => {
-    expect(validateStageOutput('selbstreview', validSelbstreview)).toEqual({ ok: true })
+    expect(validateStageOutput('self_review', validSelbstreview)).toEqual({ ok: true })
   })
 
   it('rejects missing summary', () => {
     const { summary, ...rest } = validSelbstreview
-    const result = validateStageOutput('selbstreview', rest)
+    const result = validateStageOutput('self_review', rest)
     expect(result.ok).toBe(false)
     expect(result.error).toContain('summary')
   })
 
   it('rejects non-boolean passed', () => {
-    const result = validateStageOutput('selbstreview', { ...validSelbstreview, passed: 'yes' })
+    const result = validateStageOutput('self_review', { ...validSelbstreview, passed: 'yes' })
     expect(result.ok).toBe(false)
     expect(result.error).toContain('passed')
   })
 
   it('rejects non-array findings', () => {
-    const result = validateStageOutput('selbstreview', { ...validSelbstreview, findings: 'nope' })
+    const result = validateStageOutput('self_review', { ...validSelbstreview, findings: 'nope' })
     expect(result.ok).toBe(false)
     expect(result.error).toContain('findings')
   })
 })
 
 describe('validateStageOutput - other stages', () => {
-  it('checks finalisierung required fields', () => {
-    expect(validateStageOutput('finalisierung', {
+  it('checks finalization required fields', () => {
+    expect(validateStageOutput('finalization', {
       summary: 'done',
       insights: [],
       openTodos: [],
       testPlan: [],
     }).ok).toBe(true)
-    expect(validateStageOutput('finalisierung', { summary: 'done' }).ok).toBe(false)
+    expect(validateStageOutput('finalization', { summary: 'done' }).ok).toBe(false)
   })
 
   it('accepts anything for stages without a structured schema', () => {
     expect(validateStageOutput('backlog', { whatever: 1 }).ok).toBe(true)
-    expect(validateStageOutput('umsetzung', {}).ok).toBe(true)
+    expect(validateStageOutput('implementation', {}).ok).toBe(true)
   })
 })
 
@@ -78,7 +78,7 @@ describe('detectCompletion', () => {
     expect(result.kind).toBe('still_running')
   })
 
-  it('returns completed with output for a valid selbstreview payload', async () => {
+  it('returns completed with output for a valid self_review payload', async () => {
     const run = makeRun()
     const result = await detectCompletion(run, '/cwd', {
       isPidAlive: () => false,

@@ -1,15 +1,17 @@
 import type { PipelineStage } from '../src/types.js'
 import process from 'node:process'
 
-// Narrower than the DB CHECK constraint — old stages (pruefung, refinement,
-// planning, approval1, umsetzungskonzept, approval2) are excluded intentionally.
+// Narrower than the DB CHECK constraint — legacy stages (pruefung, refinement,
+// planning, approval1, approval2, plus the German originals konzept/umsetzung/
+// selbstreview/finalisierung that were renamed to concept/implementation/
+// self_review/finalization in migration V4) are excluded intentionally.
 // The DB CHECK stays broad so legacy rows survive migrations safely.
 export const VALID_STAGES = new Set<PipelineStage>([
-  'konzept',
+  'concept',
   'backlog',
-  'umsetzung',
-  'selbstreview',
-  'finalisierung',
+  'implementation',
+  'self_review',
+  'finalization',
   'done',
   'on_hold',
   'cancelled',

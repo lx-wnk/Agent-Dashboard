@@ -162,10 +162,10 @@ async function handleSend() {
   await nextTick(autoResize)
   if (currentTask.value === null) {
     const newTask = await createTask({
-      slug: `konzept-${Date.now()}`,
+      slug: `concept-${Date.now()}`,
       title: 'New Task',
       cwd: '/',
-      stage: 'konzept',
+      stage: 'concept',
     })
     currentTask.value = newTask
     emit('taskCreated', newTask)

@@ -9,8 +9,8 @@ const props = defineProps<{
 }>()
 
 interface PlanningSubtask { id?: string, title?: string, files?: string[] }
-interface UmsetzungskonzeptStep { id?: string, description?: string, files?: string[] }
-interface UmsetzungskonzeptToolRequest { tool?: string, pattern?: string, reason?: string }
+interface ImplementationPlanStep { id?: string, description?: string, files?: string[] }
+interface ImplementationPlanToolRequest { tool?: string, pattern?: string, reason?: string }
 interface SelbstreviewFinding { severity?: string, message?: string, file?: string }
 
 function asRecord(o: unknown): Record<string, unknown> | null {
@@ -41,11 +41,11 @@ const pretty = computed(() => {
         subtasks: (Array.isArray(r.subtasks) ? r.subtasks : []) as PlanningSubtask[],
         acceptanceCriteria: (Array.isArray(r.acceptanceCriteria) ? r.acceptanceCriteria : []) as string[],
       }
-    case 'umsetzungskonzept':
+    case 'implementation_plan':
       return {
-        kind: 'umsetzungskonzept' as const,
-        steps: (Array.isArray(r.steps) ? r.steps : []) as UmsetzungskonzeptStep[],
-        toolRequests: (Array.isArray(r.toolRequests) ? r.toolRequests : []) as UmsetzungskonzeptToolRequest[],
+        kind: 'implementation_plan' as const,
+        steps: (Array.isArray(r.steps) ? r.steps : []) as ImplementationPlanStep[],
+        toolRequests: (Array.isArray(r.toolRequests) ? r.toolRequests : []) as ImplementationPlanToolRequest[],
       }
     case 'pruefung':
       return {
@@ -63,16 +63,16 @@ const pretty = computed(() => {
         refinedDescription: String(r.refinedDescription ?? ''),
         successCriteria: (Array.isArray(r.successCriteria) ? r.successCriteria : []) as string[],
       }
-    case 'selbstreview':
+    case 'self_review':
       return {
-        kind: 'selbstreview' as const,
+        kind: 'self_review' as const,
         passed: Boolean(r.passed),
         summary: String(r.summary ?? ''),
         findings: (Array.isArray(r.findings) ? r.findings : []) as SelbstreviewFinding[],
       }
-    case 'finalisierung':
+    case 'finalization':
       return {
-        kind: 'finalisierung' as const,
+        kind: 'finalization' as const,
         summary: String(r.summary ?? ''),
         insights: (Array.isArray(r.insights) ? r.insights : []) as string[],
         openTodos: (Array.isArray(r.openTodos) ? r.openTodos : []) as string[],
@@ -125,8 +125,8 @@ function shortPath(full: string): string {
       </div>
     </template>
 
-    <!-- Umsetzungskonzept: steps + toolRequests -->
-    <template v-else-if="pretty?.kind === 'umsetzungskonzept'">
+    <!-- Implementation Plan: steps + toolRequests -->
+    <template v-else-if="pretty?.kind === 'implementation_plan'">
       <div v-if="pretty.steps.length > 0" class="mb-4 last:mb-0">
         <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
           Steps <span class="font-normal">({{ pretty.steps.length }})</span>
@@ -239,7 +239,7 @@ function shortPath(full: string): string {
     </template>
 
     <!-- Self-review -->
-    <template v-else-if="pretty?.kind === 'selbstreview'">
+    <template v-else-if="pretty?.kind === 'self_review'">
       <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs mb-1">
         <div class="contents">
           <dt class="text-slate-400 dark:text-slate-600 uppercase text-[10px]">
@@ -280,7 +280,7 @@ function shortPath(full: string): string {
     </template>
 
     <!-- Finalization -->
-    <template v-else-if="pretty?.kind === 'finalisierung'">
+    <template v-else-if="pretty?.kind === 'finalization'">
       <div class="mb-4 last:mb-0">
         <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
           Summary

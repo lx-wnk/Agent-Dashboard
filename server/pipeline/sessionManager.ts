@@ -8,7 +8,7 @@ const ZOMBIE_STATE_RE = /^State:\s+Z/m
 
 /**
  * Build a human-readable session name from task + stage + iteration.
- * Format: {slug}-{stage}-iter-{n}  (e.g. fix-login-bug-umsetzung-iter-3)
+ * Format: {slug}-{stage}-iter-{n}  (e.g. fix-login-bug-implementation-iter-3)
  */
 export function buildSessionName(task: PipelineTask, stage: PipelineStage, iteration: number): string {
   return `${task.slug}-${stage}-iter-${iteration}`

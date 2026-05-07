@@ -67,13 +67,13 @@ const REVIEW_ONLY: PermissionTemplateEntry[] = [
   { tool: 'TodoWrite' },
 ]
 
-// Safe baseline auto-merged into every konzept stage's permissions. Covers the
+// Safe baseline auto-merged into every concept stage's permissions. Covers the
 // common file-op + Bash patterns the implementation agent almost always needs
-// (test, lint, typecheck, basic git operations) so the konzept stage cannot
+// (test, lint, typecheck, basic git operations) so the concept stage cannot
 // under-enumerate itself into a permission re-request loop. Excludes
 // `git push*`, `curl*`, `wget*` and similar — those still require explicit
 // per-task grant.
-const KONZEPT_BASELINE: PermissionTemplateEntry[] = [
+const CONCEPT_BASELINE: PermissionTemplateEntry[] = [
   { tool: 'Read' },
   { tool: 'Write' },
   { tool: 'Edit' },
@@ -106,10 +106,10 @@ export const PERMISSION_TEMPLATES = {
   research_only: RESEARCH_ONLY,
   test_only: TEST_ONLY,
   review_only: REVIEW_ONLY,
-  konzept_baseline: KONZEPT_BASELINE,
+  concept_baseline: CONCEPT_BASELINE,
 } as const
 
-export const DEFAULT_KONZEPT_BASELINE_TEMPLATE: PermissionTemplateName = 'konzept_baseline'
+export const DEFAULT_CONCEPT_BASELINE_TEMPLATE: PermissionTemplateName = 'concept_baseline'
 
 export type PermissionTemplateName = keyof typeof PERMISSION_TEMPLATES
 

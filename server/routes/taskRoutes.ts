@@ -361,7 +361,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
         metadata: typeof metadata === 'object' && metadata !== null ? metadata : null,
         silverBullet: silverBullet === true,
         priority: (priority === 'high' || priority === 'medium' || priority === 'low') ? priority : undefined,
-        currentStage: (typeof stage === 'string' && VALID_STAGES.has(stage as PipelineStage)) ? (stage as PipelineStage) : 'konzept',
+        currentStage: (typeof stage === 'string' && VALID_STAGES.has(stage as PipelineStage)) ? (stage as PipelineStage) : 'concept',
         userId: isAuthEnabled() ? req.user!.id : null,
       })
 

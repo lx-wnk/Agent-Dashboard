@@ -448,7 +448,7 @@ const runtime = computed(() => {
 
           <!-- Concept-stage refinement banner -->
           <div
-            v-if="task.currentStage === 'konzept'"
+            v-if="task.currentStage === 'concept'"
             class="flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md px-3.5 py-3 mb-2"
           >
             <div class="flex flex-col gap-0.5">
