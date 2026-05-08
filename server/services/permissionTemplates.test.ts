@@ -40,6 +40,31 @@ describe('permissionTemplates', () => {
     expect(bashPatterns.some(p => p.includes('wget'))).toBe(false)
   })
 
+  it('feature_implementation grants explicit Bash patterns only — no wildcard Bash, no git push, no curl/wget', () => {
+    const tpl = resolveTemplate('feature_implementation')
+    const tools = new Set(tpl.map(e => e.tool))
+    expect(tools.has('Read')).toBe(true)
+    expect(tools.has('Write')).toBe(true)
+    expect(tools.has('Edit')).toBe(true)
+    expect(tools.has('WebFetch')).toBe(true)
+
+    const bashEntries = tpl.filter(e => e.tool === 'Bash')
+    expect(bashEntries.length).toBeGreaterThan(0)
+    // No wildcard: every Bash entry must carry a non-empty pattern.
+    for (const e of bashEntries)
+      expect(typeof e.pattern === 'string' && e.pattern.length > 0).toBe(true)
+
+    const bashPatterns = bashEntries.map(e => e.pattern ?? '')
+    expect(bashPatterns).toContain('pnpm test*')
+    expect(bashPatterns).toContain('pnpm lint*')
+    expect(bashPatterns).toContain('pnpm typecheck*')
+    expect(bashPatterns).toContain('git commit*')
+
+    expect(bashPatterns).not.toContain('git push*')
+    expect(bashPatterns.some(p => p.includes('curl'))).toBe(false)
+    expect(bashPatterns.some(p => p.includes('wget'))).toBe(false)
+  })
+
   it('isPermissionTemplate accepts concept_baseline', () => {
     expect(isPermissionTemplate('concept_baseline')).toBe(true)
     expect(isPermissionTemplate('not_a_template')).toBe(false)

@@ -21,7 +21,7 @@
 | `DASHBOARD_SSE_INTERVAL_MS`      | Agent SSE broadcast interval ms, default `3000`                                                               |
 | `DASHBOARD_SPAWN_RATE_LIMIT`     | Max user-initiated spawns per window, default `5`; must be positive integer                                   |
 | `DASHBOARD_SPAWN_RATE_WINDOW_MS` | Spawn rate-limit window ms, default `60000`; must be positive integer                                         |
-| `DASHBOARD_ALLOW_GIT_PUSH`       | `true|false`, default `false`; when `true`, removes the global `git push` filter from spawned-agent allow-lists. Per-task override: `metadata.allowGitPush=true`. |
+| `DASHBOARD_ALLOW_GIT_PUSH`       | `true` or `false`, default `false`; when `true`, removes the global `git push` filter from spawned-agent allow-lists. Per-task override: `metadata.allowGitPush=true`. |
 
 ## Compaction Preservation
 

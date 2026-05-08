@@ -16,6 +16,29 @@ export interface PermissionTemplateEntry {
   pattern?: string | null
 }
 
+// Safe Bash patterns shared by every template that grants Bash access.
+// Excludes `git push*`, `curl*`, `wget*`, shell-substitution and similar —
+// those still require explicit per-task grant (and `git push` additionally
+// honors `DASHBOARD_ALLOW_GIT_PUSH` / `metadata.allowGitPush`).
+const SAFE_BASH_PATTERNS: PermissionTemplateEntry[] = [
+  { tool: 'Bash', pattern: 'pnpm test*' },
+  { tool: 'Bash', pattern: 'pnpm typecheck*' },
+  { tool: 'Bash', pattern: 'pnpm lint*' },
+  { tool: 'Bash', pattern: 'pnpm build*' },
+  { tool: 'Bash', pattern: 'pnpm install*' },
+  { tool: 'Bash', pattern: 'git status*' },
+  { tool: 'Bash', pattern: 'git diff*' },
+  { tool: 'Bash', pattern: 'git log*' },
+  { tool: 'Bash', pattern: 'git show*' },
+  { tool: 'Bash', pattern: 'git add*' },
+  { tool: 'Bash', pattern: 'git commit*' },
+  { tool: 'Bash', pattern: 'git checkout*' },
+  { tool: 'Bash', pattern: 'git branch*' },
+  { tool: 'Bash', pattern: 'git stash*' },
+  { tool: 'Bash', pattern: 'git restore*' },
+  { tool: 'Bash', pattern: 'git switch*' },
+]
+
 const FEATURE_IMPLEMENTATION: PermissionTemplateEntry[] = [
   { tool: 'Read' },
   { tool: 'Write' },
@@ -24,7 +47,7 @@ const FEATURE_IMPLEMENTATION: PermissionTemplateEntry[] = [
   { tool: 'Glob' },
   { tool: 'Grep' },
   { tool: 'LS' },
-  { tool: 'Bash' },
+  ...SAFE_BASH_PATTERNS,
   { tool: 'WebFetch' },
   { tool: 'TodoRead' },
   { tool: 'TodoWrite' },
@@ -83,22 +106,7 @@ const CONCEPT_BASELINE: PermissionTemplateEntry[] = [
   { tool: 'LS' },
   { tool: 'TodoRead' },
   { tool: 'TodoWrite' },
-  { tool: 'Bash', pattern: 'pnpm test*' },
-  { tool: 'Bash', pattern: 'pnpm typecheck*' },
-  { tool: 'Bash', pattern: 'pnpm lint*' },
-  { tool: 'Bash', pattern: 'pnpm build*' },
-  { tool: 'Bash', pattern: 'pnpm install*' },
-  { tool: 'Bash', pattern: 'git status*' },
-  { tool: 'Bash', pattern: 'git diff*' },
-  { tool: 'Bash', pattern: 'git log*' },
-  { tool: 'Bash', pattern: 'git show*' },
-  { tool: 'Bash', pattern: 'git add*' },
-  { tool: 'Bash', pattern: 'git commit*' },
-  { tool: 'Bash', pattern: 'git checkout*' },
-  { tool: 'Bash', pattern: 'git branch*' },
-  { tool: 'Bash', pattern: 'git stash*' },
-  { tool: 'Bash', pattern: 'git restore*' },
-  { tool: 'Bash', pattern: 'git switch*' },
+  ...SAFE_BASH_PATTERNS,
 ]
 
 export const PERMISSION_TEMPLATES = {
