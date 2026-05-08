@@ -250,26 +250,32 @@ describe('pipelineOrchestrator.progressTask', () => {
 
 describe('pipelineOrchestrator.start recovery', () => {
   it('logs a recovery decision and flips dead running runs to pending/failed', async () => {
-    const task = createTask({ slug: 'rec', title: 'REC', cwd: '/rec' })
+    // V7 partial unique index rejects two running runs on a single task,
+    // so the two recovery scenarios live on separate tasks. The driver
+    // loop processes each running row independently.
+    const taskA = createTask({ slug: 'rec-a', title: 'REC-A', cwd: '/rec-a' })
+    const taskB = createTask({ slug: 'rec-b', title: 'REC-B', cwd: '/rec-b' })
 
     // Dead PID + session_id → should become 'pending' (resume path)
-    const run1 = createStageRun({ taskId: task.id, stage: 'implementation' })
+    const run1 = createStageRun({ taskId: taskA.id, stage: 'implementation' })
     updateStageRun(run1.id, { status: 'running', sessionId: 'sess-1', pid: 2147483647 })
 
     // Dead PID + no session → should become 'failed'
-    const run2 = createStageRun({ taskId: task.id, stage: 'self_review' })
+    const run2 = createStageRun({ taskId: taskB.id, stage: 'self_review' })
     updateStageRun(run2.id, { status: 'running', pid: 2147483647 })
 
     const o = new PipelineOrchestrator(10000)
     o.start()
 
-    const refreshedRun1 = getLatestStageRun(task.id, 'implementation')
-    const refreshedRun2 = getLatestStageRun(task.id, 'self_review')
+    const refreshedRun1 = getLatestStageRun(taskA.id, 'implementation')
+    const refreshedRun2 = getLatestStageRun(taskB.id, 'self_review')
     expect(refreshedRun1?.status).toBe('pending')
     expect(refreshedRun2?.status).toBe('failed')
 
-    const audit = listAuditForTask(task.id)
-    expect(audit.filter(a => a.action === 'recovery_decision')).toHaveLength(2)
+    const auditA = listAuditForTask(taskA.id)
+    const auditB = listAuditForTask(taskB.id)
+    expect(auditA.filter(a => a.action === 'recovery_decision')).toHaveLength(1)
+    expect(auditB.filter(a => a.action === 'recovery_decision')).toHaveLength(1)
     o.stop()
   })
 })

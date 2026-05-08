@@ -553,6 +553,13 @@ function runMigrations(db: Database): void {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(6, new Date().toISOString())
   }
+
+  migrateV7OneRunningRunPerTask(db)
+
+  if ((version.v ?? 0) < 7) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(7, new Date().toISOString())
+  }
 }
 
 /**
@@ -569,6 +576,57 @@ function migrateV6LastGrantAt(db: Database): void {
   const cols = db.prepare('PRAGMA table_info(stage_runs)').all() as Array<{ name: string }>
   if (!cols.some(c => c.name === 'last_grant_at'))
     db.run('ALTER TABLE stage_runs ADD COLUMN last_grant_at TEXT')
+}
+
+/**
+ * Defense-in-depth against multi-spawn cascades: a partial unique index
+ * enforcing "at most one stage_run per task with status='running'" at the
+ * DB level, complementing the runtime re-entry guard in
+ * `runProgressTaskLocked` and the per-task taskLocks serialization.
+ *
+ * The index is partial (`WHERE status='running'`) so it does not constrain
+ * the dozens of historical `done`/`failed` rows that accumulate per task.
+ * Audited safe against every transition that creates or flips a stage_run:
+ *
+ *   - `runProgressTaskLocked` (pending → running): wrapped in
+ *     per-task lock + re-entry guard rejects flip if another run is
+ *     already running with a live PID.
+ *   - `iterate` transition: flips OLD → done BEFORE creating NEW pending,
+ *     all inside applyTransition's db.transaction. NEW only flips to
+ *     running on the next progressTask call.
+ *   - `retry` endpoint: creates NEW pending only when previous run is
+ *     terminal.
+ *   - `async_running` transition: keeps the EXISTING run's status at
+ *     running; never inserts a new row.
+ *
+ * If a future code path violates the invariant, SQLite throws
+ * `SQLITE_CONSTRAINT_UNIQUE` instead of letting two parallel agents burn
+ * tokens on the same stage. Idempotent: `IF NOT EXISTS` makes re-runs a
+ * no-op on already-migrated DBs.
+ *
+ * Pre-flight check: count any existing rows that would violate the index
+ * BEFORE creating it, so a corrupt legacy DB fails loud at migration time
+ * rather than silently corrupting the next runtime spawn.
+ */
+function migrateV7OneRunningRunPerTask(db: Database): void {
+  const violators = db
+    .prepare(
+      `SELECT task_id, COUNT(*) AS n
+       FROM stage_runs WHERE status = 'running'
+       GROUP BY task_id HAVING n > 1`,
+    )
+    .all() as Array<{ task_id: string, n: number }>
+  if (violators.length > 0) {
+    throw new Error(
+      `[migrateV7] cannot create unique-running index — ${violators.length} task(s) already have multiple running stage_runs:`
+      + ` ${violators.map(v => `${v.task_id} (${v.n})`).join(', ')}.`
+      + ' Resolve duplicates manually before restarting (mark stale rows failed).',
+    )
+  }
+  db.prepare(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_runs_one_running
+     ON stage_runs(task_id) WHERE status = 'running'`,
+  ).run()
 }
 
 /**

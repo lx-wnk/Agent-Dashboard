@@ -292,6 +292,34 @@ describe('stageRunsRepo', () => {
     const fetched = findStageRunBySessionId(run.sessionId || '') || getLatestStageRun(task.id, 'self_review')
     expect(fetched?.output).toEqual({ findings: ['a', 'b'], score: 0.9 })
   })
+
+  // V7 partial unique index defense-in-depth (one running stage_run per task).
+  it('rejects flipping a second stage_run to running for the same task', () => {
+    const task = createTask({ slug: 'urun', title: 'URUN', cwd: '/u' })
+    const r1 = createStageRun({ taskId: task.id, stage: 'implementation', iteration: 0 })
+    const r2 = createStageRun({ taskId: task.id, stage: 'implementation', iteration: 1 })
+    updateStageRun(r1.id, { status: 'running' })
+    expect(() => updateStageRun(r2.id, { status: 'running' })).toThrow(/UNIQUE|constraint/i)
+  })
+
+  it('allows the iterate ordering: old → done BEFORE new → running', () => {
+    const task = createTask({ slug: 'iter', title: 'ITER', cwd: '/i' })
+    const r1 = createStageRun({ taskId: task.id, stage: 'implementation', iteration: 0 })
+    updateStageRun(r1.id, { status: 'running' })
+    // iterate flow: flip OLD to done THEN create+flip NEW
+    updateStageRun(r1.id, { status: 'done' })
+    const r2 = createStageRun({ taskId: task.id, stage: 'implementation', iteration: 1 })
+    expect(() => updateStageRun(r2.id, { status: 'running' })).not.toThrow()
+  })
+
+  it('allows running runs across DIFFERENT tasks (partial index is task-scoped)', () => {
+    const t1 = createTask({ slug: 'urun-a', title: 'A', cwd: '/a' })
+    const t2 = createTask({ slug: 'urun-b', title: 'B', cwd: '/b' })
+    const r1 = createStageRun({ taskId: t1.id, stage: 'implementation' })
+    const r2 = createStageRun({ taskId: t2.id, stage: 'implementation' })
+    updateStageRun(r1.id, { status: 'running' })
+    expect(() => updateStageRun(r2.id, { status: 'running' })).not.toThrow()
+  })
 })
 
 describe('permissionsRepo', () => {
@@ -778,9 +806,9 @@ describe('legacy DB migration', () => {
     expect(audit.action).toBe('implementation_spawned')
     expect(audit.details).toBe('{"from":"konzept","to":"umsetzung"}')
 
-    // schema_version bumped to current head (V6 = last_grant_at column on stage_runs).
+    // schema_version bumped to current head (V7 = unique-running partial index on stage_runs).
     const version = db.prepare(`SELECT MAX(version) as v FROM schema_version`).get() as { v: number }
-    expect(version.v).toBe(6)
+    expect(version.v).toBe(7)
 
     // V6 must have added last_grant_at to stage_runs.
     const srCols = db.prepare(`PRAGMA table_info(stage_runs)`).all() as Array<{ name: string }>
@@ -790,6 +818,6 @@ describe('legacy DB migration', () => {
     closeDb()
     const reopened = getDb()
     const versionAgain = reopened.prepare(`SELECT MAX(version) as v FROM schema_version`).get() as { v: number }
-    expect(versionAgain.v).toBe(6)
+    expect(versionAgain.v).toBe(7)
   })
 })

@@ -78,6 +78,11 @@ CREATE INDEX IF NOT EXISTS idx_stage_runs_status ON stage_runs(status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_runs_session ON stage_runs(session_id) WHERE session_id IS NOT NULL;
 -- Composite index for getLatestStageRun hot path (task_id, stage, iteration DESC)
 CREATE INDEX IF NOT EXISTS idx_stage_runs_latest ON stage_runs(task_id, stage, iteration DESC);
+-- V7 defense-in-depth: at most one running stage_run per task. Complements
+-- the runtime re-entry guard + per-task lock. Catches future code paths
+-- that bypass orchestrator serialization.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_runs_one_running
+  ON stage_runs(task_id) WHERE status = 'running';
 
 -- Task-scoped permissions (both pre-approved and runtime-granted)
 CREATE TABLE IF NOT EXISTS task_permissions (
