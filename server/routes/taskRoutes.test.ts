@@ -475,6 +475,347 @@ describe('permission request resolution', () => {
   })
 })
 
+describe('permission-requests/bulk-resolve', () => {
+  it('rejects invalid outcome', async () => {
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'br1',
+      title: 'BR1',
+      cwd: '/br1',
+    })
+    const { createStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
+    const { status } = await api('POST', '/permission-requests/bulk-resolve', {
+      stageRunId: run.id,
+      outcome: 'maybe',
+    })
+    expect(status).toBe(400)
+  })
+
+  it('returns 404 for unknown stage_run', async () => {
+    const { status } = await api('POST', '/permission-requests/bulk-resolve', {
+      stageRunId: 'does-not-exist',
+      outcome: 'granted',
+    })
+    expect(status).toBe(404)
+  })
+
+  it('reports zero counts when no pendings exist', async () => {
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'br-empty',
+      title: 'EMPTY',
+      cwd: '/x',
+    })
+    const { createStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
+    const { status, data } = await api<{ resolved: number, granted: number }>(
+      'POST',
+      '/permission-requests/bulk-resolve',
+      { stageRunId: run.id, outcome: 'granted' },
+    )
+    expect(status).toBe(200)
+    expect(data.resolved).toBe(0)
+    expect(data.granted).toBe(0)
+  })
+
+  it('grants every pending in one transaction and persists task_permissions', async () => {
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'br-grant',
+      title: 'BR-GRANT',
+      cwd: '/g',
+    })
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
+    updateStageRun(run.id, { status: 'awaiting_user', sessionId: 'sess-bulk' })
+
+    await api('POST', '/permission-requests', {
+      stageRunId: run.id,
+      tool: 'Bash',
+      pattern: 'pnpm test*',
+    })
+    await api('POST', '/permission-requests', {
+      stageRunId: run.id,
+      tool: 'Bash',
+      pattern: 'pnpm lint*',
+    })
+    await api('POST', '/permission-requests', {
+      stageRunId: run.id,
+      tool: 'WebFetch',
+    })
+
+    const { status, data } = await api<{ resolved: number, granted: number, grantedTools: Array<{ tool: string }> }>(
+      'POST',
+      '/permission-requests/bulk-resolve',
+      { stageRunId: run.id, outcome: 'granted' },
+    )
+
+    expect(status).toBe(200)
+    expect(data.resolved).toBe(3)
+    expect(data.granted).toBe(3)
+    expect(data.grantedTools).toHaveLength(3)
+
+    const perms = await api<unknown[]>('GET', `/tasks/${task.id}/permissions`)
+    expect(perms.data.length).toBe(3)
+
+    // Pending list should now be empty
+    const pending = await api<unknown[]>('GET', `/tasks/${task.id}/permission-requests`)
+    expect(pending.data.length).toBe(0)
+  })
+
+  it('makes ONE progressTask call with combined bulk handoff note (no per-grant cascade)', async () => {
+    const spy = vi.spyOn(orchestrator, 'progressTask')
+    try {
+      const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+        slug: 'br-once',
+        title: 'BR-ONCE',
+        cwd: '/o',
+      })
+      const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+      const run = createStageRun({ taskId: task.id, stage: 'implementation' })
+      updateStageRun(run.id, { status: 'awaiting_user', sessionId: 'sess-once' })
+
+      await api('POST', '/permission-requests', { stageRunId: run.id, tool: 'Bash', pattern: 'pnpm test*' })
+      await api('POST', '/permission-requests', { stageRunId: run.id, tool: 'Write' })
+
+      await api('POST', '/permission-requests/bulk-resolve', {
+        stageRunId: run.id,
+        outcome: 'granted',
+      })
+
+      expect(spy).toHaveBeenCalledTimes(1)
+      const [, opts] = spy.mock.calls[0]!
+      expect(opts?.resumeSessionId).toBe('sess-once')
+      const note = opts?.userAdditionalPrompt as string
+      expect(note).toContain('[PERMISSIONS GRANTED — BULK]')
+      expect(note).toContain('Bash (pnpm test*)')
+      expect(note).toContain('Write')
+      expect(note).toMatch(/forward-scan|scan ALL/i)
+    }
+    finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('denies every pending without persisting task_permissions and calls resumeFromUser', async () => {
+    const spy = vi.spyOn(orchestrator, 'resumeFromUser')
+    try {
+      const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+        slug: 'br-deny',
+        title: 'BR-DENY',
+        cwd: '/d',
+      })
+      const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+      const run = createStageRun({ taskId: task.id, stage: 'implementation' })
+      updateStageRun(run.id, { status: 'awaiting_user' })
+
+      await api('POST', '/permission-requests', { stageRunId: run.id, tool: 'Bash', pattern: 'rm -rf*' })
+      await api('POST', '/permission-requests', { stageRunId: run.id, tool: 'Bash', pattern: 'curl *' })
+
+      const { status, data } = await api<{ denied: number, granted: number }>(
+        'POST',
+        '/permission-requests/bulk-resolve',
+        { stageRunId: run.id, outcome: 'denied' },
+      )
+
+      expect(status).toBe(200)
+      expect(data.denied).toBe(2)
+      expect(data.granted).toBe(0)
+
+      const perms = await api<unknown[]>('GET', `/tasks/${task.id}/permissions`)
+      expect(perms.data.length).toBe(0)
+
+      expect(spy).toHaveBeenCalledOnce()
+    }
+    finally {
+      spy.mockRestore()
+    }
+  })
+})
+
+describe('progressTask lingering-pending gate', () => {
+  it('does not respawn when terminal stage_run still has pending permission_requests', async () => {
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'gate1',
+      title: 'GATE1',
+      cwd: '/g1',
+    })
+    forceStage(task.id, 'implementation')
+
+    // Register a fake agent-requiring handler. When the gate blocks, execute
+    // must NOT run. When the gate releases, execute runs once.
+    const execute = vi.fn(async () => ({ kind: 'wait_user' as const, reason: 'fake' }))
+    orchestrator.setHandler('implementation', {
+      stage: 'implementation',
+      requiresAgent: true,
+      execute,
+    })
+
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
+    await api('POST', '/permission-requests', {
+      stageRunId: run.id,
+      tool: 'Bash',
+      pattern: 'rm -rf *',
+    })
+    // Mark run failed — simulates the kill+restart cascade leaving siblings unresolved
+    updateStageRun(run.id, { status: 'failed', endedAt: new Date().toISOString() })
+
+    const result = await orchestrator.progressTask(task.id)
+
+    expect(result).toBeNull()
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('releases the gate once every pending on the terminal run is resolved', async () => {
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'gate2',
+      title: 'GATE2',
+      cwd: '/g2',
+    })
+    forceStage(task.id, 'implementation')
+
+    const execute = vi.fn(async () => ({ kind: 'wait_user' as const, reason: 'fake' }))
+    orchestrator.setHandler('implementation', {
+      stage: 'implementation',
+      requiresAgent: true,
+      execute,
+    })
+
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
+    updateStageRun(run.id, { status: 'awaiting_user' })
+    await api('POST', '/permission-requests', { stageRunId: run.id, tool: 'Write' })
+
+    // Bulk-deny clears every pending; mirror the failed shape afterward.
+    await api('POST', '/permission-requests/bulk-resolve', {
+      stageRunId: run.id,
+      outcome: 'denied',
+    })
+    updateStageRun(run.id, { status: 'failed', endedAt: new Date().toISOString() })
+
+    await orchestrator.progressTask(task.id)
+    expect(execute).toHaveBeenCalled()
+  })
+
+  it('blocks zombie awaiting_user (dead PID) with pending permission_requests', async () => {
+    // Zombie scenario: agent crashed mid-permission-bridge, leaving the run
+    // status as awaiting_user with a dead PID. sweepAwaitingUserRuns will
+    // reap it on its next tick, but progressTask is synchronous — without
+    // covering this branch, a synchronous resolve+progressTask path would
+    // build iter+1 on top of unresolved sibling pendings before the sweep
+    // runs. The gate must catch this race.
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'gate3',
+      title: 'GATE3',
+      cwd: '/g3',
+    })
+    forceStage(task.id, 'implementation')
+
+    const execute = vi.fn(async () => ({ kind: 'wait_user' as const, reason: 'fake' }))
+    orchestrator.setHandler('implementation', {
+      stage: 'implementation',
+      requiresAgent: true,
+      execute,
+    })
+
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
+    updateStageRun(run.id, { status: 'awaiting_user', pid: null })
+    await api('POST', '/permission-requests', { stageRunId: run.id, tool: 'Write' })
+
+    const result = await orchestrator.progressTask(task.id)
+    expect(result).toBeNull()
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('does not block awaiting_user with live PID + pendings (re-entry guard owns it)', async () => {
+    // awaiting_user with a live PID is a still-alive agent paused on the
+    // channel bridge. The re-entry guard returns the existing run from
+    // ensureStageRun without re-invoking execute. Our gate must not fire
+    // here — that would short-circuit the re-entry path and skip the live
+    // PID check entirely.
+    const { data: task } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'gate4',
+      title: 'GATE4',
+      cwd: '/g4',
+    })
+    forceStage(task.id, 'implementation')
+
+    const execute = vi.fn(async () => ({ kind: 'wait_user' as const, reason: 'fake' }))
+    orchestrator.setHandler('implementation', {
+      stage: 'implementation',
+      requiresAgent: true,
+      execute,
+    })
+
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: task.id, stage: 'implementation' })
+    // process.pid is guaranteed alive — represents the live-bridge case.
+    updateStageRun(run.id, { status: 'awaiting_user', pid: process.pid })
+    await api('POST', '/permission-requests', { stageRunId: run.id, tool: 'Write' })
+
+    // re-entry guard returns the existing run without invoking execute, so
+    // we can't assert on a call count. Instead assert progressTask returns
+    // a stage_run (the existing one) rather than null (which would mean the
+    // gate blocked).
+    const result = await orchestrator.progressTask(task.id)
+    expect(result).not.toBeNull()
+    expect(execute).not.toHaveBeenCalled()
+  })
+})
+
+describe('enrichTask blockedByPendingPermissions flag', () => {
+  it('sets blockedByPendingPermissions=true when terminal run has pending requests', async () => {
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'flag1',
+      title: 'FLAG1',
+      cwd: '/f1',
+    })
+    forceStage(t.id, 'implementation')
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: t.id, stage: 'implementation' })
+    updateStageRun(run.id, { status: 'failed', endedAt: new Date().toISOString() })
+    await api('POST', '/permission-requests', { stageRunId: run.id, tool: 'Bash' })
+
+    const { data } = await api<{ blockedByPendingPermissions: boolean, needsUser: boolean }>(
+      'GET',
+      `/tasks/${t.id}`,
+    )
+    expect(data.blockedByPendingPermissions).toBe(true)
+    expect(data.needsUser).toBe(true)
+  })
+
+  it('sets blockedByPendingPermissions=true for zombie awaiting_user with pendings', async () => {
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'flag2',
+      title: 'FLAG2',
+      cwd: '/f2',
+    })
+    forceStage(t.id, 'implementation')
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: t.id, stage: 'implementation' })
+    updateStageRun(run.id, { status: 'awaiting_user', pid: null })
+    await api('POST', '/permission-requests', { stageRunId: run.id, tool: 'Bash' })
+
+    const { data } = await api<{ blockedByPendingPermissions: boolean }>('GET', `/tasks/${t.id}`)
+    expect(data.blockedByPendingPermissions).toBe(true)
+  })
+
+  it('sets blockedByPendingPermissions=false when no pendings linger', async () => {
+    const { data: t } = await api<{ id: string }>('POST', '/tasks', {
+      slug: 'flag3',
+      title: 'FLAG3',
+      cwd: '/f3',
+    })
+    forceStage(t.id, 'implementation')
+    const { createStageRun, updateStageRun } = await import('../db/stageRunsRepo.js')
+    const run = createStageRun({ taskId: t.id, stage: 'implementation' })
+    updateStageRun(run.id, { status: 'failed', endedAt: new Date().toISOString() })
+
+    const { data } = await api<{ blockedByPendingPermissions: boolean }>('GET', `/tasks/${t.id}`)
+    expect(data.blockedByPendingPermissions).toBe(false)
+  })
+})
+
 describe('pipeline config', () => {
   it('gets default and updates maxParallelOrchestrators', async () => {
     const { data: initial } = await api<{ maxParallelOrchestrators: number }>('GET', '/pipeline/config')

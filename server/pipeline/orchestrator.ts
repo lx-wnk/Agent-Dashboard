@@ -239,6 +239,47 @@ export class PipelineOrchestrator {
     if (handler.requiresAgent && !this.hasFreeRunnerSlot(task.id))
       return null
 
+    // Lingering-pending gate: when the most recent stage_run on the current
+    // stage is terminal (done/failed) but still has unresolved
+    // permission_requests attached, do NOT spawn a new run — wait for the
+    // user to clear them via the resolve / bulk-resolve endpoints.
+    //
+    // Without this gate, a single granted permission flips the run to
+    // `failed` and kicks off a fresh spawn while sibling pendings on the
+    // same dead run keep burning the user's attention budget across N
+    // independent kill+restart cascades. The bulk-resolve endpoint avoids
+    // this by design (one transaction, one restart) but legacy one-by-one
+    // resolution and any race against new agent-side requests can still
+    // produce lingering pendings — this gate is the defense-in-depth.
+    //
+    // We check `done`/`failed` (terminal) AND `awaiting_user` with a dead
+    // PID. The dead-PID awaiting_user case is a zombie that
+    // sweepAwaitingUserRuns will reap on its next tick — but the sweep is
+    // tick-driven while progressTask is synchronous, so without checking
+    // here a synchronous resolve+progressTask path would build iter+1 on
+    // top of unresolved pendings before the sweep runs. `awaiting_user`
+    // with a live PID is owned by the re-entry guard below;
+    // `pending`/`running` are non-terminal and don't need a respawn anyway.
+    if (handler.requiresAgent) {
+      const latestRunOnStage = getLatestStageRun(taskId, task.currentStage)
+      const isTerminal = !!latestRunOnStage
+        && (latestRunOnStage.status === 'failed' || latestRunOnStage.status === 'done')
+      const isZombieAwait = !!latestRunOnStage
+        && latestRunOnStage.status === 'awaiting_user'
+        && (latestRunOnStage.pid === null || !isPidAlive(latestRunOnStage.pid))
+      if (latestRunOnStage && (isTerminal || isZombieAwait)) {
+        const lingering = listPendingPermissionRequests(latestRunOnStage.id)
+        if (lingering.length > 0) {
+          consola.info(
+            `[orchestrator] progressTask blocked: ${lingering.length} pending permission_requests`
+            + ` on run ${latestRunOnStage.id} (status=${latestRunOnStage.status},`
+            + ` zombie=${isZombieAwait}); user must resolve them before respawn`,
+          )
+          return null
+        }
+      }
+    }
+
     const stageRun = this.ensureStageRun(task)
 
     // Re-entrancy guard: when an agent-driven stage already has a running

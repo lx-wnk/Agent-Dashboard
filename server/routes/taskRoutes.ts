@@ -129,19 +129,50 @@ export function buildPermissionGrantHandoffNote(input: {
   return `[PERMISSION GRANTED] You requested permission for "${toolStr}". It has been granted.${ordinal}\n\nBefore your next tool call, scan ALL remaining work in this stage and request_permission ONCE in a single bulk call with every additional tool/pattern you anticipate needing. Pre-granted entries auto-resolve silently; only genuinely new ones surface as ON HOLD. Do not request piecemeal — every missed tool restarts this stage.\n\nThen resume exactly where you left off.`
 }
 
+/**
+ * Bulk-grant variant of {@link buildPermissionGrantHandoffNote}. The user
+ * resolved N pending permission_requests in one click; the resume prompt
+ * lists every grant so the agent can attribute the unblock and forward-scan
+ * with full awareness of what was just unlocked.
+ *
+ * Exported for unit-testing the wording.
+ */
+export function buildBulkPermissionGrantHandoffNote(input: {
+  grantedTools: Array<{ tool: string, pattern: string | null }>
+  cycleCount: number
+}): string {
+  const { grantedTools, cycleCount } = input
+  const list = grantedTools
+    .map(g => g.pattern ? `  - ${g.tool} (${g.pattern})` : `  - ${g.tool}`)
+    .join('\n')
+  const ordinal = cycleCount >= 2
+    ? `\n\nThis is permission cycle #${cycleCount} on this stage_run — your prior request_permission call did not cover everything you actually needed. STOP and forward-scan the entire remaining plan now.`
+    : ''
+  return `[PERMISSIONS GRANTED — BULK] You requested ${grantedTools.length} permission${grantedTools.length === 1 ? '' : 's'} and the user granted all of them in a single decision:\n${list}${ordinal}\n\nBefore your next tool call, scan ALL remaining work in this stage and request_permission ONCE in a single bulk call with every additional tool/pattern you anticipate needing. Pre-granted entries auto-resolve silently; only genuinely new ones surface as ON HOLD. Do not request piecemeal — every missed tool restarts this stage.\n\nThen resume exactly where you left off.`
+}
+
 export function enrichTask(task: PipelineTask): PipelineTask {
   const latest = getLatestStageRunForTask(task.id)
   const latestBelongsToCurrent = latest?.stage === task.currentStage
   const latestStatus = latestBelongsToCurrent ? (latest?.status ?? null) : null
   const currentIteration = latestBelongsToCurrent ? (latest?.iteration ?? 0) : 0
-  // A `running` stage run that has open permission requests is effectively
-  // user-blocked even though its DB status hasn't flipped yet — surface it
-  // in the Needs You column so the user sees the pending decision.
-  const hasPendingPermissions
-    = latestBelongsToCurrent
-      && latestStatus === 'running'
+  // Query the pending permission_requests count once and reuse it for both
+  // hasPendingPermissions (surfaces a running task as "needs user") and
+  // blockedByPendingPermissions (surfaces a terminal/zombie task whose
+  // respawn is being held by the orchestrator's lingering-pending gate).
+  // The query is mirrored from runProgressTaskLocked so the UI flag tracks
+  // the gate's actual block condition exactly.
+  const pendingPermsCount
+    = latestBelongsToCurrent && latest != null
+      ? listPendingPermissionRequests(latest.id).length
+      : 0
+  const hasPendingPermissions = latestStatus === 'running' && pendingPermsCount > 0
+  const isTerminal = latestStatus === 'failed' || latestStatus === 'done'
+  const isZombieAwait
+    = latestStatus === 'awaiting_user'
       && latest != null
-      && listPendingPermissionRequests(latest.id).length > 0
+      && (latest.pid === null || !isPidAlive(latest.pid))
+  const blockedByPendingPermissions = (isTerminal || isZombieAwait) && pendingPermsCount > 0
   const needsUser
     = USER_WAIT_STAGES.has(task.currentStage)
       || latestStatus === 'awaiting_user'
@@ -151,6 +182,7 @@ export function enrichTask(task: PipelineTask): PipelineTask {
       // the Needs You column with Retry + Analyze actions.
       || latestStatus === 'failed'
       || hasPendingPermissions
+      || blockedByPendingPermissions
   // Live session surfacing: the modal's "follow along" pane needs the
   // session_id of whichever stage_run the user would most like to watch.
   // Prefer a currently-running run on the current stage; otherwise fall
@@ -165,6 +197,7 @@ export function enrichTask(task: PipelineTask): PipelineTask {
     currentIteration,
     activeSessionId,
     activePid,
+    blockedByPendingPermissions,
   }
 }
 
@@ -181,20 +214,35 @@ export function enrichTasksBulk(tasks: PipelineTask[]): PipelineTask[] {
     const latestBelongsToCurrent = latest?.stage === task.currentStage
     const latestStatus = latestBelongsToCurrent ? (latest?.status ?? null) : null
     const currentIteration = latestBelongsToCurrent ? (latest?.iteration ?? 0) : 0
-    const hasPendingPermissions
-      = latestBelongsToCurrent
-        && latestStatus === 'running'
+    const pendingPermsCount
+      = latestBelongsToCurrent && latest != null
+        ? listPendingPermissionRequests(latest.id).length
+        : 0
+    const hasPendingPermissions = latestStatus === 'running' && pendingPermsCount > 0
+    const isTerminal = latestStatus === 'failed' || latestStatus === 'done'
+    const isZombieAwait
+      = latestStatus === 'awaiting_user'
         && latest != null
-        && listPendingPermissionRequests(latest.id).length > 0
+        && (latest.pid === null || !isPidAlive(latest.pid))
+    const blockedByPendingPermissions = (isTerminal || isZombieAwait) && pendingPermsCount > 0
     const needsUser
       = USER_WAIT_STAGES.has(task.currentStage)
         || latestStatus === 'awaiting_user'
         || latestStatus === 'on_hold'
         || latestStatus === 'failed'
         || hasPendingPermissions
+        || blockedByPendingPermissions
     const activeSessionId = latest?.sessionId ?? null
     const activePid = latest?.status === 'running' ? (latest?.pid ?? null) : null
-    return { ...task, needsUser, latestStageRunStatus: latestStatus, currentIteration, activeSessionId, activePid }
+    return {
+      ...task,
+      needsUser,
+      latestStageRunStatus: latestStatus,
+      currentIteration,
+      activeSessionId,
+      activePid,
+      blockedByPendingPermissions,
+    }
   })
 }
 
@@ -1190,6 +1238,150 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     broadcastEnrichedUpdate(run.taskId)
     res.json(resolved)
+  })
+
+  /**
+   * Bulk-resolve every pending permission_request on a single stage_run with
+   * the same outcome (granted | denied). Collapses the user-grants-many-
+   * permissions cascade into ONE transaction, ONE SIGTERM, ONE progressTask
+   * invocation:
+   *
+   *   - all permission_request rows resolved in a single DB transaction
+   *   - on grant: each entry persisted as a task_permission row in the same
+   *     transaction so the next spawned agent's settings.json picks them up
+   *   - the awaiting_user agent is SIGTERMed exactly once (if applicable)
+   *   - the run is marked failed exactly once with a "restarting after bulk
+   *     permission grant" output stamp
+   *   - exactly one progressTask call with a combined handoff note listing
+   *     every grant
+   *
+   * Body: { stageRunId: string, outcome: 'granted' | 'denied' }
+   * Response: { resolved: number, granted: number, denied: number,
+   *             grantedTools: Array<{tool, pattern}> }
+   */
+  mutationRouter.post('/permission-requests/bulk-resolve', async (req, res) => {
+    const { stageRunId, outcome } = req.body ?? {}
+    if (!stageRunId || typeof stageRunId !== 'string') {
+      res.status(400).json({ error: 'stageRunId is required' })
+      return
+    }
+    if (outcome !== 'granted' && outcome !== 'denied') {
+      res.status(400).json({ error: 'outcome must be granted|denied' })
+      return
+    }
+    const run = getStageRunById(stageRunId)
+    if (!run) {
+      res.status(404).json({ error: 'stage run not found' })
+      return
+    }
+    const task = getTaskById(run.taskId)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'stage run not found' })
+      return
+    }
+
+    const pending = listPendingPermissionRequests(stageRunId)
+    if (pending.length === 0) {
+      res.json({ resolved: 0, granted: 0, denied: 0, grantedTools: [] })
+      return
+    }
+
+    // Kill the idle stage agent BEFORE the DB transaction — process signaling
+    // is not a DB operation and must stay outside the atomic write block.
+    const shouldRestartRun = outcome === 'granted' && run.status === 'awaiting_user'
+    if (shouldRestartRun && run.pid !== null && run.pid > 1) {
+      try {
+        process.kill(run.pid, 'SIGTERM')
+      }
+      catch { /* already dead */ }
+    }
+
+    const grantedTools: Array<{ tool: string, pattern: string | null }> = []
+    const nowIso = new Date().toISOString()
+    const db = getDb()
+    db.transaction(() => {
+      for (const r of pending) {
+        resolvePermissionRequest(r.id, outcome)
+        if (outcome === 'granted') {
+          createTaskPermission({
+            taskId: run.taskId,
+            tool: r.tool,
+            pattern: r.pattern,
+            granted: true,
+            preApproved: false,
+            decidedBy: 'user',
+          })
+          grantedTools.push({ tool: r.tool, pattern: r.pattern })
+        }
+      }
+      // Stamp last_grant_at so sweepAwaitingUserRuns resets its wallclock budget.
+      // Same rationale as the single-resolve handler: any user activity is proof
+      // the agent is not busy-waiting in a polling loop.
+      if (run.status === 'awaiting_user') {
+        updateStageRun(run.id, { lastGrantAt: nowIso })
+      }
+      if (shouldRestartRun) {
+        updateStageRun(run.id, {
+          status: 'failed',
+          output: { error: 'restarting after bulk permission grant' },
+          endedAt: nowIso,
+        })
+        appendAudit({
+          taskId: run.taskId,
+          actor: 'user',
+          action: 'permission_bulk_granted_restart',
+          details: {
+            stageRunId: run.id,
+            count: pending.length,
+            tools: grantedTools,
+          },
+        })
+      }
+      else {
+        appendAudit({
+          taskId: run.taskId,
+          actor: 'user',
+          action: outcome === 'granted' ? 'permission_bulk_granted' : 'permission_bulk_denied',
+          details: {
+            stageRunId: run.id,
+            count: pending.length,
+            tools: outcome === 'granted'
+              ? grantedTools
+              : pending.map(p => ({ tool: p.tool, pattern: p.pattern })),
+          },
+        })
+      }
+    })()
+
+    if (outcome === 'granted') {
+      if (shouldRestartRun) {
+        const cycleCount = countPermissionRequestsForStageRun(run.id)
+        const handoffNote = buildBulkPermissionGrantHandoffNote({
+          grantedTools,
+          cycleCount,
+        })
+        await deps.orchestrator.progressTask(run.taskId, {
+          resumeSessionId: run.sessionId ?? undefined,
+          userAdditionalPrompt: handoffNote,
+        })
+      }
+      else {
+        await deps.orchestrator.resumeFromUser(run.taskId)
+      }
+    }
+    else {
+      // outcome === 'denied' — leave the run in awaiting_user; the agent
+      // will see the denials via channel and either replan or give up.
+      await deps.orchestrator.resumeFromUser(run.taskId)
+    }
+
+    broadcastEnrichedUpdate(run.taskId)
+    res.json({
+      resolved: pending.length,
+      granted: outcome === 'granted' ? pending.length : 0,
+      denied: outcome === 'denied' ? pending.length : 0,
+      grantedTools,
+    })
   })
 
   // ─── Task dependencies ────────────────

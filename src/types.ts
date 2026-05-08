@@ -161,6 +161,12 @@ export interface PipelineTask {
   // True when blocked AND every blocking prereq is terminal (done/cancelled)
   // but reached the wrong stage — dependency can never be satisfied.
   isUnsatisfiable?: boolean
+  // True when the latest stage_run on the current stage is terminal
+  // (done/failed) OR a zombie awaiting_user (dead PID), AND it still has
+  // unresolved permission_requests. The orchestrator's lingering-pending
+  // gate refuses to spawn a new run while this is true; surface in UI so
+  // the user sees WHY their task is parked.
+  blockedByPendingPermissions?: boolean
 }
 
 export interface StageRun {

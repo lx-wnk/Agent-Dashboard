@@ -5,6 +5,7 @@ import { useAgents } from '../composables/useAgents'
 import {
   addTaskDependency,
   analyzeTask,
+  bulkResolvePermissionRequests,
   cancelTask,
   fetchDependencies,
   fetchDependents,
@@ -262,6 +263,26 @@ async function onResolve(req: PermissionRequest, outcome: 'granted' | 'denied') 
   await handleAction(() => resolvePermissionRequest(req.id, outcome))
 }
 
+// Pending requests grouped by stage_run so the bulk-resolve buttons can
+// dispatch one bulk-resolve call per stage_run. In practice every awaiting_user
+// run has exactly one group, but the data model permits N pendings across
+// multiple runs (e.g. legacy stale entries) so we still iterate cleanly.
+const pendingByStageRun = computed<Array<{ stageRunId: string, requests: PermissionRequest[] }>>(() => {
+  const groups = new Map<string, PermissionRequest[]>()
+  for (const r of pendingRequests.value) {
+    const arr = groups.get(r.stageRunId) ?? []
+    arr.push(r)
+    groups.set(r.stageRunId, arr)
+  }
+  return Array.from(groups.entries()).map(([stageRunId, requests]) => ({ stageRunId, requests }))
+})
+
+async function onResolveAll(stageRunId: string, outcome: 'granted' | 'denied') {
+  await handleAction(async () => {
+    await bulkResolvePermissionRequests(stageRunId, outcome)
+  })
+}
+
 async function onGrantPermission() {
   const tool = newPermTool.value.trim()
   if (!tool) {
@@ -402,46 +423,87 @@ const runtime = computed(() => {
       <div class="flex-1 overflow-y-auto">
         <!-- Overview tab -->
         <section v-if="activeTab === 'overview'" class="flex-1 overflow-y-auto p-5 flex flex-col gap-4 min-h-0">
+          <!-- Lingering-pending gate banner: orchestrator refuses to spawn
+               a fresh run while pendings linger on the previous run. Tells
+               the user WHY the task is parked (otherwise looks "stuck"). -->
+          <div
+            v-if="task.blockedByPendingPermissions"
+            class="bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-700/60 rounded-md px-3.5 py-3"
+          >
+            <h3 class="text-[11px] uppercase tracking-[0.5px] text-orange-700 dark:text-orange-400 font-semibold mb-1.5 flex items-center gap-1.5">
+              <span aria-hidden="true">⏸</span> Respawn blocked
+            </h3>
+            <p class="text-[12px] text-slate-700 dark:text-slate-300 leading-relaxed">
+              The previous stage run still has unresolved permission requests. Resolve them below — the orchestrator will spawn a fresh run automatically once the queue is clear.
+            </p>
+          </div>
           <!-- Pending permission requests banner -->
           <div
             v-if="pendingRequests.length > 0"
             class="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-700/60 rounded-md px-3.5 py-3"
           >
             <h3 class="text-[11px] uppercase tracking-[0.5px] text-yellow-700 dark:text-yellow-400 font-semibold mb-2 flex items-center gap-1.5">
-              <span aria-hidden="true">⚠</span> Waiting for Permission
+              <span aria-hidden="true">⚠</span> Waiting for Permission ({{ pendingRequests.length }})
             </h3>
             <div
-              v-for="req in pendingRequests"
-              :key="req.id"
-              class="border-t border-yellow-200 dark:border-yellow-800/50 first:border-t-0 first:pt-0 pt-2 mt-2 first:mt-0"
+              v-for="group in pendingByStageRun"
+              :key="group.stageRunId"
+              class="mb-3 last:mb-0"
             >
-              <div class="flex items-baseline gap-2 flex-wrap">
-                <strong class="text-sm text-slate-900 dark:text-slate-100">{{ req.tool }}</strong>
-                <span
-                  v-if="req.pattern"
-                  class="font-mono text-xs text-slate-700 dark:text-slate-300 bg-yellow-100/60 dark:bg-yellow-900/40 px-1.5 py-px rounded"
-                >{{ req.pattern }}</span>
-              </div>
-              <p v-if="req.reason" class="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                {{ req.reason }}
-              </p>
-              <div class="flex gap-1.5 mt-2">
+              <div
+                v-if="group.requests.length > 1"
+                class="flex gap-1.5 mb-2 pb-2 border-b border-yellow-200 dark:border-yellow-800/50"
+              >
                 <AppButton
                   variant="primary"
                   size="sm"
                   :disabled="isActing"
-                  @click="onResolve(req, 'granted')"
+                  @click="onResolveAll(group.stageRunId, 'granted')"
                 >
-                  Grant
+                  Grant All ({{ group.requests.length }})
                 </AppButton>
                 <AppButton
                   variant="danger"
                   size="sm"
                   :disabled="isActing"
-                  @click="onResolve(req, 'denied')"
+                  @click="onResolveAll(group.stageRunId, 'denied')"
                 >
-                  Deny
+                  Deny All ({{ group.requests.length }})
                 </AppButton>
+              </div>
+              <div
+                v-for="req in group.requests"
+                :key="req.id"
+                class="border-t border-yellow-200 dark:border-yellow-800/50 first:border-t-0 first:pt-0 pt-2 mt-2 first:mt-0"
+              >
+                <div class="flex items-baseline gap-2 flex-wrap">
+                  <strong class="text-sm text-slate-900 dark:text-slate-100">{{ req.tool }}</strong>
+                  <span
+                    v-if="req.pattern"
+                    class="font-mono text-xs text-slate-700 dark:text-slate-300 bg-yellow-100/60 dark:bg-yellow-900/40 px-1.5 py-px rounded"
+                  >{{ req.pattern }}</span>
+                </div>
+                <p v-if="req.reason" class="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                  {{ req.reason }}
+                </p>
+                <div class="flex gap-1.5 mt-2">
+                  <AppButton
+                    variant="primary"
+                    size="sm"
+                    :disabled="isActing"
+                    @click="onResolve(req, 'granted')"
+                  >
+                    Grant
+                  </AppButton>
+                  <AppButton
+                    variant="danger"
+                    size="sm"
+                    :disabled="isActing"
+                    @click="onResolve(req, 'denied')"
+                  >
+                    Deny
+                  </AppButton>
+                </div>
               </div>
             </div>
           </div>
@@ -715,33 +777,56 @@ const runtime = computed(() => {
         <section v-if="activeTab === 'permissions'" class="p-5">
           <div v-if="pendingRequests.length > 0" class="mb-4">
             <h3 class="text-[11px] uppercase text-slate-400 dark:text-slate-600 mb-2 tracking-[0.5px]">
-              Pending runtime requests
+              Pending runtime requests ({{ pendingRequests.length }})
             </h3>
-            <div v-for="req in pendingRequests" :key="req.id" class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded-md p-3 mb-2">
-              <div class="flex gap-2.5 items-baseline">
-                <strong>{{ req.tool }}</strong>
-                <span v-if="req.pattern" class="font-mono text-xs text-slate-900 dark:text-slate-100">{{ req.pattern }}</span>
-              </div>
-              <div v-if="req.reason" class="text-[11px] text-slate-400 dark:text-slate-600 my-1">
-                {{ req.reason }}
-              </div>
-              <div class="flex gap-1.5 mt-1.5">
+            <div v-for="group in pendingByStageRun" :key="group.stageRunId" class="mb-3 last:mb-0">
+              <div
+                v-if="group.requests.length > 1"
+                class="flex gap-1.5 mb-2"
+              >
                 <AppButton
                   variant="primary"
                   size="sm"
                   :disabled="isActing"
-                  @click="onResolve(req, 'granted')"
+                  @click="onResolveAll(group.stageRunId, 'granted')"
                 >
-                  Grant
+                  Grant All ({{ group.requests.length }})
                 </AppButton>
                 <AppButton
                   variant="danger"
                   size="sm"
                   :disabled="isActing"
-                  @click="onResolve(req, 'denied')"
+                  @click="onResolveAll(group.stageRunId, 'denied')"
                 >
-                  Deny
+                  Deny All ({{ group.requests.length }})
                 </AppButton>
+              </div>
+              <div v-for="req in group.requests" :key="req.id" class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded-md p-3 mb-2">
+                <div class="flex gap-2.5 items-baseline">
+                  <strong>{{ req.tool }}</strong>
+                  <span v-if="req.pattern" class="font-mono text-xs text-slate-900 dark:text-slate-100">{{ req.pattern }}</span>
+                </div>
+                <div v-if="req.reason" class="text-[11px] text-slate-400 dark:text-slate-600 my-1">
+                  {{ req.reason }}
+                </div>
+                <div class="flex gap-1.5 mt-1.5">
+                  <AppButton
+                    variant="primary"
+                    size="sm"
+                    :disabled="isActing"
+                    @click="onResolve(req, 'granted')"
+                  >
+                    Grant
+                  </AppButton>
+                  <AppButton
+                    variant="danger"
+                    size="sm"
+                    :disabled="isActing"
+                    @click="onResolve(req, 'denied')"
+                  >
+                    Deny
+                  </AppButton>
+                </div>
               </div>
             </div>
           </div>
