@@ -24,3 +24,9 @@ package-lock.json
 
 # Local settings contain tokens — never commit
 .claude/settings.local.json
+
+# local docs
+/docs/local
+
+# Per-branch local todo / handoff scratch — not for shared history
+/TODOS.md

@@ -22,19 +22,27 @@ export interface UpdateStageRunInput {
   output?: Record<string, unknown> | null
   tokensUsed?: number
   costCents?: number
+  lastGrantAt?: string | null
 }
 
 export function createStageRun(input: CreateStageRunInput, db: Database = getDb()): StageRun {
   const id = randomUUID()
+  // `started_at` is stamped at row creation so the orphan reaper's pending-stale
+  // branch (orchestrator.ts `sweepOrphanRuns` case 3) has a timestamp to compare
+  // against; the running-promotion transition overwrites this with the actual
+  // run start, so display logic that reads `startedAt` for "started X ago" still
+  // shows run duration once the row leaves `pending`.
+  const now = new Date().toISOString()
   db.prepare(`
-    INSERT INTO stage_runs (id, task_id, stage, session_name, status, iteration)
-    VALUES (@id, @task_id, @stage, @session_name, 'pending', @iteration)
+    INSERT INTO stage_runs (id, task_id, stage, session_name, status, iteration, started_at)
+    VALUES (@id, @task_id, @stage, @session_name, 'pending', @iteration, @started_at)
   `).run({
     id,
     task_id: input.taskId,
     stage: input.stage,
     session_name: input.sessionName ?? null,
     iteration: input.iteration ?? 0,
+    started_at: now,
   })
   return getStageRunById(id, db)!
 }
@@ -74,8 +82,8 @@ export function getLatestStageRun(
  *
  * The earlier cross-stage version sorted `iteration DESC` first, which
  * broke tasks whose current stage has iter 0 but whose history contains
- * iter 1 runs on earlier stages (e.g. umsetzungskonzept iter 1 done →
- * umsetzung iter 0 failed): the failed current-stage run was hidden behind
+ * iter 1 runs on earlier stages (e.g. implementation_plan iter 1 done →
+ * implementation iter 0 failed): the failed current-stage run was hidden behind
  * the older done row, and the Retry button disappeared.
  *
  * Pending iterate-rows (started_at = NULL) on the current stage still win
@@ -183,6 +191,21 @@ export function listRunningStageRuns(db: Database = getDb()): StageRun[] {
   return rows.map(rowToStageRun)
 }
 
+/**
+ * Pending stage_runs are runs created by `iterate` transitions or by
+ * `ensureStageRun` that have not yet been promoted to `running` by a
+ * progressTask call. Healthy ones flip within milliseconds; rows that linger
+ * (orchestrator crashed mid-flight, parent task moved to terminal, etc.)
+ * become orphan zombies. Used by the orchestrator's `sweepOrphanRuns` tick
+ * branch to reap them.
+ */
+export function listPendingStageRuns(db: Database = getDb()): StageRun[] {
+  const rows = db
+    .prepare(`SELECT * FROM stage_runs WHERE status = 'pending'`)
+    .all() as StageRunRow[]
+  return rows.map(rowToStageRun)
+}
+
 export function updateStageRun(
   id: string,
   input: UpdateStageRunInput,
@@ -230,6 +253,10 @@ export function updateStageRun(
   if (input.costCents !== undefined) {
     updates.push('cost_cents = @cost_cents')
     params.cost_cents = input.costCents
+  }
+  if (input.lastGrantAt !== undefined) {
+    updates.push('last_grant_at = @last_grant_at')
+    params.last_grant_at = input.lastGrantAt
   }
 
   if (updates.length === 0)

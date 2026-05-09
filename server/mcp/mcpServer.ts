@@ -5,6 +5,7 @@ import { makeToolRegistrar } from './mcpAuth.js'
 import { registerControlTools } from './tools/controlTools.js'
 import { registerDependencyTools } from './tools/dependencyTools.js'
 import { registerKeyTools } from './tools/keyTools.js'
+import { registerManageTaskTool } from './tools/manageTaskTools.js'
 import { registerReadTools } from './tools/readTools.js'
 import { registerWriteTools } from './tools/writeTools.js'
 
@@ -21,6 +22,7 @@ export function buildMcpServer(
   registerReadTools(tool, callerUserId)
   registerWriteTools(tool, broadcast, broadcastDeleted, callerUserId)
   registerControlTools(tool, orchestrator, broadcast, callerUserId)
+  registerManageTaskTool(tool, broadcast, callerUserId)
   registerDependencyTools(tool, broadcast)
   registerKeyTools(tool)
 

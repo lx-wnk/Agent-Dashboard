@@ -5,6 +5,8 @@ import { signJwt } from '../auth/jwtUtils.js'
 import { isAuthEnabled, requireAuth } from '../auth/requireAuth.js'
 import { upsertUser } from '../db/usersRepo.js'
 
+const TRAILING_SLASH_RE = /\/$/
+
 interface AuthRouterDeps {
   host: string
   port: number
@@ -19,7 +21,7 @@ export function createAuthRouter({ host, port }: AuthRouterDeps): Router {
       return
     }
     // DASHBOARD_PUBLIC_URL allows reverse-proxy deployments to use https://
-    const publicBase = process.env.DASHBOARD_PUBLIC_URL?.replace(/\/$/, '')
+    const publicBase = process.env.DASHBOARD_PUBLIC_URL?.replace(TRAILING_SLASH_RE, '')
     const redirectUri = publicBase
       ? `${publicBase}/auth/callback`
       : `http://${host}:${port}/auth/callback`

@@ -1,12 +1,14 @@
 import type { PipelineStage, PipelineTask, StageRun } from '../../src/types.js'
 import { execFileSync } from 'node:child_process'
 import process from 'node:process'
-import { IS_LINUX } from '../platform.js'
 import { findStageRunBySessionId, updateStageRun } from '../db/stageRunsRepo.js'
+import { IS_LINUX } from '../platform.js'
+
+const ZOMBIE_STATE_RE = /^State:\s+Z/m
 
 /**
  * Build a human-readable session name from task + stage + iteration.
- * Format: {slug}-{stage}-iter-{n}  (e.g. fix-login-bug-umsetzung-iter-3)
+ * Format: {slug}-{stage}-iter-{n}  (e.g. fix-login-bug-implementation-iter-3)
  */
 export function buildSessionName(task: PipelineTask, stage: PipelineStage, iteration: number): string {
   return `${task.slug}-${stage}-iter-${iteration}`
@@ -26,7 +28,7 @@ function isPidZombie(pid: number): boolean {
   try {
     if (IS_LINUX) {
       const stat = execFileSync('cat', [`/proc/${pid}/status`], { encoding: 'utf8', timeout: 500 })
-      return /^State:\s+Z/m.test(stat)
+      return ZOMBIE_STATE_RE.test(stat)
     }
     else {
       // macOS: ps -p PID -o stat= returns the state character(s); 'Z' = zombie

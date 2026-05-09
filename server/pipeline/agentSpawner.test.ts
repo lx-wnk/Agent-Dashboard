@@ -21,7 +21,7 @@ function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
     worktreePath: null,
     sourceBranch: null,
     targetBranch: null,
-    currentStage: 'umsetzung',
+    currentStage: 'implementation',
     parentTaskId: null,
     maxIterations: 20,
     tokenBudget: null,
@@ -41,9 +41,9 @@ function makeStageRun(): StageRun {
   return {
     id: 'sr-1',
     taskId: 't-1',
-    stage: 'umsetzung',
+    stage: 'implementation',
     sessionId: null,
-    sessionName: 'fix-login-umsetzung-iter-0',
+    sessionName: 'fix-login-implementation-iter-0',
     pid: null,
     status: 'pending',
     startedAt: null,
@@ -52,6 +52,7 @@ function makeStageRun(): StageRun {
     output: null,
     tokensUsed: 0,
     costCents: 0,
+    lastGrantAt: null,
   }
 }
 
@@ -66,6 +67,7 @@ function permission(overrides: Partial<TaskPermission>): TaskPermission {
     requestedAt: '2026-04-12T10:00:00Z',
     decidedAt: '2026-04-12T10:00:00Z',
     decidedBy: 'user',
+    expiresAt: null,
     ...overrides,
   }
 }

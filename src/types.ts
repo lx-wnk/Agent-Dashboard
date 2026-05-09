@@ -80,11 +80,11 @@ export interface OutputMessage {
 
 // Task Pipeline Types
 export type PipelineStage
-  = | 'konzept'
+  = | 'concept'
     | 'backlog'
-    | 'umsetzung'
-    | 'selbstreview'
-    | 'finalisierung'
+    | 'implementation'
+    | 'self_review'
+    | 'finalization'
     | 'done'
     | 'on_hold'
     | 'cancelled'
@@ -161,6 +161,12 @@ export interface PipelineTask {
   // True when blocked AND every blocking prereq is terminal (done/cancelled)
   // but reached the wrong stage — dependency can never be satisfied.
   isUnsatisfiable?: boolean
+  // True when the latest stage_run on the current stage is terminal
+  // (done/failed) OR a zombie awaiting_user (dead PID), AND it still has
+  // unresolved permission_requests. The orchestrator's lingering-pending
+  // gate refuses to spawn a new run while this is true; surface in UI so
+  // the user sees WHY their task is parked.
+  blockedByPendingPermissions?: boolean
 }
 
 export interface StageRun {
@@ -177,6 +183,12 @@ export interface StageRun {
   output: Record<string, unknown> | null
   tokensUsed: number
   costCents: number
+  // Timestamp of the most recent user resolution of a permission_request
+  // tied to this run. Used by `sweepAwaitingUserRuns` to anchor the
+  // wallclock budget to user activity rather than spawn time, so a slow-
+  // responding user does not get the agent killed at the 4h timeout.
+  // Null until at least one permission has been resolved on this run.
+  lastGrantAt: string | null
 }
 
 export interface TaskPermission {
@@ -189,6 +201,8 @@ export interface TaskPermission {
   requestedAt: string
   decidedAt: string | null
   decidedBy: 'user' | 'auto' | null
+  /** ISO timestamp; null = never expires. */
+  expiresAt: string | null
 }
 
 export interface PermissionRequest {
@@ -202,7 +216,12 @@ export interface PermissionRequest {
   outcome: 'granted' | 'denied' | 'timeout' | null
 }
 
-export type FeedbackStage = PipelineStage
+// `FeedbackStage` is the subset of stages on which user-authored feedback
+// can be recorded — currently the two approval-gated artifact stages.
+// Distinct from `PipelineStage` so the type matches the `task_feedback.stage`
+// CHECK constraint exactly: any caller passing a non-feedback PipelineStage
+// is rejected at compile time instead of failing the CHECK at INSERT time.
+export type FeedbackStage = 'planning' | 'implementation_plan'
 
 export interface TaskFeedback {
   id: string

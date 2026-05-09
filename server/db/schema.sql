@@ -24,9 +24,11 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- stage_runs.status — the task stays on the stage where the run died
   -- so the UI can surface retry/analyze actions on the same stage.
   current_stage TEXT NOT NULL CHECK (current_stage IN (
-    'konzept','backlog','pruefung','refinement','planning','approval1',
-    'umsetzungskonzept','approval2','umsetzung','selbstreview',
-    'finalisierung','done','on_hold','cancelled'
+    -- Canonical stages, narrowed in migration V5. The wider list that
+    -- V4 used during the German→English transition lived here previously;
+    -- legacy DBs are rebuilt to this same narrow form by migrateV5.
+    'concept','backlog','implementation','self_review','finalization',
+    'done','on_hold','cancelled'
   )),
   parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
   max_iterations INTEGER NOT NULL DEFAULT 20,
@@ -52,9 +54,9 @@ CREATE TABLE IF NOT EXISTS stage_runs (
   id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   stage TEXT NOT NULL CHECK (stage IN (
-    'konzept','backlog','pruefung','refinement','planning','approval1',
-    'umsetzungskonzept','approval2','umsetzung','selbstreview',
-    'finalisierung','done','on_hold','cancelled'
+    -- Same allow-list as tasks.current_stage — see comment there.
+    'concept','backlog','implementation','self_review','finalization',
+    'done','on_hold','cancelled'
   )),
   session_id TEXT,
   session_name TEXT,
@@ -67,7 +69,8 @@ CREATE TABLE IF NOT EXISTS stage_runs (
   iteration INTEGER NOT NULL DEFAULT 0,
   output TEXT, -- JSON: stage result
   tokens_used INTEGER NOT NULL DEFAULT 0,
-  cost_cents INTEGER NOT NULL DEFAULT 0
+  cost_cents INTEGER NOT NULL DEFAULT 0,
+  last_grant_at TEXT -- ISO8601; last time a permission was resolved on this run (V6)
 );
 
 CREATE INDEX IF NOT EXISTS idx_stage_runs_task ON stage_runs(task_id);
@@ -75,6 +78,11 @@ CREATE INDEX IF NOT EXISTS idx_stage_runs_status ON stage_runs(status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_runs_session ON stage_runs(session_id) WHERE session_id IS NOT NULL;
 -- Composite index for getLatestStageRun hot path (task_id, stage, iteration DESC)
 CREATE INDEX IF NOT EXISTS idx_stage_runs_latest ON stage_runs(task_id, stage, iteration DESC);
+-- V7 defense-in-depth: at most one running stage_run per task. Complements
+-- the runtime re-entry guard + per-task lock. Catches future code paths
+-- that bypass orchestrator serialization.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_runs_one_running
+  ON stage_runs(task_id) WHERE status = 'running';
 
 -- Task-scoped permissions (both pre-approved and runtime-granted)
 CREATE TABLE IF NOT EXISTS task_permissions (
@@ -86,7 +94,8 @@ CREATE TABLE IF NOT EXISTS task_permissions (
   pre_approved INTEGER NOT NULL, -- 0 or 1
   requested_at TEXT NOT NULL,
   decided_at TEXT,
-  decided_by TEXT -- 'user' | 'auto'
+  decided_by TEXT, -- 'user' | 'auto'
+  expires_at TEXT -- ISO8601; null = never expires (V3 added column)
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_permissions_task ON task_permissions(task_id);
@@ -139,8 +148,8 @@ CREATE TABLE IF NOT EXISTS pipeline_config (
 );
 
 -- User-authored feedback on approval-gated artifacts (planning,
--- umsetzungskonzept). A row is created when the user clicks
--- "Änderungen anfordern" on an approval gate; the task regresses to
+-- implementation_plan). A row is created when the user clicks the
+-- "Request changes" button on an approval gate; the task regresses to
 -- the reviewed stage and the prompt builder for that stage consumes
 -- all unresolved rows as a feedback prefix. A row is marked resolved
 -- when a subsequent stage_run on the reviewed stage transitions to a
@@ -152,7 +161,7 @@ CREATE TABLE IF NOT EXISTS pipeline_config (
 CREATE TABLE IF NOT EXISTS task_feedback (
   id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  stage TEXT NOT NULL CHECK (stage IN ('planning','umsetzungskonzept')),
+  stage TEXT NOT NULL CHECK (stage IN ('planning','implementation_plan')),
   stage_run_id TEXT REFERENCES stage_runs(id) ON DELETE SET NULL,
   iteration INTEGER NOT NULL,
   feedback TEXT NOT NULL,
@@ -195,7 +204,7 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_id);
 
--- Conversation turns for the konzept-stage refinement chat.
+-- Conversation turns for the concept-stage refinement chat.
 -- Each user/assistant exchange is one row.
 CREATE TABLE IF NOT EXISTS refinement_turns (
   id          TEXT PRIMARY KEY,

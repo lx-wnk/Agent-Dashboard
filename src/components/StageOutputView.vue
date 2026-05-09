@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PipelineStage, StageRunStatus } from '../types'
+import type { StageRunStatus } from '../types'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -8,10 +8,9 @@ const props = defineProps<{
   status?: StageRunStatus | null
 }>()
 
-interface PlanningSubtask { id?: string, title?: string, files?: string[] }
-interface UmsetzungskonzeptStep { id?: string, description?: string, files?: string[] }
-interface UmsetzungskonzeptToolRequest { tool?: string, pattern?: string, reason?: string }
-interface SelbstreviewFinding { severity?: string, message?: string, file?: string }
+interface ImplementationPlanStep { id?: string, description?: string, files?: string[] }
+interface ImplementationPlanToolRequest { tool?: string, pattern?: string, reason?: string }
+interface SelfReviewFinding { severity?: string, message?: string, file?: string }
 
 function asRecord(o: unknown): Record<string, unknown> | null {
   return (o && typeof o === 'object' && !Array.isArray(o)) ? o as Record<string, unknown> : null
@@ -35,44 +34,22 @@ const pretty = computed(() => {
     return null
 
   switch (props.stage) {
-    case 'planning':
+    case 'implementation_plan':
       return {
-        kind: 'planning' as const,
-        subtasks: (Array.isArray(r.subtasks) ? r.subtasks : []) as PlanningSubtask[],
-        acceptanceCriteria: (Array.isArray(r.acceptanceCriteria) ? r.acceptanceCriteria : []) as string[],
+        kind: 'implementation_plan' as const,
+        steps: (Array.isArray(r.steps) ? r.steps : []) as ImplementationPlanStep[],
+        toolRequests: (Array.isArray(r.toolRequests) ? r.toolRequests : []) as ImplementationPlanToolRequest[],
       }
-    case 'umsetzungskonzept':
+    case 'self_review':
       return {
-        kind: 'umsetzungskonzept' as const,
-        steps: (Array.isArray(r.steps) ? r.steps : []) as UmsetzungskonzeptStep[],
-        toolRequests: (Array.isArray(r.toolRequests) ? r.toolRequests : []) as UmsetzungskonzeptToolRequest[],
-      }
-    case 'pruefung':
-      return {
-        kind: 'pruefung' as const,
-        wellDefined: Boolean(r.wellDefined),
-        complexity: String(r.complexity ?? ''),
-        recommendation: String(r.recommendation ?? ''),
-        risks: (Array.isArray(r.risks) ? r.risks : []) as string[],
-        blockers: (Array.isArray(r.blockers) ? r.blockers : []) as string[],
-      }
-    case 'refinement':
-      return {
-        kind: 'refinement' as const,
-        refinedTitle: String(r.refinedTitle ?? ''),
-        refinedDescription: String(r.refinedDescription ?? ''),
-        successCriteria: (Array.isArray(r.successCriteria) ? r.successCriteria : []) as string[],
-      }
-    case 'selbstreview':
-      return {
-        kind: 'selbstreview' as const,
+        kind: 'self_review' as const,
         passed: Boolean(r.passed),
         summary: String(r.summary ?? ''),
-        findings: (Array.isArray(r.findings) ? r.findings : []) as SelbstreviewFinding[],
+        findings: (Array.isArray(r.findings) ? r.findings : []) as SelfReviewFinding[],
       }
-    case 'finalisierung':
+    case 'finalization':
       return {
-        kind: 'finalisierung' as const,
+        kind: 'finalization' as const,
         summary: String(r.summary ?? ''),
         insights: (Array.isArray(r.insights) ? r.insights : []) as string[],
         openTodos: (Array.isArray(r.openTodos) ? r.openTodos : []) as string[],
@@ -93,40 +70,8 @@ function shortPath(full: string): string {
 
 <template>
   <div class="flex flex-col gap-3.5">
-    <!-- Planning: subtasks + acceptance criteria -->
-    <template v-if="pretty?.kind === 'planning'">
-      <div v-if="pretty.subtasks.length > 0" class="mb-4 last:mb-0">
-        <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
-          Subtasks <span class="font-normal">({{ pretty.subtasks.length }})</span>
-        </h4>
-        <ol class="list-none p-0 m-0 flex flex-col gap-2.5">
-          <li v-for="(st, i) in pretty.subtasks" :key="st.id ?? i" class="bg-slate-50 dark:bg-slate-950 rounded p-2 px-2.5 border-l-2 border-blue-500 dark:border-blue-400">
-            <div class="flex gap-2 items-baseline flex-wrap">
-              <code v-if="st.id" class="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 px-1.5 py-px rounded font-semibold">{{ st.id }}</code>
-              <span class="text-xs text-slate-900 dark:text-slate-100 leading-snug">{{ st.title ?? '(no title)' }}</span>
-            </div>
-            <ul v-if="st.files && st.files.length > 0" class="list-none p-0 pt-1.5 m-0 flex flex-wrap gap-1">
-              <li v-for="f in st.files" :key="f" :title="f">
-                <code class="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 px-1 py-px rounded-sm inline-block">{{ shortPath(f) }}</code>
-              </li>
-            </ul>
-          </li>
-        </ol>
-      </div>
-      <div v-if="pretty.acceptanceCriteria.length > 0" class="mb-4 last:mb-0">
-        <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
-          Acceptance Criteria <span class="font-normal">({{ pretty.acceptanceCriteria.length }})</span>
-        </h4>
-        <ul class="list-none p-0 m-0 flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
-          <li v-for="(ac, i) in pretty.acceptanceCriteria" :key="i" class="py-1 px-2 bg-slate-50 dark:bg-slate-950 rounded leading-relaxed">
-            <span class="text-slate-400 dark:text-slate-600 mr-1">☐</span> {{ ac }}
-          </li>
-        </ul>
-      </div>
-    </template>
-
-    <!-- Umsetzungskonzept: steps + toolRequests -->
-    <template v-else-if="pretty?.kind === 'umsetzungskonzept'">
+    <!-- Implementation Plan: steps + toolRequests -->
+    <template v-if="pretty?.kind === 'implementation_plan'">
       <div v-if="pretty.steps.length > 0" class="mb-4 last:mb-0">
         <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
           Steps <span class="font-normal">({{ pretty.steps.length }})</span>
@@ -158,88 +103,8 @@ function shortPath(full: string): string {
       </div>
     </template>
 
-    <!-- Pruefung -->
-    <template v-else-if="pretty?.kind === 'pruefung'">
-      <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs mb-1">
-        <div class="contents">
-          <dt class="text-slate-400 dark:text-slate-600 uppercase text-[10px]">
-            Well-defined
-          </dt>
-          <dd class="text-slate-900 dark:text-slate-100">
-            {{ pretty.wellDefined ? '✓ yes' : '✗ no' }}
-          </dd>
-        </div>
-        <div class="contents">
-          <dt class="text-slate-400 dark:text-slate-600 uppercase text-[10px]">
-            Complexity
-          </dt>
-          <dd class="text-slate-900 dark:text-slate-100">
-            <code class="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 px-1.5 py-px rounded font-semibold">{{ pretty.complexity }}</code>
-          </dd>
-        </div>
-        <div class="contents">
-          <dt class="text-slate-400 dark:text-slate-600 uppercase text-[10px]">
-            Recommendation
-          </dt>
-          <dd class="text-slate-900 dark:text-slate-100">
-            <code class="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 px-1.5 py-px rounded font-semibold">{{ pretty.recommendation }}</code>
-          </dd>
-        </div>
-      </dl>
-      <div v-if="pretty.risks.length > 0" class="mb-4 last:mb-0">
-        <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
-          Risks
-        </h4>
-        <ul class="list-none p-0 m-0 flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
-          <li v-for="(r, i) in pretty.risks" :key="i" class="py-1 px-2 bg-slate-50 dark:bg-slate-950 rounded leading-relaxed">
-            ⚠ {{ r }}
-          </li>
-        </ul>
-      </div>
-      <div v-if="pretty.blockers.length > 0" class="mb-4 last:mb-0">
-        <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
-          Blockers
-        </h4>
-        <ul class="list-none p-0 m-0 flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
-          <li v-for="(b, i) in pretty.blockers" :key="i" class="py-1 px-2 bg-slate-50 dark:bg-slate-950 rounded leading-relaxed">
-            ⛔ {{ b }}
-          </li>
-        </ul>
-      </div>
-    </template>
-
-    <!-- Refinement -->
-    <template v-else-if="pretty?.kind === 'refinement'">
-      <div class="mb-4 last:mb-0">
-        <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
-          Refined Title
-        </h4>
-        <p class="text-xs leading-relaxed text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950 px-2.5 py-2 rounded">
-          {{ pretty.refinedTitle }}
-        </p>
-      </div>
-      <div class="mb-4 last:mb-0">
-        <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
-          Refined Description
-        </h4>
-        <p class="text-xs leading-relaxed text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950 px-2.5 py-2 rounded">
-          {{ pretty.refinedDescription }}
-        </p>
-      </div>
-      <div v-if="pretty.successCriteria.length > 0" class="mb-4 last:mb-0">
-        <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
-          Success Criteria <span class="font-normal">({{ pretty.successCriteria.length }})</span>
-        </h4>
-        <ul class="list-none p-0 m-0 flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
-          <li v-for="(sc, i) in pretty.successCriteria" :key="i" class="py-1 px-2 bg-slate-50 dark:bg-slate-950 rounded leading-relaxed">
-            <span class="text-slate-400 dark:text-slate-600 mr-1">☐</span> {{ sc }}
-          </li>
-        </ul>
-      </div>
-    </template>
-
-    <!-- Selbstreview -->
-    <template v-else-if="pretty?.kind === 'selbstreview'">
+    <!-- Self-review -->
+    <template v-else-if="pretty?.kind === 'self_review'">
       <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs mb-1">
         <div class="contents">
           <dt class="text-slate-400 dark:text-slate-600 uppercase text-[10px]">
@@ -279,8 +144,8 @@ function shortPath(full: string): string {
       </div>
     </template>
 
-    <!-- Finalisierung -->
-    <template v-else-if="pretty?.kind === 'finalisierung'">
+    <!-- Finalization -->
+    <template v-else-if="pretty?.kind === 'finalization'">
       <div class="mb-4 last:mb-0">
         <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
           Summary
@@ -328,7 +193,9 @@ function shortPath(full: string): string {
         <div class="text-[10px] font-semibold uppercase tracking-wider text-red-500 dark:text-red-400 mb-1">
           Stage error
         </div>
-        <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">{{ outputError }}</p>
+        <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">
+          {{ outputError }}
+        </p>
       </div>
 
       <!-- Agent prose captured alongside the error (e.g. "no json block" failure) -->

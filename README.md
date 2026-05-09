@@ -10,8 +10,8 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 - **Chat-style session view** — full conversation transcript with markdown rendering, collapsible tool groups, inline task checklists, sub-agent badges
 - **Channel control** — send follow-up instructions and /btw interrupts to running agents via MCP Channels
 - **Agent spawning** — start new Claude agents with custom prompts, models, and system prompts from the UI
-- **Task pipeline with approval gates** — multi-stage agentic workflow with human review checkpoints
-- **Authenticated MCP endpoint (18 tools, 4 scopes)** for external agent control
+- **Task pipeline** — multi-stage agentic workflow (concept → backlog → implementation → self_review → finalization → done) with permission gates per stage
+- **Authenticated MCP endpoint (19 tools, 4 scopes)** for external agent control
 - **API key management with scoped access** — generate and revoke bearer tokens in Settings
 - **Cross-linking between agent sessions and pipeline tasks**
 - **Multi-machine support** — aggregate agents from remote machines via `DASHBOARD_REMOTES`
@@ -60,12 +60,13 @@ Open [http://localhost:13120](http://localhost:13120) — running Claude Code ag
 
 ## Task Pipeline
 
-An agentic task pipeline runs multi-stage work items through Claude Code automatically. Tasks progress through these stages: `backlog → pruefung → refinement → planning → approval1 → umsetzungskonzept → approval2 → umsetzung → selbstreview → finalisierung → done`, with human approval gates at `approval1` and `approval2`. Terminal states also include `on_hold` and `cancelled`.
+An agentic task pipeline runs multi-stage work items through Claude Code automatically. Tasks progress through these stages: `concept → backlog → implementation → self_review → finalization → done`. Terminal states also include `on_hold` and `cancelled`. The `concept` and `backlog` stages are agent-less; `implementation` / `self_review` / `finalization` each spawn a detached `claude` CLI agent. The interactive concept refinement chat runs outside the state machine.
 
 **Key characteristics:**
 - Each agent-driven stage spawns a detached `claude` CLI process in an isolated git worktree
 - LLM output is validated against a per-stage JSON schema; one auto-retry with feedback injection before escalating to the user
 - Up to 3 tasks run in parallel (configurable via `maxParallelOrchestrators` in the pipeline DB config)
+- Permission requests from stage agents are gated through the dashboard channel; bulk-resolve UI lets the user grant/deny every pending in one click
 - Notifications (email, webhook, browser, system) dispatched on hold/failure events
 
 See [ADR-0001](docs/architecture/adr/0001-sqlite-for-task-pipeline.md) (SQLite rationale) and [ADR-0002](docs/architecture/adr/0002-runner-slot-priority-model.md) (runner-slot priority model).
@@ -85,7 +86,7 @@ The dashboard exposes a stateless StreamableHTTP MCP server at `POST /api/mcp` f
 | `pipeline:control` | Progress, approve, cancel, retry tasks; manage permissions (implies `tasks:read`) |
 | `keys:manage` | Full access including API key management |
 
-**Tools (18):** `list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `create_task`, `update_task`, `delete_task`, `progress_task`, `approve_task`, `request_changes`, `cancel_task`, `retry_task`, `grant_permission`, `resolve_permission_request`, `list_api_keys`, `create_api_key`, `revoke_api_key`
+**Tools (19):** `list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `create_task`, `update_task`, `delete_task`, `manage_task`, `progress_task`, `cancel_task`, `retry_task`, `grant_permission`, `resolve_permission_request`, `add_dependency`, `remove_dependency`, `list_api_keys`, `create_api_key`, `revoke_api_key`
 
 **Local integration:** Copy `.mcp.json.example` → `.mcp.json` and export `DASHBOARD_MCP_TOKEN`. Any Claude Code session opened in this repo will auto-connect to the dashboard MCP.
 

@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { serializeHistory, buildWindowedHistory, REFINEMENT_SYSTEM_PROMPT } from './refinementSpawner'
 import type { RefinementTurn } from '../db/refinementTurnsRepo'
+import { describe, expect, it } from 'vitest'
+import { buildWindowedHistory, REFINEMENT_SYSTEM_PROMPT, serializeHistory } from './refinementSpawner'
 
 describe('serializeHistory', () => {
   it('returns empty string for no history', () => {
@@ -26,12 +26,12 @@ describe('buildWindowedHistory', () => {
   it('always includes __phase_done anchor turns', () => {
     const turns: RefinementTurn[] = [
       { id: '1', taskId: 'x', role: 'user', content: 'first user', phase: null, createdAt: '1' },
-      { id: '2', taskId: 'x', role: 'assistant', content: 'ok\n__phase_done: konzept', phase: null, createdAt: '2' },
+      { id: '2', taskId: 'x', role: 'assistant', content: 'ok\n__phase_done: concept', phase: null, createdAt: '2' },
       { id: '3', taskId: 'x', role: 'user', content: 'second user', phase: null, createdAt: '3' },
       { id: '4', taskId: 'x', role: 'assistant', content: 'second answer', phase: null, createdAt: '4' },
     ]
     const result = buildWindowedHistory(turns)
-    expect(result).toContain('__phase_done: konzept')
+    expect(result).toContain('__phase_done: concept')
     expect(result).toContain('second user')
     expect(result).toContain('second answer')
   })
@@ -55,14 +55,14 @@ describe('buildWindowedHistory', () => {
       { id: '2', taskId: 'x', role: 'assistant', content: 'p1-a1', phase: null, createdAt: '2' },
       { id: '3', taskId: 'x', role: 'user', content: 'p1-q2', phase: null, createdAt: '3' },
       // anchor
-      { id: '4', taskId: 'x', role: 'assistant', content: 'ok\n__phase_done: analyse', phase: null, createdAt: '4' },
+      { id: '4', taskId: 'x', role: 'assistant', content: 'ok\n__phase_done: analysis', phase: null, createdAt: '4' },
       // phase 2 group (2 regular turns) — both kept
       { id: '5', taskId: 'x', role: 'user', content: 'p2-q1', phase: null, createdAt: '5' },
       { id: '6', taskId: 'x', role: 'assistant', content: 'p2-a1', phase: null, createdAt: '6' },
     ]
     const result = buildWindowedHistory(turns)
     // anchor always present
-    expect(result).toContain('__phase_done: analyse')
+    expect(result).toContain('__phase_done: analysis')
     // last 2 of phase 1 group: p1-a1, p1-q2 (p1-q1 dropped)
     expect(result).not.toContain('p1-q1')
     expect(result).toContain('p1-a1')
@@ -80,7 +80,7 @@ describe('buildWindowedHistory', () => {
       { id: '1', taskId: 'x', role: 'user', content: longContent, phase: null, createdAt: '1' },
       { id: '2', taskId: 'x', role: 'assistant', content: longContent, phase: null, createdAt: '2' },
       // anchor (small)
-      { id: '3', taskId: 'x', role: 'assistant', content: 'ok\n__phase_done: konzept', phase: null, createdAt: '3' },
+      { id: '3', taskId: 'x', role: 'assistant', content: 'ok\n__phase_done: concept', phase: null, createdAt: '3' },
       // phase 2 group: 2 long middle turns + 2 short final turns.
       // Per-group last 2 picks the short final turns, but phase 1's two long
       // turns are still in candidate -> candidate too large.
@@ -91,7 +91,7 @@ describe('buildWindowedHistory', () => {
     ]
     const result = buildWindowedHistory(turns, 5_000)
     // anchor always present
-    expect(result).toContain('__phase_done: konzept')
+    expect(result).toContain('__phase_done: concept')
     // global last 2 regular turns kept
     expect(result).toContain('last user')
     expect(result).toContain('last answer')
@@ -105,15 +105,32 @@ describe('buildWindowedHistory', () => {
   })
 })
 
-describe('REFINEMENT_SYSTEM_PROMPT', () => {
+describe('rEFINEMENT_SYSTEM_PROMPT', () => {
   it('mentions all four phases', () => {
-    expect(REFINEMENT_SYSTEM_PROMPT).toContain('ANALYSE')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('ANALYSIS')
     expect(REFINEMENT_SYSTEM_PROMPT).toContain('SPEC')
-    expect(REFINEMENT_SYSTEM_PROMPT).toContain('UMSETZUNGSKONZEPT')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('IMPLEMENTATION_PLAN')
     expect(REFINEMENT_SYSTEM_PROMPT).toContain('APPROVAL')
   })
 
   it('includes __phase_done signal instructions', () => {
     expect(REFINEMENT_SYSTEM_PROMPT).toContain('__phase_done:')
+  })
+
+  it('forces per-step enumeration of every distinct Bash pattern', () => {
+    expect(REFINEMENT_SYSTEM_PROMPT).toMatch(/walk.+each step.+Bash|enumerate.+every.+Bash|each.+step.+Bash pattern/i)
+  })
+
+  it('lists concrete common Bash patterns the agent should consider', () => {
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('pnpm test')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('pnpm typecheck')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('pnpm lint')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('git commit')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('git diff')
+    expect(REFINEMENT_SYSTEM_PROMPT).toContain('git status')
+  })
+
+  it('warns concept will be merged with baseline so under-enumeration causes loop', () => {
+    expect(REFINEMENT_SYSTEM_PROMPT).toMatch(/under-?enumerat|missing.+pattern.+loop|incomplete.+permission/i)
   })
 })

@@ -1,13 +1,14 @@
-import type { RefinementTurn } from '../db/refinementTurnsRepo.js'
+import type { Buffer } from 'node:buffer'
 import type { ChildProcess } from 'node:child_process'
 import type { Readable } from 'node:stream'
+import type { RefinementTurn } from '../db/refinementTurnsRepo.js'
 import { spawn } from 'node:child_process'
 
 export const REFINEMENT_SYSTEM_PROMPT = `You are a ticket refinement assistant that helps software teams create well-defined tasks through structured dialogue. Work through exactly four phases in strict order. Never skip phases.
 
 You have access to Read, Glob, and Grep tools — use them proactively to explore the codebase before writing the spec or implementation plan. Understanding the existing code makes your analysis concrete and accurate.
 
-**Phase 1: ANALYSE**
+**Phase 1: ANALYSIS**
 Ask ALL of the following questions at once in a numbered list so the user can answer everything in one reply:
 1. What is the working directory (cwd) of the project?
 2. What is the source branch (branch to work on)?
@@ -15,13 +16,25 @@ Ask ALL of the following questions at once in a numbered list so the user can an
 4. What problem needs to be solved or feature implemented?
 5. How complex does this feel — small/medium/large?
 
-After reading the user's answers, use your tools to explore the codebase if a cwd was provided. Then end your message with: __phase_done: analyse
+After reading the user's answers, use your tools to explore the codebase if a cwd was provided. Then end your message with: __phase_done: analysis
 
 **Phase 2: SPEC**
 Write a refined title, description, success criteria (bullet list), assumptions, out-of-scope. Use what you learned from the codebase exploration to make the spec concrete. Present it and accept feedback. When the spec is accepted, end with: __phase_done: spec
 
-**Phase 3: UMSETZUNGSKONZEPT**
-Break down the implementation into numbered steps based on the actual codebase you explored. List all tool permissions needed. For each tool: name, optional glob pattern, reason. Common tools: Read, Write, Edit, Glob, Grep, Bash. Bash always needs a pattern (e.g. "npm run *"). Never include "Bash(git push *)". Present and accept feedback. When accepted, end with: __phase_done: umsetzungskonzept
+**Phase 3: IMPLEMENTATION_PLAN**
+Break down the implementation into numbered steps based on the actual codebase you explored. Then build a COMPLETE, exhaustive permission list for the implementation agent. This is critical — under-enumeration causes a permission re-request loop where the agent gets killed and restarted for every missing tool.
+
+For each step in the plan, walk through it mentally and enumerate every distinct Bash pattern, file write, network fetch, or non-trivial tool the agent will touch. Then collapse the per-step lists into a deduplicated \`toolRequests\` array.
+
+Rules:
+- For each tool: name, optional glob/pattern, reason.
+- Bash ALWAYS needs a specific pattern. Never grant unrestricted Bash.
+- Concrete Bash patterns to consider depending on plan: \`pnpm test*\`, \`pnpm typecheck*\`, \`pnpm lint*\`, \`pnpm build*\`, \`pnpm install*\`, \`git status*\`, \`git diff*\`, \`git log*\`, \`git add*\`, \`git commit*\`, \`git checkout*\`, \`git branch*\`, \`git stash*\`. Add anything else specific to the codebase you explored (mise, make, docker, framework CLIs).
+- Never include \`Bash(git push*)\` or \`Bash(curl*)\` / \`Bash(wget*)\` — pushing is the user's job and remote fetches are blocked as dangerous.
+- Prefer explicit per-step patterns over a single broad one. The dashboard merges your output with a safe baseline (Read/Write/Edit/MultiEdit/Glob/Grep/LS + safe Bash patterns), so missing read-side basics is fine, but missing implementation-specific Bash patterns causes the loop.
+- If the agent will write files outside the project (e.g. \`~/.claude/...\`), declare a Write entry with the path pattern.
+
+Present the plan and the toolRequests array, accept feedback. When accepted, end with: __phase_done: implementation_plan
 
 **Phase 4: APPROVAL**
 Summarise the complete spec and plan. Ask the user to confirm. When confirmed, output ONLY this JSON block and nothing after it:
@@ -132,9 +145,12 @@ export function spawnRefinementTurn(
   const fullPrompt = `${historyBlock}Human: ${message}\n\nContinue the conversation as the assistant. Follow the phase instructions exactly.`
 
   const child = spawn('claude', [
-    '-p', fullPrompt,
-    '--system-prompt', REFINEMENT_SYSTEM_PROMPT,
-    '--allowedTools', 'Read,Glob,Grep',
+    '-p',
+    fullPrompt,
+    '--system-prompt',
+    REFINEMENT_SYSTEM_PROMPT,
+    '--allowedTools',
+    'Read,Glob,Grep',
   ], {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -152,8 +168,7 @@ export function spawnRefinementTurn(
       child.on('close', (code, signal) =>
         code === 0
           ? resolve()
-          : reject(new Error(`refinement spawn exited code=${code} signal=${signal}`)),
-      )
+          : reject(new Error(`refinement spawn exited code=${code} signal=${signal}`)))
       child.on('error', reject)
     })
 

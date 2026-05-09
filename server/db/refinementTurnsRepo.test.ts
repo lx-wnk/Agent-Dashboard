@@ -24,7 +24,7 @@ function insertTask(id: string) {
   getDb().prepare(`
     INSERT INTO tasks (id, slug, title, cwd, current_stage, max_iterations,
       stage_timeout_seconds, silver_bullet, priority, created_at, updated_at)
-    VALUES (?, ?, 'T', '/tmp', 'refinement', 20, 1800, 0, 'medium', '2026-01-01', '2026-01-01')
+    VALUES (?, ?, 'T', '/tmp', 'concept', 20, 1800, 0, 'medium', '2026-01-01', '2026-01-01')
   `).run(id, id)
 }
 
@@ -40,8 +40,8 @@ describe('insertTurn', () => {
 
   it('persists the phase when provided', () => {
     insertTask('t1b')
-    const turn = insertTurn({ taskId: 't1b', role: 'assistant', content: 'hi', phase: 'analyse' })
-    expect(turn.phase).toBe('analyse')
+    const turn = insertTurn({ taskId: 't1b', role: 'assistant', content: 'hi', phase: 'analysis' })
+    expect(turn.phase).toBe('analysis')
   })
 })
 
@@ -49,11 +49,11 @@ describe('listTurns', () => {
   it('returns turns in insertion order', () => {
     insertTask('t2')
     insertTurn({ taskId: 't2', role: 'user', content: 'A' })
-    insertTurn({ taskId: 't2', role: 'assistant', content: 'B', phase: 'analyse' })
+    insertTurn({ taskId: 't2', role: 'assistant', content: 'B', phase: 'analysis' })
     const turns = listTurns('t2')
     expect(turns).toHaveLength(2)
     expect(turns[0].role).toBe('user')
-    expect(turns[1].phase).toBe('analyse')
+    expect(turns[1].phase).toBe('analysis')
   })
 
   it('returns empty array for unknown task', () => {

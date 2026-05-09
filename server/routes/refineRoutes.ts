@@ -9,8 +9,8 @@ import { jsonrepair } from 'jsonrepair'
 import { appendAudit } from '../db/auditRepo.js'
 import { insertTurn, listTurns } from '../db/refinementTurnsRepo.js'
 import { getTaskById, updateTask } from '../db/tasksRepo.js'
+import { applyPresetPermissions, bulkGrantConceptStagePermissions, saveGrantsToPresets } from '../services/approvalUtils.js'
 import { spawnRefinementTurn } from '../services/refinementSpawner.js'
-import { applyPresetPermissions, bulkGrantKonzeptPermissions, saveGrantsToPresets } from '../services/approvalUtils.js'
 import { canAccessTask } from './taskRoutes.js'
 
 interface ImageAttachment {
@@ -44,13 +44,13 @@ export function createRefineRouter(
 
   mutationRouter.post('/:taskId/turn', async (req, res) => {
     const task = getTaskById(req.params.taskId)
-    if (!task || task.currentStage !== 'konzept') {
-      res.status(404).json({ error: 'Task not found or not in konzept stage' })
+    if (!task || task.currentStage !== 'concept') {
+      res.status(404).json({ error: 'Task not found or not in concept stage' })
       return
     }
 
     if (!canAccessTask(task, req.user!)) {
-      res.status(404).json({ error: 'Task not found or not in konzept stage' })
+      res.status(404).json({ error: 'Task not found or not in concept stage' })
       return
     }
 
@@ -59,7 +59,6 @@ export function createRefineRouter(
       return
     }
     activeTurns.add(task.id) // Reserve the slot before any async I/O — closes TOCTOU window
-
 
     const body = req.body as { message?: unknown, images?: unknown }
     const message = typeof body.message === 'string' ? body.message.trim() : ''
@@ -90,7 +89,7 @@ export function createRefineRouter(
         tempFiles.push(filePath)
         paths.push(filePath)
       }
-      spawnMessage = `${message}\n\n[Attached image${paths.length > 1 ? 's' : ''} — please read and analyse: ${paths.join(', ')}]`
+      spawnMessage = `${message}\n\n[Attached image${paths.length > 1 ? 's' : ''} — please read and analyze: ${paths.join(', ')}]`
     }
 
     const history = listTurns(req.params.taskId)
@@ -209,20 +208,23 @@ export function createRefineRouter(
       res.removeListener('close', onClose)
       activeTurns.delete(task.id)
       for (const f of tempFiles) {
-        try { unlinkSync(f) } catch {}
+        try {
+          unlinkSync(f)
+        }
+        catch {}
       }
     }
   })
 
   mutationRouter.post('/:taskId/confirm', (req, res) => {
     const task = getTaskById(req.params.taskId)
-    if (!task || task.currentStage !== 'konzept') {
-      res.status(404).json({ error: 'Task not found or not in konzept stage' })
+    if (!task || task.currentStage !== 'concept') {
+      res.status(404).json({ error: 'Task not found or not in concept stage' })
       return
     }
 
     if (!canAccessTask(task, req.user!)) {
-      res.status(404).json({ error: 'Task not found or not in konzept stage' })
+      res.status(404).json({ error: 'Task not found or not in concept stage' })
       return
     }
 
@@ -240,37 +242,37 @@ export function createRefineRouter(
       return
     }
 
-    let konzeptOutput: Record<string, unknown>
+    let conceptOutput: Record<string, unknown>
     try {
-      konzeptOutput = JSON.parse(jsonrepair(jsonMatch[1]))
+      conceptOutput = JSON.parse(jsonrepair(jsonMatch[1]))
     }
     catch {
       res.status(409).json({ error: 'Invalid JSON in assistant output' })
       return
     }
 
-    if (typeof konzeptOutput !== 'object' || konzeptOutput === null || Array.isArray(konzeptOutput)) {
+    if (typeof conceptOutput !== 'object' || conceptOutput === null || Array.isArray(conceptOutput)) {
       res.status(409).json({ error: 'Assistant JSON is not a plain object' })
       return
     }
 
     updateTask(task.id, {
-      title: typeof konzeptOutput.refinedTitle === 'string' ? konzeptOutput.refinedTitle : task.title,
-      description: typeof konzeptOutput.refinedDescription === 'string'
-        ? konzeptOutput.refinedDescription
+      title: typeof conceptOutput.refinedTitle === 'string' ? conceptOutput.refinedTitle : task.title,
+      description: typeof conceptOutput.refinedDescription === 'string'
+        ? conceptOutput.refinedDescription
         : task.description,
-      cwd: typeof konzeptOutput.cwd === 'string' ? konzeptOutput.cwd : task.cwd,
-      metadata: { ...(task.metadata ?? {}), konzeptOutput },
+      cwd: typeof conceptOutput.cwd === 'string' ? conceptOutput.cwd : task.cwd,
+      metadata: { ...(task.metadata ?? {}), conceptOutput },
       currentStage: 'backlog',
     })
 
-    bulkGrantKonzeptPermissions(task.id)
+    bulkGrantConceptStagePermissions(task.id)
     const userId = task.userId ?? null
-    const cwd = typeof konzeptOutput.cwd === 'string' ? konzeptOutput.cwd : task.cwd
+    const cwd = typeof conceptOutput.cwd === 'string' ? conceptOutput.cwd : task.cwd
     applyPresetPermissions(task.id, userId, cwd)
     saveGrantsToPresets(task.id, userId, cwd)
     broadcastEnrichedUpdate(task.id)
-    appendAudit({ taskId: task.id, actor: 'user', action: 'refine_confirmed', details: { cwd: konzeptOutput.cwd } })
+    appendAudit({ taskId: task.id, actor: 'user', action: 'refine_confirmed', details: { cwd: conceptOutput.cwd } })
 
     res.json(getTaskById(task.id))
   })
