@@ -34,6 +34,7 @@ import TaskSlashCommandMenu from './TaskSlashCommandMenu.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
+import WorktreeCommandRunner from './WorktreeCommandRunner.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
 const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
@@ -849,6 +850,9 @@ const runtime = computed(() => {
             </h3>
             <GitStatusPanel :task-id="task.id" />
           </div>
+
+          <!-- Worktree command runner -->
+          <WorktreeCommandRunner v-if="task" :task-id="task.id" class="mt-4" />
         </section>
 
         <!-- Stages tab -->

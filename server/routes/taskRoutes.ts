@@ -3,8 +3,10 @@ import type { NotificationEventType, PipelineStage, PipelineTask } from '../../s
 import type { AuditRow } from '../db/rowMappers.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
+import { execFile as execFileCb } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import process from 'node:process'
+import { promisify } from 'node:util'
 import { consola } from 'consola'
 import { Router } from 'express'
 import { isAuthEnabled } from '../auth/requireAuth.js'
@@ -56,6 +58,18 @@ import { getGitStatus, runGitAction } from '../services/gitService.js'
 import { listTemplateNames } from '../services/permissionTemplates.js'
 import { recommendParallelism } from '../services/resourceRecommender.js'
 import { createWorktree, removeWorktree } from '../services/worktreeManager.js'
+
+const execFileAsync = promisify(execFileCb)
+
+export const ALLOWED_COMMANDS: Record<string, { file: string, args: string[] }> = {
+  'pnpm test': { file: 'pnpm', args: ['test', '--run'] },
+  'pnpm lint': { file: 'pnpm', args: ['lint'] },
+  'pnpm typecheck': { file: 'pnpm', args: ['typecheck'] },
+  'pnpm build': { file: 'pnpm', args: ['build'] },
+  'git log': { file: 'git', args: ['log', '--oneline', '-20'] },
+  'git diff': { file: 'git', args: ['diff', '--stat'] },
+  'git status': { file: 'git', args: ['status', '--short'] },
+}
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
@@ -1652,6 +1666,35 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     catch (err) {
       res.status(500).json({ error: String(err) })
+    }
+  })
+
+  // ─── Worktree command runner ────────────────────────────────────────────────
+
+  mutationRouter.post('/tasks/:id/run', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const { command } = req.body as { command: string }
+    const allowed = ALLOWED_COMMANDS[command]
+    if (!allowed) {
+      res.status(400).json({ error: `Command not allowed. Allowed: ${Object.keys(ALLOWED_COMMANDS).join(', ')}` })
+      return
+    }
+    const cwd = task.worktreePath ?? task.cwd
+    try {
+      const { stdout, stderr } = await execFileAsync(allowed.file, allowed.args, {
+        cwd,
+        timeout: 30_000,
+        maxBuffer: 512 * 1024,
+      })
+      res.json({ output: stdout + stderr, exitCode: 0 })
+    }
+    catch (err: unknown) {
+      const e = err as { stdout?: string, stderr?: string, code?: number }
+      res.json({ output: (e.stdout ?? '') + (e.stderr ?? ''), exitCode: e.code ?? 1 })
     }
   })
 

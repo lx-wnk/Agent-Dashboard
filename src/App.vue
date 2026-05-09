@@ -7,6 +7,7 @@ import AgentTable from './components/AgentTable.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import AuditSettings from './components/AuditSettings.vue'
 import CostTrend from './components/CostTrend.vue'
+import EditGateModal from './components/EditGateModal.vue'
 import LoginPage from './components/LoginPage.vue'
 import PipelineBoard from './components/PipelineBoard.vue'
 import RefinementChat from './components/RefinementChat.vue'
@@ -263,6 +264,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
     <AuditSettings :open="showAudit" @close="showAudit = false" />
+    <EditGateModal />
   </div>
   <div v-else class="min-h-screen bg-slate-50 dark:bg-slate-950" />
 </template>

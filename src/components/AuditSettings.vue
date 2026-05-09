@@ -14,7 +14,9 @@ const emit = defineEmits<{ close: [] }>()
     >
       <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
         <header class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0">
-          <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-200">Audit Log</h2>
+          <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Audit Log
+          </h2>
           <button
             type="button"
             class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-lg leading-none"

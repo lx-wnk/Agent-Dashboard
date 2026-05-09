@@ -41,7 +41,8 @@ const healthChipClass = computed(() => {
         <span class="font-semibold text-[13px] text-slate-900 dark:text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
         <span class="text-[11px] text-slate-400 dark:text-slate-600 whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }}</span>
         <span
-          :class="['text-[10px] font-mono px-1.5 py-0.5 rounded', healthChipClass]"
+          class="text-[10px] font-mono px-1.5 py-0.5 rounded"
+          :class="healthChipClass"
           :title="`Health score: ${agent.healthScore}/100`"
         >{{ agent.healthScore }}</span>
         <MachineBadge v-if="agent.machine" :machine="agent.machine" />

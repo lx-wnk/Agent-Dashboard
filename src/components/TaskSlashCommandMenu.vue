@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 export interface SlashCommand {
   name: string
@@ -28,7 +28,9 @@ const suggestions = computed(() => {
 
 const visible = computed(() => suggestions.value.length > 0)
 
-watch(suggestions, () => { selectedIndex.value = 0 })
+watch(suggestions, () => {
+  selectedIndex.value = 0
+})
 
 function confirm(cmd: SlashCommand) {
   emit('update:modelValue', `${cmd.name} `)

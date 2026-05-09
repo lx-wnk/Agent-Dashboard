@@ -63,17 +63,31 @@ watch(() => props.taskId, load)
       </button>
     </div>
 
-    <div v-if="loading" class="text-slate-400 dark:text-slate-600 text-center py-6">Loading...</div>
-    <div v-else-if="error" class="text-red-600 dark:text-red-400">{{ error }}</div>
-    <div v-else-if="entries.length === 0" class="text-slate-400 dark:text-slate-600 text-center py-6">No audit entries.</div>
+    <div v-if="loading" class="text-slate-400 dark:text-slate-600 text-center py-6">
+      Loading...
+    </div>
+    <div v-else-if="error" class="text-red-600 dark:text-red-400">
+      {{ error }}
+    </div>
+    <div v-else-if="entries.length === 0" class="text-slate-400 dark:text-slate-600 text-center py-6">
+      No audit entries.
+    </div>
 
     <table v-else class="w-full border-collapse">
       <thead>
         <tr class="text-left text-slate-400 dark:text-slate-600 border-b border-slate-200 dark:border-slate-700">
-          <th class="pb-1.5 pr-3 font-medium">Time</th>
-          <th class="pb-1.5 pr-3 font-medium">Actor</th>
-          <th class="pb-1.5 pr-3 font-medium">Action</th>
-          <th class="pb-1.5 font-medium">Details</th>
+          <th class="pb-1.5 pr-3 font-medium">
+            Time
+          </th>
+          <th class="pb-1.5 pr-3 font-medium">
+            Actor
+          </th>
+          <th class="pb-1.5 pr-3 font-medium">
+            Action
+          </th>
+          <th class="pb-1.5 font-medium">
+            Details
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -87,7 +101,9 @@ watch(() => props.taskId, load)
                 {{ entry.actor }}
               </span>
             </td>
-            <td class="py-1.5 pr-3 font-mono text-slate-700 dark:text-slate-300">{{ entry.action }}</td>
+            <td class="py-1.5 pr-3 font-mono text-slate-700 dark:text-slate-300">
+              {{ entry.action }}
+            </td>
             <td class="py-1.5">
               <button
                 v-if="entry.details"
