@@ -14,6 +14,7 @@ import RefinementChat from './components/RefinementChat.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
+import SpotlightSearch from './components/SpotlightSearch.vue'
 import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
 import { useTasks } from './composables/useTasks'
@@ -265,6 +266,10 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
     <AuditSettings :open="showAudit" @close="showAudit = false" />
     <EditGateModal />
+    <SpotlightSearch
+      @navigate-task="task => selectTask(task)"
+      @navigate-agent="agent => selectAgent(agent)"
+    />
   </div>
   <div v-else class="min-h-screen bg-slate-50 dark:bg-slate-950" />
 </template>
