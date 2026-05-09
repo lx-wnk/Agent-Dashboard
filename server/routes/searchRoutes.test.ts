@@ -21,6 +21,12 @@ beforeEach(() => {
 
   const app = expressLib()
   app.use(expressLib.json())
+  // Inject a test user (admin) so req.user! in the search handler is populated.
+  app.use((_req, _res, next) => {
+    (_req as typeof _req & { user: { id: string, login: string, isAdmin: boolean } }).user
+      = { id: 'test-user', login: 'test', isAdmin: true }
+    next()
+  })
   app.use('/api', createSearchRouter({ getAgents: () => [] }))
   server = app.listen(0)
   baseUrl = `http://localhost:${(server.address() as AddressInfo).port}`

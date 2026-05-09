@@ -547,9 +547,13 @@ function migrateV8FtsIndex(db: Database): void {
       VALUES (new.id, new.title, COALESCE(new.description, ''));
     END
   `)
+  // DROP and recreate tasks_fts_update so existing DBs that already ran V8
+  // with the broad AFTER UPDATE ON tasks trigger get the narrowed version.
+  // IF NOT EXISTS cannot update a trigger with a different definition.
+  db.exec('DROP TRIGGER IF EXISTS tasks_fts_update')
   db.exec(`
-    CREATE TRIGGER IF NOT EXISTS tasks_fts_update
-    AFTER UPDATE ON tasks BEGIN
+    CREATE TRIGGER tasks_fts_update
+    AFTER UPDATE OF title, description ON tasks BEGIN
       DELETE FROM task_fts WHERE task_id = old.id;
       INSERT INTO task_fts(task_id, title, description)
       VALUES (new.id, new.title, COALESCE(new.description, ''));
@@ -561,6 +565,7 @@ function migrateV8FtsIndex(db: Database): void {
       DELETE FROM task_fts WHERE task_id = old.id;
     END
   `)
+  db.exec(`DELETE FROM task_fts WHERE task_id NOT IN (SELECT id FROM tasks)`)
   db.exec(`
     INSERT OR IGNORE INTO task_fts(task_id, title, description)
     SELECT id, title, COALESCE(description, '') FROM tasks

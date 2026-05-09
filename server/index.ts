@@ -259,6 +259,11 @@ async function start() {
     }, HOOKS_DEBOUNCE_MS)
   }
 
+  // Prime cachedAgents immediately so /api/search works before first SSE tick
+  getAgents().then((agents) => {
+    cachedAgents = agents
+  }).catch(() => {})
+
   function startSSEBroadcast() {
     if (sseBroadcastId)
       return
