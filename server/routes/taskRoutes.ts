@@ -3,6 +3,7 @@ import type { NotificationEventType, PipelineStage, PipelineTask } from '../../s
 import type { AuditRow } from '../db/rowMappers.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
+import { randomBytes } from 'node:crypto'
 import process from 'node:process'
 import { consola } from 'consola'
 import { Router } from 'express'
@@ -13,7 +14,7 @@ import { getDb } from '../db/client.js'
 import {
   listFeedbackForTask,
 } from '../db/feedbackRepo.js'
-import { getAllConfig, getPipelineConfigNumber, listPreferences, setConfig, setPipelineConfig, setPreference } from '../db/notificationConfigRepo.js'
+import { getAllConfig, getConfig, getPipelineConfigNumber, listPreferences, setConfig, setPipelineConfig, setPreference } from '../db/notificationConfigRepo.js'
 import {
   countPermissionRequestsForStageRun,
   createPermissionRequest,
@@ -1574,6 +1575,41 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       .prepare('SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ? OFFSET ?')
       .all(limit, offset) as AuditRow[]
     res.json(rows.map(rowToAuditEntry))
+  })
+
+  // ─── Webhook HMAC ────────────────────────────────────────────────────────────
+
+  router.get('/settings/webhook-hmac', (req, res) => {
+    if (!req.user!.isAdmin) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+    const enabled = getConfig('webhook_hmac_enabled') === 'true'
+    const hasSecret = !!getConfig('webhook_hmac_secret')
+    res.json({ enabled, hasSecret })
+  })
+
+  mutationRouter.post('/settings/webhook-hmac', (req, res) => {
+    if (!req.user!.isAdmin) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+    const { enabled, secret } = req.body as { enabled: boolean, secret?: string }
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: '`enabled` must be a boolean' })
+      return
+    }
+    setConfig('webhook_hmac_enabled', enabled ? 'true' : 'false')
+    if (enabled) {
+      const resolvedSecret = secret && secret.length >= 32
+        ? secret
+        : randomBytes(32).toString('hex')
+      setConfig('webhook_hmac_secret', resolvedSecret)
+      res.json({ enabled: true, secret: resolvedSecret })
+    }
+    else {
+      res.json({ enabled: false })
+    }
   })
 
   // ─── Git status & actions for task cwd ────────────────
