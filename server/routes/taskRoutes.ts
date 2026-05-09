@@ -48,6 +48,7 @@ import { isPidAlive } from '../pipeline/sessionManager.js'
 import { findNewestSessionId, readLastStageJsonOutput, resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
 import { spawnAnalysisAgent } from '../services/analysisSpawner.js'
 import { applyPermissionTemplateByName, bulkGrantPermissions, inheritParentPermissions, validatePermissionEntry } from '../services/approvalUtils.js'
+import { getGitStatus, runGitAction } from '../services/gitService.js'
 import { listTemplateNames } from '../services/permissionTemplates.js'
 import { recommendParallelism } from '../services/resourceRecommender.js'
 import { createWorktree, removeWorktree } from '../services/worktreeManager.js'
@@ -1550,6 +1551,45 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       setConfig(key, typeof value === 'string' ? value : value === null ? null : String(value))
     }
     res.json(getAllConfig())
+  })
+
+  // ─── Git status & actions for task cwd ────────────────
+
+  router.get('/tasks/:id/git-status', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const cwd = task.worktreePath || task.cwd
+    try {
+      const status = await getGitStatus(cwd)
+      res.json(status)
+    }
+    catch {
+      res.status(500).json({ error: 'Git operation failed' })
+    }
+  })
+
+  mutationRouter.post('/tasks/:id/git-action', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const { action } = req.body as { action: unknown }
+    if (action !== 'fetch' && action !== 'pull') {
+      res.status(400).json({ error: 'Invalid action' })
+      return
+    }
+    const cwd = task.worktreePath || task.cwd
+    try {
+      const output = await runGitAction(cwd, action)
+      res.json({ output })
+    }
+    catch (err) {
+      res.status(500).json({ error: String(err) })
+    }
   })
 
   // Mount mutation sub-router so its rejectCrossOrigin middleware guards
