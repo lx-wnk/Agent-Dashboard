@@ -29,6 +29,7 @@ import StageOutputView from './StageOutputView.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
+import GitStatusPanel from './GitStatusPanel.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
 const emit = defineEmits<{ close: [], navigate: [agent: Agent], openChat: [task: PipelineTask] }>()
@@ -785,6 +786,14 @@ const runtime = computed(() => {
             <div v-else-if="costError" class="text-sm text-red-500 dark:text-red-400">{{ costError }}</div>
             <StageCostWaterfall v-else :rows="costBreakdown" />
           </section>
+
+          <!-- Git status section -->
+          <div class="mt-4">
+            <h3 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+              Git Status
+            </h3>
+            <GitStatusPanel :task-id="task.id" />
+          </div>
         </section>
 
         <!-- Stages tab -->
