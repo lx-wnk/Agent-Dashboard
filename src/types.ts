@@ -69,6 +69,25 @@ export interface SubAgent {
   sessionFile: string
 }
 
+export interface GitStatusLastCommit {
+  hash: string
+  shortHash: string
+  message: string
+  author: string
+  date: string
+}
+
+export interface GitStatus {
+  branch: string
+  aheadCount: number
+  behindCount: number
+  staged: string[]
+  unstaged: string[]
+  untracked: string[]
+  lastCommit: GitStatusLastCommit | null
+  remoteUrl: string | null
+}
+
 export interface TaskInfo {
   id: string
   subject: string
@@ -223,6 +242,8 @@ export interface PermissionRequest {
   requestedAt: string
   resolvedAt: string | null
   outcome: 'granted' | 'denied' | 'timeout' | null
+  /** Total requests for this (tool, pattern) across all stage_runs of this task. Computed at read time. */
+  reRequestCount?: number
 }
 
 // `FeedbackStage` is the subset of stages on which user-authored feedback

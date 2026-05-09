@@ -19,6 +19,7 @@ import {
   createTaskPermission,
   deleteTaskPermission,
   getPermissionRequestById,
+  getPermissionReRequestCounts,
   listPendingPermissionRequests,
   listTaskPermissions,
   resolvePermissionRequest,
@@ -890,8 +891,13 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       return
     }
     const runs = listStageRunsForTask(req.params.id)
-    const pending = runs.flatMap(r => listPendingPermissionRequests(r.id))
-    res.json(pending)
+    const pendingRequests = runs.flatMap(r => listPendingPermissionRequests(r.id))
+    const reRequestCounts = getPermissionReRequestCounts(task.id)
+    const enrichedRequests = pendingRequests.map(pr => ({
+      ...pr,
+      reRequestCount: reRequestCounts.get(`${pr.tool}:${pr.pattern ?? '*'}`) ?? 1,
+    }))
+    res.json(enrichedRequests)
   })
 
   mutationRouter.post('/permission-requests', (req, res) => {
@@ -1580,6 +1586,10 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     const { action } = req.body as { action: unknown }
     if (action !== 'fetch' && action !== 'pull') {
       res.status(400).json({ error: 'Invalid action' })
+      return
+    }
+    if (action === 'pull' && process.env.DASHBOARD_ALLOW_GIT_PULL !== 'true') {
+      res.status(403).json({ error: 'pull is disabled. Set DASHBOARD_ALLOW_GIT_PULL=true to enable.' })
       return
     }
     const cwd = task.worktreePath || task.cwd

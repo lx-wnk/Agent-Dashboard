@@ -544,6 +544,13 @@ const runtime = computed(() => {
                     v-if="req.pattern"
                     class="font-mono text-xs text-slate-700 dark:text-slate-300 bg-yellow-100/60 dark:bg-yellow-900/40 px-1.5 py-px rounded"
                   >{{ req.pattern }}</span>
+                  <span
+                    v-if="req.reRequestCount && req.reRequestCount > 1"
+                    class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
+                    :title="`Requested ${req.reRequestCount} times`"
+                  >
+                    {{ req.reRequestCount }}x re-requests
+                  </span>
                 </div>
                 <p v-if="req.reason" class="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
                   {{ req.reason }}
@@ -882,9 +889,16 @@ const runtime = computed(() => {
                 </AppButton>
               </div>
               <div v-for="req in group.requests" :key="req.id" class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded-md p-3 mb-2">
-                <div class="flex gap-2.5 items-baseline">
+                <div class="flex gap-2.5 items-baseline flex-wrap">
                   <strong>{{ req.tool }}</strong>
                   <span v-if="req.pattern" class="font-mono text-xs text-slate-900 dark:text-slate-100">{{ req.pattern }}</span>
+                  <span
+                    v-if="req.reRequestCount && req.reRequestCount > 1"
+                    class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
+                    :title="`Requested ${req.reRequestCount} times`"
+                  >
+                    {{ req.reRequestCount }}x re-requests
+                  </span>
                 </div>
                 <div v-if="req.reason" class="text-[11px] text-slate-400 dark:text-slate-600 my-1">
                   {{ req.reason }}
