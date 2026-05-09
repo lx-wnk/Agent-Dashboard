@@ -1,5 +1,6 @@
 import type express from 'express'
 import type { NotificationEventType, PipelineStage, PipelineTask } from '../../src/types.js'
+import type { AuditRow } from '../db/rowMappers.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
 import process from 'node:process'
@@ -24,6 +25,7 @@ import {
   listTaskPermissions,
   resolvePermissionRequest,
 } from '../db/permissionsRepo.js'
+import { rowToAuditEntry } from '../db/rowMappers.js'
 import {
   getLatestStageRunForTask,
   getLatestStageRunsForTasks,
@@ -1557,6 +1559,21 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       setConfig(key, typeof value === 'string' ? value : value === null ? null : String(value))
     }
     res.json(getAllConfig())
+  })
+
+  // ─── Global Audit ────────────────────────────────────────────────────────────
+
+  router.get('/audit', (req, res) => {
+    if (!req.user!.isAdmin) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const offset = Number(req.query.offset) || 0
+    const rows = getDb()
+      .prepare('SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ? OFFSET ?')
+      .all(limit, offset) as AuditRow[]
+    res.json(rows.map(rowToAuditEntry))
   })
 
   // ─── Git status & actions for task cwd ────────────────

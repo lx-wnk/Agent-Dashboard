@@ -23,15 +23,16 @@ import {
 } from '../composables/useTasks'
 import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
-import StageCostWaterfall from './StageCostWaterfall.vue'
+import AuditLogTab from './AuditLogTab.vue'
+import GitStatusPanel from './GitStatusPanel.vue'
 import type { StageCostRow } from './StageCostWaterfall.vue'
+import StageCostWaterfall from './StageCostWaterfall.vue'
 import StageOutputView from './StageOutputView.vue'
-import TaskSlashCommandMenu from './TaskSlashCommandMenu.vue'
 import type { SlashCommand } from './TaskSlashCommandMenu.vue'
+import TaskSlashCommandMenu from './TaskSlashCommandMenu.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
-import GitStatusPanel from './GitStatusPanel.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
 const emit = defineEmits<{ close: [], navigate: [agent: Agent], openChat: [task: PipelineTask] }>()
@@ -979,9 +980,7 @@ const runtime = computed(() => {
 
         <!-- Audit tab -->
         <section v-if="activeTab === 'audit'" class="p-5">
-          <div class="text-slate-400 dark:text-slate-600 text-xs text-center py-8">
-            Audit log viewer — Phase 6.
-          </div>
+          <AuditLogTab v-if="task" :task-id="task.id" />
         </section>
       </div>
 

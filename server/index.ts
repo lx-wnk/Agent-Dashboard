@@ -21,12 +21,12 @@ import { aggregateAgents, getEnvRemoteTargets } from './remoteAggregator.js'
 import { createAgentRouter } from './routes/agentRoutes.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createAuthRouter } from './routes/authRoutes.js'
+import { createHooksRouter } from './routes/hooksRoutes.js'
 import { createPresetRouter } from './routes/presetRoutes.js'
 import { createRefineRouter } from './routes/refineRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
 import { createSystemRouter } from './routes/systemRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
-import { createHooksRouter } from './routes/hooksRoutes.js'
 import { SpawnManager } from './spawnManager.js'
 
 // Ensure FDs 0–2 are open. When spawned by tsx watch or similar tools, stdio FDs

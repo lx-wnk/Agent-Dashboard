@@ -5,6 +5,7 @@ import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
+import AuditSettings from './components/AuditSettings.vue'
 import CostTrend from './components/CostTrend.vue'
 import LoginPage from './components/LoginPage.vue'
 import PipelineBoard from './components/PipelineBoard.vue'
@@ -40,6 +41,7 @@ const activeConceptTask = ref<PipelineTask | null>(null)
 const showRefinementChat = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
+const showAudit = ref(false)
 
 function openNewTask() {
   activeConceptTask.value = null
@@ -161,6 +163,14 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       </button>
       <button
         type="button"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        title="Audit Log"
+        @click="showAudit = true"
+      >
+        Audit
+      </button>
+      <button
+        type="button"
         class="bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-none rounded-md px-2.5 py-1.5 text-base cursor-pointer leading-none hover:text-slate-700 dark:hover:text-slate-300 hover:brightness-110"
         title="Settings"
         @click="showSettings = true"
@@ -251,6 +261,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
     />
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
+    <AuditSettings :open="showAudit" @close="showAudit = false" />
   </div>
   <div v-else class="min-h-screen bg-slate-50 dark:bg-slate-950" />
 </template>
