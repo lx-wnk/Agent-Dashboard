@@ -1,9 +1,10 @@
-import { readdir, stat } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Router } from 'express'
 import { getDb } from '../db/client.js'
-import { parseFullSession } from '../jsonlParser.js'
+import { extractSessionInfo, parseJsonlLines } from '../jsonlParser.js'
 import { CLAUDE_PROJECTS_DIR } from '../paths.js'
+import { estimateCost } from '../pricing.js'
 
 interface ImportProgress {
   total: number
@@ -40,32 +41,39 @@ async function runImport() {
     }
   }
   catch {
-    // Projects dir may not exist
+    // CLAUDE_PROJECTS_DIR does not exist — proceed with empty file list
   }
 
-  currentJob = { total: files.length, processed: 0, imported: 0, errors: 0, done: false }
-  broadcast({ ...currentJob })
-
-  for (const file of files) {
-    const sessionId = file.split('/').pop()?.replace('.jsonl', '') ?? ''
-    try {
-      const fileStat = await stat(file)
-      const messages = await parseFullSession(sessionId, false)
-      const t = fileStat.mtimeMs
-      const tokens = messages.length
-      insert.run(Math.floor(t), 0, tokens)
-      currentJob!.imported++
-    }
-    catch {
-      currentJob!.errors++
-    }
-    finally {
-      currentJob!.processed++
-      broadcast({ ...currentJob! })
-    }
-  }
-  currentJob!.done = true
+  currentJob!.total = files.length
   broadcast({ ...currentJob! })
+
+  try {
+    for (const file of files) {
+      try {
+        const fileStat = await stat(file)
+        const raw = await readFile(file, 'utf-8')
+        const entries = parseJsonlLines(raw)
+        const info = extractSessionInfo(entries)
+        const { inputTokens, outputTokens } = info.tokenUsage ?? { inputTokens: 0, outputTokens: 0 }
+        const tokens = inputTokens + outputTokens
+        const cost = estimateCost({ inputTokens, outputTokens }, info.model ?? null)
+        const t = fileStat.mtimeMs
+        insert.run(Math.floor(t), cost, tokens)
+        currentJob!.imported++
+      }
+      catch {
+        currentJob!.errors++
+      }
+      finally {
+        currentJob!.processed++
+        broadcast({ ...currentJob! })
+      }
+    }
+  }
+  finally {
+    currentJob!.done = true
+    broadcast({ ...currentJob! })
+  }
 }
 
 export function createHistoryRouter(): ReturnType<typeof Router> {
@@ -76,6 +84,7 @@ export function createHistoryRouter(): ReturnType<typeof Router> {
       res.status(409).json({ error: 'Import already in progress' })
       return
     }
+    currentJob = { total: 0, processed: 0, imported: 0, errors: 0, done: false }
     runImport().catch(console.error)
     res.json({ ok: true, message: 'Import started — stream progress at GET /api/history/import/status' })
   })
@@ -102,6 +111,13 @@ export function createHistoryRouter(): ReturnType<typeof Router> {
       }
     }
     jobClients.add(cb)
+    // Re-check: job may have finished between the initial write and add
+    if (currentJob?.done) {
+      res.write(`data: ${JSON.stringify(currentJob)}\n\n`)
+      jobClients.delete(cb)
+      res.end()
+      return
+    }
     req.on('close', () => jobClients.delete(cb))
   })
 

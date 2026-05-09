@@ -228,18 +228,41 @@ function formatDate(iso: string | null) {
 
 // --- Historical data import ---
 const importStatus = ref('')
+const isImporting = ref(false)
+let importEs: EventSource | null = null
+
+onUnmounted(() => {
+  importEs?.close()
+})
 
 async function startImport() {
+  if (isImporting.value)
+    return
+  isImporting.value = true
   importStatus.value = 'Starting…'
-  await fetch('/api/history/import', { method: 'POST' })
-  const es = new EventSource('/api/history/import/status')
-  es.onmessage = (ev) => {
+  const res = await fetch('/api/history/import', { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    importStatus.value = `Error: ${(body as { error?: string }).error ?? res.statusText}`
+    isImporting.value = false
+    return
+  }
+  importEs = new EventSource('/api/history/import/status')
+  importEs.onmessage = (ev) => {
     const p = JSON.parse(ev.data) as { total: number, processed: number, done: boolean }
     importStatus.value = `${p.processed}/${p.total} processed`
     if (p.done) {
       importStatus.value = `Import complete — ${p.processed} sessions processed`
-      es.close()
+      importEs?.close()
+      importEs = null
+      isImporting.value = false
     }
+  }
+  importEs.onerror = () => {
+    importStatus.value = 'Connection lost — import may still be running'
+    importEs?.close()
+    importEs = null
+    isImporting.value = false
   }
 }
 </script>
@@ -494,7 +517,8 @@ async function startImport() {
             </h3>
             <button
               type="button"
-              class="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+              :disabled="isImporting"
+              class="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               @click="startImport"
             >
               Import Session History
