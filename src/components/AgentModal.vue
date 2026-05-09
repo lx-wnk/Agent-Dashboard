@@ -4,6 +4,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
+import ExecutionWaterfall from './ExecutionWaterfall.vue'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
 import SubAgentList from './SubAgentList.vue'
@@ -12,10 +13,13 @@ import ToolTimeline from './ToolTimeline.vue'
 import AppBadge from './ui/AppBadge.vue'
 import AppModal from './ui/AppModal.vue'
 
+type DetailsTab = 'details' | 'waterfall'
+
 const props = defineProps<{ agent: Agent | null }>()
 const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
 
 const localMessages = ref<OutputMessage[]>([])
+const activeDetailsTab = ref<DetailsTab>('details')
 const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
 const chatStreamRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
 
@@ -78,28 +82,69 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <summary class="px-4 py-2 text-xs text-slate-400 dark:text-slate-600 cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400">
             Agent Details (Tasks, Tools, Subagents)
           </summary>
-          <div class="px-4 pb-3 pt-2 flex flex-col gap-3 max-h-[200px] overflow-y-auto">
+          <div class="flex gap-0 px-4 pt-2 border-b border-slate-200 dark:border-slate-700">
+            <button
+              type="button"
+              class="px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors"
+              :class="activeDetailsTab === 'details'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'"
+              @click="activeDetailsTab = 'details'"
+            >
+              Details
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors"
+              :class="activeDetailsTab === 'waterfall'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'"
+              @click="activeDetailsTab = 'waterfall'"
+            >
+              Waterfall
+            </button>
+          </div>
+          <div v-if="activeDetailsTab === 'details'" class="px-4 pb-3 pt-2 flex flex-col gap-3 max-h-[200px] overflow-y-auto">
             <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
             <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
             <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
             <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
-              <dt class="text-slate-500 dark:text-slate-400">Input tokens</dt>
-              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">{{ formatTokens(agent.tokenUsage.inputTokens) }}</dd>
-              <dt class="text-slate-500 dark:text-slate-400">Output tokens</dt>
-              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">{{ formatTokens(agent.tokenUsage.outputTokens) }}</dd>
-              <dt class="text-slate-500 dark:text-slate-400">Cache write</dt>
+              <dt class="text-slate-500 dark:text-slate-400">
+                Input tokens
+              </dt>
+              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
+                {{ formatTokens(agent.tokenUsage.inputTokens) }}
+              </dd>
+              <dt class="text-slate-500 dark:text-slate-400">
+                Output tokens
+              </dt>
+              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
+                {{ formatTokens(agent.tokenUsage.outputTokens) }}
+              </dd>
+              <dt class="text-slate-500 dark:text-slate-400">
+                Cache write
+              </dt>
               <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
                 {{ formatTokens(agent.tokenUsage.cacheCreationTokens) }}
                 <span class="text-slate-400 dark:text-slate-600 ml-1">({{ formatCost(agent.cacheCreationCostEstimate) }})</span>
               </dd>
-              <dt class="text-slate-500 dark:text-slate-400">Cache read</dt>
+              <dt class="text-slate-500 dark:text-slate-400">
+                Cache read
+              </dt>
               <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
                 {{ formatTokens(agent.tokenUsage.cacheReadTokens) }}
                 <span class="text-slate-400 dark:text-slate-600 ml-1">({{ formatCost(agent.cacheReadCostEstimate) }})</span>
               </dd>
-              <dt class="text-slate-700 dark:text-slate-300 font-medium border-t border-slate-200 dark:border-slate-700 pt-1">Total cost</dt>
-              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono font-medium border-t border-slate-200 dark:border-slate-700 pt-1">{{ formatCost(agent.costEstimate) }}</dd>
+              <dt class="text-slate-700 dark:text-slate-300 font-medium border-t border-slate-200 dark:border-slate-700 pt-1">
+                Total cost
+              </dt>
+              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono font-medium border-t border-slate-200 dark:border-slate-700 pt-1">
+                {{ formatCost(agent.costEstimate) }}
+              </dd>
             </dl>
+          </div>
+          <div v-if="activeDetailsTab === 'waterfall'" class="max-h-[300px] overflow-y-auto">
+            <ExecutionWaterfall :session-id="agent.sessionId" />
           </div>
         </details>
       </div>

@@ -229,6 +229,22 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
     }
   })
 
+  router.get('/sessions/:sessionId/timeline', async (req, res) => {
+    const { sessionId } = req.params
+    if (!UUID_RE.test(sessionId)) {
+      res.status(400).json({ error: 'Invalid sessionId format' })
+      return
+    }
+    try {
+      const messages = await parseFullSession(sessionId, false)
+      const toolCalls = messages.filter(m => m.role === 'tool_call' && m.timestamp)
+      res.json({ toolCalls })
+    }
+    catch {
+      res.status(500).json({ error: 'Failed to read session timeline' })
+    }
+  })
+
   // Get replies from a specific agent
   router.get('/agents/:sessionId/replies', async (req, res) => {
     try {
