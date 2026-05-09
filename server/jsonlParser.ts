@@ -47,6 +47,13 @@ interface SessionCacheEntry {
 const sessionCache = new Map<string, SessionCacheEntry>()
 const SESSION_CACHE_MAX = 100 // evict oldest when exceeded
 
+interface IncrementalCacheEntry {
+  endOffset: number
+  accumulated: Partial<SessionData>
+}
+
+const incrementalCache = new Map<string, IncrementalCacheEntry>()
+
 export function encodePath(absolutePath: string): string {
   // Claude Code encodes /, ., and _ all as -. The dot is load-bearing:
   // `.claude` inside a realpath becomes `--claude` (the leading / and the
@@ -84,6 +91,86 @@ export async function headRead(filePath: string): Promise<string> {
   }
 }
 
+export interface IncrementalReadResult {
+  raw: string
+  endOffset: number
+}
+
+export async function incrementalRead(
+  filePath: string,
+  fromOffset: number,
+): Promise<IncrementalReadResult> {
+  const handle = await open(filePath, 'r')
+  try {
+    const fileStat = await handle.stat()
+    const fileSize = fileStat.size
+    if (fromOffset >= fileSize) {
+      return { raw: '', endOffset: fromOffset }
+    }
+    const readSize = fileSize - fromOffset
+    const buffer = Buffer.alloc(readSize)
+    await handle.read(buffer, 0, readSize, fromOffset)
+    return { raw: buffer.toString('utf-8'), endOffset: fileSize }
+  }
+  finally {
+    await handle.close()
+  }
+}
+
+export function mergeIncrementalInfo(
+  prev: Partial<SessionData>,
+  next: Partial<SessionData>,
+): Partial<SessionData> {
+  // Token usage: sum all four fields
+  const tokenUsage: TokenUsageData = {
+    inputTokens: (prev.tokenUsage?.inputTokens ?? 0) + (next.tokenUsage?.inputTokens ?? 0),
+    outputTokens: (prev.tokenUsage?.outputTokens ?? 0) + (next.tokenUsage?.outputTokens ?? 0),
+    cacheCreationTokens:
+      (prev.tokenUsage?.cacheCreationTokens ?? 0) + (next.tokenUsage?.cacheCreationTokens ?? 0),
+    cacheReadTokens:
+      (prev.tokenUsage?.cacheReadTokens ?? 0) + (next.tokenUsage?.cacheReadTokens ?? 0),
+  }
+
+  // toolCounts: sum each key across both maps
+  const toolCounts: Record<string, number> = { ...(prev.toolCounts ?? {}) }
+  for (const [k, v] of Object.entries(next.toolCounts ?? {})) {
+    toolCounts[k] = (toolCounts[k] ?? 0) + v
+  }
+
+  // tasks: start from prev, then upsert from next (update status if id matches, append if new)
+  const taskMap = new Map<string, { id: string, subject: string, status: string }>()
+  for (const t of prev.tasks ?? []) taskMap.set(t.id, t)
+  for (const t of next.tasks ?? []) {
+    if (taskMap.has(t.id)) {
+      taskMap.set(t.id, { ...taskMap.get(t.id)!, status: t.status })
+    }
+    else {
+      taskMap.set(t.id, t)
+    }
+  }
+
+  return {
+    sessionId:
+      (next.sessionId && next.sessionId !== 'unknown' ? next.sessionId : undefined) ?? prev.sessionId,
+    model:
+      (next.model && next.model !== 'unknown' ? next.model : undefined) ?? prev.model,
+    codeVersion:
+      (next.codeVersion && next.codeVersion !== 'unknown' ? next.codeVersion : undefined)
+      ?? prev.codeVersion,
+    entrypoint:
+      (next.entrypoint && next.entrypoint !== 'unknown' ? next.entrypoint : undefined)
+      ?? prev.entrypoint,
+    currentAction: next.currentAction ?? prev.currentAction,
+    lastTools: next.lastTools && next.lastTools.length > 0 ? next.lastTools : prev.lastTools,
+    lastOutput: next.lastOutput ?? prev.lastOutput,
+    lastBtw: next.lastBtw ?? prev.lastBtw,
+    conversationTurns: (prev.conversationTurns ?? 0) + (next.conversationTurns ?? 0),
+    tokenUsage,
+    toolCounts,
+    tasks: [...taskMap.values()],
+  }
+}
+
 export function parseJsonlLines(raw: string): any[] {
   const lines = raw.split('\n').filter(l => l.trim())
   const parsed: any[] = []
@@ -113,6 +200,13 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
   let pendingBtwMessage: string | null = null
   const taskToolUseIds = new Map<string, number>() // tool_use block.id → tasks[] index
   const tokenUsage: TokenUsageData = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+  }
+
+  const compactionBaseline: TokenUsageData = {
     inputTokens: 0,
     outputTokens: 0,
     cacheCreationTokens: 0,
@@ -174,7 +268,23 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
       // Token usage from message.usage
       const usage = entry.message?.usage
       if (usage) {
-        tokenUsage.inputTokens += usage.input_tokens || 0
+        const newInput = usage.input_tokens || 0
+        const prevInput = tokenUsage.inputTokens
+
+        // Compaction detection: if input_tokens drops by >= 80% compared to the
+        // running total, a context reset occurred. Save the baseline and restart.
+        if (prevInput > 0 && newInput > 0 && newInput <= prevInput * 0.20) {
+          compactionBaseline.inputTokens += tokenUsage.inputTokens
+          compactionBaseline.outputTokens += tokenUsage.outputTokens
+          compactionBaseline.cacheCreationTokens += tokenUsage.cacheCreationTokens
+          compactionBaseline.cacheReadTokens += tokenUsage.cacheReadTokens
+          tokenUsage.inputTokens = 0
+          tokenUsage.outputTokens = 0
+          tokenUsage.cacheCreationTokens = 0
+          tokenUsage.cacheReadTokens = 0
+        }
+
+        tokenUsage.inputTokens += newInput
         tokenUsage.outputTokens += usage.output_tokens || 0
         tokenUsage.cacheCreationTokens += usage.cache_creation_input_tokens || 0
         tokenUsage.cacheReadTokens += usage.cache_read_input_tokens || 0
@@ -235,7 +345,12 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
     currentAction,
     lastTools,
     tasks,
-    tokenUsage,
+    tokenUsage: {
+      inputTokens: compactionBaseline.inputTokens + tokenUsage.inputTokens,
+      outputTokens: compactionBaseline.outputTokens + tokenUsage.outputTokens,
+      cacheCreationTokens: compactionBaseline.cacheCreationTokens + tokenUsage.cacheCreationTokens,
+      cacheReadTokens: compactionBaseline.cacheReadTokens + tokenUsage.cacheReadTokens,
+    },
     model,
     codeVersion,
     conversationTurns,
@@ -345,13 +460,34 @@ export async function findSessionForProject(
   // mtime+size cache: skip the tail-read / parse / extract path when the
   // session JSONL hasn't changed since the last call.
   const fileStat = await stat(sessionFilePath)
+
+  // mtime+size cache: skip everything when the file hasn't changed at all
   const cached = sessionCache.get(sessionFilePath)
   if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size)
     return cached.result
 
-  const raw = await tailRead(sessionFilePath)
-  const parsed = parseJsonlLines(raw)
-  const info = extractSessionInfo(parsed)
+  let info: Partial<SessionData>
+  const incr = incrementalCache.get(sessionFilePath)
+
+  if (incr && fileStat.size > incr.endOffset) {
+    // File grew since last read — read only the new bytes
+    const { raw: newRaw, endOffset } = await incrementalRead(sessionFilePath, incr.endOffset)
+    const newParsed = parseJsonlLines(newRaw)
+    const newInfo = extractSessionInfo(newParsed)
+    info = mergeIncrementalInfo(incr.accumulated, newInfo)
+    incrementalCache.set(sessionFilePath, { endOffset, accumulated: info })
+  }
+  else if (!incr) {
+    // First read for this path — full tail read, then seed incremental cache
+    const raw = await tailRead(sessionFilePath)
+    const parsed = parseJsonlLines(raw)
+    info = extractSessionInfo(parsed)
+    incrementalCache.set(sessionFilePath, { endOffset: fileStat.size, accumulated: info })
+  }
+  else {
+    // Cache exists but size hasn't grown (file unchanged or truncated) — reuse accumulated
+    info = incr.accumulated
+  }
 
   // If model/version not found in tail, check head of file
   if (!info.model || !info.codeVersion) {
