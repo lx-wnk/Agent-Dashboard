@@ -20,7 +20,7 @@ beforeEach(async () => {
 
   const app = expressLib()
   app.use(expressLib.json())
-  app.use('/api', createWebPushRouter())
+  app.use('/api', createWebPushRouter({ rejectCrossOrigin: () => false }))
 
   server = await new Promise<ReturnType<express.Express['listen']>>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s))

@@ -14,7 +14,6 @@ import { listRemoteRegistrationsForUser } from './db/remoteRegistrationsRepo.js'
 import { getTaskById } from './db/tasksRepo.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
 import { createRejectCrossOrigin, requireApiToken } from './middleware.js'
-import { sendWebPush } from './notifications/adapters/webpush.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
@@ -347,8 +346,6 @@ async function start() {
           severity: 'warning',
         })
         .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
-      sendWebPush({ title: `Task "${task.title}" needs permission`, body: `Agent requests ${request.tool}` })
-        .catch(() => { /* ignore */ })
     },
     onTaskChanged: (taskId, info) => {
       // Fired by the orchestrator after every successful applyTransition.
@@ -360,8 +357,16 @@ async function start() {
       if (task) {
         broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
         if (task.currentStage === 'done') {
-          sendWebPush({ title: `Task "${task.title}" completed`, body: 'Pipeline task reached done stage' })
-            .catch(() => { /* ignore */ })
+          dispatcher
+            .dispatch({
+              eventType: 'completed',
+              title: `Task "${task.title}" completed`,
+              body: 'Pipeline task reached done stage',
+              taskId,
+              taskSlug: task.slug,
+              severity: 'info',
+            })
+            .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
         }
       }
       else {
@@ -385,8 +390,6 @@ async function start() {
           severity: 'error',
         })
         .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
-      sendWebPush({ title: `Task "${task.title}" stage failed`, body: `Stage ${info.stage} failed` })
-        .catch(() => { /* ignore */ })
     },
   })
   orchestrator.start()
@@ -397,7 +400,7 @@ async function start() {
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin }))
 
   // Web Push VAPID subscription management routes
-  app.use('/api', createWebPushRouter())
+  app.use('/api', createWebPushRouter({ rejectCrossOrigin }))
 
   // Permission preset management routes (list/delete remembered tool grants per project)
   app.use('/api', createPresetRouter(rejectCrossOrigin))

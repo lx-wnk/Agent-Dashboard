@@ -282,7 +282,7 @@ export type NotificationEventType
     | 'budget_exceeded'
     | 'iteration_warning'
 
-export type NotificationChannel = 'email' | 'webhook' | 'browser' | 'system'
+export type NotificationChannel = 'browser' | 'email' | 'system' | 'webpush' | 'webhook'
 
 export interface NotificationPreference {
   eventType: NotificationEventType
