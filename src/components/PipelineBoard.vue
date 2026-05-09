@@ -8,6 +8,10 @@ const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: Pipeli
 
 const { tasksByStageMap } = useTasks()
 
+function exportTasks(format: 'json' | 'csv') {
+  window.open(`/api/tasks/export?format=${format}`, '_blank')
+}
+
 interface ColumnDef {
   id: string
   label: string
@@ -70,53 +74,72 @@ const columnsWithTasks = computed(() =>
 </script>
 
 <template>
-  <div class="flex gap-3 overflow-x-auto pb-4 min-h-[calc(100vh-200px)]">
-    <div
-      v-for="{ col, tasks } in columnsWithTasks"
-      :key="col.id"
-      class="flex-[1_1_260px] min-w-[240px] rounded-lg flex flex-col max-h-[calc(100vh-220px)]"
-      :class="col.group === 'needs-you'
-        ? 'bg-yellow-50/30 dark:bg-yellow-950/10 border border-yellow-300/60 dark:border-yellow-700/40'
-        : col.group === 'terminal'
-          ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 opacity-70'
-          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700'"
-    >
-      <div
-        class="flex justify-between items-center px-3 py-2.5 border-b flex-shrink-0"
-        :class="col.group === 'needs-you'
-          ? 'border-yellow-300/60 dark:border-yellow-700/40'
-          : 'border-slate-200 dark:border-slate-700'"
+  <div>
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-xs text-slate-500 dark:text-slate-400">Export:</span>
+      <button
+        type="button"
+        class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+        @click="exportTasks('json')"
       >
-        <span
-          class="text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5"
+        JSON
+      </button>
+      <button
+        type="button"
+        class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+        @click="exportTasks('csv')"
+      >
+        CSV
+      </button>
+    </div>
+    <div class="flex gap-3 overflow-x-auto pb-4 min-h-[calc(100vh-200px)]">
+      <div
+        v-for="{ col, tasks } in columnsWithTasks"
+        :key="col.id"
+        class="flex-[1_1_260px] min-w-[240px] rounded-lg flex flex-col max-h-[calc(100vh-220px)]"
+        :class="col.group === 'needs-you'
+          ? 'bg-yellow-50/30 dark:bg-yellow-950/10 border border-yellow-300/60 dark:border-yellow-700/40'
+          : col.group === 'terminal'
+            ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 opacity-70'
+            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700'"
+      >
+        <div
+          class="flex justify-between items-center px-3 py-2.5 border-b flex-shrink-0"
           :class="col.group === 'needs-you'
-            ? 'text-yellow-700 dark:text-yellow-300'
-            : 'text-slate-500 dark:text-slate-400'"
+            ? 'border-yellow-300/60 dark:border-yellow-700/40'
+            : 'border-slate-200 dark:border-slate-700'"
         >
           <span
-            v-if="col.group === 'needs-you'"
-            class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-yellow-400/20 dark:bg-yellow-400/15 text-yellow-700 dark:text-yellow-300 text-[10px] leading-none ring-1 ring-yellow-400/40 dark:ring-yellow-500/30"
-            aria-hidden="true"
-          >!</span>
-          {{ col.label }}
-        </span>
-        <span
-          class="text-[11px] px-2 py-px rounded-full font-mono"
-          :class="col.group === 'needs-you'
-            ? 'text-yellow-700 dark:text-yellow-300 bg-yellow-400/15 dark:bg-yellow-400/10 ring-1 ring-yellow-400/30 dark:ring-yellow-500/25'
-            : 'text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-950'"
-        >{{ tasks.length }}</span>
-      </div>
-      <div class="p-2.5 flex flex-col gap-2 overflow-y-auto">
-        <TaskCard
-          v-for="task in tasks"
-          :key="task.id"
-          :task="task"
-          @select="(t) => emit('select', t)"
-          @open-chat="(t) => emit('openChat', t)"
-        />
-        <div v-if="!tasks.length" class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5">
-          —
+            class="text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5"
+            :class="col.group === 'needs-you'
+              ? 'text-yellow-700 dark:text-yellow-300'
+              : 'text-slate-500 dark:text-slate-400'"
+          >
+            <span
+              v-if="col.group === 'needs-you'"
+              class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-yellow-400/20 dark:bg-yellow-400/15 text-yellow-700 dark:text-yellow-300 text-[10px] leading-none ring-1 ring-yellow-400/40 dark:ring-yellow-500/30"
+              aria-hidden="true"
+            >!</span>
+            {{ col.label }}
+          </span>
+          <span
+            class="text-[11px] px-2 py-px rounded-full font-mono"
+            :class="col.group === 'needs-you'
+              ? 'text-yellow-700 dark:text-yellow-300 bg-yellow-400/15 dark:bg-yellow-400/10 ring-1 ring-yellow-400/30 dark:ring-yellow-500/25'
+              : 'text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-950'"
+          >{{ tasks.length }}</span>
+        </div>
+        <div class="p-2.5 flex flex-col gap-2 overflow-y-auto">
+          <TaskCard
+            v-for="task in tasks"
+            :key="task.id"
+            :task="task"
+            @select="(t) => emit('select', t)"
+            @open-chat="(t) => emit('openChat', t)"
+          />
+          <div v-if="!tasks.length" class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5">
+            —
+          </div>
         </div>
       </div>
     </div>

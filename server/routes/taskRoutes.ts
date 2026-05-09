@@ -315,6 +315,45 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(enrichTasksBulk(listTasksForUser(user.id, user.isAdmin)))
   })
 
+  // ─── Export ──────────────────────────────────────────────────────────────────
+
+  router.get('/tasks/export', (req, res) => {
+    const format = (req.query.format as string) === 'csv' ? 'csv' : 'json'
+    const user = req.user!
+    const tasks = listTasksForUser(user.id, user.isAdmin)
+
+    if (format === 'csv') {
+      const header = 'id,slug,title,currentStage,priority,createdAt,totalCostCents,totalTokens'
+      const rows = tasks.map((t) => {
+        const runs = listStageRunsForTask(t.id)
+        const totalCostCents = runs.reduce((s, r) => s + r.costCents, 0)
+        const totalTokens = runs.reduce((s, r) => s + r.tokensUsed, 0)
+        return [
+          t.id,
+          t.slug,
+          `"${t.title.replace(/"/g, '""')}"`,
+          t.currentStage,
+          t.priority,
+          t.createdAt,
+          totalCostCents,
+          totalTokens,
+        ].join(',')
+      })
+      res.setHeader('Content-Type', 'text/csv')
+      res.setHeader('Content-Disposition', 'attachment; filename="tasks.csv"')
+      res.send([header, ...rows].join('\n'))
+    }
+    else {
+      const enriched = tasks.map(t => ({
+        ...t,
+        stageRuns: listStageRunsForTask(t.id),
+      }))
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Content-Disposition', 'attachment; filename="tasks.json"')
+      res.json(enriched)
+    }
+  })
+
   router.get('/tasks/:id', (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task || !canAccessTask(task, req.user!)) {
