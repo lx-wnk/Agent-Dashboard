@@ -23,6 +23,8 @@ import {
 } from '../composables/useTasks'
 import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
+import StageCostWaterfall from './StageCostWaterfall.vue'
+import type { StageCostRow } from './StageCostWaterfall.vue'
 import StageOutputView from './StageOutputView.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
@@ -45,6 +47,9 @@ const newPermTool = ref('')
 const newPermPattern = ref('')
 const permError = ref('')
 const isGranting = ref(false)
+
+const costBreakdown = ref<StageCostRow[]>([])
+const costLoading = ref(false)
 
 const dependencies = ref<TaskDependency[]>([])
 const dependents = ref<TaskDependency[]>([])
@@ -209,7 +214,7 @@ async function loadDetails() {
 onUnmounted(stopRunningPoll)
 
 // Reset modal-local state when the user opens a different task.
-watch(() => props.task?.id, (id, prevId) => {
+watch(() => props.task?.id, async (id, prevId) => {
   if (id && id !== prevId) {
     activeTab.value = 'overview'
     actionError.value = ''
@@ -217,6 +222,16 @@ watch(() => props.task?.id, (id, prevId) => {
     feedbackHistory.value = []
     void loadDetails()
     void loadDependencies()
+    costBreakdown.value = []
+    costLoading.value = true
+    try {
+      const res = await fetch(`/api/tasks/${id}/cost-breakdown`)
+      if (res.ok)
+        costBreakdown.value = await res.json()
+    }
+    finally {
+      costLoading.value = false
+    }
   }
 })
 
@@ -748,6 +763,17 @@ const runtime = computed(() => {
               </details>
             </template>
           </div>
+
+          <!-- Cost breakdown section -->
+          <section class="mt-2">
+            <h3 class="text-[12px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
+              Cost breakdown
+            </h3>
+            <div v-if="costLoading" class="text-sm text-slate-400 dark:text-slate-600">
+              Loading...
+            </div>
+            <StageCostWaterfall v-else :rows="costBreakdown" />
+          </section>
         </section>
 
         <!-- Stages tab -->

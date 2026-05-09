@@ -82,6 +82,24 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
             <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
             <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
+            <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
+              <dt class="text-slate-500 dark:text-slate-400">Input tokens</dt>
+              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">{{ formatTokens(agent.tokenUsage.inputTokens) }}</dd>
+              <dt class="text-slate-500 dark:text-slate-400">Output tokens</dt>
+              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">{{ formatTokens(agent.tokenUsage.outputTokens) }}</dd>
+              <dt class="text-slate-500 dark:text-slate-400">Cache write</dt>
+              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
+                {{ formatTokens(agent.tokenUsage.cacheCreationTokens) }}
+                <span class="text-slate-400 dark:text-slate-600 ml-1">({{ formatCost(agent.cacheCreationCostEstimate) }})</span>
+              </dd>
+              <dt class="text-slate-500 dark:text-slate-400">Cache read</dt>
+              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
+                {{ formatTokens(agent.tokenUsage.cacheReadTokens) }}
+                <span class="text-slate-400 dark:text-slate-600 ml-1">({{ formatCost(agent.cacheReadCostEstimate) }})</span>
+              </dd>
+              <dt class="text-slate-700 dark:text-slate-300 font-medium border-t border-slate-200 dark:border-slate-700 pt-1">Total cost</dt>
+              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono font-medium border-t border-slate-200 dark:border-slate-700 pt-1">{{ formatCost(agent.costEstimate) }}</dd>
+            </dl>
           </div>
         </details>
       </div>

@@ -10,6 +10,19 @@ const props = defineProps<{ agent: Agent }>()
 defineEmits<{ select: [agent: Agent] }>()
 
 const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
+
+const hasCacheCosts = computed(
+  () => props.agent.cacheCreationCostEstimate > 0 || props.agent.cacheReadCostEstimate > 0,
+)
+
+const healthChipClass = computed(() => {
+  const s = props.agent.healthScore
+  if (s >= 75)
+    return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+  if (s >= 40)
+    return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+  return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+})
 </script>
 
 <template>
@@ -27,10 +40,18 @@ const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
         <AppBadge :variant="agent.status" />
         <span class="font-semibold text-[13px] text-slate-900 dark:text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
         <span class="text-[11px] text-slate-400 dark:text-slate-600 whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }}</span>
+        <span
+          :class="['text-[10px] font-mono px-1.5 py-0.5 rounded', healthChipClass]"
+          :title="`Health score: ${agent.healthScore}/100`"
+        >{{ agent.healthScore }}</span>
         <MachineBadge v-if="agent.machine" :machine="agent.machine" />
       </div>
-      <div class="flex-shrink-0">
+      <div class="flex-shrink-0 flex flex-col items-end">
         <span class="text-[11px] text-slate-400 dark:text-slate-600 whitespace-nowrap">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
+        <div v-if="hasCacheCosts" class="flex gap-2 text-[10px] text-slate-400 dark:text-slate-600">
+          <span title="Cache write cost">W {{ formatCost(agent.cacheCreationCostEstimate) }}</span>
+          <span title="Cache read cost">R {{ formatCost(agent.cacheReadCostEstimate) }}</span>
+        </div>
       </div>
     </div>
     <div class="relative px-3 py-3 h-[150px] overflow-hidden text-[13px] leading-relaxed text-slate-500 dark:text-slate-400 font-mono">

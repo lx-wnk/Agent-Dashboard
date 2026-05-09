@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateCost, MODEL_PRICING } from './pricing'
+import { estimateCacheCreationCost, estimateCacheReadCost, estimateCost, MODEL_PRICING } from './pricing'
 
 describe('mODEL_PRICING', () => {
   it('defines entries for all expected models', () => {
@@ -119,5 +119,43 @@ describe('estimateCost', () => {
   it('returns a positive number for any non-zero input', () => {
     expect(estimateCost({ inputTokens: 1, outputTokens: 0 }, 'claude-opus-4-6')).toBeGreaterThan(0)
     expect(estimateCost({ inputTokens: 0, outputTokens: 1 }, 'claude-haiku-4-5')).toBeGreaterThan(0)
+  })
+})
+
+describe('estimateCacheCreationCost', () => {
+  it('returns 0 for zero tokens', () => {
+    expect(estimateCacheCreationCost({ cacheCreationTokens: 0 }, 'claude-sonnet-4-6')).toBe(0)
+  })
+
+  it('calculates sonnet-4-6 cache creation at $3.75/MTok', () => {
+    const result = estimateCacheCreationCost({ cacheCreationTokens: 1_000_000 }, 'claude-sonnet-4-6')
+    expect(result).toBeCloseTo(3.75, 6)
+  })
+
+  it('calculates opus-4-0 cache creation at $18.75/MTok', () => {
+    const result = estimateCacheCreationCost({ cacheCreationTokens: 1_000_000 }, 'claude-opus-4-0')
+    expect(result).toBeCloseTo(18.75, 6)
+  })
+
+  it('falls back to default model for unknown model', () => {
+    const withDefault = estimateCacheCreationCost({ cacheCreationTokens: 100_000 }, null)
+    const withSonnet = estimateCacheCreationCost({ cacheCreationTokens: 100_000 }, 'claude-sonnet-4-6')
+    expect(withDefault).toBe(withSonnet)
+  })
+})
+
+describe('estimateCacheReadCost', () => {
+  it('returns 0 for zero tokens', () => {
+    expect(estimateCacheReadCost({ cacheReadTokens: 0 }, 'claude-sonnet-4-6')).toBe(0)
+  })
+
+  it('calculates sonnet-4-6 cache read at $0.30/MTok', () => {
+    const result = estimateCacheReadCost({ cacheReadTokens: 1_000_000 }, 'claude-sonnet-4-6')
+    expect(result).toBeCloseTo(0.3, 6)
+  })
+
+  it('calculates haiku-4-5 cache read at $0.08/MTok', () => {
+    const result = estimateCacheReadCost({ cacheReadTokens: 1_000_000 }, 'claude-haiku-4-5')
+    expect(result).toBeCloseTo(0.08, 6)
   })
 })

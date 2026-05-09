@@ -794,6 +794,25 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(listStageRunsForTask(req.params.id))
   })
 
+  router.get('/tasks/:id/cost-breakdown', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const breakdown = listStageRunsForTask(req.params.id)
+      .filter(r => r.status === 'done')
+      .map(r => ({
+        stage: r.stage,
+        iteration: r.iteration,
+        costCents: r.costCents,
+        tokensUsed: r.tokensUsed,
+        startedAt: r.startedAt,
+        endedAt: r.endedAt,
+      }))
+    res.json(breakdown)
+  })
+
   router.get('/tasks/:id/stage-runs/:runId/agent-output', async (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task || !canAccessTask(task, req.user!)) {

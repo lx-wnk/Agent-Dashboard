@@ -3,7 +3,9 @@ import { basename } from 'node:path'
 import { getChannelMap } from './channelDiscovery.js'
 import { findTasksBySessionIds } from './db/stageRunsRepo.js'
 import { findSessionForProject } from './jsonlParser.js'
-import { estimateCost } from './pricing.js'
+import { computeHealthScore } from './healthScore.js'
+import { estimateCacheCreationCost, estimateCacheReadCost, estimateCost } from './pricing.js'
+import { getRecentAvgCostPerHour } from './costTrendCache.js'
 import { scanProcesses } from './processScanner.js'
 
 const ACTIVE_THRESHOLD = 30_000 // 30s
@@ -48,6 +50,8 @@ export async function getAgents(): Promise<Agent[]> {
     processes.map(proc => findSessionForProject(proc.cwd, proc.uptime)),
   )
 
+  const recentAvgCost = getRecentAvgCostPerHour(7 * 24 * 60 * 60 * 1000)
+
   const agents: Agent[] = processes.map((proc, i) => {
     const session = sessions[i]
 
@@ -76,6 +80,23 @@ export async function getAgents(): Promise<Agent[]> {
       })),
       tokenUsage,
       costEstimate: estimateCost(session?.tokenUsage || tokenUsage, session?.model || null),
+      cacheCreationCostEstimate: estimateCacheCreationCost(
+        session?.tokenUsage || tokenUsage,
+        session?.model || null,
+      ),
+      cacheReadCostEstimate: estimateCacheReadCost(
+        session?.tokenUsage || tokenUsage,
+        session?.model || null,
+      ),
+      healthScore: computeHealthScore({
+        completedTasks: (session?.tasks || []).filter(t => t.status === 'completed').length,
+        totalTasks: (session?.tasks || []).length,
+        cacheReadTokens: tokenUsage.cacheReadTokens,
+        inputTokens: tokenUsage.inputTokens,
+        hasError: (session?.meta?.toolErrors ?? 0) > 0,
+        costEstimate: estimateCost(session?.tokenUsage || tokenUsage, session?.model || null),
+        recentAvgCost,
+      }),
       model: session?.model || null,
       codeVersion: session?.codeVersion || null,
       conversationTurns: session?.conversationTurns || 0,

@@ -33,6 +33,9 @@ export interface Agent {
   subagents: SubAgent[]
   tokenUsage: TokenUsage
   costEstimate: number
+  cacheCreationCostEstimate: number
+  cacheReadCostEstimate: number
+  healthScore: number
   model: string | null
   codeVersion: string | null
   conversationTurns: number

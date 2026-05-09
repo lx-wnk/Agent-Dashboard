@@ -26,6 +26,7 @@ let intervalId: ReturnType<typeof setInterval> | null = null
 let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
 let subscriberCount = 0
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let visibilityListenerAttached = false
 
 function handleAgentData(data: Agent[], trend?: TrendPoint[]) {
   agents.value = data
@@ -53,8 +54,25 @@ async function fetchAgents() {
   }
 }
 
+function handleVisibilityChange() {
+  if (document.hidden) {
+    stopSSE()
+    stopPolling()
+    if (sseRetryTimer) {
+      clearTimeout(sseRetryTimer)
+      sseRetryTimer = null
+    }
+  }
+  else {
+    fetchAgents()
+    startSSE()
+  }
+}
+
 function startSSE() {
   if (subscriberCount <= 0)
+    return
+  if (typeof document !== 'undefined' && document.hidden)
     return
   eventSource = new EventSource('/api/agents/stream')
 
@@ -135,9 +153,13 @@ function startDataStream() {
   if (subscriberCount > 1)
     return
 
-  // Try SSE first, with an initial fetch for immediate data
   fetchAgents()
   startSSE()
+
+  if (!visibilityListenerAttached && typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    visibilityListenerAttached = true
+  }
 }
 
 function stopDataStream() {
@@ -148,6 +170,10 @@ function stopDataStream() {
     if (sseRetryTimer) {
       clearTimeout(sseRetryTimer)
       sseRetryTimer = null
+    }
+    if (visibilityListenerAttached && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      visibilityListenerAttached = false
     }
     subscriberCount = 0
   }
