@@ -10,6 +10,7 @@ import { getAgents } from '../agentMerger.js'
 import { isAuthEnabled } from '../auth/requireAuth.js'
 import { getChannelMap } from '../channelDiscovery.js'
 import { UUID_RE } from '../constants.js'
+import { getDb } from '../db/client.js'
 import { findStageRunBySessionId } from '../db/stageRunsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
 import { parseFullSession } from '../jsonlParser.js'
@@ -269,6 +270,29 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
     catch (err) {
       console.error('Error fetching replies:', err)
       res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  router.get('/analytics/heatmap', (_req, res) => {
+    try {
+      const db = getDb()
+      const rows = db.prepare(`
+        SELECT
+          CAST(strftime('%w', datetime(t/1000, 'unixepoch')) AS INTEGER) AS dow,
+          CAST(strftime('%H', datetime(t/1000, 'unixepoch')) AS INTEGER) AS hour,
+          SUM(cost) AS total_cost
+        FROM agent_cost_trend
+        GROUP BY dow, hour
+      `).all() as Array<{ dow: number, hour: number, total_cost: number }>
+
+      const grid: number[][] = Array.from({ length: 7 }, () => Array.from<number>({ length: 24 }).fill(0))
+      for (const row of rows)
+        grid[row.dow][row.hour] = row.total_cost
+
+      res.json({ grid })
+    }
+    catch {
+      res.status(500).json({ error: 'Failed to compute heatmap' })
     }
   })
 
