@@ -26,6 +26,8 @@ import AgentChatStream from './AgentChatStream.vue'
 import StageCostWaterfall from './StageCostWaterfall.vue'
 import type { StageCostRow } from './StageCostWaterfall.vue'
 import StageOutputView from './StageOutputView.vue'
+import TaskSlashCommandMenu from './TaskSlashCommandMenu.vue'
+import type { SlashCommand } from './TaskSlashCommandMenu.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
@@ -48,6 +50,16 @@ const newPermTool = ref('')
 const newPermPattern = ref('')
 const permError = ref('')
 const isGranting = ref(false)
+
+const TASK_SLASH_COMMANDS: SlashCommand[] = [
+  { name: '/retry', description: 'Retry the current stage' },
+  { name: '/grant', description: 'Grant all pending permissions' },
+  { name: '/cancel', description: 'Cancel this task' },
+  { name: '/status', description: 'Show current stage status' },
+  { name: '/help', description: 'List available commands' },
+]
+
+const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
 
 const costBreakdown = ref<StageCostRow[]>([])
 const costLoading = ref(false)
@@ -331,6 +343,28 @@ async function onGrantPermission() {
   }
   finally {
     isGranting.value = false
+  }
+}
+
+async function onSlashSelect(cmd: { name: string }) {
+  additionalPrompt.value = ''
+  switch (cmd.name) {
+    case '/retry':
+      if (props.task)
+        await handleAction(() => retryTask(props.task!.id, undefined))
+      break
+    case '/grant':
+      if (props.task) {
+        await handleAction(async () => {
+          for (const group of pendingByStageRun.value)
+            await bulkResolvePermissionRequests(group.stageRunId, 'granted')
+        })
+      }
+      break
+    case '/cancel':
+      if (props.task)
+        await handleAction(() => cancelTask(props.task!.id))
+      break
   }
 }
 
@@ -946,12 +980,21 @@ const runtime = computed(() => {
         </p>
         <!-- Optional instruction for Resume/Retry -->
         <div v-if="isFailedRun(task)" class="mb-2">
-          <textarea
-            v-model="additionalPrompt"
-            rows="2"
-            class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-slate-900 dark:text-slate-100 text-xs resize-none focus:outline-none focus:border-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
-            placeholder="Optional instruction for Resume / Retry (e.g. logic change or hint)…"
-          />
+          <div class="relative">
+            <TaskSlashCommandMenu
+              ref="slashMenuRef"
+              v-model="additionalPrompt"
+              :commands="TASK_SLASH_COMMANDS"
+              @select="onSlashSelect"
+            />
+            <textarea
+              v-model="additionalPrompt"
+              rows="2"
+              class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-slate-900 dark:text-slate-100 text-xs resize-none focus:outline-none focus:border-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
+              placeholder="Optional instruction for Resume / Retry (e.g. logic change or hint)…"
+              @keydown="slashMenuRef?.onKeydown($event)"
+            />
+          </div>
         </div>
         <div class="flex gap-2 justify-end">
           <AppButton
