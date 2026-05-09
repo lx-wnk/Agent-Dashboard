@@ -84,6 +84,9 @@ export async function getAgents(): Promise<Agent[]> {
       lastOutput: session?.lastOutput ?? null,
       lastBtw: session?.lastBtw ?? null,
       channelAvailable: false, // set after channel discovery below
+      convergenceAlert: session?.convergenceAlert ?? false,
+      convergenceToolName: session?.convergenceToolName ?? null,
+      errorState: session?.errorState ?? null,
     }
   })
 

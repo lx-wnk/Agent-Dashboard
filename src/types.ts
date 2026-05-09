@@ -45,6 +45,12 @@ export interface Agent {
   /** Set when this agent session is running as part of a pipeline task stage. */
   pipelineTaskId?: string
   pipelineTaskTitle?: string
+  /** True when the last 5 tool calls are identical (same tool name and input). */
+  convergenceAlert: boolean
+  /** The tool name that triggered convergence detection; null otherwise. */
+  convergenceToolName: string | null
+  /** Non-null when the agent's JSONL contains a recognisable error signature. */
+  errorState: 'quota_exhausted' | 'rate_limited' | 'auth_failed' | null
 }
 
 export interface ChannelReply {

@@ -25,6 +25,9 @@ export interface SessionData {
   lastOutput: string | null
   lastBtw: { message: string, response: string | null } | null
   meta: SessionMeta | null
+  convergenceAlert: boolean
+  convergenceToolName: string | null
+  errorState: 'quota_exhausted' | 'rate_limited' | 'auth_failed' | null
 }
 
 export interface SubAgentData {
@@ -197,6 +200,12 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
   const toolCounts: Record<string, number> = {}
   let lastOutput: string | null = null
   let lastBtw: SessionData['lastBtw'] = null
+  const recentToolCalls: Array<{ name: string, inputHash: string }> = []
+  let convergenceAlert = false
+  let convergenceToolName: string | null = null
+  const recentToolResults: string[] = []
+  const recentAssistantTexts: string[] = []
+  let errorState: SessionData['errorState'] = null
   let pendingBtwMessage: string | null = null
   const taskToolUseIds = new Map<string, number>() // tool_use block.id → tasks[] index
   const tokenUsage: TokenUsageData = {
@@ -244,6 +253,14 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
               const idx = taskToolUseIds.get(block.tool_use_id)!
               tasks[idx].id = realId
             }
+          }
+          if (block.type === 'tool_result' && block.content) {
+            const text = typeof block.content === 'string'
+              ? block.content
+              : JSON.stringify(block.content)
+            recentToolResults.push(text)
+            if (recentToolResults.length > 20)
+              recentToolResults.shift()
           }
         }
       }
@@ -310,12 +327,31 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
             if (lastTools.length > 10)
               lastTools.shift()
             currentAction = `${block.name}${block.input?.command ? `: ${String(block.input.command).substring(0, 120)}` : ''}`
+
+            // Convergence detection: track last 8 tool calls; alert when last 5 are identical
+            const inputHash = JSON.stringify(block.input ?? {})
+            recentToolCalls.push({ name: block.name, inputHash })
+            if (recentToolCalls.length > 8)
+              recentToolCalls.shift()
+            if (recentToolCalls.length >= 5) {
+              const last5 = recentToolCalls.slice(-5)
+              if (
+                last5.every(c => c.name === last5[0].name)
+                && last5.every(c => c.inputHash === last5[0].inputHash)
+              ) {
+                convergenceAlert = true
+                convergenceToolName = block.name
+              }
+            }
           }
           else if (block.type === 'text' && block.text) {
             const text = block.text.trim()
             if (text.length > 0) {
               currentAction = text.substring(0, 300)
               lastOutput = text.substring(0, 500)
+              recentAssistantTexts.push(text)
+              if (recentAssistantTexts.length > 10)
+                recentAssistantTexts.shift()
             }
           }
 
@@ -339,6 +375,16 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
     }
   }
 
+  const QUOTA_RE = /quota exceeded|usage limit|monthly limit/i
+  const RATE_RE = /rate limit|429|too many requests|throttl/i
+  const AUTH_RE = /invalid api key|authentication|unauthorized|401/i
+
+  for (const text of [...recentToolResults, ...recentAssistantTexts]) {
+    if (QUOTA_RE.test(text)) { errorState = 'quota_exhausted'; break }
+    if (RATE_RE.test(text)) { errorState = 'rate_limited'; break }
+    if (AUTH_RE.test(text)) { errorState = 'auth_failed'; break }
+  }
+
   return {
     sessionId,
     entrypoint,
@@ -359,6 +405,9 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
     lastBtw: pendingBtwMessage
       ? { message: pendingBtwMessage, response: null }
       : lastBtw,
+    convergenceAlert,
+    convergenceToolName,
+    errorState,
   }
 }
 
@@ -535,6 +584,9 @@ export async function findSessionForProject(
     conversationTurns: info.conversationTurns || 0,
     toolCounts: info.toolCounts || {},
     meta,
+    convergenceAlert: info.convergenceAlert ?? false,
+    convergenceToolName: info.convergenceToolName ?? null,
+    errorState: info.errorState ?? null,
   }
 
   if (sessionCache.size >= SESSION_CACHE_MAX) {

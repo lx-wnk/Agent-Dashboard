@@ -100,6 +100,9 @@ describe('enrichWithPipelineTask', () => {
       lastOutput: null,
       lastBtw: null,
       channelAvailable: false,
+      convergenceAlert: false,
+      convergenceToolName: null,
+      errorState: null,
     }
   }
 
@@ -138,5 +141,18 @@ describe('enrichWithPipelineTask', () => {
     const agents = [makeAgent('sess-4')]
     expect(() => enrichWithPipelineTask(agents)).not.toThrow()
     expect(agents[0].pipelineTaskId).toBeUndefined()
+  })
+})
+
+describe('Agent interface — convergenceAlert / convergenceToolName / errorState fields', () => {
+  it('Agent type has the three new health fields with correct defaults', () => {
+    const agent: Pick<Agent, 'convergenceAlert' | 'convergenceToolName' | 'errorState'> = {
+      convergenceAlert: false,
+      convergenceToolName: null,
+      errorState: null,
+    }
+    expect(agent.convergenceAlert).toBe(false)
+    expect(agent.convergenceToolName).toBeNull()
+    expect(agent.errorState).toBeNull()
   })
 })

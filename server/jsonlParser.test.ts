@@ -593,6 +593,72 @@ describe('mergeIncrementalInfo', () => {
   })
 })
 
+describe('extractSessionInfo — watchdog error scanner', () => {
+  function makeToolResultEntry(content: string) {
+    return {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'x', content }],
+      },
+    }
+  }
+
+  it('detects quota_exhausted from tool result content', () => {
+    const entries = [makeToolResultEntry('Error: usage limit exceeded for this month')]
+    const result = extractSessionInfo(entries)
+    expect(result.errorState).toBe('quota_exhausted')
+  })
+
+  it('detects rate_limited from tool result content', () => {
+    const entries = [makeToolResultEntry('HTTP 429: too many requests — try again later')]
+    const result = extractSessionInfo(entries)
+    expect(result.errorState).toBe('rate_limited')
+  })
+
+  it('detects auth_failed from tool result content', () => {
+    const entries = [makeToolResultEntry('Error: invalid API key provided')]
+    const result = extractSessionInfo(entries)
+    expect(result.errorState).toBe('auth_failed')
+  })
+
+  it('returns null errorState when no error patterns match', () => {
+    const entries = [makeToolResultEntry('Successfully wrote 42 lines to the file')]
+    const result = extractSessionInfo(entries)
+    expect(result.errorState).toBeNull()
+  })
+
+  it('detects convergence when last 5 tool calls share the same name and input hash', () => {
+    const repeatedEntry = {
+      type: 'assistant',
+      message: {
+        usage: { input_tokens: 100, output_tokens: 40 },
+        content: [
+          { type: 'tool_use', name: 'Bash', input: { command: 'ls /tmp' } },
+        ],
+      },
+    }
+    const entries = Array.from({ length: 5 }, () => repeatedEntry)
+    const result = extractSessionInfo(entries)
+    expect(result.convergenceAlert).toBe(true)
+    expect(result.convergenceToolName).toBe('Bash')
+  })
+
+  it('does not flag convergence when tool inputs vary across calls', () => {
+    const makeEntry = (cmd: string) => ({
+      type: 'assistant',
+      message: {
+        usage: { input_tokens: 10, output_tokens: 5 },
+        content: [{ type: 'tool_use', name: 'Bash', input: { command: cmd } }],
+      },
+    })
+    const entries = ['ls', 'pwd', 'cat file.txt', 'echo hello', 'ls -la'].map(makeEntry)
+    const result = extractSessionInfo(entries)
+    expect(result.convergenceAlert).toBe(false)
+    expect(result.convergenceToolName).toBeNull()
+  })
+})
+
 describe('extractSessionInfo — compaction detection', () => {
   function makeAssistantEntry(inputTokens: number, outputTokens: number) {
     return {
