@@ -806,18 +806,22 @@ describe('legacy DB migration', () => {
     expect(audit.action).toBe('implementation_spawned')
     expect(audit.details).toBe('{"from":"konzept","to":"umsetzung"}')
 
-    // schema_version bumped to current head (V7 = unique-running partial index on stage_runs).
+    // schema_version bumped to current head (V8 = FTS5 full-text search index).
     const version = db.prepare(`SELECT MAX(version) as v FROM schema_version`).get() as { v: number }
-    expect(version.v).toBe(7)
+    expect(version.v).toBe(8)
 
     // V6 must have added last_grant_at to stage_runs.
     const srCols = db.prepare(`PRAGMA table_info(stage_runs)`).all() as Array<{ name: string }>
     expect(srCols.some(c => c.name === 'last_grant_at')).toBe(true)
 
+    // V8 must have created the FTS5 virtual table.
+    const ftsTbl = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='task_fts'`).get() as { name: string } | undefined
+    expect(ftsTbl).toBeDefined()
+
     // Idempotency: re-running migrations on an already-current DB must be a no-op.
     closeDb()
     const reopened = getDb()
     const versionAgain = reopened.prepare(`SELECT MAX(version) as v FROM schema_version`).get() as { v: number }
-    expect(versionAgain.v).toBe(7)
+    expect(versionAgain.v).toBe(8)
   })
 })

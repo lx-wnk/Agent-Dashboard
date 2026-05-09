@@ -1,3 +1,4 @@
+import type { Agent } from '../src/types.js'
 import type { TaskEvent } from './routes/taskRoutes.js'
 import { fstatSync, mkdirSync, openSync } from 'node:fs'
 import { createServer as createHttpServer } from 'node:http'
@@ -26,6 +27,7 @@ import { createHooksRouter } from './routes/hooksRoutes.js'
 import { createPresetRouter } from './routes/presetRoutes.js'
 import { createRefineRouter } from './routes/refineRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
+import { createSearchRouter } from './routes/searchRoutes.js'
 import { createSystemRouter } from './routes/systemRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
 import { createWebPushRouter } from './routes/webpushRoutes.js'
@@ -184,6 +186,10 @@ async function start() {
   }, 60_000)
   persistTrendId.unref()
 
+  // Cached snapshot of the last local agent scan — used by the search endpoint
+  // to avoid re-scanning processes on every search request.
+  let cachedAgents: Agent[] = []
+
   // SSE broadcast + cost trend recording: only scan processes when clients are connected
   let sseBroadcastId: ReturnType<typeof setInterval> | null = null
   let hooksDebounceId: ReturnType<typeof setTimeout> | null = null
@@ -259,6 +265,7 @@ async function start() {
     sseBroadcastId = setInterval(async () => {
       try {
         const localAgents = await getAgents()
+        cachedAgents = localAgents
         await broadcastAgents(localAgents)
       }
       catch (err) {
@@ -443,6 +450,9 @@ async function start() {
 
   // Historical session import routes
   app.use('/api', createHistoryRouter())
+
+  // Full-text search across tasks (FTS5) and agents (in-memory)
+  app.use('/api', createSearchRouter({ getAgents: () => cachedAgents }))
 
   // Agent routes (REST endpoints — non-SSE; SSE stream stays above)
   app.use('/api', createAgentRouter({ spawnManager, requireApiToken, rejectCrossOrigin }))
