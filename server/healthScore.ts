@@ -26,8 +26,7 @@ export function computeHealthScore(input: HealthScoreInput): number {
   if (recentAvgCost > 0 && costEstimate > recentAvgCost * 3)
     costSpikeScore = 0
 
-  const score
-    = successRate * 0.4
+  const score = successRate * 0.4
     + cacheHitRate * 0.25
     + errorScore * 0.25
     + costSpikeScore * 0.1

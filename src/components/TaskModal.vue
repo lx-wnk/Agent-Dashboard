@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
+import type { StageCostRow } from './StageCostWaterfall.vue'
+import type { SlashCommand } from './TaskSlashCommandMenu.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
@@ -25,10 +27,8 @@ import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
 import AuditLogTab from './AuditLogTab.vue'
 import GitStatusPanel from './GitStatusPanel.vue'
-import type { StageCostRow } from './StageCostWaterfall.vue'
 import StageCostWaterfall from './StageCostWaterfall.vue'
 import StageOutputView from './StageOutputView.vue'
-import type { SlashCommand } from './TaskSlashCommandMenu.vue'
 import TaskSlashCommandMenu from './TaskSlashCommandMenu.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
@@ -824,8 +824,12 @@ const runtime = computed(() => {
             <h3 class="text-[12px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
               Cost breakdown
             </h3>
-            <div v-if="costLoading" class="text-sm text-slate-400 dark:text-slate-600">Loading...</div>
-            <div v-else-if="costError" class="text-sm text-red-500 dark:text-red-400">{{ costError }}</div>
+            <div v-if="costLoading" class="text-sm text-slate-400 dark:text-slate-600">
+              Loading...
+            </div>
+            <div v-else-if="costError" class="text-sm text-red-500 dark:text-red-400">
+              {{ costError }}
+            </div>
             <StageCostWaterfall v-else :rows="costBreakdown" />
           </section>
 

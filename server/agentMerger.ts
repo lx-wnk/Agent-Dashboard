@@ -1,11 +1,11 @@
 import type { Agent, TokenUsage } from '../src/types.js'
 import { basename } from 'node:path'
 import { getChannelMap } from './channelDiscovery.js'
-import { findTasksBySessionIds } from './db/stageRunsRepo.js'
-import { findSessionForProject } from './jsonlParser.js'
-import { computeHealthScore } from './healthScore.js'
-import { estimateCacheCreationCost, estimateCacheReadCost, estimateCost } from './pricing.js'
 import { getRecentAvgFleetCost } from './costTrendCache.js'
+import { findTasksBySessionIds } from './db/stageRunsRepo.js'
+import { computeHealthScore } from './healthScore.js'
+import { findSessionForProject } from './jsonlParser.js'
+import { estimateCacheCreationCost, estimateCacheReadCost, estimateCost } from './pricing.js'
 import { scanProcesses } from './processScanner.js'
 
 const ACTIVE_THRESHOLD = 30_000 // 30s
