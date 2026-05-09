@@ -240,6 +240,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       :task="selectedTask"
       @close="selectTask(null)"
       @navigate="(agent: Agent) => navigateTo({ agent })"
+      @navigate-task="(taskId: string) => navigateTo({ taskId })"
       @open-chat="(t) => { selectTask(null); activeConceptTask = t; showRefinementChat = true }"
     />
 

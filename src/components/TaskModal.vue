@@ -26,6 +26,7 @@ import {
 import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
 import AuditLogTab from './AuditLogTab.vue'
+import DependencyGraph from './DependencyGraph.vue'
 import GitStatusPanel from './GitStatusPanel.vue'
 import StageCostWaterfall from './StageCostWaterfall.vue'
 import StageOutputView from './StageOutputView.vue'
@@ -35,11 +36,11 @@ import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
-const emit = defineEmits<{ close: [], navigate: [agent: Agent], openChat: [task: PipelineTask] }>()
+const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
 
 const { agents } = useAgents()
 
-type Tab = 'overview' | 'stages' | 'permissions' | 'audit'
+type Tab = 'overview' | 'stages' | 'permissions' | 'audit' | 'graph'
 const activeTab = ref<Tab>('overview')
 const stageRuns = ref<StageRun[]>([])
 const permissions = ref<TaskPermission[]>([])
@@ -480,6 +481,14 @@ const runtime = computed(() => {
           @click="activeTab = 'audit'"
         >
           Audit
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2.5 text-xs font-semibold bg-transparent border-none border-b-2 border-transparent cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+          :class="activeTab === 'graph' ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' : 'text-slate-400 dark:text-slate-600'"
+          @click="activeTab = 'graph'"
+        >
+          Dependencies
         </button>
       </nav>
 
@@ -985,6 +994,11 @@ const runtime = computed(() => {
         <!-- Audit tab -->
         <section v-if="activeTab === 'audit'" class="p-5">
           <AuditLogTab v-if="task" :task-id="task.id" />
+        </section>
+
+        <!-- Dependencies graph tab -->
+        <section v-if="activeTab === 'graph' && task" class="p-5">
+          <DependencyGraph :task-id="task.id" @navigate="id => emit('navigateTask', id)" />
         </section>
       </div>
 
