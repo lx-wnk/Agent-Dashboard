@@ -14,6 +14,7 @@ import { listRemoteRegistrationsForUser } from './db/remoteRegistrationsRepo.js'
 import { getTaskById } from './db/tasksRepo.js'
 import { createMcpRouter } from './mcp/mcpRouter.js'
 import { createRejectCrossOrigin, requireApiToken } from './middleware.js'
+import { sendWebPush } from './notifications/adapters/webpush.js'
 import { createDispatcher, setSseBroadcaster } from './notifications/dispatcher.js'
 import { DISCOVERY_DIR } from './paths.js'
 import { PipelineOrchestrator } from './pipeline/orchestrator.js'
@@ -27,6 +28,7 @@ import { createRefineRouter } from './routes/refineRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
 import { createSystemRouter } from './routes/systemRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
+import { createWebPushRouter } from './routes/webpushRoutes.js'
 import { SpawnManager } from './spawnManager.js'
 
 // Ensure FDs 0–2 are open. When spawned by tsx watch or similar tools, stdio FDs
@@ -345,6 +347,8 @@ async function start() {
           severity: 'warning',
         })
         .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
+      sendWebPush({ title: `Task "${task.title}" needs permission`, body: `Agent requests ${request.tool}` })
+        .catch(() => { /* ignore */ })
     },
     onTaskChanged: (taskId, info) => {
       // Fired by the orchestrator after every successful applyTransition.
@@ -353,10 +357,16 @@ async function start() {
       // failures. enrichTask adds latestStageRunStatus + needsUser, which
       // the kanban cards bind to for their status chip.
       const task = getTaskById(taskId)
-      if (task)
+      if (task) {
         broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
-      else
+        if (task.currentStage === 'done') {
+          sendWebPush({ title: `Task "${task.title}" completed`, body: 'Pipeline task reached done stage' })
+            .catch(() => { /* ignore */ })
+        }
+      }
+      else {
         broadcastTaskEvent({ type: 'stage_run_updated', taskId, payload: info })
+      }
     },
     onStageFailed: (taskId, info) => {
       // Push a task_updated event so the SSE clients re-fetch and see
@@ -375,6 +385,8 @@ async function start() {
           severity: 'error',
         })
         .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
+      sendWebPush({ title: `Task "${task.title}" stage failed`, body: `Stage ${info.stage} failed` })
+        .catch(() => { /* ignore */ })
     },
   })
   orchestrator.start()
@@ -383,6 +395,9 @@ async function start() {
 
   // API key management routes (browser-facing, CSRF-guarded, no bearer token required)
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin }))
+
+  // Web Push VAPID subscription management routes
+  app.use('/api', createWebPushRouter())
 
   // Permission preset management routes (list/delete remembered tool grants per project)
   app.use('/api', createPresetRouter(rejectCrossOrigin))
