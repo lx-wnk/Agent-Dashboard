@@ -225,6 +225,23 @@ function formatDate(iso: string | null) {
     return '—'
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
+
+// --- Historical data import ---
+const importStatus = ref('')
+
+async function startImport() {
+  importStatus.value = 'Starting…'
+  await fetch('/api/history/import', { method: 'POST' })
+  const es = new EventSource('/api/history/import/status')
+  es.onmessage = (ev) => {
+    const p = JSON.parse(ev.data) as { total: number, processed: number, done: boolean }
+    importStatus.value = `${p.processed}/${p.total} processed`
+    if (p.done) {
+      importStatus.value = `Import complete — ${p.processed} sessions processed`
+      es.close()
+    }
+  }
+}
 </script>
 
 <template>
@@ -471,6 +488,21 @@ function formatDate(iso: string | null) {
               </tr>
             </tbody>
           </table>
+          <div class="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+            <h3 class="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">
+              Historical Data
+            </h3>
+            <button
+              type="button"
+              class="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+              @click="startImport"
+            >
+              Import Session History
+            </button>
+            <p v-if="importStatus" class="text-xs text-slate-500 mt-1">
+              {{ importStatus }}
+            </p>
+          </div>
         </section>
 
         <!-- Remotes -->

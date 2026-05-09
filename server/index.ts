@@ -21,6 +21,7 @@ import { aggregateAgents, getEnvRemoteTargets } from './remoteAggregator.js'
 import { createAgentRouter } from './routes/agentRoutes.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createAuthRouter } from './routes/authRoutes.js'
+import { createHistoryRouter } from './routes/historyRoutes.js'
 import { createHooksRouter } from './routes/hooksRoutes.js'
 import { createPresetRouter } from './routes/presetRoutes.js'
 import { createRefineRouter } from './routes/refineRoutes.js'
@@ -439,6 +440,9 @@ async function start() {
       broadcastTaskEvent({ type: 'task_deleted', taskId })
     },
   ))
+
+  // Historical session import routes
+  app.use('/api', createHistoryRouter())
 
   // Agent routes (REST endpoints — non-SSE; SSE stream stays above)
   app.use('/api', createAgentRouter({ spawnManager, requireApiToken, rejectCrossOrigin }))
