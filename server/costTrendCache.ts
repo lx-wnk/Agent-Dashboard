@@ -3,7 +3,7 @@ import { getDb } from './db/client.js'
 /**
  * Returns the mean fleet cost across trend snapshots within the last
  * `windowMs` milliseconds. Each row in `agent_cost_trend` stores the
- * *total cumulative cost across all running agents* at that tick —
+ * total cumulative cost across all running agents at that tick —
  * not a per-agent value. Returns 0 when fewer than 2 data points exist
  * (insufficient history). Callers that need a per-agent baseline should
  * divide the result by the agent count before comparing.
