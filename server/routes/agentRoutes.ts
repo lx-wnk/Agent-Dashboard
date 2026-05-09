@@ -11,6 +11,7 @@ import { isAuthEnabled } from '../auth/requireAuth.js'
 import { getChannelMap } from '../channelDiscovery.js'
 import { UUID_RE } from '../constants.js'
 import { getDb } from '../db/client.js'
+import { getConfig } from '../db/notificationConfigRepo.js'
 import { findStageRunBySessionId } from '../db/stageRunsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
 import { parseFullSession } from '../jsonlParser.js'
@@ -293,6 +294,55 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
     }
     catch {
       res.status(500).json({ error: 'Failed to compute heatmap' })
+    }
+  })
+
+  router.get('/analytics/cost-forecast', (_req, res) => {
+    try {
+      const db = getDb()
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+      const rows = db.prepare(
+        'SELECT t, cost FROM agent_cost_trend WHERE t >= ? ORDER BY t ASC',
+      ).all(cutoff) as Array<{ t: number, cost: number }>
+
+      let cumCost = 0
+      const points: Array<{ t: number, y: number }> = rows.map((r) => {
+        cumCost += r.cost
+        return { t: r.t, y: cumCost }
+      })
+
+      let slope = 0
+      let intercept = 0
+      if (points.length >= 2) {
+        const n = points.length
+        const sumX = points.reduce((s, p) => s + p.t, 0)
+        const sumY = points.reduce((s, p) => s + p.y, 0)
+        const sumXY = points.reduce((s, p) => s + p.t * p.y, 0)
+        const sumXX = points.reduce((s, p) => s + p.t * p.t, 0)
+        slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX)
+        intercept = (sumY - slope * sumX) / n
+      }
+
+      const now = Date.now()
+      const forecast = Array.from({ length: 7 }, (_, i) => {
+        const t = now + (i + 1) * 24 * 60 * 60 * 1000
+        return { t, projectedCost: Math.max(0, slope * t + intercept) }
+      })
+
+      const warnCents = Number(getConfig('cost_forecast_warn_cents') ?? '1000')
+      const critCents = Number(getConfig('cost_forecast_critical_cents') ?? '5000')
+      const projectedCents = (forecast.at(-1)?.projectedCost ?? 0) * 100
+
+      const alerts: Array<{ level: 'warn' | 'critical', message: string }> = []
+      if (projectedCents >= critCents)
+        alerts.push({ level: 'critical', message: `Projected 7-day cost $${(projectedCents / 100).toFixed(2)} exceeds critical threshold $${(critCents / 100).toFixed(2)}` })
+      else if (projectedCents >= warnCents)
+        alerts.push({ level: 'warn', message: `Projected 7-day cost $${(projectedCents / 100).toFixed(2)} exceeds warning threshold $${(warnCents / 100).toFixed(2)}` })
+
+      res.json({ trend: points, forecast, alerts })
+    }
+    catch {
+      res.status(500).json({ error: 'Failed to compute forecast' })
     }
   })
 
