@@ -73,7 +73,7 @@ function formatDuration(ms: number | null): string {
         class="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
       >
         <td class="py-1 pr-2 text-slate-700 dark:text-slate-300 capitalize">{{ row.stage.replace('_', ' ') }}</td>
-        <td class="py-1 text-center text-slate-500 dark:text-slate-400">{{ row.iteration + 1 }}</td>
+        <td class="py-1 text-center text-slate-500 dark:text-slate-400">{{ row.iteration }}</td>
         <td class="py-1 text-right font-mono text-slate-700 dark:text-slate-300">{{ formatTokensCompact(row.tokensUsed) }}</td>
         <td class="py-1 text-right font-mono text-slate-700 dark:text-slate-300">{{ formatCost(centsToUsd(row.costCents)) }}</td>
         <td class="py-1 text-right font-mono text-slate-500 dark:text-slate-400">{{ formatDuration(stageDurationMs(row)) }}</td>

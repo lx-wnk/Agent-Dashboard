@@ -5,7 +5,7 @@ import { findTasksBySessionIds } from './db/stageRunsRepo.js'
 import { findSessionForProject } from './jsonlParser.js'
 import { computeHealthScore } from './healthScore.js'
 import { estimateCacheCreationCost, estimateCacheReadCost, estimateCost } from './pricing.js'
-import { getRecentAvgCostPerHour } from './costTrendCache.js'
+import { getRecentAvgFleetCost } from './costTrendCache.js'
 import { scanProcesses } from './processScanner.js'
 
 const ACTIVE_THRESHOLD = 30_000 // 30s
@@ -50,7 +50,10 @@ export async function getAgents(): Promise<Agent[]> {
     processes.map(proc => findSessionForProject(proc.cwd, proc.uptime)),
   )
 
-  const recentAvgCost = getRecentAvgCostPerHour(7 * 24 * 60 * 60 * 1000)
+  // Fleet-level baseline divided by agent count gives per-agent average cost.
+  // `agent_cost_trend.cost` stores the sum across all running agents at each tick.
+  const agentCount = Math.max(processes.length, 1)
+  const recentAvgCostPerAgent = getRecentAvgFleetCost(7 * 24 * 60 * 60 * 1000) / agentCount
 
   const agents: Agent[] = processes.map((proc, i) => {
     const session = sessions[i]
@@ -58,6 +61,11 @@ export async function getAgents(): Promise<Agent[]> {
     const tokenUsage: TokenUsage = session?.tokenUsage
       ? { ...session.tokenUsage }
       : { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 }
+
+    const usageSource = session?.tokenUsage || tokenUsage
+    const model = session?.model || null
+    const costEstimate = estimateCost(usageSource, model)
+    const tasks = (session?.tasks || []) as Agent['tasks']
 
     return {
       pid: proc.pid,
@@ -73,31 +81,25 @@ export async function getAgents(): Promise<Agent[]> {
       lastActivity: session?.lastActivity || new Date().toISOString(),
       currentAction: session?.currentAction || null,
       lastTools: session?.lastTools || [],
-      tasks: (session?.tasks || []) as Agent['tasks'],
+      tasks,
       subagents: (session?.subagents || []).map(sa => ({
         ...sa,
         type: sa.type.length > 60 ? `${sa.type.substring(0, 60)}...` : sa.type,
       })),
       tokenUsage,
-      costEstimate: estimateCost(session?.tokenUsage || tokenUsage, session?.model || null),
-      cacheCreationCostEstimate: estimateCacheCreationCost(
-        session?.tokenUsage || tokenUsage,
-        session?.model || null,
-      ),
-      cacheReadCostEstimate: estimateCacheReadCost(
-        session?.tokenUsage || tokenUsage,
-        session?.model || null,
-      ),
+      costEstimate,
+      cacheCreationCostEstimate: estimateCacheCreationCost(usageSource, model),
+      cacheReadCostEstimate: estimateCacheReadCost(usageSource, model),
       healthScore: computeHealthScore({
-        completedTasks: (session?.tasks || []).filter(t => t.status === 'completed').length,
-        totalTasks: (session?.tasks || []).length,
+        completedTasks: tasks.filter(t => t.status === 'completed').length,
+        totalTasks: tasks.length,
         cacheReadTokens: tokenUsage.cacheReadTokens,
         inputTokens: tokenUsage.inputTokens,
         hasError: (session?.meta?.toolErrors ?? 0) > 0,
-        costEstimate: estimateCost(session?.tokenUsage || tokenUsage, session?.model || null),
-        recentAvgCost,
+        costEstimate,
+        recentAvgCost: recentAvgCostPerAgent,
       }),
-      model: session?.model || null,
+      model,
       codeVersion: session?.codeVersion || null,
       conversationTurns: session?.conversationTurns || 0,
       toolCounts: session?.toolCounts || {},

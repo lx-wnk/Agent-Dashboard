@@ -1,12 +1,14 @@
 import { getDb } from './db/client.js'
 
 /**
- * Returns the mean accumulated cost across trend points within the last
- * `windowMs` milliseconds. Returns 0 if fewer than 2 data points exist
- * (insufficient history). Used by the health score as a baseline for
- * cost-spike detection.
+ * Returns the mean fleet cost across trend snapshots within the last
+ * `windowMs` milliseconds. Each row in `agent_cost_trend` stores the
+ * *total cumulative cost across all running agents* at that tick —
+ * not a per-agent value. Returns 0 when fewer than 2 data points exist
+ * (insufficient history). Callers that need a per-agent baseline should
+ * divide the result by the agent count before comparing.
  */
-export function getRecentAvgCostPerHour(windowMs: number): number {
+export function getRecentAvgFleetCost(windowMs: number): number {
   try {
     const db = getDb()
     const since = Date.now() - windowMs
@@ -18,7 +20,10 @@ export function getRecentAvgCostPerHour(windowMs: number): number {
     const sum = rows.reduce((acc, r) => acc + r.cost, 0)
     return sum / rows.length
   }
-  catch {
+  catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code !== 'SQLITE_ERROR' && code !== 'ENOENT')
+      console.warn('[costTrendCache] unexpected error:', err)
     return 0
   }
 }

@@ -50,6 +50,26 @@ const isGranting = ref(false)
 
 const costBreakdown = ref<StageCostRow[]>([])
 const costLoading = ref(false)
+const costError = ref('')
+
+async function loadCostBreakdown(taskId: string): Promise<void> {
+  costBreakdown.value = []
+  costError.value = ''
+  costLoading.value = true
+  try {
+    const res = await fetch(`/api/tasks/${taskId}/cost-breakdown`)
+    if (res.ok)
+      costBreakdown.value = await res.json()
+    else
+      costError.value = `Failed to load cost breakdown (${res.status})`
+  }
+  catch {
+    costError.value = 'Failed to load cost breakdown'
+  }
+  finally {
+    costLoading.value = false
+  }
+}
 
 const dependencies = ref<TaskDependency[]>([])
 const dependents = ref<TaskDependency[]>([])
@@ -222,16 +242,7 @@ watch(() => props.task?.id, async (id, prevId) => {
     feedbackHistory.value = []
     void loadDetails()
     void loadDependencies()
-    costBreakdown.value = []
-    costLoading.value = true
-    try {
-      const res = await fetch(`/api/tasks/${id}/cost-breakdown`)
-      if (res.ok)
-        costBreakdown.value = await res.json()
-    }
-    finally {
-      costLoading.value = false
-    }
+    void loadCostBreakdown(id)
   }
 })
 
@@ -254,6 +265,7 @@ watch(
       return
     void loadDetails()
     void loadDependencies()
+    void loadCostBreakdown(id)
   },
 )
 
@@ -769,9 +781,8 @@ const runtime = computed(() => {
             <h3 class="text-[12px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
               Cost breakdown
             </h3>
-            <div v-if="costLoading" class="text-sm text-slate-400 dark:text-slate-600">
-              Loading...
-            </div>
+            <div v-if="costLoading" class="text-sm text-slate-400 dark:text-slate-600">Loading...</div>
+            <div v-else-if="costError" class="text-sm text-red-500 dark:text-red-400">{{ costError }}</div>
             <StageCostWaterfall v-else :rows="costBreakdown" />
           </section>
         </section>
