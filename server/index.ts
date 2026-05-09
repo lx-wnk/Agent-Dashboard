@@ -26,6 +26,7 @@ import { createRefineRouter } from './routes/refineRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
 import { createSystemRouter } from './routes/systemRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
+import { createHooksRouter } from './routes/hooksRoutes.js'
 import { SpawnManager } from './spawnManager.js'
 
 // Ensure FDs 0–2 are open. When spawned by tsx watch or similar tools, stdio FDs
@@ -63,6 +64,12 @@ const SSE_INTERVAL_MS = (() => {
   return val
 })()
 
+const HOOKS_SECRET = process.env.DASHBOARD_HOOKS_SECRET ?? ''
+const HOOKS_DEBOUNCE_MS = (() => {
+  const val = Number(process.env.DASHBOARD_HOOKS_DEBOUNCE_MS ?? 100)
+  return Number.isFinite(val) && val >= 0 ? val : 100
+})()
+
 // Spawn state + logic (rate limit, stderr ring-buffer, reply store,
 // channel message forwarding) lives in SpawnManager.
 const spawnManager = new SpawnManager()
@@ -96,6 +103,9 @@ async function start() {
   // ─── Auth routes (public — before requireAuth) ───────────
 
   app.use(createAuthRouter({ host: HOST, port: PORT }))
+
+  // Hooks endpoint is exempt from session auth — protected by shared secret only.
+  app.use('/api/hooks', createHooksRouter({ onEvent: scheduleHooksRescan, secret: HOOKS_SECRET }))
 
   // All /api/* routes (except /auth/* and /api/me above) require authentication
   app.use('/api', requireAuth)
@@ -174,6 +184,72 @@ async function start() {
 
   // SSE broadcast + cost trend recording: only scan processes when clients are connected
   let sseBroadcastId: ReturnType<typeof setInterval> | null = null
+  let hooksDebounceId: ReturnType<typeof setTimeout> | null = null
+
+  async function broadcastAgents(localAgents: Awaited<ReturnType<typeof getAgents>>): Promise<void> {
+    const envRemotes = getEnvRemoteTargets()
+
+    // Baseline aggregation for cost trend (env remotes only — shared across all users)
+    const baselineAgents = await aggregateAgents(localAgents, envRemotes)
+    const totalCost = baselineAgents.reduce((sum, a) => sum + a.costEstimate, 0)
+    const totalTokens = baselineAgents.reduce((sum, a) => {
+      const u = a.tokenUsage
+      return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
+    }, 0)
+    costTrend.push({ t: Date.now(), cost: totalCost, tokens: totalTokens })
+    if (costTrend.length > MAX_TREND_POINTS)
+      costTrend.shift()
+
+    const trendSlice = costTrend.slice(-60)
+
+    // Fan out: each client gets local agents + their own remotes.
+    // Deduplicate: build per-userId payload cache so multiple browser tabs
+    // from the same user don't trigger duplicate remote-agent fetches.
+    const userPayloadCache = new Map<string, string>()
+
+    await Promise.all([...sseClients].map(async (client) => {
+      try {
+        if (client.res.writableEnded)
+          return
+
+        if (!userPayloadCache.has(client.userId)) {
+          const userRemotes = isAuthEnabled()
+            ? listRemoteRegistrationsForUser(client.userId).map(r => ({
+                url: r.url,
+                bearerKey: r.bearerKey,
+                name: r.name,
+              }))
+            : []
+          const allRemotes = [...envRemotes, ...userRemotes]
+          const agents = await aggregateAgents(localAgents, allRemotes)
+          userPayloadCache.set(client.userId, JSON.stringify({ agents, trend: trendSlice }))
+        }
+
+        const payload = userPayloadCache.get(client.userId)!
+        client.res.write(`data: ${payload}\n\n`)
+      }
+      catch {
+        sseClients.delete(client)
+      }
+    }))
+  }
+
+  function scheduleHooksRescan(): void {
+    if (hooksDebounceId)
+      clearTimeout(hooksDebounceId)
+    hooksDebounceId = setTimeout(async () => {
+      hooksDebounceId = null
+      if (sseClients.size === 0)
+        return
+      try {
+        const localAgents = await getAgents()
+        await broadcastAgents(localAgents)
+      }
+      catch (err) {
+        console.warn('[hooks] rescan failed:', err)
+      }
+    }, HOOKS_DEBOUNCE_MS)
+  }
 
   function startSSEBroadcast() {
     if (sseBroadcastId)
@@ -181,51 +257,7 @@ async function start() {
     sseBroadcastId = setInterval(async () => {
       try {
         const localAgents = await getAgents()
-        const envRemotes = getEnvRemoteTargets()
-
-        // Baseline aggregation for cost trend (env remotes only — shared across all users)
-        const baselineAgents = await aggregateAgents(localAgents, envRemotes)
-        const totalCost = baselineAgents.reduce((sum, a) => sum + a.costEstimate, 0)
-        const totalTokens = baselineAgents.reduce((sum, a) => {
-          const u = a.tokenUsage
-          return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
-        }, 0)
-        costTrend.push({ t: Date.now(), cost: totalCost, tokens: totalTokens })
-        if (costTrend.length > MAX_TREND_POINTS)
-          costTrend.shift()
-
-        const trendSlice = costTrend.slice(-60)
-
-        // Fan out: each client gets local agents + their own remotes.
-        // Deduplicate: build per-userId payload cache so multiple browser tabs
-        // from the same user don't trigger duplicate remote-agent fetches.
-        const userPayloadCache = new Map<string, string>()
-
-        await Promise.all([...sseClients].map(async (client) => {
-          try {
-            if (client.res.writableEnded)
-              return
-
-            if (!userPayloadCache.has(client.userId)) {
-              const userRemotes = isAuthEnabled()
-                ? listRemoteRegistrationsForUser(client.userId).map(r => ({
-                    url: r.url,
-                    bearerKey: r.bearerKey,
-                    name: r.name,
-                  }))
-                : []
-              const allRemotes = [...envRemotes, ...userRemotes]
-              const agents = await aggregateAgents(localAgents, allRemotes)
-              userPayloadCache.set(client.userId, JSON.stringify({ agents, trend: trendSlice }))
-            }
-
-            const payload = userPayloadCache.get(client.userId)!
-            client.res.write(`data: ${payload}\n\n`)
-          }
-          catch {
-            sseClients.delete(client)
-          }
-        }))
+        await broadcastAgents(localAgents)
       }
       catch (err) {
         console.error('SSE broadcast error:', err)
