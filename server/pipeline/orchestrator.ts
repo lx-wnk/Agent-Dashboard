@@ -14,15 +14,16 @@ import {
   getLatestStageRun,
   getStageRunById,
   getStageRunByIteration,
+  listPendingStageRuns,
   listRunningStageRuns,
   updateStageRun,
 } from '../db/stageRunsRepo.js'
 import { getDependentsOf, hasOtherBlockingDeps } from '../db/taskDependenciesRepo.js'
 import { getTaskById, listPickableTasks, updateTask } from '../db/tasksRepo.js'
+import { estimateCost } from '../pricing.js'
 import { cleanupLocalSettingsEntries, shouldCleanSettingsFile } from './agentSpawner.js'
 import { detectCompletion } from './completionDetector.js'
-import { attachSessionId, buildSessionName, decideRecovery } from './sessionManager.js'
-import { estimateCost } from '../pricing.js'
+import { attachSessionId, buildSessionName, decideRecovery, isPidAlive } from './sessionManager.js'
 import { findNewestSessionId, readSessionTokenSummary } from './sessionOutputReader.js'
 import { getHandlerForStage } from './stageHandlers.js'
 import { STAGE_ORDER } from './types.js'
@@ -32,6 +33,17 @@ const MAX_PARALLEL_KEY = 'maxParallelOrchestrators'
 const DEFAULT_MAX_PARALLEL = 3
 const STAGE_TIMEOUT_KEY = 'stageTimeoutSeconds'
 const DEFAULT_STAGE_TIMEOUT_SECONDS = 1800
+// Awaiting-user runs are NOT subject to the regular stage timeout because the
+// user may need hours to respond. But two failure modes still require a sweep:
+//   1. PID gone — agent crashed/exited while pending permissions remained, so
+//      the stage_run is a zombie (status=awaiting_user, no live process). Reap
+//      immediately on detection.
+//   2. PID alive but elapsed time > AWAITING_USER_TIMEOUT — the agent is
+//      busy-waiting (e.g. via shell `until [ -e ... ]; do sleep N; done`
+//      polling loops) instead of yielding to the request_permission MCP gate.
+//      Kill it.
+const AWAITING_USER_TIMEOUT_KEY = 'awaitingUserTimeoutSeconds'
+const DEFAULT_AWAITING_USER_TIMEOUT_SECONDS = 14400 // 4h
 
 /**
  * Callback invoked when a stage handler creates a runtime permission request.
@@ -222,12 +234,83 @@ export class PipelineOrchestrator {
       return null
 
     // Global runner-slot cap — applies to every agent-driven stage, not
-    // just umsetzung. Protects against spawning more concurrent Claude
+    // just implementation. Protects against spawning more concurrent Claude
     // agents than maxParallelOrchestrators allows.
     if (handler.requiresAgent && !this.hasFreeRunnerSlot(task.id))
       return null
 
+    // Lingering-pending gate: when the most recent stage_run on the current
+    // stage is terminal (done/failed) but still has unresolved
+    // permission_requests attached, do NOT spawn a new run — wait for the
+    // user to clear them via the resolve / bulk-resolve endpoints.
+    //
+    // Without this gate, a single granted permission flips the run to
+    // `failed` and kicks off a fresh spawn while sibling pendings on the
+    // same dead run keep burning the user's attention budget across N
+    // independent kill+restart cascades. The bulk-resolve endpoint avoids
+    // this by design (one transaction, one restart) but legacy one-by-one
+    // resolution and any race against new agent-side requests can still
+    // produce lingering pendings — this gate is the defense-in-depth.
+    //
+    // We check `done`/`failed` (terminal) AND `awaiting_user` with a dead
+    // PID. The dead-PID awaiting_user case is a zombie that
+    // sweepAwaitingUserRuns will reap on its next tick — but the sweep is
+    // tick-driven while progressTask is synchronous, so without checking
+    // here a synchronous resolve+progressTask path would build iter+1 on
+    // top of unresolved pendings before the sweep runs. `awaiting_user`
+    // with a live PID is owned by the re-entry guard below;
+    // `pending`/`running` are non-terminal and don't need a respawn anyway.
+    if (handler.requiresAgent) {
+      const latestRunOnStage = getLatestStageRun(taskId, task.currentStage)
+      const isTerminal = !!latestRunOnStage
+        && (latestRunOnStage.status === 'failed' || latestRunOnStage.status === 'done')
+      const isZombieAwait = !!latestRunOnStage
+        && latestRunOnStage.status === 'awaiting_user'
+        && (latestRunOnStage.pid === null || !isPidAlive(latestRunOnStage.pid))
+      if (latestRunOnStage && (isTerminal || isZombieAwait)) {
+        const lingering = listPendingPermissionRequests(latestRunOnStage.id)
+        if (lingering.length > 0) {
+          consola.info(
+            `[orchestrator] progressTask blocked: ${lingering.length} pending permission_requests`
+            + ` on run ${latestRunOnStage.id} (status=${latestRunOnStage.status},`
+            + ` zombie=${isZombieAwait}); user must resolve them before respawn`,
+          )
+          return null
+        }
+      }
+    }
+
     const stageRun = this.ensureStageRun(task)
+
+    // Re-entrancy guard: when an agent-driven stage already has a running
+    // stage_run with a live PID, do NOT spawn a second agent on top of it.
+    // This protects against the user-grants-many-permissions cascade:
+    //   1. bulk request creates N pending permission_requests on run R1
+    //   2. user grants P1 → R1 SIGTERMed + failed → progressTask spawns R2
+    //   3. R2 is alive and asking its own permissions
+    //   4. user grants P2/P3/… (still attached to R1, now failed) → resolve
+    //      route falls into the `else` branch (shouldRestartRun=false because
+    //      R1 is failed), calls resumeFromUser → progressTask
+    //   5. without this guard: ensureStageRun returns the running R2, the
+    //      handler.execute below spawns ANOTHER claude process for the same
+    //      stage_run, multiplying token burn for every extra grant click.
+    //
+    // We also intentionally do NOT bump `started_at` when returning early so
+    // the awaiting-user / stage timeout continues to count from the original
+    // spawn, not from the most recent re-entry attempt.
+    if (
+      handler.requiresAgent
+      && (stageRun.status === 'running' || stageRun.status === 'awaiting_user')
+      && stageRun.pid !== null
+      && isPidAlive(stageRun.pid)
+    ) {
+      consola.info(
+        `[orchestrator] progressTask re-entry skipped: stage ${stageRun.stage}`
+        + ` (run ${stageRun.id}, status=${stageRun.status}) has live PID ${stageRun.pid}`,
+      )
+      return stageRun
+    }
+
     updateStageRun(stageRun.id, { status: 'running', startedAt: new Date().toISOString() })
 
     const ctx = this.buildContext(task, stageRun, opts?.resumeSessionId, opts?.userAdditionalPrompt)
@@ -311,6 +394,21 @@ export class PipelineOrchestrator {
     if (existing && (existing.status === 'pending' || existing.status === 'running'))
       return existing
 
+    // `awaiting_user` with a LIVE pid is a still-alive agent blocked in the
+    // channel bridge waiting for the user response — creating a fresh iter+1
+    // row here would let the re-entry guard miss the running PID and spawn a
+    // second agent on top of the awaiting one. Zombie awaiting_user (dead
+    // PID) falls through to iter+1 so `sweepAwaitingUserRuns` can reap the
+    // dead row and progress restarts cleanly on the next iteration.
+    if (
+      existing
+      && existing.status === 'awaiting_user'
+      && existing.pid !== null
+      && isPidAlive(existing.pid)
+    ) {
+      return existing
+    }
+
     const iteration = existing ? existing.iteration + 1 : 0
     return createStageRun({
       taskId: task.id,
@@ -343,8 +441,8 @@ export class PipelineOrchestrator {
             endedAt: now,
             output: transition.output ?? null,
           }, db)
-          // Optional atomic task.metadata patch — e.g. selbstreview loop
-          // stashing review_feedback when jumping back to umsetzung. Must
+          // Optional atomic task.metadata patch — e.g. self_review loop
+          // stashing review_feedback when jumping back to implementation. Must
           // land in the same transaction as the stage transition or a
           // crash between the two leaves task state inconsistent.
           const patch: { currentStage: PipelineStage, metadata?: Record<string, unknown> | null } = {
@@ -556,9 +654,9 @@ export class PipelineOrchestrator {
    * 1. **Finalize async agents**: for every stage_run with status='running'
    *    and a PID, ask the completionDetector whether the agent is done.
    *    On success the per-stage routing decides the next transition:
-   *    most stages go to their canonical next stage; selbstreview inspects
-   *    `passed` and loops back to umsetzung with review feedback stored
-   *    on task.metadata; finalisierung transitions to `done`.
+   *    most stages go to their canonical next stage; self_review inspects
+   *    `passed` and loops back to implementation with review feedback stored
+   *    on task.metadata; finalization transitions to `done`.
    *    On schema-validation failure → retry once via `iterate` carrying
    *    the error as feedback, then escalate to `wait_user` on the second
    *    failure. Hard failure (no session, no output) → fail fast.
@@ -574,7 +672,182 @@ export class PipelineOrchestrator {
   private async progressPendingTasks(): Promise<void> {
     const allRunning = listRunningStageRuns()
     await this.finalizeCompletedAsyncRuns(allRunning)
+    await this.sweepAwaitingUserRuns(allRunning)
+    await this.sweepOrphanRuns(allRunning)
     this.pickNextTasksForFreeSlots(allRunning)
+  }
+
+  /**
+   * Sweep stage_runs whose state has diverged from their parent task or whose
+   * PID is gone. Complements the status-specific sweepers above:
+   *
+   *   - **Terminal-task orphan**: any non-terminal stage_run whose task
+   *     reached `done`/`cancelled` is a leak (the task moved on without
+   *     reaping its in-flight runs). Kill any live PID and mark failed.
+   *   - **on_hold + dead PID**: same logic as awaiting_user but for the
+   *     `on_hold` status, which `sweepAwaitingUserRuns` does not touch.
+   *   - **pending stuck > 5 min** with no live PID: a `pending` run is the
+   *     transient state between createStageRun and the next progressTask
+   *     pickup. If it sits with no PID for minutes, the orchestrator missed
+   *     it (e.g. crash after createStageRun) — reap so retry/UI is honest.
+   *
+   * Includes `running` and `awaiting_user` runs IF their task is parked
+   * (currentStage is done/cancelled/on_hold). The status-specific sweepers
+   * above otherwise handle those statuses for non-parked tasks.
+   */
+  private async sweepOrphanRuns(allRunning?: StageRun[]): Promise<void> {
+    // Scan ALL non-terminal statuses — finalize / sweepAwaitingUserRuns
+    // handle the happy paths, but the parked-task check below must run
+    // across every status to catch cascade leaks.
+    const candidates = allRunning ?? listRunningStageRuns()
+    const pendings = listPendingStageRuns()
+    const all = [...candidates, ...pendings]
+
+    const PENDING_STALE_SECONDS = 300 // 5 min
+    for (const run of all) {
+      const task = getTaskById(run.taskId)
+      if (!task)
+        continue
+
+      // Case 1: task is in a parked/terminal stage but stage_run is not.
+      // Leaked from a cancel-cascade, on_hold-cascade, or process race.
+      // `on_hold` is included because the dependency cascade sets task
+      // currentStage='on_hold' without touching the in-flight stage_run —
+      // any live agent on such a task is now working off a parked task
+      // and should be reaped.
+      if (
+        task.currentStage === 'done'
+        || task.currentStage === 'cancelled'
+        || task.currentStage === 'on_hold'
+      ) {
+        // Re-fetch in case `finalizeCompletedAsyncRuns` (or another
+        // tick branch in the same pass) already transitioned this run
+        // to a terminal status — without this guard the orphan reaper
+        // would overwrite `done`/`failed` with a fresh `failed` row
+        // and append a misleading audit entry.
+        const fresh = getStageRunById(run.id)
+        if (!fresh || fresh.status === 'done' || fresh.status === 'failed')
+          continue
+        if (fresh.pid !== null && isPidAlive(fresh.pid)) {
+          try {
+            process.kill(fresh.pid, 'SIGTERM')
+          }
+          catch { /* race */ }
+        }
+        consola.warn(
+          `[orchestrator] orphan stage_run ${fresh.id} (${fresh.stage}, status=${fresh.status})`
+          + ` belongs to parked task ${task.id} (${task.currentStage}) — reaping as failed`,
+        )
+        this.applyTransition(task, fresh, {
+          kind: 'fail',
+          error: `orphan reaper: task reached ${task.currentStage} with stage_run still ${fresh.status}`,
+        })
+        continue
+      }
+
+      // Case 2: on_hold with dead PID — agent died while task was held.
+      if (run.status === 'on_hold' && run.pid !== null && !isPidAlive(run.pid)) {
+        const fresh = getStageRunById(run.id)
+        if (!fresh || fresh.status === 'done' || fresh.status === 'failed')
+          continue
+        consola.warn(
+          `[orchestrator] on_hold run ${fresh.id} (${fresh.stage}) has dead PID ${fresh.pid} — reaping as failed`,
+        )
+        this.applyTransition(task, fresh, {
+          kind: 'fail',
+          error: 'orphan reaper: on_hold agent exited',
+        })
+        continue
+      }
+
+      // Case 3: pending with no PID and stale startedAt. progressTask never
+      // promoted it (orchestrator was down at the moment, or createStageRun
+      // happened in a code path that didn't follow up with a spawn).
+      if (run.status === 'pending' && run.pid === null && run.startedAt) {
+        const elapsedMs = Date.now() - new Date(run.startedAt).getTime()
+        if (elapsedMs > PENDING_STALE_SECONDS * 1000) {
+          const fresh = getStageRunById(run.id)
+          if (!fresh || fresh.status !== 'pending')
+            continue
+          consola.warn(
+            `[orchestrator] pending run ${fresh.id} (${fresh.stage}) stuck ${Math.round(elapsedMs / 1000)}s`
+            + ` without spawn — reaping as failed`,
+          )
+          this.applyTransition(task, fresh, {
+            kind: 'fail',
+            error: `orphan reaper: pending stage_run never promoted to running (${Math.round(elapsedMs / 1000)}s elapsed)`,
+          })
+        }
+      }
+    }
+  }
+
+  /**
+   * Sweep stuck awaiting_user runs. Two failure modes are reaped here:
+   *
+   *   1. **Dead PID with awaiting_user status**: agent crashed/exited while
+   *      permission requests were still pending. Without this sweep the run
+   *      sits forever as a zombie because `finalizeCompletedAsyncRuns`
+   *      filters to status=running.
+   *   2. **Live PID exceeding the awaiting-user wallclock**: agent is
+   *      busy-waiting (observed in the wild as `until [ -e /tmp/x ]; do
+   *      sleep N; done` shell polling loops generated as a permission-gate
+   *      workaround). Kill the agent and fail the run so the slot frees.
+   *
+   * Runs in `pickable` listings already exclude awaiting_user via
+   * `pickNextTasksForFreeSlots`, so this sweep only writes terminal status.
+   */
+  private async sweepAwaitingUserRuns(allRunning?: StageRun[]): Promise<void> {
+    const awaiting = (allRunning ?? listRunningStageRuns()).filter(r => r.status === 'awaiting_user')
+    if (awaiting.length === 0)
+      return
+    const timeoutSeconds = this.getCachedPipelineConfigNumber(
+      AWAITING_USER_TIMEOUT_KEY,
+      DEFAULT_AWAITING_USER_TIMEOUT_SECONDS,
+    )
+    for (const run of awaiting) {
+      const task = getTaskById(run.taskId)
+      if (!task)
+        continue
+      const pidAlive = run.pid !== null && isPidAlive(run.pid)
+      if (!pidAlive) {
+        consola.warn(
+          `[orchestrator] awaiting_user run ${run.id} (${run.stage}) has dead PID ${run.pid} — reaping as failed`,
+        )
+        this.applyTransition(task, run, {
+          kind: 'fail',
+          error: 'awaiting_user reaper: stage agent exited while permissions pending',
+        })
+        continue
+      }
+      // Anchor the wallclock to the last user-driven permission resolution
+      // (lastGrantAt) when it exists, falling back to spawn time. Without
+      // this, a slow-responding user gets the agent killed at the timeout
+      // even though the agent is innocently blocked. Once a single grant
+      // has landed, the budget restarts from that point.
+      const wallclockAnchor = run.lastGrantAt ?? run.startedAt
+      if (timeoutSeconds > 0 && wallclockAnchor) {
+        const elapsedMs = Date.now() - new Date(wallclockAnchor).getTime()
+        if (elapsedMs > timeoutSeconds * 1000) {
+          consola.warn(
+            `[orchestrator] awaiting_user run ${run.id} (${run.stage}) exceeded ${timeoutSeconds}s`
+            + ` since ${run.lastGrantAt ? 'last grant' : 'spawn'}`
+            + ` (elapsed ${Math.round(elapsedMs / 1000)}s) with live PID ${run.pid} — agent is likely busy-waiting; killing.`,
+          )
+          try {
+            process.kill(run.pid!, 'SIGTERM')
+          }
+          catch { /* race with exit */ }
+          const fresh = getStageRunById(run.id)
+          if (fresh && fresh.status === 'awaiting_user') {
+            this.applyTransition(task, fresh, {
+              kind: 'fail',
+              error: `awaiting_user timeout: ran ${Math.round(elapsedMs / 1000)}s (limit ${timeoutSeconds}s) — agent likely busy-waiting`,
+            })
+          }
+        }
+      }
+    }
   }
 
   private async finalizeCompletedAsyncRuns(allRunning?: StageRun[]): Promise<void> {
@@ -731,11 +1004,11 @@ export class PipelineOrchestrator {
    * Decide which transition to apply after an async stage completes.
    * Most stages route to the canonical next stage, but two special cases:
    *
-   *   - **selbstreview**: if `passed: false`, loop back to umsetzung with
+   *   - **self_review**: if `passed: false`, loop back to implementation with
    *     the review findings stored on task.metadata.review_feedback so
-   *     the next umsetzung iteration sees them. If `passed: true`,
-   *     advance to finalisierung and clear any stale review_feedback.
-   *   - **finalisierung**: the terminal agent stage — always `{done}`.
+   *     the next implementation iteration sees them. If `passed: true`,
+   *     advance to finalization and clear any stale review_feedback.
+   *   - **finalization**: the terminal agent stage — always `{done}`.
    *
    * Metadata mutations are returned as part of the `next` transition
    * (`taskMetadataPatch`) so they land in the same SQLite transaction
@@ -748,10 +1021,10 @@ export class PipelineOrchestrator {
     run: StageRun,
     output: Record<string, unknown>,
   ): StageTransition {
-    if (run.stage === 'finalisierung')
+    if (run.stage === 'finalization')
       return { kind: 'done', output }
 
-    if (run.stage === 'selbstreview') {
+    if (run.stage === 'self_review') {
       const passed = output.passed === true
       if (!passed) {
         const feedback = summarizeReviewFindings(output)
@@ -777,11 +1050,11 @@ export class PipelineOrchestrator {
           review_feedback: feedback,
           review_cycles: cycles,
         }
-        return { kind: 'next', toStage: 'umsetzung', output, taskMetadataPatch: nextMeta }
+        return { kind: 'next', toStage: 'implementation', output, taskMetadataPatch: nextMeta }
       }
       // Passed — clear any lingering feedback and the cycle counter so
-      // the finalisierung handler doesn't read stale review notes and a
-      // future re-entry into selbstreview starts from zero.
+      // the finalization handler doesn't read stale review notes and a
+      // future re-entry into self_review starts from zero.
       if (
         task.metadata
         && typeof task.metadata === 'object'
@@ -789,9 +1062,9 @@ export class PipelineOrchestrator {
       ) {
         const { review_feedback: _drop1, review_cycles: _drop2, ...rest } = task.metadata
         const cleared = Object.keys(rest).length > 0 ? rest : null
-        return { kind: 'next', toStage: 'finalisierung', output, taskMetadataPatch: cleared }
+        return { kind: 'next', toStage: 'finalization', output, taskMetadataPatch: cleared }
       }
-      return { kind: 'next', toStage: 'finalisierung', output }
+      return { kind: 'next', toStage: 'finalization', output }
     }
 
     return { kind: 'next', toStage: nextStageOrDone(run.stage), output }
@@ -1056,8 +1329,8 @@ function cleanupDashboardSettings(cwd: string): void {
 }
 
 /**
- * Extract a short, actionable review-feedback string from a selbstreview
- * output payload for injection into the next umsetzung iteration prompt.
+ * Extract a short, actionable review-feedback string from a self_review
+ * output payload for injection into the next implementation iteration prompt.
  */
 function summarizeReviewFindings(output: Record<string, unknown>): string {
   const findings = Array.isArray(output.findings) ? output.findings : []

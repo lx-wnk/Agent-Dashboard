@@ -7,12 +7,20 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
 import { createTask } from '../composables/useTasks'
 
+const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
+
+const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask], taskCreated: [task: PipelineTask] }>()
+
 const md = new Marked({ breaks: true, gfm: true })
+
+const PHASE_DONE_RE = /__phase_done:\s*\w+/g
+const REFINED_TITLE_RE = /^\*{0,2}[Rr]efined\s+[Tt]itle[^\n]*\n?/gm
+const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/
 
 function cleanContent(text: string): string {
   return text
-    .replace(/__phase_done:\s*\w+/g, '')
-    .replace(/^\*{0,2}[Rr]efined\s+[Tt]itle\*{0,2}:?[^\n]*\n?/gm, '')
+    .replace(PHASE_DONE_RE, '')
+    .replace(REFINED_TITLE_RE, '')
     .trimEnd()
 }
 
@@ -20,11 +28,10 @@ function renderMarkdown(text: string): string {
   return DOMPurify.sanitize(md.parse(cleanContent(text), { async: false }) as string)
 }
 
-const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
-const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask], taskCreated: [task: PipelineTask] }>()
-
 const currentTask = ref<PipelineTask | null>(props.task)
-watch(() => props.task, (t) => { currentTask.value = t })
+watch(() => props.task, (t) => {
+  currentTask.value = t
+})
 
 const inputText = ref('')
 const chatEl = ref<HTMLElement | null>(null)
@@ -34,7 +41,8 @@ const pendingImages = ref<ImageAttachment[]>([])
 
 function autoResize() {
   const el = textareaEl.value
-  if (!el) return
+  if (!el)
+    return
   el.style.height = 'auto'
   el.style.height = `${el.scrollHeight}px`
 }
@@ -42,23 +50,30 @@ function autoResize() {
 watch(inputText, () => nextTick(autoResize))
 
 const {
-  messages, completedPhases, isStreaming, error,
-  approvalReady, loadHistory, sendMessage, confirm, phaseLabel,
+  messages,
+  isStreaming,
+  error,
+  approvalReady,
+  loadHistory,
+  sendMessage,
+  confirm,
+  phaseLabel,
 } = useRefinementChat(() => currentTask.value?.id ?? null)
 
 const EXAMPLE_CHIPS = [
-  'Ein neues Feature implementieren',
-  'Einen Bug beheben',
-  'Code refactoren',
-  'Eine neue API-Integration',
+  'Implement a new feature',
+  'Fix a bug',
+  'Refactor code',
+  'A new API integration',
 ]
 
 // ── Dynamic title ─────────────────────────────
 const chatTitle = computed(() => {
   // Prefer a refinedTitle extracted from the agent's JSON output
   for (const msg of [...messages.value].reverse()) {
-    if (msg.role !== 'assistant' || !msg.content) continue
-    const jsonMatch = msg.content.match(/```json\n([\s\S]*?)```/)
+    if (msg.role !== 'assistant' || !msg.content)
+      continue
+    const jsonMatch = msg.content.match(JSON_BLOCK_RE)
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[1])
@@ -72,7 +87,8 @@ const chatTitle = computed(() => {
   }
   // Fall back to first user message
   const firstUser = messages.value.find(m => m.role === 'user')
-  if (!firstUser?.content) return 'Neues Ticket'
+  if (!firstUser?.content)
+    return 'New Ticket'
   const t = firstUser.content.replace(/\s+/g, ' ').trim()
   return t.length > 30 ? `${t.slice(0, 27)}…` : t
 })
@@ -88,12 +104,15 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 async function handlePaste(e: ClipboardEvent) {
   const items = e.clipboardData?.items
-  if (!items) return
+  if (!items)
+    return
   for (const item of Array.from(items)) {
-    if (!item.type.startsWith('image/')) continue
+    if (!item.type.startsWith('image/'))
+      continue
     e.preventDefault()
     const file = item.getAsFile()
-    if (!file) continue
+    if (!file)
+      continue
     const dataUrl = await readFileAsDataUrl(file)
     pendingImages.value.push({ dataUrl, mimeType: item.type })
   }
@@ -101,13 +120,16 @@ async function handlePaste(e: ClipboardEvent) {
 
 async function handleFileSelect(e: Event) {
   const files = (e.target as HTMLInputElement).files
-  if (!files) return
+  if (!files)
+    return
   for (const file of Array.from(files)) {
-    if (!file.type.startsWith('image/')) continue
+    if (!file.type.startsWith('image/'))
+      continue
     const dataUrl = await readFileAsDataUrl(file)
     pendingImages.value.push({ dataUrl, mimeType: file.type })
   }
-  if (fileInputEl.value) fileInputEl.value.value = ''
+  if (fileInputEl.value)
+    fileInputEl.value.value = ''
 }
 
 function removeImage(idx: number) {
@@ -121,7 +143,8 @@ watch(() => props.open, async (val) => {
 })
 
 onMounted(() => {
-  if (props.open && currentTask.value) loadHistory()
+  if (props.open && currentTask.value)
+    loadHistory()
 })
 
 watch(messages, async () => {
@@ -131,17 +154,18 @@ watch(messages, async () => {
 
 async function handleSend() {
   const msg = inputText.value.trim()
-  if (!msg || isStreaming.value) return
+  if (!msg || isStreaming.value)
+    return
   const images = pendingImages.value.length > 0 ? [...pendingImages.value] : undefined
   inputText.value = ''
   pendingImages.value = []
   await nextTick(autoResize)
   if (currentTask.value === null) {
     const newTask = await createTask({
-      slug: `konzept-${Date.now()}`,
+      slug: `concept-${Date.now()}`,
       title: 'New Task',
       cwd: '/',
-      stage: 'konzept',
+      stage: 'concept',
     })
     currentTask.value = newTask
     emit('taskCreated', newTask)
@@ -151,12 +175,14 @@ async function handleSend() {
 
 async function handleConfirm() {
   const updated = await confirm()
-  if (updated) emit('confirmed', updated)
+  if (updated)
+    emit('confirmed', updated)
 }
 
 function isPhaseMarker(idx: number): string | null {
   const msg = messages.value[idx]
-  if (msg.role !== 'assistant' || !msg.phase) return null
+  if (msg.role !== 'assistant' || !msg.phase)
+    return null
   return msg.phase
 }
 </script>
@@ -190,13 +216,15 @@ function isPhaseMarker(idx: number): string | null {
       >
         <!-- Empty state -->
         <div v-if="messages.length === 0" class="flex flex-col items-center gap-5 text-center px-6">
-          <div class="text-3xl opacity-30 leading-none">✦</div>
+          <div class="text-3xl opacity-30 leading-none">
+            ✦
+          </div>
           <div class="flex flex-col gap-2">
             <p class="text-xl font-bold tracking-tight m-0 text-slate-800 dark:text-slate-100">
-              Was möchtest du umsetzen?
+              What would you like to build?
             </p>
             <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed m-0 max-w-[380px]">
-              Beschreibe deine Idee — ich führe dich durch Analyse, Spec und Umsetzungskonzept.
+              Describe your idea — I'll guide you through analysis, spec, and implementation plan.
             </p>
           </div>
           <div class="flex flex-wrap gap-2 justify-center max-w-[480px]">
@@ -214,7 +242,7 @@ function isPhaseMarker(idx: number): string | null {
         <!-- Message list -->
         <template v-for="(msg, idx) in messages" :key="idx">
           <div v-if="isPhaseMarker(idx)" class="phase-marker">
-            ✓ {{ phaseLabel(isPhaseMarker(idx)!) }} abgeschlossen
+            ✓ {{ phaseLabel(isPhaseMarker(idx)!) }} complete
           </div>
 
           <div
@@ -228,7 +256,7 @@ function isPhaseMarker(idx: number): string | null {
                 :src="img.dataUrl"
                 class="max-w-[180px] max-h-[120px] rounded-md object-cover border border-slate-200 dark:border-slate-700"
                 alt="attachment"
-              />
+              >
             </div>
             {{ msg.content }}
           </div>
@@ -259,7 +287,7 @@ function isPhaseMarker(idx: number): string | null {
           class="w-full py-3 px-4 rounded-xl bg-green-500 text-black font-bold text-[0.95rem] tracking-tight border-none cursor-pointer transition-all hover:opacity-90 hover:-translate-y-px"
           @click="handleConfirm"
         >
-          Task erstellen →
+          Create Task →
         </button>
       </div>
 
@@ -270,7 +298,7 @@ function isPhaseMarker(idx: number): string | null {
             :src="img.dataUrl"
             class="max-w-[80px] max-h-[60px] rounded-md object-cover border border-slate-200 dark:border-slate-700"
             alt="attachment"
-          />
+          >
           <button
             class="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 text-[10px] cursor-pointer flex items-center justify-center leading-none p-0 hover:bg-red-500 hover:text-white hover:border-red-500"
             @click="removeImage(idx)"
@@ -284,7 +312,7 @@ function isPhaseMarker(idx: number): string | null {
       <div class="flex gap-2 px-5 py-2.5 pb-3.5 border-t border-slate-200 dark:border-slate-700 shrink-0 items-end">
         <button
           class="w-9 h-9 rounded-xl shrink-0 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 text-lg cursor-pointer flex items-center justify-center transition-colors hover:enabled:border-blue-400 hover:enabled:text-blue-400 disabled:opacity-35 disabled:cursor-default"
-          title="Bild anhängen"
+          title="Attach image"
           :disabled="isStreaming || approvalReady"
           @click="fileInputEl?.click()"
         >
@@ -302,7 +330,7 @@ function isPhaseMarker(idx: number): string | null {
           ref="textareaEl"
           v-model="inputText"
           class="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
-          placeholder="Nachricht..."
+          placeholder="Message..."
           rows="1"
           :disabled="isStreaming || approvalReady"
           @keydown.enter.exact.prevent="handleSend"

@@ -286,7 +286,7 @@ function formatDate(iso: string | null) {
                 : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
               @click="activeSection = 'permissionPresets'"
             >
-              <span class="text-sm flex-shrink-0">⚿</span> Berechtigungen
+              <span class="text-sm flex-shrink-0">⚿</span> Permissions
             </button>
           </li>
         </ul>
@@ -481,31 +481,31 @@ function formatDate(iso: string | null) {
         <!-- Permission presets -->
         <section v-else-if="activeSection === 'permissionPresets'">
           <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
-            Berechtigungen
+            Permissions
           </h3>
           <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
-            Automatisch gespeicherte Tool-Genehmigungen pro Projekt. Zurücksetzen entfernt alle gespeicherten Genehmigungen für dieses Projekt.
+            Auto-saved tool permissions per project. Reset removes all stored permissions for this project.
           </p>
           <div v-if="presetsLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
-            Lade...
+            Loading...
           </div>
           <p v-else-if="presetsError" class="text-xs text-red-600 dark:text-red-400 mb-3">
             {{ presetsError }}
           </p>
           <div v-else-if="presets.length === 0" class="text-center py-8 text-slate-400 dark:text-slate-600 text-sm">
-            Keine gespeicherten Genehmigungen.
+            No saved permissions.
           </div>
           <table v-else class="w-full border-collapse text-[13px]">
             <thead>
               <tr>
                 <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
-                  Projekt
+                  Project
                 </th>
                 <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
-                  Anzahl
+                  Count
                 </th>
                 <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
-                  Aktionen
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -520,14 +520,14 @@ function formatDate(iso: string | null) {
                 <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
                   <template v-if="confirmResetCwd === p.cwd">
                     <AppButton variant="danger" size="sm" class="mr-1" @click="resetPresets(p.cwd)">
-                      Ja, zurücksetzen
+                      Yes, reset
                     </AppButton>
                     <AppButton variant="secondary" size="sm" @click="confirmResetCwd = null">
-                      Abbrechen
+                      Cancel
                     </AppButton>
                   </template>
                   <button v-else type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmResetCwd = p.cwd">
-                    Zurücksetzen
+                    Reset
                   </button>
                 </td>
               </tr>

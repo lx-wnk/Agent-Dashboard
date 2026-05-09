@@ -54,6 +54,7 @@ export interface StageRunRow {
   output: string | null
   tokens_used: number
   cost_cents: number
+  last_grant_at: string | null
 }
 
 export interface TaskPermissionRow {
@@ -66,6 +67,7 @@ export interface TaskPermissionRow {
   requested_at: string
   decided_at: string | null
   decided_by: string | null
+  expires_at: string | null
 }
 
 export interface PermissionRequestRow {
@@ -149,6 +151,7 @@ export function rowToStageRun(row: StageRunRow): StageRun {
     output: parseJson<Record<string, unknown>>(row.output, row.id),
     tokensUsed: row.tokens_used,
     costCents: row.cost_cents,
+    lastGrantAt: row.last_grant_at ?? null,
   }
 }
 
@@ -163,6 +166,7 @@ export function rowToTaskPermission(row: TaskPermissionRow): TaskPermission {
     requestedAt: row.requested_at,
     decidedAt: row.decided_at,
     decidedBy: row.decided_by as 'user' | 'auto' | null,
+    expiresAt: row.expires_at ?? null,
   }
 }
 

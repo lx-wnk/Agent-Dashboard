@@ -302,6 +302,29 @@ export async function resolvePermissionRequest(id: string, outcome: 'granted' | 
   }
 }
 
+export interface BulkResolveResponse {
+  resolved: number
+  granted: number
+  denied: number
+  grantedTools: Array<{ tool: string, pattern: string | null }>
+}
+
+export async function bulkResolvePermissionRequests(
+  stageRunId: string,
+  outcome: 'granted' | 'denied',
+): Promise<BulkResolveResponse> {
+  const res = await fetch(`/api/permission-requests/bulk-resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stageRunId, outcome }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(err.error || 'Failed to bulk-resolve')
+  }
+  return await res.json() as BulkResolveResponse
+}
+
 export async function fetchDependencies(taskId: string): Promise<TaskDependency[]> {
   const res = await fetch(`/api/tasks/${taskId}/dependencies`)
   if (!res.ok)

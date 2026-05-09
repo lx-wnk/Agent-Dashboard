@@ -62,23 +62,55 @@ const CHANNEL_ALLOW = [
   'mcp__dashboard-channel__request_permission',
 ]
 
+export interface BuildAllowListOptions {
+  /**
+   * When true, removes the `git push` filter so agents can push directly.
+   * Sourced from env `DASHBOARD_ALLOW_GIT_PUSH=true` or per-task
+   * `metadata.allowGitPush=true`. Default false: pushes stay user-driven.
+   */
+  allowGitPush?: boolean
+}
+
 /**
  * Convert TaskPermission rows into the Claude Code `permissions.allow`
  * array format. Denied permissions are filtered out. Pure function —
  * exported for testing.
+ *
+ * `git push` policy: by default still blocked even when granted, to preserve
+ * the project's "user triggers pushes" invariant. Set `allowGitPush=true`
+ * via env or task metadata to opt out of that block.
  */
-export function buildAllowList(permissions: TaskPermission[], enableChannel = true): string[] {
+export function buildAllowList(
+  permissions: TaskPermission[],
+  enableChannel = true,
+  opts: BuildAllowListOptions = {},
+): string[] {
+  const allowGitPush = opts.allowGitPush === true
   const allow: string[] = enableChannel ? [...CHANNEL_ALLOW] : []
+  const nowIso = new Date().toISOString()
   for (const p of permissions) {
     if (!p.granted)
       continue
-    // Block git push regardless of what was granted — stage agents may commit
-    // but must never push; pushes must be triggered by the user.
-    if (p.tool === 'Bash' && p.pattern && GIT_PUSH_RE.test(p.pattern))
+    // Filter expired grants — listEffectiveTaskPermissions also filters,
+    // belt-and-braces in case a stale list is passed.
+    if (p.expiresAt && p.expiresAt <= nowIso)
+      continue
+    if (!allowGitPush && p.tool === 'Bash' && p.pattern && GIT_PUSH_RE.test(p.pattern))
       continue
     allow.push(p.pattern ? `${p.tool}(${p.pattern})` : p.tool)
   }
   return allow
+}
+
+/**
+ * Decide whether a given task may run `git push` directly. Per-task metadata
+ * override wins over env var. Default false to preserve existing safety.
+ */
+export function isGitPushAllowed(task: PipelineTask): boolean {
+  const meta = (task.metadata ?? null) as Record<string, unknown> | null
+  if (meta && meta.allowGitPush === true)
+    return true
+  return process.env.DASHBOARD_ALLOW_GIT_PUSH === 'true'
 }
 
 /**
@@ -137,8 +169,9 @@ function writeSettingsFile(
   cwd: string,
   permissions: TaskPermission[],
   enableChannel: boolean,
+  opts: BuildAllowListOptions = {},
 ): { path: string | null, wrote: boolean, isLocal: boolean } {
-  const allow = buildAllowList(permissions, enableChannel)
+  const allow = buildAllowList(permissions, enableChannel, opts)
   if (allow.length === 0)
     return { path: null, wrote: false, isLocal: false }
 
@@ -155,9 +188,30 @@ function writeSettingsFile(
   // settings.json is user-authored — merge into settings.local.json instead.
   // Claude Code concatenates permissions.allow arrays across scopes, so our
   // entries are additive and the user's file is never touched.
+  //
+  // SECURITY NOTE: when a non-dashboard `.claude/settings.json` is present,
+  // every stage agent spawned in this worktree inherits whatever the user (or
+  // a previous tool) put in its allow-list — including patterns the dashboard
+  // would never have granted via `task_permissions`. This is documented
+  // behavior (we deliberately don't overwrite user files), but it means the
+  // dashboard's `task_permissions` table is NOT the sole authority on what a
+  // stage agent can do for this worktree. Surface a warning so this is
+  // visible at spawn time rather than discovered later via unexpected agent
+  // behavior. Cleanup logic (`shouldCleanSettingsFile`) gates on the
+  // `_dashboardManaged: true` stamp, so user files are never accidentally
+  // deleted.
   const localPath = join(settingsDir, 'settings.local.json')
-  consola.info(
-    `[agentSpawner] ${settingsPath} already exists — merging allow-list into settings.local.json.`,
+  let userAllowCount = 0
+  try {
+    const userSettings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>
+    const userAllow = (userSettings.permissions as Record<string, unknown> | undefined)?.allow
+    userAllowCount = Array.isArray(userAllow) ? userAllow.length : 0
+  }
+  catch { /* unreadable / unparseable — count stays 0 */ }
+  consola.warn(
+    `[agentSpawner] ${settingsPath} is NOT dashboard-managed — agent will inherit ${userAllowCount}`
+    + ` user-authored allow-list entries IN ADDITION to task_permissions. Verify the file's allow`
+    + ` list is intended for stage-agent execution, or delete it to let the dashboard own this worktree's permissions.`,
   )
 
   let existing: Record<string, unknown> = {}
@@ -258,10 +312,12 @@ export function cleanupLocalSettingsEntries(localPath: string): void {
 export function spawnStageAgent(opts: SpawnAgentOptions): SpawnResult {
   const cwd = opts.task.worktreePath || opts.task.cwd
   const enableChannel = opts.enableChannel !== false
+  const allowGitPush = isGitPushAllowed(opts.task)
   const { path: settingsPath, wrote: wroteSettingsFile, isLocal } = writeSettingsFile(
     cwd,
     opts.permissions,
     enableChannel,
+    { allowGitPush },
   )
 
   const args = buildSpawnArgs(opts)

@@ -14,10 +14,12 @@
  * chats with it via the existing AgentModal prompt input, which resumes
  * the same session id.
  */
+import type { ChildProcess } from 'node:child_process'
 import type { PipelineTask, StageRun } from '../../src/types.js'
 import { spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import process from 'node:process'
+import { LOOPBACK_HOST, resolveDashboardPort } from '../constants.js'
 
 export interface AnalysisSpawnOptions {
   task: PipelineTask
@@ -31,6 +33,13 @@ export interface AnalysisSpawnOptions {
 export interface AnalysisSpawnResult {
   pid: number
   cwd: string
+  /**
+   * Detached child handle. Callers may attach a one-shot `exit` listener for
+   * cleanup (e.g. clearing per-task dedup state) without touching the child's
+   * stdio (which is intentionally `'ignore'` so the parent process is not
+   * blocked by the long-running analysis session).
+   */
+  child: ChildProcess
 }
 
 /**
@@ -81,7 +90,7 @@ export function buildAnalysisPrompt(opts: AnalysisSpawnOptions): string {
     '   salvageable, and a recommendation (retry as-is, edit something',
     '   first, split the task, or abandon it).',
     '3. If the human asks you to adjust the task itself, you may:',
-    `   - curl the dashboard: POST http://127.0.0.1:${process.env.DASHBOARD_PORT ?? '13120'}/api/tasks/${task.id}`,
+    `   - curl the dashboard: POST http://${LOOPBACK_HOST}:${resolveDashboardPort()}/api/tasks/${task.id}`,
     '     with Content-Type: application/json to patch editable fields',
     '     (title, description, priority, max_iterations, etc.).',
     '   - Edit files under the worktree directly.',
@@ -130,5 +139,5 @@ export function spawnAnalysisAgent(opts: AnalysisSpawnOptions): AnalysisSpawnRes
   child.stderr?.on('error', () => { /* EPIPE on exit is fine */ })
   child.unref()
 
-  return { pid: child.pid ?? 0, cwd }
+  return { pid: child.pid ?? 0, cwd, child }
 }

@@ -1,5 +1,8 @@
 import type { NotificationAdapter, NotificationPayload } from '../types.js'
+import { DEFAULT_REMOTE_TIMEOUT_MS } from '../../constants.js'
 import { getConfig } from '../../db/notificationConfigRepo.js'
+
+const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
 
 /**
  * Webhook adapter for Discord/Slack/generic POST endpoints.
@@ -25,7 +28,7 @@ export const webhookAdapter: NotificationAdapter = {
     const body = buildBody(format, payload)
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_REMOTE_TIMEOUT_MS)
     let res: Response
     try {
       res = await fetch(url, {
@@ -58,9 +61,9 @@ function isSafeWebhookUrl(raw: string): boolean {
       return false
 
     // Block if the hostname is a bare IP address that falls in a blocked range
-    const ipv4Match = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+    const ipv4Match = host.match(IPV4_RE)
     if (ipv4Match) {
-      const [, a, b, c] = ipv4Match.map(Number)
+      const [, a, b] = ipv4Match.map(Number)
       if (
         a === 127 // loopback
         || a === 10 // RFC1918 10.0.0.0/8
@@ -69,8 +72,9 @@ function isSafeWebhookUrl(raw: string): boolean {
         || (a === 169 && b === 254) // link-local
         || a === 0 // 0.0.0.0
         || a >= 240 // reserved/multicast
-      )
+      ) {
         return false
+      }
     }
 
     // Block IPv6 private ranges by prefix
@@ -81,8 +85,9 @@ function isSafeWebhookUrl(raw: string): boolean {
         || bare.startsWith('fc') // ULA fc00::/7
         || bare.startsWith('fd')
         || bare.startsWith('fe80') // link-local
-      )
+      ) {
         return false
+      }
     }
 
     return true

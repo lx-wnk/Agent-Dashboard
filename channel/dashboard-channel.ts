@@ -128,28 +128,41 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'request_permission',
       description:
-        'Ask the dashboard user to grant permission for a tool you need but is not in your pre-approved allowlist. The current task will be moved to ON HOLD until the user grants or denies. Use when you discover mid-task that you need a tool like Bash(git push *), WebFetch, or Write outside the worktree.',
+        'Request one or more tool permissions. CRITICAL: every missed permission triggers a kill-and-restart of this stage agent — request piecemeal and you will burn through the task in restart loops. Forward-scan the ENTIRE remaining plan before each call.\n\nMandatory pattern (do NOT deviate):\n  1. As your FIRST action in a task, walk through the plan step-by-step and enumerate every distinct tool you will touch — Bash patterns (e.g. `pnpm test*`, `pnpm lint*`, `pnpm typecheck*`, `git add*`, `git commit*`, `git diff*`, `git status*`, `git checkout*`), WebFetch URLs, Writes outside the worktree, etc.\n  2. Call this tool ONCE with the full `permissions: [...]` array. Pre-granted entries auto-resolve silently; only genuinely new entries surface as ON HOLD.\n  3. If you receive a `[PERMISSION GRANTED]` resume note mid-task, treat it as a signal that you under-enumerated — re-scan the rest of the work and bulk-request EVERYTHING else you anticipate, then continue.\n\nThe legacy single-tool form (`tool` + `pattern`) is kept for compatibility but is strongly discouraged — every single-tool request that lands here counts as a re-request cycle and is logged.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           stageRunId: {
             type: 'string',
-            description: 'The current stage_run id (injected by orchestrator via environment variable DASHBOARD_STAGE_RUN_ID)',
+            description: 'The current stage_run id (auto-injected from DASHBOARD_STAGE_RUN_ID env)',
+          },
+          permissions: {
+            type: 'array',
+            description: 'Bulk request — preferred. Each item: {tool, pattern?, reason?}. Pre-granted entries auto-resolve.',
+            items: {
+              type: 'object',
+              properties: {
+                tool: { type: 'string', description: 'Tool name (e.g. Bash, WebFetch, Write)' },
+                pattern: { type: 'string', description: 'Optional pattern (e.g. "git push *"); omit for full tool' },
+                reason: { type: 'string', description: 'Why this tool is needed (per-entry, optional)' },
+              },
+              required: ['tool'],
+            },
           },
           tool: {
             type: 'string',
-            description: 'The tool name you want to use (e.g. "Bash", "WebFetch")',
+            description: 'Single-tool legacy form. Use `permissions[]` instead when possible.',
           },
           pattern: {
             type: 'string',
-            description: 'Optional pattern (e.g. "git push origin main") — omit for full tool access',
+            description: 'Single-tool legacy form pattern.',
           },
           reason: {
             type: 'string',
-            description: 'Why you need this tool. Be specific — this is what the user sees in the ON HOLD notification.',
+            description: 'Top-level reason; used as fallback per-entry reason and shown in ON HOLD notifications.',
           },
         },
-        required: ['tool', 'reason'],
+        // Either `permissions` OR `tool` must be present — enforced at runtime.
       },
     },
   ],
@@ -187,7 +200,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 
   if (req.params.name === 'request_permission') {
-    const args = req.params.arguments as { stageRunId?: string, tool: string, pattern?: string, reason: string }
+    const args = req.params.arguments as {
+      stageRunId?: string
+      permissions?: Array<{ tool: string, pattern?: string, reason?: string }>
+      tool?: string
+      pattern?: string
+      reason?: string
+    }
     const stageRunId = args.stageRunId || process.env.DASHBOARD_STAGE_RUN_ID
     if (!stageRunId) {
       return {
@@ -196,28 +215,75 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         ],
       }
     }
+
+    // Normalize to bulk shape. Either `permissions[]` (preferred) or
+    // single-tool legacy form is accepted.
+    const entries = Array.isArray(args.permissions) && args.permissions.length > 0
+      ? args.permissions.map(p => ({
+          tool: p.tool,
+          pattern: p.pattern ?? null,
+          reason: p.reason ?? args.reason ?? null,
+        }))
+      : args.tool
+        ? [{ tool: args.tool, pattern: args.pattern ?? null, reason: args.reason ?? null }]
+        : null
+
+    if (!entries) {
+      return {
+        content: [{ type: 'text', text: 'request_permission needs either `permissions: [...]` or single-tool `tool`+`reason`.' }],
+      }
+    }
+
     try {
-      const res = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/permission-requests`, {
+      const res = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/permission-requests/bulk`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${TOKEN}`,
         },
-        body: JSON.stringify({
-          stageRunId,
-          tool: args.tool,
-          pattern: args.pattern ?? null,
-          reason: args.reason,
-        }),
+        body: JSON.stringify({ stageRunId, entries }),
       })
       if (!res.ok) {
-        return { content: [{ type: 'text', text: `Permission request failed: ${res.status}` }] }
+        // Graceful fallback ONLY when the dashboard does not implement the
+        // bulk endpoint (HTTP 404). Any other non-OK status (4xx validation,
+        // expired token, 5xx) is a real error — falling back to N legacy
+        // single-tool requests would silently inflate the re-request cycle
+        // counter and look like a permission-loop in telemetry.
+        if (res.status === 404) {
+          const fallbackResults: string[] = []
+          for (const e of entries) {
+            const single = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/permission-requests`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+              body: JSON.stringify({ stageRunId, tool: e.tool, pattern: e.pattern, reason: e.reason }),
+            })
+            fallbackResults.push(`${e.tool}${e.pattern ? `(${e.pattern})` : ''}: ${single.status}`)
+          }
+          return {
+            content: [{ type: 'text', text: `Bulk endpoint returned 404; fell back to single-request: ${fallbackResults.join('; ')}` }],
+          }
+        }
+        const errBody = await res.text().catch(() => '')
+        return {
+          content: [{ type: 'text', text: `Bulk endpoint returned ${res.status}: ${errBody.slice(0, 500)}` }],
+          isError: true,
+        }
       }
+      const body = (await res.json()) as {
+        autoResolved: Array<{ tool: string, pattern: string | null }>
+        pending: Array<{ id: string, tool: string, pattern: string | null }>
+        cycleCount?: number
+        loopWarning?: string | null
+      }
+      const autoMsg = body.autoResolved.length > 0
+        ? `${body.autoResolved.length} auto-resolved (already granted): ${body.autoResolved.map(e => e.tool + (e.pattern ? `(${e.pattern})` : '')).join(', ')}`
+        : 'no auto-resolves'
+      const pendMsg = body.pending.length > 0
+        ? `${body.pending.length} ON HOLD awaiting user: ${body.pending.map(e => e.tool + (e.pattern ? `(${e.pattern})` : '')).join(', ')}`
+        : 'all granted — proceed'
+      const loopMsg = body.loopWarning ? `\n\n⚠️ ${body.loopWarning}` : ''
       return {
-        content: [{
-          type: 'text',
-          text: `Permission request for ${args.tool} sent. Task is now ON HOLD — wait for user response via dashboard notification.`,
-        }],
+        content: [{ type: 'text', text: `${autoMsg}. ${pendMsg}.${loopMsg}` }],
       }
     }
     catch (err) {

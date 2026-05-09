@@ -14,7 +14,7 @@ import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
-import { createTask, useTasks } from './composables/useTasks'
+import { useTasks } from './composables/useTasks'
 import { useUser } from './composables/useUser'
 import { formatTokens, totalTokenCount } from './utils/format'
 
@@ -36,13 +36,13 @@ watch(loaded, (isLoaded) => {
   }
 }, { immediate: true })
 const showSpawnDialog = ref(false)
-const activeKonzeptTask = ref<PipelineTask | null>(null)
+const activeConceptTask = ref<PipelineTask | null>(null)
 const showRefinementChat = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
 
 function openNewTask() {
-  activeKonzeptTask.value = null
+  activeConceptTask.value = null
   showRefinementChat.value = true
 }
 const scriptPath = ref('')
@@ -220,7 +220,7 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       <PipelineBoard
         v-else-if="viewMode === 'pipeline'"
         @select="selectTask"
-        @open-chat="(t) => { activeKonzeptTask = t; showRefinementChat = true }"
+        @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
       />
       <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
     </main>
@@ -230,9 +230,8 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       :task="selectedTask"
       @close="selectTask(null)"
       @navigate="(agent: Agent) => navigateTo({ agent })"
-      @open-chat="(t) => { selectTask(null); activeKonzeptTask = t; showRefinementChat = true }"
+      @open-chat="(t) => { selectTask(null); activeConceptTask = t; showRefinementChat = true }"
     />
-
 
     <Transition name="toast">
       <div
@@ -245,10 +244,10 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
     <SpawnDialog :open="showSpawnDialog" @close="showSpawnDialog = false" />
     <RefinementChat
       :open="showRefinementChat"
-      :task="activeKonzeptTask"
-      @task-created="activeKonzeptTask = $event"
-      @close="showRefinementChat = false; activeKonzeptTask = null"
-      @confirmed="showRefinementChat = false; activeKonzeptTask = null"
+      :task="activeConceptTask"
+      @task-created="activeConceptTask = $event"
+      @close="showRefinementChat = false; activeConceptTask = null"
+      @confirmed="showRefinementChat = false; activeConceptTask = null"
     />
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />

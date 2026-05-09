@@ -8,8 +8,8 @@ export type StageTransition
     /**
      * Optional task.metadata replacement applied in the SAME transaction
      *  as the stage transition. Use this when a transition needs to mutate
-     *  task-level state atomically — e.g. selbstreview stashing review
-     *  feedback when looping back to umsetzung. Pass `null` to clear
+     *  task-level state atomically — e.g. self_review stashing review
+     *  feedback when looping back to implementation. Pass `null` to clear
      *  metadata entirely. Omit to leave metadata untouched.
      */
     taskMetadataPatch?: Record<string, unknown> | null
@@ -57,11 +57,11 @@ export interface StageHandler {
 
 // Canonical stage order for auto-transitions
 export const STAGE_ORDER: PipelineStage[] = [
-  'konzept',
+  'concept',
   'backlog',
-  'umsetzung',
-  'selbstreview',
-  'finalisierung',
+  'implementation',
+  'self_review',
+  'finalization',
   'done',
 ]
 

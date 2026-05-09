@@ -42,8 +42,7 @@ describe('jwtUtils', () => {
     }))
     // Sign with the real secret so the signature itself would otherwise pass
     const { createHmac } = await import('node:crypto')
-    const sig = createHmac('sha256', SECRET).update(`${noneHeader}.${body}`).digest('base64')
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+    const sig = createHmac('sha256', SECRET).update(`${noneHeader}.${body}`).digest('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
     const forged = `${noneHeader}.${body}.${sig}`
     expect(verifyJwt(forged, SECRET)).toBeNull()
   })
@@ -59,8 +58,7 @@ describe('jwtUtils', () => {
       exp: Math.floor(Date.now() / 1000) + 3600,
     }))
     const { createHmac } = await import('node:crypto')
-    const sig = createHmac('sha256', SECRET).update(`${wrongTypHeader}.${body}`).digest('base64')
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+    const sig = createHmac('sha256', SECRET).update(`${wrongTypHeader}.${body}`).digest('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
     const forged = `${wrongTypHeader}.${body}.${sig}`
     expect(verifyJwt(forged, SECRET)).toBeNull()
   })
