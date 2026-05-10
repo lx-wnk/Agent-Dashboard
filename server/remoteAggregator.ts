@@ -4,12 +4,13 @@ import { hostname } from 'node:os'
 import process from 'node:process'
 
 import { consola } from 'consola'
+import { AGENT_STATUSES } from '../src/types.js'
 import { DEFAULT_REMOTE_TIMEOUT_MS, resolveDashboardPort, SELF_HOSTNAMES } from './constants.js'
 
 const REMOTE_TIMEOUT_MS = DEFAULT_REMOTE_TIMEOUT_MS
 const MAX_RESPONSE_BYTES = 1_048_576 // 1MB
 const ORIGIN_HEADER = 'X-Dashboard-Origin'
-const VALID_STATUSES = new Set(['active', 'waiting', 'idle'])
+const VALID_STATUSES = new Set<string>(AGENT_STATUSES)
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const localHostname = hostname()
 

@@ -21,6 +21,8 @@ export const VALID_STAGES = new Set<PipelineStage>([
 
 export const SYSTEM_PROMPT_MAX_CHARS = 10_000
 
+export const MAX_DESCRIPTION_CHARS = 10_000
+
 export const DEPENDENCY_REQUIRED_STAGES = ['done', 'cancelled'] as const
 export const DEPENDENCY_CANCEL_ACTIONS = ['cancel', 'start', 'on_hold'] as const
 

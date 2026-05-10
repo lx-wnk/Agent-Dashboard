@@ -1,5 +1,6 @@
 import type { Agent, TokenUsage } from '../src/types.js'
 import { basename } from 'node:path'
+import { STATUS_ORDER } from '../src/utils/agentSort.js'
 import { getChannelMap } from './channelDiscovery.js'
 import { getRecentAvgFleetCost } from './costTrendCache.js'
 import { findTasksBySessionIds } from './db/stageRunsRepo.js'
@@ -132,8 +133,7 @@ export async function getAgents(): Promise<Agent[]> {
 
   // Sort: active first, then by uptime descending
   agents.sort((a, b) => {
-    const statusOrder = { active: 0, waiting: 1, idle: 2 }
-    const diff = statusOrder[a.status] - statusOrder[b.status]
+    const diff = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
     if (diff !== 0)
       return diff
     return b.uptime - a.uptime

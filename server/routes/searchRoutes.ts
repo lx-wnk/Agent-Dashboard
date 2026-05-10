@@ -2,12 +2,11 @@ import type { Agent, PipelineTask } from '../../src/types.js'
 import { Router } from 'express'
 import { getDb } from '../db/client.js'
 import { getTaskById } from '../db/tasksRepo.js'
+import { WHITESPACE_RE } from '../paths.js'
 
 interface SearchDeps {
   getAgents: () => Agent[]
 }
-
-const WHITESPACE_RE = /\s+/
 
 function sanitizeFtsQuery(raw: string): string {
   return raw

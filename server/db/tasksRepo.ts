@@ -3,6 +3,7 @@ import type { Database } from './client.js'
 import type { TaskRow } from './rowMappers.js'
 import { randomUUID } from 'node:crypto'
 import { getDb } from './client.js'
+import { DEFAULT_MAX_ITERATIONS, DEFAULT_STAGE_TIMEOUT_SECONDS } from './defaults.js'
 import { rowToTask } from './rowMappers.js'
 
 export interface CreateTaskInput {
@@ -109,10 +110,10 @@ export function createTask(input: CreateTaskInput, db: Database = getDb()): Pipe
     target_branch: input.targetBranch ?? null,
     current_stage: input.currentStage ?? 'backlog',
     parent_task_id: input.parentTaskId ?? null,
-    max_iterations: input.maxIterations ?? 20,
+    max_iterations: input.maxIterations ?? DEFAULT_MAX_ITERATIONS,
     token_budget: input.tokenBudget ?? null,
     cost_budget_cents: input.costBudgetCents ?? null,
-    stage_timeout_seconds: input.stageTimeoutSeconds ?? 1800,
+    stage_timeout_seconds: input.stageTimeoutSeconds ?? DEFAULT_STAGE_TIMEOUT_SECONDS,
     created_at: now,
     updated_at: now,
     metadata: input.metadata ? JSON.stringify(input.metadata) : null,

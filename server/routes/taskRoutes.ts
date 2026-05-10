@@ -10,7 +10,7 @@ import { promisify } from 'node:util'
 import { consola } from 'consola'
 import { Router } from 'express'
 import { isAuthEnabled } from '../auth/requireAuth.js'
-import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, UUID_RE, VALID_STAGES } from '../constants.js'
+import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, MAX_DESCRIPTION_CHARS, SLUG_PATTERN_MESSAGE, SLUG_RE, UUID_RE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import { getDb } from '../db/client.js'
 import {
@@ -392,7 +392,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     if (typeof title === 'string' && title.length > 200)
       return void res.status(400).json({ error: 'title must be ≤ 200 characters' })
-    if (typeof description === 'string' && description.length > 10_000)
+    if (typeof description === 'string' && description.length > MAX_DESCRIPTION_CHARS)
       return void res.status(400).json({ error: 'description must be ≤ 10,000 characters' })
     if (typeof cwd === 'string' && cwd.length > 4096)
       return void res.status(400).json({ error: 'cwd must be ≤ 4096 characters' })
@@ -546,7 +546,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     // (cwd, parentTaskId, worktreePath, etc.) is intentionally off-limits.
     if (typeof body.title === 'string' && body.title.length > 200)
       return void res.status(400).json({ error: 'title must be ≤ 200 characters' })
-    if (typeof body.description === 'string' && body.description.length > 10_000)
+    if (typeof body.description === 'string' && body.description.length > MAX_DESCRIPTION_CHARS)
       return void res.status(400).json({ error: 'description must be ≤ 10,000 characters' })
     if (body.maxIterations !== undefined && body.maxIterations !== null) {
       if (!Number.isInteger(body.maxIterations) || body.maxIterations < 1 || body.maxIterations > 100)

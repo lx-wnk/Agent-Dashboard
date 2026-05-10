@@ -17,6 +17,9 @@ export interface SessionMeta {
   firstPrompt: string | null
 }
 
+export const AGENT_STATUSES = ['active', 'waiting', 'idle'] as const
+export type AgentStatus = typeof AGENT_STATUSES[number]
+
 export interface Agent {
   pid: number
   sessionId: string
@@ -24,7 +27,7 @@ export interface Agent {
   projectName: string
   cwd: string
   entrypoint: 'cli' | 'desktop' | 'unknown'
-  status: 'active' | 'waiting' | 'idle'
+  status: AgentStatus
   uptime: number
   lastActivity: string
   currentAction: string | null

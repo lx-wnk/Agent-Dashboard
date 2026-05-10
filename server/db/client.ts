@@ -366,10 +366,10 @@ function migrateV5NarrowStageCheck(db: Database): void {
           'done','on_hold','cancelled'
         )),
         parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-        max_iterations INTEGER NOT NULL DEFAULT 20,
+        max_iterations INTEGER NOT NULL DEFAULT 20, -- must match server/db/defaults.ts: DEFAULT_MAX_ITERATIONS
         token_budget INTEGER,
         cost_budget_cents INTEGER,
-        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800, -- must match server/db/defaults.ts: DEFAULT_STAGE_TIMEOUT_SECONDS
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         metadata TEXT,
@@ -774,10 +774,10 @@ function migrateKonzeptCheckConstraint(connection: Database): void {
           'umsetzungskonzept','implementation_plan','approval2','done','on_hold','cancelled'
         )),
         parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-        max_iterations INTEGER NOT NULL DEFAULT 20,
+        max_iterations INTEGER NOT NULL DEFAULT 20, -- must match server/db/defaults.ts: DEFAULT_MAX_ITERATIONS
         token_budget INTEGER,
         cost_budget_cents INTEGER,
-        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800, -- must match server/db/defaults.ts: DEFAULT_STAGE_TIMEOUT_SECONDS
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         metadata TEXT,
