@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/api"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
@@ -27,7 +27,7 @@ func NewHandler(r repo.ApiKeyRepo) *Handler {
 
 // Wrap converts a handler-returns-error function to a chi-compatible HandlerFunc.
 func Wrap(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
-	return api.ErrorMiddleware(api.HandlerFunc(fn))
+	return apierr.ErrorMiddleware(apierr.HandlerFunc(fn))
 }
 
 // List returns all active API keys. Never includes key_hash or raw token.
@@ -66,10 +66,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 		Scopes []string `json:"scopes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return fmt.Errorf("%w: invalid JSON", api.ErrBadRequest)
+		return fmt.Errorf("%w: invalid JSON", apierr.ErrBadRequest)
 	}
 	if body.Name == "" {
-		return fmt.Errorf("%w: name is required", api.ErrBadRequest)
+		return fmt.Errorf("%w: name is required", apierr.ErrBadRequest)
 	}
 
 	raw := make([]byte, 32)
@@ -102,7 +102,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return fmt.Errorf("%w: id is required", api.ErrBadRequest)
+		return fmt.Errorf("%w: id is required", apierr.ErrBadRequest)
 	}
 	if err := h.repo.Delete(r.Context(), id); err != nil {
 		return fmt.Errorf("apikeys.Delete: %w", err)
