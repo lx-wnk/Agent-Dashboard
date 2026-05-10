@@ -2,6 +2,7 @@ package parser
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -58,7 +59,7 @@ func TailRead(filePath string) (string, error) {
 	}
 	buf := make([]byte, readSize)
 	n, err := io.ReadFull(f, buf)
-	if err != nil && err != io.ErrUnexpectedEOF {
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return "", fmt.Errorf("read: %w", err)
 	}
 	return string(buf[:n]), nil
@@ -178,6 +179,7 @@ func parseSessionFile(path string) (*SessionData, error) {
 		LastActivity: time.Now().Add(-24 * time.Hour), // default: old
 	}
 
+	// TODO(phase1): Tasks field not yet populated — task extraction from TodoWrite/TodoRead tool inputs is deferred.
 	var recentToolNames []string
 
 	for _, line := range strings.Split(content, "\n") {
