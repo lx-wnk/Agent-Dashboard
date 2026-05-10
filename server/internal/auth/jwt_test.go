@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,11 +43,14 @@ func TestVerifyJWT_WrongSecret(t *testing.T) {
 
 func TestVerifyJWT_MalformedToken(t *testing.T) {
 	_, err := auth.VerifyJWT("not.a.valid.jwt.token.at.all", "secret")
-	require.Error(t, err)
+	require.ErrorIs(t, err, auth.ErrTokenInvalid)
 }
 
 func TestVerifyJWT_InvalidHeader(t *testing.T) {
-	// Token with valid structure but non-HS256 alg
-	_, err := auth.VerifyJWT("aW52YWxpZA.aW52YWxpZA.aW52YWxpZA", "secret")
-	require.Error(t, err)
+	// Header: {"alg":"RS256","typ":"JWT"} — valid structure but wrong alg
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
+	body := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"x","exp":9999999999}`))
+	token := header + "." + body + ".fakesig"
+	_, err := auth.VerifyJWT(token, "secret")
+	require.ErrorIs(t, err, auth.ErrTokenInvalid)
 }

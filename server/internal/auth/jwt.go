@@ -30,10 +30,10 @@ func base64url(data []byte) string {
 	return base64.RawURLEncoding.EncodeToString(data)
 }
 
-func signHMAC(data, secret string) string {
+func computeHMAC(data, secret string) []byte {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(data))
-	return base64url(mac.Sum(nil))
+	return mac.Sum(nil)
 }
 
 // SignJWT creates an HS256 JWT token. expiresInSeconds is added to now().
@@ -49,7 +49,7 @@ func SignJWT(payload JWTPayload, secret string, expiresInSeconds int64) (string,
 	}
 	h := base64url(header)
 	b := base64url(body)
-	sig := signHMAC(h+"."+b, secret)
+	sig := base64url(computeHMAC(h+"."+b, secret))
 	return h + "." + b + "." + sig, nil
 }
 
@@ -75,9 +75,13 @@ func VerifyJWT(token, secret string) (JWTPayload, error) {
 		return JWTPayload{}, ErrTokenInvalid
 	}
 
-	// Verify signature — timing-safe comparison
-	expected := signHMAC(h+"."+b, secret)
-	if !hmac.Equal([]byte(expected), []byte(sig)) {
+	// Verify signature — timing-safe comparison on raw bytes
+	sigBytes, err := base64.RawURLEncoding.DecodeString(sig)
+	if err != nil {
+		return JWTPayload{}, ErrTokenInvalid
+	}
+	expected := computeHMAC(h+"."+b, secret)
+	if !hmac.Equal(expected, sigBytes) {
 		return JWTPayload{}, ErrTokenInvalid
 	}
 
