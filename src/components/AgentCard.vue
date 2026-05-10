@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
 import { computed } from 'vue'
+import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
@@ -8,6 +9,8 @@ import AppBadge from './ui/AppBadge.vue'
 
 const props = defineProps<{ agent: Agent }>()
 defineEmits<{ select: [agent: Agent] }>()
+
+const { getIdentity } = useAgentIdentity()
 
 const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 
@@ -38,6 +41,7 @@ const healthChipClass = computed(() => {
     <div class="bg-slate-50 dark:bg-slate-800 px-3 py-2 flex justify-between items-center gap-2">
       <div class="flex items-center gap-2 min-w-0">
         <AppBadge :variant="agent.status" />
+        <span class="mr-1">{{ getIdentity(agent.projectPath).emoji }}</span>
         <span class="font-semibold text-[13px] text-slate-900 dark:text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
         <span class="text-[11px] text-slate-400 dark:text-slate-600 whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }}</span>
         <span
