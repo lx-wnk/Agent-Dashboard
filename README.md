@@ -4,6 +4,11 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 
 ![Status](https://img.shields.io/badge/status-development-yellow)
 
+> **Go Rebuild in progress** (`feat/go-rework`) — The backend is being rewritten from TypeScript/Bun to Go.
+> Current state: Phase 1 (agent monitoring, SSE, JWT auth) and Phase 2 (SQLite/ent, GitHub OAuth, API keys) complete.
+> Remaining: task pipeline, MCP endpoint, channel bridge, TUI, plugin system.
+> The `upcoming` branch remains the working Node.js baseline until the Go rebuild merges.
+
 ## Features
 
 - **Real-time agent monitoring via SSE** — all running Claude Code processes with status, model, tokens, cost, uptime (list, card, and kanban views)
