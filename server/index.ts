@@ -1,4 +1,3 @@
-import type { Agent } from '../src/types.js'
 import type { TaskEvent } from './routes/taskRoutes.js'
 import { fstatSync, mkdirSync, openSync } from 'node:fs'
 import { createServer as createHttpServer } from 'node:http'
@@ -9,6 +8,7 @@ import cookieParser from 'cookie-parser'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
 import { discoverPatterns } from './analytics/ngrams.js'
+import { getSnapshot, updateSnapshot } from './agentSnapshot.js'
 import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
 import { DEFAULT_DASHBOARD_PORT, LOOPBACK_HOST, resolveDashboardPort } from './constants.js'
 import { getDb } from './db/client.js'
@@ -188,9 +188,7 @@ async function start() {
   }, 60_000)
   persistTrendId.unref()
 
-  // Cached snapshot of the last local agent scan — used by the search endpoint
-  // to avoid re-scanning processes on every search request.
-  let cachedAgents: Agent[] = []
+  // Agent snapshot is managed by agentSnapshot.ts — see getSnapshot/updateSnapshot.
 
   // SSE broadcast + cost trend recording: only scan processes when clients are connected
   let sseBroadcastId: ReturnType<typeof setInterval> | null = null
@@ -261,12 +259,14 @@ async function start() {
     }, HOOKS_DEBOUNCE_MS)
   }
 
-  // Prime cachedAgents immediately so /api/search works before first SSE tick
+  // Prime snapshot immediately so /api/search works before first SSE tick
   getAgents().then((agents) => {
-    cachedAgents = agents
+    updateSnapshot(agents)
   }).catch(() => {})
 
-  discoverPatterns(getDb()).catch(err => consola.warn('Pattern discovery error:', err))
+  setTimeout(() => {
+    discoverPatterns(getDb()).catch(err => consola.warn('Pattern discovery error:', err))
+  }, 30_000).unref()
 
   function startSSEBroadcast() {
     if (sseBroadcastId)
@@ -274,7 +274,7 @@ async function start() {
     sseBroadcastId = setInterval(async () => {
       try {
         const localAgents = await getAgents()
-        cachedAgents = localAgents
+        updateSnapshot(localAgents)
         await broadcastAgents(localAgents)
       }
       catch (err) {
@@ -458,13 +458,13 @@ async function start() {
   ))
 
   // Historical session import routes
-  app.use('/api', createHistoryRouter())
+  app.use('/api', createHistoryRouter({ rejectCrossOrigin }))
 
   // Memory file browser routes
-  app.use('/api', createMemoryRouter())
+  app.use('/api', createMemoryRouter({ rejectCrossOrigin }))
 
   // Full-text search across tasks (FTS5) and agents (in-memory)
-  app.use('/api', createSearchRouter({ getAgents: () => cachedAgents }))
+  app.use('/api', createSearchRouter({ getAgents: getSnapshot }))
 
   // Agent routes (REST endpoints — non-SSE; SSE stream stays above)
   app.use('/api', createAgentRouter({ spawnManager, requireApiToken, rejectCrossOrigin }))

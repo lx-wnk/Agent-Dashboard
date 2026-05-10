@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { Database as BunDatabase } from 'bun:sqlite'
+import { consola } from 'consola'
 import schemaSql from './schema.sql' with { type: 'text' }
 
 const DEFAULT_DB_PATH = join(homedir(), '.claude', 'dashboard-tasks.db')
@@ -333,7 +334,9 @@ function migrateV5NarrowStageCheck(db: Database): void {
         db.exec('ROLLBACK TO probe_v5_narrow')
         db.exec('RELEASE probe_v5_narrow')
       }
-      catch {}
+      catch (rollbackErr) {
+        consola.warn('[migrateV5] probe rollback failed:', rollbackErr)
+      }
       return false
     }
   }
@@ -537,18 +540,26 @@ function migrateV8FtsIndex(db: Database): void {
       VALUES (new.id, new.title, COALESCE(new.description, ''));
     END
   `)
-  // DROP and recreate tasks_fts_update so existing DBs that already ran V8
-  // with the broad AFTER UPDATE ON tasks trigger get the narrowed version.
-  // IF NOT EXISTS cannot update a trigger with a different definition.
-  db.exec('DROP TRIGGER IF EXISTS tasks_fts_update')
-  db.exec(`
-    CREATE TRIGGER tasks_fts_update
-    AFTER UPDATE OF title, description ON tasks BEGIN
-      DELETE FROM task_fts WHERE task_id = old.id;
-      INSERT INTO task_fts(task_id, title, description)
-      VALUES (new.id, new.title, COALESCE(new.description, ''));
-    END
-  `)
+  // Upgrade the broad AFTER UPDATE ON tasks trigger to the narrower
+  // AFTER UPDATE OF title, description version if still on the old definition.
+  // Only drop+recreate when the existing trigger body lacks the column filter —
+  // this avoids the unnecessary DROP+CREATE on every boot for up-to-date DBs.
+  const existingUpdateTrigger = db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type='trigger' AND name='tasks_fts_update'`,
+  ).get() as { sql: string } | undefined
+  const needsUpdateTriggerUpgrade = existingUpdateTrigger === undefined
+    || !existingUpdateTrigger.sql.includes('UPDATE OF')
+  if (needsUpdateTriggerUpgrade) {
+    db.exec('DROP TRIGGER IF EXISTS tasks_fts_update')
+    db.exec(`
+      CREATE TRIGGER tasks_fts_update
+      AFTER UPDATE OF title, description ON tasks BEGIN
+        DELETE FROM task_fts WHERE task_id = old.id;
+        INSERT INTO task_fts(task_id, title, description)
+        VALUES (new.id, new.title, COALESCE(new.description, ''));
+      END
+    `)
+  }
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS tasks_fts_delete
     AFTER DELETE ON tasks BEGIN
