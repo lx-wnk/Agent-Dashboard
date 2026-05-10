@@ -14,7 +14,7 @@ const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -111,7 +111,25 @@ async function resetPresets(cwd: string) {
 watch(activeSection, (val) => {
   if (val === 'permissionPresets')
     loadPresets()
+  if (val === 'analytics')
+    void loadPatterns()
 })
+
+// --- Analytics patterns ---
+const patterns = ref<Array<{ tools: string, frequency: number }>>([])
+
+async function loadPatterns() {
+  const res = await fetch('/api/analytics/patterns')
+  if (res.ok) {
+    const data = await res.json() as { patterns: typeof patterns.value }
+    patterns.value = data.patterns
+  }
+}
+
+async function refreshPatterns() {
+  await fetch('/api/analytics/patterns/refresh', { method: 'POST' })
+  await loadPatterns()
+}
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
@@ -327,6 +345,18 @@ async function startImport() {
               @click="activeSection = 'permissionPresets'"
             >
               <span class="text-sm flex-shrink-0">⚿</span> Permissions
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'analytics'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'analytics'"
+            >
+              <span class="text-sm flex-shrink-0">📊</span> Analytics
             </button>
           </li>
         </ul>
@@ -589,6 +619,36 @@ async function startImport() {
               </tr>
             </tbody>
           </table>
+        </section>
+
+        <!-- Analytics -->
+        <section v-else-if="activeSection === 'analytics'">
+          <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+            Workflow Patterns
+          </h3>
+          <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
+            Top 3-tool sequences discovered across all sessions.
+          </p>
+          <div v-if="patterns.length === 0" class="text-sm text-slate-400 dark:text-slate-600">
+            No patterns discovered yet.
+          </div>
+          <ul v-else class="space-y-1 mb-4">
+            <li
+              v-for="p in patterns"
+              :key="p.tools"
+              class="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded flex justify-between"
+            >
+              <span class="text-slate-700 dark:text-slate-300">{{ p.tools }}</span>
+              <span class="text-slate-400">×{{ p.frequency }}</span>
+            </li>
+          </ul>
+          <button
+            type="button"
+            class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            @click="refreshPatterns"
+          >
+            Refresh
+          </button>
         </section>
       </div>
     </div>

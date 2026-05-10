@@ -518,6 +518,17 @@ function migrateV5NarrowStageCheck(db: Database): void {
  * supported by the SQLite build bundled with Bun at the time of writing,
  * so we store copies instead.
  */
+function migrateV9WorkflowPatterns(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflow_patterns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tools TEXT NOT NULL UNIQUE,
+      frequency INTEGER NOT NULL DEFAULT 1,
+      last_seen_at TEXT NOT NULL
+    )
+  `)
+}
+
 function migrateV8FtsIndex(db: Database): void {
   // Drop legacy external-content table if it exists from a prior attempt,
   // so we can recreate as a standalone table. This is safe — the triggers
@@ -631,6 +642,13 @@ function runMigrations(db: Database): void {
   if ((version.v ?? 0) < 8) {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(8, new Date().toISOString())
+  }
+
+  migrateV9WorkflowPatterns(db)
+
+  if ((version.v ?? 0) < 9) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(9, new Date().toISOString())
   }
 }
 

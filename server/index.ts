@@ -8,6 +8,7 @@ import { consola } from 'consola'
 import cookieParser from 'cookie-parser'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
+import { discoverPatterns } from './analytics/ngrams.js'
 import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
 import { DEFAULT_DASHBOARD_PORT, LOOPBACK_HOST, resolveDashboardPort } from './constants.js'
 import { getDb } from './db/client.js'
@@ -264,6 +265,8 @@ async function start() {
   getAgents().then((agents) => {
     cachedAgents = agents
   }).catch(() => {})
+
+  discoverPatterns(getDb()).catch(err => consola.warn('Pattern discovery error:', err))
 
   function startSSEBroadcast() {
     if (sseBroadcastId)

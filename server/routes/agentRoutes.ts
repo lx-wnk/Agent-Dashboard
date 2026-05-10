@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { consola } from 'consola'
 import { Router } from 'express'
 import { getAgents } from '../agentMerger.js'
+import { discoverPatterns } from '../analytics/ngrams.js'
 import { isAuthEnabled } from '../auth/requireAuth.js'
 import { getChannelMap } from '../channelDiscovery.js'
 import { UUID_RE } from '../constants.js'
@@ -343,6 +344,24 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
     }
     catch {
       res.status(500).json({ error: 'Failed to compute forecast' })
+    }
+  })
+
+  router.get('/analytics/patterns', (_req, res) => {
+    const db = getDb()
+    const rows = db.prepare(
+      'SELECT tools, frequency, last_seen_at FROM workflow_patterns ORDER BY frequency DESC LIMIT 20',
+    ).all() as Array<{ tools: string, frequency: number, last_seen_at: string }>
+    res.json({ patterns: rows })
+  })
+
+  router.post('/analytics/patterns/refresh', async (_req, res) => {
+    try {
+      await discoverPatterns(getDb())
+      res.json({ ok: true })
+    }
+    catch {
+      res.status(500).json({ error: 'Pattern discovery failed' })
     }
   })
 
