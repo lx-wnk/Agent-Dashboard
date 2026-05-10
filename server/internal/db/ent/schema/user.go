@@ -15,7 +15,7 @@ type User struct{ ent.Schema }
 func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").StorageKey("id"),
-		field.String("github_login"),
+		field.String("github_login").Unique(),
 		field.String("display_name").Optional(),
 		field.String("avatar_url").Optional(),
 		field.Bool("is_admin").Default(false),

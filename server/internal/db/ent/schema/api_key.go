@@ -28,7 +28,6 @@ func (ApiKey) Fields() []ent.Field {
 // Indexes of the ApiKey.
 func (ApiKey) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("key_hash"),
 		index.Fields("active"),
 	}
 }
