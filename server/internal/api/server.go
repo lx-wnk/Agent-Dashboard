@@ -15,22 +15,28 @@ const ShutdownTimeout = 10 * time.Second
 
 // Server wraps net/http.Server with graceful shutdown support.
 type Server struct {
-	httpSrv *http.Server
+	httpSrv         *http.Server
+	shutdownTimeout time.Duration
 }
 
 // NewServer creates a Server bound to addr serving handler.
-func NewServer(addr string, handler http.Handler) *Server {
+// If timeout is <= 0, ShutdownTimeout is used as fallback.
+func NewServer(addr string, handler http.Handler, timeout time.Duration) *Server {
+	if timeout <= 0 {
+		timeout = ShutdownTimeout
+	}
 	return &Server{
 		httpSrv: &http.Server{
 			Addr:              addr,
 			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second, // prevent Slowloris
 		},
+		shutdownTimeout: timeout,
 	}
 }
 
 // Run starts the HTTP server and blocks until ctx is cancelled or an error occurs.
-// On ctx cancellation, performs graceful shutdown within ShutdownTimeout.
+// On ctx cancellation, performs graceful shutdown within s.shutdownTimeout.
 func (s *Server) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -45,7 +51,7 @@ func (s *Server) Run(ctx context.Context) error {
 	g.Go(func() error {
 		<-ctx.Done() // wait for shutdown signal
 		slog.Info("server shutting down")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 		defer cancel()
 		return s.httpSrv.Shutdown(shutdownCtx)
 	})
