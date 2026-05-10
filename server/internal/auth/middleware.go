@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+func writeUnauthorized(w http.ResponseWriter, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte(`{"error":"` + msg + `"}`))
+}
+
 type contextKey string
 
 const payloadKey contextKey = "jwt_payload"
@@ -18,16 +24,16 @@ func RequireAuth(secret string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := extractToken(r)
 			if token == "" {
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				writeUnauthorized(w, "unauthorized")
 				return
 			}
 			payload, err := VerifyJWT(token, secret)
 			if err != nil {
 				if errors.Is(err, ErrTokenExpired) {
-					http.Error(w, `{"error":"token expired"}`, http.StatusUnauthorized)
+					writeUnauthorized(w, "token expired")
 					return
 				}
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				writeUnauthorized(w, "unauthorized")
 				return
 			}
 			ctx := context.WithValue(r.Context(), payloadKey, payload)

@@ -108,7 +108,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("auth: sign jwt: %w", err)
 	}
 
-	http.SetCookie(w, &http.Cookie{Name: "oauth_state", MaxAge: -1, Path: "/"})
+	http.SetCookie(w, &http.Cookie{Name: "oauth_state", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Path: "/"})
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    token,
