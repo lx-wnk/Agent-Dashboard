@@ -110,25 +110,45 @@ async function resetPresets(cwd: string) {
 
 watch(activeSection, (val) => {
   if (val === 'permissionPresets')
-    loadPresets()
+    void loadPresets()
   if (val === 'analytics')
     void loadPatterns()
 })
 
 // --- Analytics patterns ---
 const patterns = ref<Array<{ tools: string, frequency: number }>>([])
+const patternsLoading = ref(false)
+const patternsError = ref<string | null>(null)
 
 async function loadPatterns() {
-  const res = await fetch('/api/analytics/patterns')
-  if (res.ok) {
+  patternsError.value = null
+  try {
+    const res = await fetch('/api/analytics/patterns')
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
     const data = await res.json() as { patterns: typeof patterns.value }
     patterns.value = data.patterns
+  }
+  catch (e) {
+    patternsError.value = e instanceof Error ? e.message : 'Failed to load'
   }
 }
 
 async function refreshPatterns() {
-  await fetch('/api/analytics/patterns/refresh', { method: 'POST' })
-  await loadPatterns()
+  patternsLoading.value = true
+  patternsError.value = null
+  try {
+    const res = await fetch('/api/analytics/patterns/refresh', { method: 'POST' })
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    await loadPatterns()
+  }
+  catch (e) {
+    patternsError.value = e instanceof Error ? e.message : 'Failed to refresh'
+  }
+  finally {
+    patternsLoading.value = false
+  }
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -629,7 +649,10 @@ async function startImport() {
           <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
             Top 3-tool sequences discovered across all sessions.
           </p>
-          <div v-if="patterns.length === 0" class="text-sm text-slate-400 dark:text-slate-600">
+          <p v-if="patternsError" class="text-xs text-red-500 mb-3">
+            {{ patternsError }}
+          </p>
+          <div v-else-if="patterns.length === 0" class="text-sm text-slate-400 dark:text-slate-600">
             No patterns discovered yet.
           </div>
           <ul v-else class="space-y-1 mb-4">
@@ -644,10 +667,11 @@ async function startImport() {
           </ul>
           <button
             type="button"
-            class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="patternsLoading"
             @click="refreshPatterns"
           >
-            Refresh
+            {{ patternsLoading ? 'Scanning…' : 'Refresh' }}
           </button>
         </section>
       </div>

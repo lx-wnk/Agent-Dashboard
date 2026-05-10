@@ -348,14 +348,21 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
   })
 
   router.get('/analytics/patterns', (_req, res) => {
-    const db = getDb()
-    const rows = db.prepare(
-      'SELECT tools, frequency, last_seen_at FROM workflow_patterns ORDER BY frequency DESC LIMIT 20',
-    ).all() as Array<{ tools: string, frequency: number, last_seen_at: string }>
-    res.json({ patterns: rows })
+    try {
+      const db = getDb()
+      const rows = db.prepare(
+        'SELECT tools, frequency, last_seen_at FROM workflow_patterns ORDER BY frequency DESC LIMIT 20',
+      ).all() as Array<{ tools: string, frequency: number, last_seen_at: string }>
+      res.json({ patterns: rows })
+    }
+    catch {
+      res.status(500).json({ error: 'Failed to load patterns' })
+    }
   })
 
-  router.post('/analytics/patterns/refresh', async (_req, res) => {
+  router.post('/analytics/patterns/refresh', requireApiToken, async (req, res) => {
+    if (rejectCrossOrigin(req, res))
+      return
     try {
       await discoverPatterns(getDb())
       res.json({ ok: true })

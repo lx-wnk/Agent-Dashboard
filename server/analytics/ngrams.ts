@@ -1,7 +1,7 @@
 import type { Database } from '../db/client.js'
-import { readdir } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { parseFullSession } from '../jsonlParser.js'
+import { parseJsonlLines } from '../jsonlParser.js'
 import { CLAUDE_PROJECTS_DIR } from '../paths.js'
 
 const N = 3
@@ -25,16 +25,24 @@ export async function discoverPatterns(db: Database): Promise<void> {
     for (const entry of entries) {
       if (!entry.endsWith('.jsonl'))
         continue
-      const sessionId = entry.replace('.jsonl', '')
       try {
-        const messages = await parseFullSession(sessionId, false)
-        const tools = messages.filter(m => m.role === 'tool_call').map(m => m.toolName ?? 'unknown')
+        const raw = await readFile(join(projectDir, entry), 'utf8')
+        const entries = parseJsonlLines(raw)
+        const tools: string[] = []
+        for (const e of entries) {
+          if (e?.type === 'assistant' && Array.isArray(e?.message?.content)) {
+            for (const block of e.message.content) {
+              if (block?.type === 'tool_use' && typeof block?.name === 'string')
+                tools.push(block.name)
+            }
+          }
+        }
         const grams = extractNgrams(tools)
         for (const [gram, count] of grams)
           allCounts.set(gram, (allCounts.get(gram) ?? 0) + count)
       }
       catch {
-        // Skip unreadable sessions
+        // tolerate partial/unreadable session files
       }
     }
   }
@@ -43,14 +51,12 @@ export async function discoverPatterns(db: Database): Promise<void> {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 20)
 
-  const upsert = db.prepare(`
-    INSERT INTO workflow_patterns (tools, frequency, last_seen_at)
-    VALUES (?, ?, ?)
-    ON CONFLICT(tools) DO UPDATE SET
-      frequency = excluded.frequency,
-      last_seen_at = excluded.last_seen_at
-  `)
+  const deleteAll = db.prepare('DELETE FROM workflow_patterns')
+  const insert = db.prepare('INSERT INTO workflow_patterns (tools, frequency, last_seen_at) VALUES (?, ?, ?)')
   const now = new Date().toISOString()
-  for (const [gram, freq] of top20)
-    upsert.run(gram, freq, now)
+  db.transaction(() => {
+    deleteAll.run()
+    for (const [gram, freq] of top20)
+      insert.run(gram, freq, now)
+  })()
 }

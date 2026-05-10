@@ -508,27 +508,6 @@ function migrateV5NarrowStageCheck(db: Database): void {
   }
 }
 
-/**
- * FTS5 full-text search index over task titles and descriptions.
- * Uses a standalone FTS5 table (no content= parameter) that stores its
- * own copies of the indexed text. Triggers keep it in sync; backfill
- * is idempotent via INSERT OR IGNORE.
- *
- * Note: the external-content table approach (content='tasks') is not
- * supported by the SQLite build bundled with Bun at the time of writing,
- * so we store copies instead.
- */
-function migrateV9WorkflowPatterns(db: Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS workflow_patterns (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tools TEXT NOT NULL UNIQUE,
-      frequency INTEGER NOT NULL DEFAULT 1,
-      last_seen_at TEXT NOT NULL
-    )
-  `)
-}
-
 function migrateV8FtsIndex(db: Database): void {
   // Drop legacy external-content table if it exists from a prior attempt,
   // so we can recreate as a standalone table. This is safe — the triggers
@@ -581,6 +560,21 @@ function migrateV8FtsIndex(db: Database): void {
     INSERT OR IGNORE INTO task_fts(task_id, title, description)
     SELECT id, title, COALESCE(description, '') FROM tasks
     WHERE id NOT IN (SELECT task_id FROM task_fts)
+  `)
+}
+
+/**
+ * Adds `workflow_patterns` table to store the top-20 most frequent 3-tool
+ * sequences discovered across all Claude session logs.
+ */
+function migrateV9WorkflowPatterns(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflow_patterns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tools TEXT NOT NULL UNIQUE,
+      frequency INTEGER NOT NULL DEFAULT 1,
+      last_seen_at TEXT NOT NULL
+    )
   `)
 }
 
