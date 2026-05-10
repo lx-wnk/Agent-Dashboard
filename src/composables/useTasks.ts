@@ -1,5 +1,6 @@
 import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import { computed, onUnmounted, ref, shallowRef } from 'vue'
+import { SSE_RETRY_DELAY_MS } from '../utils/sse'
 
 const tasks = shallowRef<PipelineTask[]>([])
 const selectedTask = ref<PipelineTask | null>(null)
@@ -70,7 +71,7 @@ function startSSE() {
       sseRetryTimer = setTimeout(() => {
         stopPolling()
         startSSE()
-      }, 30000)
+      }, SSE_RETRY_DELAY_MS)
     }
     // Transient error — EventSource reconnects automatically
   }

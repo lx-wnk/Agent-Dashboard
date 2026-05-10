@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { PipelineStage } from '../types'
 import { computed } from 'vue'
-import { formatCost } from '../utils/format'
+import { formatCost, formatTokens } from '../utils/format'
 
 export interface StageCostRow {
   stage: PipelineStage
@@ -25,16 +25,6 @@ const totalCostUsd = computed(() =>
 const totalTokens = computed(() =>
   props.rows.reduce((sum, r) => sum + r.tokensUsed, 0),
 )
-
-function formatTokensCompact(n: number): string {
-  if (n === 0)
-    return '—'
-  if (n < 1000)
-    return String(n)
-  if (n < 1_000_000)
-    return `${(n / 1000).toFixed(1)}k`
-  return `${(n / 1_000_000).toFixed(2)}M`
-}
 
 function stageDurationMs(row: StageCostRow): number | null {
   if (!row.startedAt || !row.endedAt)
@@ -89,7 +79,7 @@ function formatDuration(ms: number | null): string {
           {{ row.iteration }}
         </td>
         <td class="py-1 text-right font-mono text-slate-700 dark:text-slate-300">
-          {{ formatTokensCompact(row.tokensUsed) }}
+          {{ formatTokens(row.tokensUsed) }}
         </td>
         <td class="py-1 text-right font-mono text-slate-700 dark:text-slate-300">
           {{ formatCost(centsToUsd(row.costCents)) }}
@@ -106,7 +96,7 @@ function formatDuration(ms: number | null): string {
         </td>
         <td />
         <td class="pt-1 text-right font-mono text-slate-900 dark:text-slate-100">
-          {{ formatTokensCompact(totalTokens) }}
+          {{ formatTokens(totalTokens) }}
         </td>
         <td class="pt-1 text-right font-mono text-slate-900 dark:text-slate-100">
           {{ formatCost(totalCostUsd) }}

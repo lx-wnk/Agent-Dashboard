@@ -19,7 +19,7 @@ import TaskModal from './components/TaskModal.vue'
 import { useAgents } from './composables/useAgents'
 import { useTasks } from './composables/useTasks'
 import { useUser } from './composables/useUser'
-import { formatTokens, totalTokenCount } from './utils/format'
+import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
@@ -129,7 +129,7 @@ onMounted(fetchQuota)
         <template v-if="viewMode !== 'pipeline'">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</template>
         <template v-else>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</template>
       </span>
-      <span v-if="totalCost > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">${{ totalCost.toFixed(2) }}</span>
+      <span v-if="totalCost > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">{{ formatCost(totalCost) }}</span>
       <span v-if="totalTokens > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">{{ formatTokens(totalTokens) }} tokens</span>
       <div v-if="quota && quota.limit" class="flex items-center gap-1.5" :title="`${quota.tokensUsed.toLocaleString()} / ${quota.limit.toLocaleString()} tokens`">
         <span class="text-[10px] text-slate-400">Quota</span>

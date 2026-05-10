@@ -1,5 +1,6 @@
 import type { Agent } from '../types'
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { SSE_RETRY_DELAY_MS } from '../utils/sse'
 
 export interface TrendPoint {
   t: number
@@ -92,7 +93,7 @@ function startSSE() {
       sseRetryTimer = setTimeout(() => {
         stopPolling()
         startSSE()
-      }, 30000)
+      }, SSE_RETRY_DELAY_MS)
     }
     // Transient error — EventSource reconnects automatically
   }

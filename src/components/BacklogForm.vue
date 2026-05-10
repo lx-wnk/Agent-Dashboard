@@ -2,6 +2,7 @@
 import type { PipelineTask } from '../types'
 import { ref } from 'vue'
 import { createTask } from '../composables/useTasks'
+import { slugify } from '../utils/validation'
 import PermissionTemplatePicker from './PermissionTemplatePicker.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
@@ -18,14 +19,6 @@ const selectedTemplate = ref<PermissionTemplateId | null>('feature_implementatio
 
 const isSubmitting = ref(false)
 const errorMsg = ref('')
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
 
 function onTitleInput(value: string) {
   title.value = value
