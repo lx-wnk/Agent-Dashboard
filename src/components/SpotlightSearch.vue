@@ -37,6 +37,10 @@ async function search(q: string) {
   loading.value = true
   try {
     const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=all&limit=10`)
+    if (!res.ok) {
+      results.value = { tasks: [], agents: [] }
+      return
+    }
     results.value = await res.json() as SearchResults
     selectedIdx.value = 0
   }
@@ -45,19 +49,30 @@ async function search(q: string) {
   }
 }
 
+function activate(result: typeof flatResults.value[number]) {
+  if (result.type === 'task')
+    emit('navigateTask', result.item)
+  else
+    emit('navigateAgent', result.item)
+  open.value = false
+}
+
 watch(query, (q) => {
   if (debounceHandle)
     clearTimeout(debounceHandle)
-  debounceHandle = setTimeout(search, 200, q)
+  debounceHandle = setTimeout(() => {
+    search(q).catch(() => {
+      results.value = { tasks: [], agents: [] }
+    })
+  }, 200)
 })
 
 function onKeydown(e: KeyboardEvent) {
-  // Open on Cmd+K or Ctrl+K
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault()
     open.value = !open.value
     if (open.value)
-      nextTick(() => inputRef.value?.focus())
+      void nextTick(() => inputRef.value?.focus())
     return
   }
   if (!open.value)
@@ -81,11 +96,7 @@ function onKeydown(e: KeyboardEvent) {
     const selected = flatResults.value[selectedIdx.value]
     if (!selected)
       return
-    if (selected.type === 'task')
-      emit('navigateTask', selected.item)
-    else
-      emit('navigateAgent', selected.item)
-    open.value = false
+    activate(selected)
   }
 }
 
@@ -114,36 +125,52 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </p>
         </template>
         <template v-else>
-          <div v-if="results.tasks.length > 0" class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Tasks
-          </div>
-          <button
-            v-for="(item, idx) in flatResults"
-            :key="`${item.type}-${item.type === 'task' ? item.item.id : (item.item as Agent).sessionId}`"
-            type="button"
-            class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors"
-            :class="selectedIdx === idx
-              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'"
-            @click="() => {
-              if (item.type === 'task') { emit('navigateTask', item.item); open = false }
-              else { emit('navigateAgent', item.item as Agent); open = false }
-            }"
-            @mouseenter="selectedIdx = idx"
-          >
-            <span class="text-[10px] uppercase tracking-wide text-slate-400 w-10 flex-shrink-0">
-              {{ item.type === 'task' ? 'Task' : 'Agent' }}
-            </span>
-            <span class="truncate">
-              {{ item.type === 'task' ? (item.item as PipelineTask).title : (item.item as Agent).projectName }}
-            </span>
-            <span class="ml-auto text-[10px] text-slate-400">
-              {{ item.type === 'task' ? (item.item as PipelineTask).currentStage : (item.item as Agent).status }}
-            </span>
-          </button>
-          <div v-if="results.agents.length > 0 && results.tasks.length > 0" class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-t border-slate-100 dark:border-slate-800 mt-1">
-            Agents
-          </div>
+          <!-- Tasks section -->
+          <template v-if="results.tasks.length > 0">
+            <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Tasks
+            </div>
+            <button
+              v-for="(task, idx) in results.tasks"
+              :key="`task-${task.id}`"
+              type="button"
+              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors"
+              :class="selectedIdx === idx
+                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'"
+              @click="activate({ type: 'task', item: task })"
+              @mouseenter="selectedIdx = idx"
+            >
+              <span class="text-[10px] uppercase tracking-wide text-slate-400 w-10 flex-shrink-0">Task</span>
+              <span class="truncate">{{ task.title }}</span>
+              <span class="ml-auto text-[10px] text-slate-400">{{ task.currentStage }}</span>
+            </button>
+          </template>
+
+          <!-- Agents section -->
+          <template v-if="results.agents.length > 0">
+            <div
+              class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+              :class="{ 'border-t border-slate-100 dark:border-slate-800 mt-1': results.tasks.length > 0 }"
+            >
+              Agents
+            </div>
+            <button
+              v-for="(agent, idx) in results.agents"
+              :key="`agent-${agent.sessionId}`"
+              type="button"
+              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors"
+              :class="selectedIdx === (results.tasks.length + idx)
+                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'"
+              @click="activate({ type: 'agent', item: agent })"
+              @mouseenter="selectedIdx = results.tasks.length + idx"
+            >
+              <span class="text-[10px] uppercase tracking-wide text-slate-400 w-10 flex-shrink-0">Agent</span>
+              <span class="truncate">{{ agent.projectName }}</span>
+              <span class="ml-auto text-[10px] text-slate-400">{{ agent.status }}</span>
+            </button>
+          </template>
         </template>
       </div>
       <div class="px-4 py-2 border-t border-slate-100 dark:border-slate-800 flex gap-3 text-[10px] text-slate-400">
