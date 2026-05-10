@@ -22,6 +22,12 @@ package-lock.json
 # Compiled single-binary (bun build --compile)
 /dashboard
 
+# Go compiled binary
+/server/serve
+
+# Backup/scratch files
+*.bck.yml
+
 # Local settings contain tokens — never commit
 .claude/settings.local.json
 
