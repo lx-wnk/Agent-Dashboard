@@ -20,7 +20,7 @@ func encode[T any](w http.ResponseWriter, status int, v T) error {
 func decode[T any](r *http.Request) (T, error) {
 	var v T
 	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
-		return v, fmt.Errorf("%w: %s", ErrBadRequest, err.Error())
+		return v, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
 	return v, nil
 }
