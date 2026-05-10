@@ -395,17 +395,17 @@ describe('extractSessionInfo', () => {
   })
 
   it('recognises cli entrypoint', () => {
-    const entries = [{ entrypoint: 'cli' }]
+    const entries = [{ type: 'system', entrypoint: 'cli' }]
     expect(extractSessionInfo(entries).entrypoint).toBe('cli')
   })
 
   it('recognises desktop entrypoint', () => {
-    const entries = [{ entrypoint: 'desktop' }]
+    const entries = [{ type: 'system', entrypoint: 'desktop' }]
     expect(extractSessionInfo(entries).entrypoint).toBe('desktop')
   })
 
   it('falls back to unknown for unrecognised entrypoint', () => {
-    const entries = [{ entrypoint: 'web' }]
+    const entries = [{ type: 'system', entrypoint: 'web' }]
     expect(extractSessionInfo(entries).entrypoint).toBe('unknown')
   })
 })
@@ -639,7 +639,7 @@ describe('extractSessionInfo — watchdog error scanner', () => {
         ],
       },
     }
-    const entries = Array.from({ length: 5 }).fill(repeatedEntry)
+    const entries = Array.from({ length: 5 }, () => repeatedEntry)
     const result = extractSessionInfo(entries)
     expect(result.convergenceAlert).toBe(true)
     expect(result.convergenceToolName).toBe('Bash')

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { AVAILABLE_MODELS } from '../src/utils/models.js'
 import { estimateCacheCreationCost, estimateCacheReadCost, estimateCost, MODEL_PRICING } from './pricing'
 
 describe('mODEL_PRICING', () => {

@@ -57,7 +57,7 @@ describe('dispatchSlashCommand', () => {
   it('/spawn rejects missing cwd', async () => {
     const result = await dispatchSlashCommand('/spawn', ['my-slug', 'desc'], {})
     expect(result.ok).toBe(false)
-    expect(result.message).toContain('Arbeitsverzeichnis')
+    expect(result.message).toContain('working directory')
   })
 
   it('/spawn validates missing description', async () => {
@@ -77,7 +77,7 @@ describe('dispatchSlashCommand', () => {
   it('/grant requires taskId', async () => {
     const result = await dispatchSlashCommand('/grant', ['Bash'], {})
     expect(result.ok).toBe(false)
-    expect(result.message).toContain('Pipeline-Task')
+    expect(result.message).toContain('pipeline task')
   })
 
   it('/cancel calls cancel endpoint', async () => {

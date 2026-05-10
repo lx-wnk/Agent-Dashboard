@@ -20,7 +20,11 @@ beforeEach(async () => {
 
   const app = expressLib()
   app.use(expressLib.json())
-  app.use('/api', createHistoryRouter())
+  app.use((_req, _res, next) => {
+    ;(_req as any).user = { id: 'test-user', login: 'test', isAdmin: true }
+    next()
+  })
+  app.use('/api', createHistoryRouter({ rejectCrossOrigin: () => false }))
 
   server = await new Promise<ReturnType<express.Express['listen']>>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s))
