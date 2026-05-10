@@ -1,10 +1,12 @@
 package api
 
 import (
+	"io/fs"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/lx-wnk/agent-dashboard/server/frontend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -46,6 +48,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents", ErrorMiddleware(agentHandler.List))
 		r.Get("/api/agents/stream", agentHandler.Stream)
 	})
+
+	// Vue SPA catch-all — must be last (after all API routes)
+	sub, err := fs.Sub(frontend.Embedded, "dist")
+	if err != nil {
+		panic("frontend embed sub: " + err.Error())
+	}
+	r.Handle("/*", NewSPAHandler(sub))
 
 	return r
 }
