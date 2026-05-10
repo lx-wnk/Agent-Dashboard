@@ -68,13 +68,15 @@ func (r *entApiKeyRepo) List(ctx context.Context) ([]*ent.ApiKey, error) {
 
 func (r *entApiKeyRepo) Delete(ctx context.Context, id string) error {
 	// Soft-delete: set active = false so hash remains in DB for audit.
-	return r.client.ApiKey.UpdateOneID(id).
-		SetActive(false).
-		Exec(ctx)
+	if err := r.client.ApiKey.UpdateOneID(id).SetActive(false).Exec(ctx); err != nil {
+		return fmt.Errorf("apikey.Delete: %w", err)
+	}
+	return nil
 }
 
 func (r *entApiKeyRepo) TouchLastUsed(ctx context.Context, id string) error {
-	return r.client.ApiKey.UpdateOneID(id).
-		SetLastUsedAt(time.Now()).
-		Exec(ctx)
+	if err := r.client.ApiKey.UpdateOneID(id).SetLastUsedAt(time.Now()).Exec(ctx); err != nil {
+		return fmt.Errorf("apikey.TouchLastUsed: %w", err)
+	}
+	return nil
 }
