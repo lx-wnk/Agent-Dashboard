@@ -5,9 +5,15 @@ Agent Dashboard statusline — prints a one-line summary of running agents.
 Usage:
     python3 scripts/statusline.py
     python3 scripts/statusline.py --format json
+    python3 scripts/statusline.py --port 13120 --timeout 0.5
+
+Options:
+    --port PORT       Dashboard HTTP port (default: 13120)
+    --timeout SECS    Request timeout in seconds (default: 0.5)
+    --format FORMAT   Output format: text (default) or json
 
 Environment:
-    DASHBOARD_API_URL   Base URL of the dashboard (default: http://127.0.0.1:13120)
+    DASHBOARD_API_URL   Base URL of the dashboard (default: http://127.0.0.1:<port>)
     DASHBOARD_API_TOKEN Bearer token if auth is enabled (optional)
 
 Shell integration (zsh) — add to ~/.zshrc:
@@ -25,26 +31,25 @@ Shell integration (bash) — add to ~/.bashrc:
     PROMPT_COMMAND='export PS1="\\u@\\h \\w [$(_agent_status)] \\$ "'
 """
 
+import argparse
 import json
 import os
-import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Any
 
-BASE_URL = os.environ.get("DASHBOARD_API_URL", "http://127.0.0.1:13120")
-TOKEN = os.environ.get("DASHBOARD_API_TOKEN", "")
 
-
-def fetch_agents() -> list[dict[str, Any]]:
-    url = f"{BASE_URL}/api/agents"
+def fetch_agents(base_url: str, token: str, timeout: float) -> list[dict[str, Any]]:
+    url = f"{base_url}/api/agents"
     req = urllib.request.Request(url)
-    if TOKEN:
-        req.add_header("Authorization", f"Bearer {TOKEN}")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req, timeout=2) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode())
-    except (urllib.error.URLError, json.JSONDecodeError):
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+        return []
+    except Exception:
         return []
 
 
@@ -65,23 +70,46 @@ def summarize(agents: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def format_statusline(s: dict[str, Any]) -> str:
+    if s["total"] == 0:
+        return ""
     tok_k = s["total_tokens"] / 1000
     cost = s["cost_per_hour"]
     return f"⚡ {s['active']} active | ${cost:.2f}/h | {tok_k:.0f}K tok"
 
 
-def main() -> None:
-    use_json = (
-        "--format" in sys.argv
-        and sys.argv.index("--format") + 1 < len(sys.argv)
-        and sys.argv[sys.argv.index("--format") + 1] == "json"
-    )
-    agents = fetch_agents()
+def get_status(port: int, timeout: float, fmt: str) -> str:
+    base_url = os.environ.get("DASHBOARD_API_URL", f"http://127.0.0.1:{port}")
+    token = os.environ.get("DASHBOARD_API_TOKEN", "")
+    agents = fetch_agents(base_url, token, timeout)
+    if not agents:
+        return ""
     summary = summarize(agents)
-    if use_json:
-        print(json.dumps(summary))
-    else:
-        print(format_statusline(summary))
+    if fmt == "json":
+        return json.dumps(summary)
+    return format_statusline(summary)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Claude agent status for shell prompt"
+    )
+    parser.add_argument(
+        "--port", type=int, default=13120, help="Dashboard port (default: 13120)"
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=0.5,
+        help="Request timeout in seconds (default: 0.5)",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format: text (default) or json",
+    )
+    args = parser.parse_args()
+    print(get_status(args.port, args.timeout, args.format), end="")
 
 
 if __name__ == "__main__":
