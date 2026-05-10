@@ -20,10 +20,10 @@ var (
 
 // JWTPayload is the JWT body — matches the TypeScript JwtPayload interface.
 type JWTPayload struct {
-	Sub     string `json:"sub"`     // GitHub numeric user ID
-	Login   string `json:"login"`   // GitHub username
+	Sub     string `json:"sub"`   // GitHub numeric user ID
+	Login   string `json:"login"` // GitHub username
 	IsAdmin bool   `json:"isAdmin"`
-	Exp     int64  `json:"exp"`     // Unix timestamp
+	Exp     int64  `json:"exp"` // Unix timestamp
 }
 
 func base64url(data []byte) string {

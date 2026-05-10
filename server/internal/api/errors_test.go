@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
+	"github.com/stretchr/testify/require"
 )
 
 func TestErrorMiddleware_NotFound(t *testing.T) {

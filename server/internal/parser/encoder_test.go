@@ -3,8 +3,8 @@ package parser_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEncodePath(t *testing.T) {

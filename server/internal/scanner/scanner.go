@@ -84,7 +84,7 @@ func getCWDsMac(ctx context.Context, pids []int) map[int]string {
 	for i, p := range pids {
 		pidStrs[i] = strconv.Itoa(p)
 	}
-	out, err := exec.CommandContext(ctx,
+	out, err := exec.CommandContext(ctx, //nolint:gosec // pidStrs are integer PIDs parsed from ps output — not user-controlled input
 		"lsof", "-a", "-d", "cwd", "-p", strings.Join(pidStrs, ","), "-Fn",
 	).Output()
 	if err != nil {

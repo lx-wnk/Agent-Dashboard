@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTailRead_ReturnsContent(t *testing.T) {
