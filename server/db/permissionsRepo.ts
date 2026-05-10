@@ -177,3 +177,28 @@ export function countPermissionRequestsForStageRun(
     .get(stageRunId) as { c: number } | undefined
   return row?.c ?? 0
 }
+
+/**
+ * For each (tool, pattern) combination requested for this task,
+ * returns the total number of permission_requests rows (any outcome, any stage_run).
+ * Key format: `${tool}:${pattern ?? '*'}`.
+ */
+export function getPermissionReRequestCounts(
+  taskId: string,
+  db: Database = getDb(),
+): Map<string, number> {
+  const rows = db
+    .prepare(`
+      SELECT pr.tool, pr.pattern, COUNT(*) AS cnt
+      FROM permission_requests pr
+      JOIN stage_runs sr ON sr.id = pr.stage_run_id
+      WHERE sr.task_id = ?
+      GROUP BY pr.tool, pr.pattern
+    `)
+    .all(taskId) as Array<{ tool: string, pattern: string | null, cnt: number }>
+
+  const map = new Map<string, number>()
+  for (const row of rows)
+    map.set(`${row.tool}:${row.pattern ?? '*'}`, row.cnt)
+  return map
+}

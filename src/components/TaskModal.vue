@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
+import type { StageCostRow } from './StageCostWaterfall.vue'
+import type { SlashCommand } from './TaskSlashCommandMenu.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import {
@@ -23,17 +25,23 @@ import {
 } from '../composables/useTasks'
 import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
+import AuditLogTab from './AuditLogTab.vue'
+import DependencyGraph from './DependencyGraph.vue'
+import GitStatusPanel from './GitStatusPanel.vue'
+import StageCostWaterfall from './StageCostWaterfall.vue'
 import StageOutputView from './StageOutputView.vue'
+import TaskSlashCommandMenu from './TaskSlashCommandMenu.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
+import WorktreeCommandRunner from './WorktreeCommandRunner.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
-const emit = defineEmits<{ close: [], navigate: [agent: Agent], openChat: [task: PipelineTask] }>()
+const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
 
 const { agents } = useAgents()
 
-type Tab = 'overview' | 'stages' | 'permissions' | 'audit'
+type Tab = 'overview' | 'stages' | 'permissions' | 'audit' | 'graph'
 const activeTab = ref<Tab>('overview')
 const stageRuns = ref<StageRun[]>([])
 const permissions = ref<TaskPermission[]>([])
@@ -45,6 +53,39 @@ const newPermTool = ref('')
 const newPermPattern = ref('')
 const permError = ref('')
 const isGranting = ref(false)
+
+const TASK_SLASH_COMMANDS: SlashCommand[] = [
+  { name: '/retry', description: 'Retry the current stage' },
+  { name: '/grant', description: 'Grant all pending permissions' },
+  { name: '/cancel', description: 'Cancel this task' },
+  { name: '/status', description: 'Show current stage status' },
+  { name: '/help', description: 'List available commands' },
+]
+
+const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
+
+const costBreakdown = ref<StageCostRow[]>([])
+const costLoading = ref(false)
+const costError = ref('')
+
+async function loadCostBreakdown(taskId: string): Promise<void> {
+  costBreakdown.value = []
+  costError.value = ''
+  costLoading.value = true
+  try {
+    const res = await fetch(`/api/tasks/${taskId}/cost-breakdown`)
+    if (res.ok)
+      costBreakdown.value = await res.json()
+    else
+      costError.value = `Failed to load cost breakdown (${res.status})`
+  }
+  catch {
+    costError.value = 'Failed to load cost breakdown'
+  }
+  finally {
+    costLoading.value = false
+  }
+}
 
 const dependencies = ref<TaskDependency[]>([])
 const dependents = ref<TaskDependency[]>([])
@@ -209,7 +250,7 @@ async function loadDetails() {
 onUnmounted(stopRunningPoll)
 
 // Reset modal-local state when the user opens a different task.
-watch(() => props.task?.id, (id, prevId) => {
+watch(() => props.task?.id, async (id, prevId) => {
   if (id && id !== prevId) {
     activeTab.value = 'overview'
     actionError.value = ''
@@ -217,6 +258,7 @@ watch(() => props.task?.id, (id, prevId) => {
     feedbackHistory.value = []
     void loadDetails()
     void loadDependencies()
+    void loadCostBreakdown(id)
   }
 })
 
@@ -239,6 +281,7 @@ watch(
       return
     void loadDetails()
     void loadDependencies()
+    void loadCostBreakdown(id)
   },
 )
 
@@ -303,6 +346,28 @@ async function onGrantPermission() {
   }
   finally {
     isGranting.value = false
+  }
+}
+
+async function onSlashSelect(cmd: { name: string }) {
+  additionalPrompt.value = ''
+  switch (cmd.name) {
+    case '/retry':
+      if (props.task)
+        await handleAction(() => retryTask(props.task!.id, undefined))
+      break
+    case '/grant':
+      if (props.task) {
+        await handleAction(async () => {
+          for (const group of pendingByStageRun.value)
+            await bulkResolvePermissionRequests(group.stageRunId, 'granted')
+        })
+      }
+      break
+    case '/cancel':
+      if (props.task)
+        await handleAction(() => cancelTask(props.task!.id))
+      break
   }
 }
 
@@ -418,6 +483,14 @@ const runtime = computed(() => {
         >
           Audit
         </button>
+        <button
+          type="button"
+          class="px-4 py-2.5 text-xs font-semibold bg-transparent border-none border-b-2 border-transparent cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+          :class="activeTab === 'graph' ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' : 'text-slate-400 dark:text-slate-600'"
+          @click="activeTab = 'graph'"
+        >
+          Dependencies
+        </button>
       </nav>
 
       <div class="flex-1 overflow-y-auto">
@@ -482,6 +555,13 @@ const runtime = computed(() => {
                     v-if="req.pattern"
                     class="font-mono text-xs text-slate-700 dark:text-slate-300 bg-yellow-100/60 dark:bg-yellow-900/40 px-1.5 py-px rounded"
                   >{{ req.pattern }}</span>
+                  <span
+                    v-if="req.reRequestCount && req.reRequestCount > 1"
+                    class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
+                    :title="`Requested ${req.reRequestCount} times`"
+                  >
+                    {{ req.reRequestCount }}x re-requests
+                  </span>
                 </div>
                 <p v-if="req.reason" class="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
                   {{ req.reason }}
@@ -748,6 +828,31 @@ const runtime = computed(() => {
               </details>
             </template>
           </div>
+
+          <!-- Cost breakdown section -->
+          <section class="mt-2">
+            <h3 class="text-[12px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
+              Cost breakdown
+            </h3>
+            <div v-if="costLoading" class="text-sm text-slate-400 dark:text-slate-600">
+              Loading...
+            </div>
+            <div v-else-if="costError" class="text-sm text-red-500 dark:text-red-400">
+              {{ costError }}
+            </div>
+            <StageCostWaterfall v-else :rows="costBreakdown" />
+          </section>
+
+          <!-- Git status section -->
+          <div class="mt-4">
+            <h3 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+              Git Status
+            </h3>
+            <GitStatusPanel :task-id="task.id" />
+          </div>
+
+          <!-- Worktree command runner -->
+          <WorktreeCommandRunner v-if="task" :task-id="task.id" class="mt-4" />
         </section>
 
         <!-- Stages tab -->
@@ -802,9 +907,16 @@ const runtime = computed(() => {
                 </AppButton>
               </div>
               <div v-for="req in group.requests" :key="req.id" class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded-md p-3 mb-2">
-                <div class="flex gap-2.5 items-baseline">
+                <div class="flex gap-2.5 items-baseline flex-wrap">
                   <strong>{{ req.tool }}</strong>
                   <span v-if="req.pattern" class="font-mono text-xs text-slate-900 dark:text-slate-100">{{ req.pattern }}</span>
+                  <span
+                    v-if="req.reRequestCount && req.reRequestCount > 1"
+                    class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
+                    :title="`Requested ${req.reRequestCount} times`"
+                  >
+                    {{ req.reRequestCount }}x re-requests
+                  </span>
                 </div>
                 <div v-if="req.reason" class="text-[11px] text-slate-400 dark:text-slate-600 my-1">
                   {{ req.reason }}
@@ -885,9 +997,12 @@ const runtime = computed(() => {
 
         <!-- Audit tab -->
         <section v-if="activeTab === 'audit'" class="p-5">
-          <div class="text-slate-400 dark:text-slate-600 text-xs text-center py-8">
-            Audit log viewer — Phase 6.
-          </div>
+          <AuditLogTab v-if="task" :task-id="task.id" />
+        </section>
+
+        <!-- Dependencies graph tab -->
+        <section v-if="activeTab === 'graph' && task" class="p-5">
+          <DependencyGraph :task-id="task.id" @navigate="id => emit('navigateTask', id)" />
         </section>
       </div>
 
@@ -900,12 +1015,21 @@ const runtime = computed(() => {
         </p>
         <!-- Optional instruction for Resume/Retry -->
         <div v-if="isFailedRun(task)" class="mb-2">
-          <textarea
-            v-model="additionalPrompt"
-            rows="2"
-            class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-slate-900 dark:text-slate-100 text-xs resize-none focus:outline-none focus:border-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
-            placeholder="Optional instruction for Resume / Retry (e.g. logic change or hint)…"
-          />
+          <div class="relative">
+            <TaskSlashCommandMenu
+              ref="slashMenuRef"
+              v-model="additionalPrompt"
+              :commands="TASK_SLASH_COMMANDS"
+              @select="onSlashSelect"
+            />
+            <textarea
+              v-model="additionalPrompt"
+              rows="2"
+              class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-slate-900 dark:text-slate-100 text-xs resize-none focus:outline-none focus:border-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
+              placeholder="Optional instruction for Resume / Retry (e.g. logic change or hint)…"
+              @keydown="slashMenuRef?.onKeydown($event)"
+            />
+          </div>
         </div>
         <div class="flex gap-2 justify-end">
           <AppButton

@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { Database as BunDatabase } from 'bun:sqlite'
+import { consola } from 'consola'
 import schemaSql from './schema.sql' with { type: 'text' }
 
 const DEFAULT_DB_PATH = join(homedir(), '.claude', 'dashboard-tasks.db')
@@ -333,7 +334,9 @@ function migrateV5NarrowStageCheck(db: Database): void {
         db.exec('ROLLBACK TO probe_v5_narrow')
         db.exec('RELEASE probe_v5_narrow')
       }
-      catch {}
+      catch (rollbackErr) {
+        consola.warn('[migrateV5] probe rollback failed:', rollbackErr)
+      }
       return false
     }
   }
@@ -366,10 +369,10 @@ function migrateV5NarrowStageCheck(db: Database): void {
           'done','on_hold','cancelled'
         )),
         parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-        max_iterations INTEGER NOT NULL DEFAULT 20,
+        max_iterations INTEGER NOT NULL DEFAULT 20, -- must match server/db/defaults.ts: DEFAULT_MAX_ITERATIONS
         token_budget INTEGER,
         cost_budget_cents INTEGER,
-        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800, -- must match server/db/defaults.ts: DEFAULT_STAGE_TIMEOUT_SECONDS
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         metadata TEXT,
@@ -508,6 +511,84 @@ function migrateV5NarrowStageCheck(db: Database): void {
   }
 }
 
+function migrateV8FtsIndex(db: Database): void {
+  // Drop legacy external-content table if it exists from a prior attempt,
+  // so we can recreate as a standalone table. This is safe — the triggers
+  // below will repopulate it from the tasks table immediately after.
+  const existingFts = db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='task_fts'`,
+  ).get() as { sql: string } | undefined
+  if (existingFts !== undefined && existingFts.sql.includes(`content='tasks'`)) {
+    db.exec('DROP TABLE IF EXISTS task_fts')
+    db.exec('DROP TRIGGER IF EXISTS tasks_fts_insert')
+    db.exec('DROP TRIGGER IF EXISTS tasks_fts_update')
+    db.exec('DROP TRIGGER IF EXISTS tasks_fts_delete')
+  }
+
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS task_fts
+    USING fts5(
+      task_id UNINDEXED,
+      title,
+      description
+    )
+  `)
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS tasks_fts_insert
+    AFTER INSERT ON tasks BEGIN
+      INSERT INTO task_fts(task_id, title, description)
+      VALUES (new.id, new.title, COALESCE(new.description, ''));
+    END
+  `)
+  // Upgrade the broad AFTER UPDATE ON tasks trigger to the narrower
+  // AFTER UPDATE OF title, description version if still on the old definition.
+  // Only drop+recreate when the existing trigger body lacks the column filter —
+  // this avoids the unnecessary DROP+CREATE on every boot for up-to-date DBs.
+  const existingUpdateTrigger = db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type='trigger' AND name='tasks_fts_update'`,
+  ).get() as { sql: string } | undefined
+  const needsUpdateTriggerUpgrade = existingUpdateTrigger === undefined
+    || !existingUpdateTrigger.sql.includes('UPDATE OF')
+  if (needsUpdateTriggerUpgrade) {
+    db.exec('DROP TRIGGER IF EXISTS tasks_fts_update')
+    db.exec(`
+      CREATE TRIGGER tasks_fts_update
+      AFTER UPDATE OF title, description ON tasks BEGIN
+        DELETE FROM task_fts WHERE task_id = old.id;
+        INSERT INTO task_fts(task_id, title, description)
+        VALUES (new.id, new.title, COALESCE(new.description, ''));
+      END
+    `)
+  }
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS tasks_fts_delete
+    AFTER DELETE ON tasks BEGIN
+      DELETE FROM task_fts WHERE task_id = old.id;
+    END
+  `)
+  db.exec(`DELETE FROM task_fts WHERE task_id NOT IN (SELECT id FROM tasks)`)
+  db.exec(`
+    INSERT OR IGNORE INTO task_fts(task_id, title, description)
+    SELECT id, title, COALESCE(description, '') FROM tasks
+    WHERE id NOT IN (SELECT task_id FROM task_fts)
+  `)
+}
+
+/**
+ * Adds `workflow_patterns` table to store the top-20 most frequent 3-tool
+ * sequences discovered across all Claude session logs.
+ */
+function migrateV9WorkflowPatterns(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflow_patterns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tools TEXT NOT NULL UNIQUE,
+      frequency INTEGER NOT NULL DEFAULT 1,
+      last_seen_at TEXT NOT NULL
+    )
+  `)
+}
+
 function runMigrations(db: Database): void {
   migrateV1BaseSchema(db)
 
@@ -559,6 +640,20 @@ function runMigrations(db: Database): void {
   if ((version.v ?? 0) < 7) {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(7, new Date().toISOString())
+  }
+
+  migrateV8FtsIndex(db)
+
+  if ((version.v ?? 0) < 8) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(8, new Date().toISOString())
+  }
+
+  migrateV9WorkflowPatterns(db)
+
+  if ((version.v ?? 0) < 9) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(9, new Date().toISOString())
   }
 }
 
@@ -690,10 +785,10 @@ function migrateKonzeptCheckConstraint(connection: Database): void {
           'umsetzungskonzept','implementation_plan','approval2','done','on_hold','cancelled'
         )),
         parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-        max_iterations INTEGER NOT NULL DEFAULT 20,
+        max_iterations INTEGER NOT NULL DEFAULT 20, -- must match server/db/defaults.ts: DEFAULT_MAX_ITERATIONS
         token_budget INTEGER,
         cost_budget_cents INTEGER,
-        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+        stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800, -- must match server/db/defaults.ts: DEFAULT_STAGE_TIMEOUT_SECONDS
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         metadata TEXT,

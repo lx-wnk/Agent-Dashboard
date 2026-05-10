@@ -1,6 +1,8 @@
 import type { PipelineStage } from '../src/types.js'
 import process from 'node:process'
 
+export { SLUG_PATTERN_MESSAGE, SLUG_RE } from '../src/utils/validation.js'
+
 // Narrower than the DB CHECK constraint — legacy stages (pruefung, refinement,
 // planning, approval1, approval2, plus the German originals konzept/umsetzung/
 // selbstreview/finalisierung that were renamed to concept/implementation/
@@ -17,10 +19,10 @@ export const VALID_STAGES = new Set<PipelineStage>([
   'cancelled',
 ])
 
-export const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
-export const SLUG_PATTERN_MESSAGE = 'slug must match [a-z0-9][a-z0-9-]{0,63}'
-
 export const SYSTEM_PROMPT_MAX_CHARS = 10_000
+
+// TODO: move to src/utils/validation.ts for client-side validation
+export const MAX_DESCRIPTION_CHARS = 10_000
 
 export const DEPENDENCY_REQUIRED_STAGES = ['done', 'cancelled'] as const
 export const DEPENDENCY_CANCEL_ACTIONS = ['cancel', 'start', 'on_hold'] as const

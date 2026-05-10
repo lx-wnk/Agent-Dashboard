@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { AVAILABLE_MODELS } from '@/utils/models'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
@@ -215,14 +216,8 @@ onUnmounted(() => {
             <option value="">
               Auto
             </option>
-            <option value="claude-opus-4-6">
-              claude-opus-4-6
-            </option>
-            <option value="claude-sonnet-4-6">
-              claude-sonnet-4-6
-            </option>
-            <option value="claude-haiku-4-5">
-              claude-haiku-4-5
+            <option v-for="m in AVAILABLE_MODELS" :key="m" :value="m">
+              {{ m }}
             </option>
           </select>
         </div>

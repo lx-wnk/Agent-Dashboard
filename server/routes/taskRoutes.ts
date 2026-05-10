@@ -1,28 +1,34 @@
 import type express from 'express'
 import type { NotificationEventType, PipelineStage, PipelineTask } from '../../src/types.js'
+import type { AuditRow } from '../db/rowMappers.js'
 import type { Dispatcher } from '../notifications/dispatcher.js'
 import type { PipelineOrchestrator } from '../pipeline/orchestrator.js'
+import { execFile as execFileCb } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import process from 'node:process'
+import { promisify } from 'node:util'
 import { consola } from 'consola'
 import { Router } from 'express'
 import { isAuthEnabled } from '../auth/requireAuth.js'
-import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, SLUG_PATTERN_MESSAGE, SLUG_RE, UUID_RE, VALID_STAGES } from '../constants.js'
+import { DEPENDENCY_CANCEL_ACTIONS, DEPENDENCY_REQUIRED_STAGES, MAX_DESCRIPTION_CHARS, SLUG_PATTERN_MESSAGE, SLUG_RE, UUID_RE, VALID_STAGES } from '../constants.js'
 import { appendAudit, listAuditForTask } from '../db/auditRepo.js'
 import { getDb } from '../db/client.js'
 import {
   listFeedbackForTask,
 } from '../db/feedbackRepo.js'
-import { getAllConfig, getPipelineConfigNumber, listPreferences, setConfig, setPipelineConfig, setPreference } from '../db/notificationConfigRepo.js'
+import { getAllConfig, getConfig, getPipelineConfigNumber, listPreferences, setConfig, setPipelineConfig, setPreference } from '../db/notificationConfigRepo.js'
 import {
   countPermissionRequestsForStageRun,
   createPermissionRequest,
   createTaskPermission,
   deleteTaskPermission,
   getPermissionRequestById,
+  getPermissionReRequestCounts,
   listPendingPermissionRequests,
   listTaskPermissions,
   resolvePermissionRequest,
 } from '../db/permissionsRepo.js'
+import { rowToAuditEntry } from '../db/rowMappers.js'
 import {
   getLatestStageRunForTask,
   getLatestStageRunsForTasks,
@@ -48,9 +54,22 @@ import { isPidAlive } from '../pipeline/sessionManager.js'
 import { findNewestSessionId, readLastStageJsonOutput, resolvedProjectDir } from '../pipeline/sessionOutputReader.js'
 import { spawnAnalysisAgent } from '../services/analysisSpawner.js'
 import { applyPermissionTemplateByName, bulkGrantPermissions, inheritParentPermissions, validatePermissionEntry } from '../services/approvalUtils.js'
+import { getGitStatus, runGitAction } from '../services/gitService.js'
 import { listTemplateNames } from '../services/permissionTemplates.js'
 import { recommendParallelism } from '../services/resourceRecommender.js'
 import { createWorktree, removeWorktree } from '../services/worktreeManager.js'
+
+const execFileAsync = promisify(execFileCb)
+
+export const ALLOWED_COMMANDS: Record<string, { file: string, args: string[] }> = {
+  'pnpm test': { file: 'pnpm', args: ['test', '--run'] },
+  'pnpm lint': { file: 'pnpm', args: ['lint'] },
+  'pnpm typecheck': { file: 'pnpm', args: ['typecheck'] },
+  'pnpm build': { file: 'pnpm', args: ['build'] },
+  'git log': { file: 'git', args: ['log', '--oneline', '-20'] },
+  'git diff': { file: 'git', args: ['diff', '--stat'] },
+  'git status': { file: 'git', args: ['status', '--short'] },
+}
 
 type RejectCrossOrigin = (req: express.Request, res: express.Response) => boolean
 
@@ -296,6 +315,45 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(enrichTasksBulk(listTasksForUser(user.id, user.isAdmin)))
   })
 
+  // ─── Export ──────────────────────────────────────────────────────────────────
+
+  router.get('/tasks/export', (req, res) => {
+    const format = (req.query.format as string) === 'csv' ? 'csv' : 'json'
+    const user = req.user!
+    const tasks = listTasksForUser(user.id, user.isAdmin)
+
+    if (format === 'csv') {
+      const header = 'id,slug,title,currentStage,priority,createdAt,totalCostCents,totalTokens'
+      const rows = tasks.map((t) => {
+        const runs = listStageRunsForTask(t.id)
+        const totalCostCents = runs.reduce((s, r) => s + r.costCents, 0)
+        const totalTokens = runs.reduce((s, r) => s + r.tokensUsed, 0)
+        return [
+          t.id,
+          t.slug,
+          `"${t.title.replace(/"/g, '""')}"`,
+          t.currentStage,
+          t.priority,
+          t.createdAt,
+          totalCostCents,
+          totalTokens,
+        ].join(',')
+      })
+      res.setHeader('Content-Type', 'text/csv')
+      res.setHeader('Content-Disposition', 'attachment; filename="tasks.csv"')
+      res.send([header, ...rows].join('\n'))
+    }
+    else {
+      const enriched = tasks.map(t => ({
+        ...t,
+        stageRuns: listStageRunsForTask(t.id),
+      }))
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Content-Disposition', 'attachment; filename="tasks.json"')
+      res.json(enriched)
+    }
+  })
+
   router.get('/tasks/:id', (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task || !canAccessTask(task, req.user!)) {
@@ -334,8 +392,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     }
     if (typeof title === 'string' && title.length > 200)
       return void res.status(400).json({ error: 'title must be ≤ 200 characters' })
-    if (typeof description === 'string' && description.length > 10_000)
-      return void res.status(400).json({ error: 'description must be ≤ 10,000 characters' })
+    if (typeof description === 'string' && description.length > MAX_DESCRIPTION_CHARS)
+      return void res.status(400).json({ error: `description must be ≤ ${MAX_DESCRIPTION_CHARS.toLocaleString('en-US')} characters` })
     if (typeof cwd === 'string' && cwd.length > 4096)
       return void res.status(400).json({ error: 'cwd must be ≤ 4096 characters' })
     if (maxIterations !== undefined && maxIterations !== null) {
@@ -488,8 +546,8 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     // (cwd, parentTaskId, worktreePath, etc.) is intentionally off-limits.
     if (typeof body.title === 'string' && body.title.length > 200)
       return void res.status(400).json({ error: 'title must be ≤ 200 characters' })
-    if (typeof body.description === 'string' && body.description.length > 10_000)
-      return void res.status(400).json({ error: 'description must be ≤ 10,000 characters' })
+    if (typeof body.description === 'string' && body.description.length > MAX_DESCRIPTION_CHARS)
+      return void res.status(400).json({ error: `description must be ≤ ${MAX_DESCRIPTION_CHARS.toLocaleString('en-US')} characters` })
     if (body.maxIterations !== undefined && body.maxIterations !== null) {
       if (!Number.isInteger(body.maxIterations) || body.maxIterations < 1 || body.maxIterations > 100)
         return void res.status(400).json({ error: 'maxIterations must be an integer between 1 and 100' })
@@ -794,6 +852,25 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     res.json(listStageRunsForTask(req.params.id))
   })
 
+  router.get('/tasks/:id/cost-breakdown', (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const breakdown = listStageRunsForTask(req.params.id)
+      .filter(r => r.status === 'done')
+      .map(r => ({
+        stage: r.stage,
+        iteration: r.iteration,
+        costCents: r.costCents,
+        tokensUsed: r.tokensUsed,
+        startedAt: r.startedAt,
+        endedAt: r.endedAt,
+      }))
+    res.json(breakdown)
+  })
+
   router.get('/tasks/:id/stage-runs/:runId/agent-output', async (req, res) => {
     const task = getTaskById(req.params.id)
     if (!task || !canAccessTask(task, req.user!)) {
@@ -870,8 +947,13 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       return
     }
     const runs = listStageRunsForTask(req.params.id)
-    const pending = runs.flatMap(r => listPendingPermissionRequests(r.id))
-    res.json(pending)
+    const pendingRequests = runs.flatMap(r => listPendingPermissionRequests(r.id))
+    const reRequestCounts = getPermissionReRequestCounts(task.id)
+    const enrichedRequests = pendingRequests.map(pr => ({
+      ...pr,
+      reRequestCount: reRequestCounts.get(`${pr.tool}:${pr.pattern ?? '*'}`) ?? 0,
+    }))
+    res.json(enrichedRequests)
   })
 
   mutationRouter.post('/permission-requests', (req, res) => {
@@ -1531,6 +1613,128 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
       setConfig(key, typeof value === 'string' ? value : value === null ? null : String(value))
     }
     res.json(getAllConfig())
+  })
+
+  // ─── Global Audit ────────────────────────────────────────────────────────────
+
+  router.get('/audit', (req, res) => {
+    if (!req.user!.isAdmin) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const offset = Number(req.query.offset) || 0
+    const rows = getDb()
+      .prepare('SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ? OFFSET ?')
+      .all(limit, offset) as AuditRow[]
+    res.json(rows.map(rowToAuditEntry))
+  })
+
+  // ─── Webhook HMAC ────────────────────────────────────────────────────────────
+
+  router.get('/settings/webhook-hmac', (req, res) => {
+    if (!req.user!.isAdmin) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+    const enabled = getConfig('webhook_hmac_enabled') === 'true'
+    const hasSecret = !!getConfig('webhook_hmac_secret')
+    res.json({ enabled, hasSecret })
+  })
+
+  mutationRouter.post('/settings/webhook-hmac', (req, res) => {
+    if (!req.user!.isAdmin) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+    const { enabled, secret } = req.body as { enabled: boolean, secret?: string }
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: '`enabled` must be a boolean' })
+      return
+    }
+    setConfig('webhook_hmac_enabled', enabled ? 'true' : 'false')
+    if (enabled) {
+      const resolvedSecret = secret && secret.length >= 32
+        ? secret
+        : randomBytes(32).toString('hex')
+      setConfig('webhook_hmac_secret', resolvedSecret)
+      res.json({ enabled: true, secret: resolvedSecret })
+    }
+    else {
+      res.json({ enabled: false })
+    }
+  })
+
+  // ─── Git status & actions for task cwd ────────────────
+
+  router.get('/tasks/:id/git-status', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const cwd = task.worktreePath || task.cwd
+    try {
+      const status = await getGitStatus(cwd)
+      res.json(status)
+    }
+    catch {
+      res.status(500).json({ error: 'Git operation failed' })
+    }
+  })
+
+  mutationRouter.post('/tasks/:id/git-action', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const { action } = req.body as { action: unknown }
+    if (action !== 'fetch' && action !== 'pull') {
+      res.status(400).json({ error: 'Invalid action' })
+      return
+    }
+    if (action === 'pull' && process.env.DASHBOARD_ALLOW_GIT_PULL !== 'true') {
+      res.status(403).json({ error: 'pull is disabled. Set DASHBOARD_ALLOW_GIT_PULL=true to enable.' })
+      return
+    }
+    const cwd = task.worktreePath || task.cwd
+    try {
+      const output = await runGitAction(cwd, action)
+      res.json({ output })
+    }
+    catch (err) {
+      res.status(500).json({ error: String(err) })
+    }
+  })
+
+  // ─── Worktree command runner ────────────────────────────────────────────────
+
+  mutationRouter.post('/tasks/:id/run', async (req, res) => {
+    const task = getTaskById(req.params.id)
+    if (!task || !canAccessTask(task, req.user!)) {
+      res.status(404).json({ error: 'Task not found' })
+      return
+    }
+    const { command } = req.body as { command: string }
+    const allowed = ALLOWED_COMMANDS[command]
+    if (!allowed) {
+      res.status(400).json({ error: `Command not allowed. Allowed: ${Object.keys(ALLOWED_COMMANDS).join(', ')}` })
+      return
+    }
+    const cwd = task.worktreePath ?? task.cwd
+    try {
+      const { stdout, stderr } = await execFileAsync(allowed.file, allowed.args, {
+        cwd,
+        timeout: 30_000,
+        maxBuffer: 512 * 1024,
+      })
+      res.json({ output: stdout + stderr, exitCode: 0 })
+    }
+    catch (err: unknown) {
+      const e = err as { stdout?: string, stderr?: string, code?: number }
+      res.json({ output: (e.stdout ?? '') + (e.stderr ?? ''), exitCode: e.code ?? 1 })
+    }
   })
 
   // Mount mutation sub-router so its rejectCrossOrigin middleware guards

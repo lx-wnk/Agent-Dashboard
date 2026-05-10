@@ -2,6 +2,7 @@
 import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
+import { SLASH_COMMAND_DEFS } from '../composables/useSlashCommands'
 
 const props = withDefaults(defineProps<{
   agent: Agent | null
@@ -12,20 +13,13 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ messageSent: [msg: OutputMessage] }>()
 
-const SLASH_COMMANDS = [
-  { name: '/btw', description: 'Send interrupt message while agent works' },
-  { name: '/compact', description: 'Compact conversation context' },
-  { name: '/review', description: 'Review recent changes' },
-  { name: '/commit', description: 'Commit staged changes' },
-  { name: '/help', description: 'Show available commands' },
-  { name: '/clear', description: 'Clear conversation display' },
-  { name: '/cost', description: 'Show token usage and costs' },
-  { name: '/status', description: 'Show agent status summary' },
-]
-
 const { promptInput, isSending, sendStatus, sendError, handleSend } = useAgentPrompt(
   () => props.agent,
   msg => emit('messageSent', msg),
+  {
+    get taskId() { return props.agent?.pipelineTaskId },
+    get cwd() { return props.agent?.cwd },
+  },
 )
 
 const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
@@ -35,16 +29,22 @@ const slashSuggestions = computed(() => {
   const val = promptInput.value.trim()
   if (!val.startsWith('/'))
     return []
-  // Only suggest when the entire input is the slash query (no space yet = still selecting)
   if (val.includes(' '))
     return []
   const query = val.toLowerCase()
-  return SLASH_COMMANDS.filter(c => c.name.startsWith(query))
+  return SLASH_COMMAND_DEFS
+    .filter(c => c.name.startsWith(query))
+    .map(c => ({
+      ...c,
+      disabled: !!c.requiresTask && !props.agent?.pipelineTaskId,
+    }))
 })
 
 const showSuggestions = computed(() => slashSuggestions.value.length > 0)
 
-function selectSuggestion(cmd: typeof SLASH_COMMANDS[0]) {
+function selectSuggestion(cmd: { name: string, disabled?: boolean }) {
+  if (cmd.disabled)
+    return
   promptInput.value = `${cmd.name} `
   nextTick(() => inputEl.value?.focus())
 }
@@ -105,17 +105,27 @@ defineExpose({ focus })
 
 <template>
   <div class="relative" :class="variant">
-    <div v-if="showSuggestions" class="absolute bottom-full left-0 right-0 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 border-b-0 rounded-t-md max-h-60 overflow-y-auto z-10">
+    <div
+      v-if="showSuggestions"
+      id="slash-listbox"
+      role="listbox"
+      class="absolute bottom-full left-0 right-0 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 border-b-0 rounded-t-md max-h-60 overflow-y-auto z-10"
+    >
       <button
         v-for="(cmd, i) in slashSuggestions"
         :key="cmd.name"
         type="button"
-        class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-slate-500 dark:text-slate-400 text-[13px] font-mono cursor-pointer text-left hover:bg-slate-100 dark:hover:bg-slate-800"
+        role="option"
+        :aria-selected="i === selectedIndex"
+        :disabled="cmd.disabled"
+        class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-slate-500 dark:text-slate-400 text-[13px] font-mono cursor-pointer text-left hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
         :class="{ 'bg-slate-100 dark:bg-slate-800': i === selectedIndex }"
         @mousedown.prevent="selectSuggestion(cmd)"
       >
         <span class="text-blue-600 dark:text-blue-400 font-semibold flex-shrink-0">{{ cmd.name }}</span>
         <span class="text-slate-400 dark:text-slate-600 text-xs">{{ cmd.description }}</span>
+        <span v-if="cmd.usage" class="text-slate-400 dark:text-slate-500 text-[10px] ml-1">{{ cmd.usage }}</span>
+        <span v-if="cmd.requiresTask && cmd.disabled" class="text-amber-600 text-[10px] ml-auto">requires linked task</span>
       </button>
     </div>
     <div
@@ -133,6 +143,7 @@ defineExpose({ focus })
         rows="1"
         placeholder="Enter prompt..."
         :disabled="isSending"
+        :aria-controls="showSuggestions ? 'slash-listbox' : undefined"
         class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
         @input="autoResize"
@@ -143,6 +154,7 @@ defineExpose({ focus })
         v-model="promptInput"
         placeholder="Enter prompt..."
         :disabled="isSending"
+        :aria-controls="showSuggestions ? 'slash-listbox' : undefined"
         class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50"
         @keydown="onKeydown"
       >

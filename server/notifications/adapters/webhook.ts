@@ -1,6 +1,7 @@
 import type { NotificationAdapter, NotificationPayload } from '../types.js'
 import { DEFAULT_REMOTE_TIMEOUT_MS } from '../../constants.js'
 import { getConfig } from '../../db/notificationConfigRepo.js'
+import { buildSignatureHeader } from '../hmac.js'
 
 const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
 
@@ -27,14 +28,25 @@ export const webhookAdapter: NotificationAdapter = {
     const format = getConfig('webhook_format') || 'generic'
     const body = buildBody(format, payload)
 
+    const rawBody = JSON.stringify(body)
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+
+    const hmacEnabled = getConfig('webhook_hmac_enabled') === 'true'
+    const hmacSecret = hmacEnabled ? getConfig('webhook_hmac_secret') : null
+    if (hmacEnabled && hmacSecret) {
+      const timestamp = Math.floor(Date.now() / 1000).toString()
+      headers['X-Dashboard-Signature'] = buildSignatureHeader(hmacSecret, timestamp, rawBody)
+      headers['X-Dashboard-Timestamp'] = timestamp
+    }
+
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_REMOTE_TIMEOUT_MS)
     let res: Response
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        headers,
+        body: rawBody,
         signal: controller.signal,
       })
     }

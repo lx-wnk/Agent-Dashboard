@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
 import { computed, ref } from 'vue'
+import { STATUS_ORDER } from '@/utils/agentSort'
 import { totalTokenCount } from '../utils/format'
 import AgentRow from './AgentRow.vue'
 import SubAgentRow from './SubAgentRow.vue'
@@ -15,8 +16,6 @@ const props = defineProps<{
 defineEmits<{
   select: [agent: Agent]
 }>()
-
-const STATUS_ORDER: Record<string, number> = { active: 0, waiting: 1, idle: 2 }
 
 const expandedPids = ref(new Set<number>())
 const sortField = ref<SortField>('status')

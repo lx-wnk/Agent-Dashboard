@@ -268,3 +268,14 @@ export function updateStageRun(
   db.prepare(`UPDATE stage_runs SET ${updates.join(', ')} WHERE id = @id`).run(params as never)
   return getStageRunById(id, db)
 }
+
+export function sumCompletedCostCents(taskId: string, db: Database = getDb()): number {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(cost_cents), 0) AS total
+       FROM stage_runs
+       WHERE task_id = ? AND status = 'done'`,
+    )
+    .get(taskId) as { total: number }
+  return row.total
+}

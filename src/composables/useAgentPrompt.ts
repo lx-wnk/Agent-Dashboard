@@ -1,9 +1,19 @@
 import type { Agent, OutputMessage } from '../types'
 import { ref } from 'vue'
+import { dispatchSlashCommand, parseSlashCommand, SLASH_COMMAND_DEFS } from './useSlashCommands'
 
 export type OnMessageSent = (msg: OutputMessage) => void
 
-export function useAgentPrompt(getAgent: () => Agent | null, onMessageSent?: OnMessageSent) {
+export interface AgentPromptContext {
+  taskId?: string
+  cwd?: string
+}
+
+export function useAgentPrompt(
+  getAgent: () => Agent | null,
+  onMessageSent?: OnMessageSent,
+  ctx?: AgentPromptContext,
+) {
   const promptInput = ref('')
   const isSending = ref(false)
   const sendStatus = ref<'sent' | 'error' | null>(null)
@@ -14,6 +24,37 @@ export function useAgentPrompt(getAgent: () => Agent | null, onMessageSent?: OnM
     const msg = promptInput.value.trim()
     if (!msg || isSending.value || !agent)
       return
+
+    // Slash-command intercept: only known dashboard commands are intercepted;
+    // unrecognised slash commands (e.g. /btw, /compact, /review) fall through to the agent.
+    const parsed = parseSlashCommand(msg)
+    if (parsed) {
+      const [cmd, args] = parsed
+      const isKnownCommand = SLASH_COMMAND_DEFS.some(def => def.name === cmd)
+      if (isKnownCommand) {
+        promptInput.value = ''
+        isSending.value = true
+        sendError.value = ''
+        try {
+          const result = await dispatchSlashCommand(cmd, args, {
+            taskId: ctx?.taskId ?? agent?.pipelineTaskId,
+            cwd: ctx?.cwd ?? agent?.cwd,
+          })
+          sendStatus.value = result.ok ? 'sent' : 'error'
+          sendError.value = result.ok ? '' : result.message
+          if (result.ok && result.message) {
+            onMessageSent?.({ role: 'channel_reply', content: result.message, timestamp: new Date().toISOString() })
+          }
+        }
+        finally {
+          isSending.value = false
+          setTimeout(() => {
+            sendStatus.value = null
+          }, 3000)
+        }
+        return
+      }
+    }
 
     isSending.value = true
     sendStatus.value = null

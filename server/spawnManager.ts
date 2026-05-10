@@ -14,11 +14,12 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import process from 'node:process'
 import { consola } from 'consola'
+import { AVAILABLE_MODELS } from '../src/utils/models.js'
 import { buildDashboardChannelMcpConfig } from './channelConfig.js'
 import { SYSTEM_PROMPT_MAX_CHARS } from './constants.js'
 
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
-const ALLOWED_MODELS = new Set(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', '']) // empty string = "Auto" (no --model flag)
+const ALLOWED_MODELS = new Set([...AVAILABLE_MODELS, '']) // empty string = "Auto" (no --model flag)
 
 const SPAWN_STORE_MAX_AGE_MS = 60 * 60 * 1000 // 1 hour
 const MAX_REPLIES_PER_PID = 50

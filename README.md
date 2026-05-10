@@ -10,11 +10,21 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 - **Chat-style session view** — full conversation transcript with markdown rendering, collapsible tool groups, inline task checklists, sub-agent badges
 - **Channel control** — send follow-up instructions and /btw interrupts to running agents via MCP Channels
 - **Agent spawning** — start new Claude agents with custom prompts, models, and system prompts from the UI
-- **Task pipeline** — multi-stage agentic workflow (concept → backlog → implementation → self_review → finalization → done) with permission gates per stage
+- **Task pipeline** — multi-stage agentic workflow (concept → backlog → implementation → self_review → finalization → done) with permission gates per stage; supports permission `template` shortcuts (`feature_implementation`, `research_only`, `test_only`, `review_only`)
 - **Authenticated MCP endpoint (19 tools, 4 scopes)** for external agent control
 - **API key management with scoped access** — generate and revoke bearer tokens in Settings
 - **Cross-linking between agent sessions and pipeline tasks**
 - **Multi-machine support** — aggregate agents from remote machines via `DASHBOARD_REMOTES`
+- **Claude quota / rate-limit tracking** — header progress bar shows quota usage and alerts on exhaustion
+- **Per-agent color & emoji identity** — unique color and emoji per project path for instant visual distinction, stored in localStorage
+- **PWA support** — installable as a desktop/mobile app with service worker and app manifest
+- **Spotlight Search (Cmd+K)** — quick search across all tasks and agents
+- **Slash Commands** — `/spawn <slug> <description> [--cwd <path>]`, `/grant <id>`, `/cancel <id>`, `/status`, `/session`
+- **N-gram Pattern Discovery** — automatically discovers and surfaces common tool-use sequences across sessions
+- **Memory Browser** — read and write Claude agent memory files directly from the dashboard
+- **Historical Session Import** — import past session cost data via a streaming SSE progress endpoint
+- **FTS5 Full-Text Search** — fast full-text search across all pipeline tasks backed by SQLite FTS5
+- **Python Statusline** — shell PS1 integration (`scripts/statusline.py`) showing live agent count and cost
 - **Dark/light theme, list/card/kanban views**
 
 ## Quick Start
@@ -162,6 +172,13 @@ Spawned agents run detached — they survive dashboard restarts and appear in th
 | `GET` | `/api/sessions` | List resumable session files |
 | `GET` | `/api/system` | CPU, memory, and disk usage |
 | `POST` | `/api/channel-reply` | Internal: receives replies from channel servers |
+| `GET` | `/api/search?q=...&type=tasks\|agents\|all` | Full-text search across tasks and agents |
+| `GET` | `/api/memory` | List Claude agent memory files |
+| `GET` | `/api/memory/:path` | Read a memory file |
+| `PUT` | `/api/memory/:path` | Write a memory file |
+| `POST` | `/api/history/import` | Start a historical session cost import |
+| `GET` | `/api/history/import/status` | SSE stream of import progress |
+| `GET` | `/api/analytics/patterns` | Discovered workflow patterns (N-gram analysis) |
 
 ## Security
 
@@ -171,6 +188,43 @@ Spawned agents run detached — they survive dashboard restarts and appear in th
 - Markdown output sanitized via DOMPurify before `v-html` rendering
 - Spawn rate-limited to 5 requests/minute
 - **`skipPermissions` option:** The spawn dialog offers a "skip permission prompts" checkbox that passes `--dangerously-skip-permissions` to Claude Code. This bypasses all safety confirmations (file writes, deletions, shell commands). The UI shows a warning and requires double-click confirmation. Use only in isolated environments or with trusted prompts.
+
+## Python Statusline
+
+`scripts/statusline.py` integrates the dashboard into your shell prompt, showing live agent count, active cost rate, and total tokens.
+
+```bash
+# zsh — add to ~/.zshrc
+_agent_status() {
+    local out
+    out=$(python3 /path/to/agent-dashboard/scripts/statusline.py 2>/dev/null)
+    [[ -n "$out" ]] && echo " [$out]"
+}
+PROMPT='%n@%m %~$(_agent_status) %# '
+
+# bash — add to ~/.bashrc
+_agent_status() {
+    python3 /path/to/agent-dashboard/scripts/statusline.py 2>/dev/null
+}
+PROMPT_COMMAND='export PS1="\u@\h \w [$(_agent_status)] \$ "'
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port PORT` | `13120` | Dashboard HTTP port |
+| `--timeout SECS` | `0.5` | Request timeout (keep low for PS1 responsiveness) |
+| `--format text\|json` | `text` | Output format |
+
+**Environment:**
+
+| Variable | Description |
+|----------|-------------|
+| `DASHBOARD_API_URL` | Override base URL (default: `http://127.0.0.1:<port>`) |
+| `DASHBOARD_API_TOKEN` | Bearer token if auth is enabled |
+
+If the dashboard is not running or the request times out, the script prints nothing and exits silently — your prompt is never stalled.
 
 ## Agent Skills
 

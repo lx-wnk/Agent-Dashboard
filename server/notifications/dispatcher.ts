@@ -6,14 +6,16 @@ import { browserAdapter } from './adapters/browser.js'
 import { emailAdapter } from './adapters/email.js'
 import { systemAdapter } from './adapters/system.js'
 import { webhookAdapter } from './adapters/webhook.js'
+import { webpushAdapter } from './adapters/webpush.js'
 
 export { setSseBroadcaster } from './adapters/browser.js'
 
 const DEFAULT_ADAPTERS: Record<NotificationChannel, NotificationAdapter> = {
-  email: emailAdapter,
-  webhook: webhookAdapter,
   browser: browserAdapter,
+  email: emailAdapter,
   system: systemAdapter,
+  webpush: webpushAdapter,
+  webhook: webhookAdapter,
 }
 
 export interface Dispatcher {
