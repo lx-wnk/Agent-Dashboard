@@ -109,6 +109,28 @@ interface QuotaInfo {
 
 const quota = ref<QuotaInfo | null>(null)
 
+const quotaPct = computed(() => {
+  if (!quota.value?.limit)
+    return 0
+  return Math.min(100, Math.round(quota.value.tokensUsed / quota.value.limit * 100))
+})
+
+const quotaSeverity = computed(() =>
+  quotaPct.value >= 90 ? 'critical' : quotaPct.value >= 75 ? 'warning' : 'normal',
+)
+
+const quotaPeriodEndLabel = computed(() => {
+  if (!quota.value?.periodEnd)
+    return 'Monthly quota'
+  const end = new Date(quota.value.periodEnd)
+  const now = new Date()
+  const diffMs = end.getTime() - now.getTime()
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays <= 0)
+    return 'Resets soon'
+  return `Resets in ${diffDays} day${diffDays === 1 ? '' : 's'}`
+})
+
 async function fetchQuota() {
   const res = await fetch('/api/quota')
   if (res.ok)
@@ -121,7 +143,7 @@ onMounted(fetchQuota)
 <template>
   <LoginPage v-if="loaded && showLogin" />
   <div v-else-if="loaded" class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
-    <header class="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+    <header class="flex flex-wrap items-center gap-3 gap-y-2 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
       <h1 class="text-[18px] font-semibold text-slate-900 dark:text-slate-100">
         Claude Agent Overview
       </h1>
@@ -131,20 +153,27 @@ onMounted(fetchQuota)
       </span>
       <span v-if="totalCost > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">{{ formatCost(totalCost) }}</span>
       <span v-if="totalTokens > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">{{ formatTokens(totalTokens) }} tokens</span>
-      <div v-if="quota && quota.limit" class="flex items-center gap-1.5" :title="`${quota.tokensUsed.toLocaleString()} / ${quota.limit.toLocaleString()} tokens`">
+      <div v-if="quota && quota.limit" class="flex items-center gap-1.5" :title="`${quota.tokensUsed.toLocaleString()} / ${quota.limit.toLocaleString()} tokens — ${quotaPeriodEndLabel}`">
         <span class="text-[10px] text-slate-400">Quota</span>
-        <div class="w-20 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+        <div
+          class="w-20 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
+          role="progressbar"
+          :aria-valuenow="quotaPct"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="`Quota ${quotaSeverity}: ${quotaPct}% used — ${quotaPeriodEndLabel}`"
+        >
           <div
             class="h-full rounded-full transition-all"
             :class="{
-              'bg-red-500': quota.tokensUsed / quota.limit > 0.9,
-              'bg-yellow-500': quota.tokensUsed / quota.limit > 0.7 && quota.tokensUsed / quota.limit <= 0.9,
-              'bg-green-500': quota.tokensUsed / quota.limit <= 0.7,
+              'bg-red-500': quotaPct >= 90,
+              'bg-yellow-500': quotaPct >= 75 && quotaPct < 90,
+              'bg-green-500': quotaPct < 75,
             }"
-            :style="{ width: `${Math.min(100, Math.round(quota.tokensUsed / quota.limit * 100))}%` }"
+            :style="{ width: `${quotaPct}%` }"
           />
         </div>
-        <span class="text-[10px] text-slate-400">{{ Math.round(quota.tokensUsed / quota.limit * 100) }}%</span>
+        <span class="text-[10px] text-slate-400">{{ quotaPct }}%</span>
       </div>
       <input
         v-model="searchQuery"
@@ -155,7 +184,7 @@ onMounted(fetchQuota)
       <div class="flex bg-slate-100 dark:bg-slate-800 rounded-md overflow-hidden">
         <button
           type="button"
-          class="px-3 py-1.5 text-[13px] font-sans border-none cursor-pointer transition-all"
+          class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
           :class="viewMode !== 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300'"
           title="Agent monitoring dashboard"
           @click="viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
@@ -164,7 +193,7 @@ onMounted(fetchQuota)
         </button>
         <button
           type="button"
-          class="px-3 py-1.5 text-[13px] font-sans border-none cursor-pointer transition-all"
+          class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
           :class="viewMode === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300'"
           title="Task pipeline kanban"
           @click="viewMode = 'pipeline'"
@@ -174,7 +203,7 @@ onMounted(fetchQuota)
       </div>
       <button
         type="button"
-        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
         @click="showSessions = true"
       >
         Sessions
@@ -182,7 +211,7 @@ onMounted(fetchQuota)
       <button
         v-if="viewMode === 'pipeline'"
         type="button"
-        class="bg-green-600 text-white border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
+        class="bg-green-600 text-white border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
         @click="openNewTask"
       >
         + New Task
@@ -190,14 +219,14 @@ onMounted(fetchQuota)
       <button
         v-else
         type="button"
-        class="bg-green-600 text-white border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
+        class="bg-green-600 text-white border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
         @click="showSpawnDialog = true"
       >
         + New Agent
       </button>
       <button
         type="button"
-        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-1.5 text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
         title="Audit Log"
         @click="showAudit = true"
       >
@@ -205,7 +234,7 @@ onMounted(fetchQuota)
       </button>
       <button
         type="button"
-        class="bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-none rounded-md px-2.5 py-1.5 text-base cursor-pointer leading-none hover:text-slate-700 dark:hover:text-slate-300 hover:brightness-110"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-none rounded-md min-w-[44px] min-h-[44px] px-2.5 py-2 text-base cursor-pointer leading-none hover:text-slate-700 dark:hover:text-slate-300 hover:brightness-110"
         title="Settings"
         @click="showSettings = true"
       >

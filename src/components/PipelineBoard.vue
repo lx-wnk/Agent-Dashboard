@@ -102,6 +102,9 @@ function tasksForColumn(col: ColumnDef): PipelineTask[] {
 const columnsWithTasks = computed(() =>
   COLUMNS.map(col => ({ col, tasks: tasksForColumn(col) })),
 )
+
+// O(1) lookup for epic membership — avoids O(N²) .some() in template
+const epicParentIds = computed(() => new Set(epics.value.map(e => e.parent.id)))
 </script>
 
 <template>
@@ -169,13 +172,23 @@ const columnsWithTasks = computed(() =>
               <button
                 type="button"
                 class="w-full flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-950 text-left"
+                :aria-expanded="!!epicExpanded[epic.parent.id]"
+                :aria-controls="`epic-children-${epic.parent.id}`"
                 @click="toggleEpic(epic.parent.id)"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" class="flex-shrink-0">
-                  <circle cx="12" cy="12" r="9" fill="none" stroke="#e2e8f0" stroke-width="3" />
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  class="flex-shrink-0"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <circle cx="12" cy="12" r="9" fill="none" class="stroke-slate-200 dark:stroke-slate-700" stroke-width="3" />
                   <circle
                     cx="12" cy="12" r="9" fill="none"
-                    stroke="#3b82f6" stroke-width="3"
+                    class="stroke-blue-500"
+                    stroke-width="3"
                     stroke-dasharray="56.55"
                     :stroke-dashoffset="56.55 * (1 - epic.completionPct / 100)"
                     stroke-linecap="round"
@@ -184,9 +197,13 @@ const columnsWithTasks = computed(() =>
                 </svg>
                 <span class="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate flex-1">{{ epic.parent.title }}</span>
                 <span class="text-[10px] text-slate-400 flex-shrink-0">{{ epic.doneCount }}/{{ epic.totalCount }} ({{ epic.completionPct }}%)</span>
-                <span class="text-xs text-slate-400">{{ epicExpanded[epic.parent.id] ? '▲' : '▼' }}</span>
+                <span class="text-xs text-slate-400" aria-hidden="true">{{ epicExpanded[epic.parent.id] ? '▲' : '▼' }}</span>
               </button>
-              <div v-if="epicExpanded[epic.parent.id]" class="pl-3 pr-2 pb-2 pt-1 space-y-1.5">
+              <div
+                :id="`epic-children-${epic.parent.id}`"
+                v-if="epicExpanded[epic.parent.id]"
+                class="pl-3 pr-2 pb-2 pt-1 space-y-1.5"
+              >
                 <TaskCard
                   v-for="child in epic.children.filter(c => tasks.some(t => t.id === c.id))"
                   :key="child.id"
@@ -198,14 +215,14 @@ const columnsWithTasks = computed(() =>
             </div>
           </template>
           <TaskCard
-            v-for="task in tasks.filter(t => !t.parentTaskId || !epics.some(e => e.parent.id === t.parentTaskId))"
+            v-for="task in tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId))"
             :key="task.id"
             :task="task"
             @select="(t) => emit('select', t)"
             @open-chat="(t) => emit('openChat', t)"
           />
           <div
-            v-if="tasks.filter(t => !t.parentTaskId || !epics.some(e => e.parent.id === t.parentTaskId)).length === 0
+            v-if="tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId)).length === 0
               && !epics.some(e => tasks.some(t => t.parentTaskId === e.parent.id))"
             class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5"
           >

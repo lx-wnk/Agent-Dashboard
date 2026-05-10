@@ -7,8 +7,9 @@ interface AgentIdentity {
 
 const STORAGE_KEY = 'agent-identities'
 
-const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#f97316', '#84cc16']
-const EMOJIS = ['🤖', '🦾', '🧠', '⚡', '🔬', '🛠️', '🎯', '🚀', '🦊', '🐙']
+// Tableau Color Blind 10 compatible palette — safe for deuteranopia/protanopia
+export const COLORS = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc948', '#b07aa1', '#ff9da7']
+export const EMOJIS = ['🤖', '🦾', '🧠', '⚡', '🔬', '🛠️', '🎯', '🚀', '🦊', '🐙']
 
 function load(): Record<string, AgentIdentity> {
   try {
@@ -20,7 +21,13 @@ function load(): Record<string, AgentIdentity> {
 }
 
 function persist(store: Record<string, AgentIdentity>): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
+  const data = JSON.stringify(store)
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(() => localStorage.setItem(STORAGE_KEY, data))
+  }
+  else {
+    setTimeout(() => localStorage.setItem(STORAGE_KEY, data), 0)
+  }
 }
 
 function deterministicIndex(str: string, len: number): number {

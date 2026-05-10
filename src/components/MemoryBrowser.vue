@@ -12,28 +12,58 @@ const selectedPath = ref<string | null>(null)
 const content = ref('')
 const saving = ref(false)
 const saved = ref(false)
+const dirty = ref(false)
+const error = ref<string | null>(null)
 
 async function loadFiles() {
-  const res = await fetch('/api/memory')
-  if (res.ok) {
-    const data = await res.json() as { files: MemoryFile[] }
-    files.value = data.files
+  error.value = null
+  try {
+    const res = await fetch('/api/memory')
+    if (res.ok) {
+      const data = await res.json() as { files: MemoryFile[] }
+      files.value = data.files
+    }
+    else {
+      error.value = `Failed to load files (${res.status})`
+    }
+  }
+  catch {
+    error.value = 'Network error loading files.'
   }
 }
 
 async function openFile(path: string) {
+  if (dirty.value && !confirm('Unsaved changes will be lost. Continue?'))
+    return
+
+  error.value = null
   selectedPath.value = path
-  const res = await fetch(`/api/memory/${encodeURIComponent(path)}`)
-  if (res.ok) {
-    const data = await res.json() as { content: string }
-    content.value = data.content
+  dirty.value = false
+
+  try {
+    const res = await fetch(`/api/memory/${encodeURIComponent(path)}`)
+    if (res.ok) {
+      const data = await res.json() as { content: string }
+      content.value = data.content
+    }
+    else {
+      error.value = `Failed to load file (${res.status})`
+    }
   }
+  catch {
+    error.value = 'Network error loading file.'
+  }
+}
+
+function onContentChange() {
+  dirty.value = true
 }
 
 async function save() {
   if (!selectedPath.value)
     return
   saving.value = true
+  error.value = null
   try {
     const res = await fetch(`/api/memory/${encodeURIComponent(selectedPath.value)}`, {
       method: 'PUT',
@@ -41,11 +71,18 @@ async function save() {
       body: JSON.stringify({ content: content.value }),
     })
     if (res.ok) {
+      dirty.value = false
       saved.value = true
       setTimeout(() => {
         saved.value = false
       }, 2000)
     }
+    else {
+      error.value = `Failed to save file (${res.status})`
+    }
+  }
+  catch {
+    error.value = 'Network error saving file.'
   }
   finally {
     saving.value = false
@@ -61,7 +98,10 @@ onMounted(loadFiles)
       <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200 dark:border-slate-700">
         Memory Files
       </div>
-      <div v-if="files.length === 0" class="px-3 py-4 text-xs text-slate-400">
+      <p v-if="error && !selectedPath" role="status" aria-live="polite" class="px-3 py-2 text-xs text-red-500 dark:text-red-400">
+        {{ error }}
+      </p>
+      <div v-if="files.length === 0 && !error" class="px-3 py-4 text-xs text-slate-400">
         No memory files found
       </div>
       <button
@@ -83,15 +123,22 @@ onMounted(loadFiles)
       </div>
       <template v-else>
         <div class="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-          <span class="text-xs font-mono text-slate-500 truncate">{{ selectedPath }}</span>
+          <span class="text-xs font-mono text-slate-500 truncate">
+            {{ selectedPath }}
+            <span v-if="dirty" class="text-amber-500 ml-1" aria-label="Unsaved changes">*</span>
+          </span>
           <AppButton size="sm" :disabled="saving" @click="save">
             {{ saved ? 'Saved!' : saving ? 'Saving…' : 'Save' }}
           </AppButton>
         </div>
+        <p v-if="error" role="status" aria-live="polite" class="px-4 py-2 text-xs text-red-500 dark:text-red-400">
+          {{ error }}
+        </p>
         <textarea
           v-model="content"
           class="flex-1 resize-none p-4 font-mono text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 outline-none"
           spellcheck="false"
+          @input="onContentChange"
         />
       </template>
     </div>

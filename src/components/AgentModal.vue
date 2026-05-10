@@ -59,7 +59,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       <div class="bg-slate-50 dark:bg-slate-800 px-4 py-2.5 flex justify-between items-center flex-shrink-0">
         <div class="flex items-center gap-2.5 min-w-0">
           <AppBadge :variant="agent.status" />
-          <span class="mr-1">{{ getIdentity(agent.projectPath).emoji }}</span>
+          <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
           <span class="font-semibold text-sm text-slate-900 dark:text-slate-100">{{ agent.projectName }}</span>
           <MachineBadge v-if="agent.machine" :machine="agent.machine" />
           <span class="text-[11px] text-slate-400 dark:text-slate-600 whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>

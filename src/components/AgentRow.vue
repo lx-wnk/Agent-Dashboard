@@ -25,7 +25,7 @@ const { getIdentity } = useAgentIdentity()
       <AppBadge :variant="agent.status" />
     </td>
     <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 text-sm text-slate-900 dark:text-slate-100 font-medium">
-      <span class="mr-1 text-sm">{{ getIdentity(agent.projectPath).emoji }}</span>
+      <span class="mr-1 text-sm" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
       <span
         :style="{ backgroundColor: getIdentity(agent.projectPath).color }"
         class="inline-block w-2 h-2 rounded-full mr-1 flex-shrink-0"

@@ -105,11 +105,18 @@ defineExpose({ focus })
 
 <template>
   <div class="relative" :class="variant">
-    <div v-if="showSuggestions" class="absolute bottom-full left-0 right-0 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 border-b-0 rounded-t-md max-h-60 overflow-y-auto z-10">
+    <div
+      v-if="showSuggestions"
+      id="slash-listbox"
+      role="listbox"
+      class="absolute bottom-full left-0 right-0 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 border-b-0 rounded-t-md max-h-60 overflow-y-auto z-10"
+    >
       <button
         v-for="(cmd, i) in slashSuggestions"
         :key="cmd.name"
         type="button"
+        role="option"
+        :aria-selected="i === selectedIndex"
         :disabled="cmd.disabled"
         class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-slate-500 dark:text-slate-400 text-[13px] font-mono cursor-pointer text-left hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
         :class="{ 'bg-slate-100 dark:bg-slate-800': i === selectedIndex }"
@@ -118,6 +125,7 @@ defineExpose({ focus })
         <span class="text-blue-600 dark:text-blue-400 font-semibold flex-shrink-0">{{ cmd.name }}</span>
         <span class="text-slate-400 dark:text-slate-600 text-xs">{{ cmd.description }}</span>
         <span v-if="cmd.usage" class="text-slate-400 dark:text-slate-500 text-[10px] ml-1">{{ cmd.usage }}</span>
+        <span v-if="cmd.requiresTask && cmd.disabled" class="text-amber-600 text-[10px] ml-auto">requires linked task</span>
       </button>
     </div>
     <div
@@ -135,6 +143,7 @@ defineExpose({ focus })
         rows="1"
         placeholder="Enter prompt..."
         :disabled="isSending"
+        :aria-controls="showSuggestions ? 'slash-listbox' : undefined"
         class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
         @input="autoResize"
@@ -145,6 +154,7 @@ defineExpose({ focus })
         v-model="promptInput"
         placeholder="Enter prompt..."
         :disabled="isSending"
+        :aria-controls="showSuggestions ? 'slash-listbox' : undefined"
         class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50"
         @keydown="onKeydown"
       >

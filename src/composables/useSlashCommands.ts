@@ -12,17 +12,23 @@ export interface SlashCommandDef {
 export interface CommandResult {
   ok: boolean
   message: string
+  loading?: boolean
 }
 
 export const SLASH_COMMAND_DEFS: SlashCommandDef[] = [
-  { name: '/spawn', description: 'Neuen Pipeline-Task anlegen', usage: '<slug> <beschreibung>' },
-  { name: '/grant', description: 'Offene Permission-Anfrage genehmigen', usage: '<toolName>', requiresTask: true },
-  { name: '/cancel', description: 'Aktuellen Task abbrechen', requiresTask: true },
-  { name: '/retry', description: 'Fehlgeschlagene Stage erneut starten', requiresTask: true },
-  { name: '/promote', description: 'Task an nächste Stage weiterleiten (Approval-Gate überspringen)', requiresTask: true },
-  { name: '/help', description: 'Alle verfügbaren Befehle anzeigen' },
+  { name: '/spawn', description: 'Create new pipeline task', usage: '<slug> <description>' },
+  { name: '/grant', description: 'Grant open permission request', usage: '<toolName>', requiresTask: true },
+  { name: '/cancel', description: 'Cancel current task', requiresTask: true },
+  { name: '/retry', description: 'Restart failed stage', requiresTask: true },
+  { name: '/promote', description: 'Advance task to next stage (skip approval gate)', requiresTask: true },
+  { name: '/help', description: 'List all available commands' },
 ]
 
+/**
+ * Parse a slash command string into [command, args].
+ * Supports basic quoted arguments, e.g.: /spawn my-slug "My Task Description"
+ * Note: nested quotes are not supported.
+ */
 export function parseSlashCommand(raw: string): [string, string[]] | null {
   const trimmed = raw.trim()
   if (!trimmed.startsWith('/'))
@@ -79,11 +85,11 @@ export async function dispatchSlashCommand(
       const [slug, ...descParts] = args
       const description = descParts.join(' ')
       if (!slug || !description)
-        return { ok: false, message: 'Verwendung: /spawn <slug> <beschreibung>' }
+        return { ok: false, message: 'Usage: /spawn <slug> <description>' }
       if (!SLUG_RE.test(slug))
-        return { ok: false, message: `Ungültiger Slug "${slug}". Format: [a-z0-9][a-z0-9-]{0,63}` }
+        return { ok: false, message: `Invalid slug "${slug}". Format: [a-z0-9][a-z0-9-]{0,63}` }
       if (!ctx.cwd)
-        return { ok: false, message: '/spawn benötigt ein Arbeitsverzeichnis. Öffne einen Agenten mit bekanntem cwd.' }
+        return { ok: false, message: '/spawn requires a working directory. Open an agent with a known cwd.' }
       try {
         const res = await fetch('/api/tasks', {
           method: 'POST',
@@ -92,29 +98,32 @@ export async function dispatchSlashCommand(
         })
         if (!res.ok) {
           const data = await res.json().catch(() => ({})) as ApiError
-          return { ok: false, message: data.error ?? `Fehler ${res.status}` }
+          return { ok: false, message: data.error ?? `Error ${res.status}` }
         }
-        return { ok: true, message: `Task "${slug}" wurde angelegt.` }
+        return { ok: true, message: `Task "${slug}" created.` }
       }
       catch {
-        return { ok: false, message: 'Netzwerkfehler beim Anlegen des Tasks.' }
+        return { ok: false, message: 'Network error creating task.' }
       }
     }
 
     case '/grant': {
       if (!ctx.taskId)
-        return { ok: false, message: '/grant benötigt einen verknüpften Pipeline-Task.' }
+        return { ok: false, message: '/grant requires a linked pipeline task.' }
       const [toolName] = args
       if (!toolName)
-        return { ok: false, message: 'Verwendung: /grant <toolName>' }
+        return { ok: false, message: 'Usage: /grant <toolName>' }
       try {
+        // Step 1: load pending permission requests
         const listRes = await fetch(`/api/tasks/${ctx.taskId}/permission-requests`)
         if (!listRes.ok)
-          return { ok: false, message: `Konnte Permission-Requests nicht laden (${listRes.status}).` }
+          return { ok: false, message: `Could not load permission requests (${listRes.status}).` }
         const requests = await listRes.json() as Array<{ id: string, tool: string }>
         const match = requests.find(r => r.tool.toLowerCase() === toolName.toLowerCase())
         if (!match)
-          return { ok: false, message: `Keine offene Permission-Anfrage für Tool "${toolName}" gefunden.` }
+          return { ok: false, message: `No open permission request found for tool "${toolName}".` }
+
+        // Step 2: resolve the permission
         const resolveRes = await fetch(`/api/permission-requests/${match.id}/resolve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -122,64 +131,64 @@ export async function dispatchSlashCommand(
         })
         if (!resolveRes.ok) {
           const data = await resolveRes.json().catch(() => ({})) as ApiError
-          return { ok: false, message: data.error ?? `Fehler ${resolveRes.status}` }
+          return { ok: false, message: data.error ?? `Error ${resolveRes.status}` }
         }
-        return { ok: true, message: `Permission für "${toolName}" gewährt.` }
+        return { ok: true, message: `Permission granted for "${toolName}".` }
       }
       catch {
-        return { ok: false, message: 'Netzwerkfehler beim Gewähren der Permission.' }
+        return { ok: false, message: 'Network error granting permission.' }
       }
     }
 
     case '/cancel': {
       if (!ctx.taskId)
-        return { ok: false, message: '/cancel benötigt einen verknüpften Pipeline-Task.' }
+        return { ok: false, message: '/cancel requires a linked pipeline task.' }
       try {
         const res = await fetch(`/api/tasks/${ctx.taskId}/cancel`, { method: 'POST' })
         if (!res.ok) {
           const data = await res.json().catch(() => ({})) as ApiError
-          return { ok: false, message: data.error ?? `Fehler ${res.status}` }
+          return { ok: false, message: data.error ?? `Error ${res.status}` }
         }
-        return { ok: true, message: 'Task wurde abgebrochen.' }
+        return { ok: true, message: 'Task cancelled.' }
       }
       catch {
-        return { ok: false, message: 'Netzwerkfehler beim Abbrechen des Tasks.' }
+        return { ok: false, message: 'Network error cancelling task.' }
       }
     }
 
     case '/retry': {
       if (!ctx.taskId)
-        return { ok: false, message: '/retry benötigt einen verknüpften Pipeline-Task.' }
+        return { ok: false, message: '/retry requires a linked pipeline task.' }
       try {
         const res = await fetch(`/api/tasks/${ctx.taskId}/retry`, { method: 'POST' })
         if (!res.ok) {
           const data = await res.json().catch(() => ({})) as ApiError
-          return { ok: false, message: data.error ?? `Fehler ${res.status}` }
+          return { ok: false, message: data.error ?? `Error ${res.status}` }
         }
-        return { ok: true, message: 'Stage wird erneut gestartet.' }
+        return { ok: true, message: 'Stage restarted.' }
       }
       catch {
-        return { ok: false, message: 'Netzwerkfehler beim Retry.' }
+        return { ok: false, message: 'Network error retrying stage.' }
       }
     }
 
     case '/promote': {
       if (!ctx.taskId)
-        return { ok: false, message: '/promote benötigt einen verknüpften Pipeline-Task.' }
+        return { ok: false, message: '/promote requires a linked pipeline task.' }
       try {
         const res = await fetch(`/api/tasks/${ctx.taskId}/progress`, { method: 'POST' })
         if (!res.ok) {
           const data = await res.json().catch(() => ({})) as ApiError
-          return { ok: false, message: data.error ?? `Fehler ${res.status}` }
+          return { ok: false, message: data.error ?? `Error ${res.status}` }
         }
-        return { ok: true, message: 'Task wurde zur nächsten Stage weitergeleitet.' }
+        return { ok: true, message: 'Task promoted to next stage.' }
       }
       catch {
-        return { ok: false, message: 'Netzwerkfehler beim Weiterleiten.' }
+        return { ok: false, message: 'Network error promoting task.' }
       }
     }
 
     default:
-      return { ok: false, message: `Unbekannter Befehl "${cmd}". Tippe /help für eine Übersicht.` }
+      return { ok: false, message: `Unknown command "${cmd}". Type /help for an overview.` }
   }
 }
