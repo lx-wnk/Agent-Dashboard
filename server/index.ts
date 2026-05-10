@@ -24,6 +24,7 @@ import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createAuthRouter } from './routes/authRoutes.js'
 import { createHistoryRouter } from './routes/historyRoutes.js'
 import { createHooksRouter } from './routes/hooksRoutes.js'
+import { createMemoryRouter } from './routes/memoryRoutes.js'
 import { createPresetRouter } from './routes/presetRoutes.js'
 import { createRefineRouter } from './routes/refineRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
@@ -455,6 +456,9 @@ async function start() {
 
   // Historical session import routes
   app.use('/api', createHistoryRouter())
+
+  // Memory file browser routes
+  app.use('/api', createMemoryRouter())
 
   // Full-text search across tasks (FTS5) and agents (in-memory)
   app.use('/api', createSearchRouter({ getAgents: () => cachedAgents }))
