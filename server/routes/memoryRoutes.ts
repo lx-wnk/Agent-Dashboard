@@ -1,14 +1,19 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { Router } from 'express'
 
 const CLAUDE_ROOT = resolve(join(homedir(), '.claude'))
 
+const MEMORY_FILE_RE = /^projects\/[^/]+\/memory\/[^/]+\.md$/
+
 function safePath(encoded: string): string | null {
   const decoded = decodeURIComponent(encoded)
+  if (!MEMORY_FILE_RE.test(decoded))
+    return null
   const resolved = resolve(CLAUDE_ROOT, decoded)
-  if (!resolved.startsWith(`${CLAUDE_ROOT}/`) && resolved !== CLAUDE_ROOT)
+  const rel = relative(CLAUDE_ROOT, resolved)
+  if (rel.startsWith('..') || isAbsolute(rel))
     return null
   return resolved
 }

@@ -35,15 +35,17 @@ async function save() {
     return
   saving.value = true
   try {
-    await fetch(`/api/memory/${encodeURIComponent(selectedPath.value)}`, {
+    const res = await fetch(`/api/memory/${encodeURIComponent(selectedPath.value)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: content.value }),
     })
-    saved.value = true
-    setTimeout(() => {
-      saved.value = false
-    }, 2000)
+    if (res.ok) {
+      saved.value = true
+      setTimeout(() => {
+        saved.value = false
+      }, 2000)
+    }
   }
   finally {
     saving.value = false
