@@ -14,7 +14,7 @@ type User struct{ ent.Schema }
 // Fields of the User.
 func (User) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("id"),
+		field.String("id").StorageKey("id"),
 		field.String("github_login"),
 		field.String("display_name").Optional(),
 		field.String("avatar_url").Optional(),
