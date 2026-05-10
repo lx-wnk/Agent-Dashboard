@@ -99,3 +99,8 @@ func (c Config) ShutdownTimeout() time.Duration {
 func (c Config) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
 }
+
+// CallbackURL returns the GitHub OAuth redirect URI derived from Host and Port.
+func (c Config) CallbackURL() string {
+	return fmt.Sprintf("http://%s/api/auth/callback", c.Addr())
+}
