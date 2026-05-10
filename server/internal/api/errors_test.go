@@ -64,3 +64,12 @@ func TestErrorMiddleware_BadRequest(t *testing.T) {
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+func TestErrorMiddleware_Forbidden(t *testing.T) {
+	handler := api.ErrorMiddleware(func(w http.ResponseWriter, r *http.Request) error {
+		return api.ErrForbidden
+	})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
