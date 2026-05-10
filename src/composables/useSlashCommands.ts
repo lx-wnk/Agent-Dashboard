@@ -1,3 +1,7 @@
+import { SLUG_RE } from '../utils/validation'
+
+interface ApiError { error?: string }
+
 export interface SlashCommandDef {
   name: string
   description: string
@@ -18,10 +22,6 @@ export const SLASH_COMMAND_DEFS: SlashCommandDef[] = [
   { name: '/promote', description: 'Task an nächste Stage weiterleiten (Approval-Gate überspringen)', requiresTask: true },
   { name: '/help', description: 'Alle verfügbaren Befehle anzeigen' },
 ]
-
-interface ApiError { error?: string }
-
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export function parseSlashCommand(raw: string): [string, string[]] | null {
   const trimmed = raw.trim()
