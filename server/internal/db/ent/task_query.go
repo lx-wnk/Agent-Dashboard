@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -11,17 +12,26 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/predicate"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
 )
 
 // TaskQuery is the builder for querying Task entities.
 type TaskQuery struct {
 	config
-	ctx        *QueryContext
-	order      []task.OrderOption
-	inters     []Interceptor
-	predicates []predicate.Task
+	ctx              *QueryContext
+	order            []task.OrderOption
+	inters           []Interceptor
+	predicates       []predicate.Task
+	withStageRuns    *StageRunQuery
+	withPermissions  *TaskPermissionQuery
+	withAuditLogs    *AuditLogQuery
+	withDependencies *TaskDependencyQuery
+	withDependents   *TaskDependencyQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -56,6 +66,116 @@ func (_q *TaskQuery) Unique(unique bool) *TaskQuery {
 func (_q *TaskQuery) Order(o ...task.OrderOption) *TaskQuery {
 	_q.order = append(_q.order, o...)
 	return _q
+}
+
+// QueryStageRuns chains the current query on the "stage_runs" edge.
+func (_q *TaskQuery) QueryStageRuns() *StageRunQuery {
+	query := (&StageRunClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, selector),
+			sqlgraph.To(stagerun.Table, stagerun.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.StageRunsTable, task.StageRunsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryPermissions chains the current query on the "permissions" edge.
+func (_q *TaskQuery) QueryPermissions() *TaskPermissionQuery {
+	query := (&TaskPermissionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, selector),
+			sqlgraph.To(taskpermission.Table, taskpermission.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.PermissionsTable, task.PermissionsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryAuditLogs chains the current query on the "audit_logs" edge.
+func (_q *TaskQuery) QueryAuditLogs() *AuditLogQuery {
+	query := (&AuditLogClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, selector),
+			sqlgraph.To(auditlog.Table, auditlog.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.AuditLogsTable, task.AuditLogsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryDependencies chains the current query on the "dependencies" edge.
+func (_q *TaskQuery) QueryDependencies() *TaskDependencyQuery {
+	query := (&TaskDependencyClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, selector),
+			sqlgraph.To(taskdependency.Table, taskdependency.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.DependenciesTable, task.DependenciesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryDependents chains the current query on the "dependents" edge.
+func (_q *TaskQuery) QueryDependents() *TaskDependencyQuery {
+	query := (&TaskDependencyClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, selector),
+			sqlgraph.To(taskdependency.Table, taskdependency.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.DependentsTable, task.DependentsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // First returns the first Task entity from the query.
@@ -245,15 +365,75 @@ func (_q *TaskQuery) Clone() *TaskQuery {
 		return nil
 	}
 	return &TaskQuery{
-		config:     _q.config,
-		ctx:        _q.ctx.Clone(),
-		order:      append([]task.OrderOption{}, _q.order...),
-		inters:     append([]Interceptor{}, _q.inters...),
-		predicates: append([]predicate.Task{}, _q.predicates...),
+		config:           _q.config,
+		ctx:              _q.ctx.Clone(),
+		order:            append([]task.OrderOption{}, _q.order...),
+		inters:           append([]Interceptor{}, _q.inters...),
+		predicates:       append([]predicate.Task{}, _q.predicates...),
+		withStageRuns:    _q.withStageRuns.Clone(),
+		withPermissions:  _q.withPermissions.Clone(),
+		withAuditLogs:    _q.withAuditLogs.Clone(),
+		withDependencies: _q.withDependencies.Clone(),
+		withDependents:   _q.withDependents.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
+}
+
+// WithStageRuns tells the query-builder to eager-load the nodes that are connected to
+// the "stage_runs" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TaskQuery) WithStageRuns(opts ...func(*StageRunQuery)) *TaskQuery {
+	query := (&StageRunClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withStageRuns = query
+	return _q
+}
+
+// WithPermissions tells the query-builder to eager-load the nodes that are connected to
+// the "permissions" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TaskQuery) WithPermissions(opts ...func(*TaskPermissionQuery)) *TaskQuery {
+	query := (&TaskPermissionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withPermissions = query
+	return _q
+}
+
+// WithAuditLogs tells the query-builder to eager-load the nodes that are connected to
+// the "audit_logs" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TaskQuery) WithAuditLogs(opts ...func(*AuditLogQuery)) *TaskQuery {
+	query := (&AuditLogClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withAuditLogs = query
+	return _q
+}
+
+// WithDependencies tells the query-builder to eager-load the nodes that are connected to
+// the "dependencies" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TaskQuery) WithDependencies(opts ...func(*TaskDependencyQuery)) *TaskQuery {
+	query := (&TaskDependencyClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withDependencies = query
+	return _q
+}
+
+// WithDependents tells the query-builder to eager-load the nodes that are connected to
+// the "dependents" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TaskQuery) WithDependents(opts ...func(*TaskDependencyQuery)) *TaskQuery {
+	query := (&TaskDependencyClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withDependents = query
+	return _q
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -332,8 +512,15 @@ func (_q *TaskQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *TaskQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Task, error) {
 	var (
-		nodes = []*Task{}
-		_spec = _q.querySpec()
+		nodes       = []*Task{}
+		_spec       = _q.querySpec()
+		loadedTypes = [5]bool{
+			_q.withStageRuns != nil,
+			_q.withPermissions != nil,
+			_q.withAuditLogs != nil,
+			_q.withDependencies != nil,
+			_q.withDependents != nil,
+		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Task).scanValues(nil, columns)
@@ -341,6 +528,7 @@ func (_q *TaskQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Task, e
 	_spec.Assign = func(columns []string, values []any) error {
 		node := &Task{config: _q.config}
 		nodes = append(nodes, node)
+		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	for i := range hooks {
@@ -352,7 +540,193 @@ func (_q *TaskQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Task, e
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := _q.withStageRuns; query != nil {
+		if err := _q.loadStageRuns(ctx, query, nodes,
+			func(n *Task) { n.Edges.StageRuns = []*StageRun{} },
+			func(n *Task, e *StageRun) { n.Edges.StageRuns = append(n.Edges.StageRuns, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withPermissions; query != nil {
+		if err := _q.loadPermissions(ctx, query, nodes,
+			func(n *Task) { n.Edges.Permissions = []*TaskPermission{} },
+			func(n *Task, e *TaskPermission) { n.Edges.Permissions = append(n.Edges.Permissions, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withAuditLogs; query != nil {
+		if err := _q.loadAuditLogs(ctx, query, nodes,
+			func(n *Task) { n.Edges.AuditLogs = []*AuditLog{} },
+			func(n *Task, e *AuditLog) { n.Edges.AuditLogs = append(n.Edges.AuditLogs, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withDependencies; query != nil {
+		if err := _q.loadDependencies(ctx, query, nodes,
+			func(n *Task) { n.Edges.Dependencies = []*TaskDependency{} },
+			func(n *Task, e *TaskDependency) { n.Edges.Dependencies = append(n.Edges.Dependencies, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withDependents; query != nil {
+		if err := _q.loadDependents(ctx, query, nodes,
+			func(n *Task) { n.Edges.Dependents = []*TaskDependency{} },
+			func(n *Task, e *TaskDependency) { n.Edges.Dependents = append(n.Edges.Dependents, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
+}
+
+func (_q *TaskQuery) loadStageRuns(ctx context.Context, query *StageRunQuery, nodes []*Task, init func(*Task), assign func(*Task, *StageRun)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Task)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(stagerun.FieldTaskID)
+	}
+	query.Where(predicate.StageRun(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(task.StageRunsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.TaskID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "task_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *TaskQuery) loadPermissions(ctx context.Context, query *TaskPermissionQuery, nodes []*Task, init func(*Task), assign func(*Task, *TaskPermission)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Task)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(taskpermission.FieldTaskID)
+	}
+	query.Where(predicate.TaskPermission(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(task.PermissionsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.TaskID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "task_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *TaskQuery) loadAuditLogs(ctx context.Context, query *AuditLogQuery, nodes []*Task, init func(*Task), assign func(*Task, *AuditLog)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Task)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(auditlog.FieldTaskID)
+	}
+	query.Where(predicate.AuditLog(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(task.AuditLogsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.TaskID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "task_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *TaskQuery) loadDependencies(ctx context.Context, query *TaskDependencyQuery, nodes []*Task, init func(*Task), assign func(*Task, *TaskDependency)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Task)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(taskdependency.FieldTaskID)
+	}
+	query.Where(predicate.TaskDependency(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(task.DependenciesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.TaskID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "task_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *TaskQuery) loadDependents(ctx context.Context, query *TaskDependencyQuery, nodes []*Task, init func(*Task), assign func(*Task, *TaskDependency)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Task)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(taskdependency.FieldDependsOnID)
+	}
+	query.Where(predicate.TaskDependency(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(task.DependentsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.DependsOnID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "depends_on_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
 }
 
 func (_q *TaskQuery) sqlCount(ctx context.Context) (int, error) {

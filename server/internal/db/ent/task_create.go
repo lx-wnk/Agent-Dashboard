@@ -10,7 +10,11 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
 )
 
 // TaskCreate is the builder for creating a Task entity.
@@ -52,6 +56,48 @@ func (_c *TaskCreate) SetCwd(v string) *TaskCreate {
 	return _c
 }
 
+// SetWorktreePath sets the "worktree_path" field.
+func (_c *TaskCreate) SetWorktreePath(v string) *TaskCreate {
+	_c.mutation.SetWorktreePath(v)
+	return _c
+}
+
+// SetNillableWorktreePath sets the "worktree_path" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableWorktreePath(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetWorktreePath(*v)
+	}
+	return _c
+}
+
+// SetSourceBranch sets the "source_branch" field.
+func (_c *TaskCreate) SetSourceBranch(v string) *TaskCreate {
+	_c.mutation.SetSourceBranch(v)
+	return _c
+}
+
+// SetNillableSourceBranch sets the "source_branch" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableSourceBranch(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetSourceBranch(*v)
+	}
+	return _c
+}
+
+// SetTargetBranch sets the "target_branch" field.
+func (_c *TaskCreate) SetTargetBranch(v string) *TaskCreate {
+	_c.mutation.SetTargetBranch(v)
+	return _c
+}
+
+// SetNillableTargetBranch sets the "target_branch" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableTargetBranch(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetTargetBranch(*v)
+	}
+	return _c
+}
+
 // SetCurrentStage sets the "current_stage" field.
 func (_c *TaskCreate) SetCurrentStage(v string) *TaskCreate {
 	_c.mutation.SetCurrentStage(v)
@@ -77,6 +123,110 @@ func (_c *TaskCreate) SetNillablePriority(v *string) *TaskCreate {
 	if v != nil {
 		_c.SetPriority(*v)
 	}
+	return _c
+}
+
+// SetUserID sets the "user_id" field.
+func (_c *TaskCreate) SetUserID(v string) *TaskCreate {
+	_c.mutation.SetUserID(v)
+	return _c
+}
+
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableUserID(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetUserID(*v)
+	}
+	return _c
+}
+
+// SetParentTaskID sets the "parent_task_id" field.
+func (_c *TaskCreate) SetParentTaskID(v string) *TaskCreate {
+	_c.mutation.SetParentTaskID(v)
+	return _c
+}
+
+// SetNillableParentTaskID sets the "parent_task_id" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableParentTaskID(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetParentTaskID(*v)
+	}
+	return _c
+}
+
+// SetMaxIterations sets the "max_iterations" field.
+func (_c *TaskCreate) SetMaxIterations(v int) *TaskCreate {
+	_c.mutation.SetMaxIterations(v)
+	return _c
+}
+
+// SetNillableMaxIterations sets the "max_iterations" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableMaxIterations(v *int) *TaskCreate {
+	if v != nil {
+		_c.SetMaxIterations(*v)
+	}
+	return _c
+}
+
+// SetTokenBudget sets the "token_budget" field.
+func (_c *TaskCreate) SetTokenBudget(v int) *TaskCreate {
+	_c.mutation.SetTokenBudget(v)
+	return _c
+}
+
+// SetNillableTokenBudget sets the "token_budget" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableTokenBudget(v *int) *TaskCreate {
+	if v != nil {
+		_c.SetTokenBudget(*v)
+	}
+	return _c
+}
+
+// SetCostBudgetCents sets the "cost_budget_cents" field.
+func (_c *TaskCreate) SetCostBudgetCents(v int) *TaskCreate {
+	_c.mutation.SetCostBudgetCents(v)
+	return _c
+}
+
+// SetNillableCostBudgetCents sets the "cost_budget_cents" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableCostBudgetCents(v *int) *TaskCreate {
+	if v != nil {
+		_c.SetCostBudgetCents(*v)
+	}
+	return _c
+}
+
+// SetStageTimeoutSeconds sets the "stage_timeout_seconds" field.
+func (_c *TaskCreate) SetStageTimeoutSeconds(v int) *TaskCreate {
+	_c.mutation.SetStageTimeoutSeconds(v)
+	return _c
+}
+
+// SetNillableStageTimeoutSeconds sets the "stage_timeout_seconds" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableStageTimeoutSeconds(v *int) *TaskCreate {
+	if v != nil {
+		_c.SetStageTimeoutSeconds(*v)
+	}
+	return _c
+}
+
+// SetSilverBullet sets the "silver_bullet" field.
+func (_c *TaskCreate) SetSilverBullet(v bool) *TaskCreate {
+	_c.mutation.SetSilverBullet(v)
+	return _c
+}
+
+// SetNillableSilverBullet sets the "silver_bullet" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableSilverBullet(v *bool) *TaskCreate {
+	if v != nil {
+		_c.SetSilverBullet(*v)
+	}
+	return _c
+}
+
+// SetMetadata sets the "metadata" field.
+func (_c *TaskCreate) SetMetadata(v map[string]interface{}) *TaskCreate {
+	_c.mutation.SetMetadata(v)
 	return _c
 }
 
@@ -112,6 +262,81 @@ func (_c *TaskCreate) SetNillableUpdatedAt(v *time.Time) *TaskCreate {
 func (_c *TaskCreate) SetID(v string) *TaskCreate {
 	_c.mutation.SetID(v)
 	return _c
+}
+
+// AddStageRunIDs adds the "stage_runs" edge to the StageRun entity by IDs.
+func (_c *TaskCreate) AddStageRunIDs(ids ...string) *TaskCreate {
+	_c.mutation.AddStageRunIDs(ids...)
+	return _c
+}
+
+// AddStageRuns adds the "stage_runs" edges to the StageRun entity.
+func (_c *TaskCreate) AddStageRuns(v ...*StageRun) *TaskCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddStageRunIDs(ids...)
+}
+
+// AddPermissionIDs adds the "permissions" edge to the TaskPermission entity by IDs.
+func (_c *TaskCreate) AddPermissionIDs(ids ...string) *TaskCreate {
+	_c.mutation.AddPermissionIDs(ids...)
+	return _c
+}
+
+// AddPermissions adds the "permissions" edges to the TaskPermission entity.
+func (_c *TaskCreate) AddPermissions(v ...*TaskPermission) *TaskCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPermissionIDs(ids...)
+}
+
+// AddAuditLogIDs adds the "audit_logs" edge to the AuditLog entity by IDs.
+func (_c *TaskCreate) AddAuditLogIDs(ids ...string) *TaskCreate {
+	_c.mutation.AddAuditLogIDs(ids...)
+	return _c
+}
+
+// AddAuditLogs adds the "audit_logs" edges to the AuditLog entity.
+func (_c *TaskCreate) AddAuditLogs(v ...*AuditLog) *TaskCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddAuditLogIDs(ids...)
+}
+
+// AddDependencyIDs adds the "dependencies" edge to the TaskDependency entity by IDs.
+func (_c *TaskCreate) AddDependencyIDs(ids ...string) *TaskCreate {
+	_c.mutation.AddDependencyIDs(ids...)
+	return _c
+}
+
+// AddDependencies adds the "dependencies" edges to the TaskDependency entity.
+func (_c *TaskCreate) AddDependencies(v ...*TaskDependency) *TaskCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddDependencyIDs(ids...)
+}
+
+// AddDependentIDs adds the "dependents" edge to the TaskDependency entity by IDs.
+func (_c *TaskCreate) AddDependentIDs(ids ...string) *TaskCreate {
+	_c.mutation.AddDependentIDs(ids...)
+	return _c
+}
+
+// AddDependents adds the "dependents" edges to the TaskDependency entity.
+func (_c *TaskCreate) AddDependents(v ...*TaskDependency) *TaskCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddDependentIDs(ids...)
 }
 
 // Mutation returns the TaskMutation object of the builder.
@@ -157,6 +382,18 @@ func (_c *TaskCreate) defaults() {
 		v := task.DefaultPriority
 		_c.mutation.SetPriority(v)
 	}
+	if _, ok := _c.mutation.MaxIterations(); !ok {
+		v := task.DefaultMaxIterations
+		_c.mutation.SetMaxIterations(v)
+	}
+	if _, ok := _c.mutation.StageTimeoutSeconds(); !ok {
+		v := task.DefaultStageTimeoutSeconds
+		_c.mutation.SetStageTimeoutSeconds(v)
+	}
+	if _, ok := _c.mutation.SilverBullet(); !ok {
+		v := task.DefaultSilverBullet
+		_c.mutation.SetSilverBullet(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := task.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -175,14 +412,33 @@ func (_c *TaskCreate) check() error {
 	if _, ok := _c.mutation.Title(); !ok {
 		return &ValidationError{Name: "title", err: errors.New(`ent: missing required field "Task.title"`)}
 	}
+	if v, ok := _c.mutation.Title(); ok {
+		if err := task.TitleValidator(v); err != nil {
+			return &ValidationError{Name: "title", err: fmt.Errorf(`ent: validator failed for field "Task.title": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Cwd(); !ok {
 		return &ValidationError{Name: "cwd", err: errors.New(`ent: missing required field "Task.cwd"`)}
+	}
+	if v, ok := _c.mutation.Cwd(); ok {
+		if err := task.CwdValidator(v); err != nil {
+			return &ValidationError{Name: "cwd", err: fmt.Errorf(`ent: validator failed for field "Task.cwd": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.CurrentStage(); !ok {
 		return &ValidationError{Name: "current_stage", err: errors.New(`ent: missing required field "Task.current_stage"`)}
 	}
 	if _, ok := _c.mutation.Priority(); !ok {
 		return &ValidationError{Name: "priority", err: errors.New(`ent: missing required field "Task.priority"`)}
+	}
+	if _, ok := _c.mutation.MaxIterations(); !ok {
+		return &ValidationError{Name: "max_iterations", err: errors.New(`ent: missing required field "Task.max_iterations"`)}
+	}
+	if _, ok := _c.mutation.StageTimeoutSeconds(); !ok {
+		return &ValidationError{Name: "stage_timeout_seconds", err: errors.New(`ent: missing required field "Task.stage_timeout_seconds"`)}
+	}
+	if _, ok := _c.mutation.SilverBullet(); !ok {
+		return &ValidationError{Name: "silver_bullet", err: errors.New(`ent: missing required field "Task.silver_bullet"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Task.created_at"`)}
@@ -235,11 +491,23 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	}
 	if value, ok := _c.mutation.Description(); ok {
 		_spec.SetField(task.FieldDescription, field.TypeString, value)
-		_node.Description = value
+		_node.Description = &value
 	}
 	if value, ok := _c.mutation.Cwd(); ok {
 		_spec.SetField(task.FieldCwd, field.TypeString, value)
 		_node.Cwd = value
+	}
+	if value, ok := _c.mutation.WorktreePath(); ok {
+		_spec.SetField(task.FieldWorktreePath, field.TypeString, value)
+		_node.WorktreePath = &value
+	}
+	if value, ok := _c.mutation.SourceBranch(); ok {
+		_spec.SetField(task.FieldSourceBranch, field.TypeString, value)
+		_node.SourceBranch = &value
+	}
+	if value, ok := _c.mutation.TargetBranch(); ok {
+		_spec.SetField(task.FieldTargetBranch, field.TypeString, value)
+		_node.TargetBranch = &value
 	}
 	if value, ok := _c.mutation.CurrentStage(); ok {
 		_spec.SetField(task.FieldCurrentStage, field.TypeString, value)
@@ -249,6 +517,38 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 		_spec.SetField(task.FieldPriority, field.TypeString, value)
 		_node.Priority = value
 	}
+	if value, ok := _c.mutation.UserID(); ok {
+		_spec.SetField(task.FieldUserID, field.TypeString, value)
+		_node.UserID = &value
+	}
+	if value, ok := _c.mutation.ParentTaskID(); ok {
+		_spec.SetField(task.FieldParentTaskID, field.TypeString, value)
+		_node.ParentTaskID = &value
+	}
+	if value, ok := _c.mutation.MaxIterations(); ok {
+		_spec.SetField(task.FieldMaxIterations, field.TypeInt, value)
+		_node.MaxIterations = value
+	}
+	if value, ok := _c.mutation.TokenBudget(); ok {
+		_spec.SetField(task.FieldTokenBudget, field.TypeInt, value)
+		_node.TokenBudget = &value
+	}
+	if value, ok := _c.mutation.CostBudgetCents(); ok {
+		_spec.SetField(task.FieldCostBudgetCents, field.TypeInt, value)
+		_node.CostBudgetCents = &value
+	}
+	if value, ok := _c.mutation.StageTimeoutSeconds(); ok {
+		_spec.SetField(task.FieldStageTimeoutSeconds, field.TypeInt, value)
+		_node.StageTimeoutSeconds = value
+	}
+	if value, ok := _c.mutation.SilverBullet(); ok {
+		_spec.SetField(task.FieldSilverBullet, field.TypeBool, value)
+		_node.SilverBullet = value
+	}
+	if value, ok := _c.mutation.Metadata(); ok {
+		_spec.SetField(task.FieldMetadata, field.TypeJSON, value)
+		_node.Metadata = value
+	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(task.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
@@ -256,6 +556,86 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(task.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if nodes := _c.mutation.StageRunsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   task.StageRunsTable,
+			Columns: []string{task.StageRunsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stagerun.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PermissionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   task.PermissionsTable,
+			Columns: []string{task.PermissionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(taskpermission.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.AuditLogsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   task.AuditLogsTable,
+			Columns: []string{task.AuditLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(auditlog.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.DependenciesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   task.DependenciesTable,
+			Columns: []string{task.DependenciesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(taskdependency.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.DependentsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   task.DependentsTable,
+			Columns: []string{task.DependentsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(taskdependency.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }
