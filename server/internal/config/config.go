@@ -2,6 +2,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -83,8 +85,12 @@ func Load(cfgFile string) (Config, error) {
 	}
 
 	if cfg.JWTSecret == "" {
-		slog.Warn("DASHBOARD_JWT_SECRET not set — using insecure default, do not use in production")
-		cfg.JWTSecret = "dev-insecure-secret-change-me"
+		secret, err := randomHex(32)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: generate jwt secret: %w", err)
+		}
+		cfg.JWTSecret = secret
+		slog.Warn("DASHBOARD_JWT_SECRET not set — generated ephemeral secret; sessions will invalidate on restart")
 	}
 
 	return cfg, nil
@@ -103,4 +109,12 @@ func (c Config) Addr() string {
 // CallbackURL returns the GitHub OAuth redirect URI derived from Host and Port.
 func (c Config) CallbackURL() string {
 	return fmt.Sprintf("http://%s/api/auth/callback", c.Addr())
+}
+
+func randomHex(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -13,7 +15,8 @@ import (
 )
 
 // Open returns an ent.Client connected to the SQLite database at path.
-// Creates the database file if absent. Runs auto-migrate to apply schema.
+// Creates the database file and any missing parent directories if absent.
+// Runs auto-migrate to apply schema.
 // Use ":memory:" as path for in-memory databases (testing).
 func Open(path string) (*ent.Client, error) {
 	// modernc.org/sqlite uses _pragma=<name>(<value>) URI parameters,
@@ -21,6 +24,10 @@ func Open(path string) (*ent.Client, error) {
 	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)"
 	if path == ":memory:" {
 		dsn = "file::memory:?mode=memory&_pragma=foreign_keys(1)"
+	} else {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			return nil, fmt.Errorf("db: create parent dirs for %q: %w", path, err)
+		}
 	}
 	// modernc.org/sqlite registers as "sqlite"; ent's dialect constant is "sqlite3".
 	// Use OpenDB with the ent dialect constant so ent recognises the SQLite dialect.
