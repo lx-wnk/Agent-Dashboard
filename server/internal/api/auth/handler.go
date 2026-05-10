@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/api"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	serverauth "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
@@ -34,7 +34,7 @@ func NewHandler(deps Deps) *Handler {
 // GET /api/auth/github
 func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 	if h.deps.GitHubClient == nil {
-		return api.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
+		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
 	}
 	statePayload := serverauth.JWTPayload{Sub: "oauth-state"}
 	state, err := serverauth.SignJWT(statePayload, h.deps.JWTSecret, 300)
@@ -57,18 +57,21 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 // GET /api/auth/callback?code=XXX&state=YYY
 func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 	if h.deps.GitHubClient == nil {
-		return api.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
+		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
+	}
+	if h.deps.UserRepo == nil {
+		return apierr.NewAppError(http.StatusServiceUnavailable, "user store unavailable")
 	}
 
 	stateCookie, err := r.Cookie("oauth_state")
 	if err != nil {
-		return api.NewAppError(http.StatusBadRequest, "missing state cookie")
+		return apierr.NewAppError(http.StatusBadRequest, "missing state cookie")
 	}
 	if _, err := serverauth.VerifyJWT(stateCookie.Value, h.deps.JWTSecret); err != nil {
-		return api.NewAppError(http.StatusUnauthorized, "invalid state token")
+		return apierr.NewAppError(http.StatusUnauthorized, "invalid state token")
 	}
 	if r.URL.Query().Get("state") != stateCookie.Value {
-		return api.NewAppError(http.StatusUnauthorized, "state mismatch")
+		return apierr.NewAppError(http.StatusUnauthorized, "state mismatch")
 	}
 
 	code := r.URL.Query().Get("code")
@@ -134,7 +137,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) error {
 	payload, ok := serverauth.PayloadFromContext(r.Context())
 	if !ok {
-		return api.NewAppError(http.StatusUnauthorized, "unauthorized")
+		return apierr.NewAppError(http.StatusUnauthorized, "unauthorized")
 	}
 	if h.deps.UserRepo == nil {
 		return fmt.Errorf("auth: user repo not configured")
@@ -142,9 +145,9 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) error {
 	user, err := h.deps.UserRepo.GetByID(r.Context(), payload.Sub)
 	if err != nil {
 		if errors.Is(err, serverauth.ErrTokenInvalid) {
-			return api.NewAppError(http.StatusUnauthorized, "unauthorized")
+			return apierr.NewAppError(http.StatusUnauthorized, "unauthorized")
 		}
-		return api.NewAppError(http.StatusUnauthorized, "user not found")
+		return apierr.NewAppError(http.StatusUnauthorized, "user not found")
 	}
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(map[string]any{
