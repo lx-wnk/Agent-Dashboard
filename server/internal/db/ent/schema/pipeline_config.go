@@ -13,7 +13,7 @@ type PipelineConfig struct{ ent.Schema }
 // Fields of the PipelineConfig.
 func (PipelineConfig) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("id").StorageKey("key"),
+		field.String("id").StorageKey("key").Immutable(),
 		field.String("value"),
 	}
 }
