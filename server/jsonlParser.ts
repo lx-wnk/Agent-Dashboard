@@ -178,12 +178,91 @@ export function mergeIncrementalInfo(
   }
 }
 
-export function parseJsonlLines(raw: string): any[] {
+export interface JsonlContentBlock {
+  type: string
+  name?: string
+  text?: string
+  id?: string
+  tool_use_id?: string
+  content?: any
+  input?: any
+  [key: string]: any
+}
+
+export interface JsonlMessage {
+  type?: string
+  role?: string
+  model?: string
+  prompt?: string
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    cache_creation_input_tokens?: number
+    cache_read_input_tokens?: number
+  }
+  content?: string | JsonlContentBlock[]
+  [key: string]: any
+}
+
+export interface AssistantEntry {
+  type: 'assistant'
+  message: JsonlMessage
+  sessionId?: string
+  version?: string
+  entrypoint?: string
+  timestamp?: string
+  [key: string]: any
+}
+
+export interface ToolResultEntry {
+  type: 'tool_result'
+  result?: unknown
+  timestamp?: string
+  [key: string]: any
+}
+
+export interface SystemEntry {
+  type: 'system'
+  sessionId?: string
+  version?: string
+  entrypoint?: string
+  timestamp?: string
+  [key: string]: any
+}
+
+export interface UserEntry {
+  type: 'user'
+  message?: JsonlMessage
+  sessionId?: string
+  version?: string
+  entrypoint?: string
+  timestamp?: string
+  [key: string]: any
+}
+
+export interface SummaryEntry {
+  type: 'summary'
+  [key: string]: any
+}
+
+export type JsonlEntry =
+  | AssistantEntry
+  | ToolResultEntry
+  | SystemEntry
+  | UserEntry
+  | SummaryEntry
+  | { type: string, [key: string]: any }
+
+export function isAssistantEntry(e: JsonlEntry): e is AssistantEntry {
+  return e.type === 'assistant'
+}
+
+export function parseJsonlLines(raw: string): JsonlEntry[] {
   const lines = raw.split('\n').filter(l => l.trim())
-  const parsed: any[] = []
+  const parsed: JsonlEntry[] = []
   for (const line of lines) {
     try {
-      parsed.push(JSON.parse(line))
+      parsed.push(JSON.parse(line) as JsonlEntry)
     }
     catch {
       // partial first line from tail-read, skip
@@ -192,7 +271,7 @@ export function parseJsonlLines(raw: string): any[] {
   return parsed
 }
 
-export function extractSessionInfo(entries: any[]): Partial<SessionData> {
+export function extractSessionInfo(entries: JsonlEntry[]): Partial<SessionData> {
   let sessionId = ''
   let entrypoint: SessionData['entrypoint'] = 'unknown'
   let currentAction: string | null = null

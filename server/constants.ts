@@ -21,6 +21,7 @@ export const VALID_STAGES = new Set<PipelineStage>([
 
 export const SYSTEM_PROMPT_MAX_CHARS = 10_000
 
+// TODO: move to src/utils/validation.ts for client-side validation
 export const MAX_DESCRIPTION_CHARS = 10_000
 
 export const DEPENDENCY_REQUIRED_STAGES = ['done', 'cancelled'] as const

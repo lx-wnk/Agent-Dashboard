@@ -1,1 +1,5 @@
-export const STATUS_ORDER: Record<string, number> = { active: 0, waiting: 1, idle: 2 }
+import { AGENT_STATUSES, type AgentStatus } from '../types.js'
+
+export const STATUS_ORDER = Object.fromEntries(
+  AGENT_STATUSES.map((s, i) => [s, i]),
+) as Record<AgentStatus, number>
