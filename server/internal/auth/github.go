@@ -94,11 +94,19 @@ func (c *GitHubClient) ExchangeCode(ctx context.Context, code, redirectURI strin
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("github.ExchangeCode: read body: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("github.ExchangeCode: HTTP %d: %s", resp.StatusCode, body)
+	}
+
 	var result struct {
 		AccessToken string `json:"access_token"`
 		Error       string `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return "", fmt.Errorf("github.ExchangeCode: decode: %w", err)
 	}
 	if result.Error != "" {
