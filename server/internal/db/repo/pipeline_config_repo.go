@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -10,7 +11,7 @@ import (
 )
 
 type PipelineConfigRepo interface {
-	GetNumber(ctx context.Context, key string, fallback int) int
+	GetNumber(ctx context.Context, key string, fallback float64) float64
 	Set(ctx context.Context, key, value string) error
 	GetAll(ctx context.Context) (map[string]string, error)
 }
@@ -21,13 +22,15 @@ func NewPipelineConfigRepo(client *ent.Client) PipelineConfigRepo {
 	return &entPipelineConfigRepo{client: client}
 }
 
-func (r *entPipelineConfigRepo) GetNumber(ctx context.Context, key string, fallback int) int {
+func (r *entPipelineConfigRepo) GetNumber(ctx context.Context, key string, fallback float64) float64 {
 	cfg, err := r.client.PipelineConfig.Query().Where(pipelineconfig.ID(key)).Only(ctx)
 	if err != nil {
+		slog.Error("pipeline_config: db lookup", "key", key, "err", err)
 		return fallback
 	}
-	n, err := strconv.Atoi(cfg.Value)
+	n, err := strconv.ParseFloat(cfg.Value, 64)
 	if err != nil {
+		slog.Error("pipeline_config: parse float", "key", key, "err", err)
 		return fallback
 	}
 	return n

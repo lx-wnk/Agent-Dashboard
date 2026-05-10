@@ -18,7 +18,7 @@ type PermissionRepo interface {
 	CreatePermissionRequest(ctx context.Context, input CreatePermissionRequestInput) (*ent.PermissionRequest, error)
 	GetPermissionRequest(ctx context.Context, id string) (*ent.PermissionRequest, error)
 	ListPendingForStageRun(ctx context.Context, stageRunID string) ([]*ent.PermissionRequest, error)
-	ResolvePermissionRequest(ctx context.Context, id, outcome string) (*ent.PermissionRequest, error)
+	ResolvePermissionRequest(ctx context.Context, id, outcome string) error
 	CountForStageRun(ctx context.Context, stageRunID string) (int, error)
 }
 
@@ -117,16 +117,19 @@ func (r *entPermissionRepo) ListPendingForStageRun(ctx context.Context, stageRun
 	return reqs, nil
 }
 
-func (r *entPermissionRepo) ResolvePermissionRequest(ctx context.Context, id, outcome string) (*ent.PermissionRequest, error) {
-	now := time.Now()
-	req, err := r.client.PermissionRequest.UpdateOneID(id).
+func (r *entPermissionRepo) ResolvePermissionRequest(ctx context.Context, id, outcome string) error {
+	n, err := r.client.PermissionRequest.Update().
+		Where(permissionrequest.ID(id), permissionrequest.OutcomeIsNil()).
 		SetOutcome(outcome).
-		SetResolvedAt(now).
+		SetResolvedAt(time.Now()).
 		Save(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("permission.ResolvePermissionRequest: %w", err)
+		return fmt.Errorf("permission_request.Resolve: %w", err)
 	}
-	return req, nil
+	if n == 0 {
+		return fmt.Errorf("permission_request.Resolve: already resolved or not found")
+	}
+	return nil
 }
 
 func (r *entPermissionRepo) CountForStageRun(ctx context.Context, stageRunID string) (int, error) {
