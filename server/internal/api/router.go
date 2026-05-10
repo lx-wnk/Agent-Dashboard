@@ -5,7 +5,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -34,14 +37,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 	r.Use(SecurityHeaders)
 
 	// Public routes (no auth)
-	r.Get("/api/system/health", func(w http.ResponseWriter, r *http.Request) {
-		_ = encode(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
+	r.Get("/api/system/health", system.HealthHandler)
 
 	// Protected routes (JWT required)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(deps.Config.JWTSecret))
-		// Agent routes and SPA handler are mounted in later tasks
+		agentHandler := agents.NewHandler(merger.GetAgents, deps.AgentBroadcaster)
+		r.Get("/api/agents", ErrorMiddleware(agentHandler.List))
+		r.Get("/api/agents/stream", agentHandler.Stream)
 	})
 
 	return r
