@@ -161,10 +161,9 @@ const columnsWithTasks = computed(() =>
           >{{ tasks.length }}</span>
         </div>
         <div class="p-2.5 flex flex-col gap-2 overflow-y-auto">
-          <!-- Epic groups: show for any epic that has children in this column -->
           <template v-for="epic in epics" :key="epic.parent.id">
             <div
-              v-if="tasksForColumn(col).some(t => t.parentTaskId === epic.parent.id)"
+              v-if="tasks.some(t => t.parentTaskId === epic.parent.id)"
               class="mb-2 border border-blue-200 dark:border-blue-800 rounded-lg overflow-hidden"
             >
               <button
@@ -189,7 +188,7 @@ const columnsWithTasks = computed(() =>
               </button>
               <div v-if="epicExpanded[epic.parent.id]" class="pl-3 pr-2 pb-2 pt-1 space-y-1.5">
                 <TaskCard
-                  v-for="child in epic.children.filter(c => tasksForColumn(col).some(t => t.id === c.id))"
+                  v-for="child in epic.children.filter(c => tasks.some(t => t.id === c.id))"
                   :key="child.id"
                   :task="child"
                   @select="emit('select', child)"
@@ -198,15 +197,18 @@ const columnsWithTasks = computed(() =>
               </div>
             </div>
           </template>
-          <!-- Standalone tasks (non-epic-child or epic parent rows) -->
           <TaskCard
-            v-for="task in tasks"
+            v-for="task in tasks.filter(t => !t.parentTaskId || !epics.some(e => e.parent.id === t.parentTaskId))"
             :key="task.id"
             :task="task"
             @select="(t) => emit('select', t)"
             @open-chat="(t) => emit('openChat', t)"
           />
-          <div v-if="!tasks.length && !epics.some(e => tasksForColumn(col).some(t => t.parentTaskId === e.parent.id))" class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5">
+          <div
+            v-if="tasks.filter(t => !t.parentTaskId || !epics.some(e => e.parent.id === t.parentTaskId)).length === 0
+              && !epics.some(e => tasks.some(t => t.parentTaskId === e.parent.id))"
+            class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5"
+          >
             —
           </div>
         </div>
