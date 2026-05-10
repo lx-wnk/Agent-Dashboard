@@ -75,6 +75,9 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	code := r.URL.Query().Get("code")
+	if code == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "missing code")
+	}
 	accessToken, err := h.deps.GitHubClient.ExchangeCode(r.Context(), code, h.deps.CallbackURL)
 	if err != nil {
 		return fmt.Errorf("auth: exchange code: %w", err)
@@ -126,6 +129,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 		Value:    "",
 		MaxAge:   -1,
 		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 	w.WriteHeader(http.StatusNoContent)
