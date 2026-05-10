@@ -54,6 +54,9 @@ type UpdateTaskInput struct {
 	StageTimeoutSeconds *int
 	Metadata            map[string]any
 	MetadataClear       bool
+	WorktreePath        *string
+	SourceBranch        *string
+	TargetBranch        *string
 }
 
 type entTaskRepo struct{ client *ent.Client }
@@ -160,6 +163,15 @@ func (r *entTaskRepo) Update(ctx context.Context, id string, in UpdateTaskInput)
 		q = q.ClearMetadata()
 	} else if in.Metadata != nil {
 		q = q.SetMetadata(in.Metadata)
+	}
+	if in.WorktreePath != nil {
+		q = q.SetWorktreePath(*in.WorktreePath)
+	}
+	if in.SourceBranch != nil {
+		q = q.SetSourceBranch(*in.SourceBranch)
+	}
+	if in.TargetBranch != nil {
+		q = q.SetTargetBranch(*in.TargetBranch)
 	}
 	t, err := q.Save(ctx)
 	if err != nil {

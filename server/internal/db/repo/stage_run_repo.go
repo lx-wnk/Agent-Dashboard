@@ -22,7 +22,7 @@ type StageRunRepo interface {
 	ListByStatus(ctx context.Context, statuses ...string) ([]*ent.StageRun, error)
 	ListPending(ctx context.Context) ([]*ent.StageRun, error)
 	Update(ctx context.Context, id string, input UpdateStageRunInput) (*ent.StageRun, error)
-	SumCompletedCostCents(ctx context.Context, taskID string) (int, error)
+	SumCompletedCostCents(ctx context.Context, taskID string) (int64, error)
 	GetLatestForTasks(ctx context.Context, taskIDs []string) (map[string]*ent.StageRun, error)
 }
 
@@ -182,31 +182,37 @@ func (r *entStageRunRepo) Update(ctx context.Context, id string, in UpdateStageR
 	return sr, nil
 }
 
-func (r *entStageRunRepo) SumCompletedCostCents(ctx context.Context, taskID string) (int, error) {
-	runs, err := r.client.StageRun.Query().
+func (r *entStageRunRepo) SumCompletedCostCents(ctx context.Context, taskID string) (int64, error) {
+	type aggResult struct {
+		Sum int `json:"sum"`
+	}
+	var result []aggResult
+	err := r.client.StageRun.Query().
 		Where(stagerun.TaskID(taskID), stagerun.StatusIn("done", "failed")).
-		All(ctx)
+		Aggregate(ent.Sum(stagerun.FieldCostCents)).
+		Scan(ctx, &result)
 	if err != nil {
 		return 0, fmt.Errorf("stagerun.SumCompletedCostCents: %w", err)
 	}
-	total := 0
-	for _, run := range runs {
-		total += run.CostCents
+	if len(result) == 0 {
+		return 0, nil
 	}
-	return total, nil
+	return int64(result[0].Sum), nil
 }
 
 func (r *entStageRunRepo) GetLatestForTasks(ctx context.Context, taskIDs []string) (map[string]*ent.StageRun, error) {
 	runs, err := r.client.StageRun.Query().
 		Where(stagerun.TaskIDIn(taskIDs...)).
-		Order(stagerun.ByCreatedAt()).
+		Order(stagerun.ByCreatedAt(sql.OrderDesc())).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("stagerun.GetLatestForTasks: %w", err)
 	}
 	result := make(map[string]*ent.StageRun)
 	for _, run := range runs {
-		result[run.TaskID] = run // last write wins (latest due to ordering)
+		if _, exists := result[run.TaskID]; !exists {
+			result[run.TaskID] = run
+		}
 	}
 	return result, nil
 }
