@@ -7,9 +7,12 @@
 //   DASHBOARD_HOOKS_SECRET — shared secret; must match DASHBOARD_HOOKS_SECRET on server
 //   CLAUDE_HOOK_TYPE       — set automatically by Claude Code for each hook event
 
+const { Buffer } = require('node:buffer')
+const process = require('node:process')
+
 const DASHBOARD_HOOKS_URL
   = process.env.DASHBOARD_HOOKS_URL
-  || 'http://127.0.0.1:13120/api/hooks/event'
+    || 'http://127.0.0.1:13120/api/hooks/event'
 const DASHBOARD_HOOKS_SECRET = process.env.DASHBOARD_HOOKS_SECRET || ''
 
 const chunks = []
@@ -25,7 +28,7 @@ process.stdin.on('end', async () => {
 
   const headers = { 'Content-Type': 'application/json' }
   if (DASHBOARD_HOOKS_SECRET) {
-    headers['Authorization'] = `Bearer ${DASHBOARD_HOOKS_SECRET}`
+    headers.Authorization = `Bearer ${DASHBOARD_HOOKS_SECRET}`
   }
 
   try {

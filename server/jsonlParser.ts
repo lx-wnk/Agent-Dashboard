@@ -41,6 +41,10 @@ export interface SubAgentData {
 const TAIL_BYTES = 32768 // read last 32KB
 const HEAD_BYTES = 8192 // read first 8KB for model/version
 
+const QUOTA_RE = /quota exceeded|usage limit|monthly limit/i
+const RATE_RE = /rate limit|429|too many requests|throttl/i
+const AUTH_RE = /invalid api key|authentication|unauthorized|401/i
+
 interface SessionCacheEntry {
   mtimeMs: number
   size: number
@@ -375,14 +379,19 @@ export function extractSessionInfo(entries: any[]): Partial<SessionData> {
     }
   }
 
-  const QUOTA_RE = /quota exceeded|usage limit|monthly limit/i
-  const RATE_RE = /rate limit|429|too many requests|throttl/i
-  const AUTH_RE = /invalid api key|authentication|unauthorized|401/i
-
   for (const text of [...recentToolResults, ...recentAssistantTexts]) {
-    if (QUOTA_RE.test(text)) { errorState = 'quota_exhausted'; break }
-    if (RATE_RE.test(text)) { errorState = 'rate_limited'; break }
-    if (AUTH_RE.test(text)) { errorState = 'auth_failed'; break }
+    if (QUOTA_RE.test(text)) {
+      errorState = 'quota_exhausted'
+      break
+    }
+    if (RATE_RE.test(text)) {
+      errorState = 'rate_limited'
+      break
+    }
+    if (AUTH_RE.test(text)) {
+      errorState = 'auth_failed'
+      break
+    }
   }
 
   return {

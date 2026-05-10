@@ -10,11 +10,15 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 - **Chat-style session view** — full conversation transcript with markdown rendering, collapsible tool groups, inline task checklists, sub-agent badges
 - **Channel control** — send follow-up instructions and /btw interrupts to running agents via MCP Channels
 - **Agent spawning** — start new Claude agents with custom prompts, models, and system prompts from the UI
-- **Task pipeline** — multi-stage agentic workflow (concept → backlog → implementation → self_review → finalization → done) with permission gates per stage
+- **Task pipeline** — multi-stage agentic workflow (concept → backlog → implementation → self_review → finalization → done) with permission gates per stage; supports permission `template` shortcuts (`feature_implementation`, `research_only`, `test_only`, `review_only`)
 - **Authenticated MCP endpoint (19 tools, 4 scopes)** for external agent control
 - **API key management with scoped access** — generate and revoke bearer tokens in Settings
 - **Cross-linking between agent sessions and pipeline tasks**
 - **Multi-machine support** — aggregate agents from remote machines via `DASHBOARD_REMOTES`
+- **Claude quota / rate-limit tracking** — header progress bar shows quota usage and alerts on exhaustion
+- **Per-agent color & emoji identity** — persistent per-agent visual identity stored in localStorage
+- **PWA support** — installable as a desktop/mobile app with service worker and app manifest
+- **Shell statusline script** — Python script for PS1/shell integration showing active agent count
 - **Dark/light theme, list/card/kanban views**
 
 ## Quick Start

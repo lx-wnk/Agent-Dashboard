@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -638,7 +639,7 @@ describe('extractSessionInfo — watchdog error scanner', () => {
         ],
       },
     }
-    const entries = Array.from({ length: 5 }, () => repeatedEntry)
+    const entries = Array.from({ length: 5 }).fill(repeatedEntry)
     const result = extractSessionInfo(entries)
     expect(result.convergenceAlert).toBe(true)
     expect(result.convergenceToolName).toBe('Bash')
@@ -706,9 +707,9 @@ describe('extractSessionInfo — compaction detection', () => {
   it('handles multiple compaction events in sequence', () => {
     const entries = [
       makeAssistantEntry(1000, 400),
-      makeAssistantEntry(50, 20),    // first compaction
+      makeAssistantEntry(50, 20), // first compaction
       makeAssistantEntry(800, 320),
-      makeAssistantEntry(40, 16),    // second compaction
+      makeAssistantEntry(40, 16), // second compaction
       makeAssistantEntry(200, 80),
     ]
     const result = extractSessionInfo(entries)
