@@ -951,7 +951,7 @@ export function createTaskRouter(deps: TaskRouterDeps): Router {
     const reRequestCounts = getPermissionReRequestCounts(task.id)
     const enrichedRequests = pendingRequests.map(pr => ({
       ...pr,
-      reRequestCount: reRequestCounts.get(`${pr.tool}:${pr.pattern ?? '*'}`) ?? 1,
+      reRequestCount: reRequestCounts.get(`${pr.tool}:${pr.pattern ?? '*'}`) ?? 0,
     }))
     res.json(enrichedRequests)
   })

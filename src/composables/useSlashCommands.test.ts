@@ -50,8 +50,14 @@ describe('dispatchSlashCommand', () => {
   })
 
   it('/spawn validates slug format', async () => {
-    const result = await dispatchSlashCommand('/spawn', ['Bad Slug!', 'desc'], {})
+    const result = await dispatchSlashCommand('/spawn', ['Bad-Slug!', 'desc'], {})
     expect(result.ok).toBe(false)
+  })
+
+  it('/spawn rejects missing cwd', async () => {
+    const result = await dispatchSlashCommand('/spawn', ['my-slug', 'desc'], {})
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Arbeitsverzeichnis')
   })
 
   it('/spawn validates missing description', async () => {

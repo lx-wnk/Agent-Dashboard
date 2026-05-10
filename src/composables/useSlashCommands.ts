@@ -21,7 +21,7 @@ export const SLASH_COMMAND_DEFS: SlashCommandDef[] = [
 
 interface ApiError { error?: string }
 
-const SLUG_RE = /^[a-z][a-z0-9-]*$/
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export function parseSlashCommand(raw: string): [string, string[]] | null {
   const trimmed = raw.trim()
@@ -81,12 +81,14 @@ export async function dispatchSlashCommand(
       if (!slug || !description)
         return { ok: false, message: 'Verwendung: /spawn <slug> <beschreibung>' }
       if (!SLUG_RE.test(slug))
-        return { ok: false, message: `Ungültiger Slug "${slug}". Nur Kleinbuchstaben, Zahlen und Bindestriche erlaubt (muss mit Buchstabe beginnen).` }
+        return { ok: false, message: `Ungültiger Slug "${slug}". Format: [a-z0-9][a-z0-9-]{0,63}` }
+      if (!ctx.cwd)
+        return { ok: false, message: '/spawn benötigt ein Arbeitsverzeichnis. Öffne einen Agenten mit bekanntem cwd.' }
       try {
         const res = await fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ slug, title: description, cwd: ctx.cwd ?? '.' }),
+          body: JSON.stringify({ slug, title: description, cwd: ctx.cwd }),
         })
         if (!res.ok) {
           const data = await res.json().catch(() => ({})) as ApiError
