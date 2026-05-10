@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { encodePath, extractSessionInfo, parseJsonlLines, pickBestJsonlFile } from './jsonlParser'
+import { Buffer } from 'node:buffer'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { encodePath, extractSessionInfo, incrementalRead, mergeIncrementalInfo, parseJsonlLines, pickBestJsonlFile } from './jsonlParser'
 
 describe('parseJsonlLines', () => {
   it('parses valid JSON lines into an array', () => {
@@ -391,17 +395,17 @@ describe('extractSessionInfo', () => {
   })
 
   it('recognises cli entrypoint', () => {
-    const entries = [{ entrypoint: 'cli' }]
+    const entries = [{ type: 'system', entrypoint: 'cli' }]
     expect(extractSessionInfo(entries).entrypoint).toBe('cli')
   })
 
   it('recognises desktop entrypoint', () => {
-    const entries = [{ entrypoint: 'desktop' }]
+    const entries = [{ type: 'system', entrypoint: 'desktop' }]
     expect(extractSessionInfo(entries).entrypoint).toBe('desktop')
   })
 
   it('falls back to unknown for unrecognised entrypoint', () => {
-    const entries = [{ entrypoint: 'web' }]
+    const entries = [{ type: 'system', entrypoint: 'web' }]
     expect(extractSessionInfo(entries).entrypoint).toBe('unknown')
   })
 })
@@ -448,5 +452,268 @@ describe('pickBestJsonlFile', () => {
     const older = file('old.jsonl', 60_000, undefined) // birthtimeMs = 0
     const newer = file('new.jsonl', 5_000, undefined) // birthtimeMs = 0
     expect(pickBestJsonlFile([older, newer], 30)).toBe(newer)
+  })
+})
+
+describe('incrementalRead', () => {
+  let dir: string
+
+  beforeAll(async () => {
+    dir = join(tmpdir(), `jsonl-incr-test-${Date.now()}`)
+    await mkdir(dir, { recursive: true })
+  })
+
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('reads exactly the bytes after fromOffset', async () => {
+    const filePath = join(dir, 'incr1.jsonl')
+    const content = '{"type":"user"}\n{"type":"assistant"}\n'
+    await writeFile(filePath, content, 'utf-8')
+    const firstLineBytes = Buffer.byteLength('{"type":"user"}\n', 'utf-8')
+
+    const result = await incrementalRead(filePath, firstLineBytes)
+
+    expect(result.raw).toBe('{"type":"assistant"}\n')
+    expect(result.endOffset).toBe(Buffer.byteLength(content, 'utf-8'))
+  })
+
+  it('returns empty raw and same offset when fromOffset equals file size', async () => {
+    const filePath = join(dir, 'incr2.jsonl')
+    const content = '{"type":"user"}\n'
+    await writeFile(filePath, content, 'utf-8')
+    const size = Buffer.byteLength(content, 'utf-8')
+
+    const result = await incrementalRead(filePath, size)
+
+    expect(result.raw).toBe('')
+    expect(result.endOffset).toBe(size)
+  })
+
+  it('returns empty raw when fromOffset exceeds file size', async () => {
+    const filePath = join(dir, 'incr3.jsonl')
+    await writeFile(filePath, 'hello\n', 'utf-8')
+    const size = Buffer.byteLength('hello\n', 'utf-8')
+
+    const result = await incrementalRead(filePath, size + 100)
+
+    expect(result.raw).toBe('')
+    expect(result.endOffset).toBe(size + 100)
+  })
+
+  it('reads entire file when fromOffset is 0', async () => {
+    const filePath = join(dir, 'incr4.jsonl')
+    const content = '{"a":1}\n{"b":2}\n'
+    await writeFile(filePath, content, 'utf-8')
+
+    const result = await incrementalRead(filePath, 0)
+
+    expect(result.raw).toBe(content)
+    expect(result.endOffset).toBe(Buffer.byteLength(content, 'utf-8'))
+  })
+})
+
+describe('mergeIncrementalInfo', () => {
+  it('sums token usage fields from prev and next', () => {
+    const prev = {
+      tokenUsage: { inputTokens: 100, outputTokens: 50, cacheCreationTokens: 10, cacheReadTokens: 5 },
+    }
+    const next = {
+      tokenUsage: { inputTokens: 200, outputTokens: 80, cacheCreationTokens: 20, cacheReadTokens: 15 },
+    }
+    const result = mergeIncrementalInfo(prev, next)
+
+    expect(result.tokenUsage).toEqual({
+      inputTokens: 300,
+      outputTokens: 130,
+      cacheCreationTokens: 30,
+      cacheReadTokens: 20,
+    })
+  })
+
+  it('sums conversationTurns', () => {
+    const result = mergeIncrementalInfo({ conversationTurns: 3 }, { conversationTurns: 7 })
+    expect(result.conversationTurns).toBe(10)
+  })
+
+  it('merges toolCounts by summing per-key values', () => {
+    const result = mergeIncrementalInfo(
+      { toolCounts: { Read: 2, Write: 1 } },
+      { toolCounts: { Read: 3, Bash: 4 } },
+    )
+    expect(result.toolCounts).toEqual({ Read: 5, Write: 1, Bash: 4 })
+  })
+
+  it('updates status of existing task and appends new tasks', () => {
+    const prev = {
+      tasks: [
+        { id: 't1', subject: 'alpha', status: 'pending' },
+        { id: 't2', subject: 'beta', status: 'pending' },
+      ],
+    }
+    const next = {
+      tasks: [
+        { id: 't1', subject: 'alpha', status: 'completed' },
+        { id: 't3', subject: 'gamma', status: 'pending' },
+      ],
+    }
+    const result = mergeIncrementalInfo(prev, next)
+
+    expect(result.tasks).toHaveLength(3)
+    expect(result.tasks!.find(t => t.id === 't1')!.status).toBe('completed')
+    expect(result.tasks!.find(t => t.id === 't2')!.status).toBe('pending')
+    expect(result.tasks!.find(t => t.id === 't3')!.status).toBe('pending')
+  })
+
+  it('uses next.lastOutput if non-null, else falls back to prev', () => {
+    expect(mergeIncrementalInfo({ lastOutput: 'old' }, { lastOutput: 'new' }).lastOutput).toBe('new')
+    expect(mergeIncrementalInfo({ lastOutput: 'old' }, { lastOutput: null }).lastOutput).toBe('old')
+    expect(mergeIncrementalInfo({ lastOutput: null }, { lastOutput: null }).lastOutput).toBeNull()
+  })
+
+  it('prefers non-unknown next.model over prev', () => {
+    expect(
+      mergeIncrementalInfo({ model: 'claude-3-5-sonnet' }, { model: null }).model,
+    ).toBe('claude-3-5-sonnet')
+    expect(
+      mergeIncrementalInfo({ model: 'claude-3-5-sonnet' }, { model: 'claude-3-7-sonnet' }).model,
+    ).toBe('claude-3-7-sonnet')
+  })
+
+  it('handles both prev and next being empty objects without throwing', () => {
+    const result = mergeIncrementalInfo({}, {})
+    expect(result.tokenUsage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    })
+    expect(result.conversationTurns).toBe(0)
+    expect(result.tasks).toEqual([])
+  })
+})
+
+describe('extractSessionInfo — watchdog error scanner', () => {
+  function makeToolResultEntry(content: string) {
+    return {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'x', content }],
+      },
+    }
+  }
+
+  it('detects quota_exhausted from tool result content', () => {
+    const entries = [makeToolResultEntry('Error: usage limit exceeded for this month')]
+    const result = extractSessionInfo(entries)
+    expect(result.errorState).toBe('quota_exhausted')
+  })
+
+  it('detects rate_limited from tool result content', () => {
+    const entries = [makeToolResultEntry('HTTP 429: too many requests — try again later')]
+    const result = extractSessionInfo(entries)
+    expect(result.errorState).toBe('rate_limited')
+  })
+
+  it('detects auth_failed from tool result content', () => {
+    const entries = [makeToolResultEntry('Error: invalid API key provided')]
+    const result = extractSessionInfo(entries)
+    expect(result.errorState).toBe('auth_failed')
+  })
+
+  it('returns null errorState when no error patterns match', () => {
+    const entries = [makeToolResultEntry('Successfully wrote 42 lines to the file')]
+    const result = extractSessionInfo(entries)
+    expect(result.errorState).toBeNull()
+  })
+
+  it('detects convergence when last 5 tool calls share the same name and input hash', () => {
+    const repeatedEntry = {
+      type: 'assistant',
+      message: {
+        usage: { input_tokens: 100, output_tokens: 40 },
+        content: [
+          { type: 'tool_use', name: 'Bash', input: { command: 'ls /tmp' } },
+        ],
+      },
+    }
+    const entries = Array.from({ length: 5 }, () => repeatedEntry)
+    const result = extractSessionInfo(entries)
+    expect(result.convergenceAlert).toBe(true)
+    expect(result.convergenceToolName).toBe('Bash')
+  })
+
+  it('does not flag convergence when tool inputs vary across calls', () => {
+    const makeEntry = (cmd: string) => ({
+      type: 'assistant',
+      message: {
+        usage: { input_tokens: 10, output_tokens: 5 },
+        content: [{ type: 'tool_use', name: 'Bash', input: { command: cmd } }],
+      },
+    })
+    const entries = ['ls', 'pwd', 'cat file.txt', 'echo hello', 'ls -la'].map(makeEntry)
+    const result = extractSessionInfo(entries)
+    expect(result.convergenceAlert).toBe(false)
+    expect(result.convergenceToolName).toBeNull()
+  })
+})
+
+describe('extractSessionInfo — compaction detection', () => {
+  function makeAssistantEntry(inputTokens: number, outputTokens: number) {
+    return {
+      type: 'assistant',
+      message: {
+        usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+        content: [],
+      },
+    }
+  }
+
+  it('accumulates tokens normally when no compaction occurs', () => {
+    const entries = [
+      makeAssistantEntry(100, 50),
+      makeAssistantEntry(120, 60),
+      makeAssistantEntry(140, 70),
+    ]
+    const result = extractSessionInfo(entries)
+    expect(result.tokenUsage!.inputTokens).toBe(360)
+    expect(result.tokenUsage!.outputTokens).toBe(180)
+  })
+
+  it('detects compaction when input_tokens drops by >= 80% and preserves baseline', () => {
+    const entries = [
+      makeAssistantEntry(500, 200),
+      makeAssistantEntry(500, 200),
+      // 90% drop from 1000 — compaction event
+      makeAssistantEntry(100, 40),
+      makeAssistantEntry(110, 45),
+    ]
+    const result = extractSessionInfo(entries)
+    // Baseline 1000 input preserved; post-compaction 210 added
+    expect(result.tokenUsage!.inputTokens).toBe(1210)
+  })
+
+  it('does not trigger compaction when drop is less than 80%', () => {
+    const entries = [
+      makeAssistantEntry(1000, 400),
+      makeAssistantEntry(250, 100), // 75% drop — not a compaction
+    ]
+    const result = extractSessionInfo(entries)
+    expect(result.tokenUsage!.inputTokens).toBe(1250)
+  })
+
+  it('handles multiple compaction events in sequence', () => {
+    const entries = [
+      makeAssistantEntry(1000, 400),
+      makeAssistantEntry(50, 20), // first compaction
+      makeAssistantEntry(800, 320),
+      makeAssistantEntry(40, 16), // second compaction
+      makeAssistantEntry(200, 80),
+    ]
+    const result = extractSessionInfo(entries)
+    // Baseline = 1000 + 50 + 800 = 1850; post-compaction = 240
+    expect(result.tokenUsage!.inputTokens).toBe(2090)
   })
 })

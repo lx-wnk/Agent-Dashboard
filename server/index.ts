@@ -7,6 +7,8 @@ import { consola } from 'consola'
 import cookieParser from 'cookie-parser'
 import express from 'express'
 import { getAgents } from './agentMerger.js'
+import { discoverPatterns } from './analytics/ngrams.js'
+import { getSnapshot, updateSnapshot } from './agentSnapshot.js'
 import { isAuthEnabled, requireAuth } from './auth/requireAuth.js'
 import { DEFAULT_DASHBOARD_PORT, LOOPBACK_HOST, resolveDashboardPort } from './constants.js'
 import { getDb } from './db/client.js'
@@ -21,11 +23,16 @@ import { aggregateAgents, getEnvRemoteTargets } from './remoteAggregator.js'
 import { createAgentRouter } from './routes/agentRoutes.js'
 import { createApiKeyRouter } from './routes/apiKeyRoutes.js'
 import { createAuthRouter } from './routes/authRoutes.js'
+import { createHistoryRouter } from './routes/historyRoutes.js'
+import { createHooksRouter } from './routes/hooksRoutes.js'
+import { createMemoryRouter } from './routes/memoryRoutes.js'
 import { createPresetRouter } from './routes/presetRoutes.js'
 import { createRefineRouter } from './routes/refineRoutes.js'
 import { createRemoteRouter } from './routes/remoteRoutes.js'
+import { createSearchRouter } from './routes/searchRoutes.js'
 import { createSystemRouter } from './routes/systemRoutes.js'
 import { createTaskRouter, enrichTask } from './routes/taskRoutes.js'
+import { createWebPushRouter } from './routes/webpushRoutes.js'
 import { SpawnManager } from './spawnManager.js'
 
 // Ensure FDs 0–2 are open. When spawned by tsx watch or similar tools, stdio FDs
@@ -63,6 +70,12 @@ const SSE_INTERVAL_MS = (() => {
   return val
 })()
 
+const HOOKS_SECRET = process.env.DASHBOARD_HOOKS_SECRET ?? ''
+const HOOKS_DEBOUNCE_MS = (() => {
+  const val = Number(process.env.DASHBOARD_HOOKS_DEBOUNCE_MS ?? 100)
+  return Number.isFinite(val) && val >= 0 ? val : 100
+})()
+
 // Spawn state + logic (rate limit, stderr ring-buffer, reply store,
 // channel message forwarding) lives in SpawnManager.
 const spawnManager = new SpawnManager()
@@ -96,6 +109,9 @@ async function start() {
   // ─── Auth routes (public — before requireAuth) ───────────
 
   app.use(createAuthRouter({ host: HOST, port: PORT }))
+
+  // Hooks endpoint is exempt from session auth — protected by shared secret only.
+  app.use('/api/hooks', createHooksRouter({ onEvent: scheduleHooksRescan, secret: HOOKS_SECRET }))
 
   // All /api/* routes (except /auth/* and /api/me above) require authentication
   app.use('/api', requireAuth)
@@ -172,8 +188,85 @@ async function start() {
   }, 60_000)
   persistTrendId.unref()
 
+  // Agent snapshot is managed by agentSnapshot.ts — see getSnapshot/updateSnapshot.
+
   // SSE broadcast + cost trend recording: only scan processes when clients are connected
   let sseBroadcastId: ReturnType<typeof setInterval> | null = null
+  let hooksDebounceId: ReturnType<typeof setTimeout> | null = null
+
+  async function broadcastAgents(localAgents: Awaited<ReturnType<typeof getAgents>>): Promise<void> {
+    const envRemotes = getEnvRemoteTargets()
+
+    // Baseline aggregation for cost trend (env remotes only — shared across all users)
+    const baselineAgents = await aggregateAgents(localAgents, envRemotes)
+    const totalCost = baselineAgents.reduce((sum, a) => sum + a.costEstimate, 0)
+    const totalTokens = baselineAgents.reduce((sum, a) => {
+      const u = a.tokenUsage
+      return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
+    }, 0)
+    costTrend.push({ t: Date.now(), cost: totalCost, tokens: totalTokens })
+    if (costTrend.length > MAX_TREND_POINTS)
+      costTrend.shift()
+
+    const trendSlice = costTrend.slice(-60)
+
+    // Fan out: each client gets local agents + their own remotes.
+    // Deduplicate: build per-userId payload cache so multiple browser tabs
+    // from the same user don't trigger duplicate remote-agent fetches.
+    const userPayloadCache = new Map<string, string>()
+
+    await Promise.all([...sseClients].map(async (client) => {
+      try {
+        if (client.res.writableEnded)
+          return
+
+        if (!userPayloadCache.has(client.userId)) {
+          const userRemotes = isAuthEnabled()
+            ? listRemoteRegistrationsForUser(client.userId).map(r => ({
+                url: r.url,
+                bearerKey: r.bearerKey,
+                name: r.name,
+              }))
+            : []
+          const allRemotes = [...envRemotes, ...userRemotes]
+          const agents = await aggregateAgents(localAgents, allRemotes)
+          userPayloadCache.set(client.userId, JSON.stringify({ agents, trend: trendSlice }))
+        }
+
+        const payload = userPayloadCache.get(client.userId)!
+        client.res.write(`data: ${payload}\n\n`)
+      }
+      catch {
+        sseClients.delete(client)
+      }
+    }))
+  }
+
+  function scheduleHooksRescan(): void {
+    if (hooksDebounceId)
+      clearTimeout(hooksDebounceId)
+    hooksDebounceId = setTimeout(async () => {
+      hooksDebounceId = null
+      if (sseClients.size === 0)
+        return
+      try {
+        const localAgents = await getAgents()
+        await broadcastAgents(localAgents)
+      }
+      catch (err) {
+        console.warn('[hooks] rescan failed:', err)
+      }
+    }, HOOKS_DEBOUNCE_MS)
+  }
+
+  // Prime snapshot immediately so /api/search works before first SSE tick
+  getAgents().then((agents) => {
+    updateSnapshot(agents)
+  }).catch(() => {})
+
+  setTimeout(() => {
+    discoverPatterns(getDb()).catch(err => consola.warn('Pattern discovery error:', err))
+  }, 30_000).unref()
 
   function startSSEBroadcast() {
     if (sseBroadcastId)
@@ -181,51 +274,8 @@ async function start() {
     sseBroadcastId = setInterval(async () => {
       try {
         const localAgents = await getAgents()
-        const envRemotes = getEnvRemoteTargets()
-
-        // Baseline aggregation for cost trend (env remotes only — shared across all users)
-        const baselineAgents = await aggregateAgents(localAgents, envRemotes)
-        const totalCost = baselineAgents.reduce((sum, a) => sum + a.costEstimate, 0)
-        const totalTokens = baselineAgents.reduce((sum, a) => {
-          const u = a.tokenUsage
-          return sum + u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens
-        }, 0)
-        costTrend.push({ t: Date.now(), cost: totalCost, tokens: totalTokens })
-        if (costTrend.length > MAX_TREND_POINTS)
-          costTrend.shift()
-
-        const trendSlice = costTrend.slice(-60)
-
-        // Fan out: each client gets local agents + their own remotes.
-        // Deduplicate: build per-userId payload cache so multiple browser tabs
-        // from the same user don't trigger duplicate remote-agent fetches.
-        const userPayloadCache = new Map<string, string>()
-
-        await Promise.all([...sseClients].map(async (client) => {
-          try {
-            if (client.res.writableEnded)
-              return
-
-            if (!userPayloadCache.has(client.userId)) {
-              const userRemotes = isAuthEnabled()
-                ? listRemoteRegistrationsForUser(client.userId).map(r => ({
-                    url: r.url,
-                    bearerKey: r.bearerKey,
-                    name: r.name,
-                  }))
-                : []
-              const allRemotes = [...envRemotes, ...userRemotes]
-              const agents = await aggregateAgents(localAgents, allRemotes)
-              userPayloadCache.set(client.userId, JSON.stringify({ agents, trend: trendSlice }))
-            }
-
-            const payload = userPayloadCache.get(client.userId)!
-            client.res.write(`data: ${payload}\n\n`)
-          }
-          catch {
-            sseClients.delete(client)
-          }
-        }))
+        updateSnapshot(localAgents)
+        await broadcastAgents(localAgents)
       }
       catch (err) {
         console.error('SSE broadcast error:', err)
@@ -321,10 +371,24 @@ async function start() {
       // failures. enrichTask adds latestStageRunStatus + needsUser, which
       // the kanban cards bind to for their status chip.
       const task = getTaskById(taskId)
-      if (task)
+      if (task) {
         broadcastTaskEvent({ type: 'task_updated', taskId, payload: enrichTask(task) })
-      else
+        if (task.currentStage === 'done') {
+          dispatcher
+            .dispatch({
+              eventType: 'completed',
+              title: `Task "${task.title}" completed`,
+              body: 'Pipeline task reached done stage',
+              taskId,
+              taskSlug: task.slug,
+              severity: 'info',
+            })
+            .catch(err => consola.warn('[notifications] dispatch failed:', (err as Error).message))
+        }
+      }
+      else {
         broadcastTaskEvent({ type: 'stage_run_updated', taskId, payload: info })
+      }
     },
     onStageFailed: (taskId, info) => {
       // Push a task_updated event so the SSE clients re-fetch and see
@@ -351,6 +415,9 @@ async function start() {
 
   // API key management routes (browser-facing, CSRF-guarded, no bearer token required)
   app.use('/api', createApiKeyRouter({ rejectCrossOrigin }))
+
+  // Web Push VAPID subscription management routes
+  app.use('/api', createWebPushRouter({ rejectCrossOrigin }))
 
   // Permission preset management routes (list/delete remembered tool grants per project)
   app.use('/api', createPresetRouter(rejectCrossOrigin))
@@ -389,6 +456,15 @@ async function start() {
       broadcastTaskEvent({ type: 'task_deleted', taskId })
     },
   ))
+
+  // Historical session import routes
+  app.use('/api', createHistoryRouter({ rejectCrossOrigin }))
+
+  // Memory file browser routes
+  app.use('/api', createMemoryRouter({ rejectCrossOrigin }))
+
+  // Full-text search across tasks (FTS5) and agents (in-memory)
+  app.use('/api', createSearchRouter({ getAgents: getSnapshot }))
 
   // Agent routes (REST endpoints — non-SSE; SSE stream stays above)
   app.use('/api', createAgentRouter({ spawnManager, requireApiToken, rejectCrossOrigin }))

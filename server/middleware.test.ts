@@ -30,12 +30,12 @@ function makeReq(headers: Record<string, string> = {}): Partial<Request> {
 // requireApiToken
 // ---------------------------------------------------------------------------
 
-describe('requireApiToken — fail-open (no env var)', () => {
+describe('requireApiToken — no env var (generated token active)', () => {
   afterEach(() => {
     delete process.env.DASHBOARD_API_TOKEN
   })
 
-  it('calls next() when DASHBOARD_API_TOKEN is not set', () => {
+  it('returns 401 when DASHBOARD_API_TOKEN is not set and no Authorization header provided', () => {
     delete process.env.DASHBOARD_API_TOKEN
     const next = mock()
     const req = makeReq()
@@ -43,8 +43,8 @@ describe('requireApiToken — fail-open (no env var)', () => {
 
     requireApiToken(req as Request, res as unknown as Response, next as unknown as NextFunction)
 
-    expect(next).toHaveBeenCalledTimes(1)
-    expect(res._statusCode).toBe(0) // no status set
+    expect(next).toHaveBeenCalledTimes(0)
+    expect(res._statusCode).toBe(401)
   })
 })
 

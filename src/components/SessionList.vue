@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { shortModel } from '../utils/format'
+import { formatCost, shortModel } from '../utils/format'
 import AppModal from './ui/AppModal.vue'
 
 interface SessionInfo {
@@ -191,7 +191,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <pre v-if="s.lastResponse" class="text-[11px] font-mono text-slate-400 dark:text-slate-600 bg-white dark:bg-slate-900 border-l-2 border-slate-200 dark:border-slate-700 px-2 py-1.5 mb-1.5 rounded-r leading-relaxed whitespace-pre-wrap break-words max-h-[5.5lh] overflow-y-auto">{{ s.lastResponse }}</pre>
             <div class="flex gap-1.5 mb-2">
               <span v-if="s.model" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 uppercase tracking-wide font-mono">{{ shortModel(s.model) }}</span>
-              <span v-if="s.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-green-600 dark:text-green-400 font-mono">${{ s.costEstimate.toFixed(2) }}</span>
+              <span v-if="s.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-green-600 dark:text-green-400 font-mono">{{ formatCost(s.costEstimate) }}</span>
               <span class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 font-mono" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
             </div>
             <div class="flex gap-1.5">

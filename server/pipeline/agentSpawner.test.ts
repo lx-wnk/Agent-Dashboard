@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { AVAILABLE_MODELS } from '../../src/utils/models.js'
 import {
   buildAllowList,
   buildSpawnArgs,
@@ -158,9 +159,11 @@ describe('buildSpawnArgs', () => {
   })
 
   it('includes --model when set', () => {
-    const args = buildSpawnArgs({ ...baseOpts, model: 'claude-opus-4-6' })
+    const model = 'claude-opus-4-6'
+    expect(AVAILABLE_MODELS as readonly string[]).toContain(model)
+    const args = buildSpawnArgs({ ...baseOpts, model })
     const idx = args.indexOf('--model')
-    expect(args[idx + 1]).toBe('claude-opus-4-6')
+    expect(args[idx + 1]).toBe(model)
   })
 
   it('includes --system-prompt when set and caps at 10000 chars', () => {
@@ -171,10 +174,12 @@ describe('buildSpawnArgs', () => {
   })
 
   it('orders args as --resume, -p, --model, --system-prompt', () => {
+    const model = 'claude-haiku-4-5'
+    expect(AVAILABLE_MODELS as readonly string[]).toContain(model)
     const args = buildSpawnArgs({
       ...baseOpts,
       resumeSessionId: 'sess',
-      model: 'claude-haiku-4-5',
+      model,
       systemPrompt: 'you are an agent',
     })
     // --resume comes first, then -p, then --model, then --system-prompt

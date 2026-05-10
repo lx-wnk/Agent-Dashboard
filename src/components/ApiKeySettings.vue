@@ -14,7 +14,7 @@ const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -110,8 +110,46 @@ async function resetPresets(cwd: string) {
 
 watch(activeSection, (val) => {
   if (val === 'permissionPresets')
-    loadPresets()
+    void loadPresets()
+  if (val === 'analytics')
+    void loadPatterns()
 })
+
+// --- Analytics patterns ---
+const patterns = ref<Array<{ tools: string, frequency: number }>>([])
+const patternsLoading = ref(false)
+const patternsError = ref<string | null>(null)
+
+async function loadPatterns() {
+  patternsError.value = null
+  try {
+    const res = await fetch('/api/analytics/patterns')
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    const data = await res.json() as { patterns: typeof patterns.value }
+    patterns.value = data.patterns
+  }
+  catch (e) {
+    patternsError.value = e instanceof Error ? e.message : 'Failed to load'
+  }
+}
+
+async function refreshPatterns() {
+  patternsLoading.value = true
+  patternsError.value = null
+  try {
+    const res = await fetch('/api/analytics/patterns/refresh', { method: 'POST' })
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    await loadPatterns()
+  }
+  catch (e) {
+    patternsError.value = e instanceof Error ? e.message : 'Failed to refresh'
+  }
+  finally {
+    patternsLoading.value = false
+  }
+}
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
@@ -225,6 +263,46 @@ function formatDate(iso: string | null) {
     return '—'
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
+
+// --- Historical data import ---
+const importStatus = ref('')
+const isImporting = ref(false)
+let importEs: EventSource | null = null
+
+onUnmounted(() => {
+  importEs?.close()
+})
+
+async function startImport() {
+  if (isImporting.value)
+    return
+  isImporting.value = true
+  importStatus.value = 'Starting…'
+  const res = await fetch('/api/history/import', { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    importStatus.value = `Error: ${(body as { error?: string }).error ?? res.statusText}`
+    isImporting.value = false
+    return
+  }
+  importEs = new EventSource('/api/history/import/status')
+  importEs.onmessage = (ev) => {
+    const p = JSON.parse(ev.data) as { total: number, processed: number, done: boolean }
+    importStatus.value = `${p.processed}/${p.total} processed`
+    if (p.done) {
+      importStatus.value = `Import complete — ${p.processed} sessions processed`
+      importEs?.close()
+      importEs = null
+      isImporting.value = false
+    }
+  }
+  importEs.onerror = () => {
+    importStatus.value = 'Connection lost — import may still be running'
+    importEs?.close()
+    importEs = null
+    isImporting.value = false
+  }
+}
 </script>
 
 <template>
@@ -287,6 +365,18 @@ function formatDate(iso: string | null) {
               @click="activeSection = 'permissionPresets'"
             >
               <span class="text-sm flex-shrink-0">⚿</span> Permissions
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'analytics'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'analytics'"
+            >
+              <span class="text-sm flex-shrink-0">📊</span> Analytics
             </button>
           </li>
         </ul>
@@ -471,6 +561,22 @@ function formatDate(iso: string | null) {
               </tr>
             </tbody>
           </table>
+          <div class="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+            <h3 class="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">
+              Historical Data
+            </h3>
+            <button
+              type="button"
+              :disabled="isImporting"
+              class="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              @click="startImport"
+            >
+              Import Session History
+            </button>
+            <p v-if="importStatus" class="text-xs text-slate-500 mt-1">
+              {{ importStatus }}
+            </p>
+          </div>
         </section>
 
         <!-- Remotes -->
@@ -533,6 +639,40 @@ function formatDate(iso: string | null) {
               </tr>
             </tbody>
           </table>
+        </section>
+
+        <!-- Analytics -->
+        <section v-else-if="activeSection === 'analytics'">
+          <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+            Workflow Patterns
+          </h3>
+          <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
+            Top 3-tool sequences discovered across all sessions.
+          </p>
+          <p v-if="patternsError" class="text-xs text-red-500 mb-3">
+            {{ patternsError }}
+          </p>
+          <div v-else-if="patterns.length === 0" class="text-sm text-slate-400 dark:text-slate-600">
+            No patterns discovered yet.
+          </div>
+          <ul v-else class="space-y-1 mb-4">
+            <li
+              v-for="p in patterns"
+              :key="p.tools"
+              class="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded flex justify-between"
+            >
+              <span class="text-slate-700 dark:text-slate-300">{{ p.tools }}</span>
+              <span class="text-slate-400">×{{ p.frequency }}</span>
+            </li>
+          </ul>
+          <button
+            type="button"
+            class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="patternsLoading"
+            @click="refreshPatterns"
+          >
+            {{ patternsLoading ? 'Scanning…' : 'Refresh' }}
+          </button>
         </section>
       </div>
     </div>

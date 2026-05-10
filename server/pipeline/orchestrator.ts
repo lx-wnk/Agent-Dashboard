@@ -16,6 +16,7 @@ import {
   getStageRunByIteration,
   listPendingStageRuns,
   listRunningStageRuns,
+  sumCompletedCostCents,
   updateStageRun,
 } from '../db/stageRunsRepo.js'
 import { getDependentsOf, hasOtherBlockingDeps } from '../db/taskDependenciesRepo.js'
@@ -893,6 +894,30 @@ export class PipelineOrchestrator {
         const hasPendingPerms = listPendingPermissionRequests(run.id).length > 0
         if (hasPendingPerms)
           continue
+
+        // Cost budget enforcement: kill and fail the current stage run if the
+        // task has already spent more than its configured cost ceiling.
+        if (task.costBudgetCents != null && task.costBudgetCents > 0) {
+          const completedCents = sumCompletedCostCents(task.id)
+          if (completedCents > task.costBudgetCents) {
+            consola.warn(
+              `[orchestrator] task ${task.id} exceeded cost budget`
+              + ` (${completedCents}¢ > ${task.costBudgetCents}¢) — killing PID ${run.pid}`,
+            )
+            try {
+              process.kill(run.pid!, 'SIGTERM')
+            }
+            catch { /* race with natural process exit */ }
+            const fresh2 = getStageRunById(run.id)
+            if (fresh2 && fresh2.status === 'running') {
+              this.applyTransition(task, fresh2, {
+                kind: 'fail',
+                error: `cost budget exceeded: ${completedCents}¢ spent, limit ${task.costBudgetCents}¢`,
+              })
+            }
+            continue
+          }
+        }
 
         // Enforce stage timeout: a PID-alive run that has exceeded the
         // configured limit is killed and failed so it doesn't hold a runner

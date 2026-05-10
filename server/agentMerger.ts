@@ -1,9 +1,12 @@
 import type { Agent, TokenUsage } from '../src/types.js'
 import { basename } from 'node:path'
+import { STATUS_ORDER } from '../src/utils/agentSort.js'
 import { getChannelMap } from './channelDiscovery.js'
+import { getRecentAvgFleetCost } from './costTrendCache.js'
 import { findTasksBySessionIds } from './db/stageRunsRepo.js'
+import { computeHealthScore } from './healthScore.js'
 import { findSessionForProject } from './jsonlParser.js'
-import { estimateCost } from './pricing.js'
+import { estimateCacheCreationCost, estimateCacheReadCost, estimateCost } from './pricing.js'
 import { scanProcesses } from './processScanner.js'
 
 const ACTIVE_THRESHOLD = 30_000 // 30s
@@ -48,12 +51,22 @@ export async function getAgents(): Promise<Agent[]> {
     processes.map(proc => findSessionForProject(proc.cwd, proc.uptime)),
   )
 
+  // Fleet-level baseline divided by agent count gives per-agent average cost.
+  // `agent_cost_trend.cost` stores the sum across all running agents at each tick.
+  const agentCount = Math.max(processes.length, 1)
+  const recentAvgCostPerAgent = getRecentAvgFleetCost(7 * 24 * 60 * 60 * 1000) / agentCount
+
   const agents: Agent[] = processes.map((proc, i) => {
     const session = sessions[i]
 
     const tokenUsage: TokenUsage = session?.tokenUsage
       ? { ...session.tokenUsage }
       : { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 }
+
+    const usageSource = session?.tokenUsage || tokenUsage
+    const model = session?.model || null
+    const costEstimate = estimateCost(usageSource, model)
+    const tasks = (session?.tasks || []) as Agent['tasks']
 
     return {
       pid: proc.pid,
@@ -69,14 +82,25 @@ export async function getAgents(): Promise<Agent[]> {
       lastActivity: session?.lastActivity || new Date().toISOString(),
       currentAction: session?.currentAction || null,
       lastTools: session?.lastTools || [],
-      tasks: (session?.tasks || []) as Agent['tasks'],
+      tasks,
       subagents: (session?.subagents || []).map(sa => ({
         ...sa,
         type: sa.type.length > 60 ? `${sa.type.substring(0, 60)}...` : sa.type,
       })),
       tokenUsage,
-      costEstimate: estimateCost(session?.tokenUsage || tokenUsage, session?.model || null),
-      model: session?.model || null,
+      costEstimate,
+      cacheCreationCostEstimate: estimateCacheCreationCost(usageSource, model),
+      cacheReadCostEstimate: estimateCacheReadCost(usageSource, model),
+      healthScore: computeHealthScore({
+        completedTasks: tasks.filter(t => t.status === 'completed').length,
+        totalTasks: tasks.length,
+        cacheReadTokens: tokenUsage.cacheReadTokens,
+        inputTokens: tokenUsage.inputTokens,
+        hasError: (session?.meta?.toolErrors ?? 0) > 0,
+        costEstimate,
+        recentAvgCost: recentAvgCostPerAgent,
+      }),
+      model,
       codeVersion: session?.codeVersion || null,
       conversationTurns: session?.conversationTurns || 0,
       toolCounts: session?.toolCounts || {},
@@ -84,6 +108,9 @@ export async function getAgents(): Promise<Agent[]> {
       lastOutput: session?.lastOutput ?? null,
       lastBtw: session?.lastBtw ?? null,
       channelAvailable: false, // set after channel discovery below
+      convergenceAlert: session?.convergenceAlert ?? false,
+      convergenceToolName: session?.convergenceToolName ?? null,
+      errorState: session?.errorState ?? null,
     }
   })
 
@@ -106,8 +133,7 @@ export async function getAgents(): Promise<Agent[]> {
 
   // Sort: active first, then by uptime descending
   agents.sort((a, b) => {
-    const statusOrder = { active: 0, waiting: 1, idle: 2 }
-    const diff = statusOrder[a.status] - statusOrder[b.status]
+    const diff = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
     if (diff !== 0)
       return diff
     return b.uptime - a.uptime

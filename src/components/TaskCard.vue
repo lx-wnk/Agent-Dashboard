@@ -84,9 +84,9 @@ function stageLabel(stage: PipelineStage): string {
       >⚠ Needs Permission</span>
       <span
         v-if="task.blockedByPendingPermissions"
-        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-700/60"
+        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
         title="Respawn blocked: previous run still has unresolved permission requests"
-      >⏸ Respawn Blocked</span>
+      >&#9888; blocked by permissions</span>
       <span v-if="task.worktreePath" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Has worktree">WT</span>
       <span v-if="task.sourceBranch" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700">{{ task.sourceBranch }}</span>
       <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Follow-up task">↳</span>

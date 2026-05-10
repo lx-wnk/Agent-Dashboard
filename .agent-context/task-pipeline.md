@@ -94,6 +94,7 @@ server/index.ts  ← composition root (only place that constructs concrete insta
 4. `notifications/*` — imports `db/notificationConfigRepo` and `src/types.ts` only. Adapters are private to `dispatcher.ts`.
 5. `routes/*` and `mcp/*` — may import from `db/*`, `services/*`, `src/types.ts`, and type-only from `pipeline/orchestrator.ts` and `notifications/dispatcher.ts`. Runtime instances of the orchestrator and dispatcher are injected from `server/index.ts`. Runtime imports from `pipeline/*` are limited to specific named helpers that do not touch the state machine (currently: `resolvedProjectDir` from `pipeline/sessionOutputReader.ts`, used by `routes/taskRoutes.ts`); never import the orchestrator, stage handlers, completion detector, or any other state-machine internals at runtime.
 6. `server/index.ts` is the **only** file that instantiates concrete services. It is the composition root.
+7. `analytics/*` — stateless analyzers. Imports `db/*`, `paths`, `jsonlParser`, `node:*` only. Never imports `pipeline/`, `notifications/`, `routes/`, or `services/`. Called from `routes/*` and composition root only.
 
 ## Why `pipeline/` Does Not Import `notifications/`
 

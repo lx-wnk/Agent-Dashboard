@@ -2,14 +2,18 @@ import type { Router as ExpressRouter, Request, RequestHandler, Response } from 
 import type { SpawnManager } from '../spawnManager.js'
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { consola } from 'consola'
 import { Router } from 'express'
 import { getAgents } from '../agentMerger.js'
+import { discoverPatterns } from '../analytics/ngrams.js'
 import { isAuthEnabled } from '../auth/requireAuth.js'
 import { getChannelMap } from '../channelDiscovery.js'
 import { UUID_RE } from '../constants.js'
+import { getDb } from '../db/client.js'
+import { getConfig } from '../db/notificationConfigRepo.js'
 import { findStageRunBySessionId } from '../db/stageRunsRepo.js'
 import { getTaskById } from '../db/tasksRepo.js'
 import { parseFullSession } from '../jsonlParser.js'
@@ -229,6 +233,22 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
     }
   })
 
+  router.get('/sessions/:sessionId/timeline', async (req, res) => {
+    const { sessionId } = req.params
+    if (!UUID_RE.test(sessionId)) {
+      res.status(400).json({ error: 'Invalid sessionId format' })
+      return
+    }
+    try {
+      const messages = await parseFullSession(sessionId, false)
+      const toolCalls = messages.filter(m => m.role === 'tool_call' && m.timestamp)
+      res.json({ toolCalls })
+    }
+    catch {
+      res.status(500).json({ error: 'Failed to read session timeline' })
+    }
+  })
+
   // Get replies from a specific agent
   router.get('/agents/:sessionId/replies', async (req, res) => {
     try {
@@ -253,6 +273,131 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
     catch (err) {
       console.error('Error fetching replies:', err)
       res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  router.get('/analytics/heatmap', (_req, res) => {
+    try {
+      const db = getDb()
+      const rows = db.prepare(`
+        SELECT
+          CAST(strftime('%w', datetime(t/1000, 'unixepoch')) AS INTEGER) AS dow,
+          CAST(strftime('%H', datetime(t/1000, 'unixepoch')) AS INTEGER) AS hour,
+          SUM(cost) AS total_cost
+        FROM agent_cost_trend
+        GROUP BY dow, hour
+      `).all() as Array<{ dow: number, hour: number, total_cost: number }>
+
+      const grid: number[][] = Array.from({ length: 7 }, () => Array.from<number>({ length: 24 }).fill(0))
+      for (const row of rows)
+        grid[row.dow][row.hour] = row.total_cost
+
+      res.json({ grid })
+    }
+    catch {
+      res.status(500).json({ error: 'Failed to compute heatmap' })
+    }
+  })
+
+  router.get('/analytics/cost-forecast', (_req, res) => {
+    try {
+      const db = getDb()
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+      const rows = db.prepare(
+        'SELECT t, cost FROM agent_cost_trend WHERE t >= ? ORDER BY t ASC',
+      ).all(cutoff) as Array<{ t: number, cost: number }>
+
+      let cumCost = 0
+      const points: Array<{ t: number, y: number }> = rows.map((r) => {
+        cumCost += r.cost
+        return { t: r.t, y: cumCost }
+      })
+
+      let slope = 0
+      let intercept = 0
+      if (points.length >= 2) {
+        const n = points.length
+        const sumX = points.reduce((s, p) => s + p.t, 0)
+        const sumY = points.reduce((s, p) => s + p.y, 0)
+        const sumXY = points.reduce((s, p) => s + p.t * p.y, 0)
+        const sumXX = points.reduce((s, p) => s + p.t * p.t, 0)
+        slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX)
+        intercept = (sumY - slope * sumX) / n
+      }
+
+      const now = Date.now()
+      const forecast = Array.from({ length: 7 }, (_, i) => {
+        const t = now + (i + 1) * 24 * 60 * 60 * 1000
+        return { t, projectedCost: Math.max(0, slope * t + intercept) }
+      })
+
+      const warnCents = Number(getConfig('cost_forecast_warn_cents') ?? '1000')
+      const critCents = Number(getConfig('cost_forecast_critical_cents') ?? '5000')
+      const projectedCents = (forecast.at(-1)?.projectedCost ?? 0) * 100
+
+      const alerts: Array<{ level: 'warn' | 'critical', message: string }> = []
+      if (projectedCents >= critCents)
+        alerts.push({ level: 'critical', message: `Projected 7-day cost $${(projectedCents / 100).toFixed(2)} exceeds critical threshold $${(critCents / 100).toFixed(2)}` })
+      else if (projectedCents >= warnCents)
+        alerts.push({ level: 'warn', message: `Projected 7-day cost $${(projectedCents / 100).toFixed(2)} exceeds warning threshold $${(warnCents / 100).toFixed(2)}` })
+
+      res.json({ trend: points, forecast, alerts })
+    }
+    catch {
+      res.status(500).json({ error: 'Failed to compute forecast' })
+    }
+  })
+
+  router.get('/analytics/patterns', (_req, res) => {
+    try {
+      const db = getDb()
+      const rows = db.prepare(
+        'SELECT tools, frequency, last_seen_at FROM workflow_patterns ORDER BY frequency DESC LIMIT 20',
+      ).all() as Array<{ tools: string, frequency: number, last_seen_at: string }>
+      res.json({ patterns: rows })
+    }
+    catch {
+      res.status(500).json({ error: 'Failed to load patterns' })
+    }
+  })
+
+  router.post('/analytics/patterns/refresh', requireApiToken, async (req, res) => {
+    if (rejectCrossOrigin(req, res))
+      return
+    try {
+      await discoverPatterns(getDb())
+      res.json({ ok: true })
+    }
+    catch {
+      res.status(500).json({ error: 'Pattern discovery failed' })
+    }
+  })
+
+  router.get('/quota', async (_req, res) => {
+    const usageDir = join(homedir(), '.claude', 'usage-data')
+    try {
+      const files = await readdir(usageDir)
+      const jsonFiles = files.filter(f => f.endsWith('.json')).sort().reverse()
+      if (jsonFiles.length === 0) {
+        res.json({ limit: null })
+        return
+      }
+      const raw = await readFile(join(usageDir, jsonFiles[0]), 'utf8')
+      const data = JSON.parse(raw) as {
+        periodStart?: string
+        periodEnd?: string
+        tokensUsed?: number
+        limit?: number | null
+      }
+      res.json({
+        periodStart: data.periodStart ?? null,
+        periodEnd: data.periodEnd ?? null,
+        tokensUsed: data.tokensUsed ?? 0,
+        limit: data.limit ?? null,
+      })
+    }
+    catch {
+      res.json({ limit: null })
     }
   })
 

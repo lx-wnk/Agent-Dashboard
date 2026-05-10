@@ -17,6 +17,9 @@ export interface SessionMeta {
   firstPrompt: string | null
 }
 
+export const AGENT_STATUSES = ['active', 'waiting', 'idle'] as const
+export type AgentStatus = typeof AGENT_STATUSES[number]
+
 export interface Agent {
   pid: number
   sessionId: string
@@ -24,7 +27,7 @@ export interface Agent {
   projectName: string
   cwd: string
   entrypoint: 'cli' | 'desktop' | 'unknown'
-  status: 'active' | 'waiting' | 'idle'
+  status: AgentStatus
   uptime: number
   lastActivity: string
   currentAction: string | null
@@ -33,6 +36,9 @@ export interface Agent {
   subagents: SubAgent[]
   tokenUsage: TokenUsage
   costEstimate: number
+  cacheCreationCostEstimate: number
+  cacheReadCostEstimate: number
+  healthScore: number
   model: string | null
   codeVersion: string | null
   conversationTurns: number
@@ -45,6 +51,12 @@ export interface Agent {
   /** Set when this agent session is running as part of a pipeline task stage. */
   pipelineTaskId?: string
   pipelineTaskTitle?: string
+  /** True when the last 5 tool calls are identical (same tool name and input). */
+  convergenceAlert: boolean
+  /** The tool name that triggered convergence detection; null otherwise. */
+  convergenceToolName: string | null
+  /** Non-null when the agent's JSONL contains a recognisable error signature. */
+  errorState: 'quota_exhausted' | 'rate_limited' | 'auth_failed' | null
 }
 
 export interface ChannelReply {
@@ -58,6 +70,25 @@ export interface SubAgent {
   status: 'active' | 'completed'
   currentAction: string | null
   sessionFile: string
+}
+
+export interface GitStatusLastCommit {
+  hash: string
+  shortHash: string
+  message: string
+  author: string
+  date: string
+}
+
+export interface GitStatus {
+  branch: string
+  aheadCount: number
+  behindCount: number
+  staged: string[]
+  unstaged: string[]
+  untracked: string[]
+  lastCommit: GitStatusLastCommit | null
+  remoteUrl: string | null
 }
 
 export interface TaskInfo {
@@ -214,6 +245,8 @@ export interface PermissionRequest {
   requestedAt: string
   resolvedAt: string | null
   outcome: 'granted' | 'denied' | 'timeout' | null
+  /** Total requests for this (tool, pattern) across all stage_runs of this task. Computed at read time. */
+  reRequestCount?: number
 }
 
 // `FeedbackStage` is the subset of stages on which user-authored feedback
@@ -252,7 +285,7 @@ export type NotificationEventType
     | 'budget_exceeded'
     | 'iteration_warning'
 
-export type NotificationChannel = 'email' | 'webhook' | 'browser' | 'system'
+export type NotificationChannel = 'browser' | 'email' | 'system' | 'webpush' | 'webhook'
 
 export interface NotificationPreference {
   eventType: NotificationEventType

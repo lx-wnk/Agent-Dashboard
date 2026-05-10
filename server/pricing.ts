@@ -22,3 +22,19 @@ export function estimateCost(usage: Partial<TokenUsage> & Pick<TokenUsage, 'inpu
     + ((usage.cacheCreationTokens || 0) * pricing.cacheCreate) / m
   )
 }
+
+export function estimateCacheCreationCost(
+  usage: Pick<TokenUsage, 'cacheCreationTokens'>,
+  model: string | null,
+): number {
+  const pricing = (model && MODEL_PRICING[model]) || MODEL_PRICING[DEFAULT_MODEL]
+  return (usage.cacheCreationTokens * pricing.cacheCreate) / 1_000_000
+}
+
+export function estimateCacheReadCost(
+  usage: Pick<TokenUsage, 'cacheReadTokens'>,
+  model: string | null,
+): number {
+  const pricing = (model && MODEL_PRICING[model]) || MODEL_PRICING[DEFAULT_MODEL]
+  return (usage.cacheReadTokens * pricing.cacheRead) / 1_000_000
+}
