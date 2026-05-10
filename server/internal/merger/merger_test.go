@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCalculateStatus(t *testing.T) {

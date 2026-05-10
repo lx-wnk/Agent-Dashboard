@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBroadcaster_SubscribeReceivesData(t *testing.T) {

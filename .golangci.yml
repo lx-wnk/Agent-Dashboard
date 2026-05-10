@@ -1,28 +1,42 @@
-# .golangci.yml
+version: "2"
 linters:
   enable:
-    - govet
-    - staticcheck
-    - errcheck
-    - revive
     - gosec
     - misspell
-    - gofmt
-
-linters-settings:
-  revive:
+    - revive
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: exported
-        disabled: false
-
-issues:
-  exclude-rules:
-    - path: "_test.go"
-      linters: [gosec, errcheck]
-    - path: "wire_gen.go"
-      linters: [all]
-    - path: "ent/"
-      linters: [all]
-
-run:
-  timeout: 5m
+      - linters:
+          - errcheck
+          - gosec
+        path: _test.go
+      - linters:
+          - all
+        path: wire_gen.go
+      - linters:
+          - all
+        path: ent/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

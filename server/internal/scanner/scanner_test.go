@@ -3,8 +3,8 @@ package scanner_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseElapsedTime(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSignAndVerifyJWT(t *testing.T) {

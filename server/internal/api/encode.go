@@ -15,12 +15,3 @@ func encode[T any](w http.ResponseWriter, status int, v T) error {
 	}
 	return nil
 }
-
-// decode reads JSON from r.Body into v.
-func decode[T any](r *http.Request) (T, error) {
-	var v T
-	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
-		return v, fmt.Errorf("%w: %w", ErrBadRequest, err)
-	}
-	return v, nil
-}

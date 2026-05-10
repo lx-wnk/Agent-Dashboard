@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/v2"
 )
 

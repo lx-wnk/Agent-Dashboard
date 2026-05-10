@@ -3,9 +3,9 @@ package parser_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEstimateCost(t *testing.T) {
