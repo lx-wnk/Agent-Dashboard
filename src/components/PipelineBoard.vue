@@ -1,12 +1,43 @@
 <script setup lang="ts">
 import type { PipelineStage, PipelineTask } from '../types'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useTasks } from '../composables/useTasks'
 import TaskCard from './TaskCard.vue'
 
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
-const { tasksByStageMap } = useTasks()
+const { tasks: allTasks, tasksByStageMap } = useTasks()
+
+interface Epic {
+  parent: PipelineTask
+  children: PipelineTask[]
+  doneCount: number
+  totalCount: number
+  completionPct: number
+}
+
+const epics = computed((): Epic[] => {
+  const parentIds = new Set(allTasks.value.filter(t => t.parentTaskId).map(t => t.parentTaskId!))
+  return [...parentIds].map((parentId) => {
+    const parent = allTasks.value.find(t => t.id === parentId)
+    if (!parent)
+      return null
+    const children = allTasks.value.filter(t => t.parentTaskId === parentId)
+    const doneCount = children.filter(c => c.currentStage === 'done').length
+    return {
+      parent,
+      children,
+      doneCount,
+      totalCount: children.length,
+      completionPct: children.length > 0 ? Math.round((doneCount / children.length) * 100) : 0,
+    }
+  }).filter(Boolean) as Epic[]
+})
+
+const epicExpanded = ref<Record<string, boolean>>({})
+function toggleEpic(id: string) {
+  epicExpanded.value[id] = !epicExpanded.value[id]
+}
 
 function exportTasks(format: 'json' | 'csv') {
   window.open(`/api/tasks/export?format=${format}`, '_blank')
@@ -130,6 +161,44 @@ const columnsWithTasks = computed(() =>
           >{{ tasks.length }}</span>
         </div>
         <div class="p-2.5 flex flex-col gap-2 overflow-y-auto">
+          <!-- Epic groups: show for any epic that has children in this column -->
+          <template v-for="epic in epics" :key="epic.parent.id">
+            <div
+              v-if="tasksForColumn(col).some(t => t.parentTaskId === epic.parent.id)"
+              class="mb-2 border border-blue-200 dark:border-blue-800 rounded-lg overflow-hidden"
+            >
+              <button
+                type="button"
+                class="w-full flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-950 text-left"
+                @click="toggleEpic(epic.parent.id)"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" class="flex-shrink-0">
+                  <circle cx="12" cy="12" r="9" fill="none" stroke="#e2e8f0" stroke-width="3" />
+                  <circle
+                    cx="12" cy="12" r="9" fill="none"
+                    stroke="#3b82f6" stroke-width="3"
+                    stroke-dasharray="56.55"
+                    :stroke-dashoffset="56.55 * (1 - epic.completionPct / 100)"
+                    stroke-linecap="round"
+                    transform="rotate(-90 12 12)"
+                  />
+                </svg>
+                <span class="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate flex-1">{{ epic.parent.title }}</span>
+                <span class="text-[10px] text-slate-400 flex-shrink-0">{{ epic.doneCount }}/{{ epic.totalCount }} ({{ epic.completionPct }}%)</span>
+                <span class="text-xs text-slate-400">{{ epicExpanded[epic.parent.id] ? '▲' : '▼' }}</span>
+              </button>
+              <div v-if="epicExpanded[epic.parent.id]" class="pl-3 pr-2 pb-2 pt-1 space-y-1.5">
+                <TaskCard
+                  v-for="child in epic.children.filter(c => tasksForColumn(col).some(t => t.id === c.id))"
+                  :key="child.id"
+                  :task="child"
+                  @select="emit('select', child)"
+                  @open-chat="emit('openChat', child)"
+                />
+              </div>
+            </div>
+          </template>
+          <!-- Standalone tasks (non-epic-child or epic parent rows) -->
           <TaskCard
             v-for="task in tasks"
             :key="task.id"
@@ -137,7 +206,7 @@ const columnsWithTasks = computed(() =>
             @select="(t) => emit('select', t)"
             @open-chat="(t) => emit('openChat', t)"
           />
-          <div v-if="!tasks.length" class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5">
+          <div v-if="!tasks.length && !epics.some(e => tasksForColumn(col).some(t => t.parentTaskId === e.parent.id))" class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5">
             —
           </div>
         </div>
