@@ -30,5 +30,5 @@ func provideRouterDeps(cfg api.RouterConfig, b *sse.Broadcaster) api.RouterDeps 
 }
 
 func provideServer(cfg config.Config, handler http.Handler) *api.Server {
-	return api.NewServer(cfg.Addr(), handler)
+	return api.NewServer(cfg.Addr(), handler, cfg.ShutdownTimeout())
 }

@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -80,6 +81,12 @@ func Load(cfgFile string) (Config, error) {
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return Config{}, fmt.Errorf("config unmarshal: %w", err)
 	}
+
+	if cfg.JWTSecret == "" {
+		slog.Warn("DASHBOARD_JWT_SECRET not set — using insecure default, do not use in production")
+		cfg.JWTSecret = "dev-insecure-secret-change-me"
+	}
+
 	return cfg, nil
 }
 
