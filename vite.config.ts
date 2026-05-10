@@ -77,11 +77,19 @@ export default defineConfig({
     },
   },
   server: {
-    // HMR WebSocket runs on the Express httpServer (shared port, see server/index.ts).
+    port: 5173,
     // Use 127.0.0.1 explicitly — on dual-stack IPv6 systems 'localhost' may resolve
     // to ::1 first, causing ECONNREFUSED when the server only binds to 127.0.0.1.
     proxy: {
-      '/api': `http://127.0.0.1:${DASHBOARD_PORT}`,
+      '/api': {
+        target: `http://127.0.0.1:${DASHBOARD_PORT}`,
+        changeOrigin: true,
+        ws: true,
+      },
+      '/auth': {
+        target: `http://127.0.0.1:${DASHBOARD_PORT}`,
+        changeOrigin: true,
+      },
     },
   },
 })
