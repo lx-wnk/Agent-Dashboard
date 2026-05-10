@@ -99,6 +99,23 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
 
 const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
 const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
+
+interface QuotaInfo {
+  periodStart: string | null
+  periodEnd: string | null
+  tokensUsed: number
+  limit: number | null
+}
+
+const quota = ref<QuotaInfo | null>(null)
+
+async function fetchQuota() {
+  const res = await fetch('/api/quota')
+  if (res.ok)
+    quota.value = await res.json() as QuotaInfo
+}
+
+onMounted(fetchQuota)
 </script>
 
 <template>
@@ -114,6 +131,21 @@ const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTo
       </span>
       <span v-if="totalCost > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">${{ totalCost.toFixed(2) }}</span>
       <span v-if="totalTokens > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">{{ formatTokens(totalTokens) }} tokens</span>
+      <div v-if="quota && quota.limit" class="flex items-center gap-1.5" :title="`${quota.tokensUsed.toLocaleString()} / ${quota.limit.toLocaleString()} tokens`">
+        <span class="text-[10px] text-slate-400">Quota</span>
+        <div class="w-20 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+          <div
+            class="h-full rounded-full transition-all"
+            :class="{
+              'bg-red-500': quota.tokensUsed / quota.limit > 0.9,
+              'bg-yellow-500': quota.tokensUsed / quota.limit > 0.7 && quota.tokensUsed / quota.limit <= 0.9,
+              'bg-green-500': quota.tokensUsed / quota.limit <= 0.7,
+            }"
+            :style="{ width: `${Math.min(100, Math.round(quota.tokensUsed / quota.limit * 100))}%` }"
+          />
+        </div>
+        <span class="text-[10px] text-slate-400">{{ Math.round(quota.tokensUsed / quota.limit * 100) }}%</span>
+      </div>
       <input
         v-model="searchQuery"
         type="text"

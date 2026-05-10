@@ -2,7 +2,8 @@ import type { Router as ExpressRouter, Request, RequestHandler, Response } from 
 import type { SpawnManager } from '../spawnManager.js'
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { consola } from 'consola'
 import { Router } from 'express'
@@ -369,6 +370,34 @@ export function createAgentRouter({ spawnManager, requireApiToken, rejectCrossOr
     }
     catch {
       res.status(500).json({ error: 'Pattern discovery failed' })
+    }
+  })
+
+  router.get('/quota', async (_req, res) => {
+    const usageDir = join(homedir(), '.claude', 'usage-data')
+    try {
+      const files = await readdir(usageDir)
+      const jsonFiles = files.filter(f => f.endsWith('.json')).sort().reverse()
+      if (jsonFiles.length === 0) {
+        res.json({ limit: null })
+        return
+      }
+      const raw = await readFile(join(usageDir, jsonFiles[0]), 'utf8')
+      const data = JSON.parse(raw) as {
+        periodStart?: string
+        periodEnd?: string
+        tokensUsed?: number
+        limit?: number | null
+      }
+      res.json({
+        periodStart: data.periodStart ?? null,
+        periodEnd: data.periodEnd ?? null,
+        tokensUsed: data.tokensUsed ?? 0,
+        limit: data.limit ?? null,
+      })
+    }
+    catch {
+      res.json({ limit: null })
     }
   })
 
