@@ -13,8 +13,13 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/user"
 )
 
@@ -76,10 +81,15 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			apikey.Table:         apikey.ValidColumn,
-			pipelineconfig.Table: pipelineconfig.ValidColumn,
-			task.Table:           task.ValidColumn,
-			user.Table:           user.ValidColumn,
+			apikey.Table:            apikey.ValidColumn,
+			auditlog.Table:          auditlog.ValidColumn,
+			permissionrequest.Table: permissionrequest.ValidColumn,
+			pipelineconfig.Table:    pipelineconfig.ValidColumn,
+			stagerun.Table:          stagerun.ValidColumn,
+			task.Table:              task.ValidColumn,
+			taskdependency.Table:    taskdependency.ValidColumn,
+			taskpermission.Table:    taskpermission.ValidColumn,
+			user.Table:              user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

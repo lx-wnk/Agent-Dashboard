@@ -31,6 +31,78 @@ var (
 			},
 		},
 	}
+	// AuditLogsColumns holds the columns for the "audit_logs" table.
+	AuditLogsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "actor", Type: field.TypeString},
+		{Name: "action", Type: field.TypeString},
+		{Name: "details", Type: field.TypeJSON, Nullable: true},
+		{Name: "timestamp", Type: field.TypeTime},
+		{Name: "task_id", Type: field.TypeString},
+	}
+	// AuditLogsTable holds the schema information for the "audit_logs" table.
+	AuditLogsTable = &schema.Table{
+		Name:       "audit_logs",
+		Columns:    AuditLogsColumns,
+		PrimaryKey: []*schema.Column{AuditLogsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "audit_logs_tasks_audit_logs",
+				Columns:    []*schema.Column{AuditLogsColumns[5]},
+				RefColumns: []*schema.Column{TasksColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "auditlog_task_id",
+				Unique:  false,
+				Columns: []*schema.Column{AuditLogsColumns[5]},
+			},
+			{
+				Name:    "auditlog_timestamp",
+				Unique:  false,
+				Columns: []*schema.Column{AuditLogsColumns[4]},
+			},
+		},
+	}
+	// PermissionRequestsColumns holds the columns for the "permission_requests" table.
+	PermissionRequestsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "tool", Type: field.TypeString},
+		{Name: "pattern", Type: field.TypeString, Nullable: true},
+		{Name: "reason", Type: field.TypeString, Nullable: true},
+		{Name: "outcome", Type: field.TypeString, Nullable: true},
+		{Name: "requested_at", Type: field.TypeTime},
+		{Name: "resolved_at", Type: field.TypeTime, Nullable: true},
+		{Name: "stage_run_id", Type: field.TypeString},
+	}
+	// PermissionRequestsTable holds the schema information for the "permission_requests" table.
+	PermissionRequestsTable = &schema.Table{
+		Name:       "permission_requests",
+		Columns:    PermissionRequestsColumns,
+		PrimaryKey: []*schema.Column{PermissionRequestsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "permission_requests_stage_runs_permission_requests",
+				Columns:    []*schema.Column{PermissionRequestsColumns[7]},
+				RefColumns: []*schema.Column{StageRunsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "permissionrequest_stage_run_id",
+				Unique:  false,
+				Columns: []*schema.Column{PermissionRequestsColumns[7]},
+			},
+			{
+				Name:    "permissionrequest_outcome",
+				Unique:  false,
+				Columns: []*schema.Column{PermissionRequestsColumns[4]},
+			},
+		},
+	}
 	// PipelineConfigsColumns holds the columns for the "pipeline_configs" table.
 	PipelineConfigsColumns = []*schema.Column{
 		{Name: "key", Type: field.TypeString},
@@ -42,15 +114,75 @@ var (
 		Columns:    PipelineConfigsColumns,
 		PrimaryKey: []*schema.Column{PipelineConfigsColumns[0]},
 	}
+	// StageRunsColumns holds the columns for the "stage_runs" table.
+	StageRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "stage", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString, Nullable: true},
+		{Name: "session_name", Type: field.TypeString, Nullable: true},
+		{Name: "pid", Type: field.TypeInt, Nullable: true},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "iteration", Type: field.TypeInt, Default: 0},
+		{Name: "output", Type: field.TypeJSON, Nullable: true},
+		{Name: "tokens_used", Type: field.TypeInt, Default: 0},
+		{Name: "cost_cents", Type: field.TypeInt, Default: 0},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "ended_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_grant_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "task_id", Type: field.TypeString},
+	}
+	// StageRunsTable holds the schema information for the "stage_runs" table.
+	StageRunsTable = &schema.Table{
+		Name:       "stage_runs",
+		Columns:    StageRunsColumns,
+		PrimaryKey: []*schema.Column{StageRunsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "stage_runs_tasks_stage_runs",
+				Columns:    []*schema.Column{StageRunsColumns[14]},
+				RefColumns: []*schema.Column{TasksColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "stagerun_task_id",
+				Unique:  false,
+				Columns: []*schema.Column{StageRunsColumns[14]},
+			},
+			{
+				Name:    "stagerun_status",
+				Unique:  false,
+				Columns: []*schema.Column{StageRunsColumns[5]},
+			},
+			{
+				Name:    "stagerun_task_id_stage_iteration",
+				Unique:  false,
+				Columns: []*schema.Column{StageRunsColumns[14], StageRunsColumns[1], StageRunsColumns[6]},
+			},
+		},
+	}
 	// TasksColumns holds the columns for the "tasks" table.
 	TasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "slug", Type: field.TypeString, Unique: true},
-		{Name: "title", Type: field.TypeString},
+		{Name: "title", Type: field.TypeString, Size: 200},
 		{Name: "description", Type: field.TypeString, Nullable: true},
-		{Name: "cwd", Type: field.TypeString},
+		{Name: "cwd", Type: field.TypeString, Size: 4096},
+		{Name: "worktree_path", Type: field.TypeString, Nullable: true},
+		{Name: "source_branch", Type: field.TypeString, Nullable: true},
+		{Name: "target_branch", Type: field.TypeString, Nullable: true},
 		{Name: "current_stage", Type: field.TypeString, Default: "concept"},
 		{Name: "priority", Type: field.TypeString, Default: "medium"},
+		{Name: "user_id", Type: field.TypeString, Nullable: true},
+		{Name: "parent_task_id", Type: field.TypeString, Nullable: true},
+		{Name: "max_iterations", Type: field.TypeInt, Default: 20},
+		{Name: "token_budget", Type: field.TypeInt, Nullable: true},
+		{Name: "cost_budget_cents", Type: field.TypeInt, Nullable: true},
+		{Name: "stage_timeout_seconds", Type: field.TypeInt, Default: 1800},
+		{Name: "silver_bullet", Type: field.TypeBool, Default: false},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
@@ -59,6 +191,102 @@ var (
 		Name:       "tasks",
 		Columns:    TasksColumns,
 		PrimaryKey: []*schema.Column{TasksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "task_current_stage",
+				Unique:  false,
+				Columns: []*schema.Column{TasksColumns[8]},
+			},
+			{
+				Name:    "task_parent_task_id",
+				Unique:  false,
+				Columns: []*schema.Column{TasksColumns[11]},
+			},
+			{
+				Name:    "task_silver_bullet_priority_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[18]},
+			},
+		},
+	}
+	// TaskDependenciesColumns holds the columns for the "task_dependencies" table.
+	TaskDependenciesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "required_stage", Type: field.TypeString, Default: "done"},
+		{Name: "on_cancel_action", Type: field.TypeString, Default: "on_hold"},
+		{Name: "task_id", Type: field.TypeString},
+		{Name: "depends_on_id", Type: field.TypeString},
+	}
+	// TaskDependenciesTable holds the schema information for the "task_dependencies" table.
+	TaskDependenciesTable = &schema.Table{
+		Name:       "task_dependencies",
+		Columns:    TaskDependenciesColumns,
+		PrimaryKey: []*schema.Column{TaskDependenciesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "task_dependencies_tasks_dependencies",
+				Columns:    []*schema.Column{TaskDependenciesColumns[3]},
+				RefColumns: []*schema.Column{TasksColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "task_dependencies_tasks_dependents",
+				Columns:    []*schema.Column{TaskDependenciesColumns[4]},
+				RefColumns: []*schema.Column{TasksColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "taskdependency_task_id",
+				Unique:  false,
+				Columns: []*schema.Column{TaskDependenciesColumns[3]},
+			},
+			{
+				Name:    "taskdependency_depends_on_id",
+				Unique:  false,
+				Columns: []*schema.Column{TaskDependenciesColumns[4]},
+			},
+			{
+				Name:    "taskdependency_task_id_depends_on_id",
+				Unique:  true,
+				Columns: []*schema.Column{TaskDependenciesColumns[3], TaskDependenciesColumns[4]},
+			},
+		},
+	}
+	// TaskPermissionsColumns holds the columns for the "task_permissions" table.
+	TaskPermissionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "tool", Type: field.TypeString},
+		{Name: "pattern", Type: field.TypeString, Nullable: true},
+		{Name: "granted", Type: field.TypeBool, Default: false},
+		{Name: "pre_approved", Type: field.TypeBool, Default: false},
+		{Name: "decided_by", Type: field.TypeString, Nullable: true},
+		{Name: "requested_at", Type: field.TypeTime},
+		{Name: "decided_at", Type: field.TypeTime, Nullable: true},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "task_id", Type: field.TypeString},
+	}
+	// TaskPermissionsTable holds the schema information for the "task_permissions" table.
+	TaskPermissionsTable = &schema.Table{
+		Name:       "task_permissions",
+		Columns:    TaskPermissionsColumns,
+		PrimaryKey: []*schema.Column{TaskPermissionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "task_permissions_tasks_permissions",
+				Columns:    []*schema.Column{TaskPermissionsColumns[9]},
+				RefColumns: []*schema.Column{TasksColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "taskpermission_task_id",
+				Unique:  false,
+				Columns: []*schema.Column{TaskPermissionsColumns[9]},
+			},
+		},
 	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
@@ -79,11 +307,22 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		APIKeysTable,
+		AuditLogsTable,
+		PermissionRequestsTable,
 		PipelineConfigsTable,
+		StageRunsTable,
 		TasksTable,
+		TaskDependenciesTable,
+		TaskPermissionsTable,
 		UsersTable,
 	}
 )
 
 func init() {
+	AuditLogsTable.ForeignKeys[0].RefTable = TasksTable
+	PermissionRequestsTable.ForeignKeys[0].RefTable = StageRunsTable
+	StageRunsTable.ForeignKeys[0].RefTable = TasksTable
+	TaskDependenciesTable.ForeignKeys[0].RefTable = TasksTable
+	TaskDependenciesTable.ForeignKeys[1].RefTable = TasksTable
+	TaskPermissionsTable.ForeignKeys[0].RefTable = TasksTable
 }

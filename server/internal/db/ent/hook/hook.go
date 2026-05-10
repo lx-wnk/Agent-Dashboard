@@ -21,6 +21,30 @@ func (f ApiKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, erro
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ApiKeyMutation", m)
 }
 
+// The AuditLogFunc type is an adapter to allow the use of ordinary
+// function as AuditLog mutator.
+type AuditLogFunc func(context.Context, *ent.AuditLogMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuditLogFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuditLogMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuditLogMutation", m)
+}
+
+// The PermissionRequestFunc type is an adapter to allow the use of ordinary
+// function as PermissionRequest mutator.
+type PermissionRequestFunc func(context.Context, *ent.PermissionRequestMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PermissionRequestFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PermissionRequestMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PermissionRequestMutation", m)
+}
+
 // The PipelineConfigFunc type is an adapter to allow the use of ordinary
 // function as PipelineConfig mutator.
 type PipelineConfigFunc func(context.Context, *ent.PipelineConfigMutation) (ent.Value, error)
@@ -33,6 +57,18 @@ func (f PipelineConfigFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PipelineConfigMutation", m)
 }
 
+// The StageRunFunc type is an adapter to allow the use of ordinary
+// function as StageRun mutator.
+type StageRunFunc func(context.Context, *ent.StageRunMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StageRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StageRunMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StageRunMutation", m)
+}
+
 // The TaskFunc type is an adapter to allow the use of ordinary
 // function as Task mutator.
 type TaskFunc func(context.Context, *ent.TaskMutation) (ent.Value, error)
@@ -43,6 +79,30 @@ func (f TaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error)
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TaskMutation", m)
+}
+
+// The TaskDependencyFunc type is an adapter to allow the use of ordinary
+// function as TaskDependency mutator.
+type TaskDependencyFunc func(context.Context, *ent.TaskDependencyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f TaskDependencyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.TaskDependencyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TaskDependencyMutation", m)
+}
+
+// The TaskPermissionFunc type is an adapter to allow the use of ordinary
+// function as TaskPermission mutator.
+type TaskPermissionFunc func(context.Context, *ent.TaskPermissionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f TaskPermissionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.TaskPermissionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TaskPermissionMutation", m)
 }
 
 // The UserFunc type is an adapter to allow the use of ordinary

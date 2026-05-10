@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -22,18 +23,105 @@ type Task struct {
 	// Title holds the value of the "title" field.
 	Title string `json:"title,omitempty"`
 	// Description holds the value of the "description" field.
-	Description string `json:"description,omitempty"`
+	Description *string `json:"description,omitempty"`
 	// Cwd holds the value of the "cwd" field.
 	Cwd string `json:"cwd,omitempty"`
+	// WorktreePath holds the value of the "worktree_path" field.
+	WorktreePath *string `json:"worktree_path,omitempty"`
+	// SourceBranch holds the value of the "source_branch" field.
+	SourceBranch *string `json:"source_branch,omitempty"`
+	// TargetBranch holds the value of the "target_branch" field.
+	TargetBranch *string `json:"target_branch,omitempty"`
 	// CurrentStage holds the value of the "current_stage" field.
 	CurrentStage string `json:"current_stage,omitempty"`
 	// Priority holds the value of the "priority" field.
 	Priority string `json:"priority,omitempty"`
+	// UserID holds the value of the "user_id" field.
+	UserID *string `json:"user_id,omitempty"`
+	// ParentTaskID holds the value of the "parent_task_id" field.
+	ParentTaskID *string `json:"parent_task_id,omitempty"`
+	// MaxIterations holds the value of the "max_iterations" field.
+	MaxIterations int `json:"max_iterations,omitempty"`
+	// TokenBudget holds the value of the "token_budget" field.
+	TokenBudget *int `json:"token_budget,omitempty"`
+	// CostBudgetCents holds the value of the "cost_budget_cents" field.
+	CostBudgetCents *int `json:"cost_budget_cents,omitempty"`
+	// StageTimeoutSeconds holds the value of the "stage_timeout_seconds" field.
+	StageTimeoutSeconds int `json:"stage_timeout_seconds,omitempty"`
+	// SilverBullet holds the value of the "silver_bullet" field.
+	SilverBullet bool `json:"silver_bullet,omitempty"`
+	// Metadata holds the value of the "metadata" field.
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
-	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the TaskQuery when eager-loading is set.
+	Edges        TaskEdges `json:"edges"`
 	selectValues sql.SelectValues
+}
+
+// TaskEdges holds the relations/edges for other nodes in the graph.
+type TaskEdges struct {
+	// StageRuns holds the value of the stage_runs edge.
+	StageRuns []*StageRun `json:"stage_runs,omitempty"`
+	// Permissions holds the value of the permissions edge.
+	Permissions []*TaskPermission `json:"permissions,omitempty"`
+	// AuditLogs holds the value of the audit_logs edge.
+	AuditLogs []*AuditLog `json:"audit_logs,omitempty"`
+	// Dependencies holds the value of the dependencies edge.
+	Dependencies []*TaskDependency `json:"dependencies,omitempty"`
+	// Dependents holds the value of the dependents edge.
+	Dependents []*TaskDependency `json:"dependents,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [5]bool
+}
+
+// StageRunsOrErr returns the StageRuns value or an error if the edge
+// was not loaded in eager-loading.
+func (e TaskEdges) StageRunsOrErr() ([]*StageRun, error) {
+	if e.loadedTypes[0] {
+		return e.StageRuns, nil
+	}
+	return nil, &NotLoadedError{edge: "stage_runs"}
+}
+
+// PermissionsOrErr returns the Permissions value or an error if the edge
+// was not loaded in eager-loading.
+func (e TaskEdges) PermissionsOrErr() ([]*TaskPermission, error) {
+	if e.loadedTypes[1] {
+		return e.Permissions, nil
+	}
+	return nil, &NotLoadedError{edge: "permissions"}
+}
+
+// AuditLogsOrErr returns the AuditLogs value or an error if the edge
+// was not loaded in eager-loading.
+func (e TaskEdges) AuditLogsOrErr() ([]*AuditLog, error) {
+	if e.loadedTypes[2] {
+		return e.AuditLogs, nil
+	}
+	return nil, &NotLoadedError{edge: "audit_logs"}
+}
+
+// DependenciesOrErr returns the Dependencies value or an error if the edge
+// was not loaded in eager-loading.
+func (e TaskEdges) DependenciesOrErr() ([]*TaskDependency, error) {
+	if e.loadedTypes[3] {
+		return e.Dependencies, nil
+	}
+	return nil, &NotLoadedError{edge: "dependencies"}
+}
+
+// DependentsOrErr returns the Dependents value or an error if the edge
+// was not loaded in eager-loading.
+func (e TaskEdges) DependentsOrErr() ([]*TaskDependency, error) {
+	if e.loadedTypes[4] {
+		return e.Dependents, nil
+	}
+	return nil, &NotLoadedError{edge: "dependents"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -41,7 +129,13 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case task.FieldID, task.FieldSlug, task.FieldTitle, task.FieldDescription, task.FieldCwd, task.FieldCurrentStage, task.FieldPriority:
+		case task.FieldMetadata:
+			values[i] = new([]byte)
+		case task.FieldSilverBullet:
+			values[i] = new(sql.NullBool)
+		case task.FieldMaxIterations, task.FieldTokenBudget, task.FieldCostBudgetCents, task.FieldStageTimeoutSeconds:
+			values[i] = new(sql.NullInt64)
+		case task.FieldID, task.FieldSlug, task.FieldTitle, task.FieldDescription, task.FieldCwd, task.FieldWorktreePath, task.FieldSourceBranch, task.FieldTargetBranch, task.FieldCurrentStage, task.FieldPriority, task.FieldUserID, task.FieldParentTaskID:
 			values[i] = new(sql.NullString)
 		case task.FieldCreatedAt, task.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -82,13 +176,35 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field description", values[i])
 			} else if value.Valid {
-				_m.Description = value.String
+				_m.Description = new(string)
+				*_m.Description = value.String
 			}
 		case task.FieldCwd:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field cwd", values[i])
 			} else if value.Valid {
 				_m.Cwd = value.String
+			}
+		case task.FieldWorktreePath:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_path", values[i])
+			} else if value.Valid {
+				_m.WorktreePath = new(string)
+				*_m.WorktreePath = value.String
+			}
+		case task.FieldSourceBranch:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field source_branch", values[i])
+			} else if value.Valid {
+				_m.SourceBranch = new(string)
+				*_m.SourceBranch = value.String
+			}
+		case task.FieldTargetBranch:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field target_branch", values[i])
+			} else if value.Valid {
+				_m.TargetBranch = new(string)
+				*_m.TargetBranch = value.String
 			}
 		case task.FieldCurrentStage:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -101,6 +217,60 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field priority", values[i])
 			} else if value.Valid {
 				_m.Priority = value.String
+			}
+		case task.FieldUserID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field user_id", values[i])
+			} else if value.Valid {
+				_m.UserID = new(string)
+				*_m.UserID = value.String
+			}
+		case task.FieldParentTaskID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field parent_task_id", values[i])
+			} else if value.Valid {
+				_m.ParentTaskID = new(string)
+				*_m.ParentTaskID = value.String
+			}
+		case task.FieldMaxIterations:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field max_iterations", values[i])
+			} else if value.Valid {
+				_m.MaxIterations = int(value.Int64)
+			}
+		case task.FieldTokenBudget:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field token_budget", values[i])
+			} else if value.Valid {
+				_m.TokenBudget = new(int)
+				*_m.TokenBudget = int(value.Int64)
+			}
+		case task.FieldCostBudgetCents:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field cost_budget_cents", values[i])
+			} else if value.Valid {
+				_m.CostBudgetCents = new(int)
+				*_m.CostBudgetCents = int(value.Int64)
+			}
+		case task.FieldStageTimeoutSeconds:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field stage_timeout_seconds", values[i])
+			} else if value.Valid {
+				_m.StageTimeoutSeconds = int(value.Int64)
+			}
+		case task.FieldSilverBullet:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field silver_bullet", values[i])
+			} else if value.Valid {
+				_m.SilverBullet = value.Bool
+			}
+		case task.FieldMetadata:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field metadata", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Metadata); err != nil {
+					return fmt.Errorf("unmarshal field metadata: %w", err)
+				}
 			}
 		case task.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -125,6 +295,31 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *Task) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
+}
+
+// QueryStageRuns queries the "stage_runs" edge of the Task entity.
+func (_m *Task) QueryStageRuns() *StageRunQuery {
+	return NewTaskClient(_m.config).QueryStageRuns(_m)
+}
+
+// QueryPermissions queries the "permissions" edge of the Task entity.
+func (_m *Task) QueryPermissions() *TaskPermissionQuery {
+	return NewTaskClient(_m.config).QueryPermissions(_m)
+}
+
+// QueryAuditLogs queries the "audit_logs" edge of the Task entity.
+func (_m *Task) QueryAuditLogs() *AuditLogQuery {
+	return NewTaskClient(_m.config).QueryAuditLogs(_m)
+}
+
+// QueryDependencies queries the "dependencies" edge of the Task entity.
+func (_m *Task) QueryDependencies() *TaskDependencyQuery {
+	return NewTaskClient(_m.config).QueryDependencies(_m)
+}
+
+// QueryDependents queries the "dependents" edge of the Task entity.
+func (_m *Task) QueryDependents() *TaskDependencyQuery {
+	return NewTaskClient(_m.config).QueryDependents(_m)
 }
 
 // Update returns a builder for updating this Task.
@@ -156,17 +351,66 @@ func (_m *Task) String() string {
 	builder.WriteString("title=")
 	builder.WriteString(_m.Title)
 	builder.WriteString(", ")
-	builder.WriteString("description=")
-	builder.WriteString(_m.Description)
+	if v := _m.Description; v != nil {
+		builder.WriteString("description=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("cwd=")
 	builder.WriteString(_m.Cwd)
+	builder.WriteString(", ")
+	if v := _m.WorktreePath; v != nil {
+		builder.WriteString("worktree_path=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.SourceBranch; v != nil {
+		builder.WriteString("source_branch=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TargetBranch; v != nil {
+		builder.WriteString("target_branch=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("current_stage=")
 	builder.WriteString(_m.CurrentStage)
 	builder.WriteString(", ")
 	builder.WriteString("priority=")
 	builder.WriteString(_m.Priority)
+	builder.WriteString(", ")
+	if v := _m.UserID; v != nil {
+		builder.WriteString("user_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ParentTaskID; v != nil {
+		builder.WriteString("parent_task_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	builder.WriteString("max_iterations=")
+	builder.WriteString(fmt.Sprintf("%v", _m.MaxIterations))
+	builder.WriteString(", ")
+	if v := _m.TokenBudget; v != nil {
+		builder.WriteString("token_budget=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.CostBudgetCents; v != nil {
+		builder.WriteString("cost_budget_cents=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("stage_timeout_seconds=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StageTimeoutSeconds))
+	builder.WriteString(", ")
+	builder.WriteString("silver_bullet=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SilverBullet))
+	builder.WriteString(", ")
+	builder.WriteString("metadata=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Metadata))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

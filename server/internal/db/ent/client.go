@@ -14,9 +14,15 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/user"
 )
 
@@ -27,10 +33,20 @@ type Client struct {
 	Schema *migrate.Schema
 	// ApiKey is the client for interacting with the ApiKey builders.
 	ApiKey *ApiKeyClient
+	// AuditLog is the client for interacting with the AuditLog builders.
+	AuditLog *AuditLogClient
+	// PermissionRequest is the client for interacting with the PermissionRequest builders.
+	PermissionRequest *PermissionRequestClient
 	// PipelineConfig is the client for interacting with the PipelineConfig builders.
 	PipelineConfig *PipelineConfigClient
+	// StageRun is the client for interacting with the StageRun builders.
+	StageRun *StageRunClient
 	// Task is the client for interacting with the Task builders.
 	Task *TaskClient
+	// TaskDependency is the client for interacting with the TaskDependency builders.
+	TaskDependency *TaskDependencyClient
+	// TaskPermission is the client for interacting with the TaskPermission builders.
+	TaskPermission *TaskPermissionClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 }
@@ -45,8 +61,13 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.ApiKey = NewApiKeyClient(c.config)
+	c.AuditLog = NewAuditLogClient(c.config)
+	c.PermissionRequest = NewPermissionRequestClient(c.config)
 	c.PipelineConfig = NewPipelineConfigClient(c.config)
+	c.StageRun = NewStageRunClient(c.config)
 	c.Task = NewTaskClient(c.config)
+	c.TaskDependency = NewTaskDependencyClient(c.config)
+	c.TaskPermission = NewTaskPermissionClient(c.config)
 	c.User = NewUserClient(c.config)
 }
 
@@ -138,12 +159,17 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:            ctx,
-		config:         cfg,
-		ApiKey:         NewApiKeyClient(cfg),
-		PipelineConfig: NewPipelineConfigClient(cfg),
-		Task:           NewTaskClient(cfg),
-		User:           NewUserClient(cfg),
+		ctx:               ctx,
+		config:            cfg,
+		ApiKey:            NewApiKeyClient(cfg),
+		AuditLog:          NewAuditLogClient(cfg),
+		PermissionRequest: NewPermissionRequestClient(cfg),
+		PipelineConfig:    NewPipelineConfigClient(cfg),
+		StageRun:          NewStageRunClient(cfg),
+		Task:              NewTaskClient(cfg),
+		TaskDependency:    NewTaskDependencyClient(cfg),
+		TaskPermission:    NewTaskPermissionClient(cfg),
+		User:              NewUserClient(cfg),
 	}, nil
 }
 
@@ -161,12 +187,17 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:            ctx,
-		config:         cfg,
-		ApiKey:         NewApiKeyClient(cfg),
-		PipelineConfig: NewPipelineConfigClient(cfg),
-		Task:           NewTaskClient(cfg),
-		User:           NewUserClient(cfg),
+		ctx:               ctx,
+		config:            cfg,
+		ApiKey:            NewApiKeyClient(cfg),
+		AuditLog:          NewAuditLogClient(cfg),
+		PermissionRequest: NewPermissionRequestClient(cfg),
+		PipelineConfig:    NewPipelineConfigClient(cfg),
+		StageRun:          NewStageRunClient(cfg),
+		Task:              NewTaskClient(cfg),
+		TaskDependency:    NewTaskDependencyClient(cfg),
+		TaskPermission:    NewTaskPermissionClient(cfg),
+		User:              NewUserClient(cfg),
 	}, nil
 }
 
@@ -195,19 +226,23 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
-	c.ApiKey.Use(hooks...)
-	c.PipelineConfig.Use(hooks...)
-	c.Task.Use(hooks...)
-	c.User.Use(hooks...)
+	for _, n := range []interface{ Use(...Hook) }{
+		c.ApiKey, c.AuditLog, c.PermissionRequest, c.PipelineConfig, c.StageRun, c.Task,
+		c.TaskDependency, c.TaskPermission, c.User,
+	} {
+		n.Use(hooks...)
+	}
 }
 
 // Intercept adds the query interceptors to all the entity clients.
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
-	c.ApiKey.Intercept(interceptors...)
-	c.PipelineConfig.Intercept(interceptors...)
-	c.Task.Intercept(interceptors...)
-	c.User.Intercept(interceptors...)
+	for _, n := range []interface{ Intercept(...Interceptor) }{
+		c.ApiKey, c.AuditLog, c.PermissionRequest, c.PipelineConfig, c.StageRun, c.Task,
+		c.TaskDependency, c.TaskPermission, c.User,
+	} {
+		n.Intercept(interceptors...)
+	}
 }
 
 // Mutate implements the ent.Mutator interface.
@@ -215,10 +250,20 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *ApiKeyMutation:
 		return c.ApiKey.mutate(ctx, m)
+	case *AuditLogMutation:
+		return c.AuditLog.mutate(ctx, m)
+	case *PermissionRequestMutation:
+		return c.PermissionRequest.mutate(ctx, m)
 	case *PipelineConfigMutation:
 		return c.PipelineConfig.mutate(ctx, m)
+	case *StageRunMutation:
+		return c.StageRun.mutate(ctx, m)
 	case *TaskMutation:
 		return c.Task.mutate(ctx, m)
+	case *TaskDependencyMutation:
+		return c.TaskDependency.mutate(ctx, m)
+	case *TaskPermissionMutation:
+		return c.TaskPermission.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
 	default:
@@ -359,6 +404,304 @@ func (c *ApiKeyClient) mutate(ctx context.Context, m *ApiKeyMutation) (Value, er
 	}
 }
 
+// AuditLogClient is a client for the AuditLog schema.
+type AuditLogClient struct {
+	config
+}
+
+// NewAuditLogClient returns a client for the AuditLog from the given config.
+func NewAuditLogClient(c config) *AuditLogClient {
+	return &AuditLogClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `auditlog.Hooks(f(g(h())))`.
+func (c *AuditLogClient) Use(hooks ...Hook) {
+	c.hooks.AuditLog = append(c.hooks.AuditLog, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `auditlog.Intercept(f(g(h())))`.
+func (c *AuditLogClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AuditLog = append(c.inters.AuditLog, interceptors...)
+}
+
+// Create returns a builder for creating a AuditLog entity.
+func (c *AuditLogClient) Create() *AuditLogCreate {
+	mutation := newAuditLogMutation(c.config, OpCreate)
+	return &AuditLogCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AuditLog entities.
+func (c *AuditLogClient) CreateBulk(builders ...*AuditLogCreate) *AuditLogCreateBulk {
+	return &AuditLogCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AuditLogClient) MapCreateBulk(slice any, setFunc func(*AuditLogCreate, int)) *AuditLogCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AuditLogCreateBulk{err: fmt.Errorf("calling to AuditLogClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AuditLogCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AuditLogCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AuditLog.
+func (c *AuditLogClient) Update() *AuditLogUpdate {
+	mutation := newAuditLogMutation(c.config, OpUpdate)
+	return &AuditLogUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AuditLogClient) UpdateOne(_m *AuditLog) *AuditLogUpdateOne {
+	mutation := newAuditLogMutation(c.config, OpUpdateOne, withAuditLog(_m))
+	return &AuditLogUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AuditLogClient) UpdateOneID(id string) *AuditLogUpdateOne {
+	mutation := newAuditLogMutation(c.config, OpUpdateOne, withAuditLogID(id))
+	return &AuditLogUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AuditLog.
+func (c *AuditLogClient) Delete() *AuditLogDelete {
+	mutation := newAuditLogMutation(c.config, OpDelete)
+	return &AuditLogDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AuditLogClient) DeleteOne(_m *AuditLog) *AuditLogDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AuditLogClient) DeleteOneID(id string) *AuditLogDeleteOne {
+	builder := c.Delete().Where(auditlog.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AuditLogDeleteOne{builder}
+}
+
+// Query returns a query builder for AuditLog.
+func (c *AuditLogClient) Query() *AuditLogQuery {
+	return &AuditLogQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAuditLog},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AuditLog entity by its id.
+func (c *AuditLogClient) Get(ctx context.Context, id string) (*AuditLog, error) {
+	return c.Query().Where(auditlog.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AuditLogClient) GetX(ctx context.Context, id string) *AuditLog {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryTask queries the task edge of a AuditLog.
+func (c *AuditLogClient) QueryTask(_m *AuditLog) *TaskQuery {
+	query := (&TaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(auditlog.Table, auditlog.FieldID, id),
+			sqlgraph.To(task.Table, task.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, auditlog.TaskTable, auditlog.TaskColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *AuditLogClient) Hooks() []Hook {
+	return c.hooks.AuditLog
+}
+
+// Interceptors returns the client interceptors.
+func (c *AuditLogClient) Interceptors() []Interceptor {
+	return c.inters.AuditLog
+}
+
+func (c *AuditLogClient) mutate(ctx context.Context, m *AuditLogMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AuditLogCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AuditLogUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AuditLogUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AuditLogDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AuditLog mutation op: %q", m.Op())
+	}
+}
+
+// PermissionRequestClient is a client for the PermissionRequest schema.
+type PermissionRequestClient struct {
+	config
+}
+
+// NewPermissionRequestClient returns a client for the PermissionRequest from the given config.
+func NewPermissionRequestClient(c config) *PermissionRequestClient {
+	return &PermissionRequestClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `permissionrequest.Hooks(f(g(h())))`.
+func (c *PermissionRequestClient) Use(hooks ...Hook) {
+	c.hooks.PermissionRequest = append(c.hooks.PermissionRequest, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `permissionrequest.Intercept(f(g(h())))`.
+func (c *PermissionRequestClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PermissionRequest = append(c.inters.PermissionRequest, interceptors...)
+}
+
+// Create returns a builder for creating a PermissionRequest entity.
+func (c *PermissionRequestClient) Create() *PermissionRequestCreate {
+	mutation := newPermissionRequestMutation(c.config, OpCreate)
+	return &PermissionRequestCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PermissionRequest entities.
+func (c *PermissionRequestClient) CreateBulk(builders ...*PermissionRequestCreate) *PermissionRequestCreateBulk {
+	return &PermissionRequestCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PermissionRequestClient) MapCreateBulk(slice any, setFunc func(*PermissionRequestCreate, int)) *PermissionRequestCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PermissionRequestCreateBulk{err: fmt.Errorf("calling to PermissionRequestClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PermissionRequestCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PermissionRequestCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PermissionRequest.
+func (c *PermissionRequestClient) Update() *PermissionRequestUpdate {
+	mutation := newPermissionRequestMutation(c.config, OpUpdate)
+	return &PermissionRequestUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PermissionRequestClient) UpdateOne(_m *PermissionRequest) *PermissionRequestUpdateOne {
+	mutation := newPermissionRequestMutation(c.config, OpUpdateOne, withPermissionRequest(_m))
+	return &PermissionRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PermissionRequestClient) UpdateOneID(id string) *PermissionRequestUpdateOne {
+	mutation := newPermissionRequestMutation(c.config, OpUpdateOne, withPermissionRequestID(id))
+	return &PermissionRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PermissionRequest.
+func (c *PermissionRequestClient) Delete() *PermissionRequestDelete {
+	mutation := newPermissionRequestMutation(c.config, OpDelete)
+	return &PermissionRequestDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PermissionRequestClient) DeleteOne(_m *PermissionRequest) *PermissionRequestDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PermissionRequestClient) DeleteOneID(id string) *PermissionRequestDeleteOne {
+	builder := c.Delete().Where(permissionrequest.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PermissionRequestDeleteOne{builder}
+}
+
+// Query returns a query builder for PermissionRequest.
+func (c *PermissionRequestClient) Query() *PermissionRequestQuery {
+	return &PermissionRequestQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePermissionRequest},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PermissionRequest entity by its id.
+func (c *PermissionRequestClient) Get(ctx context.Context, id string) (*PermissionRequest, error) {
+	return c.Query().Where(permissionrequest.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PermissionRequestClient) GetX(ctx context.Context, id string) *PermissionRequest {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryStageRun queries the stage_run edge of a PermissionRequest.
+func (c *PermissionRequestClient) QueryStageRun(_m *PermissionRequest) *StageRunQuery {
+	query := (&StageRunClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(permissionrequest.Table, permissionrequest.FieldID, id),
+			sqlgraph.To(stagerun.Table, stagerun.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, permissionrequest.StageRunTable, permissionrequest.StageRunColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *PermissionRequestClient) Hooks() []Hook {
+	return c.hooks.PermissionRequest
+}
+
+// Interceptors returns the client interceptors.
+func (c *PermissionRequestClient) Interceptors() []Interceptor {
+	return c.inters.PermissionRequest
+}
+
+func (c *PermissionRequestClient) mutate(ctx context.Context, m *PermissionRequestMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PermissionRequestCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PermissionRequestUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PermissionRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PermissionRequestDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PermissionRequest mutation op: %q", m.Op())
+	}
+}
+
 // PipelineConfigClient is a client for the PipelineConfig schema.
 type PipelineConfigClient struct {
 	config
@@ -492,6 +835,171 @@ func (c *PipelineConfigClient) mutate(ctx context.Context, m *PipelineConfigMuta
 	}
 }
 
+// StageRunClient is a client for the StageRun schema.
+type StageRunClient struct {
+	config
+}
+
+// NewStageRunClient returns a client for the StageRun from the given config.
+func NewStageRunClient(c config) *StageRunClient {
+	return &StageRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `stagerun.Hooks(f(g(h())))`.
+func (c *StageRunClient) Use(hooks ...Hook) {
+	c.hooks.StageRun = append(c.hooks.StageRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `stagerun.Intercept(f(g(h())))`.
+func (c *StageRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StageRun = append(c.inters.StageRun, interceptors...)
+}
+
+// Create returns a builder for creating a StageRun entity.
+func (c *StageRunClient) Create() *StageRunCreate {
+	mutation := newStageRunMutation(c.config, OpCreate)
+	return &StageRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StageRun entities.
+func (c *StageRunClient) CreateBulk(builders ...*StageRunCreate) *StageRunCreateBulk {
+	return &StageRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StageRunClient) MapCreateBulk(slice any, setFunc func(*StageRunCreate, int)) *StageRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StageRunCreateBulk{err: fmt.Errorf("calling to StageRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StageRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StageRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StageRun.
+func (c *StageRunClient) Update() *StageRunUpdate {
+	mutation := newStageRunMutation(c.config, OpUpdate)
+	return &StageRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StageRunClient) UpdateOne(_m *StageRun) *StageRunUpdateOne {
+	mutation := newStageRunMutation(c.config, OpUpdateOne, withStageRun(_m))
+	return &StageRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StageRunClient) UpdateOneID(id string) *StageRunUpdateOne {
+	mutation := newStageRunMutation(c.config, OpUpdateOne, withStageRunID(id))
+	return &StageRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StageRun.
+func (c *StageRunClient) Delete() *StageRunDelete {
+	mutation := newStageRunMutation(c.config, OpDelete)
+	return &StageRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StageRunClient) DeleteOne(_m *StageRun) *StageRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StageRunClient) DeleteOneID(id string) *StageRunDeleteOne {
+	builder := c.Delete().Where(stagerun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StageRunDeleteOne{builder}
+}
+
+// Query returns a query builder for StageRun.
+func (c *StageRunClient) Query() *StageRunQuery {
+	return &StageRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStageRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StageRun entity by its id.
+func (c *StageRunClient) Get(ctx context.Context, id string) (*StageRun, error) {
+	return c.Query().Where(stagerun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StageRunClient) GetX(ctx context.Context, id string) *StageRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryTask queries the task edge of a StageRun.
+func (c *StageRunClient) QueryTask(_m *StageRun) *TaskQuery {
+	query := (&TaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(stagerun.Table, stagerun.FieldID, id),
+			sqlgraph.To(task.Table, task.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, stagerun.TaskTable, stagerun.TaskColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryPermissionRequests queries the permission_requests edge of a StageRun.
+func (c *StageRunClient) QueryPermissionRequests(_m *StageRun) *PermissionRequestQuery {
+	query := (&PermissionRequestClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(stagerun.Table, stagerun.FieldID, id),
+			sqlgraph.To(permissionrequest.Table, permissionrequest.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, stagerun.PermissionRequestsTable, stagerun.PermissionRequestsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *StageRunClient) Hooks() []Hook {
+	return c.hooks.StageRun
+}
+
+// Interceptors returns the client interceptors.
+func (c *StageRunClient) Interceptors() []Interceptor {
+	return c.inters.StageRun
+}
+
+func (c *StageRunClient) mutate(ctx context.Context, m *StageRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StageRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StageRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StageRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StageRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StageRun mutation op: %q", m.Op())
+	}
+}
+
 // TaskClient is a client for the Task schema.
 type TaskClient struct {
 	config
@@ -600,6 +1108,86 @@ func (c *TaskClient) GetX(ctx context.Context, id string) *Task {
 	return obj
 }
 
+// QueryStageRuns queries the stage_runs edge of a Task.
+func (c *TaskClient) QueryStageRuns(_m *Task) *StageRunQuery {
+	query := (&StageRunClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, id),
+			sqlgraph.To(stagerun.Table, stagerun.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.StageRunsTable, task.StageRunsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryPermissions queries the permissions edge of a Task.
+func (c *TaskClient) QueryPermissions(_m *Task) *TaskPermissionQuery {
+	query := (&TaskPermissionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, id),
+			sqlgraph.To(taskpermission.Table, taskpermission.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.PermissionsTable, task.PermissionsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAuditLogs queries the audit_logs edge of a Task.
+func (c *TaskClient) QueryAuditLogs(_m *Task) *AuditLogQuery {
+	query := (&AuditLogClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, id),
+			sqlgraph.To(auditlog.Table, auditlog.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.AuditLogsTable, task.AuditLogsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryDependencies queries the dependencies edge of a Task.
+func (c *TaskClient) QueryDependencies(_m *Task) *TaskDependencyQuery {
+	query := (&TaskDependencyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, id),
+			sqlgraph.To(taskdependency.Table, taskdependency.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.DependenciesTable, task.DependenciesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryDependents queries the dependents edge of a Task.
+func (c *TaskClient) QueryDependents(_m *Task) *TaskDependencyQuery {
+	query := (&TaskDependencyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(task.Table, task.FieldID, id),
+			sqlgraph.To(taskdependency.Table, taskdependency.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, task.DependentsTable, task.DependentsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *TaskClient) Hooks() []Hook {
 	return c.hooks.Task
@@ -622,6 +1210,320 @@ func (c *TaskClient) mutate(ctx context.Context, m *TaskMutation) (Value, error)
 		return (&TaskDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Task mutation op: %q", m.Op())
+	}
+}
+
+// TaskDependencyClient is a client for the TaskDependency schema.
+type TaskDependencyClient struct {
+	config
+}
+
+// NewTaskDependencyClient returns a client for the TaskDependency from the given config.
+func NewTaskDependencyClient(c config) *TaskDependencyClient {
+	return &TaskDependencyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `taskdependency.Hooks(f(g(h())))`.
+func (c *TaskDependencyClient) Use(hooks ...Hook) {
+	c.hooks.TaskDependency = append(c.hooks.TaskDependency, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `taskdependency.Intercept(f(g(h())))`.
+func (c *TaskDependencyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.TaskDependency = append(c.inters.TaskDependency, interceptors...)
+}
+
+// Create returns a builder for creating a TaskDependency entity.
+func (c *TaskDependencyClient) Create() *TaskDependencyCreate {
+	mutation := newTaskDependencyMutation(c.config, OpCreate)
+	return &TaskDependencyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of TaskDependency entities.
+func (c *TaskDependencyClient) CreateBulk(builders ...*TaskDependencyCreate) *TaskDependencyCreateBulk {
+	return &TaskDependencyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *TaskDependencyClient) MapCreateBulk(slice any, setFunc func(*TaskDependencyCreate, int)) *TaskDependencyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &TaskDependencyCreateBulk{err: fmt.Errorf("calling to TaskDependencyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*TaskDependencyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &TaskDependencyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for TaskDependency.
+func (c *TaskDependencyClient) Update() *TaskDependencyUpdate {
+	mutation := newTaskDependencyMutation(c.config, OpUpdate)
+	return &TaskDependencyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *TaskDependencyClient) UpdateOne(_m *TaskDependency) *TaskDependencyUpdateOne {
+	mutation := newTaskDependencyMutation(c.config, OpUpdateOne, withTaskDependency(_m))
+	return &TaskDependencyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *TaskDependencyClient) UpdateOneID(id string) *TaskDependencyUpdateOne {
+	mutation := newTaskDependencyMutation(c.config, OpUpdateOne, withTaskDependencyID(id))
+	return &TaskDependencyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for TaskDependency.
+func (c *TaskDependencyClient) Delete() *TaskDependencyDelete {
+	mutation := newTaskDependencyMutation(c.config, OpDelete)
+	return &TaskDependencyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *TaskDependencyClient) DeleteOne(_m *TaskDependency) *TaskDependencyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *TaskDependencyClient) DeleteOneID(id string) *TaskDependencyDeleteOne {
+	builder := c.Delete().Where(taskdependency.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &TaskDependencyDeleteOne{builder}
+}
+
+// Query returns a query builder for TaskDependency.
+func (c *TaskDependencyClient) Query() *TaskDependencyQuery {
+	return &TaskDependencyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeTaskDependency},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a TaskDependency entity by its id.
+func (c *TaskDependencyClient) Get(ctx context.Context, id string) (*TaskDependency, error) {
+	return c.Query().Where(taskdependency.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *TaskDependencyClient) GetX(ctx context.Context, id string) *TaskDependency {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryTask queries the task edge of a TaskDependency.
+func (c *TaskDependencyClient) QueryTask(_m *TaskDependency) *TaskQuery {
+	query := (&TaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(taskdependency.Table, taskdependency.FieldID, id),
+			sqlgraph.To(task.Table, task.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, taskdependency.TaskTable, taskdependency.TaskColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryDependsOn queries the depends_on edge of a TaskDependency.
+func (c *TaskDependencyClient) QueryDependsOn(_m *TaskDependency) *TaskQuery {
+	query := (&TaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(taskdependency.Table, taskdependency.FieldID, id),
+			sqlgraph.To(task.Table, task.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, taskdependency.DependsOnTable, taskdependency.DependsOnColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *TaskDependencyClient) Hooks() []Hook {
+	return c.hooks.TaskDependency
+}
+
+// Interceptors returns the client interceptors.
+func (c *TaskDependencyClient) Interceptors() []Interceptor {
+	return c.inters.TaskDependency
+}
+
+func (c *TaskDependencyClient) mutate(ctx context.Context, m *TaskDependencyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&TaskDependencyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&TaskDependencyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&TaskDependencyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&TaskDependencyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown TaskDependency mutation op: %q", m.Op())
+	}
+}
+
+// TaskPermissionClient is a client for the TaskPermission schema.
+type TaskPermissionClient struct {
+	config
+}
+
+// NewTaskPermissionClient returns a client for the TaskPermission from the given config.
+func NewTaskPermissionClient(c config) *TaskPermissionClient {
+	return &TaskPermissionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `taskpermission.Hooks(f(g(h())))`.
+func (c *TaskPermissionClient) Use(hooks ...Hook) {
+	c.hooks.TaskPermission = append(c.hooks.TaskPermission, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `taskpermission.Intercept(f(g(h())))`.
+func (c *TaskPermissionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.TaskPermission = append(c.inters.TaskPermission, interceptors...)
+}
+
+// Create returns a builder for creating a TaskPermission entity.
+func (c *TaskPermissionClient) Create() *TaskPermissionCreate {
+	mutation := newTaskPermissionMutation(c.config, OpCreate)
+	return &TaskPermissionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of TaskPermission entities.
+func (c *TaskPermissionClient) CreateBulk(builders ...*TaskPermissionCreate) *TaskPermissionCreateBulk {
+	return &TaskPermissionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *TaskPermissionClient) MapCreateBulk(slice any, setFunc func(*TaskPermissionCreate, int)) *TaskPermissionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &TaskPermissionCreateBulk{err: fmt.Errorf("calling to TaskPermissionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*TaskPermissionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &TaskPermissionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for TaskPermission.
+func (c *TaskPermissionClient) Update() *TaskPermissionUpdate {
+	mutation := newTaskPermissionMutation(c.config, OpUpdate)
+	return &TaskPermissionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *TaskPermissionClient) UpdateOne(_m *TaskPermission) *TaskPermissionUpdateOne {
+	mutation := newTaskPermissionMutation(c.config, OpUpdateOne, withTaskPermission(_m))
+	return &TaskPermissionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *TaskPermissionClient) UpdateOneID(id string) *TaskPermissionUpdateOne {
+	mutation := newTaskPermissionMutation(c.config, OpUpdateOne, withTaskPermissionID(id))
+	return &TaskPermissionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for TaskPermission.
+func (c *TaskPermissionClient) Delete() *TaskPermissionDelete {
+	mutation := newTaskPermissionMutation(c.config, OpDelete)
+	return &TaskPermissionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *TaskPermissionClient) DeleteOne(_m *TaskPermission) *TaskPermissionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *TaskPermissionClient) DeleteOneID(id string) *TaskPermissionDeleteOne {
+	builder := c.Delete().Where(taskpermission.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &TaskPermissionDeleteOne{builder}
+}
+
+// Query returns a query builder for TaskPermission.
+func (c *TaskPermissionClient) Query() *TaskPermissionQuery {
+	return &TaskPermissionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeTaskPermission},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a TaskPermission entity by its id.
+func (c *TaskPermissionClient) Get(ctx context.Context, id string) (*TaskPermission, error) {
+	return c.Query().Where(taskpermission.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *TaskPermissionClient) GetX(ctx context.Context, id string) *TaskPermission {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryTask queries the task edge of a TaskPermission.
+func (c *TaskPermissionClient) QueryTask(_m *TaskPermission) *TaskQuery {
+	query := (&TaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(taskpermission.Table, taskpermission.FieldID, id),
+			sqlgraph.To(task.Table, task.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, taskpermission.TaskTable, taskpermission.TaskColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *TaskPermissionClient) Hooks() []Hook {
+	return c.hooks.TaskPermission
+}
+
+// Interceptors returns the client interceptors.
+func (c *TaskPermissionClient) Interceptors() []Interceptor {
+	return c.inters.TaskPermission
+}
+
+func (c *TaskPermissionClient) mutate(ctx context.Context, m *TaskPermissionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&TaskPermissionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&TaskPermissionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&TaskPermissionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&TaskPermissionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown TaskPermission mutation op: %q", m.Op())
 	}
 }
 
@@ -761,9 +1663,11 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		ApiKey, PipelineConfig, Task, User []ent.Hook
+		ApiKey, AuditLog, PermissionRequest, PipelineConfig, StageRun, Task,
+		TaskDependency, TaskPermission, User []ent.Hook
 	}
 	inters struct {
-		ApiKey, PipelineConfig, Task, User []ent.Interceptor
+		ApiKey, AuditLog, PermissionRequest, PipelineConfig, StageRun, Task,
+		TaskDependency, TaskPermission, User []ent.Interceptor
 	}
 )

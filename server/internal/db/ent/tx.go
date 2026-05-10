@@ -14,10 +14,20 @@ type Tx struct {
 	config
 	// ApiKey is the client for interacting with the ApiKey builders.
 	ApiKey *ApiKeyClient
+	// AuditLog is the client for interacting with the AuditLog builders.
+	AuditLog *AuditLogClient
+	// PermissionRequest is the client for interacting with the PermissionRequest builders.
+	PermissionRequest *PermissionRequestClient
 	// PipelineConfig is the client for interacting with the PipelineConfig builders.
 	PipelineConfig *PipelineConfigClient
+	// StageRun is the client for interacting with the StageRun builders.
+	StageRun *StageRunClient
 	// Task is the client for interacting with the Task builders.
 	Task *TaskClient
+	// TaskDependency is the client for interacting with the TaskDependency builders.
+	TaskDependency *TaskDependencyClient
+	// TaskPermission is the client for interacting with the TaskPermission builders.
+	TaskPermission *TaskPermissionClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 
@@ -152,8 +162,13 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.ApiKey = NewApiKeyClient(tx.config)
+	tx.AuditLog = NewAuditLogClient(tx.config)
+	tx.PermissionRequest = NewPermissionRequestClient(tx.config)
 	tx.PipelineConfig = NewPipelineConfigClient(tx.config)
+	tx.StageRun = NewStageRunClient(tx.config)
 	tx.Task = NewTaskClient(tx.config)
+	tx.TaskDependency = NewTaskDependencyClient(tx.config)
+	tx.TaskPermission = NewTaskPermissionClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 }
 

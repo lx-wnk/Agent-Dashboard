@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 const (
@@ -21,16 +22,83 @@ const (
 	FieldDescription = "description"
 	// FieldCwd holds the string denoting the cwd field in the database.
 	FieldCwd = "cwd"
+	// FieldWorktreePath holds the string denoting the worktree_path field in the database.
+	FieldWorktreePath = "worktree_path"
+	// FieldSourceBranch holds the string denoting the source_branch field in the database.
+	FieldSourceBranch = "source_branch"
+	// FieldTargetBranch holds the string denoting the target_branch field in the database.
+	FieldTargetBranch = "target_branch"
 	// FieldCurrentStage holds the string denoting the current_stage field in the database.
 	FieldCurrentStage = "current_stage"
 	// FieldPriority holds the string denoting the priority field in the database.
 	FieldPriority = "priority"
+	// FieldUserID holds the string denoting the user_id field in the database.
+	FieldUserID = "user_id"
+	// FieldParentTaskID holds the string denoting the parent_task_id field in the database.
+	FieldParentTaskID = "parent_task_id"
+	// FieldMaxIterations holds the string denoting the max_iterations field in the database.
+	FieldMaxIterations = "max_iterations"
+	// FieldTokenBudget holds the string denoting the token_budget field in the database.
+	FieldTokenBudget = "token_budget"
+	// FieldCostBudgetCents holds the string denoting the cost_budget_cents field in the database.
+	FieldCostBudgetCents = "cost_budget_cents"
+	// FieldStageTimeoutSeconds holds the string denoting the stage_timeout_seconds field in the database.
+	FieldStageTimeoutSeconds = "stage_timeout_seconds"
+	// FieldSilverBullet holds the string denoting the silver_bullet field in the database.
+	FieldSilverBullet = "silver_bullet"
+	// FieldMetadata holds the string denoting the metadata field in the database.
+	FieldMetadata = "metadata"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// EdgeStageRuns holds the string denoting the stage_runs edge name in mutations.
+	EdgeStageRuns = "stage_runs"
+	// EdgePermissions holds the string denoting the permissions edge name in mutations.
+	EdgePermissions = "permissions"
+	// EdgeAuditLogs holds the string denoting the audit_logs edge name in mutations.
+	EdgeAuditLogs = "audit_logs"
+	// EdgeDependencies holds the string denoting the dependencies edge name in mutations.
+	EdgeDependencies = "dependencies"
+	// EdgeDependents holds the string denoting the dependents edge name in mutations.
+	EdgeDependents = "dependents"
 	// Table holds the table name of the task in the database.
 	Table = "tasks"
+	// StageRunsTable is the table that holds the stage_runs relation/edge.
+	StageRunsTable = "stage_runs"
+	// StageRunsInverseTable is the table name for the StageRun entity.
+	// It exists in this package in order to avoid circular dependency with the "stagerun" package.
+	StageRunsInverseTable = "stage_runs"
+	// StageRunsColumn is the table column denoting the stage_runs relation/edge.
+	StageRunsColumn = "task_id"
+	// PermissionsTable is the table that holds the permissions relation/edge.
+	PermissionsTable = "task_permissions"
+	// PermissionsInverseTable is the table name for the TaskPermission entity.
+	// It exists in this package in order to avoid circular dependency with the "taskpermission" package.
+	PermissionsInverseTable = "task_permissions"
+	// PermissionsColumn is the table column denoting the permissions relation/edge.
+	PermissionsColumn = "task_id"
+	// AuditLogsTable is the table that holds the audit_logs relation/edge.
+	AuditLogsTable = "audit_logs"
+	// AuditLogsInverseTable is the table name for the AuditLog entity.
+	// It exists in this package in order to avoid circular dependency with the "auditlog" package.
+	AuditLogsInverseTable = "audit_logs"
+	// AuditLogsColumn is the table column denoting the audit_logs relation/edge.
+	AuditLogsColumn = "task_id"
+	// DependenciesTable is the table that holds the dependencies relation/edge.
+	DependenciesTable = "task_dependencies"
+	// DependenciesInverseTable is the table name for the TaskDependency entity.
+	// It exists in this package in order to avoid circular dependency with the "taskdependency" package.
+	DependenciesInverseTable = "task_dependencies"
+	// DependenciesColumn is the table column denoting the dependencies relation/edge.
+	DependenciesColumn = "task_id"
+	// DependentsTable is the table that holds the dependents relation/edge.
+	DependentsTable = "task_dependencies"
+	// DependentsInverseTable is the table name for the TaskDependency entity.
+	// It exists in this package in order to avoid circular dependency with the "taskdependency" package.
+	DependentsInverseTable = "task_dependencies"
+	// DependentsColumn is the table column denoting the dependents relation/edge.
+	DependentsColumn = "depends_on_id"
 )
 
 // Columns holds all SQL columns for task fields.
@@ -40,8 +108,19 @@ var Columns = []string{
 	FieldTitle,
 	FieldDescription,
 	FieldCwd,
+	FieldWorktreePath,
+	FieldSourceBranch,
+	FieldTargetBranch,
 	FieldCurrentStage,
 	FieldPriority,
+	FieldUserID,
+	FieldParentTaskID,
+	FieldMaxIterations,
+	FieldTokenBudget,
+	FieldCostBudgetCents,
+	FieldStageTimeoutSeconds,
+	FieldSilverBullet,
+	FieldMetadata,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -57,10 +136,20 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	TitleValidator func(string) error
+	// CwdValidator is a validator for the "cwd" field. It is called by the builders before save.
+	CwdValidator func(string) error
 	// DefaultCurrentStage holds the default value on creation for the "current_stage" field.
 	DefaultCurrentStage string
 	// DefaultPriority holds the default value on creation for the "priority" field.
 	DefaultPriority string
+	// DefaultMaxIterations holds the default value on creation for the "max_iterations" field.
+	DefaultMaxIterations int
+	// DefaultStageTimeoutSeconds holds the default value on creation for the "stage_timeout_seconds" field.
+	DefaultStageTimeoutSeconds int
+	// DefaultSilverBullet holds the default value on creation for the "silver_bullet" field.
+	DefaultSilverBullet bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -97,6 +186,21 @@ func ByCwd(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCwd, opts...).ToFunc()
 }
 
+// ByWorktreePath orders the results by the worktree_path field.
+func ByWorktreePath(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreePath, opts...).ToFunc()
+}
+
+// BySourceBranch orders the results by the source_branch field.
+func BySourceBranch(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceBranch, opts...).ToFunc()
+}
+
+// ByTargetBranch orders the results by the target_branch field.
+func ByTargetBranch(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTargetBranch, opts...).ToFunc()
+}
+
 // ByCurrentStage orders the results by the current_stage field.
 func ByCurrentStage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCurrentStage, opts...).ToFunc()
@@ -107,6 +211,41 @@ func ByPriority(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPriority, opts...).ToFunc()
 }
 
+// ByUserID orders the results by the user_id field.
+func ByUserID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUserID, opts...).ToFunc()
+}
+
+// ByParentTaskID orders the results by the parent_task_id field.
+func ByParentTaskID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldParentTaskID, opts...).ToFunc()
+}
+
+// ByMaxIterations orders the results by the max_iterations field.
+func ByMaxIterations(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMaxIterations, opts...).ToFunc()
+}
+
+// ByTokenBudget orders the results by the token_budget field.
+func ByTokenBudget(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTokenBudget, opts...).ToFunc()
+}
+
+// ByCostBudgetCents orders the results by the cost_budget_cents field.
+func ByCostBudgetCents(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCostBudgetCents, opts...).ToFunc()
+}
+
+// ByStageTimeoutSeconds orders the results by the stage_timeout_seconds field.
+func ByStageTimeoutSeconds(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStageTimeoutSeconds, opts...).ToFunc()
+}
+
+// BySilverBullet orders the results by the silver_bullet field.
+func BySilverBullet(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSilverBullet, opts...).ToFunc()
+}
+
 // ByCreatedAt orders the results by the created_at field.
 func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
@@ -115,4 +254,109 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByStageRunsCount orders the results by stage_runs count.
+func ByStageRunsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newStageRunsStep(), opts...)
+	}
+}
+
+// ByStageRuns orders the results by stage_runs terms.
+func ByStageRuns(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newStageRunsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByPermissionsCount orders the results by permissions count.
+func ByPermissionsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPermissionsStep(), opts...)
+	}
+}
+
+// ByPermissions orders the results by permissions terms.
+func ByPermissions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPermissionsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByAuditLogsCount orders the results by audit_logs count.
+func ByAuditLogsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newAuditLogsStep(), opts...)
+	}
+}
+
+// ByAuditLogs orders the results by audit_logs terms.
+func ByAuditLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newAuditLogsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByDependenciesCount orders the results by dependencies count.
+func ByDependenciesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newDependenciesStep(), opts...)
+	}
+}
+
+// ByDependencies orders the results by dependencies terms.
+func ByDependencies(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newDependenciesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByDependentsCount orders the results by dependents count.
+func ByDependentsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newDependentsStep(), opts...)
+	}
+}
+
+// ByDependents orders the results by dependents terms.
+func ByDependents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newDependentsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+func newStageRunsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(StageRunsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, StageRunsTable, StageRunsColumn),
+	)
+}
+func newPermissionsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PermissionsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PermissionsTable, PermissionsColumn),
+	)
+}
+func newAuditLogsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(AuditLogsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, AuditLogsTable, AuditLogsColumn),
+	)
+}
+func newDependenciesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(DependenciesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, DependenciesTable, DependenciesColumn),
+	)
+}
+func newDependentsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(DependentsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, DependentsTable, DependentsColumn),
+	)
 }

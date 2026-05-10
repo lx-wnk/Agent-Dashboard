@@ -6,8 +6,13 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/user"
 )
 
@@ -29,26 +34,104 @@ func init() {
 	apikeyDescCreatedAt := apikeyFields[5].Descriptor()
 	// apikey.DefaultCreatedAt holds the default value on creation for the created_at field.
 	apikey.DefaultCreatedAt = apikeyDescCreatedAt.Default.(func() time.Time)
+	auditlogFields := schema.AuditLog{}.Fields()
+	_ = auditlogFields
+	// auditlogDescTimestamp is the schema descriptor for timestamp field.
+	auditlogDescTimestamp := auditlogFields[5].Descriptor()
+	// auditlog.DefaultTimestamp holds the default value on creation for the timestamp field.
+	auditlog.DefaultTimestamp = auditlogDescTimestamp.Default.(func() time.Time)
+	permissionrequestFields := schema.PermissionRequest{}.Fields()
+	_ = permissionrequestFields
+	// permissionrequestDescRequestedAt is the schema descriptor for requested_at field.
+	permissionrequestDescRequestedAt := permissionrequestFields[6].Descriptor()
+	// permissionrequest.DefaultRequestedAt holds the default value on creation for the requested_at field.
+	permissionrequest.DefaultRequestedAt = permissionrequestDescRequestedAt.Default.(func() time.Time)
+	stagerunFields := schema.StageRun{}.Fields()
+	_ = stagerunFields
+	// stagerunDescStatus is the schema descriptor for status field.
+	stagerunDescStatus := stagerunFields[6].Descriptor()
+	// stagerun.DefaultStatus holds the default value on creation for the status field.
+	stagerun.DefaultStatus = stagerunDescStatus.Default.(string)
+	// stagerunDescIteration is the schema descriptor for iteration field.
+	stagerunDescIteration := stagerunFields[7].Descriptor()
+	// stagerun.DefaultIteration holds the default value on creation for the iteration field.
+	stagerun.DefaultIteration = stagerunDescIteration.Default.(int)
+	// stagerunDescTokensUsed is the schema descriptor for tokens_used field.
+	stagerunDescTokensUsed := stagerunFields[9].Descriptor()
+	// stagerun.DefaultTokensUsed holds the default value on creation for the tokens_used field.
+	stagerun.DefaultTokensUsed = stagerunDescTokensUsed.Default.(int)
+	// stagerunDescCostCents is the schema descriptor for cost_cents field.
+	stagerunDescCostCents := stagerunFields[10].Descriptor()
+	// stagerun.DefaultCostCents holds the default value on creation for the cost_cents field.
+	stagerun.DefaultCostCents = stagerunDescCostCents.Default.(int)
+	// stagerunDescCreatedAt is the schema descriptor for created_at field.
+	stagerunDescCreatedAt := stagerunFields[14].Descriptor()
+	// stagerun.DefaultCreatedAt holds the default value on creation for the created_at field.
+	stagerun.DefaultCreatedAt = stagerunDescCreatedAt.Default.(func() time.Time)
 	taskFields := schema.Task{}.Fields()
 	_ = taskFields
+	// taskDescTitle is the schema descriptor for title field.
+	taskDescTitle := taskFields[2].Descriptor()
+	// task.TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	task.TitleValidator = taskDescTitle.Validators[0].(func(string) error)
+	// taskDescCwd is the schema descriptor for cwd field.
+	taskDescCwd := taskFields[4].Descriptor()
+	// task.CwdValidator is a validator for the "cwd" field. It is called by the builders before save.
+	task.CwdValidator = taskDescCwd.Validators[0].(func(string) error)
 	// taskDescCurrentStage is the schema descriptor for current_stage field.
-	taskDescCurrentStage := taskFields[5].Descriptor()
+	taskDescCurrentStage := taskFields[8].Descriptor()
 	// task.DefaultCurrentStage holds the default value on creation for the current_stage field.
 	task.DefaultCurrentStage = taskDescCurrentStage.Default.(string)
 	// taskDescPriority is the schema descriptor for priority field.
-	taskDescPriority := taskFields[6].Descriptor()
+	taskDescPriority := taskFields[9].Descriptor()
 	// task.DefaultPriority holds the default value on creation for the priority field.
 	task.DefaultPriority = taskDescPriority.Default.(string)
+	// taskDescMaxIterations is the schema descriptor for max_iterations field.
+	taskDescMaxIterations := taskFields[12].Descriptor()
+	// task.DefaultMaxIterations holds the default value on creation for the max_iterations field.
+	task.DefaultMaxIterations = taskDescMaxIterations.Default.(int)
+	// taskDescStageTimeoutSeconds is the schema descriptor for stage_timeout_seconds field.
+	taskDescStageTimeoutSeconds := taskFields[15].Descriptor()
+	// task.DefaultStageTimeoutSeconds holds the default value on creation for the stage_timeout_seconds field.
+	task.DefaultStageTimeoutSeconds = taskDescStageTimeoutSeconds.Default.(int)
+	// taskDescSilverBullet is the schema descriptor for silver_bullet field.
+	taskDescSilverBullet := taskFields[16].Descriptor()
+	// task.DefaultSilverBullet holds the default value on creation for the silver_bullet field.
+	task.DefaultSilverBullet = taskDescSilverBullet.Default.(bool)
 	// taskDescCreatedAt is the schema descriptor for created_at field.
-	taskDescCreatedAt := taskFields[7].Descriptor()
+	taskDescCreatedAt := taskFields[18].Descriptor()
 	// task.DefaultCreatedAt holds the default value on creation for the created_at field.
 	task.DefaultCreatedAt = taskDescCreatedAt.Default.(func() time.Time)
 	// taskDescUpdatedAt is the schema descriptor for updated_at field.
-	taskDescUpdatedAt := taskFields[8].Descriptor()
+	taskDescUpdatedAt := taskFields[19].Descriptor()
 	// task.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	task.DefaultUpdatedAt = taskDescUpdatedAt.Default.(func() time.Time)
 	// task.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	task.UpdateDefaultUpdatedAt = taskDescUpdatedAt.UpdateDefault.(func() time.Time)
+	taskdependencyFields := schema.TaskDependency{}.Fields()
+	_ = taskdependencyFields
+	// taskdependencyDescRequiredStage is the schema descriptor for required_stage field.
+	taskdependencyDescRequiredStage := taskdependencyFields[3].Descriptor()
+	// taskdependency.DefaultRequiredStage holds the default value on creation for the required_stage field.
+	taskdependency.DefaultRequiredStage = taskdependencyDescRequiredStage.Default.(string)
+	// taskdependencyDescOnCancelAction is the schema descriptor for on_cancel_action field.
+	taskdependencyDescOnCancelAction := taskdependencyFields[4].Descriptor()
+	// taskdependency.DefaultOnCancelAction holds the default value on creation for the on_cancel_action field.
+	taskdependency.DefaultOnCancelAction = taskdependencyDescOnCancelAction.Default.(string)
+	taskpermissionFields := schema.TaskPermission{}.Fields()
+	_ = taskpermissionFields
+	// taskpermissionDescGranted is the schema descriptor for granted field.
+	taskpermissionDescGranted := taskpermissionFields[4].Descriptor()
+	// taskpermission.DefaultGranted holds the default value on creation for the granted field.
+	taskpermission.DefaultGranted = taskpermissionDescGranted.Default.(bool)
+	// taskpermissionDescPreApproved is the schema descriptor for pre_approved field.
+	taskpermissionDescPreApproved := taskpermissionFields[5].Descriptor()
+	// taskpermission.DefaultPreApproved holds the default value on creation for the pre_approved field.
+	taskpermission.DefaultPreApproved = taskpermissionDescPreApproved.Default.(bool)
+	// taskpermissionDescRequestedAt is the schema descriptor for requested_at field.
+	taskpermissionDescRequestedAt := taskpermissionFields[7].Descriptor()
+	// taskpermission.DefaultRequestedAt holds the default value on creation for the requested_at field.
+	taskpermission.DefaultRequestedAt = taskpermissionDescRequestedAt.Default.(func() time.Time)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescIsAdmin is the schema descriptor for is_admin field.

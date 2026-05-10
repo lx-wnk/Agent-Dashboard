@@ -9,11 +9,26 @@ import (
 // ApiKey is the predicate function for apikey builders.
 type ApiKey func(*sql.Selector)
 
+// AuditLog is the predicate function for auditlog builders.
+type AuditLog func(*sql.Selector)
+
+// PermissionRequest is the predicate function for permissionrequest builders.
+type PermissionRequest func(*sql.Selector)
+
 // PipelineConfig is the predicate function for pipelineconfig builders.
 type PipelineConfig func(*sql.Selector)
 
+// StageRun is the predicate function for stagerun builders.
+type StageRun func(*sql.Selector)
+
 // Task is the predicate function for task builders.
 type Task func(*sql.Selector)
+
+// TaskDependency is the predicate function for taskdependency builders.
+type TaskDependency func(*sql.Selector)
+
+// TaskPermission is the predicate function for taskpermission builders.
+type TaskPermission func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
