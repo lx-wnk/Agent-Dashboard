@@ -15,7 +15,7 @@ type Task struct{ ent.Schema }
 // Fields of the Task.
 func (Task) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("id"),
+		field.String("id").StorageKey("id"),
 		field.String("slug").Unique(),
 		field.String("title"),
 		field.String("description").Optional(),
