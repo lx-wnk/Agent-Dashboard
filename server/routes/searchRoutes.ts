@@ -1,7 +1,8 @@
 import type { Agent, PipelineTask } from '../../src/types.js'
 import { Router } from 'express'
 import { getDb } from '../db/client.js'
-import { getTaskById } from '../db/tasksRepo.js'
+import type { TaskRow } from '../db/rowMappers.js'
+import { rowToTask } from '../db/rowMappers.js'
 import { WHITESPACE_RE } from '../paths.js'
 
 interface SearchDeps {
@@ -21,7 +22,12 @@ export function createSearchRouter({ getAgents }: SearchDeps): ReturnType<typeof
   const router = Router()
 
   router.get('/search', (req, res) => {
-    const q = (typeof req.query.q === 'string' ? req.query.q : '').trim()
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+
+    const q = (typeof req.query.q === 'string' ? req.query.q : '').slice(0, 200).trim()
     const type = (typeof req.query.type === 'string' ? req.query.type : 'all')
     const limit = Math.min(50, Math.max(1, Number.parseInt(String(req.query.limit ?? '20'), 10) || 20))
 
@@ -31,31 +37,43 @@ export function createSearchRouter({ getAgents }: SearchDeps): ReturnType<typeof
     }
 
     const db = getDb()
-    const user = req.user!
+    const user = req.user
 
-    // FTS5 task search
+    // FTS5 task search — subquery approach avoids rank-column ambiguity that
+    // occurs when task_fts is JOINed with tasks. The FTS subquery resolves
+    // `rank` in its own scope; the outer query applies user-scoping.
     const tasks: PipelineTask[] = []
     if (type === 'tasks' || type === 'all') {
-      const rows = db.prepare(`
-        SELECT task_id FROM task_fts
-        WHERE task_fts MATCH ?
-        ORDER BY rank
-        LIMIT ?
-      `).all(sanitizeFtsQuery(q), limit) as Array<{ task_id: string }>
-      tasks.push(
-        ...rows
-          .map(r => getTaskById(r.task_id))
-          .filter((t): t is PipelineTask => t !== null),
-      )
+      try {
+        const rows = db.prepare(`
+          SELECT tasks.*
+          FROM tasks
+          WHERE id IN (
+            SELECT task_id FROM task_fts
+            WHERE task_fts MATCH @query
+            ORDER BY rank
+            LIMIT @ftsLimit
+          )
+            AND (user_id IS NULL OR user_id = @userId OR @isAdmin = 1)
+          LIMIT @limit
+        `).all({
+          query: sanitizeFtsQuery(q),
+          ftsLimit: limit * 3,
+          userId: user.id,
+          isAdmin: user.isAdmin ? 1 : 0,
+          limit,
+        }) as TaskRow[]
+        tasks.push(...rows.map(rowToTask))
+      }
+      catch {
+        // FTS5 query parse errors (e.g. invalid syntax) — return empty results
+      }
     }
 
-    const scopedTasks = user.isAdmin
-      ? tasks
-      : tasks.filter(t => t.userId === null || t.userId === user.id)
-
-    // In-memory agent search
+    // In-memory agent search — agents are local/shared; only admins see them
+    // in multi-user setups to avoid leaking other users' agent activity.
     let agents: Agent[] = []
-    if (type === 'agents' || type === 'all') {
+    if ((type === 'agents' || type === 'all') && user.isAdmin) {
       const ql = q.toLowerCase()
       agents = getAgents()
         .filter(a =>
@@ -66,7 +84,7 @@ export function createSearchRouter({ getAgents }: SearchDeps): ReturnType<typeof
         .slice(0, limit)
     }
 
-    res.json({ tasks: scopedTasks, agents })
+    res.json({ tasks, agents })
   })
 
   return router
