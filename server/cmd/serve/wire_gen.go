@@ -6,27 +6,59 @@ import (
 	"net/http"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
+	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
 func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, error) {
+	entClient, err := provideDB(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 	broadcaster := sse.NewBroadcaster()
 	routerConfig := provideRouterConfig(cfg)
-	routerDeps := provideRouterDeps(routerConfig, broadcaster)
+	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, nil
 }
 
+func provideDB(cfg config.Config) (*ent.Client, error) {
+	return db.Open(cfg.DBPath)
+}
+
+func provideGitHubClient(cfg config.Config) *authpkg.GitHubClient {
+	if cfg.GitHubClientID == "" {
+		return nil
+	}
+	return authpkg.NewGitHubClient(cfg.GitHubClientID, cfg.GitHubClientSecret)
+}
+
 func provideRouterConfig(cfg config.Config) api.RouterConfig {
 	return api.RouterConfig{
-		JWTSecret: cfg.JWTSecret,
+		JWTSecret:   cfg.JWTSecret,
+		CallbackURL: cfg.CallbackURL(),
 	}
 }
 
-func provideRouterDeps(cfg api.RouterConfig, b *sse.Broadcaster) api.RouterDeps {
-	return api.RouterDeps{Config: cfg, AgentBroadcaster: b}
+func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client) api.RouterDeps {
+	var userRepo repo.UserRepo
+	var apiKeyRepo repo.ApiKeyRepo
+	if client != nil {
+		userRepo = repo.NewUserRepo(client)
+		apiKeyRepo = repo.NewApiKeyRepo(client)
+	}
+	return api.RouterDeps{
+		Config:           rc,
+		AgentBroadcaster: b,
+		GitHubClient:     provideGitHubClient(cfg),
+		UserRepo:         userRepo,
+		ApiKeyRepo:       apiKeyRepo,
+	}
 }
 
 func provideServer(cfg config.Config, handler http.Handler) *api.Server {

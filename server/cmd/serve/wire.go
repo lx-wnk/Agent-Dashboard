@@ -12,6 +12,8 @@ import (
 
 func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, error) {
 	wire.Build(
+		provideDB,
+		provideGitHubClient,
 		provideRouterConfig,
 		provideRouterDeps,
 		api.NewRouter,
