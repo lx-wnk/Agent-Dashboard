@@ -2,6 +2,7 @@
 package history
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -93,7 +94,7 @@ func (h *Handler) startImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.importer.Run(r.Context(), onProgress); err != nil {
+	if err := h.importer.Run(context.Background(), onProgress); err != nil {
 		// Run returns an error only when already running globally (single-instance guard).
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
