@@ -68,7 +68,7 @@ func registerProgressTask(registry mcp.ToolRegistry, d ControlDeps) {
 				return nil, mcp.Fail("Task cannot progress (terminal, not found, or no free runner slot)")
 			}
 			safeBroadcast(d.Broadcast, id)
-			// Refresh task after progression.
+			// Refresh task after progression; ignore error — stale data is better than an error on success.
 			task, _ = d.TaskRepo.GetByID(ctx, id)
 			return mcp.OK(map[string]any{"task": task, "stageRun": stageRun})
 		},
@@ -113,6 +113,7 @@ func registerCancelTask(registry mcp.ToolRegistry, d ControlDeps) {
 			}
 			safeBroadcast(d.Broadcast, id)
 
+			// Refresh task after cancel; ignore error — stale data is better than an error on success.
 			task, _ = d.TaskRepo.GetByID(ctx, id)
 			return mcp.OK(map[string]any{"task": task})
 		},
@@ -141,7 +142,10 @@ func registerRetryTask(registry mcp.ToolRegistry, d ControlDeps) {
 			}
 
 			// Get the latest stage run for the task's current stage.
-			latest, _ := d.SRRepo.GetLatestByTaskAndStage(ctx, id, task.CurrentStage)
+			latest, err := d.SRRepo.GetLatestByTaskAndStage(ctx, id, task.CurrentStage)
+			if err != nil {
+				return nil, mcp.Fail("retry_task: could not fetch stage run: " + err.Error())
+			}
 			if latest == nil || latest.Status != "failed" {
 				return nil, mcp.Fail("Task has no failed stage run to retry on its current stage")
 			}
@@ -167,6 +171,7 @@ func registerRetryTask(registry mcp.ToolRegistry, d ControlDeps) {
 				return nil, mcp.Fail("Task could not progress (slot full, no handler, or terminal)")
 			}
 			safeBroadcast(d.Broadcast, id)
+			// Refresh task after retry; ignore error — stale data is better than an error on success.
 			task, _ = d.TaskRepo.GetByID(ctx, id)
 			return mcp.OK(map[string]any{"task": task, "stageRun": stageRun})
 		},
@@ -269,7 +274,13 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 					if req.Pattern != nil {
 						in.Pattern = req.Pattern
 					}
-					_, _ = d.PermRepo.CreateTaskPermission(ctx, in)
+					if _, permErr := d.PermRepo.CreateTaskPermission(ctx, in); permErr != nil {
+						return mcp.OK(map[string]any{
+							"resolved": req,
+							"resumed":  false,
+							"warning":  "permission grant recorded but CreateTaskPermission failed: " + permErr.Error(),
+						})
+					}
 				}
 				if d.Orchestrator != nil {
 					if _, resumeErr := d.Orchestrator.ResumeFromUser(ctx, run.TaskID); resumeErr != nil {

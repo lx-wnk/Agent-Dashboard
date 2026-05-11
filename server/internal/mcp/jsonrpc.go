@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 )
@@ -32,9 +34,14 @@ type rpcError struct {
 func MCPHandler(registry ToolRegistry) http.HandlerFunc {
 	toolsList := buildToolsList(registry)
 	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var req rpcRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeRPC(w, rpcResponse{JSONRPC: "2.0", Error: &rpcError{Code: -32700, Message: "parse error"}})
+			return
+		}
+		if req.JSONRPC != "2.0" {
+			writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32600, Message: "jsonrpc must be \"2.0\""}})
 			return
 		}
 
@@ -76,7 +83,7 @@ func MCPHandler(registry ToolRegistry) http.HandlerFunc {
 			if p.Arguments == nil {
 				p.Arguments = map[string]any{}
 			}
-			result, err := def.Handler(r.Context(), p.Arguments)
+			result, err := callHandler(def, r.Context(), p.Arguments)
 			if err != nil {
 				code := -32603 // internal error
 				if _, isMCP := err.(*MCPError); isMCP {
@@ -91,6 +98,17 @@ func MCPHandler(registry ToolRegistry) http.HandlerFunc {
 			writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32601, Message: "method not found: " + req.Method}})
 		}
 	}
+}
+
+// callHandler invokes def.Handler and converts any panic into an error so the
+// JSON-RPC response always includes the request id rather than returning a bare HTTP 500.
+func callHandler(def *ToolDef, ctx context.Context, args map[string]any) (result *ToolResult, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("handler panic: %v", r)
+		}
+	}()
+	return def.Handler(ctx, args)
 }
 
 func writeRPC(w http.ResponseWriter, resp rpcResponse) {

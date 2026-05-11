@@ -28,9 +28,13 @@ func TestMCPEndpoint_Initialize(t *testing.T) {
 }
 
 func TestMCPEndpoint_ToolsList_SortedAlphabetically(t *testing.T) {
+	noop := func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
+		return mcp.OK(nil)
+	}
 	registry := mcp.ToolRegistry{}
-	registry.Register(&mcp.ToolDef{Name: "z_tool", Description: "Z", InputSchema: map[string]any{"type": "object"}, Handler: nil})
-	registry.Register(&mcp.ToolDef{Name: "a_tool", Description: "A", InputSchema: map[string]any{"type": "object"}, Handler: nil})
+	// Use real scope-map names that sort correctly: "list_tasks" < "update_task"
+	registry.Register(&mcp.ToolDef{Name: "update_task", Description: "Z", InputSchema: map[string]any{"type": "object"}, Handler: noop})
+	registry.Register(&mcp.ToolDef{Name: "list_tasks", Description: "A", InputSchema: map[string]any{"type": "object"}, Handler: noop})
 	h := mcp.MCPHandler(registry)
 	body := `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
 	req := httptest.NewRequest(http.MethodPost, "/api/mcp", bytes.NewBufferString(body))
@@ -40,8 +44,8 @@ func TestMCPEndpoint_ToolsList_SortedAlphabetically(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	toolsList := resp["result"].(map[string]any)["tools"].([]any)
-	require.Equal(t, "a_tool", toolsList[0].(map[string]any)["name"])
-	require.Equal(t, "z_tool", toolsList[1].(map[string]any)["name"])
+	require.Equal(t, "list_tasks", toolsList[0].(map[string]any)["name"])
+	require.Equal(t, "update_task", toolsList[1].(map[string]any)["name"])
 }
 
 func TestMCPEndpoint_ToolsCall_MissingScope(t *testing.T) {

@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
@@ -80,7 +82,7 @@ func AuthFromContext(ctx context.Context) *MCPAuthInfo {
 func writeAuthError(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	_, _ = w.Write([]byte(`{"error":"` + msg + `"}`))
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 // McpAuthMiddleware is a chi-compatible middleware that authenticates MCP requests.
@@ -89,11 +91,12 @@ func McpAuthMiddleware(keyRepo repo.ApiKeyRepo) func(http.Handler) http.Handler 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
-			if len(header) < 8 || header[:7] != "Bearer " {
+			rest, ok := strings.CutPrefix(header, "Bearer ")
+			if !ok {
 				writeAuthError(w, "Missing or invalid Authorization header")
 				return
 			}
-			token := header[7:]
+			token := strings.TrimSpace(rest)
 			hash := HashToken(token)
 			key, err := keyRepo.GetByHash(r.Context(), hash)
 			if err != nil {
