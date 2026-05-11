@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
@@ -15,6 +16,10 @@ type RefinementTurnRepo interface {
 	// ListForTask returns all turns for a task ordered by created_at ASC.
 	// Limit <= 0 means no limit.
 	ListForTask(ctx context.Context, taskID string, limit int) ([]*ent.RefinementTurn, error)
+	// ListForTaskNewest returns the most-recent limit turns for a task, ordered ASC (oldest first).
+	// This is the correct method to use for building windowed conversation history.
+	// Limit <= 0 means no limit (equivalent to ListForTask).
+	ListForTaskNewest(ctx context.Context, taskID string, limit int) ([]*ent.RefinementTurn, error)
 	// DeleteForTask removes all turns for a task (for cleanup / reset).
 	DeleteForTask(ctx context.Context, taskID string) error
 }
@@ -58,6 +63,24 @@ func (r *entRefinementTurnRepo) ListForTask(ctx context.Context, taskID string, 
 	turns, err := q.All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("refinementTurn.ListForTask: %w", err)
+	}
+	return turns, nil
+}
+
+func (r *entRefinementTurnRepo) ListForTaskNewest(ctx context.Context, taskID string, limit int) ([]*ent.RefinementTurn, error) {
+	q := r.client.RefinementTurn.Query().
+		Where(refinementturn.TaskID(taskID)).
+		Order(refinementturn.ByCreatedAt(sql.OrderDesc()))
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	turns, err := q.All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("refinementTurn.ListForTaskNewest: %w", err)
+	}
+	// Reverse to restore ASC order (oldest first) for the caller.
+	for i, j := 0, len(turns)-1; i < j; i, j = i+1, j-1 {
+		turns[i], turns[j] = turns[j], turns[i]
 	}
 	return turns, nil
 }

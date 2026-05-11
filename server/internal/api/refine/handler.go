@@ -109,7 +109,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch windowed history (last 20 turns) for context.
-	history, err := h.turns.ListForTask(r.Context(), taskID, 20)
+	history, err := h.turns.ListForTaskNewest(r.Context(), taskID, 20)
 	if err != nil {
 		jsonError(w, "failed to fetch history", http.StatusInternalServerError)
 		return
