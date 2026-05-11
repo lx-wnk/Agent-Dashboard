@@ -6,17 +6,29 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// AgentCostTrend is the predicate function for agentcosttrend builders.
+type AgentCostTrend func(*sql.Selector)
+
 // ApiKey is the predicate function for apikey builders.
 type ApiKey func(*sql.Selector)
 
 // AuditLog is the predicate function for auditlog builders.
 type AuditLog func(*sql.Selector)
 
+// PermissionPreset is the predicate function for permissionpreset builders.
+type PermissionPreset func(*sql.Selector)
+
 // PermissionRequest is the predicate function for permissionrequest builders.
 type PermissionRequest func(*sql.Selector)
 
 // PipelineConfig is the predicate function for pipelineconfig builders.
 type PipelineConfig func(*sql.Selector)
+
+// RefinementTurn is the predicate function for refinementturn builders.
+type RefinementTurn func(*sql.Selector)
+
+// RemoteRegistration is the predicate function for remoteregistration builders.
+type RemoteRegistration func(*sql.Selector)
 
 // StageRun is the predicate function for stagerun builders.
 type StageRun func(*sql.Selector)

@@ -12,14 +12,22 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// AgentCostTrend is the client for interacting with the AgentCostTrend builders.
+	AgentCostTrend *AgentCostTrendClient
 	// ApiKey is the client for interacting with the ApiKey builders.
 	ApiKey *ApiKeyClient
 	// AuditLog is the client for interacting with the AuditLog builders.
 	AuditLog *AuditLogClient
+	// PermissionPreset is the client for interacting with the PermissionPreset builders.
+	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
 	PermissionRequest *PermissionRequestClient
 	// PipelineConfig is the client for interacting with the PipelineConfig builders.
 	PipelineConfig *PipelineConfigClient
+	// RefinementTurn is the client for interacting with the RefinementTurn builders.
+	RefinementTurn *RefinementTurnClient
+	// RemoteRegistration is the client for interacting with the RemoteRegistration builders.
+	RemoteRegistration *RemoteRegistrationClient
 	// StageRun is the client for interacting with the StageRun builders.
 	StageRun *StageRunClient
 	// Task is the client for interacting with the Task builders.
@@ -161,10 +169,14 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.AgentCostTrend = NewAgentCostTrendClient(tx.config)
 	tx.ApiKey = NewApiKeyClient(tx.config)
 	tx.AuditLog = NewAuditLogClient(tx.config)
+	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
 	tx.PermissionRequest = NewPermissionRequestClient(tx.config)
 	tx.PipelineConfig = NewPipelineConfigClient(tx.config)
+	tx.RefinementTurn = NewRefinementTurnClient(tx.config)
+	tx.RemoteRegistration = NewRemoteRegistrationClient(tx.config)
 	tx.StageRun = NewStageRunClient(tx.config)
 	tx.Task = NewTaskClient(tx.config)
 	tx.TaskDependency = NewTaskDependencyClient(tx.config)
@@ -179,7 +191,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: ApiKey.QueryXXX(), the query will be executed
+// applies a query, for example: AgentCostTrend.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

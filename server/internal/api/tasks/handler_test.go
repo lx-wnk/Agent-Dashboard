@@ -34,10 +34,11 @@ func withAuth(t *testing.T, r *http.Request) *http.Request {
 // newTestHandler creates a Handler backed by an in-memory SQLite DB.
 func newTestHandler(t *testing.T) (*tasks.Handler, *chi.Mux) {
 	t.Helper()
-	client, err := db.Open(":memory:")
+	bundle, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
 	}
+	client := bundle.Client
 	t.Cleanup(func() { _ = client.Close() })
 
 	taskRepo := repo.NewTaskRepo(client)

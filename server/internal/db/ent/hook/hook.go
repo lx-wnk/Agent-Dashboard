@@ -9,6 +9,18 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
+// The AgentCostTrendFunc type is an adapter to allow the use of ordinary
+// function as AgentCostTrend mutator.
+type AgentCostTrendFunc func(context.Context, *ent.AgentCostTrendMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AgentCostTrendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AgentCostTrendMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AgentCostTrendMutation", m)
+}
+
 // The ApiKeyFunc type is an adapter to allow the use of ordinary
 // function as ApiKey mutator.
 type ApiKeyFunc func(context.Context, *ent.ApiKeyMutation) (ent.Value, error)
@@ -33,6 +45,18 @@ func (f AuditLogFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, er
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuditLogMutation", m)
 }
 
+// The PermissionPresetFunc type is an adapter to allow the use of ordinary
+// function as PermissionPreset mutator.
+type PermissionPresetFunc func(context.Context, *ent.PermissionPresetMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PermissionPresetFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PermissionPresetMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PermissionPresetMutation", m)
+}
+
 // The PermissionRequestFunc type is an adapter to allow the use of ordinary
 // function as PermissionRequest mutator.
 type PermissionRequestFunc func(context.Context, *ent.PermissionRequestMutation) (ent.Value, error)
@@ -55,6 +79,30 @@ func (f PipelineConfigFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PipelineConfigMutation", m)
+}
+
+// The RefinementTurnFunc type is an adapter to allow the use of ordinary
+// function as RefinementTurn mutator.
+type RefinementTurnFunc func(context.Context, *ent.RefinementTurnMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RefinementTurnFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RefinementTurnMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RefinementTurnMutation", m)
+}
+
+// The RemoteRegistrationFunc type is an adapter to allow the use of ordinary
+// function as RemoteRegistration mutator.
+type RemoteRegistrationFunc func(context.Context, *ent.RemoteRegistrationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RemoteRegistrationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RemoteRegistrationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RemoteRegistrationMutation", m)
 }
 
 // The StageRunFunc type is an adapter to allow the use of ordinary

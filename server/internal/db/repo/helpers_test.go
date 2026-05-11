@@ -11,12 +11,12 @@ import (
 
 func openDB(t *testing.T) *ent.Client {
 	t.Helper()
-	client, err := db.Open(":memory:")
+	bundle, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
-	return client
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	return bundle.Client
 }
 
 func createTask(t *testing.T, r repo.TaskRepo, slug string) string {

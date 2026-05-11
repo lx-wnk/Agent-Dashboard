@@ -15,10 +15,14 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
@@ -31,14 +35,22 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// AgentCostTrend is the client for interacting with the AgentCostTrend builders.
+	AgentCostTrend *AgentCostTrendClient
 	// ApiKey is the client for interacting with the ApiKey builders.
 	ApiKey *ApiKeyClient
 	// AuditLog is the client for interacting with the AuditLog builders.
 	AuditLog *AuditLogClient
+	// PermissionPreset is the client for interacting with the PermissionPreset builders.
+	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
 	PermissionRequest *PermissionRequestClient
 	// PipelineConfig is the client for interacting with the PipelineConfig builders.
 	PipelineConfig *PipelineConfigClient
+	// RefinementTurn is the client for interacting with the RefinementTurn builders.
+	RefinementTurn *RefinementTurnClient
+	// RemoteRegistration is the client for interacting with the RemoteRegistration builders.
+	RemoteRegistration *RemoteRegistrationClient
 	// StageRun is the client for interacting with the StageRun builders.
 	StageRun *StageRunClient
 	// Task is the client for interacting with the Task builders.
@@ -60,10 +72,14 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.AgentCostTrend = NewAgentCostTrendClient(c.config)
 	c.ApiKey = NewApiKeyClient(c.config)
 	c.AuditLog = NewAuditLogClient(c.config)
+	c.PermissionPreset = NewPermissionPresetClient(c.config)
 	c.PermissionRequest = NewPermissionRequestClient(c.config)
 	c.PipelineConfig = NewPipelineConfigClient(c.config)
+	c.RefinementTurn = NewRefinementTurnClient(c.config)
+	c.RemoteRegistration = NewRemoteRegistrationClient(c.config)
 	c.StageRun = NewStageRunClient(c.config)
 	c.Task = NewTaskClient(c.config)
 	c.TaskDependency = NewTaskDependencyClient(c.config)
@@ -159,17 +175,21 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:               ctx,
-		config:            cfg,
-		ApiKey:            NewApiKeyClient(cfg),
-		AuditLog:          NewAuditLogClient(cfg),
-		PermissionRequest: NewPermissionRequestClient(cfg),
-		PipelineConfig:    NewPipelineConfigClient(cfg),
-		StageRun:          NewStageRunClient(cfg),
-		Task:              NewTaskClient(cfg),
-		TaskDependency:    NewTaskDependencyClient(cfg),
-		TaskPermission:    NewTaskPermissionClient(cfg),
-		User:              NewUserClient(cfg),
+		ctx:                ctx,
+		config:             cfg,
+		AgentCostTrend:     NewAgentCostTrendClient(cfg),
+		ApiKey:             NewApiKeyClient(cfg),
+		AuditLog:           NewAuditLogClient(cfg),
+		PermissionPreset:   NewPermissionPresetClient(cfg),
+		PermissionRequest:  NewPermissionRequestClient(cfg),
+		PipelineConfig:     NewPipelineConfigClient(cfg),
+		RefinementTurn:     NewRefinementTurnClient(cfg),
+		RemoteRegistration: NewRemoteRegistrationClient(cfg),
+		StageRun:           NewStageRunClient(cfg),
+		Task:               NewTaskClient(cfg),
+		TaskDependency:     NewTaskDependencyClient(cfg),
+		TaskPermission:     NewTaskPermissionClient(cfg),
+		User:               NewUserClient(cfg),
 	}, nil
 }
 
@@ -187,24 +207,28 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:               ctx,
-		config:            cfg,
-		ApiKey:            NewApiKeyClient(cfg),
-		AuditLog:          NewAuditLogClient(cfg),
-		PermissionRequest: NewPermissionRequestClient(cfg),
-		PipelineConfig:    NewPipelineConfigClient(cfg),
-		StageRun:          NewStageRunClient(cfg),
-		Task:              NewTaskClient(cfg),
-		TaskDependency:    NewTaskDependencyClient(cfg),
-		TaskPermission:    NewTaskPermissionClient(cfg),
-		User:              NewUserClient(cfg),
+		ctx:                ctx,
+		config:             cfg,
+		AgentCostTrend:     NewAgentCostTrendClient(cfg),
+		ApiKey:             NewApiKeyClient(cfg),
+		AuditLog:           NewAuditLogClient(cfg),
+		PermissionPreset:   NewPermissionPresetClient(cfg),
+		PermissionRequest:  NewPermissionRequestClient(cfg),
+		PipelineConfig:     NewPipelineConfigClient(cfg),
+		RefinementTurn:     NewRefinementTurnClient(cfg),
+		RemoteRegistration: NewRemoteRegistrationClient(cfg),
+		StageRun:           NewStageRunClient(cfg),
+		Task:               NewTaskClient(cfg),
+		TaskDependency:     NewTaskDependencyClient(cfg),
+		TaskPermission:     NewTaskPermissionClient(cfg),
+		User:               NewUserClient(cfg),
 	}, nil
 }
 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		ApiKey.
+//		AgentCostTrend.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -227,7 +251,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.ApiKey, c.AuditLog, c.PermissionRequest, c.PipelineConfig, c.StageRun, c.Task,
+		c.AgentCostTrend, c.ApiKey, c.AuditLog, c.PermissionPreset, c.PermissionRequest,
+		c.PipelineConfig, c.RefinementTurn, c.RemoteRegistration, c.StageRun, c.Task,
 		c.TaskDependency, c.TaskPermission, c.User,
 	} {
 		n.Use(hooks...)
@@ -238,7 +263,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.ApiKey, c.AuditLog, c.PermissionRequest, c.PipelineConfig, c.StageRun, c.Task,
+		c.AgentCostTrend, c.ApiKey, c.AuditLog, c.PermissionPreset, c.PermissionRequest,
+		c.PipelineConfig, c.RefinementTurn, c.RemoteRegistration, c.StageRun, c.Task,
 		c.TaskDependency, c.TaskPermission, c.User,
 	} {
 		n.Intercept(interceptors...)
@@ -248,14 +274,22 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *AgentCostTrendMutation:
+		return c.AgentCostTrend.mutate(ctx, m)
 	case *ApiKeyMutation:
 		return c.ApiKey.mutate(ctx, m)
 	case *AuditLogMutation:
 		return c.AuditLog.mutate(ctx, m)
+	case *PermissionPresetMutation:
+		return c.PermissionPreset.mutate(ctx, m)
 	case *PermissionRequestMutation:
 		return c.PermissionRequest.mutate(ctx, m)
 	case *PipelineConfigMutation:
 		return c.PipelineConfig.mutate(ctx, m)
+	case *RefinementTurnMutation:
+		return c.RefinementTurn.mutate(ctx, m)
+	case *RemoteRegistrationMutation:
+		return c.RemoteRegistration.mutate(ctx, m)
 	case *StageRunMutation:
 		return c.StageRun.mutate(ctx, m)
 	case *TaskMutation:
@@ -268,6 +302,139 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.User.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// AgentCostTrendClient is a client for the AgentCostTrend schema.
+type AgentCostTrendClient struct {
+	config
+}
+
+// NewAgentCostTrendClient returns a client for the AgentCostTrend from the given config.
+func NewAgentCostTrendClient(c config) *AgentCostTrendClient {
+	return &AgentCostTrendClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `agentcosttrend.Hooks(f(g(h())))`.
+func (c *AgentCostTrendClient) Use(hooks ...Hook) {
+	c.hooks.AgentCostTrend = append(c.hooks.AgentCostTrend, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `agentcosttrend.Intercept(f(g(h())))`.
+func (c *AgentCostTrendClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AgentCostTrend = append(c.inters.AgentCostTrend, interceptors...)
+}
+
+// Create returns a builder for creating a AgentCostTrend entity.
+func (c *AgentCostTrendClient) Create() *AgentCostTrendCreate {
+	mutation := newAgentCostTrendMutation(c.config, OpCreate)
+	return &AgentCostTrendCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AgentCostTrend entities.
+func (c *AgentCostTrendClient) CreateBulk(builders ...*AgentCostTrendCreate) *AgentCostTrendCreateBulk {
+	return &AgentCostTrendCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AgentCostTrendClient) MapCreateBulk(slice any, setFunc func(*AgentCostTrendCreate, int)) *AgentCostTrendCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AgentCostTrendCreateBulk{err: fmt.Errorf("calling to AgentCostTrendClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AgentCostTrendCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AgentCostTrendCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AgentCostTrend.
+func (c *AgentCostTrendClient) Update() *AgentCostTrendUpdate {
+	mutation := newAgentCostTrendMutation(c.config, OpUpdate)
+	return &AgentCostTrendUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AgentCostTrendClient) UpdateOne(_m *AgentCostTrend) *AgentCostTrendUpdateOne {
+	mutation := newAgentCostTrendMutation(c.config, OpUpdateOne, withAgentCostTrend(_m))
+	return &AgentCostTrendUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AgentCostTrendClient) UpdateOneID(id string) *AgentCostTrendUpdateOne {
+	mutation := newAgentCostTrendMutation(c.config, OpUpdateOne, withAgentCostTrendID(id))
+	return &AgentCostTrendUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AgentCostTrend.
+func (c *AgentCostTrendClient) Delete() *AgentCostTrendDelete {
+	mutation := newAgentCostTrendMutation(c.config, OpDelete)
+	return &AgentCostTrendDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AgentCostTrendClient) DeleteOne(_m *AgentCostTrend) *AgentCostTrendDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AgentCostTrendClient) DeleteOneID(id string) *AgentCostTrendDeleteOne {
+	builder := c.Delete().Where(agentcosttrend.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AgentCostTrendDeleteOne{builder}
+}
+
+// Query returns a query builder for AgentCostTrend.
+func (c *AgentCostTrendClient) Query() *AgentCostTrendQuery {
+	return &AgentCostTrendQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAgentCostTrend},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AgentCostTrend entity by its id.
+func (c *AgentCostTrendClient) Get(ctx context.Context, id string) (*AgentCostTrend, error) {
+	return c.Query().Where(agentcosttrend.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AgentCostTrendClient) GetX(ctx context.Context, id string) *AgentCostTrend {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AgentCostTrendClient) Hooks() []Hook {
+	return c.hooks.AgentCostTrend
+}
+
+// Interceptors returns the client interceptors.
+func (c *AgentCostTrendClient) Interceptors() []Interceptor {
+	return c.inters.AgentCostTrend
+}
+
+func (c *AgentCostTrendClient) mutate(ctx context.Context, m *AgentCostTrendMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AgentCostTrendCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AgentCostTrendUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AgentCostTrendUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AgentCostTrendDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AgentCostTrend mutation op: %q", m.Op())
 	}
 }
 
@@ -553,6 +720,139 @@ func (c *AuditLogClient) mutate(ctx context.Context, m *AuditLogMutation) (Value
 	}
 }
 
+// PermissionPresetClient is a client for the PermissionPreset schema.
+type PermissionPresetClient struct {
+	config
+}
+
+// NewPermissionPresetClient returns a client for the PermissionPreset from the given config.
+func NewPermissionPresetClient(c config) *PermissionPresetClient {
+	return &PermissionPresetClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `permissionpreset.Hooks(f(g(h())))`.
+func (c *PermissionPresetClient) Use(hooks ...Hook) {
+	c.hooks.PermissionPreset = append(c.hooks.PermissionPreset, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `permissionpreset.Intercept(f(g(h())))`.
+func (c *PermissionPresetClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PermissionPreset = append(c.inters.PermissionPreset, interceptors...)
+}
+
+// Create returns a builder for creating a PermissionPreset entity.
+func (c *PermissionPresetClient) Create() *PermissionPresetCreate {
+	mutation := newPermissionPresetMutation(c.config, OpCreate)
+	return &PermissionPresetCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PermissionPreset entities.
+func (c *PermissionPresetClient) CreateBulk(builders ...*PermissionPresetCreate) *PermissionPresetCreateBulk {
+	return &PermissionPresetCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PermissionPresetClient) MapCreateBulk(slice any, setFunc func(*PermissionPresetCreate, int)) *PermissionPresetCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PermissionPresetCreateBulk{err: fmt.Errorf("calling to PermissionPresetClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PermissionPresetCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PermissionPresetCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PermissionPreset.
+func (c *PermissionPresetClient) Update() *PermissionPresetUpdate {
+	mutation := newPermissionPresetMutation(c.config, OpUpdate)
+	return &PermissionPresetUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PermissionPresetClient) UpdateOne(_m *PermissionPreset) *PermissionPresetUpdateOne {
+	mutation := newPermissionPresetMutation(c.config, OpUpdateOne, withPermissionPreset(_m))
+	return &PermissionPresetUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PermissionPresetClient) UpdateOneID(id string) *PermissionPresetUpdateOne {
+	mutation := newPermissionPresetMutation(c.config, OpUpdateOne, withPermissionPresetID(id))
+	return &PermissionPresetUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PermissionPreset.
+func (c *PermissionPresetClient) Delete() *PermissionPresetDelete {
+	mutation := newPermissionPresetMutation(c.config, OpDelete)
+	return &PermissionPresetDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PermissionPresetClient) DeleteOne(_m *PermissionPreset) *PermissionPresetDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PermissionPresetClient) DeleteOneID(id string) *PermissionPresetDeleteOne {
+	builder := c.Delete().Where(permissionpreset.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PermissionPresetDeleteOne{builder}
+}
+
+// Query returns a query builder for PermissionPreset.
+func (c *PermissionPresetClient) Query() *PermissionPresetQuery {
+	return &PermissionPresetQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePermissionPreset},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PermissionPreset entity by its id.
+func (c *PermissionPresetClient) Get(ctx context.Context, id string) (*PermissionPreset, error) {
+	return c.Query().Where(permissionpreset.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PermissionPresetClient) GetX(ctx context.Context, id string) *PermissionPreset {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PermissionPresetClient) Hooks() []Hook {
+	return c.hooks.PermissionPreset
+}
+
+// Interceptors returns the client interceptors.
+func (c *PermissionPresetClient) Interceptors() []Interceptor {
+	return c.inters.PermissionPreset
+}
+
+func (c *PermissionPresetClient) mutate(ctx context.Context, m *PermissionPresetMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PermissionPresetCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PermissionPresetUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PermissionPresetUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PermissionPresetDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PermissionPreset mutation op: %q", m.Op())
+	}
+}
+
 // PermissionRequestClient is a client for the PermissionRequest schema.
 type PermissionRequestClient struct {
 	config
@@ -832,6 +1132,272 @@ func (c *PipelineConfigClient) mutate(ctx context.Context, m *PipelineConfigMuta
 		return (&PipelineConfigDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown PipelineConfig mutation op: %q", m.Op())
+	}
+}
+
+// RefinementTurnClient is a client for the RefinementTurn schema.
+type RefinementTurnClient struct {
+	config
+}
+
+// NewRefinementTurnClient returns a client for the RefinementTurn from the given config.
+func NewRefinementTurnClient(c config) *RefinementTurnClient {
+	return &RefinementTurnClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `refinementturn.Hooks(f(g(h())))`.
+func (c *RefinementTurnClient) Use(hooks ...Hook) {
+	c.hooks.RefinementTurn = append(c.hooks.RefinementTurn, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `refinementturn.Intercept(f(g(h())))`.
+func (c *RefinementTurnClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RefinementTurn = append(c.inters.RefinementTurn, interceptors...)
+}
+
+// Create returns a builder for creating a RefinementTurn entity.
+func (c *RefinementTurnClient) Create() *RefinementTurnCreate {
+	mutation := newRefinementTurnMutation(c.config, OpCreate)
+	return &RefinementTurnCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RefinementTurn entities.
+func (c *RefinementTurnClient) CreateBulk(builders ...*RefinementTurnCreate) *RefinementTurnCreateBulk {
+	return &RefinementTurnCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RefinementTurnClient) MapCreateBulk(slice any, setFunc func(*RefinementTurnCreate, int)) *RefinementTurnCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RefinementTurnCreateBulk{err: fmt.Errorf("calling to RefinementTurnClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RefinementTurnCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RefinementTurnCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RefinementTurn.
+func (c *RefinementTurnClient) Update() *RefinementTurnUpdate {
+	mutation := newRefinementTurnMutation(c.config, OpUpdate)
+	return &RefinementTurnUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RefinementTurnClient) UpdateOne(_m *RefinementTurn) *RefinementTurnUpdateOne {
+	mutation := newRefinementTurnMutation(c.config, OpUpdateOne, withRefinementTurn(_m))
+	return &RefinementTurnUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RefinementTurnClient) UpdateOneID(id string) *RefinementTurnUpdateOne {
+	mutation := newRefinementTurnMutation(c.config, OpUpdateOne, withRefinementTurnID(id))
+	return &RefinementTurnUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RefinementTurn.
+func (c *RefinementTurnClient) Delete() *RefinementTurnDelete {
+	mutation := newRefinementTurnMutation(c.config, OpDelete)
+	return &RefinementTurnDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RefinementTurnClient) DeleteOne(_m *RefinementTurn) *RefinementTurnDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RefinementTurnClient) DeleteOneID(id string) *RefinementTurnDeleteOne {
+	builder := c.Delete().Where(refinementturn.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RefinementTurnDeleteOne{builder}
+}
+
+// Query returns a query builder for RefinementTurn.
+func (c *RefinementTurnClient) Query() *RefinementTurnQuery {
+	return &RefinementTurnQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRefinementTurn},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RefinementTurn entity by its id.
+func (c *RefinementTurnClient) Get(ctx context.Context, id string) (*RefinementTurn, error) {
+	return c.Query().Where(refinementturn.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RefinementTurnClient) GetX(ctx context.Context, id string) *RefinementTurn {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RefinementTurnClient) Hooks() []Hook {
+	return c.hooks.RefinementTurn
+}
+
+// Interceptors returns the client interceptors.
+func (c *RefinementTurnClient) Interceptors() []Interceptor {
+	return c.inters.RefinementTurn
+}
+
+func (c *RefinementTurnClient) mutate(ctx context.Context, m *RefinementTurnMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RefinementTurnCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RefinementTurnUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RefinementTurnUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RefinementTurnDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RefinementTurn mutation op: %q", m.Op())
+	}
+}
+
+// RemoteRegistrationClient is a client for the RemoteRegistration schema.
+type RemoteRegistrationClient struct {
+	config
+}
+
+// NewRemoteRegistrationClient returns a client for the RemoteRegistration from the given config.
+func NewRemoteRegistrationClient(c config) *RemoteRegistrationClient {
+	return &RemoteRegistrationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `remoteregistration.Hooks(f(g(h())))`.
+func (c *RemoteRegistrationClient) Use(hooks ...Hook) {
+	c.hooks.RemoteRegistration = append(c.hooks.RemoteRegistration, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `remoteregistration.Intercept(f(g(h())))`.
+func (c *RemoteRegistrationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RemoteRegistration = append(c.inters.RemoteRegistration, interceptors...)
+}
+
+// Create returns a builder for creating a RemoteRegistration entity.
+func (c *RemoteRegistrationClient) Create() *RemoteRegistrationCreate {
+	mutation := newRemoteRegistrationMutation(c.config, OpCreate)
+	return &RemoteRegistrationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RemoteRegistration entities.
+func (c *RemoteRegistrationClient) CreateBulk(builders ...*RemoteRegistrationCreate) *RemoteRegistrationCreateBulk {
+	return &RemoteRegistrationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RemoteRegistrationClient) MapCreateBulk(slice any, setFunc func(*RemoteRegistrationCreate, int)) *RemoteRegistrationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RemoteRegistrationCreateBulk{err: fmt.Errorf("calling to RemoteRegistrationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RemoteRegistrationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RemoteRegistrationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RemoteRegistration.
+func (c *RemoteRegistrationClient) Update() *RemoteRegistrationUpdate {
+	mutation := newRemoteRegistrationMutation(c.config, OpUpdate)
+	return &RemoteRegistrationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RemoteRegistrationClient) UpdateOne(_m *RemoteRegistration) *RemoteRegistrationUpdateOne {
+	mutation := newRemoteRegistrationMutation(c.config, OpUpdateOne, withRemoteRegistration(_m))
+	return &RemoteRegistrationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RemoteRegistrationClient) UpdateOneID(id string) *RemoteRegistrationUpdateOne {
+	mutation := newRemoteRegistrationMutation(c.config, OpUpdateOne, withRemoteRegistrationID(id))
+	return &RemoteRegistrationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RemoteRegistration.
+func (c *RemoteRegistrationClient) Delete() *RemoteRegistrationDelete {
+	mutation := newRemoteRegistrationMutation(c.config, OpDelete)
+	return &RemoteRegistrationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RemoteRegistrationClient) DeleteOne(_m *RemoteRegistration) *RemoteRegistrationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RemoteRegistrationClient) DeleteOneID(id string) *RemoteRegistrationDeleteOne {
+	builder := c.Delete().Where(remoteregistration.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RemoteRegistrationDeleteOne{builder}
+}
+
+// Query returns a query builder for RemoteRegistration.
+func (c *RemoteRegistrationClient) Query() *RemoteRegistrationQuery {
+	return &RemoteRegistrationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRemoteRegistration},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RemoteRegistration entity by its id.
+func (c *RemoteRegistrationClient) Get(ctx context.Context, id string) (*RemoteRegistration, error) {
+	return c.Query().Where(remoteregistration.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RemoteRegistrationClient) GetX(ctx context.Context, id string) *RemoteRegistration {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RemoteRegistrationClient) Hooks() []Hook {
+	return c.hooks.RemoteRegistration
+}
+
+// Interceptors returns the client interceptors.
+func (c *RemoteRegistrationClient) Interceptors() []Interceptor {
+	return c.inters.RemoteRegistration
+}
+
+func (c *RemoteRegistrationClient) mutate(ctx context.Context, m *RemoteRegistrationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RemoteRegistrationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RemoteRegistrationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RemoteRegistrationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RemoteRegistrationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RemoteRegistration mutation op: %q", m.Op())
 	}
 }
 
@@ -1663,11 +2229,13 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		ApiKey, AuditLog, PermissionRequest, PipelineConfig, StageRun, Task,
+		AgentCostTrend, ApiKey, AuditLog, PermissionPreset, PermissionRequest,
+		PipelineConfig, RefinementTurn, RemoteRegistration, StageRun, Task,
 		TaskDependency, TaskPermission, User []ent.Hook
 	}
 	inters struct {
-		ApiKey, AuditLog, PermissionRequest, PipelineConfig, StageRun, Task,
+		AgentCostTrend, ApiKey, AuditLog, PermissionPreset, PermissionRequest,
+		PipelineConfig, RefinementTurn, RemoteRegistration, StageRun, Task,
 		TaskDependency, TaskPermission, User []ent.Interceptor
 	}
 )

@@ -8,6 +8,34 @@ import (
 )
 
 var (
+	// AgentCostTrendsColumns holds the columns for the "agent_cost_trends" table.
+	AgentCostTrendsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "model", Type: field.TypeString},
+		{Name: "input_tokens", Type: field.TypeInt},
+		{Name: "output_tokens", Type: field.TypeInt},
+		{Name: "cost_usd", Type: field.TypeFloat64},
+		{Name: "recorded_at", Type: field.TypeTime},
+	}
+	// AgentCostTrendsTable holds the schema information for the "agent_cost_trends" table.
+	AgentCostTrendsTable = &schema.Table{
+		Name:       "agent_cost_trends",
+		Columns:    AgentCostTrendsColumns,
+		PrimaryKey: []*schema.Column{AgentCostTrendsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "agentcosttrend_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{AgentCostTrendsColumns[1]},
+			},
+			{
+				Name:    "agentcosttrend_recorded_at",
+				Unique:  false,
+				Columns: []*schema.Column{AgentCostTrendsColumns[6]},
+			},
+		},
+	}
 	// APIKeysColumns holds the columns for the "api_keys" table.
 	APIKeysColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -66,6 +94,27 @@ var (
 			},
 		},
 	}
+	// PermissionPresetsColumns holds the columns for the "permission_presets" table.
+	PermissionPresetsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "user_id", Type: field.TypeString, Nullable: true},
+		{Name: "project_cwd", Type: field.TypeString},
+		{Name: "tool", Type: field.TypeString},
+		{Name: "pattern", Type: field.TypeString, Nullable: true},
+	}
+	// PermissionPresetsTable holds the schema information for the "permission_presets" table.
+	PermissionPresetsTable = &schema.Table{
+		Name:       "permission_presets",
+		Columns:    PermissionPresetsColumns,
+		PrimaryKey: []*schema.Column{PermissionPresetsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "permissionpreset_user_id_project_cwd_tool_pattern",
+				Unique:  true,
+				Columns: []*schema.Column{PermissionPresetsColumns[1], PermissionPresetsColumns[2], PermissionPresetsColumns[3], PermissionPresetsColumns[4]},
+			},
+		},
+	}
 	// PermissionRequestsColumns holds the columns for the "permission_requests" table.
 	PermissionRequestsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -113,6 +162,50 @@ var (
 		Name:       "pipeline_configs",
 		Columns:    PipelineConfigsColumns,
 		PrimaryKey: []*schema.Column{PipelineConfigsColumns[0]},
+	}
+	// RefinementTurnsColumns holds the columns for the "refinement_turns" table.
+	RefinementTurnsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "task_id", Type: field.TypeString},
+		{Name: "role", Type: field.TypeString},
+		{Name: "content", Type: field.TypeString},
+		{Name: "phase", Type: field.TypeString, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// RefinementTurnsTable holds the schema information for the "refinement_turns" table.
+	RefinementTurnsTable = &schema.Table{
+		Name:       "refinement_turns",
+		Columns:    RefinementTurnsColumns,
+		PrimaryKey: []*schema.Column{RefinementTurnsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "refinementturn_task_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{RefinementTurnsColumns[1], RefinementTurnsColumns[5]},
+			},
+		},
+	}
+	// RemoteRegistrationsColumns holds the columns for the "remote_registrations" table.
+	RemoteRegistrationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "url", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString, Nullable: true},
+		{Name: "bearer_key", Type: field.TypeString, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// RemoteRegistrationsTable holds the schema information for the "remote_registrations" table.
+	RemoteRegistrationsTable = &schema.Table{
+		Name:       "remote_registrations",
+		Columns:    RemoteRegistrationsColumns,
+		PrimaryKey: []*schema.Column{RemoteRegistrationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "remoteregistration_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{RemoteRegistrationsColumns[1]},
+			},
+		},
 	}
 	// StageRunsColumns holds the columns for the "stage_runs" table.
 	StageRunsColumns = []*schema.Column{
@@ -306,10 +399,14 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		AgentCostTrendsTable,
 		APIKeysTable,
 		AuditLogsTable,
+		PermissionPresetsTable,
 		PermissionRequestsTable,
 		PipelineConfigsTable,
+		RefinementTurnsTable,
+		RemoteRegistrationsTable,
 		StageRunsTable,
 		TasksTable,
 		TaskDependenciesTable,

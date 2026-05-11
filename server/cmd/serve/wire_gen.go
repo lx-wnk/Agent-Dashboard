@@ -22,10 +22,14 @@ import (
 )
 
 func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, error) {
-	entClient, err := provideDB(cfg)
+	bundle, err := provideDB(cfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	entClient := bundle.Client
+	// bundle.DB is available here for future raw-SQL repo injection.
+	_ = bundle.DB
+
 	broadcaster := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(broadcaster)
 	routerConfig := provideRouterConfig(cfg)
@@ -43,7 +47,7 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 	return server, broadcaster, orch, nil
 }
 
-func provideDB(cfg config.Config) (*ent.Client, error) {
+func provideDB(cfg config.Config) (*db.DBBundle, error) {
 	return db.Open(cfg.DBPath)
 }
 
