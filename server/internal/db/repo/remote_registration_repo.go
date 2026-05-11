@@ -59,21 +59,11 @@ func (r *entRemoteRegistrationRepo) ListForUser(ctx context.Context, userID stri
 }
 
 func (r *entRemoteRegistrationRepo) Delete(ctx context.Context, id string, userID string) (bool, error) {
-	// Query first to enforce user ownership.
-	existing, err := r.client.RemoteRegistration.Query().
-		Where(
-			remoteregistration.ID(id),
-			remoteregistration.UserID(userID),
-		).
-		Only(ctx)
+	n, err := r.client.RemoteRegistration.Delete().
+		Where(remoteregistration.ID(id), remoteregistration.UserID(userID)).
+		Exec(ctx)
 	if err != nil {
-		if ent.IsNotFound(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("remoteRegistration.Delete.query: %w", err)
-	}
-	if err := r.client.RemoteRegistration.DeleteOne(existing).Exec(ctx); err != nil {
 		return false, fmt.Errorf("remoteRegistration.Delete: %w", err)
 	}
-	return true, nil
+	return n > 0, nil
 }
