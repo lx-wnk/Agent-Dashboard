@@ -118,6 +118,29 @@ func (h *Handler) Mount(r chi.Router) {
 
 	// Resume stage.
 	r.Post("/api/tasks/{id}/resume-stage", apierr.ErrorMiddleware(h.resumeStage))
+
+	// Analysis agent spawn.
+	r.Post("/api/tasks/{id}/analyze", apierr.ErrorMiddleware(h.analyzeTask))
+
+	// Git status + actions.
+	r.Get("/api/tasks/{id}/git-status", apierr.ErrorMiddleware(h.getGitStatusHandler))
+	r.Post("/api/tasks/{id}/git-action", apierr.ErrorMiddleware(h.gitActionHandler))
+	r.Post("/api/tasks/{id}/run", apierr.ErrorMiddleware(h.taskRunHandler))
+
+	// Notification preferences + config.
+	r.Get("/api/notifications/preferences", apierr.ErrorMiddleware(h.listNotificationPreferences))
+	r.Put("/api/notifications/preferences/{eventType}", apierr.ErrorMiddleware(h.putNotificationPreference))
+	r.Get("/api/notifications/config", apierr.ErrorMiddleware(h.getNotificationConfig))
+	r.Put("/api/notifications/config", apierr.ErrorMiddleware(h.putNotificationConfig))
+
+	// Global audit + webhook HMAC settings.
+	r.Get("/api/audit", apierr.ErrorMiddleware(h.listGlobalAudit))
+	r.Get("/api/settings/webhook-hmac", apierr.ErrorMiddleware(h.getWebhookHMAC))
+	r.Post("/api/settings/webhook-hmac", apierr.ErrorMiddleware(h.putWebhookHMAC))
+
+	// Export + feedback.
+	r.Get("/api/tasks/export", apierr.ErrorMiddleware(h.exportTasks))
+	r.Get("/api/tasks/{id}/feedback", apierr.ErrorMiddleware(h.listFeedback))
 }
 
 func (h *Handler) broadcastEnrichedUpdate(ctx context.Context, taskID string) {
