@@ -3,11 +3,13 @@ package pipeline
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +17,19 @@ import (
 )
 
 var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
+
+// allowedTools is the whitelist of tools pipeline stage agents may be granted.
+var allowedTools = map[string]bool{
+	"Read": true, "Write": true, "Edit": true, "MultiEdit": true,
+	"Glob": true, "Grep": true, "LS": true, "Bash": true, "WebFetch": true,
+	"mcp__dashboard-channel__dashboard_reply":    true,
+	"mcp__dashboard-channel__request_permission": true,
+}
+
+// dangerousBashRE matches shell patterns that must never appear in a Bash allow-list entry.
+var dangerousBashRE = regexp.MustCompile(
+	"(?i)(curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|bash\\s+-c|sh\\s+-c|\\beval\\b|\\$\\(|`|&&|\\|\\||;\\s*\\w|>\\s*\\w|<\\s*\\w|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w)",
+)
 
 const systemPromptMaxChars = 10000
 
@@ -56,7 +71,21 @@ func BuildAllowList(permissions []*ent.TaskPermission, enableChannel, allowGitPu
 		if p.ExpiresAt != nil && p.ExpiresAt.Before(now) {
 			continue
 		}
+		if !allowedTools[p.Tool] {
+			continue
+		}
 		if !allowGitPush && p.Tool == "Bash" && p.Pattern != nil && gitPushRE.MatchString(*p.Pattern) {
+			continue
+		}
+		if p.Tool == "Bash" {
+			if p.Pattern == nil || *p.Pattern == "" {
+				continue // blanket Bash allow is forbidden
+			}
+			normalized := strings.Join(strings.Fields(*p.Pattern), " ")
+			if dangerousBashRE.MatchString(normalized) {
+				continue // dangerous shell pattern
+			}
+			allow = append(allow, fmt.Sprintf("Bash(%s)", normalized))
 			continue
 		}
 		if p.Pattern != nil && *p.Pattern != "" {
@@ -109,7 +138,7 @@ func writeSettingsFile(cwd string, permissions []*ent.TaskPermission, enableChan
 	claudeDir := filepath.Join(cwd, ".claude")
 	settingsPath := filepath.Join(claudeDir, "settings.json")
 	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
-		if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		if err := os.MkdirAll(claudeDir, 0o700); err != nil {
 			return "", false, false, fmt.Errorf("writeSettingsFile: mkdir .claude: %w", err)
 		}
 		settings := map[string]any{
@@ -117,7 +146,7 @@ func writeSettingsFile(cwd string, permissions []*ent.TaskPermission, enableChan
 			"_dashboardManaged": true,
 		}
 		data, _ := json.MarshalIndent(settings, "", "  ")
-		if err := os.WriteFile(settingsPath, data, 0o644); err != nil {
+		if err := os.WriteFile(settingsPath, data, 0o600); err != nil {
 			return "", false, false, fmt.Errorf("writeSettingsFile: write: %w", err)
 		}
 		return settingsPath, true, false, nil
@@ -159,11 +188,11 @@ func writeSettingsFile(cwd string, permissions []*ent.TaskPermission, enableChan
 	existingPerms["allow"] = merged
 	existing["permissions"] = existingPerms
 	existing["_dashboardManagedAllows"] = newEntries
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+	if err := os.MkdirAll(claudeDir, 0o700); err != nil {
 		return "", false, false, fmt.Errorf("writeSettingsFile: mkdir .claude (local): %w", err)
 	}
 	data, _ := json.MarshalIndent(existing, "", "  ")
-	if err := os.WriteFile(localPath, data, 0o644); err != nil {
+	if err := os.WriteFile(localPath, data, 0o600); err != nil {
 		return "", false, false, fmt.Errorf("writeSettingsFile: write local: %w", err)
 	}
 	return localPath, true, true, nil
@@ -208,21 +237,10 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return SpawnResult{}, fmt.Errorf("SpawnStageAgent.StderrPipe: %w", err)
-	}
+	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
 		return SpawnResult{}, fmt.Errorf("SpawnStageAgent.Start: %w", err)
 	}
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			if _, err := stderrPipe.Read(buf); err != nil {
-				return
-			}
-		}
-	}()
 	cleanup := func() {
 		if !wrote || settingsPath == "" {
 			return
@@ -279,5 +297,5 @@ func cleanupLocalSettingsEntries(localPath string) {
 		return
 	}
 	out, _ := json.MarshalIndent(parsed, "", "  ")
-	_ = os.WriteFile(localPath, out, 0o644)
+	_ = os.WriteFile(localPath, out, 0o600)
 }

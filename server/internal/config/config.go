@@ -84,6 +84,12 @@ func Load(cfgFile string) (Config, error) {
 		return Config{}, fmt.Errorf("config unmarshal: %w", err)
 	}
 
+	// Reject operator-set JWT secrets that are too short (< 32 chars).
+	// The auto-generated secret is always 64 hex chars so this only fires for short manually-set values.
+	if cfg.JWTSecret != "" && len(cfg.JWTSecret) < 32 {
+		return Config{}, fmt.Errorf("config: DASHBOARD_JWT_SECRET must be at least 32 characters, got %d", len(cfg.JWTSecret))
+	}
+
 	if cfg.JWTSecret == "" {
 		secret, err := randomHex(32)
 		if err != nil {
@@ -93,7 +99,18 @@ func Load(cfgFile string) (Config, error) {
 		slog.Warn("DASHBOARD_JWT_SECRET not set — generated ephemeral secret; sessions will invalidate on restart")
 	}
 
+	// Warn when binding to a non-loopback address — dashboard reads sensitive session data.
+	loopback := map[string]bool{"127.0.0.1": true, "::1": true, "localhost": true}
+	if !loopback[cfg.Host] {
+		slog.Warn("DASHBOARD_HOST is non-loopback — server will expose sensitive Claude session data to the network. Use VPN/SSH tunnel only.", "host", cfg.Host)
+	}
+
 	return cfg, nil
+}
+
+// IsLoopback reports whether the configured host is a loopback address.
+func (c Config) IsLoopback() bool {
+	return c.Host == "127.0.0.1" || c.Host == "::1" || c.Host == "localhost"
 }
 
 // ShutdownTimeout returns the graceful shutdown duration.
@@ -107,8 +124,13 @@ func (c Config) Addr() string {
 }
 
 // CallbackURL returns the GitHub OAuth redirect URI derived from Host and Port.
+// Uses https for non-loopback hosts.
 func (c Config) CallbackURL() string {
-	return fmt.Sprintf("http://%s/api/auth/callback", c.Addr())
+	scheme := "http"
+	if !c.IsLoopback() {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s/api/auth/callback", scheme, c.Addr())
 }
 
 func randomHex(n int) (string, error) {

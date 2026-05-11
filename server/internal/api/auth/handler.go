@@ -18,6 +18,7 @@ type Deps struct {
 	CallbackURL  string
 	GitHubClient *serverauth.GitHubClient
 	UserRepo     repo.UserRepo
+	IsLoopback   bool // true when Host is 127.0.0.1 / ::1 / localhost
 }
 
 // Handler handles GitHub OAuth routes.
@@ -36,8 +37,7 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 	if h.deps.GitHubClient == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
 	}
-	statePayload := serverauth.JWTPayload{Sub: "oauth-state"}
-	state, err := serverauth.SignJWT(statePayload, h.deps.JWTSecret, 300)
+	state, err := serverauth.SignOAuthState(h.deps.JWTSecret)
 	if err != nil {
 		return fmt.Errorf("auth: build state: %w", err)
 	}
@@ -46,6 +46,7 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 		Value:    state,
 		MaxAge:   300,
 		HttpOnly: true,
+		Secure:   !h.deps.IsLoopback,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
@@ -67,7 +68,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "missing state cookie")
 	}
-	if _, err := serverauth.VerifyJWT(stateCookie.Value, h.deps.JWTSecret); err != nil {
+	if _, err := serverauth.VerifyOAuthState(stateCookie.Value, h.deps.JWTSecret); err != nil {
 		return apierr.NewAppError(http.StatusUnauthorized, "invalid state token")
 	}
 	if r.URL.Query().Get("state") != stateCookie.Value {
@@ -108,12 +109,20 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("auth: sign jwt: %w", err)
 	}
 
-	http.SetCookie(w, &http.Cookie{Name: "oauth_state", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Path: "/"})
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_state",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   !h.deps.IsLoopback,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    token,
 		MaxAge:   86400 * 7,
 		HttpOnly: true,
+		Secure:   !h.deps.IsLoopback,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
@@ -129,6 +138,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 		Value:    "",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   !h.deps.IsLoopback,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})

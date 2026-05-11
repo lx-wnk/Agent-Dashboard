@@ -15,3 +15,8 @@ func encode[T any](w http.ResponseWriter, status int, v T) error {
 	}
 	return nil
 }
+
+// Encode writes v as JSON with the given status code. Used by sub-packages.
+func Encode[T any](w http.ResponseWriter, status int, v T) error {
+	return encode(w, status, v)
+}
