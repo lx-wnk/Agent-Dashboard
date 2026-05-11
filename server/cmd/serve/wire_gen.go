@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
@@ -29,8 +30,11 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 		return nil, nil, nil, err
 	}
 	entClient := bundle.Client
-	// bundle.DB is available here for future raw-SQL repo injection.
-	_ = bundle.DB
+
+	var searchHandler *search.Handler
+	if bundle != nil {
+		searchHandler = search.NewHandler(bundle.DB)
+	}
 
 	broadcaster := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(broadcaster)
@@ -43,7 +47,7 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 
 	taskHandler := provideTaskHandler(entClient, orch, taskBroadcaster)
 	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster)
-	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler)
+	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, orch, nil
@@ -166,7 +170,7 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	return mcp.MCPHandler(registry)
 }
 
-func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler) api.RouterDeps {
+func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler) api.RouterDeps {
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if client != nil {
@@ -191,6 +195,7 @@ func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaste
 		TaskHandler:      taskHandler,
 		RemotesHandler:   remotesHandler,
 		PresetsHandler:   presetsHandler,
+		SearchHandler:    searchHandler,
 		MCPHandler:       mcpHandler,
 		ChannelReply:     agents.NewChannelReplyHandler(replyStore),
 	}
