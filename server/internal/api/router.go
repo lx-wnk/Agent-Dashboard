@@ -100,6 +100,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/sessions/{sessionId}/timeline", sessions.Timeline)
 
 		r.Get("/api/quota", system.Quota)
+		r.Get("/api/system/config", system.Config)
+		r.Get("/api/system/system", system.System)
 
 		r.Get("/api/memory", memory.List)
 		r.Get("/api/memory/*", memory.Get)

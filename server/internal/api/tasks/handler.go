@@ -45,6 +45,7 @@ type Handler struct {
 	permRepo     repo.PermissionRepo
 	auditRepo    repo.AuditRepo
 	cfgRepo      repo.PipelineConfigRepo
+	depRepo      repo.DependencyRepo
 	orchestrator OrchestratorIface
 	broadcaster  *sse.TaskBroadcaster
 }
@@ -56,6 +57,7 @@ type Deps struct {
 	PermRepo     repo.PermissionRepo
 	AuditRepo    repo.AuditRepo
 	CfgRepo      repo.PipelineConfigRepo
+	DepRepo      repo.DependencyRepo
 	Orchestrator OrchestratorIface
 	Broadcaster  *sse.TaskBroadcaster
 }
@@ -67,6 +69,7 @@ func NewHandler(deps Deps) *Handler {
 		permRepo:     deps.PermRepo,
 		auditRepo:    deps.AuditRepo,
 		cfgRepo:      deps.CfgRepo,
+		depRepo:      deps.DepRepo,
 		orchestrator: deps.Orchestrator,
 		broadcaster:  deps.Broadcaster,
 	}
@@ -74,6 +77,7 @@ func NewHandler(deps Deps) *Handler {
 
 // Mount registers all task routes on the given chi.Router.
 func (h *Handler) Mount(r chi.Router) {
+	// Existing task routes.
 	r.Get("/api/tasks", apierr.ErrorMiddleware(h.list))
 	r.Get("/api/tasks/stream", h.stream)
 	r.Get("/api/tasks/{id}", apierr.ErrorMiddleware(h.getOne))
@@ -89,6 +93,31 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/api/tasks/{id}/permissions", apierr.ErrorMiddleware(h.grantPermission))
 	r.Delete("/api/tasks/{id}/permissions/{permID}", apierr.ErrorMiddleware(h.revokePermission))
 	r.Post("/api/tasks/{id}/permission-requests/{reqID}/resolve", apierr.ErrorMiddleware(h.resolvePermissionRequest))
+
+	// Pipeline config.
+	r.Get("/api/pipeline/config", apierr.ErrorMiddleware(h.getPipelineConfig))
+	r.Put("/api/pipeline/config", apierr.ErrorMiddleware(h.putPipelineConfig))
+	r.Get("/api/pipeline/recommendation", apierr.ErrorMiddleware(h.getPipelineRecommendation))
+
+	// Cost breakdown and stage output.
+	r.Get("/api/tasks/{id}/cost-breakdown", apierr.ErrorMiddleware(h.getCostBreakdown))
+	r.Get("/api/tasks/{id}/stage-runs/{runId}/agent-output", apierr.ErrorMiddleware(h.getStageRunAgentOutput))
+
+	// Permission requests.
+	r.Get("/api/tasks/{id}/permission-requests", apierr.ErrorMiddleware(h.listPermissionRequests))
+	r.Post("/api/tasks/{id}/permissions/bulk", apierr.ErrorMiddleware(h.bulkGrantPermissions))
+	r.Post("/api/permission-requests", apierr.ErrorMiddleware(h.createPermissionRequest))
+	r.Post("/api/permission-requests/bulk", apierr.ErrorMiddleware(h.bulkCreatePermissionRequests))
+	r.Post("/api/permission-requests/bulk-resolve", apierr.ErrorMiddleware(h.bulkResolvePermissionRequests))
+
+	// Dependencies.
+	r.Get("/api/tasks/{id}/dependencies", apierr.ErrorMiddleware(h.listDependencies))
+	r.Get("/api/tasks/{id}/dependents", apierr.ErrorMiddleware(h.listDependents))
+	r.Post("/api/tasks/{id}/dependencies", apierr.ErrorMiddleware(h.addDependency))
+	r.Delete("/api/tasks/{id}/dependencies/{depId}", apierr.ErrorMiddleware(h.removeDependency))
+
+	// Resume stage.
+	r.Post("/api/tasks/{id}/resume-stage", apierr.ErrorMiddleware(h.resumeStage))
 }
 
 func (h *Handler) broadcastEnrichedUpdate(ctx context.Context, taskID string) {
