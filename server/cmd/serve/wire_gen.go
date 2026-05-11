@@ -56,9 +56,11 @@ func provideGitHubClient(cfg config.Config) *authpkg.GitHubClient {
 
 func provideRouterConfig(cfg config.Config) api.RouterConfig {
 	return api.RouterConfig{
-		JWTSecret:   cfg.JWTSecret,
-		CallbackURL: cfg.CallbackURL(),
-		IsLoopback:  cfg.IsLoopback(),
+		JWTSecret:       cfg.JWTSecret,
+		CallbackURL:     cfg.CallbackURL(),
+		IsLoopback:      cfg.IsLoopback(),
+		HooksSecret:     cfg.HooksSecret,
+		HooksDebounceMs: cfg.HooksDebounceMs,
 	}
 }
 
