@@ -7,12 +7,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 )
@@ -75,7 +77,10 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) error {
 		limit = maxLimit
 	}
 
-	payload, _ := auth.PayloadFromContext(r.Context())
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		return apierr.ErrForbidden
+	}
 
 	// Trim and validate query.
 	q = strings.TrimSpace(q)
@@ -120,7 +125,6 @@ SELECT t.id, t.slug, t.title, t.description, t.cwd, t.current_stage, t.priority,
 FROM tasks t
 WHERE t.rowid IN (
     SELECT rowid FROM task_fts WHERE task_fts MATCH ?
-    ORDER BY rank
     LIMIT ?
 )
 AND (t.user_id IS NULL OR t.user_id = ? OR ? = 1)
@@ -131,9 +135,10 @@ LIMIT ?`
 		isAdminInt = 1
 	}
 
-	rows, err := h.db.QueryContext(ctx, sqlQuery, ftsQuery, limit, userID, isAdminInt, limit)
+	rows, err := h.db.QueryContext(ctx, sqlQuery, ftsQuery, limit*4, userID, isAdminInt, limit)
 	if err != nil {
 		// Return empty results gracefully — FTS errors should not be surfaced as 500.
+		slog.Warn("search: FTS query failed", "err", err, "q", ftsQuery)
 		return []taskSearchResult{}, nil
 	}
 	defer rows.Close()
