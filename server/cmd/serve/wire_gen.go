@@ -9,6 +9,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -176,6 +177,10 @@ func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaste
 	if client != nil {
 		remotesHandler = remotes.NewHandler(repo.NewRemoteRegistrationRepo(client))
 	}
+	var presetsHandler *presets.Handler
+	if client != nil {
+		presetsHandler = presets.NewHandler(repo.NewPermissionPresetRepo(client))
+	}
 	replyStore := agents.NewReplyStore()
 	return api.RouterDeps{
 		Config:           rc,
@@ -185,6 +190,7 @@ func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaste
 		ApiKeyRepo:       apiKeyRepo,
 		TaskHandler:      taskHandler,
 		RemotesHandler:   remotesHandler,
+		PresetsHandler:   presetsHandler,
 		MCPHandler:       mcpHandler,
 		ChannelReply:     agents.NewChannelReplyHandler(replyStore),
 	}

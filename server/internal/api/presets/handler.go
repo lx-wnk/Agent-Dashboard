@@ -1,0 +1,68 @@
+// Package presets implements GET/DELETE /api/settings/permission-presets.
+package presets
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+)
+
+// Handler handles the /api/settings/permission-presets endpoints.
+type Handler struct {
+	repo repo.PermissionPresetRepo
+}
+
+// NewHandler creates a Handler.
+func NewHandler(r repo.PermissionPresetRepo) *Handler {
+	return &Handler{repo: r}
+}
+
+// Mount registers all permission-preset routes on r.
+// All routes require JWT auth — they must be mounted inside a protected group.
+func (h *Handler) Mount(r chi.Router) {
+	r.Get("/api/settings/permission-presets", apierr.ErrorMiddleware(h.list))
+	r.Delete("/api/settings/permission-presets", apierr.ErrorMiddleware(h.delete))
+}
+
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		return apierr.ErrForbidden
+	}
+	summaries, err := h.repo.ListSummaries(r.Context(), &payload.Sub)
+	if err != nil {
+		return fmt.Errorf("presets.list: %w", err)
+	}
+	if summaries == nil {
+		summaries = []repo.PresetProjectSummary{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(summaries)
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {
+	var body struct {
+		Cwd string `json:"cwd"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if body.Cwd == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "cwd is required")
+	}
+
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		return apierr.ErrForbidden
+	}
+	if err := h.repo.DeleteForProject(r.Context(), &payload.Sub, body.Cwd); err != nil {
+		return fmt.Errorf("presets.delete: %w", err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
