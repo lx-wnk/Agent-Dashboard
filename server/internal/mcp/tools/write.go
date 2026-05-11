@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
@@ -434,184 +435,216 @@ func registerManageTask(registry mcp.ToolRegistry, d WriteDeps) {
 
 			switch action {
 			case "grant_permissions":
-				rawPerms, err := parsePermissionsArg(args)
-				if err != nil {
-					return nil, err
-				}
-				summary := map[string]any{}
-
-				if templateName := mcp.OptionalString(args, "template"); templateName != "" {
-					n, err := applyTemplate(ctx, d.PermRepo, taskID, templateName)
-					if err != nil {
-						return nil, err
-					}
-					summary["template"] = map[string]any{"name": templateName, "granted": n}
-				}
-				if len(rawPerms) > 0 {
-					entries, err := permInputsToGrantEntries(rawPerms)
-					if err != nil {
-						return nil, err
-					}
-					granted, err := d.PermRepo.BulkGrantPermissions(ctx, taskID, entries)
-					if err != nil {
-						return nil, mcp.Fail("grant_permissions: " + err.Error())
-					}
-					summary["explicit"] = map[string]any{"granted": len(granted)}
-				}
-				_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-					TaskID: taskID, Actor: "system", Action: "permissions_granted",
-					Details: map[string]any{"summary": summary, "source": "mcp_manage_task"},
-				})
-				safeBroadcast(d.Broadcast, taskID)
-				return mcp.OK(map[string]any{"action": "grant_permissions", "summary": summary})
-
+				return handleGrantPermissions(ctx, d, taskID, args)
 			case "revoke_permission":
-				permID := mcp.OptionalString(args, "permission_id")
-				if permID == "" {
-					return nil, mcp.Fail("permission_id is required for revoke_permission")
-				}
-				if err := d.PermRepo.DeleteTaskPermission(ctx, permID); err != nil {
-					return nil, mcp.Fail("revoke_permission: " + err.Error())
-				}
-				_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-					TaskID: taskID, Actor: "system", Action: "permission_revoked",
-					Details: map[string]any{"permissionId": permID, "source": "mcp_manage_task"},
-				})
-				safeBroadcast(d.Broadcast, taskID)
-				return mcp.OK(map[string]any{"action": "revoke_permission", "removed": permID})
-
+				return handleRevokePermission(ctx, d, taskID, args)
 			case "list_permissions":
-				effectiveOnly := true // default true per TypeScript reference
-				if _, hasFlag := args["effective_only"]; hasFlag {
-					effectiveOnly = mcp.OptionalBool(args, "effective_only")
-				}
-				var perms interface{}
-				if effectiveOnly {
-					perms, err = d.PermRepo.ListEffectiveTaskPermissions(ctx, taskID)
-				} else {
-					perms, err = d.PermRepo.ListTaskPermissions(ctx, taskID)
-				}
-				if err != nil {
-					return nil, mcp.Fail("list_permissions: " + err.Error())
-				}
-				return mcp.OK(map[string]any{"action": "list_permissions", "permissions": perms})
-
+				return handleListPermissions(ctx, d, taskID, args)
 			case "inherit_from_parent":
-				if task.ParentTaskID == nil || *task.ParentTaskID == "" {
-					return nil, mcp.Fail("Task has no parentTaskId — cannot inherit")
-				}
-				inherited, err := d.PermRepo.InheritPermissionsFromParent(ctx, taskID, *task.ParentTaskID)
-				if err != nil {
-					return nil, mcp.Fail("inherit_from_parent: " + err.Error())
-				}
-				_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-					TaskID: taskID, Actor: "system", Action: "permissions_inherited",
-					Details: map[string]any{"fromParent": *task.ParentTaskID, "granted": len(inherited), "source": "mcp_manage_task"},
-				})
-				safeBroadcast(d.Broadcast, taskID)
-				return mcp.OK(map[string]any{
-					"action": "inherit_from_parent", "from": *task.ParentTaskID, "granted": len(inherited),
-				})
-
+				return handleInheritFromParent(ctx, d, task, args)
 			case "set_metadata":
-				rawPatch, ok := args["metadata_patch"]
-				if !ok || rawPatch == nil {
-					return nil, mcp.Fail("metadata_patch with at least one key is required")
-				}
-				patch, ok := rawPatch.(map[string]any)
-				if !ok || len(patch) == 0 {
-					return nil, mcp.Fail("metadata_patch with at least one key is required")
-				}
-				existing := map[string]any{}
-				if task.Metadata != nil {
-					existing = task.Metadata
-				}
-				merged := make(map[string]any, len(existing)+len(patch))
-				for k, v := range existing {
-					merged[k] = v
-				}
-				for k, v := range patch {
-					merged[k] = v
-				}
-				updated, err := d.TaskRepo.Update(ctx, taskID, repo.UpdateTaskInput{Metadata: merged})
-				if err != nil {
-					return nil, mcp.Fail("set_metadata: " + err.Error())
-				}
-				_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-					TaskID: taskID, Actor: "system", Action: "metadata_patched",
-					Details: map[string]any{"keys": mapKeys(patch), "source": "mcp_manage_task"},
-				})
-				safeBroadcast(d.Broadcast, taskID)
-				return mcp.OK(map[string]any{"action": "set_metadata", "task": updated})
-
+				return handleSetMetadata(ctx, d, task, args)
 			case "set_priority":
-				prio := mcp.OptionalString(args, "priority")
-				_, hasSB := args["silverBullet"]
-				if prio == "" && !hasSB {
-					return nil, mcp.Fail("priority or silverBullet must be provided")
-				}
-				in := repo.UpdateTaskInput{}
-				if prio != "" {
-					in.Priority = &prio
-				}
-				if hasSB {
-					v := mcp.OptionalBool(args, "silverBullet")
-					in.SilverBullet = &v
-				}
-				updated, err := d.TaskRepo.Update(ctx, taskID, in)
-				if err != nil {
-					return nil, mcp.Fail("set_priority: " + err.Error())
-				}
-				details := map[string]any{"source": "mcp_manage_task"}
-				if prio != "" {
-					details["priority"] = prio
-				}
-				if hasSB {
-					details["silverBullet"] = mcp.OptionalBool(args, "silverBullet")
-				}
-				_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-					TaskID: taskID, Actor: "system", Action: "priority_changed", Details: details,
-				})
-				safeBroadcast(d.Broadcast, taskID)
-				return mcp.OK(map[string]any{"action": "set_priority", "task": updated})
-
+				return handleSetPriority(ctx, d, task, args)
 			case "set_budget":
-				in := repo.UpdateTaskInput{}
-				anySet := false
-				if f, ok := mcp.OptionalFloat64(args, "tokenBudget"); ok {
-					v := int(f)
-					in.TokenBudget = &v
-					anySet = true
-				}
-				if f, ok := mcp.OptionalFloat64(args, "costBudgetCents"); ok {
-					v := int(f)
-					in.CostBudgetCents = &v
-					anySet = true
-				}
-				if f, ok := mcp.OptionalFloat64(args, "maxIterations"); ok {
-					v := int(f)
-					in.MaxIterations = &v
-					anySet = true
-				}
-				if !anySet {
-					return nil, mcp.Fail("at least one of tokenBudget, costBudgetCents, maxIterations is required")
-				}
-				updated, err := d.TaskRepo.Update(ctx, taskID, in)
-				if err != nil {
-					return nil, mcp.Fail("set_budget: " + err.Error())
-				}
-				_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-					TaskID: taskID, Actor: "system", Action: "budget_changed",
-					Details: map[string]any{"source": "mcp_manage_task"},
-				})
-				safeBroadcast(d.Broadcast, taskID)
-				return mcp.OK(map[string]any{"action": "set_budget", "task": updated})
-
+				return handleSetBudget(ctx, d, task, args)
 			default:
-				return nil, mcp.Fail("unsupported action: " + action)
+				return nil, mcp.Fail("unknown action: " + action)
 			}
 		},
 	})
+}
+
+func handleGrantPermissions(ctx context.Context, d WriteDeps, taskID string, args map[string]any) (*mcp.ToolResult, error) {
+	rawPerms, err := parsePermissionsArg(args)
+	if err != nil {
+		return nil, err
+	}
+	summary := map[string]any{}
+
+	if templateName := mcp.OptionalString(args, "template"); templateName != "" {
+		n, err := applyTemplate(ctx, d.PermRepo, taskID, templateName)
+		if err != nil {
+			return nil, err
+		}
+		summary["template"] = map[string]any{"name": templateName, "granted": n}
+	}
+	if len(rawPerms) > 0 {
+		entries, err := permInputsToGrantEntries(rawPerms)
+		if err != nil {
+			return nil, err
+		}
+		granted, err := d.PermRepo.BulkGrantPermissions(ctx, taskID, entries)
+		if err != nil {
+			return nil, mcp.Fail("grant_permissions: " + err.Error())
+		}
+		summary["explicit"] = map[string]any{"granted": len(granted)}
+	}
+	// Audit is best-effort: a failed append must not block the user-visible operation.
+	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		TaskID: taskID, Actor: "system", Action: "permissions_granted",
+		Details: map[string]any{"summary": summary, "source": "mcp_manage_task"},
+	})
+	safeBroadcast(d.Broadcast, taskID)
+	return mcp.OK(map[string]any{"action": "grant_permissions", "summary": summary})
+}
+
+func handleRevokePermission(ctx context.Context, d WriteDeps, taskID string, args map[string]any) (*mcp.ToolResult, error) {
+	permID := mcp.OptionalString(args, "permission_id")
+	if permID == "" {
+		return nil, mcp.Fail("permission_id is required for revoke_permission")
+	}
+	if err := d.PermRepo.DeleteTaskPermission(ctx, permID); err != nil {
+		return nil, mcp.Fail("revoke_permission: " + err.Error())
+	}
+	// Audit is best-effort: a failed append must not block the user-visible operation.
+	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		TaskID: taskID, Actor: "system", Action: "permission_revoked",
+		Details: map[string]any{"permissionId": permID, "source": "mcp_manage_task"},
+	})
+	safeBroadcast(d.Broadcast, taskID)
+	return mcp.OK(map[string]any{"action": "revoke_permission", "removed": permID})
+}
+
+func handleListPermissions(ctx context.Context, d WriteDeps, taskID string, args map[string]any) (*mcp.ToolResult, error) {
+	effectiveOnly := true // default true per TypeScript reference
+	if _, hasFlag := args["effective_only"]; hasFlag {
+		effectiveOnly = mcp.OptionalBool(args, "effective_only")
+	}
+	var perms interface{}
+	var err error
+	if effectiveOnly {
+		perms, err = d.PermRepo.ListEffectiveTaskPermissions(ctx, taskID)
+	} else {
+		perms, err = d.PermRepo.ListTaskPermissions(ctx, taskID)
+	}
+	if err != nil {
+		return nil, mcp.Fail("list_permissions: " + err.Error())
+	}
+	return mcp.OK(map[string]any{"action": "list_permissions", "permissions": perms})
+}
+
+func handleInheritFromParent(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {
+	taskID := task.ID
+	if task.ParentTaskID == nil || *task.ParentTaskID == "" {
+		return nil, mcp.Fail("Task has no parentTaskId — cannot inherit")
+	}
+	inherited, err := d.PermRepo.InheritPermissionsFromParent(ctx, taskID, *task.ParentTaskID)
+	if err != nil {
+		return nil, mcp.Fail("inherit_from_parent: " + err.Error())
+	}
+	// Audit is best-effort: a failed append must not block the user-visible operation.
+	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		TaskID: taskID, Actor: "system", Action: "permissions_inherited",
+		Details: map[string]any{"fromParent": *task.ParentTaskID, "granted": len(inherited), "source": "mcp_manage_task"},
+	})
+	safeBroadcast(d.Broadcast, taskID)
+	return mcp.OK(map[string]any{
+		"action": "inherit_from_parent", "from": *task.ParentTaskID, "granted": len(inherited),
+	})
+}
+
+func handleSetMetadata(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {
+	taskID := task.ID
+	rawPatch, ok := args["metadata_patch"]
+	if !ok || rawPatch == nil {
+		return nil, mcp.Fail("metadata_patch with at least one key is required")
+	}
+	patch, ok := rawPatch.(map[string]any)
+	if !ok || len(patch) == 0 {
+		return nil, mcp.Fail("metadata_patch with at least one key is required")
+	}
+	existing := map[string]any{}
+	if task.Metadata != nil {
+		existing = task.Metadata
+	}
+	merged := make(map[string]any, len(existing)+len(patch))
+	for k, v := range existing {
+		merged[k] = v
+	}
+	for k, v := range patch {
+		merged[k] = v
+	}
+	updated, err := d.TaskRepo.Update(ctx, taskID, repo.UpdateTaskInput{Metadata: merged})
+	if err != nil {
+		return nil, mcp.Fail("set_metadata: " + err.Error())
+	}
+	// Audit is best-effort: a failed append must not block the user-visible operation.
+	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		TaskID: taskID, Actor: "system", Action: "metadata_patched",
+		Details: map[string]any{"keys": mapKeys(patch), "source": "mcp_manage_task"},
+	})
+	safeBroadcast(d.Broadcast, taskID)
+	return mcp.OK(map[string]any{"action": "set_metadata", "task": updated})
+}
+
+func handleSetPriority(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {
+	taskID := task.ID
+	prio := mcp.OptionalString(args, "priority")
+	_, hasSB := args["silverBullet"]
+	if prio == "" && !hasSB {
+		return nil, mcp.Fail("priority or silverBullet must be provided")
+	}
+	in := repo.UpdateTaskInput{}
+	if prio != "" {
+		in.Priority = &prio
+	}
+	if hasSB {
+		v := mcp.OptionalBool(args, "silverBullet")
+		in.SilverBullet = &v
+	}
+	updated, err := d.TaskRepo.Update(ctx, taskID, in)
+	if err != nil {
+		return nil, mcp.Fail("set_priority: " + err.Error())
+	}
+	details := map[string]any{"source": "mcp_manage_task"}
+	if prio != "" {
+		details["priority"] = prio
+	}
+	if hasSB {
+		details["silverBullet"] = mcp.OptionalBool(args, "silverBullet")
+	}
+	// Audit is best-effort: a failed append must not block the user-visible operation.
+	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		TaskID: taskID, Actor: "system", Action: "priority_changed", Details: details,
+	})
+	safeBroadcast(d.Broadcast, taskID)
+	return mcp.OK(map[string]any{"action": "set_priority", "task": updated})
+}
+
+func handleSetBudget(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {
+	taskID := task.ID
+	in := repo.UpdateTaskInput{}
+	anySet := false
+	if f, ok := mcp.OptionalFloat64(args, "tokenBudget"); ok {
+		v := int(f)
+		in.TokenBudget = &v
+		anySet = true
+	}
+	if f, ok := mcp.OptionalFloat64(args, "costBudgetCents"); ok {
+		v := int(f)
+		in.CostBudgetCents = &v
+		anySet = true
+	}
+	if f, ok := mcp.OptionalFloat64(args, "maxIterations"); ok {
+		v := int(f)
+		in.MaxIterations = &v
+		anySet = true
+	}
+	if !anySet {
+		return nil, mcp.Fail("at least one of tokenBudget, costBudgetCents, maxIterations is required")
+	}
+	updated, err := d.TaskRepo.Update(ctx, taskID, in)
+	if err != nil {
+		return nil, mcp.Fail("set_budget: " + err.Error())
+	}
+	// Audit is best-effort: a failed append must not block the user-visible operation.
+	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		TaskID: taskID, Actor: "system", Action: "budget_changed",
+		Details: map[string]any{"source": "mcp_manage_task"},
+	})
+	safeBroadcast(d.Broadcast, taskID)
+	return mcp.OK(map[string]any{"action": "set_budget", "task": updated})
 }
 
 // registerAddDependency registers the add_dependency tool.
