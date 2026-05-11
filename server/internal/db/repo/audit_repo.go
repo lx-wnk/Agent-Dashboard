@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
@@ -12,6 +13,7 @@ import (
 type AuditRepo interface {
 	Append(ctx context.Context, input AppendAuditInput) error
 	ListForTask(ctx context.Context, taskID string) ([]*ent.AuditLog, error)
+	ListAll(ctx context.Context, limit, offset int) ([]*ent.AuditLog, error)
 }
 
 type AppendAuditInput struct {
@@ -50,6 +52,18 @@ func (r *entAuditRepo) ListForTask(ctx context.Context, taskID string) ([]*ent.A
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("audit.ListForTask: %w", err)
+	}
+	return logs, nil
+}
+
+func (r *entAuditRepo) ListAll(ctx context.Context, limit, offset int) ([]*ent.AuditLog, error) {
+	logs, err := r.client.AuditLog.Query().
+		Order(auditlog.ByTimestamp(sql.OrderDesc())).
+		Limit(limit).
+		Offset(offset).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("audit.ListAll: %w", err)
 	}
 	return logs, nil
 }
