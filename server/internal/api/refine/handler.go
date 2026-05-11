@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -64,7 +65,7 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 			Role:      string(t.Role),
 			Content:   t.Content,
 			Phase:     t.Phase,
-			CreatedAt: t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			CreatedAt: t.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
@@ -97,7 +98,15 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store the user turn.
+	// 1. Fetch prior history BEFORE storing the current user turn so it does not
+	//    appear twice in the prompt (once in history, once as UserMessage).
+	history, err := h.turns.ListForTaskNewest(r.Context(), taskID, 20)
+	if err != nil {
+		jsonError(w, "failed to fetch history", http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Now store the user turn (it won't be included in the history slice above).
 	userRole := "user"
 	if _, err := h.turns.Create(r.Context(), repo.CreateTurnInput{
 		TaskID:  taskID,
@@ -108,15 +117,13 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch windowed history (last 20 turns) for context.
-	history, err := h.turns.ListForTaskNewest(r.Context(), taskID, 20)
-	if err != nil {
-		jsonError(w, "failed to fetch history", http.StatusInternalServerError)
-		return
-	}
-
+	// 3. Build history, filtering out sentinel "confirmed" turns so they never
+	//    appear in the model context.
 	turns := make([]refine.Turn, 0, len(history))
 	for _, t := range history {
+		if t.Phase != nil && *t.Phase == "confirmed" {
+			continue
+		}
 		turns = append(turns, refine.Turn{
 			Role:    string(t.Role),
 			Content: t.Content,
@@ -168,7 +175,11 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 			}
 			sb.WriteString(line)
 			sb.WriteString("\n")
-			fmt.Fprintf(w, "data: %s\n\n", line)
+			// Split on embedded newlines to maintain valid SSE framing.
+			for _, l := range strings.Split(line, "\n") {
+				fmt.Fprintf(w, "data: %s\n", l)
+			}
+			fmt.Fprint(w, "\n")
 			if canFlush {
 				flusher.Flush()
 			}
