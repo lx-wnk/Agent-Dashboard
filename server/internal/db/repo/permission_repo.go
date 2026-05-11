@@ -13,13 +13,23 @@ import (
 
 type PermissionRepo interface {
 	CreateTaskPermission(ctx context.Context, input CreateTaskPermissionInput) (*ent.TaskPermission, error)
+	BulkGrantPermissions(ctx context.Context, taskID string, entries []GrantEntry) ([]*ent.TaskPermission, error)
 	ListTaskPermissions(ctx context.Context, taskID string) ([]*ent.TaskPermission, error)
+	ListEffectiveTaskPermissions(ctx context.Context, taskID string) ([]*ent.TaskPermission, error)
+	InheritPermissionsFromParent(ctx context.Context, taskID, parentTaskID string) ([]*ent.TaskPermission, error)
 	DeleteTaskPermission(ctx context.Context, id string) error
 	CreatePermissionRequest(ctx context.Context, input CreatePermissionRequestInput) (*ent.PermissionRequest, error)
 	GetPermissionRequest(ctx context.Context, id string) (*ent.PermissionRequest, error)
 	ListPendingForStageRun(ctx context.Context, stageRunID string) ([]*ent.PermissionRequest, error)
 	ResolvePermissionRequest(ctx context.Context, id, outcome string) error
 	CountForStageRun(ctx context.Context, stageRunID string) (int, error)
+}
+
+// GrantEntry describes a single permission to bulk-grant.
+type GrantEntry struct {
+	Tool      string
+	Pattern   *string
+	ExpiresAt *time.Time
 }
 
 type CreateTaskPermissionInput struct {
@@ -72,6 +82,62 @@ func (r *entPermissionRepo) ListTaskPermissions(ctx context.Context, taskID stri
 		return nil, fmt.Errorf("permission.ListTaskPermissions: %w", err)
 	}
 	return perms, nil
+}
+
+func (r *entPermissionRepo) BulkGrantPermissions(ctx context.Context, taskID string, entries []GrantEntry) ([]*ent.TaskPermission, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	results := make([]*ent.TaskPermission, 0, len(entries))
+	for _, e := range entries {
+		p, err := r.CreateTaskPermission(ctx, CreateTaskPermissionInput{
+			TaskID:      taskID,
+			Tool:        e.Tool,
+			Pattern:     e.Pattern,
+			Granted:     true,
+			PreApproved: true,
+			ExpiresAt:   e.ExpiresAt,
+		})
+		if err != nil {
+			return results, fmt.Errorf("permission.BulkGrantPermissions: %w", err)
+		}
+		results = append(results, p)
+	}
+	return results, nil
+}
+
+func (r *entPermissionRepo) ListEffectiveTaskPermissions(ctx context.Context, taskID string) ([]*ent.TaskPermission, error) {
+	now := time.Now()
+	perms, err := r.client.TaskPermission.Query().
+		Where(
+			taskpermission.TaskID(taskID),
+			taskpermission.Granted(true),
+			taskpermission.Or(
+				taskpermission.ExpiresAtIsNil(),
+				taskpermission.ExpiresAtGT(now),
+			),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("permission.ListEffectiveTaskPermissions: %w", err)
+	}
+	return perms, nil
+}
+
+func (r *entPermissionRepo) InheritPermissionsFromParent(ctx context.Context, taskID, parentTaskID string) ([]*ent.TaskPermission, error) {
+	parentPerms, err := r.ListEffectiveTaskPermissions(ctx, parentTaskID)
+	if err != nil {
+		return nil, fmt.Errorf("permission.InheritPermissionsFromParent: %w", err)
+	}
+	entries := make([]GrantEntry, 0, len(parentPerms))
+	for _, p := range parentPerms {
+		entries = append(entries, GrantEntry{
+			Tool:      p.Tool,
+			Pattern:   p.Pattern,
+			ExpiresAt: p.ExpiresAt,
+		})
+	}
+	return r.BulkGrantPermissions(ctx, taskID, entries)
 }
 
 func (r *entPermissionRepo) DeleteTaskPermission(ctx context.Context, id string) error {
