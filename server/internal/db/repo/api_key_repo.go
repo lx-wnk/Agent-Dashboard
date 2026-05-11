@@ -15,6 +15,7 @@ import (
 type ApiKeyRepo interface {
 	Create(ctx context.Context, name, hash string, scopes []string) (*ent.ApiKey, error)
 	GetByHash(ctx context.Context, hash string) (*ent.ApiKey, error)
+	GetByID(ctx context.Context, id string) (*ent.ApiKey, error)
 	List(ctx context.Context) ([]*ent.ApiKey, error)
 	Delete(ctx context.Context, id string) error
 	TouchLastUsed(ctx context.Context, id string) error
@@ -41,6 +42,14 @@ func (r *entApiKeyRepo) Create(ctx context.Context, name, hash string, scopes []
 		Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("apikey.Create: %w", err)
+	}
+	return k, nil
+}
+
+func (r *entApiKeyRepo) GetByID(ctx context.Context, id string) (*ent.ApiKey, error) {
+	k, err := r.client.ApiKey.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("apikey.GetByID: %w", err)
 	}
 	return k, nil
 }
