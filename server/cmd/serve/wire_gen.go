@@ -13,6 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
@@ -21,7 +22,9 @@ import (
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	mcptools "github.com/lx-wnk/agent-dashboard/server/internal/mcp/tools"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
+	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
 
 func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, error) {
@@ -36,6 +39,14 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 		searchHandler = search.NewHandler(bundle.DB)
 	}
 
+	var webPushHandler *apiwp.Handler
+	if bundle != nil {
+		notifCfgRepo := rawrepo.NewNotificationConfigRepo(bundle.DB)
+		subRepo := rawrepo.NewPushSubscriptionRepo(bundle.DB)
+		wpSvc := wpservice.NewService(notifCfgRepo, subRepo)
+		webPushHandler = apiwp.NewHandler(wpSvc)
+	}
+
 	broadcaster := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(broadcaster)
 	routerConfig := provideRouterConfig(cfg)
@@ -47,7 +58,7 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 
 	taskHandler := provideTaskHandler(entClient, orch, taskBroadcaster)
 	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster)
-	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler)
+	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, orch, nil
@@ -170,7 +181,7 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	return mcp.MCPHandler(registry)
 }
 
-func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler) api.RouterDeps {
+func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler) api.RouterDeps {
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if client != nil {
@@ -193,6 +204,7 @@ func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaste
 		UserRepo:         userRepo,
 		ApiKeyRepo:       apiKeyRepo,
 		TaskHandler:      taskHandler,
+		WebPushHandler:   webPushHandler,
 		RemotesHandler:   remotesHandler,
 		PresetsHandler:   presetsHandler,
 		SearchHandler:    searchHandler,
