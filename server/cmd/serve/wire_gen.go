@@ -9,6 +9,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
+	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
@@ -23,6 +24,7 @@ import (
 	mcptools "github.com/lx-wnk/agent-dashboard/server/internal/mcp/tools"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
+	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
@@ -58,7 +60,15 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 
 	taskHandler := provideTaskHandler(entClient, orch, taskBroadcaster)
 	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster)
-	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler)
+
+	var historyHandler *apihistory.Handler
+	if entClient != nil {
+		costRepo := repo.NewAgentCostTrendRepo(entClient)
+		histImporter := histsvc.NewImporter(costRepo)
+		historyHandler = apihistory.NewHandler(histImporter)
+	}
+
+	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, orch, nil
@@ -181,7 +191,7 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	return mcp.MCPHandler(registry)
 }
 
-func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler) api.RouterDeps {
+func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler) api.RouterDeps {
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if client != nil {
@@ -208,6 +218,7 @@ func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaste
 		RemotesHandler:   remotesHandler,
 		PresetsHandler:   presetsHandler,
 		SearchHandler:    searchHandler,
+		HistoryHandler:   historyHandler,
 		MCPHandler:       mcpHandler,
 		ChannelReply:     agents.NewChannelReplyHandler(replyStore),
 	}
