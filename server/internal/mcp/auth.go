@@ -77,6 +77,12 @@ func AuthFromContext(ctx context.Context) *MCPAuthInfo {
 	return v
 }
 
+func writeAuthError(w http.ResponseWriter, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte(`{"error":"` + msg + `"}`))
+}
+
 // McpAuthMiddleware is a chi-compatible middleware that authenticates MCP requests.
 // It reads Bearer token → SHA-256 hash → DB lookup → resolved scopes → context.
 func McpAuthMiddleware(keyRepo repo.ApiKeyRepo) func(http.Handler) http.Handler {
@@ -84,16 +90,17 @@ func McpAuthMiddleware(keyRepo repo.ApiKeyRepo) func(http.Handler) http.Handler 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
 			if len(header) < 8 || header[:7] != "Bearer " {
-				http.Error(w, `{"error":"Missing or invalid Authorization header"}`, http.StatusUnauthorized)
+				writeAuthError(w, "Missing or invalid Authorization header")
 				return
 			}
 			token := header[7:]
 			hash := HashToken(token)
 			key, err := keyRepo.GetByHash(r.Context(), hash)
 			if err != nil {
-				http.Error(w, `{"error":"Invalid or revoked API key"}`, http.StatusUnauthorized)
+				writeAuthError(w, "Invalid or revoked API key")
 				return
 			}
+			// Fire-and-forget: detach from request ctx so cancel/timeout doesn't suppress the write; failures are non-critical.
 			go func() { _ = keyRepo.TouchLastUsed(context.Background(), key.ID) }() //nolint:errcheck
 			info := &MCPAuthInfo{
 				KeyID:  key.ID,

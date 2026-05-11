@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 )
 
 const protocolVersion = "2024-11-05"
@@ -77,7 +78,11 @@ func MCPHandler(registry ToolRegistry) http.HandlerFunc {
 			}
 			result, err := def.Handler(r.Context(), p.Arguments)
 			if err != nil {
-				writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32003, Message: err.Error()}})
+				code := -32603 // internal error
+				if _, isMCP := err.(*MCPError); isMCP {
+					code = -32003 // tool-level failure (insufficient scope, not-found, etc.)
+				}
+				writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: code, Message: err.Error()}})
 				return
 			}
 			writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: req.ID, Result: result})
@@ -93,10 +98,16 @@ func writeRPC(w http.ResponseWriter, resp rpcResponse) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// buildToolsList builds the tools/list payload once at startup.
+// buildToolsList builds the tools/list payload once at startup, sorted by name for determinism.
 func buildToolsList(registry ToolRegistry) []map[string]any {
+	names := make([]string, 0, len(registry))
+	for name := range registry {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 	out := make([]map[string]any, 0, len(registry))
-	for _, def := range registry {
+	for _, name := range names {
+		def := registry[name]
 		out = append(out, map[string]any{
 			"name":        def.Name,
 			"description": def.Description,
