@@ -58,6 +58,10 @@ func (imp *Importer) Run(ctx context.Context, onProgress func(ImportProgress)) e
 
 	go func() {
 		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("history.import: panic in import goroutine", "panic", r)
+				onProgress(ImportProgress{Done: true})
+			}
 			imp.mu.Lock()
 			imp.running = false
 			imp.mu.Unlock()
