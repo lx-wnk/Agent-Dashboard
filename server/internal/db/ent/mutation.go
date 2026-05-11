@@ -3682,7 +3682,7 @@ type RefinementTurnMutation struct {
 	typ           string
 	id            *string
 	task_id       *string
-	role          *string
+	role          *refinementturn.Role
 	content       *string
 	phase         *string
 	created_at    *time.Time
@@ -3833,12 +3833,12 @@ func (m *RefinementTurnMutation) ResetTaskID() {
 }
 
 // SetRole sets the "role" field.
-func (m *RefinementTurnMutation) SetRole(s string) {
-	m.role = &s
+func (m *RefinementTurnMutation) SetRole(r refinementturn.Role) {
+	m.role = &r
 }
 
 // Role returns the value of the "role" field in the mutation.
-func (m *RefinementTurnMutation) Role() (r string, exists bool) {
+func (m *RefinementTurnMutation) Role() (r refinementturn.Role, exists bool) {
 	v := m.role
 	if v == nil {
 		return
@@ -3849,7 +3849,7 @@ func (m *RefinementTurnMutation) Role() (r string, exists bool) {
 // OldRole returns the old "role" field's value of the RefinementTurn entity.
 // If the RefinementTurn object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *RefinementTurnMutation) OldRole(ctx context.Context) (v string, err error) {
+func (m *RefinementTurnMutation) OldRole(ctx context.Context) (v refinementturn.Role, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldRole is only allowed on UpdateOne operations")
 	}
@@ -4093,7 +4093,7 @@ func (m *RefinementTurnMutation) SetField(name string, value ent.Value) error {
 		m.SetTaskID(v)
 		return nil
 	case refinementturn.FieldRole:
-		v, ok := value.(string)
+		v, ok := value.(refinementturn.Role)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}

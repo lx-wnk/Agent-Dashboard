@@ -69,11 +69,6 @@ func TaskID(v string) predicate.RefinementTurn {
 	return predicate.RefinementTurn(sql.FieldEQ(FieldTaskID, v))
 }
 
-// Role applies equality check predicate on the "role" field. It's identical to RoleEQ.
-func Role(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldEQ(FieldRole, v))
-}
-
 // Content applies equality check predicate on the "content" field. It's identical to ContentEQ.
 func Content(v string) predicate.RefinementTurn {
 	return predicate.RefinementTurn(sql.FieldEQ(FieldContent, v))
@@ -155,68 +150,23 @@ func TaskIDContainsFold(v string) predicate.RefinementTurn {
 }
 
 // RoleEQ applies the EQ predicate on the "role" field.
-func RoleEQ(v string) predicate.RefinementTurn {
+func RoleEQ(v Role) predicate.RefinementTurn {
 	return predicate.RefinementTurn(sql.FieldEQ(FieldRole, v))
 }
 
 // RoleNEQ applies the NEQ predicate on the "role" field.
-func RoleNEQ(v string) predicate.RefinementTurn {
+func RoleNEQ(v Role) predicate.RefinementTurn {
 	return predicate.RefinementTurn(sql.FieldNEQ(FieldRole, v))
 }
 
 // RoleIn applies the In predicate on the "role" field.
-func RoleIn(vs ...string) predicate.RefinementTurn {
+func RoleIn(vs ...Role) predicate.RefinementTurn {
 	return predicate.RefinementTurn(sql.FieldIn(FieldRole, vs...))
 }
 
 // RoleNotIn applies the NotIn predicate on the "role" field.
-func RoleNotIn(vs ...string) predicate.RefinementTurn {
+func RoleNotIn(vs ...Role) predicate.RefinementTurn {
 	return predicate.RefinementTurn(sql.FieldNotIn(FieldRole, vs...))
-}
-
-// RoleGT applies the GT predicate on the "role" field.
-func RoleGT(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldGT(FieldRole, v))
-}
-
-// RoleGTE applies the GTE predicate on the "role" field.
-func RoleGTE(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldGTE(FieldRole, v))
-}
-
-// RoleLT applies the LT predicate on the "role" field.
-func RoleLT(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldLT(FieldRole, v))
-}
-
-// RoleLTE applies the LTE predicate on the "role" field.
-func RoleLTE(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldLTE(FieldRole, v))
-}
-
-// RoleContains applies the Contains predicate on the "role" field.
-func RoleContains(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldContains(FieldRole, v))
-}
-
-// RoleHasPrefix applies the HasPrefix predicate on the "role" field.
-func RoleHasPrefix(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldHasPrefix(FieldRole, v))
-}
-
-// RoleHasSuffix applies the HasSuffix predicate on the "role" field.
-func RoleHasSuffix(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldHasSuffix(FieldRole, v))
-}
-
-// RoleEqualFold applies the EqualFold predicate on the "role" field.
-func RoleEqualFold(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldEqualFold(FieldRole, v))
-}
-
-// RoleContainsFold applies the ContainsFold predicate on the "role" field.
-func RoleContainsFold(v string) predicate.RefinementTurn {
-	return predicate.RefinementTurn(sql.FieldContainsFold(FieldRole, v))
 }
 
 // ContentEQ applies the EQ predicate on the "content" field.

@@ -16,7 +16,7 @@ func (RefinementTurn) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").StorageKey("id").Immutable(),
 		field.String("task_id"),
-		field.String("role"),    // "user" | "assistant"
+		field.Enum("role").Values("user", "assistant"),
 		field.String("content"),
 		field.String("phase").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),

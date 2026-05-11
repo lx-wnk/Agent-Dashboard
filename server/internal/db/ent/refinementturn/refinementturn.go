@@ -3,6 +3,7 @@
 package refinementturn
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -51,6 +52,29 @@ var (
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
+
+// Role defines the type for the "role" enum field.
+type Role string
+
+// Role values.
+const (
+	RoleUser      Role = "user"
+	RoleAssistant Role = "assistant"
+)
+
+func (r Role) String() string {
+	return string(r)
+}
+
+// RoleValidator is a validator for the "role" field enum values. It is called by the builders before save.
+func RoleValidator(r Role) error {
+	switch r {
+	case RoleUser, RoleAssistant:
+		return nil
+	default:
+		return fmt.Errorf("refinementturn: invalid enum value for role field: %q", r)
+	}
+}
 
 // OrderOption defines the ordering options for the RefinementTurn queries.
 type OrderOption func(*sql.Selector)
