@@ -272,7 +272,14 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 					_, _ = d.PermRepo.CreateTaskPermission(ctx, in)
 				}
 				if d.Orchestrator != nil {
-					_, _ = d.Orchestrator.ResumeFromUser(ctx, run.TaskID)
+					if _, resumeErr := d.Orchestrator.ResumeFromUser(ctx, run.TaskID); resumeErr != nil {
+						// Resume failed — surface as warning so caller knows agent was not re-signalled.
+						return mcp.OK(map[string]any{
+							"resolved": req,
+							"resumed":  false,
+							"warning":  "ResumeFromUser failed: " + resumeErr.Error(),
+						})
+					}
 					safeBroadcast(d.Broadcast, run.TaskID)
 					resumed = true
 				}
