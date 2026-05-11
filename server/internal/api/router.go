@@ -17,6 +17,7 @@ import (
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
@@ -49,6 +50,7 @@ type RouterDeps struct {
 	ApiKeyRepo       repo.ApiKeyRepo
 	TaskHandler      *tasks.Handler
 	RemotesHandler   *remotes.Handler
+	PresetsHandler   *presets.Handler
 	MCPHandler       http.Handler
 	ChannelReply     *agents.ChannelReplyHandler
 }
@@ -124,6 +126,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.RemotesHandler != nil {
 			deps.RemotesHandler.Mount(r)
+		}
+
+		if deps.PresetsHandler != nil {
+			deps.PresetsHandler.Mount(r)
 		}
 	})
 
