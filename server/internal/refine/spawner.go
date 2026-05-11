@@ -76,10 +76,13 @@ func RunRefinementTurn(ctx context.Context, cfg SpawnConfig) (<-chan string, err
 			case ch <- line:
 			case <-ctx.Done():
 				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
 				return
 			}
 		}
-		_ = cmd.Wait()
+		if err := cmd.Wait(); err != nil {
+			ch <- "[ERROR] claude exited: " + err.Error()
+		}
 	}()
 
 	return ch, nil
