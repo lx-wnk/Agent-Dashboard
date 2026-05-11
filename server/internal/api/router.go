@@ -36,6 +36,7 @@ type RouterDeps struct {
 	ApiKeyRepo       repo.ApiKeyRepo
 	TaskHandler      *tasks.Handler
 	MCPHandler       http.Handler
+	ChannelReply     *agents.ChannelReplyHandler
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -84,6 +85,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 			deps.TaskHandler.Mount(r)
 		}
 	})
+
+	// Channel-reply endpoint — bearer token auth via discovery file (no JWT).
+	// The channel bridge posts here; auth is validated against the per-PID discovery file.
+	if deps.ChannelReply != nil {
+		r.Post("/api/channel-reply", deps.ChannelReply.Post)
+		r.Get("/api/agents/{pid}/replies", deps.ChannelReply.GetReplies)
+	}
 
 	// MCP endpoint — Bearer token auth (API key), not JWT session auth.
 	// Mounted outside the JWT group so OAuth-less clients can reach it.
