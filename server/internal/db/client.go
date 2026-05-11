@@ -17,9 +17,16 @@ import (
 // DBBundle holds both the ent client and the underlying *sql.DB.
 // The raw *sql.DB is needed for repositories that execute hand-written SQL
 // (e.g. FTS5 queries, notification_config, push_subscriptions).
+// Calling Close() or Client.Close() invalidates both fields.
 type DBBundle struct {
 	Client *ent.Client
 	DB     *sql.DB
+}
+
+// Close closes the database connection. Both Client and DB become invalid after this call.
+// Note: Client.Close() also closes DB because the ent driver wraps the same *sql.DB.
+func (b *DBBundle) Close() error {
+	return b.Client.Close()
 }
 
 // Open returns a DBBundle connected to the SQLite database at path.

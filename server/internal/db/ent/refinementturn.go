@@ -20,7 +20,7 @@ type RefinementTurn struct {
 	// TaskID holds the value of the "task_id" field.
 	TaskID string `json:"task_id,omitempty"`
 	// Role holds the value of the "role" field.
-	Role string `json:"role,omitempty"`
+	Role refinementturn.Role `json:"role,omitempty"`
 	// Content holds the value of the "content" field.
 	Content string `json:"content,omitempty"`
 	// Phase holds the value of the "phase" field.
@@ -70,7 +70,7 @@ func (_m *RefinementTurn) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field role", values[i])
 			} else if value.Valid {
-				_m.Role = value.String
+				_m.Role = refinementturn.Role(value.String)
 			}
 		case refinementturn.FieldContent:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -131,7 +131,7 @@ func (_m *RefinementTurn) String() string {
 	builder.WriteString(_m.TaskID)
 	builder.WriteString(", ")
 	builder.WriteString("role=")
-	builder.WriteString(_m.Role)
+	builder.WriteString(fmt.Sprintf("%v", _m.Role))
 	builder.WriteString(", ")
 	builder.WriteString("content=")
 	builder.WriteString(_m.Content)

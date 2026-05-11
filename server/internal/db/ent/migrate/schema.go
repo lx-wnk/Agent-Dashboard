@@ -167,7 +167,7 @@ var (
 	RefinementTurnsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "task_id", Type: field.TypeString},
-		{Name: "role", Type: field.TypeString},
+		{Name: "role", Type: field.TypeEnum, Enums: []string{"user", "assistant"}},
 		{Name: "content", Type: field.TypeString},
 		{Name: "phase", Type: field.TypeString, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},

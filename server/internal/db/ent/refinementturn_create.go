@@ -27,7 +27,7 @@ func (_c *RefinementTurnCreate) SetTaskID(v string) *RefinementTurnCreate {
 }
 
 // SetRole sets the "role" field.
-func (_c *RefinementTurnCreate) SetRole(v string) *RefinementTurnCreate {
+func (_c *RefinementTurnCreate) SetRole(v refinementturn.Role) *RefinementTurnCreate {
 	_c.mutation.SetRole(v)
 	return _c
 }
@@ -121,6 +121,11 @@ func (_c *RefinementTurnCreate) check() error {
 	if _, ok := _c.mutation.Role(); !ok {
 		return &ValidationError{Name: "role", err: errors.New(`ent: missing required field "RefinementTurn.role"`)}
 	}
+	if v, ok := _c.mutation.Role(); ok {
+		if err := refinementturn.RoleValidator(v); err != nil {
+			return &ValidationError{Name: "role", err: fmt.Errorf(`ent: validator failed for field "RefinementTurn.role": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Content(); !ok {
 		return &ValidationError{Name: "content", err: errors.New(`ent: missing required field "RefinementTurn.content"`)}
 	}
@@ -167,7 +172,7 @@ func (_c *RefinementTurnCreate) createSpec() (*RefinementTurn, *sqlgraph.CreateS
 		_node.TaskID = value
 	}
 	if value, ok := _c.mutation.Role(); ok {
-		_spec.SetField(refinementturn.FieldRole, field.TypeString, value)
+		_spec.SetField(refinementturn.FieldRole, field.TypeEnum, value)
 		_node.Role = value
 	}
 	if value, ok := _c.mutation.Content(); ok {
