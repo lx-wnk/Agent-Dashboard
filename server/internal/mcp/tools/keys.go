@@ -31,20 +31,9 @@ func RegisterKeyTools(registry mcp.ToolRegistry, d KeyDeps) {
 func registerListAPIKeys(registry mcp.ToolRegistry, d KeyDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "list_api_keys",
-		Description: "List API keys. Active keys only by default; include_revoked includes soft-deleted keys (note: revoked keys are not stored separately, so active-only is the effective behaviour).",
-		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"include_revoked": map[string]any{
-					"type":        "boolean",
-					"description": "When true, include revoked (inactive) keys in the result (currently returns active keys only; revoked entries are not retained)",
-				},
-			},
-		},
+		Description: "List active API keys.",
+		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
-			// List always returns active keys. The TypeScript layer had a separate
-			// includeRevoked path but revoked keys are soft-deleted (active=false) and
-			// there is no ListAll method — active-only is the safe fallback.
 			keys, err := d.ApiKeyRepo.List(ctx)
 			if err != nil {
 				return nil, mcp.Fail("list_api_keys: " + err.Error())
