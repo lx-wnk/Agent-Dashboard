@@ -16,6 +16,8 @@ import (
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -92,6 +94,16 @@ func NewRouter(deps RouterDeps) http.Handler {
 		agentHandler := agents.NewHandler(merger.GetAgents, deps.AgentBroadcaster)
 		r.Get("/api/agents", ErrorMiddleware(agentHandler.List))
 		r.Get("/api/agents/stream", agentHandler.Stream)
+		r.Get("/api/agents/{sessionId}/output", sessions.Output)
+
+		r.Get("/api/sessions", sessions.List)
+		r.Get("/api/sessions/{sessionId}/timeline", sessions.Timeline)
+
+		r.Get("/api/quota", system.Quota)
+
+		r.Get("/api/memory", memory.List)
+		r.Get("/api/memory/*", memory.Get)
+		r.Put("/api/memory/*", memory.Put)
 
 		r.Get("/api/auth/me", ErrorMiddleware(authHandler.Me))
 
