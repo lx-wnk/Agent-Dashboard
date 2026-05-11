@@ -27,12 +27,14 @@ import (
 
 // RouterConfig holds configuration values for the router.
 type RouterConfig struct {
-	JWTSecret       string
-	CallbackURL     string
-	IsLoopback      bool            // true when Host is 127.0.0.1 / ::1 / localhost
-	Embedded        http.FileSystem // Vue SPA embed (unused until Task 14)
-	HooksSecret     string
-	HooksDebounceMs int
+	JWTSecret         string
+	CallbackURL       string
+	IsLoopback        bool            // true when Host is 127.0.0.1 / ::1 / localhost
+	Embedded          http.FileSystem // Vue SPA embed (unused until Task 14)
+	HooksSecret       string
+	HooksDebounceMs   int
+	SpawnRateLimit    int
+	SpawnRateWindowMs int
 }
 
 // RouterDeps holds all dependencies injected into the router.
@@ -111,6 +113,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Post("/api/channel-reply", deps.ChannelReply.Post)
 		r.Get("/api/agents/{pid}/replies", deps.ChannelReply.GetReplies)
 	}
+
+	// Spawn management — rate-limited user-initiated agent spawning and channel message forwarding.
+	spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs)
+	spawnHandler := agents.NewSpawnHandler(spawnMgr)
+	r.Post("/api/agents/spawn", spawnHandler.Spawn)
+	r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
+	r.Post("/api/agents/{pid}/message", spawnHandler.Message)
 
 	// MCP endpoint — Bearer token auth (API key), not JWT session auth.
 	// Mounted outside the JWT group so OAuth-less clients can reach it.
