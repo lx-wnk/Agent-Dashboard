@@ -19,6 +19,9 @@ func TestIsSafeRemoteURL(t *testing.T) {
 		{"ftp protocol", "ftp://example.com/api", false},
 		{"empty string", "", false},
 		{"no scheme", "example.com/api", false},
+		{"RFC-1918 10.x", "http://10.0.0.1", false},
+		{"RFC-1918 192.168.x.x", "http://192.168.1.1", false},
+		{"RFC-1918 172.16.x.x", "http://172.16.0.1", false},
 	}
 
 	for _, tc := range cases {

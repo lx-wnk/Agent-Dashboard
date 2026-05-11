@@ -4,6 +4,7 @@ package remotes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -58,14 +59,25 @@ func isSafeRemoteURL(raw string) bool {
 	// Additional: block any IP that net resolves as loopback or link-local
 	// (catches numeric IPv6 like ::ffff:127.0.0.1 etc.).
 	if ip := net.ParseIP(h); ip != nil {
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() {
 			return false
 		}
 	}
 	return true
 }
 
-var connectivityClient = &http.Client{Timeout: 15 * time.Second}
+var connectivityClient = &http.Client{
+	Timeout: 15 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if !isSafeRemoteURL(req.URL.String()) {
+			return http.ErrUseLastResponse
+		}
+		if len(via) >= 3 {
+			return errors.New("too many redirects")
+		}
+		return nil
+	},
+}
 
 // testRemoteConnection attempts GET {baseURL}/api/agents with an optional bearer token.
 // Returns true when the server responds (any status code counts as reachable).
@@ -114,7 +126,10 @@ func (h *Handler) Mount(r chi.Router) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
-	payload, _ := auth.PayloadFromContext(r.Context())
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		return apierr.ErrForbidden
+	}
 	regs, err := h.repo.ListForUser(r.Context(), payload.Sub)
 	if err != nil {
 		return fmt.Errorf("remotes.list: %w", err)
@@ -158,7 +173,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	defer cancel()
 	connectionOk := testRemoteConnection(connCtx, body.URL, bearerKey)
 
-	payload, _ := auth.PayloadFromContext(r.Context())
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		return apierr.ErrForbidden
+	}
+	existing, err := h.repo.ListForUser(r.Context(), payload.Sub)
+	if err != nil {
+		return fmt.Errorf("remotes: list for cap check: %w", err)
+	}
+	if len(existing) >= 50 {
+		return apierr.NewAppError(http.StatusBadRequest, "remote registration limit reached (max 50)")
+	}
 	reg, err := h.repo.Create(r.Context(), repo.CreateRemoteInput{
 		UserID:    payload.Sub,
 		URL:       body.URL,
@@ -189,7 +214,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
-	payload, _ := auth.PayloadFromContext(r.Context())
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		return apierr.ErrForbidden
+	}
 	found, err := h.repo.Delete(r.Context(), id, payload.Sub)
 	if err != nil {
 		return fmt.Errorf("remotes.delete: %w", err)
