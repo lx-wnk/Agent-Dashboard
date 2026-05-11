@@ -30,6 +30,11 @@ func claudeProjectsDir() string {
 	return filepath.Join(home, ".claude", "projects")
 }
 
+// ClaudeProjectsDir returns ~/.claude/projects — exported for use by pipeline package.
+func ClaudeProjectsDir() string {
+	return claudeProjectsDir()
+}
+
 // sessionMetaDir returns ~/.claude/usage-data/session-meta
 func sessionMetaDir() string {
 	home, _ := os.UserHomeDir()
