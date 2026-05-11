@@ -15,6 +15,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
+	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
@@ -55,6 +56,7 @@ type RouterDeps struct {
 	RemotesHandler   *remotes.Handler
 	PresetsHandler   *presets.Handler
 	SearchHandler    *search.Handler
+	HistoryHandler   *apihistory.Handler
 	MCPHandler       http.Handler
 	ChannelReply     *agents.ChannelReplyHandler
 }
@@ -142,6 +144,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.SearchHandler != nil {
 			r.Get("/api/search", ErrorMiddleware(deps.SearchHandler.Search))
+		}
+
+		if deps.HistoryHandler != nil {
+			deps.HistoryHandler.Mount(r)
 		}
 	})
 
