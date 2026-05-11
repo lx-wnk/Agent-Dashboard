@@ -135,6 +135,84 @@ func TestSearch_TaskFTS(t *testing.T) {
 	}
 }
 
+// TestSearch_TaskVisibility_NonAdmin verifies that a non-admin user only sees their own tasks.
+func TestSearch_TaskVisibility_NonAdmin(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Close() })
+
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	// Insert a task owned by alice.
+	_, err = bundle.DB.Exec(`
+		INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, user_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"task-alice", "alice-task", "ScopingTestAlice", "/tmp/alice",
+		"concept", "medium", 20, 1800, false, "user-alice", now, now,
+	)
+	if err != nil {
+		t.Fatalf("insert alice task: %v", err)
+	}
+
+	// Insert a task owned by bob.
+	_, err = bundle.DB.Exec(`
+		INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, user_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"task-bob", "bob-task", "ScopingTestBob", "/tmp/bob",
+		"concept", "medium", 20, 1800, false, "user-bob", now, now,
+	)
+	if err != nil {
+		t.Fatalf("insert bob task: %v", err)
+	}
+
+	h := search.NewHandler(bundle.DB)
+	ro := chi.NewRouter()
+	ro.Use(auth.RequireAuth(testJWTSecret))
+	ro.Get("/api/search", apierr.ErrorMiddleware(h.Search))
+
+	// Sign a non-admin token for alice.
+	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-alice", Login: "alice", IsAdmin: false}, testJWTSecret, 3600)
+	if err != nil {
+		t.Fatalf("sign jwt: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=ScopingTest&type=tasks", nil)
+	req.AddCookie(&http.Cookie{Name: "auth_token", Value: token})
+	rr := httptest.NewRecorder()
+	ro.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		Tasks []struct {
+			ID string `json:"id"`
+		} `json:"tasks"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	for _, task := range resp.Tasks {
+		if task.ID == "task-bob" {
+			t.Errorf("non-admin alice should not see bob's task, but it appeared in results")
+		}
+	}
+
+	var aliceFound bool
+	for _, task := range resp.Tasks {
+		if task.ID == "task-alice" {
+			aliceFound = true
+		}
+	}
+	if !aliceFound {
+		t.Errorf("alice should see her own task, but task-alice was not in results; body=%s", rr.Body.String())
+	}
+}
+
 // TestSearch_TypeAgents_NonAdmin verifies non-admin always gets empty agents.
 func TestSearch_TypeAgents_NonAdmin(t *testing.T) {
 	bundle, err := db.Open(":memory:")
