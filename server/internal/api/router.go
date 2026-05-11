@@ -23,6 +23,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
@@ -50,6 +51,7 @@ type RouterDeps struct {
 	UserRepo         repo.UserRepo
 	ApiKeyRepo       repo.ApiKeyRepo
 	TaskHandler      *tasks.Handler
+	WebPushHandler   *apiwp.Handler
 	RemotesHandler   *remotes.Handler
 	PresetsHandler   *presets.Handler
 	SearchHandler    *search.Handler
@@ -120,6 +122,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Get("/api/settings/api-keys", ErrorMiddleware(apiKeyHandler.List))
 			r.Post("/api/settings/api-keys", ErrorMiddleware(apiKeyHandler.Create))
 			r.Delete("/api/settings/api-keys/{id}", ErrorMiddleware(apiKeyHandler.Delete))
+		}
+
+		if deps.WebPushHandler != nil {
+			deps.WebPushHandler.Mount(r)
 		}
 
 		if deps.TaskHandler != nil {

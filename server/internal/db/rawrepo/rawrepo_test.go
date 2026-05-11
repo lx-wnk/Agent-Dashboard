@@ -1,0 +1,121 @@
+package rawrepo_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
+)
+
+func openTestDB(t *testing.T) *db.DBBundle {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Close() })
+	return bundle
+}
+
+// TestNotificationConfigRepo_GetSet verifies Set persists a value and Get returns it.
+func TestNotificationConfigRepo_GetSet(t *testing.T) {
+	bundle := openTestDB(t)
+	repo := rawrepo.NewNotificationConfigRepo(bundle.DB)
+	ctx := context.Background()
+
+	// Key absent before Set.
+	val, found, err := repo.Get(ctx, "test_key")
+	if err != nil {
+		t.Fatalf("Get before Set: %v", err)
+	}
+	if found {
+		t.Fatalf("expected key absent, got value %q", val)
+	}
+
+	// Set a value.
+	if err := repo.Set(ctx, "test_key", "hello"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	// Get returns the set value.
+	val, found, err = repo.Get(ctx, "test_key")
+	if err != nil {
+		t.Fatalf("Get after Set: %v", err)
+	}
+	if !found {
+		t.Fatal("expected key found after Set")
+	}
+	if val != "hello" {
+		t.Fatalf("expected value %q, got %q", "hello", val)
+	}
+
+	// Set again (upsert) replaces the value.
+	if err := repo.Set(ctx, "test_key", "world"); err != nil {
+		t.Fatalf("Set upsert: %v", err)
+	}
+	val, _, _ = repo.Get(ctx, "test_key")
+	if val != "world" {
+		t.Fatalf("expected upserted value %q, got %q", "world", val)
+	}
+}
+
+// TestPushSubscriptionRepo_Register verifies Register inserts and ListAll returns it.
+func TestPushSubscriptionRepo_Register(t *testing.T) {
+	bundle := openTestDB(t)
+	repo := rawrepo.NewPushSubscriptionRepo(bundle.DB)
+	ctx := context.Background()
+
+	// Empty list initially.
+	subs, err := repo.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll empty: %v", err)
+	}
+	if len(subs) != 0 {
+		t.Fatalf("expected 0 subs, got %d", len(subs))
+	}
+
+	// Register a subscription.
+	sub := rawrepo.PushSubscription{
+		Endpoint: "https://push.example.com/endpoint1",
+		P256dh:   "key_p256dh",
+		Auth:     "key_auth",
+	}
+	if err := repo.Register(ctx, sub); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	// ListAll returns the subscription.
+	subs, err = repo.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(subs) != 1 {
+		t.Fatalf("expected 1 sub, got %d", len(subs))
+	}
+	got := subs[0]
+	if got.Endpoint != sub.Endpoint {
+		t.Errorf("endpoint: want %q, got %q", sub.Endpoint, got.Endpoint)
+	}
+	if got.P256dh != sub.P256dh {
+		t.Errorf("p256dh: want %q, got %q", sub.P256dh, got.P256dh)
+	}
+	if got.Auth != sub.Auth {
+		t.Errorf("auth: want %q, got %q", sub.Auth, got.Auth)
+	}
+	if got.ID == "" {
+		t.Error("expected non-empty ID")
+	}
+	if got.CreatedAt == "" {
+		t.Error("expected non-empty CreatedAt")
+	}
+
+	// Register same endpoint again (INSERT OR IGNORE) — should not duplicate.
+	if err := repo.Register(ctx, sub); err != nil {
+		t.Fatalf("Register duplicate: %v", err)
+	}
+	subs, _ = repo.ListAll(ctx)
+	if len(subs) != 1 {
+		t.Fatalf("expected 1 sub after duplicate register, got %d", len(subs))
+	}
+}
