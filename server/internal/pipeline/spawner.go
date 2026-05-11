@@ -26,16 +26,17 @@ var dangerousBashRE = regexp.MustCompile(
 const systemPromptMaxChars = 10000
 
 type SpawnAgentOptions struct {
-	Task            *ent.Task
-	StageRun        *ent.StageRun
-	Prompt          string
-	SystemPrompt    string
-	Model           string
-	Permissions     []*ent.TaskPermission
-	EnableChannel   bool
-	ResumeSessionID string
-	MCPToken        string
-	MCPUrl          string
+	Task              *ent.Task
+	StageRun          *ent.StageRun
+	Prompt            string
+	SystemPrompt      string
+	Model             string
+	Permissions       []*ent.TaskPermission
+	EnableChannel     bool
+	ChannelConfigPath string // path to the temp MCP config file for --mcp-config
+	ResumeSessionID   string
+	MCPToken          string
+	MCPUrl            string
 }
 
 type SpawnResult struct {
@@ -105,6 +106,9 @@ func BuildSpawnArgs(opts SpawnAgentOptions) []string {
 			sp = sp[:systemPromptMaxChars]
 		}
 		args = append(args, "--system-prompt", sp)
+	}
+	if opts.ChannelConfigPath != "" {
+		args = append(args, "--mcp-config", opts.ChannelConfigPath)
 	}
 	return args
 }
@@ -234,6 +238,9 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 		return SpawnResult{}, fmt.Errorf("SpawnStageAgent.Start: %w", err)
 	}
 	cleanup := func() {
+		if opts.ChannelConfigPath != "" {
+			_ = os.Remove(opts.ChannelConfigPath)
+		}
 		if !wrote || settingsPath == "" {
 			return
 		}

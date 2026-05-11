@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
+	"github.com/lx-wnk/agent-dashboard/server/internal/channel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 )
 
@@ -69,6 +70,19 @@ func main() {
 		},
 	}
 	serve.Flags().StringVar(&cfgFile, "config", "", "path to JSON config file")
+
+	// channel subcommand: runs the dashboard-channel MCP stdio server.
+	// Claude Code spawns this when it reads the --mcp-config written by the pipeline spawner.
+	channelCmd := &cobra.Command{
+		Use:   "channel",
+		Short: "Run the dashboard-channel MCP stdio server (invoked by Claude Code)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return channel.Run(cmd.Context())
+		},
+		// Hide from help output — this is an internal subcommand for Claude Code.
+		Hidden: true,
+	}
+	root.AddCommand(channelCmd)
 
 	root.AddCommand(serve)
 
