@@ -95,6 +95,10 @@ func registerGetTask(registry mcp.ToolRegistry, d ReadDeps) {
 			}
 			task, err := d.TaskRepo.GetByID(ctx, idOrSlug)
 			if err != nil {
+				if !ent.IsNotFound(err) {
+					return nil, mcp.Fail("get_task: " + err.Error())
+				}
+				// Not found by ID — try slug
 				task, err = d.TaskRepo.GetBySlug(ctx, idOrSlug)
 				if err != nil {
 					return nil, mcp.Fail("Task not found: " + idOrSlug)
@@ -130,7 +134,10 @@ func registerListStageRuns(registry mcp.ToolRegistry, d ReadDeps) {
 			}
 			task, err := d.TaskRepo.GetByID(ctx, taskID)
 			if err != nil {
-				return nil, mcp.Fail("Task not found: " + taskID)
+				if ent.IsNotFound(err) {
+					return nil, mcp.Fail("Task not found: " + taskID)
+				}
+				return nil, mcp.Fail("list_stage_runs: " + err.Error())
 			}
 			if accessErr := checkTaskAccess(ctx, task.UserID); accessErr != nil {
 				return nil, accessErr
@@ -169,7 +176,10 @@ func registerListAudit(registry mcp.ToolRegistry, d ReadDeps) {
 			}
 			task, err := d.TaskRepo.GetByID(ctx, taskID)
 			if err != nil {
-				return nil, mcp.Fail("Task not found: " + taskID)
+				if ent.IsNotFound(err) {
+					return nil, mcp.Fail("Task not found: " + taskID)
+				}
+				return nil, mcp.Fail("list_audit: " + err.Error())
 			}
 			if accessErr := checkTaskAccess(ctx, task.UserID); accessErr != nil {
 				return nil, accessErr
@@ -208,7 +218,10 @@ func registerListPermissionRequests(registry mcp.ToolRegistry, d ReadDeps) {
 			}
 			task, err := d.TaskRepo.GetByID(ctx, taskID)
 			if err != nil {
-				return nil, mcp.Fail("Task not found: " + taskID)
+				if ent.IsNotFound(err) {
+					return nil, mcp.Fail("Task not found: " + taskID)
+				}
+				return nil, mcp.Fail("list_permission_requests: " + err.Error())
 			}
 			if accessErr := checkTaskAccess(ctx, task.UserID); accessErr != nil {
 				return nil, accessErr
