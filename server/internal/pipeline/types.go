@@ -66,6 +66,8 @@ type StageContext struct {
 	PriorIterationOutput map[string]any
 	ResumeSessionID      string
 	UserAdditionalPrompt string
+	MCPToken             string
+	MCPUrl               string
 
 	RecordAudit       func(action string, details map[string]any)
 	RequestPermission func(tool, pattern, reason string) *ent.PermissionRequest
@@ -117,6 +119,12 @@ type OrchestratorOptions struct {
 	PermissionRepo repo.PermissionRepo
 	AuditRepo      repo.AuditRepo
 	ConfigRepo     repo.PipelineConfigRepo
+
+	// MCPToken and MCPUrl are injected into spawned stage agents via
+	// DASHBOARD_MCP_TOKEN / DASHBOARD_MCP_URL so the channel bridge can
+	// authenticate back-calls to the dashboard REST API.
+	MCPToken string
+	MCPUrl   string
 
 	OnPermissionRequest func(taskID string, req *ent.PermissionRequest)
 	OnStageFailed       func(taskID string, info StageFailedInfo)

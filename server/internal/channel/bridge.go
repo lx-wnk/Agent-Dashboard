@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -24,11 +25,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -38,15 +41,24 @@ import (
 
 const discoveryDir = ".claude/dashboard-channel"
 
+var dashboardClient = &http.Client{Timeout: 15 * time.Second}
+
 // Run starts the channel bridge. It blocks until the MCP stdio session ends.
 func Run(ctx context.Context) error {
 	dashboardURL := strings.TrimSuffix(os.Getenv("DASHBOARD_MCP_URL"), "/")
 	if dashboardURL == "" {
 		dashboardURL = "http://127.0.0.1:13120"
+	} else if !isLoopbackURL(dashboardURL) {
+		slog.Warn("channel: DASHBOARD_MCP_URL is not a loopback address — ignoring, using default",
+			"url", dashboardURL)
+		dashboardURL = "http://127.0.0.1:13120"
 	}
 	mcpToken := os.Getenv("DASHBOARD_MCP_TOKEN")
 	stageRunID := os.Getenv("DASHBOARD_STAGE_RUN_ID")
-	httpToken := generateToken()
+	httpToken, err := generateToken()
+	if err != nil {
+		return fmt.Errorf("channel: generateToken: %w", err)
+	}
 	parentPid := os.Getppid()
 
 	var sessionPtr atomic.Pointer[mcp.ServerSession]
@@ -61,27 +73,22 @@ func Run(ctx context.Context) error {
 		slog.Warn("channel: discovery file write failed", "err", err)
 	}
 
+	var cleanupOnce sync.Once
 	cleanup := func() {
-		if discPath != "" {
-			_ = os.Remove(discPath)
-		}
-		shutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = httpSrv.Shutdown(shutCtx)
+		cleanupOnce.Do(func() {
+			if discPath != "" {
+				_ = os.Remove(discPath)
+			}
+			shutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = httpSrv.Shutdown(shutCtx)
+		})
 	}
 	defer cleanup()
 
-	// Honour OS signals in addition to the context.
-	go func() {
-		sigC := make(chan os.Signal, 1)
-		signal.Notify(sigC, syscall.SIGTERM, syscall.SIGINT)
-		select {
-		case <-sigC:
-		case <-ctx.Done():
-		}
-		cleanup()
-		os.Exit(0)
-	}()
+	// Cancel context on OS signals so server.Run returns cleanly and deferred cleanup fires.
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "dashboard-channel", Version: "0.1.0"}, &mcp.ServerOptions{
 		Instructions: channelInstructions,
@@ -97,6 +104,13 @@ func Run(ctx context.Context) error {
 		}
 	})
 
+	registerTools(server, dashboardURL, mcpToken, stageRunID, parentPid)
+
+	slog.Info("channel: MCP stdio server starting", "parentPid", parentPid, "httpPort", httpPort)
+	return server.Run(ctx, &mcp.StdioTransport{})
+}
+
+func registerTools(server *mcp.Server, dashboardURL, mcpToken, stageRunID string, parentPid int) {
 	// dashboard_reply tool
 	type replyArgs struct {
 		Message string `json:"message" jsonschema:"description=Reply message to display in the dashboard,required"`
@@ -109,6 +123,7 @@ func Run(ctx context.Context) error {
 			return errResult("message is required"), nil, nil
 		}
 		if err := postReply(dashboardURL, mcpToken, parentPid, args.Message); err != nil {
+			slog.Warn("channel: postReply failed", "err", err)
 			return textResult("dashboard unreachable: " + err.Error()), nil, nil
 		}
 		return textResult("Reply sent to dashboard."), nil, nil
@@ -121,7 +136,6 @@ func Run(ctx context.Context) error {
 		Reason  *string `json:"reason,omitempty"`
 	}
 	type reqPermArgs struct {
-		StageRunID  *string     `json:"stageRunId,omitempty"`
 		Permissions []permEntry `json:"permissions,omitempty"`
 		Tool        *string     `json:"tool,omitempty"`
 		Pattern     *string     `json:"pattern,omitempty"`
@@ -131,11 +145,7 @@ func Run(ctx context.Context) error {
 		Name:        "request_permission",
 		Description: requestPermDesc,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args reqPermArgs) (*mcp.CallToolResult, any, error) {
-		sid := stageRunID
-		if args.StageRunID != nil && *args.StageRunID != "" {
-			sid = *args.StageRunID
-		}
-		if sid == "" {
+		if stageRunID == "" {
 			return errResult("No stageRunId — task is not orchestrator-managed."), nil, nil
 		}
 
@@ -150,15 +160,12 @@ func Run(ctx context.Context) error {
 		}
 
 		resp, apiErr := callDashboard(dashboardURL, mcpToken, "POST", "/api/permission-requests/bulk",
-			map[string]any{"stageRunId": sid, "entries": entries})
+			map[string]any{"stageRunId": stageRunID, "entries": entries})
 		if apiErr != nil {
 			return textResult("Could not reach dashboard: " + apiErr.Error()), nil, nil
 		}
 		return textResult(resp), nil, nil
 	})
-
-	slog.Info("channel: MCP stdio server starting", "parentPid", parentPid, "httpPort", httpPort)
-	return server.Run(ctx, &mcp.StdioTransport{})
 }
 
 // ─── HTTP server ──────────────────────────────────────────────────────────────
@@ -181,6 +188,10 @@ func startHTTPServer(
 	})
 
 	mux.HandleFunc("POST /message", func(w http.ResponseWriter, r *http.Request) {
+		if !checkBearer(r, httpToken) {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
 		if err != nil {
 			http.Error(w, "read error", http.StatusBadRequest)
@@ -194,12 +205,13 @@ func startHTTPServer(
 
 		// Forward as MCP log notification (best-effort).
 		if ss := sess.Load(); ss != nil {
-			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+			msgJSON, _ := json.Marshal(payload.Message)
+			notifyCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 			defer cancel()
-			_ = ss.Log(ctx, &mcp.LoggingMessageParams{
+			_ = ss.Log(notifyCtx, &mcp.LoggingMessageParams{
 				Level:  "info",
 				Logger: "dashboard",
-				Data:   json.RawMessage(`"` + escapeJSON(payload.Message) + `"`),
+				Data:   json.RawMessage(msgJSON),
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -213,7 +225,12 @@ func startHTTPServer(
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	srv := &http.Server{Handler: mux, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+	}
 	go func() {
 		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			slog.Error("channel: HTTP server error", "err", err)
@@ -222,12 +239,27 @@ func startHTTPServer(
 	return srv, port, nil
 }
 
+func checkBearer(r *http.Request, expected string) bool {
+	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return subtle.ConstantTimeCompare([]byte(got), []byte(expected)) == 1
+}
+
 func corsOrigin(r *http.Request, dashboardURL string) string {
 	o := r.Header.Get("Origin")
-	if strings.HasPrefix(o, "http://127.0.0.1") || strings.HasPrefix(o, "http://localhost") {
+	u, err := url.Parse(o)
+	if err == nil && (u.Hostname() == "127.0.0.1" || u.Hostname() == "localhost") {
 		return o
 	}
 	return dashboardURL
+}
+
+func isLoopbackURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	h := u.Hostname()
+	return h == "127.0.0.1" || h == "localhost" || h == "::1"
 }
 
 // ─── Discovery ────────────────────────────────────────────────────────────────
@@ -250,13 +282,32 @@ func writeDiscovery(parentPid, port int, token string) (string, error) {
 		"token":      token,
 		"startedAt":  time.Now().UTC().Format(time.RFC3339),
 	})
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return "", fmt.Errorf("write: %w", err)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if os.IsExist(err) {
+		// Stale file from a previous run with the same parent PID — overwrite it.
+		if err2 := os.WriteFile(path, data, 0o600); err2 != nil {
+			return "", fmt.Errorf("overwrite discovery: %w", err2)
+		}
+		return path, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("create discovery: %w", err)
+	}
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("write discovery: %w", err)
 	}
 	return path, nil
 }
 
-func cwd() string { d, _ := os.Getwd(); return d }
+func cwd() string {
+	d, err := os.Getwd()
+	if err != nil {
+		slog.Warn("channel: os.Getwd failed", "err", err)
+	}
+	return d
+}
 
 // ─── Dashboard HTTP helpers ───────────────────────────────────────────────────
 
@@ -279,38 +330,36 @@ func callDashboard(baseURL, token, method, path string, body any) (string, error
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := dashboardClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if readErr != nil {
+		slog.Warn("channel: callDashboard body read error", "err", readErr)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 	return formatPermResponse(respBody), nil
 }
 
+type permItem struct {
+	Tool    string  `json:"tool"`
+	Pattern *string `json:"pattern"`
+}
+
 func formatPermResponse(body []byte) string {
 	var v struct {
-		AutoResolved []struct {
-			Tool    string  `json:"tool"`
-			Pattern *string `json:"pattern"`
-		} `json:"autoResolved"`
-		Pending []struct {
-			Tool    string  `json:"tool"`
-			Pattern *string `json:"pattern"`
-		} `json:"pending"`
-		LoopWarning *string `json:"loopWarning"`
+		AutoResolved []permItem `json:"autoResolved"`
+		Pending      []permItem `json:"pending"`
+		LoopWarning  *string    `json:"loopWarning"`
 	}
 	if err := json.Unmarshal(body, &v); err != nil {
 		return string(body)
 	}
-	fmtList := func(items []struct {
-		Tool    string  `json:"tool"`
-		Pattern *string `json:"pattern"`
-	}) []string {
+	fmtList := func(items []permItem) []string {
 		names := make([]string, 0, len(items))
 		for _, e := range items {
 			s := e.Tool
@@ -347,17 +396,12 @@ func postReply(dashboardURL, token string, parentPid int, message string) error 
 
 // ─── Misc ─────────────────────────────────────────────────────────────────────
 
-func generateToken() string {
+func generateToken() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		panic("channel: generateToken: " + err.Error())
+		return "", err
 	}
-	return hex.EncodeToString(b)
-}
-
-func escapeJSON(s string) string {
-	b, _ := json.Marshal(s)
-	return string(b[1 : len(b)-1]) // strip surrounding quotes
+	return hex.EncodeToString(b), nil
 }
 
 func textResult(text string) *mcp.CallToolResult {

@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 // mcpServerEntry mirrors the claude CLI's mcpServers JSON shape.
 type mcpServerEntry struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args,omitempty"`
-	Env     []string `json:"env,omitempty"`
 }
 
 type mcpConfig struct {
@@ -39,7 +39,12 @@ func WriteTempConfig(binaryPath string) (path string, err error) {
 	if err != nil {
 		return "", fmt.Errorf("channelconfig: marshal: %w", err)
 	}
-	f, err := os.CreateTemp("", "dashboard-channel-mcp-*.json")
+	// Write to a per-user 0700 directory to prevent world-readable exposure on Linux /tmp.
+	dir := filepath.Join(os.TempDir(), "dashboard-"+strconv.Itoa(os.Getuid()))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("channelconfig: mkdir: %w", err)
+	}
+	f, err := os.CreateTemp(dir, "dashboard-channel-mcp-*.json")
 	if err != nil {
 		return "", fmt.Errorf("channelconfig: create temp file: %w", err)
 	}
@@ -47,11 +52,6 @@ func WriteTempConfig(binaryPath string) (path string, err error) {
 	if _, err := f.Write(data); err != nil {
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("channelconfig: write temp file: %w", err)
-	}
-	// chmod 0600 so only the owner can read the config (contains no secrets but good hygiene).
-	if err := os.Chmod(f.Name(), 0o600); err != nil {
-		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("channelconfig: chmod: %w", err)
 	}
 	return f.Name(), nil
 }
@@ -65,7 +65,7 @@ func SelfBinaryPath() (string, error) {
 	}
 	abs, err := filepath.EvalSymlinks(exe)
 	if err != nil {
-		return exe, nil // fall back to unresolved
+		return "", fmt.Errorf("channelconfig: EvalSymlinks: %w", err)
 	}
 	return abs, nil
 }

@@ -77,6 +77,11 @@ func main() {
 		Use:   "channel",
 		Short: "Run the dashboard-channel MCP stdio server (invoked by Claude Code)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Redirect slog to stderr: the channel bridge uses os.Stdin/os.Stdout
+			// for MCP stdio transport — any log lines on stdout corrupt the protocol.
+			slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+				Level: slog.LevelInfo,
+			})))
 			return channel.Run(cmd.Context())
 		},
 		// Hide from help output — this is an internal subcommand for Claude Code.
