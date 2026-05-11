@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
@@ -34,6 +35,7 @@ type RouterDeps struct {
 	UserRepo         repo.UserRepo
 	ApiKeyRepo       repo.ApiKeyRepo
 	TaskHandler      *tasks.Handler
+	MCPHandler       http.Handler
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -82,6 +84,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 			deps.TaskHandler.Mount(r)
 		}
 	})
+
+	// MCP endpoint — Bearer token auth (API key), not JWT session auth.
+	// Mounted outside the JWT group so OAuth-less clients can reach it.
+	if deps.MCPHandler != nil {
+		r.With(mcp.McpAuthMiddleware(deps.ApiKeyRepo)).Post("/api/mcp", deps.MCPHandler.ServeHTTP)
+	}
 
 	// Vue SPA catch-all — must be last (after all API routes)
 	sub, err := fs.Sub(frontend.Embedded, "dist")
