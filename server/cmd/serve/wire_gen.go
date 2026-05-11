@@ -12,6 +12,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	mcptools "github.com/lx-wnk/agent-dashboard/server/internal/mcp/tools"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
@@ -31,7 +33,8 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 	}
 
 	taskHandler := provideTaskHandler(entClient, orch, taskBroadcaster)
-	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler)
+	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster)
+	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, orch, nil
@@ -102,7 +105,55 @@ func provideTaskHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator,
 	})
 }
 
-func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler) api.RouterDeps {
+func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster) http.Handler {
+	if client == nil || orch == nil {
+		return nil
+	}
+
+	taskRepo := repo.NewTaskRepo(client)
+	srRepo := repo.NewStageRunRepo(client)
+	permRepo := repo.NewPermissionRepo(client)
+	auditRepo := repo.NewAuditRepo(client)
+	depRepo := repo.NewDependencyRepo(client)
+	apiKeyRepo := repo.NewApiKeyRepo(client)
+
+	broadcast := func(taskID string) {
+		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: taskID, Payload: map[string]string{}})
+	}
+	broadcastDeleted := func(taskID string) {
+		tb.Broadcast(sse.TaskEvent{Type: "task_deleted", TaskID: taskID, Payload: map[string]string{}})
+	}
+
+	registry := mcp.ToolRegistry{}
+	mcptools.RegisterReadTools(registry, mcptools.ReadDeps{
+		TaskRepo:  taskRepo,
+		SRRepo:    srRepo,
+		PermRepo:  permRepo,
+		AuditRepo: auditRepo,
+	})
+	mcptools.RegisterWriteTools(registry, mcptools.WriteDeps{
+		TaskRepo:         taskRepo,
+		PermRepo:         permRepo,
+		AuditRepo:        auditRepo,
+		DepRepo:          depRepo,
+		Broadcast:        broadcast,
+		BroadcastDeleted: broadcastDeleted,
+	})
+	mcptools.RegisterControlTools(registry, mcptools.ControlDeps{
+		TaskRepo:     taskRepo,
+		SRRepo:       srRepo,
+		PermRepo:     permRepo,
+		AuditRepo:    auditRepo,
+		Orchestrator: orch,
+		Broadcast:    broadcast,
+	})
+	mcptools.RegisterKeyTools(registry, mcptools.KeyDeps{
+		ApiKeyRepo: apiKeyRepo,
+	})
+	return mcp.MCPHandler(registry)
+}
+
+func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler) api.RouterDeps {
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if client != nil {
@@ -116,6 +167,7 @@ func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaste
 		UserRepo:         userRepo,
 		ApiKeyRepo:       apiKeyRepo,
 		TaskHandler:      taskHandler,
+		MCPHandler:       mcpHandler,
 	}
 }
 
