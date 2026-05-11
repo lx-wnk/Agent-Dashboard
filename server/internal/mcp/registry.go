@@ -48,10 +48,14 @@ type ToolDef struct {
 // ToolRegistry maps tool names to definitions.
 type ToolRegistry map[string]*ToolDef
 
-// Register adds a tool to the registry. Panics on duplicate name (programming error).
+// Register adds a tool to the registry.
+// Panics on duplicate name or missing ToolScopeMap entry (both are programming errors).
 func (r ToolRegistry) Register(def *ToolDef) {
 	if _, exists := r[def.Name]; exists {
 		panic("mcp: duplicate tool registration: " + def.Name)
+	}
+	if _, hasScopeEntry := ToolScopeMap[def.Name]; !hasScopeEntry {
+		panic("mcp: tool registered without a ToolScopeMap entry: " + def.Name)
 	}
 	r[def.Name] = def
 }

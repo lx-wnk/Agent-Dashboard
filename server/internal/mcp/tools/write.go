@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -30,6 +29,9 @@ var permissionTemplates = map[string][]repo.GrantEntry{
 	"feature_implementation": {
 		{Tool: "Read"}, {Tool: "Write"}, {Tool: "Edit"}, {Tool: "MultiEdit"},
 		{Tool: "Glob"}, {Tool: "Grep"}, {Tool: "LS"}, {Tool: "Bash"}, {Tool: "WebFetch"},
+	},
+	"concept_baseline": {
+		{Tool: "Read"}, {Tool: "Glob"}, {Tool: "Grep"}, {Tool: "WebFetch"}, {Tool: "WebSearch"},
 	},
 	"research_only": {
 		{Tool: "Read"}, {Tool: "Glob"}, {Tool: "Grep"}, {Tool: "WebFetch"},
@@ -511,7 +513,7 @@ func handleListPermissions(ctx context.Context, d WriteDeps, taskID string, args
 	if _, hasFlag := args["effective_only"]; hasFlag {
 		effectiveOnly = mcp.OptionalBool(args, "effective_only")
 	}
-	var perms interface{}
+	var perms any
 	var err error
 	if effectiveOnly {
 		perms, err = d.PermRepo.ListEffectiveTaskPermissions(ctx, taskID)
@@ -544,6 +546,18 @@ func handleInheritFromParent(ctx context.Context, d WriteDeps, task *ent.Task, a
 	})
 }
 
+// metadataAllowList is the set of metadata keys MCP callers may set.
+// Security-sensitive keys (e.g. allowGitPush) are intentionally excluded
+// so they cannot be escalated via the MCP endpoint.
+var metadataAllowList = map[string]bool{
+	"description": true,
+	"tags":        true,
+	"externalId":  true,
+	"notes":       true,
+	"category":    true,
+	"source":      true,
+}
+
 func handleSetMetadata(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {
 	taskID := task.ID
 	rawPatch, ok := args["metadata_patch"]
@@ -553,6 +567,11 @@ func handleSetMetadata(ctx context.Context, d WriteDeps, task *ent.Task, args ma
 	patch, ok := rawPatch.(map[string]any)
 	if !ok || len(patch) == 0 {
 		return nil, mcp.Fail("metadata_patch with at least one key is required")
+	}
+	for k := range patch {
+		if !metadataAllowList[k] {
+			return nil, mcp.Fail("metadata key not allowed: " + k)
+		}
 	}
 	existing := map[string]any{}
 	if task.Metadata != nil {
@@ -690,11 +709,10 @@ func registerAddDependency(registry mcp.ToolRegistry, d WriteDeps) {
 
 			dep, err := d.DepRepo.Add(ctx, taskID, dependsOnID, requiredStage, onCancelAction)
 			if err != nil {
-				msg := err.Error()
-				if strings.Contains(msg, "UNIQUE") || strings.Contains(msg, "unique") {
+				if ent.IsConstraintError(err) {
 					return nil, mcp.Fail("Dependency already exists")
 				}
-				return nil, mcp.Fail("add_dependency: " + msg)
+				return nil, mcp.Fail("add_dependency: " + err.Error())
 			}
 			safeBroadcast(d.Broadcast, taskID)
 			return mcp.OK(dep)
