@@ -2,9 +2,7 @@ package pipeline
 
 import (
 	"fmt"
-	"log/slog"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
@@ -27,28 +25,16 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		spawnFn = SpawnStageAgent
 	}
 
-	// Write a temp MCP config file so the spawned agent gets the dashboard-channel MCP server.
-	// Failures are non-fatal: the agent runs without the channel bridge rather than refusing to spawn.
-	var channelCfgPath string
-	if selfBin, binErr := channelconfig.SelfBinaryPath(); binErr == nil {
-		if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin); cfgErr == nil {
-			channelCfgPath = cfgPath
-		} else {
-			slog.Warn("channelconfig: failed to write temp config — agent runs without channel bridge", "err", cfgErr)
-		}
-	} else {
-		slog.Warn("channelconfig: failed to resolve self binary path — agent runs without channel bridge", "err", binErr)
-	}
-
 	result, err := spawnFn(SpawnAgentOptions{
-		Task:              ctx.Task,
-		StageRun:          ctx.StageRun,
-		SystemPrompt:      bundle.SystemPrompt,
-		Prompt:            feedback + bundle.UserPrompt + buildAdditionalPromptSuffix(ctx.UserAdditionalPrompt),
-		Permissions:       ctx.Permissions,
-		EnableChannel:     true,
-		ChannelConfigPath: channelCfgPath,
-		ResumeSessionID:   ctx.ResumeSessionID,
+		Task:            ctx.Task,
+		StageRun:        ctx.StageRun,
+		SystemPrompt:    bundle.SystemPrompt,
+		Prompt:          feedback + bundle.UserPrompt + buildAdditionalPromptSuffix(ctx.UserAdditionalPrompt),
+		Permissions:     ctx.Permissions,
+		EnableChannel:   true,
+		ResumeSessionID: ctx.ResumeSessionID,
+		MCPToken:        ctx.MCPToken,
+		MCPUrl:          ctx.MCPUrl,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agentStageHandler.Execute(%s): %w", h.stage, err)

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
@@ -26,17 +27,16 @@ var dangerousBashRE = regexp.MustCompile(
 const systemPromptMaxChars = 10000
 
 type SpawnAgentOptions struct {
-	Task              *ent.Task
-	StageRun          *ent.StageRun
-	Prompt            string
-	SystemPrompt      string
-	Model             string
-	Permissions       []*ent.TaskPermission
-	EnableChannel     bool
-	ChannelConfigPath string // path to the temp MCP config file for --mcp-config
-	ResumeSessionID   string
-	MCPToken          string
-	MCPUrl            string
+	Task            *ent.Task
+	StageRun        *ent.StageRun
+	Prompt          string
+	SystemPrompt    string
+	Model           string
+	Permissions     []*ent.TaskPermission
+	EnableChannel   bool
+	ResumeSessionID string
+	MCPToken        string
+	MCPUrl          string
 }
 
 type SpawnResult struct {
@@ -107,8 +107,13 @@ func BuildSpawnArgs(opts SpawnAgentOptions) []string {
 		}
 		args = append(args, "--system-prompt", sp)
 	}
-	if opts.ChannelConfigPath != "" {
-		args = append(args, "--mcp-config", opts.ChannelConfigPath)
+	return args
+}
+
+func buildSpawnArgsWithChannelConfig(opts SpawnAgentOptions, channelCfgPath string) []string {
+	args := BuildSpawnArgs(opts)
+	if channelCfgPath != "" {
+		args = append(args, "--mcp-config", channelCfgPath)
 	}
 	return args
 }
@@ -226,7 +231,23 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	if err != nil {
 		slog.Warn("writeSettingsFile failed — continuing without pre-approved allow-list", "err", err)
 	}
-	args := BuildSpawnArgs(opts)
+
+	// Write a temp MCP config file so the spawned agent gets the dashboard-channel MCP server.
+	// Failures are non-fatal: the agent runs without the channel bridge rather than refusing to spawn.
+	var channelCfgPath string
+	if opts.EnableChannel {
+		if selfBin, binErr := channelconfig.SelfBinaryPath(); binErr == nil {
+			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin); cfgErr == nil {
+				channelCfgPath = cfgPath
+			} else {
+				slog.Warn("channelconfig: failed to write temp config — agent runs without channel bridge", "err", cfgErr)
+			}
+		} else {
+			slog.Warn("channelconfig: failed to resolve self binary path — agent runs without channel bridge", "err", binErr)
+		}
+	}
+
+	args := buildSpawnArgsWithChannelConfig(opts, channelCfgPath)
 	cmd := exec.Command("claude", args...)
 	cmd.Dir = cwd
 	cmd.Env = BuildSpawnEnv(opts)
@@ -235,11 +256,14 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	cmd.Stdout = nil
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
+		if channelCfgPath != "" {
+			_ = os.Remove(channelCfgPath)
+		}
 		return SpawnResult{}, fmt.Errorf("SpawnStageAgent.Start: %w", err)
 	}
 	cleanup := func() {
-		if opts.ChannelConfigPath != "" {
-			_ = os.Remove(opts.ChannelConfigPath)
+		if channelCfgPath != "" {
+			_ = os.Remove(channelCfgPath)
 		}
 		if !wrote || settingsPath == "" {
 			return

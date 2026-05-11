@@ -3,7 +3,9 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
@@ -69,14 +71,14 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 	auditRepo := repo.NewAuditRepo(client)
 	cfgRepo := repo.NewPipelineConfigRepo(client)
 
-	_ = cfg // reserved for future pipeline config flags
-
 	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
 		TaskRepo:       taskRepo,
 		StageRunRepo:   srRepo,
 		PermissionRepo: permRepo,
 		AuditRepo:      auditRepo,
 		ConfigRepo:     cfgRepo,
+		MCPToken:       os.Getenv("DASHBOARD_MCP_TOKEN"),
+		MCPUrl:         fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
 		OnTaskChanged: func(taskID string, transitionKind string) {
 			tb.Broadcast(sse.TaskEvent{
 				Type:   "task_changed",
