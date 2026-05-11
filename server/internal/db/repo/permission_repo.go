@@ -21,6 +21,7 @@ type PermissionRepo interface {
 	CreatePermissionRequest(ctx context.Context, input CreatePermissionRequestInput) (*ent.PermissionRequest, error)
 	GetPermissionRequest(ctx context.Context, id string) (*ent.PermissionRequest, error)
 	ListPendingForStageRun(ctx context.Context, stageRunID string) ([]*ent.PermissionRequest, error)
+	ListPendingForTask(ctx context.Context, taskID string, stageRunIDs []string) ([]*ent.PermissionRequest, error)
 	ResolvePermissionRequest(ctx context.Context, id, outcome string) error
 	CountForStageRun(ctx context.Context, stageRunID string) (int, error)
 }
@@ -196,6 +197,19 @@ func (r *entPermissionRepo) ResolvePermissionRequest(ctx context.Context, id, ou
 		return fmt.Errorf("permission_request.Resolve: already resolved or not found")
 	}
 	return nil
+}
+
+func (r *entPermissionRepo) ListPendingForTask(ctx context.Context, _ string, stageRunIDs []string) ([]*ent.PermissionRequest, error) {
+	if len(stageRunIDs) == 0 {
+		return nil, nil
+	}
+	reqs, err := r.client.PermissionRequest.Query().
+		Where(permissionrequest.StageRunIDIn(stageRunIDs...), permissionrequest.OutcomeIsNil()).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("permission.ListPendingForTask: %w", err)
+	}
+	return reqs, nil
 }
 
 func (r *entPermissionRepo) CountForStageRun(ctx context.Context, stageRunID string) (int, error) {
