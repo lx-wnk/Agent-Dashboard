@@ -62,6 +62,10 @@ func RunRefinementTurn(ctx context.Context, cfg SpawnConfig) (<-chan string, err
 		return nil, fmt.Errorf("refine: stdout pipe: %w", err)
 	}
 
+	// Capture stderr so exit errors include diagnostic context.
+	var stderrBuf strings.Builder
+	cmd.Stderr = &stderrBuf
+
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("refine: start claude: %w", err)
 	}
@@ -70,6 +74,8 @@ func RunRefinementTurn(ctx context.Context, cfg SpawnConfig) (<-chan string, err
 	go func() {
 		defer close(ch)
 		scanner := bufio.NewScanner(stdout)
+		// Increase max token size to 4 MB to handle large code-block outputs.
+		scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 		for scanner.Scan() {
 			line := scanner.Text()
 			select {
@@ -80,8 +86,16 @@ func RunRefinementTurn(ctx context.Context, cfg SpawnConfig) (<-chan string, err
 				return
 			}
 		}
+		// Surface scanner errors (e.g. line too long) before waiting on the process.
+		if err := scanner.Err(); err != nil {
+			ch <- "[ERROR] scanner: " + err.Error()
+		}
 		if err := cmd.Wait(); err != nil {
-			ch <- "[ERROR] claude exited: " + err.Error()
+			msg := "[ERROR] claude exited: " + err.Error()
+			if s := strings.TrimSpace(stderrBuf.String()); s != "" {
+				msg += " — " + s
+			}
+			ch <- msg
 		}
 	}()
 
