@@ -20,10 +20,22 @@ var (
 
 // JWTPayload is the JWT body — matches the TypeScript JwtPayload interface.
 type JWTPayload struct {
-	Sub     string `json:"sub"`   // GitHub numeric user ID
-	Login   string `json:"login"` // GitHub username
+	Sub     string `json:"sub"`             // GitHub numeric user ID
+	Login   string `json:"login"`           // GitHub username
 	IsAdmin bool   `json:"isAdmin"`
-	Exp     int64  `json:"exp"` // Unix timestamp
+	Exp     int64  `json:"exp"`             // Unix timestamp
+	Iat     int64  `json:"iat,omitempty"`   // Issued-at Unix timestamp
+	Iss     string `json:"iss,omitempty"`   // Issuer
+	Aud     string `json:"aud,omitempty"`   // Audience
+}
+
+// OAuthStatePayload is the payload for short-lived OAuth state tokens.
+// Kept separate from JWTPayload to prevent state tokens from being accepted
+// where session tokens are expected.
+type OAuthStatePayload struct {
+	Sub string `json:"sub"` // always "oauth-state"
+	Exp int64  `json:"exp"`
+	Aud string `json:"aud"` // always "agent-dashboard:oauth-state"
 }
 
 func base64url(data []byte) string {
@@ -42,7 +54,10 @@ func SignJWT(payload JWTPayload, secret string, expiresInSeconds int64) (string,
 	if err != nil {
 		return "", fmt.Errorf("marshal header: %w", err)
 	}
-	payload.Exp = time.Now().Unix() + expiresInSeconds
+	now := time.Now().Unix()
+	payload.Exp = now + expiresInSeconds
+	payload.Iat = now
+	payload.Iss = "agent-dashboard"
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("marshal payload: %w", err)
@@ -55,6 +70,7 @@ func SignJWT(payload JWTPayload, secret string, expiresInSeconds int64) (string,
 
 // VerifyJWT validates an HS256 JWT and returns the payload.
 // Returns ErrTokenInvalid for structural/signature errors, ErrTokenExpired for expired tokens.
+// Rejects tokens with sub == "oauth-state" as defense-in-depth against state token reuse.
 func VerifyJWT(token, secret string) (JWTPayload, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -94,8 +110,86 @@ func VerifyJWT(token, secret string) (JWTPayload, error) {
 	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 		return JWTPayload{}, ErrTokenInvalid
 	}
+	// Defense-in-depth: reject OAuth state tokens used as session tokens.
+	if payload.Sub == "oauth-state" {
+		return JWTPayload{}, ErrTokenInvalid
+	}
 	if time.Now().Unix() > payload.Exp {
 		return JWTPayload{}, ErrTokenExpired
+	}
+	return payload, nil
+}
+
+// SignOAuthState creates a short-lived HS256 JWT for use as the OAuth CSRF state parameter.
+func SignOAuthState(secret string) (string, error) {
+	header, err := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
+	if err != nil {
+		return "", fmt.Errorf("marshal header: %w", err)
+	}
+	payload := OAuthStatePayload{
+		Sub: "oauth-state",
+		Aud: "agent-dashboard:oauth-state",
+		Exp: time.Now().Unix() + 300,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal payload: %w", err)
+	}
+	h := base64url(header)
+	b := base64url(body)
+	sig := base64url(computeHMAC(h+"."+b, secret))
+	return h + "." + b + "." + sig, nil
+}
+
+// VerifyOAuthState validates an OAuth state token and returns its payload.
+// Rejects tokens with wrong audience or subject.
+func VerifyOAuthState(token, secret string) (OAuthStatePayload, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+	h, b, sig := parts[0], parts[1], parts[2]
+
+	// Verify header
+	headerBytes, err := base64.RawURLEncoding.DecodeString(h)
+	if err != nil {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+	var header map[string]string
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+	if header["alg"] != "HS256" || header["typ"] != "JWT" {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+
+	// Verify signature — timing-safe comparison on raw bytes
+	sigBytes, err := base64.RawURLEncoding.DecodeString(sig)
+	if err != nil {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+	expected := computeHMAC(h+"."+b, secret)
+	if !hmac.Equal(expected, sigBytes) {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+
+	// Decode payload
+	bodyBytes, err := base64.RawURLEncoding.DecodeString(b)
+	if err != nil {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+	var payload OAuthStatePayload
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+	if payload.Aud != "agent-dashboard:oauth-state" {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+	if payload.Sub != "oauth-state" {
+		return OAuthStatePayload{}, ErrTokenInvalid
+	}
+	if time.Now().Unix() > payload.Exp {
+		return OAuthStatePayload{}, ErrTokenExpired
 	}
 	return payload, nil
 }

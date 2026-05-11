@@ -6,25 +6,35 @@ import (
 	"net/http"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
-func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, error) {
+func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, error) {
 	entClient, err := provideDB(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	broadcaster := sse.NewBroadcaster()
+	taskBroadcaster := sse.NewTaskBroadcaster(broadcaster)
 	routerConfig := provideRouterConfig(cfg)
-	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient)
+
+	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	taskHandler := provideTaskHandler(entClient, orch, taskBroadcaster)
+	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
-	return server, broadcaster, nil
+	return server, broadcaster, orch, nil
 }
 
 func provideDB(cfg config.Config) (*ent.Client, error) {
@@ -42,10 +52,57 @@ func provideRouterConfig(cfg config.Config) api.RouterConfig {
 	return api.RouterConfig{
 		JWTSecret:   cfg.JWTSecret,
 		CallbackURL: cfg.CallbackURL(),
+		IsLoopback:  cfg.IsLoopback(),
 	}
 }
 
-func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client) api.RouterDeps {
+func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroadcaster) (*pipeline.PipelineOrchestrator, error) {
+	if client == nil {
+		return nil, nil
+	}
+	taskRepo := repo.NewTaskRepo(client)
+	srRepo := repo.NewStageRunRepo(client)
+	permRepo := repo.NewPermissionRepo(client)
+	auditRepo := repo.NewAuditRepo(client)
+	cfgRepo := repo.NewPipelineConfigRepo(client)
+
+	_ = cfg // reserved for future pipeline config flags
+
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:       taskRepo,
+		StageRunRepo:   srRepo,
+		PermissionRepo: permRepo,
+		AuditRepo:      auditRepo,
+		ConfigRepo:     cfgRepo,
+		OnTaskChanged: func(taskID string, transitionKind string) {
+			tb.Broadcast(sse.TaskEvent{
+				Type:   "task_changed",
+				TaskID: taskID,
+				Payload: map[string]string{
+					"transitionKind": transitionKind,
+				},
+			})
+		},
+	})
+	return orch, err
+}
+
+func provideTaskHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster) *tasks.Handler {
+	if client == nil || orch == nil {
+		return nil
+	}
+	return tasks.NewHandler(tasks.Deps{
+		TaskRepo:     repo.NewTaskRepo(client),
+		SRRepo:       repo.NewStageRunRepo(client),
+		PermRepo:     repo.NewPermissionRepo(client),
+		AuditRepo:    repo.NewAuditRepo(client),
+		CfgRepo:      repo.NewPipelineConfigRepo(client),
+		Orchestrator: orch,
+		Broadcaster:  tb,
+	})
+}
+
+func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler) api.RouterDeps {
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if client != nil {
@@ -58,6 +115,7 @@ func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaste
 		GitHubClient:     provideGitHubClient(cfg),
 		UserRepo:         userRepo,
 		ApiKeyRepo:       apiKeyRepo,
+		TaskHandler:      taskHandler,
 	}
 }
 

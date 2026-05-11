@@ -11,6 +11,7 @@ import (
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
@@ -21,6 +22,7 @@ import (
 type RouterConfig struct {
 	JWTSecret   string
 	CallbackURL string
+	IsLoopback  bool            // true when Host is 127.0.0.1 / ::1 / localhost
 	Embedded    http.FileSystem // Vue SPA embed (unused until Task 14)
 }
 
@@ -31,6 +33,7 @@ type RouterDeps struct {
 	GitHubClient     *authpkg.GitHubClient
 	UserRepo         repo.UserRepo
 	ApiKeyRepo       repo.ApiKeyRepo
+	TaskHandler      *tasks.Handler
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -53,6 +56,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		CallbackURL:  deps.Config.CallbackURL,
 		GitHubClient: deps.GitHubClient,
 		UserRepo:     deps.UserRepo,
+		IsLoopback:   deps.Config.IsLoopback,
 	})
 	r.Get("/api/auth/github", ErrorMiddleware(authHandler.GitHubRedirect))
 	r.Get("/api/auth/callback", ErrorMiddleware(authHandler.Callback))
@@ -72,6 +76,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Get("/api/settings/api-keys", ErrorMiddleware(apiKeyHandler.List))
 			r.Post("/api/settings/api-keys", ErrorMiddleware(apiKeyHandler.Create))
 			r.Delete("/api/settings/api-keys/{id}", ErrorMiddleware(apiKeyHandler.Delete))
+		}
+
+		if deps.TaskHandler != nil {
+			deps.TaskHandler.Mount(r)
 		}
 	})
 

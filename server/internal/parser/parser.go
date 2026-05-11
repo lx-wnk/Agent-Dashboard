@@ -72,8 +72,9 @@ func TailRead(filePath string) (string, error) {
 
 // jsonlMessage is the minimal structure of a JSONL session log entry.
 type jsonlMessage struct {
-	Type    string          `json:"type"`
-	Message json.RawMessage `json:"message"`
+	Type      string          `json:"type"`
+	Timestamp string          `json:"timestamp"` // ISO 8601, e.g. "2025-01-15T10:30:00.000Z"
+	Message   json.RawMessage `json:"message"`
 }
 
 type msgContent struct {
@@ -215,7 +216,12 @@ func parseSessionFile(path string) (*SessionData, error) {
 				data.TokenUsage.CacheCreationTokens += msg.Usage.CacheCreationTokens
 				data.TokenUsage.CacheReadTokens += msg.Usage.CacheReadTokens
 			}
-			data.LastActivity = time.Now()
+			if ts, parseErr := time.Parse(time.RFC3339Nano, entry.Timestamp); parseErr == nil {
+				if ts.After(data.LastActivity) {
+					data.LastActivity = ts
+				}
+			}
+			// If parse fails, LastActivity stays at its default (-24h old) — agent looks idle, which is correct.
 
 			var blocks []toolUseBlock
 			if err := json.Unmarshal(msg.Content, &blocks); err == nil {
