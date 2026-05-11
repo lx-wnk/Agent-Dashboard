@@ -12,10 +12,14 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
@@ -81,15 +85,19 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			apikey.Table:            apikey.ValidColumn,
-			auditlog.Table:          auditlog.ValidColumn,
-			permissionrequest.Table: permissionrequest.ValidColumn,
-			pipelineconfig.Table:    pipelineconfig.ValidColumn,
-			stagerun.Table:          stagerun.ValidColumn,
-			task.Table:              task.ValidColumn,
-			taskdependency.Table:    taskdependency.ValidColumn,
-			taskpermission.Table:    taskpermission.ValidColumn,
-			user.Table:              user.ValidColumn,
+			agentcosttrend.Table:     agentcosttrend.ValidColumn,
+			apikey.Table:             apikey.ValidColumn,
+			auditlog.Table:           auditlog.ValidColumn,
+			permissionpreset.Table:   permissionpreset.ValidColumn,
+			permissionrequest.Table:  permissionrequest.ValidColumn,
+			pipelineconfig.Table:     pipelineconfig.ValidColumn,
+			refinementturn.Table:     refinementturn.ValidColumn,
+			remoteregistration.Table: remoteregistration.ValidColumn,
+			stagerun.Table:           stagerun.ValidColumn,
+			task.Table:               task.ValidColumn,
+			taskdependency.Table:     taskdependency.ValidColumn,
+			taskpermission.Table:     taskpermission.ValidColumn,
+			user.Table:               user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

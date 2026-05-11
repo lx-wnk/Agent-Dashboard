@@ -14,8 +14,9 @@ import (
 
 func setupOrchestrator(t *testing.T) (*pipeline.PipelineOrchestrator, context.Context) {
 	t.Helper()
-	client, err := db.Open(":memory:")
+	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
+	client := bundle.Client
 	t.Cleanup(func() { client.Close() })
 	ctx := context.Background()
 
@@ -42,8 +43,9 @@ func setupOrchestrator(t *testing.T) (*pipeline.PipelineOrchestrator, context.Co
 
 func TestOrchestrator_BacklogTransitionsToImplementation(t *testing.T) {
 	// This test exercises the backlog stage handler end-to-end through ProgressTask.
-	client, err := db.Open(":memory:")
+	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
+	client := bundle.Client
 	defer client.Close()
 
 	ctx := context.Background()
@@ -85,8 +87,9 @@ func TestOrchestrator_BacklogTransitionsToImplementation(t *testing.T) {
 }
 
 func TestOrchestrator_AsyncRunningTransition_RecordsPI(t *testing.T) {
-	client, err := db.Open(":memory:")
+	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
+	client := bundle.Client
 	defer client.Close()
 
 	ctx := context.Background()
@@ -129,8 +132,9 @@ func TestOrchestrator_AsyncRunningTransition_RecordsPI(t *testing.T) {
 }
 
 func TestOrchestrator_FailTransition_TaskStageUnchanged(t *testing.T) {
-	client, err := db.Open(":memory:")
+	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
+	client := bundle.Client
 	defer client.Close()
 	ctx := context.Background()
 

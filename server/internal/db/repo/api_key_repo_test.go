@@ -13,10 +13,10 @@ import (
 
 func openTestDB(t *testing.T) *ent.Client {
 	t.Helper()
-	client, err := db.Open(":memory:")
+	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = client.Close() })
-	return client
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	return bundle.Client
 }
 
 func TestApiKeyRepo_CreateAndGetByHash(t *testing.T) {

@@ -5,9 +5,12 @@ package ent
 import (
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
@@ -20,6 +23,12 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	agentcosttrendFields := schema.AgentCostTrend{}.Fields()
+	_ = agentcosttrendFields
+	// agentcosttrendDescRecordedAt is the schema descriptor for recorded_at field.
+	agentcosttrendDescRecordedAt := agentcosttrendFields[6].Descriptor()
+	// agentcosttrend.DefaultRecordedAt holds the default value on creation for the recorded_at field.
+	agentcosttrend.DefaultRecordedAt = agentcosttrendDescRecordedAt.Default.(func() time.Time)
 	apikeyFields := schema.ApiKey{}.Fields()
 	_ = apikeyFields
 	// apikeyDescScopes is the schema descriptor for scopes field.
@@ -46,6 +55,18 @@ func init() {
 	permissionrequestDescRequestedAt := permissionrequestFields[6].Descriptor()
 	// permissionrequest.DefaultRequestedAt holds the default value on creation for the requested_at field.
 	permissionrequest.DefaultRequestedAt = permissionrequestDescRequestedAt.Default.(func() time.Time)
+	refinementturnFields := schema.RefinementTurn{}.Fields()
+	_ = refinementturnFields
+	// refinementturnDescCreatedAt is the schema descriptor for created_at field.
+	refinementturnDescCreatedAt := refinementturnFields[5].Descriptor()
+	// refinementturn.DefaultCreatedAt holds the default value on creation for the created_at field.
+	refinementturn.DefaultCreatedAt = refinementturnDescCreatedAt.Default.(func() time.Time)
+	remoteregistrationFields := schema.RemoteRegistration{}.Fields()
+	_ = remoteregistrationFields
+	// remoteregistrationDescCreatedAt is the schema descriptor for created_at field.
+	remoteregistrationDescCreatedAt := remoteregistrationFields[5].Descriptor()
+	// remoteregistration.DefaultCreatedAt holds the default value on creation for the created_at field.
+	remoteregistration.DefaultCreatedAt = remoteregistrationDescCreatedAt.Default.(func() time.Time)
 	stagerunFields := schema.StageRun{}.Fields()
 	_ = stagerunFields
 	// stagerunDescStatus is the schema descriptor for status field.

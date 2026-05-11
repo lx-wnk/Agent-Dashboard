@@ -17,11 +17,11 @@ import (
 
 func setupHandler(t *testing.T) (*apikeys.Handler, *chi.Mux) {
 	t.Helper()
-	client, err := db.Open(":memory:")
+	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = client.Close() })
+	t.Cleanup(func() { _ = bundle.Client.Close() })
 
-	r := repo.NewApiKeyRepo(client)
+	r := repo.NewApiKeyRepo(bundle.Client)
 	h := apikeys.NewHandler(r)
 
 	mux := chi.NewRouter()
