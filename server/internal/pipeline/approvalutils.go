@@ -25,15 +25,17 @@ func SaveGrantsToPresets(
 	if err != nil {
 		return fmt.Errorf("SaveGrantsToPresets: list permissions: %w", err)
 	}
+	inputs := make([]repo.UpsertPresetInput, 0, len(perms))
 	for _, p := range perms {
-		if err := presetRepo.Upsert(ctx, repo.UpsertPresetInput{
+		inputs = append(inputs, repo.UpsertPresetInput{
 			UserID:     userID,
 			ProjectCwd: cwd,
 			Tool:       p.Tool,
 			Pattern:    p.Pattern,
-		}); err != nil {
-			return fmt.Errorf("SaveGrantsToPresets: upsert preset: %w", err)
-		}
+		})
+	}
+	if err := presetRepo.UpsertBatch(ctx, inputs); err != nil {
+		return fmt.Errorf("SaveGrantsToPresets: upsert presets: %w", err)
 	}
 	return nil
 }
@@ -80,7 +82,8 @@ func ApplyPresetPermissions(
 		has[key{p.Tool, pat}] = true
 	}
 
-	// Grant missing entries.
+	// Collect all missing entries, then grant in a single bulk call.
+	var missing []repo.GrantEntry
 	for _, entry := range presetEntries {
 		pat := ""
 		if entry.Pattern != nil {
@@ -89,11 +92,13 @@ func ApplyPresetPermissions(
 		if has[key{entry.Tool, pat}] {
 			continue
 		}
-		if _, err := permRepo.BulkGrantPermissions(ctx, taskID, []repo.GrantEntry{
-			{Tool: entry.Tool, Pattern: entry.Pattern},
-		}); err != nil {
-			return fmt.Errorf("ApplyPresetPermissions: grant %s: %w", entry.Tool, err)
-		}
+		missing = append(missing, repo.GrantEntry{Tool: entry.Tool, Pattern: entry.Pattern})
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	if _, err := permRepo.BulkGrantPermissions(ctx, taskID, missing); err != nil {
+		return fmt.Errorf("ApplyPresetPermissions: bulk grant: %w", err)
 	}
 	return nil
 }

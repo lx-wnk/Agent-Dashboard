@@ -14,6 +14,8 @@ import (
 type PermissionPresetRepo interface {
 	// Upsert inserts a preset entry idempotently (INSERT OR IGNORE semantics).
 	Upsert(ctx context.Context, input UpsertPresetInput) error
+	// UpsertBatch inserts multiple preset entries idempotently in a single pass.
+	UpsertBatch(ctx context.Context, inputs []UpsertPresetInput) error
 	// ListSummaries returns all presets grouped by projectCwd for the given userID.
 	// userID == nil matches rows where user_id IS NULL.
 	ListSummaries(ctx context.Context, userID *string) ([]PresetProjectSummary, error)
@@ -48,20 +50,57 @@ func NewPermissionPresetRepo(client *ent.Client) PermissionPresetRepo {
 	return &entPermissionPresetRepo{client: client}
 }
 
-func (r *entPermissionPresetRepo) Upsert(ctx context.Context, in UpsertPresetInput) error {
-	err := r.client.PermissionPreset.Create().
-		SetID(uuid.New().String()).
-		SetNillableUserID(in.UserID).
-		SetProjectCwd(in.ProjectCwd).
-		SetTool(in.Tool).
-		SetNillablePattern(in.Pattern).
-		Exec(ctx)
-	if err != nil && ent.IsConstraintError(err) {
-		// Already exists — INSERT OR IGNORE semantics.
-		return nil
-	}
+func (r *entPermissionPresetRepo) Upsert(ctx context.Context, input UpsertPresetInput) error {
+	// Check-then-insert inside a transaction to handle the SQLite NULL-UNIQUE caveat:
+	// SQLite treats two NULL values as distinct, so the UNIQUE index cannot deduplicate
+	// rows where user_id or pattern is NULL. We do a manual existence check instead.
+	tx, err := r.client.Tx(ctx)
 	if err != nil {
-		return fmt.Errorf("permissionPreset.Upsert: %w", err)
+		return fmt.Errorf("permissionPreset.Upsert: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	q := tx.PermissionPreset.Query().
+		Where(permissionpreset.ProjectCwd(input.ProjectCwd), permissionpreset.Tool(input.Tool))
+	if input.UserID == nil {
+		q = q.Where(permissionpreset.UserIDIsNil())
+	} else {
+		q = q.Where(permissionpreset.UserIDEQ(*input.UserID))
+	}
+	if input.Pattern == nil {
+		q = q.Where(permissionpreset.PatternIsNil())
+	} else {
+		q = q.Where(permissionpreset.PatternEQ(*input.Pattern))
+	}
+	exists, err := q.Exist(ctx)
+	if err != nil {
+		return fmt.Errorf("permissionPreset.Upsert: check exists: %w", err)
+	}
+	if exists {
+		return tx.Commit()
+	}
+
+	create := tx.PermissionPreset.Create().
+		SetID(uuid.New().String()).
+		SetProjectCwd(input.ProjectCwd).
+		SetTool(input.Tool)
+	if input.UserID != nil {
+		create = create.SetUserID(*input.UserID)
+	}
+	if input.Pattern != nil {
+		create = create.SetPattern(*input.Pattern)
+	}
+	if err := create.Exec(ctx); err != nil {
+		return fmt.Errorf("permissionPreset.Upsert: insert: %w", err)
+	}
+	return tx.Commit()
+}
+
+func (r *entPermissionPresetRepo) UpsertBatch(ctx context.Context, inputs []UpsertPresetInput) error {
+	for _, input := range inputs {
+		if err := r.Upsert(ctx, input); err != nil {
+			return fmt.Errorf("permissionPreset.UpsertBatch: %w", err)
+		}
 	}
 	return nil
 }
@@ -107,18 +146,14 @@ func (r *entPermissionPresetRepo) ListSummaries(ctx context.Context, userID *str
 
 func (r *entPermissionPresetRepo) DeleteForProject(ctx context.Context, userID *string, projectCwd string) error {
 	q := r.client.PermissionPreset.Delete().
-		Where(permissionpreset.ProjectCwdEQ(projectCwd))
+		Where(permissionpreset.ProjectCwd(projectCwd))
 	if userID == nil {
 		q = q.Where(permissionpreset.UserIDIsNil())
 	} else {
-		q = q.Where(
-			permissionpreset.Or(
-				permissionpreset.UserIDIsNil(),
-				permissionpreset.UserIDEQ(*userID),
-			),
-		)
+		q = q.Where(permissionpreset.UserIDEQ(*userID))
 	}
-	if _, err := q.Exec(ctx); err != nil {
+	_, err := q.Exec(ctx)
+	if err != nil {
 		return fmt.Errorf("permissionPreset.DeleteForProject: %w", err)
 	}
 	return nil
