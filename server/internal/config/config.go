@@ -32,6 +32,8 @@ type Config struct {
 	AllowGitPush           bool   `koanf:"allow_git_push"`
 	HooksSecret            string `koanf:"hooks_secret"`
 	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
+	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
+	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
 }
 
 // Defaults returns a Config populated with safe defaults.
@@ -44,6 +46,8 @@ func Defaults() Config {
 		SSEIntervalMs:          3000,
 		ShutdownTimeoutSeconds: 10,
 		HooksDebounceMs:        100,
+		SpawnRateLimit:         5,
+		SpawnRateWindowMs:      60000,
 	}
 }
 
@@ -61,6 +65,8 @@ func Load(cfgFile string) (Config, error) {
 		"sse_interval_ms":          cfg.SSEIntervalMs,
 		"shutdown_timeout_seconds": cfg.ShutdownTimeoutSeconds,
 		"hooks_debounce_ms":        cfg.HooksDebounceMs,
+		"spawn_rate_limit":         cfg.SpawnRateLimit,
+		"spawn_rate_window_ms":     cfg.SpawnRateWindowMs,
 	}
 	if err := k.Load(confmap.Provider(defaults, "."), nil); err != nil {
 		return Config{}, fmt.Errorf("config defaults: %w", err)

@@ -1,0 +1,366 @@
+package agents
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+)
+
+const (
+	spawnStoreMaxAge = time.Hour
+	maxStderrBytes   = 4096
+	systemPromptMax  = 10000
+	channelMsgTimeout = 5 * time.Second
+)
+
+var uuidRE = regexp.MustCompile(`(?i)^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
+
+// SpawnStatus tracks the state of a user-initiated agent spawn.
+type SpawnStatus struct {
+	PID       int    `json:"pid"`
+	Status    string `json:"status"` // "running" | "exited" | "error"
+	ExitCode  *int   `json:"exitCode"`
+	Stderr    string `json:"stderr"`
+	StartedAt string `json:"startedAt"`
+	Prompt    string `json:"prompt"`
+	Cwd       string `json:"cwd"`
+}
+
+// SpawnManager rate-limits and tracks user-initiated Claude agent spawns.
+type SpawnManager struct {
+	rateLimitMax    int
+	rateLimitWindow time.Duration
+
+	mu          sync.Mutex
+	attempts    []time.Time // sliding window of recent spawn attempts
+	spawnStore  map[int]*SpawnStatus
+}
+
+// NewSpawnManager creates a SpawnManager with the given rate limit config.
+func NewSpawnManager(maxSpawns int, windowMs int) *SpawnManager {
+	if maxSpawns <= 0 {
+		maxSpawns = 5
+	}
+	if windowMs <= 0 {
+		windowMs = 60_000
+	}
+	return &SpawnManager{
+		rateLimitMax:    maxSpawns,
+		rateLimitWindow: time.Duration(windowMs) * time.Millisecond,
+		spawnStore:      make(map[int]*SpawnStatus),
+	}
+}
+
+// IsSpawnAllowed reports whether a new spawn is allowed under the rate limit.
+func (m *SpawnManager) IsSpawnAllowed() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pruneAttempts()
+	return len(m.attempts) < m.rateLimitMax
+}
+
+func (m *SpawnManager) recordAttempt() {
+	m.pruneAttempts()
+	m.attempts = append(m.attempts, time.Now())
+}
+
+func (m *SpawnManager) pruneAttempts() {
+	cutoff := time.Now().Add(-m.rateLimitWindow)
+	i := 0
+	for i < len(m.attempts) && m.attempts[i].Before(cutoff) {
+		i++
+	}
+	m.attempts = m.attempts[i:]
+}
+
+// Spawn validates the request, spawns a claude process, and returns the PID.
+func (m *SpawnManager) Spawn(body map[string]any) (int, error) {
+	m.mu.Lock()
+	m.recordAttempt()
+	m.mu.Unlock()
+
+	prompt, _ := body["prompt"].(string)
+	if prompt == "" {
+		return 0, fmt.Errorf("missing or invalid prompt")
+	}
+	cwd, _ := body["cwd"].(string)
+	if cwd == "" {
+		return 0, fmt.Errorf("missing or invalid cwd")
+	}
+	if _, err := os.Stat(cwd); err != nil {
+		return 0, fmt.Errorf("directory does not exist: %s", cwd)
+	}
+	model, _ := body["model"].(string)
+	systemPrompt, _ := body["systemPrompt"].(string)
+	if len(systemPrompt) > systemPromptMax {
+		systemPrompt = systemPrompt[:systemPromptMax]
+	}
+	resumeSessionID, _ := body["resumeSessionId"].(string)
+	if resumeSessionID != "" && !uuidRE.MatchString(resumeSessionID) {
+		return 0, fmt.Errorf("invalid sessionId format")
+	}
+	enableChannel, _ := body["enableChannel"].(bool)
+	if _, hasChannel := body["enableChannel"]; !hasChannel {
+		enableChannel = true // default on
+	}
+
+	var args []string
+	if resumeSessionID != "" {
+		args = append(args, "--resume", resumeSessionID)
+	}
+	args = append(args, "-p", prompt)
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	if systemPrompt != "" {
+		args = append(args, "--system-prompt", systemPrompt)
+	}
+
+	var channelCfgPath string
+	if enableChannel {
+		if selfBin, err := channelconfig.SelfBinaryPath(); err == nil {
+			if cfgPath, err := channelconfig.WriteTempConfig(selfBin); err == nil {
+				channelCfgPath = cfgPath
+				args = append(args, "--mcp-config", cfgPath)
+			}
+		}
+	}
+
+	cmd := exec.Command("claude", args...)
+	cmd.Dir = cwd
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	stderrPipe, _ := cmd.StderrPipe()
+
+	if err := cmd.Start(); err != nil {
+		if channelCfgPath != "" {
+			_ = os.Remove(channelCfgPath)
+		}
+		return 0, fmt.Errorf("spawn failed: %w", err)
+	}
+
+	pid := cmd.Process.Pid
+	status := &SpawnStatus{
+		PID:       pid,
+		Status:    "running",
+		StartedAt: time.Now().UTC().Format(time.RFC3339),
+		Prompt:    prompt[:min(len(prompt), 200)],
+		Cwd:       cwd,
+	}
+
+	m.mu.Lock()
+	m.spawnStore[pid] = status
+	m.mu.Unlock()
+
+	// Collect stderr in a bounded ring-buffer.
+	go func() {
+		if stderrPipe != nil {
+			buf := make([]byte, 1024)
+			for {
+				n, err := stderrPipe.Read(buf)
+				if n > 0 {
+					m.mu.Lock()
+					status.Stderr += string(buf[:n])
+					if len(status.Stderr) > maxStderrBytes {
+						status.Stderr = status.Stderr[len(status.Stderr)-maxStderrBytes:]
+					}
+					m.mu.Unlock()
+				}
+				if err != nil {
+					break
+				}
+			}
+		}
+		// Wait for process exit.
+		if err := cmd.Wait(); err != nil {
+			m.mu.Lock()
+			status.Status = "error"
+			status.Stderr += "\n" + err.Error()
+			m.mu.Unlock()
+		} else {
+			code := cmd.ProcessState.ExitCode()
+			m.mu.Lock()
+			status.Status = "exited"
+			status.ExitCode = &code
+			m.mu.Unlock()
+		}
+		if channelCfgPath != "" {
+			_ = os.Remove(channelCfgPath)
+		}
+		// Prune old entries.
+		m.mu.Lock()
+		for k, s := range m.spawnStore {
+			t, err := time.Parse(time.RFC3339, s.StartedAt)
+			if err == nil && time.Since(t) > spawnStoreMaxAge {
+				delete(m.spawnStore, k)
+			}
+		}
+		m.mu.Unlock()
+	}()
+
+	return pid, nil
+}
+
+// GetStatus returns the status of a spawned agent by PID, or nil if unknown.
+func (m *SpawnManager) GetStatus(pid int) *SpawnStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.spawnStore[pid]
+	if s == nil {
+		return nil
+	}
+	// Return a copy to avoid data races on the caller side.
+	cp := *s
+	return &cp
+}
+
+// SendMessageToChannel forwards a message to the channel bridge for the given PID.
+func (m *SpawnManager) SendMessageToChannel(pid int, message string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("UserHomeDir: %w", err)
+	}
+	path := filepath.Join(home, discoveryDir, strconv.Itoa(pid)+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("channel not available for PID %d", pid)
+	}
+	var disc struct {
+		Port  int    `json:"port"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(data, &disc); err != nil || disc.Port == 0 {
+		return fmt.Errorf("invalid discovery file for PID %d", pid)
+	}
+
+	body, _ := json.Marshal(map[string]string{"message": message})
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		"POST",
+		fmt.Sprintf("http://127.0.0.1:%d/message", disc.Port),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+disc.Token)
+
+	client := &http.Client{Timeout: channelMsgTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("channel unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("channel error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	return nil
+}
+
+// SpawnHandler handles spawn-related HTTP endpoints.
+type SpawnHandler struct {
+	manager *SpawnManager
+}
+
+// NewSpawnHandler creates a SpawnHandler backed by the given manager.
+func NewSpawnHandler(manager *SpawnManager) *SpawnHandler {
+	return &SpawnHandler{manager: manager}
+}
+
+// Spawn handles POST /api/agents/spawn.
+func (h *SpawnHandler) Spawn(w http.ResponseWriter, r *http.Request) {
+	if !h.manager.IsSpawnAllowed() {
+		http.Error(w, fmt.Sprintf(`{"error":"Too many spawn requests. Max %d per %ds."}`,
+			h.manager.rateLimitMax,
+			int(h.manager.rateLimitWindow.Seconds()),
+		), http.StatusTooManyRequests)
+		return
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		return
+	}
+
+	pid, err := h.manager.Spawn(body)
+	if err != nil {
+		code := http.StatusBadRequest
+		if strings.HasPrefix(err.Error(), "spawn failed") || strings.HasPrefix(err.Error(), "directory does not exist") {
+			code = http.StatusBadRequest
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "pid": pid})
+}
+
+// Status handles GET /api/agents/spawn/{pid}/status.
+func (h *SpawnHandler) Status(w http.ResponseWriter, r *http.Request) {
+	pidStr := r.PathValue("pid")
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil || pid <= 0 {
+		http.Error(w, `{"error":"invalid pid"}`, http.StatusBadRequest)
+		return
+	}
+	status := h.manager.GetStatus(pid)
+	if status == nil {
+		http.Error(w, `{"error":"unknown spawn PID"}`, http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(status)
+}
+
+// Message handles POST /api/agents/{pid}/message.
+func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
+	pidStr := r.PathValue("pid")
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil || pid <= 0 {
+		http.Error(w, `{"error":"invalid pid"}`, http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Message == "" {
+		http.Error(w, `{"error":"missing message"}`, http.StatusBadRequest)
+		return
+	}
+	if err := h.manager.SendMessageToChannel(pid, body.Message); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
