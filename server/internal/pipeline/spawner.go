@@ -18,14 +18,6 @@ import (
 
 var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
 
-// allowedTools is the whitelist of tools pipeline stage agents may be granted.
-var allowedTools = map[string]bool{
-	"Read": true, "Write": true, "Edit": true, "MultiEdit": true,
-	"Glob": true, "Grep": true, "LS": true, "Bash": true, "WebFetch": true,
-	"mcp__dashboard-channel__dashboard_reply":    true,
-	"mcp__dashboard-channel__request_permission": true,
-}
-
 // dangerousBashRE matches shell patterns that must never appear in a Bash allow-list entry.
 var dangerousBashRE = regexp.MustCompile(
 	"(?i)(curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|bash\\s+-c|sh\\s+-c|\\beval\\b|\\$\\(|`|&&|\\|\\||;\\s*\\w|>\\s*\\w|<\\s*\\w|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w)",
@@ -71,7 +63,7 @@ func BuildAllowList(permissions []*ent.TaskPermission, enableChannel, allowGitPu
 		if p.ExpiresAt != nil && p.ExpiresAt.Before(now) {
 			continue
 		}
-		if !allowedTools[p.Tool] {
+		if !AllowedToolNames[p.Tool] {
 			continue
 		}
 		if !allowGitPush && p.Tool == "Bash" && p.Pattern != nil && gitPushRE.MatchString(*p.Pattern) {
