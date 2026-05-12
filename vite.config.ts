@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { fileURLToPath, URL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
@@ -7,6 +8,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 const DASHBOARD_PORT = process.env.DASHBOARD_PORT || '13120'
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   plugins: [
     tailwindcss(),
     vue(),
@@ -70,7 +76,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['vue', 'vue-router'],
+          vendor: ['vue'],
           charts: ['d3'],
         },
       },
@@ -85,10 +91,22 @@ export default defineConfig({
         target: `http://127.0.0.1:${DASHBOARD_PORT}`,
         changeOrigin: true,
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED') return
+            console.error('[vite proxy]', err)
+          })
+        },
       },
       '/auth': {
         target: `http://127.0.0.1:${DASHBOARD_PORT}`,
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED') return
+            console.error('[vite proxy]', err)
+          })
+        },
       },
     },
   },
