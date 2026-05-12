@@ -37,6 +37,9 @@ package-lock.json
 # Per-branch local todo / handoff scratch — not for shared history
 /TODOS.md
 
+# Branch review / analysis outputs — ephemeral, not for shared history
+/outputs/
+
 # Vue SPA build output — the placeholder dist/index.html is committed so go:embed
 # compiles without requiring a pnpm build first. Real build artifacts (assets/, etc.)
 # are ignored via the directory-level rule below so they don't bloat the repo.

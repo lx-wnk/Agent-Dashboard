@@ -2,55 +2,82 @@
 
 ## What This Is
 
-A real-time monitoring dashboard for locally running Claude Code agents. It reads Claude Code's internal JSONL session logs and process metadata to display token usage, costs, tool activity, tasks, and subagents across all running agent processes.
+A real-time monitoring dashboard for locally running Claude Code agents. Reads Claude Code's internal JSONL session logs and process metadata to display token usage, costs, tool activity, tasks, and subagents across all running agent processes.
+
+**Stack:** Go 1.26 backend (chi, ent ORM, modernc/sqlite, Wire DI) + Vue 3 TypeScript SPA (Vite, pnpm). Go workspace with `./sdk` and `./server` modules. Build via `task` (Taskfile.yml), hot-reload via `air`.
 
 ## Backend (`server/`)
 
-Express + Node CLI tools.
+Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + Wire DI).
 
-- `server/platform.ts` — Shared `IS_LINUX` constant for platform detection
-- `server/paths.ts` — Shared path constants (`CLAUDE_PROJECTS_DIR`, `SESSION_META_DIR`, `DISCOVERY_DIR`, `WHITESPACE_RE`)
-- `server/constants.ts` — Shared constants: `VALID_STAGES`, `SLUG_RE`, `SLUG_PATTERN_MESSAGE`, `SYSTEM_PROMPT_MAX_CHARS`
-- `server/index.ts` — Express server with `/api/agents` REST + `/api/agents/stream` SSE endpoint, integrates Vite dev middleware
-- `server/processScanner.ts` — Uses `ps` and `lsof` to find running `/claude` processes and their working directories
-- `server/jsonlParser.ts` — Tail-reads last 32KB of JSONL session files, extracts tokens, model, tools, tasks
-- `server/agentMerger.ts` — Matches PIDs to session data, calculates costs via `estimateCost` (from `pricing.ts`), determines status
-- `server/spawnManager.ts` — Rate-limited dashboard-initiated agent spawner; manages spawn slots, stderr ring-buffer, and channel-reply routing (configurable via `DASHBOARD_SPAWN_RATE_LIMIT`, `DASHBOARD_SPAWN_RATE_WINDOW_MS`)
-- `server/channelConfig.ts` — `buildDashboardChannelMcpConfig()`: builds the MCP channel config injected into user-spawned agents
+### Core packages (`server/internal/`)
+
+| Package | Responsibility |
+|---|---|
+| `api/` | chi router (`router.go`), HTTP handlers by domain sub-package |
+| `api/agents/` | Agent SSE broadcast, spawn, message forwarding, channel reply |
+| `api/tasks/` | Task CRUD, pipeline progression, permissions, dependencies |
+| `api/auth/` | GitHub OAuth flow, JWT session cookies |
+| `api/apikeys/` | API key CRUD endpoints |
+| `api/hooks/` | Debounced rescan hook endpoint |
+| `api/memory/` | Claude memory file read/write |
+| `api/presets/` | Permission preset CRUD |
+| `api/refine/` | Refinement chat SSE stream |
+| `api/remotes/` | Remote dashboard registration + SSRF-guarded proxy |
+| `api/search/` | FTS5 spotlight search (tasks + in-memory agents) |
+| `api/sessions/` | Resumable session listing |
+| `api/system/` | Health check, CPU/memory metrics |
+| `api/wphandler/` | Web Push subscription + send |
+| `api/history/` | Historical session cost import SSE |
+| `pipeline/` | State machine, orchestrator, stage handlers, completion detector, agent spawner |
+| `db/` | ent ORM schemas + repos (tasks, stage_runs, users, api_keys, presets, remotes, refine, cost_history, web_push subscriptions) |
+| `mcp/` | Stateless StreamableHTTP MCP server — 19 tools, 4 scope tiers |
+| `auth/` | JWT helpers, GitHub OAuth client |
+| `scanner/` | ps/lsof process scanner |
+| `parser/` | JSONL session parser (tail-reads 32KB) |
+| `merger/` | Agent data merger + cost estimation (`MODEL_PRICING`) |
+| `sse/` | SSE broadcaster (agents + tasks) |
+| `channel/` | Channel discovery + proxy to per-agent MCP stdio server |
+| `channelconfig/` | Builds dashboard-channel MCP config for spawned agents |
+| `refine/` | Refinement chat repo + spawner |
+| `history/` | Cost history importer service |
+| `webpush/` | VAPID service + subscription management |
+| `platform/` | `IS_LINUX` constant |
+| `config/` | koanf-based config (env + JSON, validation) |
+
+### SDK (`sdk/`)
+
+Go module for the `dashboard-channel` MCP stdio server. Injected into every spawned pipeline stage agent. Provides two-way permission gate and channel reply bridge. Binary compiled separately.
 
 ## Frontend (`src/`)
 
-Vue 3 + TypeScript SPA.
+Vue 3 + TypeScript SPA (unchanged structure from TypeScript-server era).
 
-- `src/composables/useAgents.ts` — SSE-first real-time updates via `/api/agents/stream` with polling fallback; manages view mode (list/cards/kanban) with localStorage persistence and search query state
-- `src/composables/useAgentPrompt.ts` — Shared composable for sending prompts to agents (via channel or spawn/resume)
-- `src/composables/useTheme.ts` — Dark/light theme composable with OS preference detection and localStorage persistence
-- `src/App.vue` — Root: header stats + view toggle (list/cards/kanban) + search bar + agent list or card grid or kanban + modal
-- `src/components/AgentRow.vue` / `SubAgentRow.vue` — Table rows for list view (subagents indented under parent)
-- `src/components/AgentCard.vue` — Card view tile with status, output preview, and inline prompt input
-- `src/components/AgentCardGrid.vue` — Responsive grid wrapper for AgentCard tiles
-- `src/components/AgentModal.vue` — Full session modal with output transcript, agent details (ToolTimeline, TaskList, SubAgentList), and prompt input
-- `src/components/ToolTimeline.vue` — Recent tool pills; expects `:tools` (string[])
-- `src/components/TaskList.vue` — Task list with status icons; expects `:tasks` (TaskInfo[])
-- `src/components/SubAgentList.vue` — Subagent cards; expects `:subagents` (SubAgent[])
-- `src/components/KanbanBoard.vue` — Kanban board aggregating tasks across agents into status columns (pending/in-progress/completed)
-- `src/types.ts` — All shared TypeScript interfaces (`Agent`, `TokenUsage`, `SessionMeta`, etc.)
-- `src/utils/format.ts` — Token, cost, uptime, and model name formatting utilities (including `shortModel`)
+- `src/composables/useAgents.ts` — SSE-first real-time updates via `/api/agents/stream` with polling fallback; view mode + search state
+- `src/composables/useAgentPrompt.ts` — send prompts to agents (via channel or spawn/resume)
+- `src/composables/useTheme.ts` — dark/light theme with OS preference + localStorage
+- `src/App.vue` — root: header stats + view toggle + search + agent list/cards/kanban + modal
+- `src/components/AgentRow.vue` / `SubAgentRow.vue` — list view rows
+- `src/components/AgentCard.vue` — card view tile
+- `src/components/AgentModal.vue` — full session modal (transcript, ToolTimeline, TaskList, SubAgentList, prompt)
+- `src/components/KanbanBoard.vue` — task kanban across agents
+- `src/types.ts` — shared TypeScript interfaces (`Agent`, `TokenUsage`, `SessionMeta`, etc.)
+- `src/utils/format.ts` — token, cost, uptime, model name formatting
 
 ## Pipeline UI (`src/components/` + `src/composables/`)
 
 - `src/components/PipelineBoard.vue` — kanban-style task pipeline board
 - `src/components/TaskCard.vue` — task card with status chip and run-status badge
 - `src/components/TaskModal.vue` — full task detail: stage output, chat stream, feedback, permissions
-- `src/components/StageOutputView.vue` — renders per-stage LLM output with expand/collapse
+- `src/components/StageOutputView.vue` — per-stage LLM output with expand/collapse
 - `src/components/AgentChatStream.vue` — live SSE-streamed agent message view
 - `src/components/BacklogForm.vue` — task creation / backlog entry form
-- `src/components/CrossLinkBanner.vue` — session↔task cross-link banner rendered in both `AgentModal.vue` and `TaskModal.vue`; emits `click` to trigger cross-navigation
-- `src/composables/useTasks.ts` — SSE-first task list state with 60s polling fallback
-- `src/composables/useRole.ts` — role-based access control composable
+- `src/components/CrossLinkBanner.vue` — session↔task cross-link banner
+- `src/composables/useTasks.ts` — SSE-first task list with 60s polling fallback
+- `src/composables/useRole.ts` — role-based access control
 
 ## Data Flow
 
-Browser connects to `/api/agents/stream` (SSE) with polling fallback → Express scans processes (`ps`/`lsof`) → matches PIDs to `~/.claude/projects/{encoded_path}/{sessionId}.jsonl` → tail-reads JSONL + reads `~/.claude/usage-data/session-meta/{sessionId}.json` → merges, calculates cost/status → broadcasts `Agent[]` to SSE clients.
+Browser connects to `/api/agents/stream` (SSE) with polling fallback → Go backend scans processes (`ps`/`lsof`) → matches PIDs to `~/.claude/projects/{encoded_path}/{sessionId}.jsonl` → tail-reads JSONL + reads `~/.claude/usage-data/session-meta/{sessionId}.json` → merges, calculates cost/status → broadcasts `Agent[]` to SSE clients.
 
 **Agent status thresholds:** active < 30s, waiting < 5min, idle > 5min (since last activity).
