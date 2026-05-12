@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { formatCost, shortModel } from '../utils/format'
 import AppModal from './ui/AppModal.vue'
+import SessionDetailModal from './SessionDetailModal.vue'
 
 interface SessionInfo {
   sessionId: string
@@ -23,10 +24,7 @@ const emit = defineEmits<{ close: [] }>()
 const sessions = ref<SessionInfo[]>([])
 const isLoading = ref(false)
 const search = ref('')
-const resumePrompts = ref<Record<string, string>>({})
-const spawning = ref<string | null>(null)
-const resumeMsg = ref<Record<string, string>>({})
-const resumeError = ref<Record<string, boolean>>({})
+const selectedSession = ref<SessionInfo | null>(null)
 
 const filtered = computed(() => {
   const q = search.value.toLowerCase()
@@ -61,49 +59,6 @@ function shortenPath(path: string): string {
     return `~${path.slice(props.homeDir.length)}`
   }
   return path
-}
-
-async function resumeSession(s: SessionInfo) {
-  const prompt = resumePrompts.value[s.sessionId]?.trim()
-  if (!prompt || spawning.value)
-    return
-
-  spawning.value = s.sessionId
-  resumeMsg.value[s.sessionId] = ''
-  resumeError.value[s.sessionId] = false
-
-  try {
-    const res = await fetch('/api/agents/spawn', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        cwd: s.projectPath,
-        resumeSessionId: s.sessionId,
-        enableChannel: true,
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok)
-      throw new Error(data.error || 'Spawn failed')
-
-    resumeMsg.value[s.sessionId] = `PID ${data.pid} spawned`
-    resumePrompts.value[s.sessionId] = ''
-    loadSessions()
-    setTimeout(() => {
-      resumeMsg.value[s.sessionId] = ''
-    }, 4000)
-  }
-  catch (err: unknown) {
-    resumeError.value[s.sessionId] = true
-    resumeMsg.value[s.sessionId] = err instanceof Error ? err.message : 'Failed'
-    setTimeout(() => {
-      resumeMsg.value[s.sessionId] = ''
-    }, 4000)
-  }
-  finally {
-    spawning.value = null
-  }
 }
 
 async function loadSessions() {
@@ -178,45 +133,39 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <div
             v-for="s in filtered"
             :key="s.sessionId"
-            class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5"
+            class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5 cursor-pointer hover:border-slate-400 dark:hover:border-slate-600 transition-colors"
+            @click="selectedSession = s"
           >
-            <div class="flex justify-between items-center mb-1">
-              <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ s.projectName }}</span>
-              <span class="text-[11px] text-slate-400 dark:text-slate-600">{{ formatDate(s.lastModified) }}</span>
-            </div>
-            <code class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate block mb-1">{{ shortenPath(s.projectPath) }}</code>
-            <p v-if="s.firstPrompt" class="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 mb-1.5">
+            <!-- Title: firstPrompt prominent -->
+            <p v-if="s.firstPrompt" class="text-sm font-semibold text-slate-900 dark:text-slate-100 line-clamp-2 mb-1 leading-snug">
               {{ s.firstPrompt }}
             </p>
-            <pre v-if="s.lastResponse" class="text-[11px] font-mono text-slate-400 dark:text-slate-600 bg-white dark:bg-slate-900 border-l-2 border-slate-200 dark:border-slate-700 px-2 py-1.5 mb-1.5 rounded-r leading-relaxed whitespace-pre-wrap break-words max-h-[5.5lh] overflow-y-auto">{{ s.lastResponse }}</pre>
-            <div class="flex gap-1.5 mb-2">
+            <span v-else class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1 block">{{ s.projectName }}</span>
+
+            <!-- Path -->
+            <code class="font-mono text-xs text-slate-500 dark:text-slate-400 truncate block mb-1.5">{{ shortenPath(s.projectPath) }}</code>
+
+            <!-- Last response snippet -->
+            <pre v-if="s.lastResponse" class="text-[11px] font-mono text-slate-400 dark:text-slate-600 bg-white dark:bg-slate-900 border-l-2 border-slate-200 dark:border-slate-700 px-2 py-1.5 mb-2 rounded-r leading-relaxed whitespace-pre-wrap break-words max-h-[5.5lh] overflow-y-auto">{{ s.lastResponse }}</pre>
+
+            <!-- Metadata badges -->
+            <div class="flex flex-wrap gap-1.5 items-center">
               <span v-if="s.model" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 uppercase tracking-wide font-mono">{{ shortModel(s.model) }}</span>
               <span v-if="s.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-green-600 dark:text-green-400 font-mono">{{ formatCost(s.costEstimate) }}</span>
               <span class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 font-mono" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
+              <span class="ml-auto text-[10px] text-slate-400 dark:text-slate-600">{{ formatDate(s.lastModified) }}</span>
             </div>
-            <div class="flex gap-1.5">
-              <input
-                v-model="resumePrompts[s.sessionId]"
-                class="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-xs px-2 py-1 focus:outline-none focus:border-green-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
-                type="text"
-                placeholder="Follow-up prompt..."
-                @keydown.enter="resumeSession(s)"
-              >
-              <button
-                type="button"
-                class="flex-shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-3 py-1 text-xs font-semibold cursor-pointer hover:text-green-600 dark:hover:text-green-400 hover:border-green-500 dark:hover:border-green-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                :disabled="!resumePrompts[s.sessionId]?.trim() || spawning === s.sessionId"
-                @click="resumeSession(s)"
-              >
-                {{ spawning === s.sessionId ? '...' : 'Resume' }}
-              </button>
-            </div>
-            <p v-if="resumeMsg[s.sessionId]" class="text-[11px] mt-1" :class="resumeError[s.sessionId] ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
-              {{ resumeMsg[s.sessionId] }}
-            </p>
           </div>
         </div>
       </div>
     </div>
   </AppModal>
+
+  <SessionDetailModal
+    :open="selectedSession !== null"
+    :session="selectedSession"
+    :home-dir="homeDir"
+    @close="selectedSession = null"
+    @resumed="selectedSession = null; loadSessions()"
+  />
 </template>
