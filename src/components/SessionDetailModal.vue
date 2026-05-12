@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { formatCost, shortModel } from '../utils/format'
 import AppModal from './ui/AppModal.vue'
 
@@ -28,10 +28,13 @@ const emit = defineEmits<{ close: []; resumed: [] }>()
 
 const messages = ref<OutputMessage[]>([])
 const isLoading = ref(false)
+const fetchError = ref('')
 const resumePrompt = ref('')
 const spawning = ref(false)
 const statusMsg = ref('')
 const statusIsError = ref(false)
+const scrollContainer = ref<HTMLElement | null>(null)
+let abortCtrl: AbortController | null = null
 
 function shortenPath(path: string): string {
   if (props.homeDir && path.startsWith(props.homeDir))
@@ -54,18 +57,36 @@ function formatDate(iso: string): string {
 }
 
 async function fetchMessages(sessionId: string) {
+  abortCtrl?.abort()
+  abortCtrl = new AbortController()
+  const { signal } = abortCtrl
+
   isLoading.value = true
+  fetchError.value = ''
   messages.value = []
+
   try {
-    const res = await fetch(`/api/agents/${sessionId}/output`)
+    const res = await fetch(`/api/agents/${sessionId}/output`, { signal })
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
-    messages.value = (data.messages as OutputMessage[]).filter(m => m.content !== '')
+    if (signal.aborted)
+      return
+    messages.value = (data.messages as OutputMessage[]).filter(
+      m => m.content !== '' || m.role === 'tool_call',
+    )
+    await nextTick()
+    if (scrollContainer.value)
+      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
   }
-  catch { /* ignore */ }
+  catch (err: unknown) {
+    if (signal.aborted)
+      return
+    fetchError.value = err instanceof Error ? err.message : 'Failed to load transcript'
+  }
   finally {
-    isLoading.value = false
+    if (!signal.aborted)
+      isLoading.value = false
   }
 }
 
@@ -79,7 +100,11 @@ watch(
       fetchMessages(sessionId)
     }
     else {
+      abortCtrl?.abort()
+      abortCtrl = null
       messages.value = []
+      fetchError.value = ''
+      isLoading.value = false
     }
   },
 )
@@ -155,9 +180,12 @@ async function resumeSession() {
       </header>
 
       <!-- Body: message list -->
-      <div class="flex-1 overflow-y-auto px-4 py-3">
+      <div ref="scrollContainer" class="flex-1 overflow-y-auto px-4 py-3">
         <div v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
           Loading transcript...
+        </div>
+        <div v-else-if="fetchError" class="text-center py-12 text-red-600 dark:text-red-400 text-sm">
+          {{ fetchError }}
         </div>
         <div v-else-if="messages.length === 0" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
           No messages available.
