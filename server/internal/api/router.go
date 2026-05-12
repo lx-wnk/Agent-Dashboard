@@ -114,6 +114,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		r.Get("/api/sessions", sessions.List)
 		r.Get("/api/sessions/{sessionId}/timeline", sessions.Timeline)
+		r.Get("/api/slash-commands", sessions.SlashCommands)
 
 		r.Get("/api/quota", system.Quota)
 		r.Get("/api/config", system.Config)         // frontend expects /api/config
