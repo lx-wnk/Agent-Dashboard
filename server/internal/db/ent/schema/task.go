@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	entsql "entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -37,12 +38,13 @@ func (Task) Fields() []ent.Field {
 }
 
 func (Task) Edges() []ent.Edge {
+	cascade := entsql.Annotation{OnDelete: entsql.Cascade}
 	return []ent.Edge{
-		edge.To("stage_runs", StageRun.Type),
-		edge.To("permissions", TaskPermission.Type),
-		edge.To("audit_logs", AuditLog.Type),
-		edge.To("dependencies", TaskDependency.Type),
-		edge.To("dependents", TaskDependency.Type),
+		edge.To("stage_runs", StageRun.Type).Annotations(cascade),
+		edge.To("permissions", TaskPermission.Type).Annotations(cascade),
+		edge.To("audit_logs", AuditLog.Type).Annotations(cascade),
+		edge.To("dependencies", TaskDependency.Type).Annotations(cascade),
+		edge.To("dependents", TaskDependency.Type).Annotations(cascade),
 	}
 }
 

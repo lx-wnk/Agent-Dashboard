@@ -286,14 +286,53 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 	return o.applyTransition(ctx, task, stageRun, transition)
 }
 
-func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Task, sr *ent.StageRun, t StageTransition) (*ent.StageRun, error) {
+func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Task, sr *ent.StageRun, t StageTransition) (result *ent.StageRun, retErr error) {
+	// When a Client is available, wrap all DB writes in a single transaction to
+	// prevent torn state (e.g. stage_run=done while task.current_stage is still
+	// the old stage after a mid-write crash or context cancellation).
+	if o.opts.Client != nil {
+		tx, err := o.opts.Client.Tx(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("applyTransition.beginTx: %w", err)
+		}
+		defer func() {
+			if retErr != nil {
+				_ = tx.Rollback()
+			}
+		}()
+		txSR := repo.NewStageRunRepo(tx.Client())
+		txTask := repo.NewTaskRepo(tx.Client())
+		txAudit := repo.NewAuditRepo(tx.Client())
+		result, retErr = o.applyTransitionWrites(ctx, task, sr, t, txSR, txTask, txAudit)
+		if retErr != nil {
+			return nil, retErr
+		}
+		if retErr = tx.Commit(); retErr != nil {
+			return nil, fmt.Errorf("applyTransition.commit: %w", retErr)
+		}
+		return result, nil
+	}
+	// No client available (e.g. in tests with mocked repos) — write without tx.
+	return o.applyTransitionWrites(ctx, task, sr, t, o.opts.StageRunRepo, o.opts.TaskRepo, o.opts.AuditRepo)
+}
+
+func (o *PipelineOrchestrator) applyTransitionWrites(
+	ctx context.Context,
+	task *ent.Task,
+	sr *ent.StageRun,
+	t StageTransition,
+	srRepo repo.StageRunRepo,
+	taskRepo repo.TaskRepo,
+	auditRepo repo.AuditRepo,
+) (*ent.StageRun, error) {
 	now := time.Now()
 	var updatedRunID string
 	var newRunID string
+	var postCommit []func()
 
 	switch tr := t.(type) {
 	case NextTransition:
-		if _, err := o.opts.StageRunRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 			Status:  strPtr("done"),
 			EndedAt: &now,
 			Output:  tr.Output,
@@ -306,29 +345,31 @@ func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Ta
 		} else if tr.MetadataPatch != nil {
 			taskUpdate.Metadata = tr.MetadataPatch
 		}
-		if _, err := o.opts.TaskRepo.Update(ctx, task.ID, taskUpdate); err != nil {
+		if _, err := taskRepo.Update(ctx, task.ID, taskUpdate); err != nil {
 			return nil, fmt.Errorf("applyTransition.next.updateTask: %w", err)
 		}
-		_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
 			TaskID: task.ID, Actor: "orchestrator", Action: "stage_transition",
 			Details: map[string]any{"from": task.CurrentStage, "to": tr.Stage},
 		})
 		updatedRunID = sr.ID
 
 	case DoneTransition:
-		if _, err := o.opts.StageRunRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 			Status: strPtr("done"), EndedAt: &now, Output: tr.Output,
 		}); err != nil {
 			return nil, fmt.Errorf("applyTransition.done.updateRun: %w", err)
 		}
 		done := "done"
-		if _, err := o.opts.TaskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &done}); err != nil {
+		if _, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &done}); err != nil {
 			return nil, fmt.Errorf("applyTransition.done.updateTask: %w", err)
 		}
-		_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{TaskID: task.ID, Actor: "orchestrator", Action: "task_done"})
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{TaskID: task.ID, Actor: "orchestrator", Action: "task_done"})
 		updatedRunID = sr.ID
-		o.handleDependentTasks(ctx, task.ID, "done")
-		o.taskLocks.Delete(task.ID)
+		postCommit = append(postCommit, func() {
+			o.handleDependentTasks(ctx, task.ID, "done")
+			o.taskLocks.Delete(task.ID)
+		})
 
 	case FailTransition:
 		output := tr.Output
@@ -336,65 +377,66 @@ func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Ta
 			output = map[string]any{}
 		}
 		output["error"] = tr.Reason
-		if _, err := o.opts.StageRunRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 			Status: strPtr("failed"), EndedAt: &now, Output: output,
 		}); err != nil {
 			return nil, fmt.Errorf("applyTransition.fail.updateRun: %w", err)
 		}
-		_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
 			TaskID: task.ID, Actor: "orchestrator", Action: "stage_failed",
 			Details: map[string]any{"stage": sr.Stage, "iteration": sr.Iteration, "error": tr.Reason},
 		})
 		updatedRunID = sr.ID
 		if o.opts.OnStageFailed != nil {
-			o.opts.OnStageFailed(task.ID, StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: tr.Reason})
+			info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: tr.Reason}
+			postCommit = append(postCommit, func() { o.opts.OnStageFailed(task.ID, info) })
 		}
 
 	case WaitUserTransition:
-		if _, err := o.opts.StageRunRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 			Status: strPtr("awaiting_user"), Output: tr.Output,
 		}); err != nil {
 			return nil, fmt.Errorf("applyTransition.waitUser.updateRun: %w", err)
 		}
-		_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
 			TaskID: task.ID, Actor: "orchestrator", Action: "awaiting_user",
 			Details: map[string]any{"reason": tr.Reason},
 		})
 		updatedRunID = sr.ID
 
 	case IterateTransition:
-		if _, err := o.opts.StageRunRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 			Status: strPtr("done"), EndedAt: &now, Output: tr.Output,
 		}); err != nil {
 			return nil, fmt.Errorf("applyTransition.iterate.updateRun: %w", err)
 		}
-		task2, _ := o.opts.TaskRepo.GetByID(ctx, task.ID)
+		task2, _ := taskRepo.GetByID(ctx, task.ID)
 		maxIter := 20
 		if task2 != nil {
 			maxIter = task2.MaxIterations
 		}
 		if sr.Iteration+1 >= maxIter {
-			// Iteration limit — flip to failed
 			failOutput := tr.Output
 			if failOutput == nil {
 				failOutput = map[string]any{}
 			}
 			failOutput["error"] = fmt.Sprintf("iteration limit reached (%d)", maxIter)
-			if _, err := o.opts.StageRunRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+			if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 				Status: strPtr("failed"), Output: failOutput,
 			}); err != nil {
 				return nil, fmt.Errorf("applyTransition.iterate.limitFail: %w", err)
 			}
-			_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
+			_ = auditRepo.Append(ctx, repo.AppendAuditInput{
 				TaskID: task.ID, Actor: "orchestrator", Action: "iteration_limit_reached",
 				Details: map[string]any{"maxIter": maxIter, "lastIteration": sr.Iteration},
 			})
 			updatedRunID = sr.ID
 			if o.opts.OnStageFailed != nil {
-				o.opts.OnStageFailed(task.ID, StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: fmt.Sprintf("iteration limit reached (%d)", maxIter)})
+				info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: fmt.Sprintf("iteration limit reached (%d)", maxIter)}
+				postCommit = append(postCommit, func() { o.opts.OnStageFailed(task.ID, info) })
 			}
 		} else {
-			newSR, err := o.opts.StageRunRepo.Create(ctx, repo.CreateStageRunInput{
+			newSR, err := srRepo.Create(ctx, repo.CreateStageRunInput{
 				TaskID:      task.ID,
 				Stage:       sr.Stage,
 				Iteration:   sr.Iteration + 1,
@@ -408,16 +450,16 @@ func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Ta
 		}
 
 	case OnHoldTransition:
-		if _, err := o.opts.StageRunRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 			Status: strPtr("on_hold"), Output: tr.Output,
 		}); err != nil {
 			return nil, fmt.Errorf("applyTransition.onHold.updateRun: %w", err)
 		}
 		onHold := "on_hold"
-		if _, err := o.opts.TaskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &onHold}); err != nil {
+		if _, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &onHold}); err != nil {
 			return nil, fmt.Errorf("applyTransition.onHold.updateTask: %w", err)
 		}
-		_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
 			TaskID: task.ID, Actor: "orchestrator", Action: "moved_on_hold",
 			Details: map[string]any{"permissionRequestId": tr.PermissionRequestID},
 		})
@@ -428,10 +470,10 @@ func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Ta
 		if tr.PID != 0 {
 			update.PID = &tr.PID
 		}
-		if _, err := o.opts.StageRunRepo.Update(ctx, sr.ID, update); err != nil {
+		if _, err := srRepo.Update(ctx, sr.ID, update); err != nil {
 			return nil, fmt.Errorf("applyTransition.asyncRunning.updateRun: %w", err)
 		}
-		_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
 			TaskID: task.ID, Actor: "orchestrator", Action: "agent_spawned",
 			Details: map[string]any{"pid": tr.PID, "stage": sr.Stage},
 		})
@@ -439,6 +481,11 @@ func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Ta
 
 	default:
 		panic(fmt.Sprintf("orchestrator.applyTransition: unhandled transition type %T", t))
+	}
+
+	// Post-commit side effects (must run after writes are committed).
+	for _, fn := range postCommit {
+		fn()
 	}
 
 	if o.opts.OnTaskChanged != nil {
@@ -572,12 +619,9 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 		picks = picks[:freeSlots]
 	}
 	for _, task := range picks {
-		t := task
-		go func() {
-			if _, err := o.ProgressTask(ctx, t.ID, nil); err != nil {
-				slog.Error("orchestrator: pickup failed", "taskID", t.ID, "err", err)
-			}
-		}()
+		if _, err := o.ProgressTask(ctx, task.ID, nil); err != nil {
+			slog.Error("orchestrator: pickup failed", "taskID", task.ID, "err", err)
+		}
 	}
 }
 

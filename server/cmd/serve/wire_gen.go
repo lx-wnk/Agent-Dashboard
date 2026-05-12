@@ -121,6 +121,7 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 	cfgRepo := repo.NewPipelineConfigRepo(client)
 
 	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		Client:         client,
 		TaskRepo:       taskRepo,
 		StageRunRepo:   srRepo,
 		PermissionRepo: permRepo,

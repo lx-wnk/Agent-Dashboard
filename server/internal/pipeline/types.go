@@ -115,6 +115,7 @@ func IsTerminalStage(s string) bool {
 // OrchestratorOptions configures the PipelineOrchestrator.
 type OrchestratorOptions struct {
 	PollInterval   time.Duration
+	Client         *ent.Client
 	TaskRepo       repo.TaskRepo
 	StageRunRepo   repo.StageRunRepo
 	PermissionRepo repo.PermissionRepo

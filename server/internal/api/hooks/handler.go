@@ -51,7 +51,10 @@ type pendingEntry struct {
 }
 
 // New creates a Handler with the given shared secret and rescan callback.
-// secret may be empty — when empty, all POST /api/hooks/event requests from loopback are accepted.
+// When secret is non-empty it is required for all hook endpoints. When empty,
+// /api/hooks/event is open (loopback-only by network binding) but PreTool,
+// Respond, and Pending still require the secret to prevent unauthenticated
+// tool-gate manipulation.
 func New(secret string, onEvent OnEventFn) *Handler {
 	return &Handler{
 		secret:  secret,
@@ -76,9 +79,25 @@ func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) requireSecret(w http.ResponseWriter, r *http.Request) bool {
+	if h.secret == "" {
+		http.Error(w, `{"error":"DASHBOARD_HOOKS_SECRET must be set to use the edit gate"}`, http.StatusUnauthorized)
+		return false
+	}
+	got := bearerToken(r)
+	if subtle.ConstantTimeCompare([]byte(got), []byte(h.secret)) != 1 {
+		w.WriteHeader(http.StatusUnauthorized)
+		return false
+	}
+	return true
+}
+
 // PreTool handles POST /api/hooks/pre-tool.
 // Registers a pending edit decision and blocks until the user approves/rejects or the timeout fires.
 func (h *Handler) PreTool(w http.ResponseWriter, r *http.Request) {
+	if !h.requireSecret(w, r) {
+		return
+	}
 	var body struct {
 		SessionID  string `json:"sessionId"`
 		ToolName   string `json:"toolName"`
@@ -139,6 +158,9 @@ func (h *Handler) PreTool(w http.ResponseWriter, r *http.Request) {
 // Respond handles POST /api/hooks/respond.
 // Sends the approve/reject decision to the waiting pre-tool handler.
 func (h *Handler) Respond(w http.ResponseWriter, r *http.Request) {
+	if !h.requireSecret(w, r) {
+		return
+	}
 	var body struct {
 		ID       string `json:"id"`
 		Decision string `json:"decision"` // "accept" | "reject"
@@ -173,6 +195,9 @@ func (h *Handler) Respond(w http.ResponseWriter, r *http.Request) {
 // Pending handles GET /api/hooks/pending.
 // Returns all pending edit gate decisions, optionally filtered by sessionId.
 func (h *Handler) Pending(w http.ResponseWriter, r *http.Request) {
+	if !h.requireSecret(w, r) {
+		return
+	}
 	sessionID := r.URL.Query().Get("sessionId")
 
 	h.mu.Lock()

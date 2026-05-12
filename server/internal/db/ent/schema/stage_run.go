@@ -35,7 +35,7 @@ func (StageRun) Fields() []ent.Field {
 func (StageRun) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("task", Task.Type).Ref("stage_runs").Field("task_id").Unique().Required().Immutable(),
-		edge.To("permission_requests", PermissionRequest.Type),
+		edge.To("permission_requests", PermissionRequest.Type).Annotations(entsql.Annotation{OnDelete: entsql.Cascade}),
 	}
 }
 

@@ -78,7 +78,7 @@ var (
 				Symbol:     "audit_logs_tasks_audit_logs",
 				Columns:    []*schema.Column{AuditLogsColumns[5]},
 				RefColumns: []*schema.Column{TasksColumns[0]},
-				OnDelete:   schema.NoAction,
+				OnDelete:   schema.Cascade,
 			},
 		},
 		Indexes: []*schema.Index{
@@ -136,7 +136,7 @@ var (
 				Symbol:     "permission_requests_stage_runs_permission_requests",
 				Columns:    []*schema.Column{PermissionRequestsColumns[7]},
 				RefColumns: []*schema.Column{StageRunsColumns[0]},
-				OnDelete:   schema.NoAction,
+				OnDelete:   schema.Cascade,
 			},
 		},
 		Indexes: []*schema.Index{
@@ -235,7 +235,7 @@ var (
 				Symbol:     "stage_runs_tasks_stage_runs",
 				Columns:    []*schema.Column{StageRunsColumns[14]},
 				RefColumns: []*schema.Column{TasksColumns[0]},
-				OnDelete:   schema.NoAction,
+				OnDelete:   schema.Cascade,
 			},
 		},
 		Indexes: []*schema.Index{
@@ -320,13 +320,13 @@ var (
 				Symbol:     "task_dependencies_tasks_dependencies",
 				Columns:    []*schema.Column{TaskDependenciesColumns[3]},
 				RefColumns: []*schema.Column{TasksColumns[0]},
-				OnDelete:   schema.NoAction,
+				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "task_dependencies_tasks_dependents",
 				Columns:    []*schema.Column{TaskDependenciesColumns[4]},
 				RefColumns: []*schema.Column{TasksColumns[0]},
-				OnDelete:   schema.NoAction,
+				OnDelete:   schema.Cascade,
 			},
 		},
 		Indexes: []*schema.Index{
@@ -370,7 +370,7 @@ var (
 				Symbol:     "task_permissions_tasks_permissions",
 				Columns:    []*schema.Column{TaskPermissionsColumns[9]},
 				RefColumns: []*schema.Column{TasksColumns[0]},
-				OnDelete:   schema.NoAction,
+				OnDelete:   schema.Cascade,
 			},
 		},
 		Indexes: []*schema.Index{

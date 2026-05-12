@@ -64,6 +64,8 @@ task dev
 Starts the Go server with `air` hot-reload on port 13120. The last-built Vue SPA is served as embedded static files. Open [http://localhost:13120](http://localhost:13120) — running Claude Code agents appear automatically.
 
 > **Auth:** When no GitHub OAuth is configured and the server is on loopback (default), all API requests are allowed without login.
+>
+> **Security note:** Auth bypass means full local trust — any process with access to `127.0.0.1:13120` can create API keys, spawn agents, and read session data. This is safe for single-user developer machines. For shared machines or multi-user environments, configure GitHub OAuth (`DASHBOARD_GITHUB_CLIENT_ID` + `DASHBOARD_GITHUB_CLIENT_SECRET`) to enforce per-user authentication.
 
 **With frontend hot-reload** (run in two terminals when iterating on UI):
 ```bash
