@@ -9,6 +9,7 @@ import (
 
 // SlashCommands handles GET /api/slash-commands.
 // Returns Claude built-in commands plus all installed skills from the plugin cache.
+// The optional ?cwd= query param is accepted but reserved for future project-scoped skill lookup.
 func SlashCommands(w http.ResponseWriter, r *http.Request) {
 	cmds := parser.GetSlashCommands()
 	w.Header().Set("Content-Type", "application/json")

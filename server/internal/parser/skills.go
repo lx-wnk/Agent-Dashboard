@@ -28,7 +28,7 @@ var builtinCommands = []SlashCommand{
 // GetSlashCommands returns all available slash commands: built-ins + installed skills.
 func GetSlashCommands() []SlashCommand {
 	seen := make(map[string]bool)
-	var cmds []SlashCommand
+	cmds := []SlashCommand{}
 
 	for _, c := range builtinCommands {
 		seen[c.Name] = true
