@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, onUnmounted, ref, watch } from 'vue'
 import { formatCost, shortModel } from '../utils/format'
 import AppModal from './ui/AppModal.vue'
 
@@ -35,6 +35,7 @@ const statusMsg = ref('')
 const statusIsError = ref(false)
 const scrollContainer = ref<HTMLElement | null>(null)
 let abortCtrl: AbortController | null = null
+onUnmounted(() => { abortCtrl?.abort(); abortCtrl = null })
 
 function shortenPath(path: string): string {
   if (props.homeDir && path.startsWith(props.homeDir))
