@@ -21,7 +21,7 @@ var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
 
 // dangerousBashRE matches shell patterns that must never appear in a Bash allow-list entry.
 var dangerousBashRE = regexp.MustCompile(
-	"(?i)(curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|bash\\s+-c|sh\\s+-c|\\beval\\b|\\$\\(|`|&&|\\|\\||;\\s*\\w|>\\s*\\w|<\\s*\\w|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w)",
+	"(?i)(curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|\\bnetcat\\b|bash\\s+-c|sh\\s+-c|\\beval\\b|python\\s+-c|perl\\s+-e|ruby\\s+-e|base64\\s+-d|\\$\\(|`|&&|\\||;\\s*\\w|>\\s*\\w|<\\s*\\w|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w)",
 )
 
 const systemPromptMaxChars = 10000

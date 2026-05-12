@@ -62,6 +62,7 @@ type StageContext struct {
 	Task                 *ent.Task
 	StageRun             *ent.StageRun
 	Permissions          []*ent.TaskPermission
+	AllStageRuns         []*ent.StageRun
 	PreviousOutput       map[string]any
 	PriorIterationOutput map[string]any
 	ResumeSessionID      string

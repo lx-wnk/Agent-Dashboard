@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -55,7 +56,7 @@ func NewGitHubClient(clientID, clientSecret string, opts ...githubOption) *GitHu
 		tokenURL:     defaultGitHubTokenURL,
 		userURL:      defaultGitHubUserURL,
 		authURL:      defaultGitHubAuthURL,
-		httpClient:   &http.Client{},
+		httpClient:   &http.Client{Timeout: 10 * time.Second},
 	}
 	for _, o := range opts {
 		o(c)

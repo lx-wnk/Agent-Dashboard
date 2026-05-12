@@ -52,7 +52,8 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 	}
 
 	broadcaster := sse.NewBroadcaster()
-	taskBroadcaster := sse.NewTaskBroadcaster(broadcaster)
+	taskBase := sse.NewBroadcaster()
+	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
 	routerConfig := provideRouterConfig(cfg)
 
 	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster)
@@ -126,7 +127,7 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 		AuditRepo:      auditRepo,
 		ConfigRepo:     cfgRepo,
 		MCPToken:       os.Getenv("DASHBOARD_MCP_TOKEN"),
-		MCPUrl:         fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
+		MCPUrl:         fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		OnTaskChanged: func(taskID string, transitionKind string) {
 			tb.Broadcast(sse.TaskEvent{
 				Type:   "task_changed",
@@ -150,6 +151,7 @@ func provideTaskHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator,
 		PermRepo:     repo.NewPermissionRepo(client),
 		AuditRepo:    repo.NewAuditRepo(client),
 		CfgRepo:      repo.NewPipelineConfigRepo(client),
+		DepRepo:      repo.NewDependencyRepo(client),
 		Orchestrator: orch,
 		Broadcaster:  tb,
 	})

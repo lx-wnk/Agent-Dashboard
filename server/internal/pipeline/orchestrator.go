@@ -219,6 +219,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 	}
 
 	perms, _ := o.opts.PermissionRepo.ListTaskPermissions(ctx, task.ID)
+	allRuns, _ := o.opts.StageRunRepo.ListForTask(ctx, task.ID)
 	prevOutput := o.getPreviousStageOutput(ctx, task)
 	priorIterOutput := o.getPriorIterationOutput(ctx, task, stageRun)
 
@@ -236,6 +237,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		Task:                 task,
 		StageRun:             stageRun,
 		Permissions:          perms,
+		AllStageRuns:         allRuns,
 		PreviousOutput:       prevOutput,
 		PriorIterationOutput: priorIterOutput,
 		ResumeSessionID:      resumeSessionID,
@@ -326,6 +328,7 @@ func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Ta
 		_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{TaskID: task.ID, Actor: "orchestrator", Action: "task_done"})
 		updatedRunID = sr.ID
 		o.handleDependentTasks(ctx, task.ID, "done")
+		o.taskLocks.Delete(task.ID)
 
 	case FailTransition:
 		output := tr.Output
@@ -626,13 +629,12 @@ func (o *PipelineOrchestrator) sweepAwaitingUserRuns(ctx context.Context, allRun
 		if err != nil {
 			continue
 		}
-		pid := 0
-		if run.Pid != nil {
-			pid = *run.Pid
-		}
-		if !IsPidAlive(pid) {
+		// Only reap runs that had a live agent process which has since died.
+		// Nil-PID runs are legitimate: concept/backlog WaitUser transitions never
+		// spawn an agent, so IsPidAlive(0) == false must not trigger the reaper.
+		if run.Pid != nil && !IsPidAlive(*run.Pid) {
 			slog.Warn("orchestrator: awaiting_user run has dead PID — reaping as failed",
-				"runID", run.ID, "stage", run.Stage, "pid", pid)
+				"runID", run.ID, "stage", run.Stage, "pid", *run.Pid)
 			if _, err := o.applyTransition(ctx, task, run, FailTransition{
 				Reason: "awaiting_user reaper: stage agent exited while permissions pending",
 			}); err != nil {
@@ -646,9 +648,13 @@ func (o *PipelineOrchestrator) sweepAwaitingUserRuns(ctx context.Context, allRun
 				anchor = run.LastGrantAt
 			}
 			if anchor != nil && time.Since(*anchor) > time.Duration(timeoutSec)*time.Second {
+				timeoutPid := 0
+				if run.Pid != nil {
+					timeoutPid = *run.Pid
+				}
 				slog.Warn("orchestrator: awaiting_user run exceeded wallclock timeout — killing agent",
-					"runID", run.ID, "pid", pid, "timeoutSec", timeoutSec)
-				_ = syscallKill(pid)
+					"runID", run.ID, "pid", timeoutPid, "timeoutSec", timeoutSec)
+				_ = syscallKill(timeoutPid)
 				fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
 				if fresh != nil && fresh.Status == "awaiting_user" {
 					elapsed := time.Since(*anchor).Seconds()
@@ -979,6 +985,14 @@ func (o *PipelineOrchestrator) ResumeFromUser(ctx context.Context, taskID string
 }
 
 func syscallKill(pid int) error {
+	if pid <= 0 {
+		return nil
+	}
+	// Signal the process group so spawned subprocesses (Setpgid: true) are also terminated.
+	if err := syscall.Kill(-pid, syscall.SIGTERM); err == nil {
+		return nil
+	}
+	// Fall back to signaling the process directly if group kill fails (e.g. process already exited).
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return err

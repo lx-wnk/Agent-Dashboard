@@ -2,8 +2,6 @@ package pipeline
 
 import (
 	"fmt"
-
-	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
 // agentStageHandler is the generic stage handler for agent-driven stages.
@@ -114,7 +112,7 @@ func selfReviewBuilder(ctx *StageContext) PromptBundle {
 }
 
 func finalizationBuilder(ctx *StageContext) PromptBundle {
-	return FinalizationPrompt(ctx.Task, []*ent.StageRun{})
+	return FinalizationPrompt(ctx.Task, ctx.AllStageRuns)
 }
 
 // HandlersByStage is the registry of all stage handlers.

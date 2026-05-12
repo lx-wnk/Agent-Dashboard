@@ -161,6 +161,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.RefineHandler != nil {
 			deps.RefineHandler.Mount(r)
 		}
+
+		// Spawn management — rate-limited user-initiated agent spawning and channel message forwarding.
+		// Inside the protected group so only authenticated users can spawn agents.
+		spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs)
+		spawnHandler := agents.NewSpawnHandler(spawnMgr)
+		r.Post("/api/agents/spawn", spawnHandler.Spawn)
+		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
+		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
 	})
 
 	// Channel-reply endpoint — bearer token auth via discovery file (no JWT).
@@ -169,13 +177,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Post("/api/channel-reply", deps.ChannelReply.Post)
 		r.Get("/api/agents/{pid}/replies", deps.ChannelReply.GetReplies)
 	}
-
-	// Spawn management — rate-limited user-initiated agent spawning and channel message forwarding.
-	spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs)
-	spawnHandler := agents.NewSpawnHandler(spawnMgr)
-	r.Post("/api/agents/spawn", spawnHandler.Spawn)
-	r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
-	r.Post("/api/agents/{pid}/message", spawnHandler.Message)
 
 	// MCP endpoint — Bearer token auth (API key), not JWT session auth.
 	// Mounted outside the JWT group so OAuth-less clients can reach it.
