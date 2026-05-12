@@ -25,7 +25,8 @@ func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Durati
 				slog.Error("agent scan failed", "err", err)
 				continue
 			}
-			data, err := json.Marshal(agents)
+			// Wrap in {agents, trend} — SSE client expects this shape.
+			data, err := json.Marshal(map[string]any{"agents": agents, "trend": []any{}})
 			if err != nil {
 				slog.Error("agent marshal failed", "err", err)
 				continue

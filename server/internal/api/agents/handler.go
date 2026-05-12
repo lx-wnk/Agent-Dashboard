@@ -50,9 +50,10 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// Send current state immediately so client doesn't wait for first tick
+	// Send current state immediately so client doesn't wait for first tick.
+	// Wrap in {agents, trend} — the SSE client expects this shape.
 	if agents, err := h.getAgents(r.Context()); err == nil {
-		if data, err := json.Marshal(agents); err == nil {
+		if data, err := json.Marshal(map[string]any{"agents": agents, "trend": []any{}}); err == nil {
 			fmt.Fprintf(w, "data: %s\n\n", data)
 			flusher.Flush()
 		}
