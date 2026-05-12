@@ -13,18 +13,14 @@
     "url": "https://github.com/lx-wnk/Agent-Dashboard.git"
   },
   "scripts": {
-    "dev": "bun --watch server/index.ts",
+    "dev": "vite",
     "build": "vite build",
-    "build:server": "bun build --compile server/index.ts --outfile=dashboard",
-    "start": "NODE_ENV=production bun server/index.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "vitest run && bun test server/ --parallel",
+    "test": "vitest run",
     "test:watch": "vitest",
-    "test:server": "bun test server/ --parallel",
     "test:e2e": "playwright test",
-    "typecheck": "vue-tsc --noEmit",
-    "fix": "eslint . --fix && vue-tsc --noEmit && vitest run && bun test server/ --parallel"
+    "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

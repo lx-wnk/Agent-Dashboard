@@ -6,9 +6,16 @@ tasks:
     cmds: [task --list]
 
   dev:
-    desc: Start server with live reload (requires air)
-    dir: server
-    cmd: air -c ../.air.toml
+    desc: Start Go backend + Vite frontend (requires air)
+    deps: [dev:go, dev:frontend]
+
+  dev:go:
+    desc: Start Go backend with air hot-reload on :13120
+    cmd: "$(go env GOPATH)/bin/air -c .air.toml"
+
+  dev:frontend:
+    desc: Start Vite dev server with HMR on :5173
+    cmd: pnpm dev
 
   build:
     desc: Build server binary

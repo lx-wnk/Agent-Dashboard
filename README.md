@@ -34,10 +34,16 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 | Go 1.26+ | `brew install go` |
 | Task (Taskfile runner) | `brew install go-task/tap/go-task` |
 | air (hot-reload) | `go install github.com/air-verse/air@latest` |
+| golangci-lint | `brew install golangci-lint` |
 | Node.js 22+ + pnpm | [pnpm.io/installation](https://pnpm.io/installation) |
 | Claude Code | Required — dashboard reads live agent sessions |
 
 **Platform:** macOS and Linux only. Windows is unsupported.
+
+> **PATH note:** `go install` puts binaries in `$(go env GOPATH)/bin` (typically `~/go/bin`). Add it to your shell:
+> ```bash
+> echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc && source ~/.zshrc
+> ```
 
 ## Installation
 
@@ -51,11 +57,24 @@ pnpm install
 
 ## Running (Development)
 
+**Backend only (most common):**
 ```bash
 task dev
 ```
+Starts the Go server with `air` hot-reload on port 13120. The last-built Vue SPA is served as embedded static files. Open [http://localhost:13120](http://localhost:13120) — running Claude Code agents appear automatically.
 
-Starts the Go server with `air` hot-reload and the Vite SPA middleware on port 13120. Open [http://localhost:13120](http://localhost:13120) — running Claude Code agents appear automatically.
+> **Auth:** When no GitHub OAuth is configured and the server is on loopback (default), all API requests are allowed without login.
+
+**With frontend hot-reload** (run in two terminals when iterating on UI):
+```bash
+# Terminal 1
+task dev       # Go backend on :13120
+
+# Terminal 2
+pnpm dev       # Vite dev server on :5173, proxies /api → :13120
+```
+
+`air` only watches `.go` files. Frontend changes require `pnpm build` (or use `pnpm dev` for HMR).
 
 ## Building (Production)
 
@@ -69,7 +88,9 @@ The binary embeds the Vue SPA via `go:embed`. Deploy by copying `bin/agent-dashb
 ## Running (Production)
 
 ```bash
-export JWT_SECRET=<secret>
+export DASHBOARD_JWT_SECRET=<min-32-char-secret>
+export DASHBOARD_GITHUB_CLIENT_ID=<client-id>
+export DASHBOARD_GITHUB_CLIENT_SECRET=<client-secret>
 ./bin/agent-dashboard serve
 ```
 
@@ -188,12 +209,13 @@ The dashboard exposes a stateless StreamableHTTP MCP server at `POST /api/mcp` f
 
 | Variable | Default | Description |
 |---|---|---|
-| `JWT_SECRET` | **required** | Secret for signing JWT session tokens |
+| `DASHBOARD_JWT_SECRET` | auto-generated (ephemeral) | Secret for signing JWT session tokens (min 32 chars; set a stable value to survive restarts) |
+| `DASHBOARD_GITHUB_CLIENT_ID` | — | GitHub OAuth app client ID (omit for loopback dev — auth bypass activates automatically) |
+| `DASHBOARD_GITHUB_CLIENT_SECRET` | — | GitHub OAuth app client secret |
 | `DASHBOARD_PORT` | `13120` | HTTP server port |
 | `DASHBOARD_HOST` | `127.0.0.1` | Bind address (warns if non-loopback) |
 | `DASHBOARD_DB_PATH` | `~/.claude/dashboard-tasks.db` | SQLite path |
 | `DASHBOARD_WORKTREE_ROOT` | `~/.claude/dashboard-worktrees` | Per-task git worktrees |
-| `DASHBOARD_REMOTES` | — | Comma-separated remote dashboard URLs |
 | `DASHBOARD_SSE_INTERVAL_MS` | `3000` | Agent SSE broadcast interval (ms) |
 | `DASHBOARD_SPAWN_RATE_LIMIT` | `5` | Max user-initiated spawns per window |
 | `DASHBOARD_SPAWN_RATE_WINDOW_MS` | `60000` | Spawn rate-limit window (ms) |
@@ -205,9 +227,6 @@ The dashboard exposes a stateless StreamableHTTP MCP server at `POST /api/mcp` f
 | `DASHBOARD_ALLOW_GIT_PULL` | `false` | Enable `POST /api/tasks/:id/git-action` with `action:'pull'` |
 | `DASHBOARD_HOOKS_SECRET` | — | Shared bearer token for `/api/hooks/event` |
 | `DASHBOARD_HOOKS_DEBOUNCE_MS` | `100` | Debounce before SSE rescan after hook event |
-| `GITHUB_CLIENT_ID` | — | GitHub OAuth app client ID |
-| `GITHUB_CLIENT_SECRET` | — | GitHub OAuth app client secret |
-| `GITHUB_CALLBACK_URL` | — | GitHub OAuth callback URL |
 
 ## Controlling Running Agents
 
@@ -236,7 +255,8 @@ Spawned agents run detached — they survive dashboard restarts and appear in th
 ## Security
 
 - Server binds to `127.0.0.1` only — never exposed to the network
-- `JWT_SECRET` environment variable is required at startup
+- Auth bypass active when loopback + no GitHub OAuth configured; all API requests allowed without login (safe for local dev)
+- `DASHBOARD_JWT_SECRET` auto-generated if unset (ephemeral — sessions reset on restart); set a stable value for production
 - Bearer tokens are SHA-256 hashed before storage; never stored in plaintext
 - Channel replies authenticated via per-agent Bearer tokens
 - Markdown output sanitized via DOMPurify before `v-html` rendering
