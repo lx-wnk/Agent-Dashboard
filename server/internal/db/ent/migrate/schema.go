@@ -222,7 +222,7 @@ var (
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "ended_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_grant_at", Type: field.TypeTime, Nullable: true},
-		{Name: "created_at", Type: field.TypeTime},
+		{Name: "created_at", Type: field.TypeTime, Default: "datetime('now')"},
 		{Name: "task_id", Type: field.TypeString},
 	}
 	// StageRunsTable holds the schema information for the "stage_runs" table.

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	entsql "entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -27,7 +28,7 @@ func (StageRun) Fields() []ent.Field {
 		field.Time("started_at").Optional().Nillable(),
 		field.Time("ended_at").Optional().Nillable(),
 		field.Time("last_grant_at").Optional().Nillable(),
-		field.Time("created_at").Default(time.Now).Immutable(),
+		field.Time("created_at").Default(time.Now).Immutable().Annotations(entsql.Default("datetime('now')")),
 	}
 }
 

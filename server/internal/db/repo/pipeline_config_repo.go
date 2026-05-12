@@ -25,7 +25,9 @@ func NewPipelineConfigRepo(client *ent.Client) PipelineConfigRepo {
 func (r *entPipelineConfigRepo) GetNumber(ctx context.Context, key string, fallback float64) float64 {
 	cfg, err := r.client.PipelineConfig.Query().Where(pipelineconfig.ID(key)).Only(ctx)
 	if err != nil {
-		slog.Error("pipeline_config: db lookup", "key", key, "err", err)
+		if !ent.IsNotFound(err) {
+			slog.Error("pipeline_config: db lookup", "key", key, "err", err)
+		}
 		return fallback
 	}
 	n, err := strconv.ParseFloat(cfg.Value, 64)
