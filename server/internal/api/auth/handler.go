@@ -19,6 +19,7 @@ type Deps struct {
 	GitHubClient *serverauth.GitHubClient
 	UserRepo     repo.UserRepo
 	IsLoopback   bool // true when Host is 127.0.0.1 / ::1 / localhost
+	BypassAuth   bool // true when loopback + no GitHub OAuth; all requests treated as local admin
 }
 
 // Handler handles GitHub OAuth routes.
@@ -147,8 +148,21 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 }
 
 // Me returns the currently authenticated user.
-// GET /api/auth/me
+// GET /api/me
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) error {
+	if h.deps.BypassAuth {
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(map[string]any{
+			"user": map[string]any{
+				"id":      "local",
+				"login":   "local",
+				"isAdmin": true,
+			},
+			"isAdmin":     true,
+			"authEnabled": false,
+		})
+	}
+
 	payload, ok := serverauth.PayloadFromContext(r.Context())
 	if !ok {
 		return apierr.NewAppError(http.StatusUnauthorized, "unauthorized")
@@ -165,10 +179,12 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) error {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(map[string]any{
-		"id":           user.ID,
-		"github_login": user.GithubLogin,
-		"display_name": user.DisplayName,
-		"avatar_url":   user.AvatarURL,
-		"is_admin":     user.IsAdmin,
+		"user": map[string]any{
+			"id":      user.ID,
+			"login":   user.GithubLogin,
+			"isAdmin": user.IsAdmin,
+		},
+		"isAdmin":     user.IsAdmin,
+		"authEnabled": true,
 	})
 }

@@ -38,6 +38,7 @@ type RouterConfig struct {
 	JWTSecret         string
 	CallbackURL       string
 	IsLoopback        bool            // true when Host is 127.0.0.1 / ::1 / localhost
+	BypassAuth        bool            // skip JWT when loopback + no GitHub OAuth configured
 	Embedded          http.FileSystem // Vue SPA embed (unused until Task 14)
 	HooksSecret       string
 	HooksDebounceMs   int
@@ -95,14 +96,17 @@ func NewRouter(deps RouterDeps) http.Handler {
 		GitHubClient: deps.GitHubClient,
 		UserRepo:     deps.UserRepo,
 		IsLoopback:   deps.Config.IsLoopback,
+		BypassAuth:   deps.Config.BypassAuth,
 	})
 	r.Get("/api/auth/github", ErrorMiddleware(authHandler.GitHubRedirect))
 	r.Get("/api/auth/callback", ErrorMiddleware(authHandler.Callback))
 	r.Post("/api/auth/logout", ErrorMiddleware(authHandler.Logout))
 
-	// Protected routes (JWT required)
+	// Protected routes (JWT required, unless auth bypass is active)
 	r.Group(func(r chi.Router) {
-		r.Use(authpkg.RequireAuth(deps.Config.JWTSecret))
+		if !deps.Config.BypassAuth {
+			r.Use(authpkg.RequireAuth(deps.Config.JWTSecret))
+		}
 		agentHandler := agents.NewHandler(merger.GetAgents, deps.AgentBroadcaster)
 		r.Get("/api/agents", ErrorMiddleware(agentHandler.List))
 		r.Get("/api/agents/stream", agentHandler.Stream)
@@ -112,14 +116,16 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/sessions/{sessionId}/timeline", sessions.Timeline)
 
 		r.Get("/api/quota", system.Quota)
-		r.Get("/api/system/config", system.Config)
-		r.Get("/api/system/system", system.System)
+		r.Get("/api/config", system.Config)         // frontend expects /api/config
+		r.Get("/api/system/config", system.Config)  // keep old path for compatibility
+		r.Get("/api/system", system.System)         // frontend expects /api/system
+		r.Get("/api/system/system", system.System)  // keep old path for compatibility
 
 		r.Get("/api/memory", memory.List)
 		r.Get("/api/memory/*", memory.Get)
 		r.Put("/api/memory/*", memory.Put)
 
-		r.Get("/api/auth/me", ErrorMiddleware(authHandler.Me))
+		r.Get("/api/me", ErrorMiddleware(authHandler.Me))
 
 		if deps.ApiKeyRepo != nil {
 			apiKeyHandler := apikeyhandler.NewHandler(deps.ApiKeyRepo)
@@ -206,7 +212,7 @@ func newDebouncedRescan(broadcaster *sse.Broadcaster, debounceMs int) hooks.OnEv
 				slog.Warn("hooks: debounced rescan failed", "err", err)
 				return
 			}
-			data, err := json.Marshal(agents)
+			data, err := json.Marshal(map[string]any{"agents": agents, "trend": []any{}})
 			if err != nil {
 				slog.Warn("hooks: marshal failed", "err", err)
 				return

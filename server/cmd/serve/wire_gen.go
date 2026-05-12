@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -92,10 +93,15 @@ func provideGitHubClient(cfg config.Config) *authpkg.GitHubClient {
 }
 
 func provideRouterConfig(cfg config.Config) api.RouterConfig {
+	bypassAuth := cfg.IsLoopback() && cfg.GitHubClientID == ""
+	if bypassAuth {
+		slog.Info("auth bypass active — loopback + no GitHub OAuth configured; all API requests allowed without login")
+	}
 	return api.RouterConfig{
 		JWTSecret:         cfg.JWTSecret,
 		CallbackURL:       cfg.CallbackURL(),
 		IsLoopback:        cfg.IsLoopback(),
+		BypassAuth:        bypassAuth,
 		HooksSecret:       cfg.HooksSecret,
 		HooksDebounceMs:   cfg.HooksDebounceMs,
 		SpawnRateLimit:    cfg.SpawnRateLimit,
