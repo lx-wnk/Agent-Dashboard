@@ -142,7 +142,7 @@ onMounted(fetchQuota)
 
 <template>
   <LoginPage v-if="loaded && showLogin" />
-  <div v-else-if="loaded" class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+  <div v-else-if="loaded" class="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
     <header class="flex flex-wrap items-center gap-3 gap-y-2 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
       <h1 class="text-[18px] font-semibold text-slate-900 dark:text-slate-100">
         Claude Agent Overview
@@ -260,8 +260,8 @@ onMounted(fetchQuota)
     </div>
 
     <div
+      v-show="viewMode !== 'pipeline'"
       class="flex items-center gap-1 px-6 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-      :class="{ 'invisible pointer-events-none': viewMode === 'pipeline' }"
     >
       <button
         type="button"
@@ -282,7 +282,7 @@ onMounted(fetchQuota)
         ≡ List
       </button>
     </div>
-    <main class="p-6">
+    <main class="p-6 flex-1 min-h-0 overflow-y-auto">
       <p v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600">
         Loading agents...
       </p>

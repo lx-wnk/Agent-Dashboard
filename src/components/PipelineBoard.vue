@@ -108,8 +108,8 @@ const epicParentIds = computed(() => new Set(epics.value.map(e => e.parent.id)))
 </script>
 
 <template>
-  <div>
-    <div class="flex items-center gap-2 mb-3">
+  <div class="flex flex-col h-full">
+    <div class="flex items-center gap-2 mb-3 flex-shrink-0">
       <span class="text-xs text-slate-500 dark:text-slate-400">Export:</span>
       <button
         type="button"
@@ -126,11 +126,11 @@ const epicParentIds = computed(() => new Set(epics.value.map(e => e.parent.id)))
         CSV
       </button>
     </div>
-    <div class="flex gap-3 overflow-x-auto pb-4 min-h-[calc(100vh-200px)]">
+    <div class="flex gap-3 overflow-x-auto pb-4 flex-1 min-h-0">
       <div
         v-for="{ col, tasks } in columnsWithTasks"
         :key="col.id"
-        class="flex-[1_1_260px] min-w-[240px] rounded-lg flex flex-col max-h-[calc(100vh-220px)]"
+        class="flex-[1_1_260px] min-w-[240px] rounded-lg flex flex-col"
         :class="col.group === 'needs-you'
           ? 'bg-yellow-50/30 dark:bg-yellow-950/10 border border-yellow-300/60 dark:border-yellow-700/40'
           : col.group === 'terminal'
