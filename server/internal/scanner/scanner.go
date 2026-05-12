@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -15,10 +16,40 @@ import (
 
 // ProcessInfo holds metadata about a running Claude Code process.
 type ProcessInfo struct {
-	PID     int
-	CWD     string
-	Uptime  int64 // seconds
-	Command string
+	PID             int
+	CWD             string
+	Uptime          int64 // seconds
+	Command         string
+	ClaudeConfigDir string // value of CLAUDE_CONFIG_DIR in the process env, or "" for default
+}
+
+var claudeConfigDirRE = regexp.MustCompile(`CLAUDE_CONFIG_DIR=(\S+)`)
+
+// getClaudeConfigDir reads CLAUDE_CONFIG_DIR from a process's environment.
+// On Linux it reads /proc/{pid}/environ; on macOS it uses ps ewww.
+// Returns "" when not found (caller uses the default ~/.claude path).
+func getClaudeConfigDir(pid int) string {
+	if platform.IsLinux {
+		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
+		if err != nil {
+			return ""
+		}
+		for _, kv := range strings.Split(string(raw), "\x00") {
+			if strings.HasPrefix(kv, "CLAUDE_CONFIG_DIR=") {
+				return strings.TrimPrefix(kv, "CLAUDE_CONFIG_DIR=")
+			}
+		}
+		return ""
+	}
+	// macOS: ps ewww appends env vars after the command arguments.
+	out, err := exec.Command("ps", "ewww", "-p", strconv.Itoa(pid)).Output() //nolint:gosec // pid from ps output
+	if err != nil {
+		return ""
+	}
+	if m := claudeConfigDirRE.FindSubmatch(out); m != nil {
+		return string(m[1])
+	}
+	return ""
 }
 
 // ParseElapsedTime converts ps etime format (e.g. "2-01:05:30") to seconds.
@@ -142,10 +173,11 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 			continue
 		}
 		result = append(result, ProcessInfo{
-			PID:     r.pid,
-			CWD:     cwd,
-			Uptime:  ParseElapsedTime(r.etime),
-			Command: r.command,
+			PID:             r.pid,
+			CWD:             cwd,
+			Uptime:          ParseElapsedTime(r.etime),
+			Command:         r.command,
+			ClaudeConfigDir: getClaudeConfigDir(r.pid),
 		})
 	}
 	return result, nil

@@ -24,21 +24,66 @@ var (
 	authRE  = regexp.MustCompile(`(?i)invalid api key|authentication|unauthorized|401`)
 )
 
-// claudeProjectsDir returns ~/.claude/projects
-func claudeProjectsDir() string {
+// claudeConfigDir returns the Claude config base directory.
+// Respects CLAUDE_CONFIG_DIR env var; falls back to ~/.claude.
+func claudeConfigDir() string {
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		return dir
+	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", "projects")
+	return filepath.Join(home, ".claude")
 }
 
-// ClaudeProjectsDir returns ~/.claude/projects — exported for use by pipeline package.
+// allClaudeConfigDirs returns all candidate Claude config directories to search.
+// Priority order:
+//  1. DASHBOARD_CLAUDE_CONFIG_DIRS — explicit comma-separated list (highest priority)
+//  2. CLAUDE_CONFIG_DIR from the server process environment
+//  3. Default ~/.claude
+//  4. Common custom variants that exist on disk (~/.claude-personal, etc.)
+func allClaudeConfigDirs() []string {
+	seen := make(map[string]bool)
+	var dirs []string
+	add := func(d string) {
+		d = strings.TrimSpace(d)
+		if d != "" && !seen[d] {
+			seen[d] = true
+			dirs = append(dirs, d)
+		}
+	}
+	// 1. Explicit dashboard config — overrides auto-detection for teams/multi-user setups.
+	if val := os.Getenv("DASHBOARD_CLAUDE_CONFIG_DIRS"); val != "" {
+		for _, p := range strings.Split(val, ",") {
+			add(p)
+		}
+	}
+	// 2. Server process CLAUDE_CONFIG_DIR.
+	add(claudeConfigDir())
+	// 3. Standard default.
+	home, _ := os.UserHomeDir()
+	add(filepath.Join(home, ".claude"))
+	// 4. Common custom dir names that exist on disk.
+	for _, name := range []string{".claude-personal", ".claude-work", ".claude-dev"} {
+		candidate := filepath.Join(home, name)
+		if _, err := os.Stat(filepath.Join(candidate, "projects")); err == nil {
+			add(candidate)
+		}
+	}
+	return dirs
+}
+
+// claudeProjectsDir returns the Claude projects directory.
+func claudeProjectsDir() string {
+	return filepath.Join(claudeConfigDir(), "projects")
+}
+
+// ClaudeProjectsDir returns the Claude projects directory — exported for use by pipeline package.
 func ClaudeProjectsDir() string {
 	return claudeProjectsDir()
 }
 
-// sessionMetaDir returns ~/.claude/usage-data/session-meta
+// sessionMetaDir returns the Claude session-meta directory.
 func sessionMetaDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", "usage-data", "session-meta")
+	return filepath.Join(claudeConfigDir(), "usage-data", "session-meta")
 }
 
 // TailRead reads the last tailBytes bytes of a file.
@@ -117,9 +162,15 @@ type SessionData struct {
 }
 
 // FindSessionForProject locates the most recently active JSONL session for cwd.
-func FindSessionForProject(cwd string, uptimeSeconds int64) (*SessionData, error) {
+// claudeConfigDir, if non-empty, overrides the default ~/.claude config directory
+// (use the value of CLAUDE_CONFIG_DIR from the process environment).
+func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir string) (*SessionData, error) {
+	baseDir := claudeProjectsDir()
+	if claudeConfigDir != "" {
+		baseDir = filepath.Join(claudeConfigDir, "projects")
+	}
 	encoded := EncodePath(cwd)
-	projectDir := filepath.Join(claudeProjectsDir(), encoded)
+	projectDir := filepath.Join(baseDir, encoded)
 
 	entries, err := os.ReadDir(projectDir)
 	if err != nil {
@@ -157,6 +208,8 @@ func FindSessionForProject(cwd string, uptimeSeconds int64) (*SessionData, error
 		return candidates[i].mtime.After(candidates[j].mtime)
 	})
 
+	var bestByContent *SessionData
+	var bestByContentPath string
 	for _, c := range candidates {
 		data, err := parseSessionFile(c.path)
 		if err != nil {
@@ -169,6 +222,19 @@ func FindSessionForProject(cwd string, uptimeSeconds int64) (*SessionData, error
 			data.Meta = loadSessionMeta(data.SessionID)
 			return data, nil
 		}
+		// Keep the first (most-recently modified) as fallback in case no entry matches.
+		if bestByContent == nil {
+			bestByContent = data
+			bestByContentPath = c.path
+		}
+	}
+	// Fallback: the process is alive but its session was cleared or very old.
+	// Return the most-recently modified session so the card still shows the agent.
+	if bestByContent != nil {
+		bestByContent.SessionID = strings.TrimSuffix(filepath.Base(bestByContentPath), ".jsonl")
+		bestByContent.ProjectPath = cwd
+		bestByContent.Meta = loadSessionMeta(bestByContent.SessionID)
+		return bestByContent, nil
 	}
 	return nil, fmt.Errorf("no active session for %s", cwd)
 }
@@ -197,7 +263,8 @@ func parseSessionFile(path string) (*SessionData, error) {
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
 		}
-		if entry.Type != "message" {
+		// Accept both the legacy "message" envelope and the current direct "assistant" type.
+		if entry.Type != "assistant" && entry.Type != "message" {
 			continue
 		}
 		var msg msgContent

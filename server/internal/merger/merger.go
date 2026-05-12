@@ -39,7 +39,7 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 
 	agents := make([]sdk.Agent, 0, len(processes))
 	for _, proc := range processes {
-		session, err := parser.FindSessionForProject(proc.CWD, proc.Uptime)
+		session, err := parser.FindSessionForProject(proc.CWD, proc.Uptime, proc.ClaudeConfigDir)
 		if err != nil {
 			continue
 		}
@@ -59,8 +59,8 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 			Uptime:                    proc.Uptime,
 			LastActivity:              session.LastActivity.Format(time.RFC3339),
 			CurrentAction:             session.CurrentAction,
-			LastTools:                 session.LastTools,
-			Tasks:                     session.Tasks,
+			LastTools:                 append(make([]string, 0), session.LastTools...),
+			Tasks:                     append(make([]sdk.TaskInfo, 0), session.Tasks...),
 			Subagents:                 []sdk.SubAgent{},
 			TokenUsage:                session.TokenUsage,
 			CostEstimate:              cost,
@@ -73,6 +73,7 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 			ConvergenceAlert:          session.ConvergenceAlert,
 			ConvergenceToolName:       session.ConvergenceToolName,
 			ErrorState:                session.ErrorState,
+			LastOutput:                session.LastOutput,
 		}
 		agents = append(agents, agent)
 	}

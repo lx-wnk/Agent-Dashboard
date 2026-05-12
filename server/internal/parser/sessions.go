@@ -54,18 +54,20 @@ type jsonlFileEntry struct {
 	mtime              time.Time
 }
 
-// GetSessions scans ~/.claude/projects/ and returns the 100 most recently
-// modified sessions enriched with token counts, model, and first/last content.
+// GetSessions scans all known Claude config directories and returns the 100 most
+// recently modified sessions enriched with token counts, model, and first/last content.
 func GetSessions(ctx context.Context) ([]SessionInfo, error) {
-	projectsDir := claudeProjectsDir()
-
-	projectDirs, err := os.ReadDir(projectsDir)
-	if err != nil {
-		return []SessionInfo{}, nil
-	}
-
 	// Collect all .jsonl files
+	seenSessions := make(map[string]bool) // deduplicate by sessionID
 	var allFiles []jsonlFileEntry
+
+	for _, configDir := range allClaudeConfigDirs() {
+		projectsDir := filepath.Join(configDir, "projects")
+		projectDirs, err := os.ReadDir(projectsDir)
+		if err != nil {
+			continue
+		}
+
 	for _, dirEntry := range projectDirs {
 		if !dirEntry.IsDir() {
 			continue
@@ -80,9 +82,10 @@ func GetSessions(ctx context.Context) ([]SessionInfo, error) {
 				continue
 			}
 			sessionID := strings.TrimSuffix(f.Name(), ".jsonl")
-			if !uuidRE.MatchString(sessionID) {
+			if !uuidRE.MatchString(sessionID) || seenSessions[sessionID] {
 				continue
 			}
+			seenSessions[sessionID] = true
 			fullPath := filepath.Join(dirPath, f.Name())
 			info, err := f.Info()
 			if err != nil {
@@ -96,6 +99,7 @@ func GetSessions(ctx context.Context) ([]SessionInfo, error) {
 			})
 		}
 	}
+	} // end configDir loop
 
 	// Sort newest first, cap at maxSessions
 	sort.Slice(allFiles, func(i, j int) bool {
@@ -250,7 +254,7 @@ func extractLastAssistantText(raw string) string {
 			continue
 		}
 		var e entry
-		if err := json.Unmarshal([]byte(line), &e); err != nil || e.Type != "message" {
+		if err := json.Unmarshal([]byte(line), &e); err != nil || (e.Type != "assistant" && e.Type != "message") {
 			continue
 		}
 		var msg msgBody
@@ -279,27 +283,29 @@ func extractLastAssistantText(raw string) string {
 
 // ParseFullSession reads an entire session JSONL (capped at 10 MB) and returns
 // all messages in display order. If lastOnly is true, only the last assistant
-// message is returned.
+// message is returned. Searches all candidate Claude config directories.
 func ParseFullSession(sessionID string, lastOnly bool) ([]OutputMessage, error) {
 	if !uuidRE.MatchString(sessionID) {
 		return nil, nil
 	}
 
-	projectsDir := claudeProjectsDir()
-	dirs, err := os.ReadDir(projectsDir)
-	if err != nil {
-		return nil, nil
-	}
-
 	var sessionPath string
-	for _, d := range dirs {
-		if !d.IsDir() {
+outer:
+	for _, configDir := range allClaudeConfigDirs() {
+		projectsDir := filepath.Join(configDir, "projects")
+		dirs, err := os.ReadDir(projectsDir)
+		if err != nil {
 			continue
 		}
-		candidate := filepath.Join(projectsDir, d.Name(), sessionID+".jsonl")
-		if _, err := os.Stat(candidate); err == nil {
-			sessionPath = candidate
-			break
+		for _, d := range dirs {
+			if !d.IsDir() {
+				continue
+			}
+			candidate := filepath.Join(projectsDir, d.Name(), sessionID+".jsonl")
+			if _, err := os.Stat(candidate); err == nil {
+				sessionPath = candidate
+				break outer
+			}
 		}
 	}
 	if sessionPath == "" {
@@ -442,9 +448,12 @@ func parseOutputMessages(raw string, lastOnly bool) []OutputMessage {
 			continue
 		}
 
-		// User messages
-		if e.Type == "user" && msg.Role == "user" {
+		// User messages (new format: type=="user"; legacy format: type=="message" with role=="user")
+		if (e.Type == "user" || (e.Type == "message" && msg.Role == "user")) && msg.Role == "user" {
 			for _, text := range extractTextFromContent(msg.Content) {
+				if isSystemXMLContent(text) {
+					continue
+				}
 				messages = append(messages, OutputMessage{Role: "human", Content: text, Timestamp: ts})
 			}
 			// Tool results inside user message
@@ -479,8 +488,8 @@ func parseOutputMessages(raw string, lastOnly bool) []OutputMessage {
 			continue
 		}
 
-		// Assistant messages
-		if e.Type != "assistant" {
+		// Assistant messages (new format: type=="assistant"; legacy format: type=="message" with role=="assistant")
+		if e.Type != "assistant" && !(e.Type == "message" && msg.Role == "assistant") {
 			continue
 		}
 		var blocks []rawBlock
@@ -626,6 +635,16 @@ func extractTextFromContent(raw json.RawMessage) []string {
 // extractTextFromPrompt extracts text parts from a queued_command prompt.
 func extractTextFromPrompt(raw json.RawMessage) []string {
 	return extractTextFromContent(raw)
+}
+
+// isSystemXMLContent reports whether text is an internal Claude Code protocol
+// message that should not be shown in the transcript. These appear as user-role
+// JSONL entries and include slash-command envelopes and local-command caveats.
+func isSystemXMLContent(text string) bool {
+	return strings.HasPrefix(text, "<command-name>") ||
+		strings.HasPrefix(text, "<local-command-caveat>") ||
+		strings.HasPrefix(text, "<command-message>") ||
+		strings.HasPrefix(text, "<function_calls>")
 }
 
 func strPtr(s string) *string {
