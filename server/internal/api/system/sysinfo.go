@@ -165,33 +165,23 @@ func linuxCPUUsage() float64 {
 }
 
 func macCPUUsage() float64 {
-	// top -l2 -n0: sample twice to get delta; second sample has actual usage
-	out, err := exec.Command("top", "-l", "2", "-n", "0").Output()
+	// Sum %cpu across all processes, normalize by core count (~28ms vs top's 2.6s).
+	out, err := exec.Command("ps", "-A", "-o", "%cpu").Output()
 	if err != nil {
 		return 0
 	}
-	lines := strings.Split(string(out), "\n")
-	// Find last "CPU usage:" line
-	var cpuLine string
-	for _, l := range lines {
-		if strings.Contains(l, "CPU usage:") {
-			cpuLine = l
+	var sum float64
+	for _, line := range strings.Split(string(out), "\n") {
+		v, err := strconv.ParseFloat(strings.TrimSpace(line), 64)
+		if err == nil {
+			sum += v
 		}
 	}
-	if cpuLine == "" {
-		return 0
+	cores := runtime.NumCPU()
+	if cores <= 0 {
+		cores = 1
 	}
-	// Format: "CPU usage: X.X% user, Y.Y% sys, Z.Z% idle"
-	fields := strings.Fields(cpuLine)
-	var idle float64
-	for i, f := range fields {
-		if f == "idle" && i > 0 {
-			pct := strings.TrimSuffix(fields[i-1], "%")
-			idle, _ = strconv.ParseFloat(pct, 64)
-			break
-		}
-	}
-	return math.Round((100-idle)*100) / 100
+	return math.Round(sum/float64(cores)*100) / 100
 }
 
 func getMemInfo() memInfo {
