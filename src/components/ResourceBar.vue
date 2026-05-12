@@ -29,14 +29,37 @@ async function poll() {
   catch { /* ignore */ }
 }
 
+function startPolling() {
+  if (timer)
+    return
+  timer = setInterval(poll, 15000)
+}
+
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+function onVisibilityChange() {
+  if (document.hidden)
+    stopPolling()
+  else {
+    poll()
+    startPolling()
+  }
+}
+
 onMounted(() => {
   poll()
-  timer = setInterval(poll, 5000)
+  startPolling()
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onUnmounted(() => {
-  if (timer)
-    clearInterval(timer)
+  stopPolling()
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 

@@ -67,12 +67,36 @@ async function pollPending() {
   }
 }
 
+function startPolling() {
+  if (pollHandle)
+    return
+  pollHandle = setInterval(pollPending, 3000)
+}
+
+function stopPolling() {
+  if (pollHandle) {
+    clearInterval(pollHandle)
+    pollHandle = null
+  }
+}
+
+function onVisibilityChange() {
+  if (document.hidden)
+    stopPolling()
+  else {
+    pollPending()
+    startPolling()
+  }
+}
+
 onMounted(() => {
-  pollHandle = setInterval(pollPending, 1000)
+  pollPending()
+  startPolling()
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 onUnmounted(() => {
-  if (pollHandle)
-    clearInterval(pollHandle)
+  stopPolling()
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 
