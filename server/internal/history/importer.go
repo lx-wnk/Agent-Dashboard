@@ -34,14 +34,23 @@ type ImportProgress struct {
 // Importer scans CLAUDE_PROJECTS_DIR, extracts per-session cost data, and bulk-inserts
 // into the agent_cost_trend table. Only one concurrent run is permitted per instance.
 type Importer struct {
-	costRepo repo.AgentCostTrendRepo
-	mu       sync.Mutex
-	running  bool
+	costRepo  repo.AgentCostTrendRepo
+	collectFn func(string) ([]string, error) // injectable for tests; nil → collectJSONLFiles
+	mu        sync.Mutex
+	running   bool
 }
 
 // NewImporter creates an Importer backed by costRepo.
 func NewImporter(costRepo repo.AgentCostTrendRepo) *Importer {
 	return &Importer{costRepo: costRepo}
+}
+
+// WithCollectFn returns a shallow copy of imp with fn as the file-collection function.
+// For use in tests only — overrides the default collectJSONLFiles scan.
+func (imp *Importer) WithCollectFn(fn func(string) ([]string, error)) *Importer {
+	cp := *imp
+	cp.collectFn = fn
+	return &cp
 }
 
 // Run starts the import in a background goroutine. Returns immediately.
@@ -75,8 +84,12 @@ func (imp *Importer) Run(ctx context.Context, onProgress func(ImportProgress)) e
 func (imp *Importer) runImport(ctx context.Context, onProgress func(ImportProgress)) {
 	projectsDir := parser.ClaudeProjectsDir()
 
+	collect := imp.collectFn
+	if collect == nil {
+		collect = collectJSONLFiles
+	}
 	// Collect all JSONL files one level deep: projects/{encoded_path}/*.jsonl
-	files, err := collectJSONLFiles(projectsDir)
+	files, err := collect(projectsDir)
 	if err != nil {
 		slog.Warn("history.import: failed to collect jsonl files", "err", err)
 		onProgress(ImportProgress{Done: true})

@@ -43,19 +43,6 @@ func newTestRouter(imp *histsvc.Importer) http.Handler {
 	return r
 }
 
-// blockingRepo.BulkInsert blocks until done is closed.
-type blockingRepo struct {
-	done <-chan struct{}
-}
-
-func (b *blockingRepo) BulkInsert(_ context.Context, _ []repo.AgentCostRow) error {
-	<-b.done
-	return nil
-}
-func (b *blockingRepo) ListByTimeRange(_ context.Context, _, _ time.Time) ([]*ent.AgentCostTrend, error) {
-	return nil, nil
-}
-
 // noopRepo succeeds immediately without doing anything.
 type noopRepo struct{}
 
@@ -66,20 +53,31 @@ func (n *noopRepo) ListByTimeRange(_ context.Context, _, _ time.Time) ([]*ent.Ag
 
 // TestHandler_Import_AlreadyRunning verifies that a second POST returns 409.
 func TestHandler_Import_AlreadyRunning(t *testing.T) {
-	blocked := make(chan struct{})
-	imp := histsvc.NewImporter(&blockingRepo{done: blocked})
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+
+	// blockingCollect signals started then blocks until unblock is closed.
+	// This replaces a blockingRepo approach: BulkInsert is only called when rows exist,
+	// but the projects dir may be empty in CI, so we block at the scan step instead.
+	blockingCollect := func(_ string) ([]string, error) {
+		close(started)
+		<-unblock
+		return nil, nil
+	}
+
+	imp := histsvc.NewImporter(&noopRepo{}).WithCollectFn(blockingCollect)
 	router := newTestRouter(imp)
 
-	// First POST — starts a background goroutine that blocks on BulkInsert.
+	// First POST — goroutine blocks inside blockingCollect.
 	req1 := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/history/import", nil))
 	w1 := httptest.NewRecorder()
 	router.ServeHTTP(w1, req1)
 	require.Equal(t, http.StatusOK, w1.Code)
 
-	// Let the goroutine enter the running state.
-	time.Sleep(20 * time.Millisecond)
+	// Wait until the goroutine is definitively inside the collect fn (no timing dependency).
+	<-started
 
-	// Second POST — must return 409.
+	// Second POST — must return 409 because the first goroutine is still running.
 	req2 := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/history/import", nil))
 	w2 := httptest.NewRecorder()
 	router.ServeHTTP(w2, req2)
@@ -90,8 +88,8 @@ func TestHandler_Import_AlreadyRunning(t *testing.T) {
 	require.NoError(t, json.NewDecoder(w2.Body).Decode(&body))
 	assert.Contains(t, body["error"], "already in progress")
 
-	// Unblock the goroutine to avoid a goroutine leak.
-	close(blocked)
+	// Unblock the goroutine so it can finish.
+	close(unblock)
 }
 
 // TestHandler_SSE_ReceivesProgress verifies that an SSE client receives Done progress.
