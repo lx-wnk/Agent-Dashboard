@@ -1,5 +1,7 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
+import { onUnmounted, watch } from 'vue'
+
+const props = withDefaults(defineProps<{
   open: boolean
   zIndex?: number
 }>(), {
@@ -7,6 +9,26 @@ withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ close: [] }>()
+
+// Lock body scroll when open to prevent background movement making modal appear to jump.
+// Compensate scrollbar width so layout doesn't shift on systems with classic scrollbars.
+watch(() => props.open, (isOpen) => {
+  if (isOpen) {
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0)
+      document.body.style.paddingRight = `${scrollbarWidth}px`
+  }
+  else {
+    document.body.style.overflow = ''
+    document.body.style.paddingRight = ''
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  document.body.style.overflow = ''
+  document.body.style.paddingRight = ''
+})
 </script>
 
 <template>
