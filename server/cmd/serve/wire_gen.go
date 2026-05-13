@@ -94,7 +94,7 @@ func provideDB(cfg config.Config) (*db.DBBundle, error) {
 	return db.Open(cfg.DBPath)
 }
 
-func provideGitHubClient(cfg config.Config) authpkg.OAuthProvider {
+func provideOAuthProvider(cfg config.Config) authpkg.OAuthProvider {
 	if cfg.GitHubClientID == "" {
 		return nil
 	}
@@ -234,7 +234,7 @@ func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConf
 		Ctx:              ctx,
 		Config:           rc,
 		AgentBroadcaster: b,
-		OAuthProvider:    provideGitHubClient(cfg),
+		OAuthProvider:    provideOAuthProvider(cfg),
 		UserRepo:         userRepo,
 		ApiKeyRepo:       apiKeyRepo,
 		TaskHandler:      taskHandler,

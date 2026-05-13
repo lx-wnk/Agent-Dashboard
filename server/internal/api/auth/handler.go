@@ -50,7 +50,7 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 		MaxAge:   300,
 		HttpOnly: true,
 		Secure:   !h.deps.IsLoopback,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 	http.Redirect(w, r, h.deps.OAuthProvider.BuildAuthURL(state, h.deps.CallbackURL), http.StatusFound)
@@ -120,7 +120,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   !h.deps.IsLoopback,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 	http.SetCookie(w, &http.Cookie{
