@@ -1,4 +1,4 @@
-package auth
+package githubauth
 
 import (
 	"context"
@@ -10,7 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 )
+
+// Compile-time assertion that *Client satisfies the OAuthProvider interface.
+var _ auth.OAuthProvider = (*Client)(nil)
 
 const (
 	defaultGitHubTokenURL = "https://github.com/login/oauth/access_token"
@@ -18,16 +23,8 @@ const (
 	defaultGitHubAuthURL  = "https://github.com/login/oauth/authorize"
 )
 
-// GitHubUserProfile holds the fields we need from the GitHub user API.
-type GitHubUserProfile struct {
-	ID          string // numeric GitHub user ID, as string
-	Login       string
-	DisplayName string
-	AvatarURL   string
-}
-
-// GitHubClient exchanges OAuth codes and fetches GitHub user profiles.
-type GitHubClient struct {
+// Client exchanges OAuth codes and fetches GitHub user profiles.
+type Client struct {
 	clientID     string
 	clientSecret string
 	tokenURL     string
@@ -36,21 +33,21 @@ type GitHubClient struct {
 	httpClient   *http.Client
 }
 
-type githubOption func(*GitHubClient)
+type option func(*Client)
 
 // WithUserAPIURL overrides the GitHub user API URL (for testing).
-func WithUserAPIURL(u string) githubOption {
-	return func(c *GitHubClient) { c.userURL = u }
+func WithUserAPIURL(u string) option {
+	return func(c *Client) { c.userURL = u }
 }
 
 // WithTokenURL overrides the GitHub token exchange URL (for testing).
-func WithTokenURL(u string) githubOption {
-	return func(c *GitHubClient) { c.tokenURL = u }
+func WithTokenURL(u string) option {
+	return func(c *Client) { c.tokenURL = u }
 }
 
-// NewGitHubClient creates a GitHubClient for the given OAuth app credentials.
-func NewGitHubClient(clientID, clientSecret string, opts ...githubOption) *GitHubClient {
-	c := &GitHubClient{
+// NewClient creates a Client for the given OAuth app credentials.
+func NewClient(clientID, clientSecret string, opts ...option) *Client {
+	c := &Client{
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		tokenURL:     defaultGitHubTokenURL,
@@ -65,7 +62,7 @@ func NewGitHubClient(clientID, clientSecret string, opts ...githubOption) *GitHu
 }
 
 // BuildAuthURL returns the GitHub authorization URL for the OAuth flow.
-func (c *GitHubClient) BuildAuthURL(state, redirectURI string) string {
+func (c *Client) BuildAuthURL(state, redirectURI string) string {
 	v := url.Values{}
 	v.Set("client_id", c.clientID)
 	v.Set("state", state)
@@ -75,7 +72,7 @@ func (c *GitHubClient) BuildAuthURL(state, redirectURI string) string {
 }
 
 // ExchangeCode exchanges an OAuth authorization code for an access token.
-func (c *GitHubClient) ExchangeCode(ctx context.Context, code, redirectURI string) (string, error) {
+func (c *Client) ExchangeCode(ctx context.Context, code, redirectURI string) (string, error) {
 	v := url.Values{}
 	v.Set("client_id", c.clientID)
 	v.Set("client_secret", c.clientSecret)
@@ -117,7 +114,7 @@ func (c *GitHubClient) ExchangeCode(ctx context.Context, code, redirectURI strin
 }
 
 // GetUser fetches the GitHub user profile for the given access token.
-func (c *GitHubClient) GetUser(ctx context.Context, accessToken string) (*GitHubUserProfile, error) {
+func (c *Client) GetUser(ctx context.Context, accessToken string) (*auth.OAuthUserProfile, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.userURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("github.GetUser: build request: %w", err)
@@ -148,7 +145,7 @@ func (c *GitHubClient) GetUser(ctx context.Context, accessToken string) (*GitHub
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("github.GetUser: decode: %w", err)
 	}
-	return &GitHubUserProfile{
+	return &auth.OAuthUserProfile{
 		ID:          strconv.FormatInt(raw.ID, 10),
 		Login:       raw.Login,
 		DisplayName: raw.Name,

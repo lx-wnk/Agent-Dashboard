@@ -1,4 +1,4 @@
-package auth_test
+package githubauth_test
 
 import (
 	"encoding/json"
@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	githubauth "github.com/lx-wnk/agent-dashboard/server/internal/auth/github"
 )
 
-func TestGitHubClient_GetUser(t *testing.T) {
+func TestClient_GetUser(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -23,7 +23,7 @@ func TestGitHubClient_GetUser(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := auth.NewGitHubClient("id", "secret", auth.WithUserAPIURL(srv.URL))
+	client := githubauth.NewClient("id", "secret", githubauth.WithUserAPIURL(srv.URL))
 	user, err := client.GetUser(t.Context(), "test-token")
 	require.NoError(t, err)
 	require.Equal(t, "12345", user.ID) // numeric GitHub ID converted to string
@@ -31,15 +31,15 @@ func TestGitHubClient_GetUser(t *testing.T) {
 	require.Equal(t, "The Octocat", user.DisplayName)
 }
 
-func TestGitHubClient_BuildAuthURL(t *testing.T) {
-	client := auth.NewGitHubClient("my-client-id", "secret")
+func TestClient_BuildAuthURL(t *testing.T) {
+	client := githubauth.NewClient("my-client-id", "secret")
 	url := client.BuildAuthURL("my-state", "http://callback")
 	require.Contains(t, url, "client_id=my-client-id")
 	require.Contains(t, url, "state=my-state")
 	require.Contains(t, url, "redirect_uri=")
 }
 
-func TestGitHubClient_ExchangeCode(t *testing.T) {
+func TestClient_ExchangeCode(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
 		w.Header().Set("Content-Type", "application/json")
@@ -49,7 +49,7 @@ func TestGitHubClient_ExchangeCode(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := auth.NewGitHubClient("id", "secret", auth.WithTokenURL(srv.URL))
+	client := githubauth.NewClient("id", "secret", githubauth.WithTokenURL(srv.URL))
 	token, err := client.ExchangeCode(t.Context(), "code123", "http://callback")
 	require.NoError(t, err)
 	require.Equal(t, "gho_test123", token)
