@@ -112,3 +112,46 @@ func TestPresetsHandler_DeleteValidCwd(t *testing.T) {
 	require.True(t, resp["ok"])
 }
 
+// TestPresetsHandler_BypassAuth tests handlers in bypass mode (no JWT, loopback only).
+// This simulates the scenario where BypassAuth=true and no JWT middleware runs.
+func TestPresetsHandler_BypassAuth_List(t *testing.T) {
+	_, mux := setupBypassAuthHandler(t)
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/settings/permission-presets", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var list []repo.PresetProjectSummary
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&list))
+	require.Empty(t, list)
+}
+
+func TestPresetsHandler_BypassAuth_Delete(t *testing.T) {
+	_, mux := setupBypassAuthHandler(t)
+
+	body, _ := json.Marshal(map[string]any{"cwd": "/some/project"})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/settings/permission-presets", bytes.NewReader(body)))
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]bool
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.True(t, resp["ok"])
+}
+
+// setupBypassAuthHandler creates a handler without JWT middleware (bypass mode).
+func setupBypassAuthHandler(t *testing.T) (*presets.Handler, *chi.Mux) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	r := repo.NewPermissionPresetRepo(bundle.Client)
+	h := presets.NewHandler(r)
+
+	mux := chi.NewRouter()
+	// Mount handler WITHOUT JWT middleware — simulates bypass auth mode.
+	h.Mount(mux)
+	return h, mux
+}
+

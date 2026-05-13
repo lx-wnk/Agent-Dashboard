@@ -30,11 +30,13 @@ func (h *Handler) Mount(r chi.Router) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
+	var userID *string
 	payload, ok := auth.PayloadFromContext(r.Context())
-	if !ok {
-		return apierr.ErrForbidden
+	if ok {
+		userID = &payload.Sub
 	}
-	summaries, err := h.repo.ListSummaries(r.Context(), &payload.Sub)
+	// If !ok, userID is nil (bypass mode — will return global presets)
+	summaries, err := h.repo.ListSummaries(r.Context(), userID)
 	if err != nil {
 		return fmt.Errorf("presets.list: %w", err)
 	}
@@ -56,11 +58,13 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadRequest, "cwd is required")
 	}
 
+	var userID *string
 	payload, ok := auth.PayloadFromContext(r.Context())
-	if !ok {
-		return apierr.ErrForbidden
+	if ok {
+		userID = &payload.Sub
 	}
-	if err := h.repo.DeleteForProject(r.Context(), &payload.Sub, body.Cwd); err != nil {
+	// If !ok, userID is nil (bypass mode — will delete global presets for the cwd)
+	if err := h.repo.DeleteForProject(r.Context(), userID, body.Cwd); err != nil {
 		return fmt.Errorf("presets.delete: %w", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
