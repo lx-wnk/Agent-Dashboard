@@ -76,6 +76,12 @@ func claudeProjectsDir() string {
 	return filepath.Join(claudeConfigDir(), "projects")
 }
 
+// AllClaudeConfigDirs returns all Claude config directories to search.
+// Exported for use by packages that need JSONL file discovery (e.g., analytics).
+func AllClaudeConfigDirs() []string {
+	return allClaudeConfigDirs()
+}
+
 // ClaudeProjectsDir returns the Claude projects directory — exported for use by pipeline package.
 func ClaudeProjectsDir() string {
 	return claudeProjectsDir()

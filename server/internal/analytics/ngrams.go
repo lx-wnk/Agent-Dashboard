@@ -4,7 +4,6 @@ package analytics
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 )
 
 const (
@@ -22,41 +23,6 @@ const (
 )
 
 var toolNameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
-
-// allClaudeConfigDirs returns all candidate Claude config directories.
-// Mirrors the unexported parser.allClaudeConfigDirs logic.
-func allClaudeConfigDirs() []string {
-	seen := make(map[string]bool)
-	var dirs []string
-	add := func(d string) {
-		d = strings.TrimSpace(d)
-		if d != "" && !seen[d] {
-			seen[d] = true
-			dirs = append(dirs, d)
-		}
-	}
-	// 1. Explicit dashboard config list.
-	if val := os.Getenv("DASHBOARD_CLAUDE_CONFIG_DIRS"); val != "" {
-		for _, p := range strings.Split(val, ",") {
-			add(p)
-		}
-	}
-	// 2. Server process CLAUDE_CONFIG_DIR.
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-		add(dir)
-	}
-	// 3. Default ~/.claude.
-	home, _ := os.UserHomeDir()
-	add(filepath.Join(home, ".claude"))
-	// 4. Common custom dir names that exist on disk.
-	for _, name := range []string{".claude-personal", ".claude-work", ".claude-dev"} {
-		candidate := filepath.Join(home, name)
-		if _, err := os.Stat(filepath.Join(candidate, "projects")); err == nil {
-			add(candidate)
-		}
-	}
-	return dirs
-}
 
 // patternEntry holds a discovered ngram and its occurrence count.
 type patternEntry struct {
@@ -83,7 +49,7 @@ func ExtractNgrams(toolSequence []string) map[string]int {
 func DiscoverPatterns(db *sql.DB) error {
 	globalCounts := make(map[string]int)
 
-	for _, configDir := range allClaudeConfigDirs() {
+	for _, configDir := range parser.AllClaudeConfigDirs() {
 		projectsDir := filepath.Join(configDir, "projects")
 		projectDirs, err := os.ReadDir(projectsDir)
 		if err != nil {
@@ -137,22 +103,26 @@ func DiscoverPatterns(db *sql.DB) error {
 	return upsertPatterns(db, entries)
 }
 
-// upsertPatterns writes the discovered patterns into the workflow_patterns table.
-func upsertPatterns(db *sql.DB, entries []patternEntry) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	const stmt = `
-INSERT INTO workflow_patterns (tools, frequency, last_seen_at)
-VALUES (?, ?, ?)
-ON CONFLICT(tools) DO UPDATE SET
-    frequency = excluded.frequency,
-    last_seen_at = excluded.last_seen_at
-`
-	for _, e := range entries {
-		if _, err := db.Exec(stmt, e.tools, e.frequency, now); err != nil {
-			return fmt.Errorf("analytics: upsert pattern %q: %w", e.tools, err)
+// upsertPatterns replaces all workflow_patterns with the given top entries in a
+// single transaction, pruning any patterns that fell out of the top-N.
+func upsertPatterns(db *sql.DB, top []patternEntry) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	if _, err := tx.Exec("DELETE FROM workflow_patterns"); err != nil {
+		return err
+	}
+	for _, p := range top {
+		if _, err := tx.Exec(
+			"INSERT INTO workflow_patterns (tools, frequency, last_seen_at) VALUES (?, ?, ?)",
+			p.tools, p.frequency, time.Now().UTC().Format(time.RFC3339),
+		); err != nil {
+			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 // extractToolsFromJSONL reads a JSONL file (capped at maxFileSize) and returns

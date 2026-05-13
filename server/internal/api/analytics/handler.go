@@ -4,9 +4,11 @@ package analytics
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,6 +20,7 @@ import (
 type Handler struct {
 	db      *sql.DB
 	cfgRepo repo.PipelineConfigRepo
+	mu      sync.Mutex // serializes concurrent pattern refresh calls
 }
 
 // NewHandler creates a Handler backed by the given *sql.DB and config repo.
@@ -70,6 +73,8 @@ func (h *Handler) getPatterns(w http.ResponseWriter, r *http.Request) {
 // ─── POST /api/analytics/patterns/refresh ─────────────────────────────────────
 
 func (h *Handler) refreshPatterns(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if err := analytics.DiscoverPatterns(h.db); err != nil {
 		slog.Error("analytics: discover patterns failed", "err", err)
 		jsonError(w, "pattern discovery failed", http.StatusInternalServerError)
@@ -97,8 +102,7 @@ GROUP BY dow, hour
 `
 	rows, err := h.db.QueryContext(r.Context(), q)
 	if err != nil {
-		slog.Warn("analytics: heatmap query failed", "err", err)
-		writeJSON(w, http.StatusOK, heatmapResponse{})
+		jsonError(w, fmt.Sprintf("analytics.heatmap: %v", err), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -113,6 +117,10 @@ GROUP BY dow, hour
 		if dow >= 0 && dow < 7 && hour >= 0 && hour < 24 {
 			resp.Grid[dow][hour] = cost
 		}
+	}
+	if err := rows.Err(); err != nil {
+		jsonError(w, fmt.Sprintf("analytics.heatmap: rows: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -149,8 +157,12 @@ ORDER BY recorded_at ASC
 	}
 	defer rows.Close()
 
-	// Build cumulative-sum series as {t (unix ms), y (cumulative USD)}.
-	var series []dataPoint
+	// Build cumulative-sum series as {t (unix ms, normalized), y (cumulative USD)}.
+	// Normalization avoids float64 cancellation with large Unix ms values.
+	var rawSeries []struct {
+		tRaw int64
+		y    float64
+	}
 	var cumCost float64
 	for rows.Next() {
 		var recordedAt time.Time
@@ -159,26 +171,37 @@ ORDER BY recorded_at ASC
 			continue
 		}
 		cumCost += cost
-		series = append(series, dataPoint{
-			t: float64(recordedAt.UnixMilli()),
-			y: cumCost,
-		})
+		rawSeries = append(rawSeries, struct {
+			tRaw int64
+			y    float64
+		}{tRaw: recordedAt.UnixMilli(), y: cumCost})
+	}
+	if err := rows.Err(); err != nil {
+		jsonError(w, fmt.Sprintf("analytics.cost-forecast: rows: %v", err), http.StatusInternalServerError)
+		return
 	}
 
-	if len(series) == 0 {
+	if len(rawSeries) == 0 {
 		writeJSON(w, http.StatusOK, forecastResponse{Forecast: []forecastPoint{}, Alert: ""})
 		return
 	}
 
+	// Normalize timestamps relative to the first observation.
+	t0 := float64(rawSeries[0].tRaw)
+	series := make([]dataPoint, len(rawSeries))
+	for i, r := range rawSeries {
+		series[i] = dataPoint{t: float64(r.tRaw) - t0, y: r.y}
+	}
+
 	slope, intercept := linearRegression(series)
 
-	// Project 7 days forward from now.
+	// Project 7 days forward from now (re-apply t0 offset when evaluating).
 	now := time.Now().UTC()
 	forecast := make([]forecastPoint, 7)
 	for i := 0; i < 7; i++ {
 		ft := now.AddDate(0, 0, i+1)
-		tMs := float64(ft.UnixMilli())
-		projected := math.Max(0, slope*tMs+intercept)
+		tNorm := float64(ft.UnixMilli()) - t0
+		projected := math.Max(0, slope*tNorm+intercept)
 		forecast[i] = forecastPoint{
 			T:             ft.UnixMilli(),
 			ProjectedCost: projected,
