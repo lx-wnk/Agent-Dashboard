@@ -41,8 +41,14 @@ func (StageRun) Edges() []ent.Edge {
 
 func (StageRun) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("task_id"),
 		index.Fields("status"),
 		index.Fields("task_id", "stage", "iteration"),
+		index.Fields("task_id", "created_at"),
+		// DB-level guard: at most one running stage_run per task.
+		// Catches multi-spawn bugs the runtime re-entry guard misses.
+		// Also serves as the task_id lookup index for running rows.
+		index.Fields("task_id").Unique().Annotations(
+			entsql.IndexAnnotation{Where: "status = 'running'"},
+		),
 	}
 }

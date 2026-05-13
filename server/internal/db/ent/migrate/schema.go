@@ -3,6 +3,7 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
@@ -240,11 +241,6 @@ var (
 		},
 		Indexes: []*schema.Index{
 			{
-				Name:    "stagerun_task_id",
-				Unique:  false,
-				Columns: []*schema.Column{StageRunsColumns[14]},
-			},
-			{
 				Name:    "stagerun_status",
 				Unique:  false,
 				Columns: []*schema.Column{StageRunsColumns[5]},
@@ -253,6 +249,19 @@ var (
 				Name:    "stagerun_task_id_stage_iteration",
 				Unique:  false,
 				Columns: []*schema.Column{StageRunsColumns[14], StageRunsColumns[1], StageRunsColumns[6]},
+			},
+			{
+				Name:    "stagerun_task_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{StageRunsColumns[14], StageRunsColumns[13]},
+			},
+			{
+				Name:    "stagerun_task_id",
+				Unique:  true,
+				Columns: []*schema.Column{StageRunsColumns[14]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "status = 'running'",
+				},
 			},
 		},
 	}

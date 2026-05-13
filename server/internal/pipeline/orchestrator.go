@@ -23,7 +23,7 @@ const (
 	defaultStageTimeoutSeconds = 1800
 	awaitingUserTimeoutKey     = "awaitingUserTimeoutSeconds"
 	defaultAwaitingUserTimeout = 14400 // 4h
-	pendingStaleSeconds        = 300   // 5 min
+	pendingStaleDuration = 5 * time.Minute
 	maxReviewCyclesKey         = "maxReviewCycles"
 	defaultMaxReviewCycles     = 3
 )
@@ -98,7 +98,7 @@ func (o *PipelineOrchestrator) getCachedConfigNumber(ctx context.Context, key st
 		}
 	}
 	n := int(o.opts.ConfigRepo.GetNumber(ctx, key, float64(fallback)))
-	o.configCache.Store(key, cachedConfig{value: n, expiresAt: time.Now().Add(5 * time.Second)})
+	o.configCache.Store(key, cachedConfig{value: n, expiresAt: time.Now().Add(60 * time.Second)})
 	return n
 }
 
@@ -151,6 +151,20 @@ func (o *PipelineOrchestrator) ProgressTask(ctx context.Context, taskID string, 
 func (o *PipelineOrchestrator) getTaskMutex(taskID string) *sync.Mutex {
 	mu, _ := o.taskLocks.LoadOrStore(taskID, &sync.Mutex{})
 	return mu.(*sync.Mutex)
+}
+
+// sweepApplyTransition applies a transition from within a sweep, guarded by a
+// TryLock on the per-task mutex. Returns (nil, false, nil) when the lock is
+// already held — progressTask is actively processing the task, so the run is
+// not truly an orphan; the sweep defers to the next tick.
+func (o *PipelineOrchestrator) sweepApplyTransition(ctx context.Context, task *ent.Task, run *ent.StageRun, t StageTransition) (*ent.StageRun, bool, error) {
+	mu := o.getTaskMutex(task.ID)
+	if !mu.TryLock() {
+		return nil, false, nil
+	}
+	defer mu.Unlock()
+	result, err := o.applyTransition(ctx, task, run, t)
+	return result, true, err
 }
 
 func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID string, opts *ProgressOpts) (*ent.StageRun, error) {
@@ -679,10 +693,12 @@ func (o *PipelineOrchestrator) sweepAwaitingUserRuns(ctx context.Context, allRun
 		if run.Pid != nil && !IsPidAlive(*run.Pid) {
 			slog.Warn("orchestrator: awaiting_user run has dead PID — reaping as failed",
 				"runID", run.ID, "stage", run.Stage, "pid", *run.Pid)
-			if _, err := o.applyTransition(ctx, task, run, FailTransition{
+			if _, locked, err := o.sweepApplyTransition(ctx, task, run, FailTransition{
 				Reason: "awaiting_user reaper: stage agent exited while permissions pending",
 			}); err != nil {
 				slog.Error("sweepAwaitingUserRuns.applyTransition", "err", err)
+			} else if !locked {
+				slog.Debug("sweepAwaitingUserRuns: task locked by progressTask — deferring to next tick", "taskID", task.ID)
 			}
 			continue
 		}
@@ -702,10 +718,12 @@ func (o *PipelineOrchestrator) sweepAwaitingUserRuns(ctx context.Context, allRun
 				fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
 				if fresh != nil && fresh.Status == "awaiting_user" {
 					elapsed := time.Since(*anchor).Seconds()
-					if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
+					if _, locked, err := o.sweepApplyTransition(ctx, task, fresh, FailTransition{
 						Reason: fmt.Sprintf("awaiting_user timeout: ran %.0fs (limit %ds) — agent likely busy-waiting", elapsed, timeoutSec),
 					}); err != nil {
 						slog.Error("sweepAwaitingUserRuns.timeout.applyTransition", "err", err)
+					} else if !locked {
+						slog.Debug("sweepAwaitingUserRuns timeout: task locked by progressTask — deferring to next tick", "taskID", task.ID)
 					}
 				}
 			}
@@ -737,10 +755,12 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 			}
 			slog.Warn("orchestrator: orphan stage_run — task is parked, reaping run as failed",
 				"runID", fresh.ID, "taskStage", task.CurrentStage)
-			if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
+			if _, locked, err := o.sweepApplyTransition(ctx, task, fresh, FailTransition{
 				Reason: fmt.Sprintf("orphan reaper: task reached %s with stage_run still %s", task.CurrentStage, fresh.Status),
 			}); err != nil {
 				slog.Error("sweepOrphanRuns.case1.applyTransition", "err", err)
+			} else if !locked {
+				slog.Debug("sweepOrphanRuns case1: task locked by progressTask — deferring to next tick", "taskID", task.ID)
 			}
 			continue
 		}
@@ -751,14 +771,16 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 				continue
 			}
 			slog.Warn("orchestrator: on_hold run has dead PID — reaping as failed", "runID", fresh.ID)
-			if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: "orphan reaper: on_hold agent exited"}); err != nil {
+			if _, locked, err := o.sweepApplyTransition(ctx, task, fresh, FailTransition{Reason: "orphan reaper: on_hold agent exited"}); err != nil {
 				slog.Error("sweepOrphanRuns.case2.applyTransition", "err", err)
+			} else if !locked {
+				slog.Debug("sweepOrphanRuns case2: task locked by progressTask — deferring to next tick", "taskID", task.ID)
 			}
 			continue
 		}
 		// Case 3: pending stuck > 5 min without a PID
 		if run.Status == "pending" && run.Pid == nil && run.StartedAt != nil {
-			if time.Since(*run.StartedAt) > pendingStaleSeconds*time.Second {
+			if time.Since(*run.StartedAt) > pendingStaleDuration {
 				fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
 				if fresh == nil || fresh.Status != "pending" {
 					continue
@@ -766,10 +788,12 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 				elapsed := time.Since(*run.StartedAt).Seconds()
 				slog.Warn("orchestrator: pending run stuck without spawn — reaping as failed",
 					"runID", fresh.ID, "elapsedSec", elapsed)
-				if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
+				if _, locked, err := o.sweepApplyTransition(ctx, task, fresh, FailTransition{
 					Reason: fmt.Sprintf("orphan reaper: pending stage_run never promoted to running (%.0fs elapsed)", elapsed),
 				}); err != nil {
 					slog.Error("sweepOrphanRuns.case3.applyTransition", "err", err)
+				} else if !locked {
+					slog.Debug("sweepOrphanRuns case3: task locked by progressTask — deferring to next tick", "taskID", task.ID)
 				}
 			}
 		}
@@ -1019,7 +1043,9 @@ func (o *PipelineOrchestrator) updateTokenUsage(ctx context.Context, stageRunID,
 }
 
 // NotifyTaskTerminated is called by cancel routes to cascade terminal state to dependents.
+// It also removes the per-task mutex so taskLocks does not grow unbounded.
 func (o *PipelineOrchestrator) NotifyTaskTerminated(ctx context.Context, taskID, stage string) {
+	o.taskLocks.Delete(taskID)
 	o.handleDependentTasks(ctx, taskID, stage)
 }
 

@@ -105,6 +105,10 @@ const columnsWithTasks = computed(() =>
 
 // O(1) lookup for epic membership — avoids O(N²) .some() in template
 const epicParentIds = computed(() => new Set(epics.value.map(e => e.parent.id)))
+
+function isHighlightCol(col: ColumnDef): boolean {
+  return col.group === 'needs-you'
+}
 </script>
 
 <template>
@@ -131,7 +135,7 @@ const epicParentIds = computed(() => new Set(epics.value.map(e => e.parent.id)))
         v-for="{ col, tasks } in columnsWithTasks"
         :key="col.id"
         class="flex-[1_1_260px] min-w-[240px] rounded-lg flex flex-col"
-        :class="col.group === 'needs-you'
+        :class="isHighlightCol(col)
           ? 'bg-yellow-50/30 dark:bg-yellow-950/10 border border-yellow-300/60 dark:border-yellow-700/40'
           : col.group === 'terminal'
             ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 opacity-70'
@@ -139,18 +143,18 @@ const epicParentIds = computed(() => new Set(epics.value.map(e => e.parent.id)))
       >
         <div
           class="flex justify-between items-center px-3 py-2.5 border-b flex-shrink-0"
-          :class="col.group === 'needs-you'
+          :class="isHighlightCol(col)
             ? 'border-yellow-300/60 dark:border-yellow-700/40'
             : 'border-slate-200 dark:border-slate-700'"
         >
           <span
             class="text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5"
-            :class="col.group === 'needs-you'
+            :class="isHighlightCol(col)
               ? 'text-yellow-700 dark:text-yellow-300'
               : 'text-slate-500 dark:text-slate-400'"
           >
             <span
-              v-if="col.group === 'needs-you'"
+              v-if="isHighlightCol(col)"
               class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-yellow-400/20 dark:bg-yellow-400/15 text-yellow-700 dark:text-yellow-300 text-[10px] leading-none ring-1 ring-yellow-400/40 dark:ring-yellow-500/30"
               aria-hidden="true"
             >!</span>
@@ -158,7 +162,7 @@ const epicParentIds = computed(() => new Set(epics.value.map(e => e.parent.id)))
           </span>
           <span
             class="text-[11px] px-2 py-px rounded-full font-mono"
-            :class="col.group === 'needs-you'
+            :class="isHighlightCol(col)
               ? 'text-yellow-700 dark:text-yellow-300 bg-yellow-400/15 dark:bg-yellow-400/10 ring-1 ring-yellow-400/30 dark:ring-yellow-500/25'
               : 'text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-950'"
           >{{ tasks.length }}</span>
