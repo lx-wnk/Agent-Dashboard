@@ -1,12 +1,12 @@
-// Dependency wiring — manually maintained (Wire is not used).
+// Dependency wiring — manually maintained.
 
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
@@ -19,6 +19,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	githubauth "github.com/lx-wnk/agent-dashboard/server/internal/auth/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -32,7 +33,7 @@ import (
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
 
-func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, error) {
+func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
 		return nil, nil, nil, err
@@ -41,7 +42,7 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 
 	var searchHandler *search.Handler
 	if bundle != nil {
-		searchHandler = search.NewHandler(bundle.DB)
+		searchHandler = search.NewHandler(rawrepo.NewSearchRepo(bundle.DB))
 	}
 
 	var webPushHandler *apiwp.Handler
@@ -80,10 +81,10 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 	var analyticsHandler *apianalytics.Handler
 	if bundle != nil {
 		cfgRepo := repo.NewPipelineConfigRepo(entClient)
-		analyticsHandler = apianalytics.NewHandler(bundle.DB, cfgRepo)
+		analyticsHandler = apianalytics.NewHandler(rawrepo.NewAnalyticsRepo(bundle.DB), bundle.DB, cfgRepo)
 	}
 
-	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler, refineHandler, analyticsHandler)
+	routerDeps := provideRouterDeps(ctx, cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler, refineHandler, analyticsHandler)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, orch, nil
@@ -93,11 +94,11 @@ func provideDB(cfg config.Config) (*db.DBBundle, error) {
 	return db.Open(cfg.DBPath)
 }
 
-func provideGitHubClient(cfg config.Config) *authpkg.GitHubClient {
+func provideGitHubClient(cfg config.Config) authpkg.OAuthProvider {
 	if cfg.GitHubClientID == "" {
 		return nil
 	}
-	return authpkg.NewGitHubClient(cfg.GitHubClientID, cfg.GitHubClientSecret)
+	return githubauth.NewClient(cfg.GitHubClientID, cfg.GitHubClientSecret)
 }
 
 func provideRouterConfig(cfg config.Config) api.RouterConfig {
@@ -134,7 +135,7 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 		PermissionRepo: permRepo,
 		AuditRepo:      auditRepo,
 		ConfigRepo:     cfgRepo,
-		MCPToken:       os.Getenv("DASHBOARD_MCP_TOKEN"),
+		MCPToken:       cfg.MCPToken,
 		MCPUrl:         fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		OnTaskChanged: func(taskID string, transitionKind string) {
 			tb.Broadcast(sse.TaskEvent{
@@ -213,7 +214,7 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	return mcp.MCPHandler(registry)
 }
 
-func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler, refineHandler *refineapi.Handler, analyticsHandler *apianalytics.Handler) api.RouterDeps {
+func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler, refineHandler *refineapi.Handler, analyticsHandler *apianalytics.Handler) api.RouterDeps {
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if client != nil {
@@ -230,9 +231,10 @@ func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaste
 	}
 	replyStore := agents.NewReplyStore()
 	return api.RouterDeps{
+		Ctx:              ctx,
 		Config:           rc,
 		AgentBroadcaster: b,
-		GitHubClient:     provideGitHubClient(cfg),
+		OAuthProvider:    provideGitHubClient(cfg),
 		UserRepo:         userRepo,
 		ApiKeyRepo:       apiKeyRepo,
 		TaskHandler:      taskHandler,

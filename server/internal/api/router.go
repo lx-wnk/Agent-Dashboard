@@ -1,11 +1,13 @@
 package api
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,9 +51,13 @@ type RouterConfig struct {
 
 // RouterDeps holds all dependencies injected into the router.
 type RouterDeps struct {
+	// Ctx is the server-lifetime context. When cancelled (e.g. on shutdown) any
+	// background goroutines started by the router (e.g. debounced rescan) are
+	// also cancelled. If nil, context.Background() is used as a fallback.
+	Ctx              context.Context
 	Config           RouterConfig
 	AgentBroadcaster *sse.Broadcaster
-	GitHubClient     *authpkg.GitHubClient
+	OAuthProvider    authpkg.OAuthProvider
 	UserRepo         repo.UserRepo
 	ApiKeyRepo       repo.ApiKeyRepo
 	TaskHandler      *tasks.Handler
@@ -68,6 +74,11 @@ type RouterDeps struct {
 
 // NewRouter builds the chi router with all middleware and route mounts.
 func NewRouter(deps RouterDeps) http.Handler {
+	serverCtx := deps.Ctx
+	if serverCtx == nil {
+		serverCtx = context.Background()
+	}
+
 	r := chi.NewRouter()
 
 	// Global middleware (applied to every request)
@@ -76,6 +87,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 	r.Use(SlogMiddleware)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(SecurityHeaders)
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, 8*1024*1024) // 8 MB
+			next.ServeHTTP(w, r)
+		})
+	})
+	r.Use(gzipMiddleware)
 
 	// Public routes (no auth)
 	r.Get("/api/system/health", system.HealthHandler)
@@ -85,7 +103,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if debounceMs <= 0 {
 		debounceMs = 100
 	}
-	hooksHandler := hooks.New(deps.Config.HooksSecret, newDebouncedRescan(deps.AgentBroadcaster, debounceMs))
+	hooksHandler := hooks.New(deps.Config.HooksSecret, newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs))
 	r.Post("/api/hooks/event", hooksHandler.Event)
 	r.Post("/api/hooks/pre-tool", hooksHandler.PreTool)
 	r.Post("/api/hooks/respond", hooksHandler.Respond)
@@ -95,7 +113,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	authHandler := apiauth.NewHandler(apiauth.Deps{
 		JWTSecret:    deps.Config.JWTSecret,
 		CallbackURL:  deps.Config.CallbackURL,
-		GitHubClient: deps.GitHubClient,
+		OAuthProvider: deps.OAuthProvider,
 		UserRepo:     deps.UserRepo,
 		IsLoopback:   deps.Config.IsLoopback,
 		BypassAuth:   deps.Config.BypassAuth,
@@ -106,6 +124,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	// Protected routes (JWT required, unless auth bypass is active)
 	r.Group(func(r chi.Router) {
+		// RequireSameOriginForMutations guards against CSRF in both auth modes:
+		// in bypass mode it is the primary CSRF defence; in auth mode it is
+		// defence-in-depth on top of JWT validation.
+		r.Use(RequireSameOriginForMutations)
 		if !deps.Config.BypassAuth {
 			r.Use(authpkg.RequireAuth(deps.Config.JWTSecret))
 		}
@@ -129,6 +151,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Put("/api/memory/*", memory.Put)
 
 		r.Get("/api/me", ErrorMiddleware(authHandler.Me))
+		r.Delete("/api/me", ErrorMiddleware(authHandler.DeleteMe))
 
 		if deps.ApiKeyRepo != nil {
 			apiKeyHandler := apikeyhandler.NewHandler(deps.ApiKeyRepo)
@@ -201,9 +224,44 @@ func NewRouter(deps RouterDeps) http.Handler {
 	return r
 }
 
+// gzipResponseWriter wraps http.ResponseWriter to write through a gzip.Writer.
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	Writer *gzip.Writer
+}
+
+func (g *gzipResponseWriter) Write(b []byte) (int, error) {
+	return g.Writer.Write(b)
+}
+
+// gzipMiddleware compresses non-SSE responses when the client accepts gzip encoding.
+func gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// Skip compression for SSE streams to avoid buffering issues.
+		if r.Header.Get("Accept") == "text/event-stream" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		defer gz.Close()
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length")
+		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, Writer: gz}, r)
+	})
+}
+
 // newDebouncedRescan returns an OnEventFn that triggers an agent rescan after debounceMs.
 // Multiple calls within the window collapse into one rescan.
-func newDebouncedRescan(broadcaster *sse.Broadcaster, debounceMs int) hooks.OnEventFn {
+// ctx should be the server-lifetime context so the rescan is cancelled on shutdown.
+func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debounceMs int) hooks.OnEventFn {
 	var mu sync.Mutex
 	var timer *time.Timer
 	delay := time.Duration(debounceMs) * time.Millisecond
@@ -215,7 +273,11 @@ func newDebouncedRescan(broadcaster *sse.Broadcaster, debounceMs int) hooks.OnEv
 			timer.Stop()
 		}
 		timer = time.AfterFunc(delay, func() {
-			agents, err := merger.GetAgents(context.Background())
+			// Respect server shutdown — skip rescan if context is done.
+			if ctx.Err() != nil {
+				return
+			}
+			agents, err := merger.GetAgents(ctx)
 			if err != nil {
 				slog.Warn("hooks: debounced rescan failed", "err", err)
 				return

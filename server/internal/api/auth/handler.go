@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	serverauth "github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
@@ -16,7 +18,7 @@ import (
 type Deps struct {
 	JWTSecret    string
 	CallbackURL  string
-	GitHubClient *serverauth.GitHubClient
+	OAuthProvider serverauth.OAuthProvider
 	UserRepo     repo.UserRepo
 	IsLoopback   bool // true when Host is 127.0.0.1 / ::1 / localhost
 	BypassAuth   bool // true when loopback + no GitHub OAuth; all requests treated as local admin
@@ -35,7 +37,7 @@ func NewHandler(deps Deps) *Handler {
 // GitHubRedirect redirects the browser to the GitHub authorization URL.
 // GET /api/auth/github
 func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
-	if h.deps.GitHubClient == nil {
+	if h.deps.OAuthProvider == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
 	}
 	state, err := serverauth.SignOAuthState(h.deps.JWTSecret)
@@ -48,17 +50,17 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 		MaxAge:   300,
 		HttpOnly: true,
 		Secure:   !h.deps.IsLoopback,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
-	http.Redirect(w, r, h.deps.GitHubClient.BuildAuthURL(state, h.deps.CallbackURL), http.StatusFound)
+	http.Redirect(w, r, h.deps.OAuthProvider.BuildAuthURL(state, h.deps.CallbackURL), http.StatusFound)
 	return nil
 }
 
 // Callback handles the GitHub OAuth callback.
 // GET /api/auth/callback?code=XXX&state=YYY
 func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
-	if h.deps.GitHubClient == nil {
+	if h.deps.OAuthProvider == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
 	}
 	if h.deps.UserRepo == nil {
@@ -80,12 +82,12 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 	if code == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "missing code")
 	}
-	accessToken, err := h.deps.GitHubClient.ExchangeCode(r.Context(), code, h.deps.CallbackURL)
+	accessToken, err := h.deps.OAuthProvider.ExchangeCode(r.Context(), code, h.deps.CallbackURL)
 	if err != nil {
 		return fmt.Errorf("auth: exchange code: %w", err)
 	}
 
-	profile, err := h.deps.GitHubClient.GetUser(r.Context(), accessToken)
+	profile, err := h.deps.OAuthProvider.GetUser(r.Context(), accessToken)
 	if err != nil {
 		return fmt.Errorf("auth: get user: %w", err)
 	}
@@ -105,7 +107,10 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		Login:   user.GithubLogin,
 		IsAdmin: user.IsAdmin,
 	}
-	token, err := serverauth.SignJWT(tokenPayload, h.deps.JWTSecret, 86400*7)
+	if user.IsAdmin {
+		tokenPayload.AdminGrantedAt = time.Now().Unix()
+	}
+	token, err := serverauth.SignJWT(tokenPayload, h.deps.JWTSecret, 86400)
 	if err != nil {
 		return fmt.Errorf("auth: sign jwt: %w", err)
 	}
@@ -115,16 +120,16 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   !h.deps.IsLoopback,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    token,
-		MaxAge:   86400 * 7,
+		MaxAge:   86400,
 		HttpOnly: true,
 		Secure:   !h.deps.IsLoopback,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -140,9 +145,43 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   !h.deps.IsLoopback,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// DeleteMe permanently removes the authenticated user's account (GDPR right-to-erasure).
+// DELETE /api/me
+func (h *Handler) DeleteMe(w http.ResponseWriter, r *http.Request) error {
+	if h.deps.BypassAuth {
+		return apierr.NewAppError(http.StatusForbidden, "account deletion not available in bypass-auth mode")
+	}
+	payload, ok := serverauth.PayloadFromContext(r.Context())
+	if !ok {
+		return apierr.NewAppError(http.StatusUnauthorized, "unauthorized")
+	}
+	if h.deps.UserRepo == nil {
+		return fmt.Errorf("auth: user repo not configured")
+	}
+	// Clear cookie first so the deleted session cannot be replayed.
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    "",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   !h.deps.IsLoopback,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+	})
+	if err := h.deps.UserRepo.Delete(r.Context(), payload.Sub); err != nil {
+		if ent.IsNotFound(err) {
+			// Already gone — treat as success (double-click / stale JWT replay).
+			return nil
+		}
+		return fmt.Errorf("auth: delete user: %w", err)
+	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
