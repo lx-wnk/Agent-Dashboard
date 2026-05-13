@@ -107,6 +107,14 @@ func runRawMigrations(db *sql.DB) error {
 		`CREATE TRIGGER IF NOT EXISTS tasks_ad AFTER DELETE ON tasks BEGIN
 			INSERT INTO task_fts(task_fts, rowid) VALUES ('delete', old.rowid);
 		END`,
+
+		// workflow_patterns: top ngrams discovered from JSONL session files.
+		`CREATE TABLE IF NOT EXISTS workflow_patterns (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			tools TEXT NOT NULL UNIQUE,
+			frequency INTEGER NOT NULL DEFAULT 1,
+			last_seen_at TEXT NOT NULL
+		)`,
 	}
 
 	for _, stmt := range stmts {

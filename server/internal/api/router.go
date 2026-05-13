@@ -13,6 +13,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/lx-wnk/agent-dashboard/server/frontend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
+	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
@@ -60,6 +61,7 @@ type RouterDeps struct {
 	SearchHandler    *search.Handler
 	HistoryHandler   *apihistory.Handler
 	RefineHandler    *refineapi.Handler
+	AnalyticsHandler *apianalytics.Handler
 	MCPHandler       http.Handler
 	ChannelReply     *agents.ChannelReplyHandler
 }
@@ -161,6 +163,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.RefineHandler != nil {
 			deps.RefineHandler.Mount(r)
+		}
+
+		if deps.AnalyticsHandler != nil {
+			deps.AnalyticsHandler.Mount(r)
 		}
 
 		// Spawn management — rate-limited user-initiated agent spawning and channel message forwarding.

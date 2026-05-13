@@ -10,6 +10,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
+	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
@@ -76,7 +77,13 @@ func initializeServer(cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeli
 		refineHandler = refineapi.NewHandler(repo.NewRefinementTurnRepo(entClient), repo.NewTaskRepo(entClient))
 	}
 
-	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler, refineHandler)
+	var analyticsHandler *apianalytics.Handler
+	if bundle != nil {
+		cfgRepo := repo.NewPipelineConfigRepo(entClient)
+		analyticsHandler = apianalytics.NewHandler(bundle.DB, cfgRepo)
+	}
+
+	routerDeps := provideRouterDeps(cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler, refineHandler, analyticsHandler)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, orch, nil
@@ -206,7 +213,7 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	return mcp.MCPHandler(registry)
 }
 
-func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler, refineHandler *refineapi.Handler) api.RouterDeps {
+func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler, refineHandler *refineapi.Handler, analyticsHandler *apianalytics.Handler) api.RouterDeps {
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if client != nil {
@@ -235,6 +242,7 @@ func provideRouterDeps(cfg config.Config, rc api.RouterConfig, b *sse.Broadcaste
 		SearchHandler:    searchHandler,
 		HistoryHandler:   historyHandler,
 		RefineHandler:    refineHandler,
+		AnalyticsHandler: analyticsHandler,
 		MCPHandler:       mcpHandler,
 		ChannelReply:     agents.NewChannelReplyHandler(replyStore),
 	}
