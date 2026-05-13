@@ -22,8 +22,11 @@ package-lock.json
 # Compiled single-binary (bun build --compile)
 /dashboard
 
-# Go compiled binary
+# Go compiled binaries
 /server/serve
+/serve
+/bin/
+.air-tmp/
 
 # Backup/scratch files
 *.bck.yml
