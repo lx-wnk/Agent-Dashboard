@@ -230,13 +230,48 @@ type gzipResponseWriter struct {
 	Writer *gzip.Writer
 }
 
+var _ http.Flusher = (*gzipResponseWriter)(nil)
+
 func (g *gzipResponseWriter) Write(b []byte) (int, error) {
 	return g.Writer.Write(b)
+}
+
+func (g *gzipResponseWriter) Flush() {
+	_ = g.Writer.Flush()
+	if f, ok := g.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// gzipHijackWriter extends gzipResponseWriter to also implement http.Hijacker.
+// Used when the underlying ResponseWriter supports connection hijacking (e.g. WebSocket upgrades).
+type gzipHijackWriter struct {
+	*gzipResponseWriter
+	http.Hijacker
+}
+
+var _ http.Hijacker = (*gzipHijackWriter)(nil)
+var _ http.Flusher = (*gzipHijackWriter)(nil)
+
+// newGzipWriter wraps w with gzip compression. If w also implements http.Hijacker,
+// the returned writer forwards Hijack calls to the underlying writer so chi middleware
+// and WebSocket upgrade paths continue to work correctly.
+func newGzipWriter(w http.ResponseWriter, gz *gzip.Writer) http.ResponseWriter {
+	base := &gzipResponseWriter{ResponseWriter: w, Writer: gz}
+	if h, ok := w.(http.Hijacker); ok {
+		return &gzipHijackWriter{gzipResponseWriter: base, Hijacker: h}
+	}
+	return base
 }
 
 // gzipMiddleware compresses non-SSE responses when the client accepts gzip encoding.
 func gzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set Vary unconditionally so shared caches know this URL varies by
+		// Accept-Encoding, even for responses served without compression (RFC 7234).
+		// Use Add rather than Set to preserve any Vary values already set by handlers.
+		w.Header().Add("Vary", "Accept-Encoding")
+
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			next.ServeHTTP(w, r)
 			return
@@ -254,7 +289,7 @@ func gzipMiddleware(next http.Handler) http.Handler {
 		defer gz.Close()
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Del("Content-Length")
-		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, Writer: gz}, r)
+		next.ServeHTTP(newGzipWriter(w, gz), r)
 	})
 }
 
