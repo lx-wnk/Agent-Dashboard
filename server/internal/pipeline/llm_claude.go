@@ -7,7 +7,11 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
-// ClaudeSpawner is the default LLMSpawner that delegates to SpawnStageAgent.
+// ClaudeSpawner is currently unreachable — provideSpawner returns nil for "claude"
+// so stage_handlers.go falls through to SpawnStageAgent (which correctly handles
+// Permissions, WorktreePath, Metadata, and the channel MCP).
+// Do NOT switch the wiring here without first propagating Permissions,
+// WorktreePath, and Metadata via LLMSpawnArgs.
 type ClaudeSpawner struct {
 	MCPToken     string
 	MCPUrl       string

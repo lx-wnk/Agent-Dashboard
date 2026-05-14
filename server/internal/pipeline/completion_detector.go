@@ -104,6 +104,7 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 	if sr.Output != nil {
 		if syntheticFile, ok := sr.Output["synthetic_session_file"].(string); ok && syntheticFile != "" {
 			if _, statErr := os.Stat(syntheticFile); statErr == nil {
+				defer os.Remove(syntheticFile) // clean up synthetic session after reading
 				read, err := ReadLastStageJsonOutputFromFile(syntheticFile)
 				if err != nil {
 					return CompletionResult{Kind: "failed", Error: fmt.Sprintf("synthetic session read error: %s", err)}, nil

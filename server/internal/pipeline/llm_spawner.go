@@ -10,8 +10,11 @@ type LLMSpawnArgs struct {
 	UserPrompt   string
 	Model        string
 	WorkDir      string
+	// AllowedTools is reserved for future adapters that can restrict tool use.
+	// Current adapters (Ollama, OpenAI, CustomCommand) do not enforce this list.
 	AllowedTools []string
-	Env          []string
+	// Env is reserved for future use. Current adapters do not forward these vars.
+	Env []string
 }
 
 // LLMSpawnResult is returned by a successful Spawn call.

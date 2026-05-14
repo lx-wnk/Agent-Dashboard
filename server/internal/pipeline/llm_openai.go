@@ -39,13 +39,16 @@ func (o *OpenAISpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 		Model    string    `json:"model"`
 		Messages []message `json:"messages"`
 	}
-	body, _ := json.Marshal(request{
+	body, err := json.Marshal(request{
 		Model: model,
 		Messages: []message{
 			{Role: "system", Content: args.SystemPrompt},
 			{Role: "user", Content: args.UserPrompt},
 		},
 	})
+	if err != nil {
+		return LLMSpawnResult{}, fmt.Errorf("OpenAISpawner: marshal request: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		baseURL+"/chat/completions", bytes.NewReader(body))

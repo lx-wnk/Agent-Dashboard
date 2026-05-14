@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"time"
 )
 
 // CustomCommandSpawner runs an arbitrary executable, passes LLMSpawnArgs as JSON
@@ -22,11 +23,15 @@ func (c *CustomCommandSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LL
 	if err != nil {
 		return LLMSpawnResult{}, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, c.Command)
 	cmd.Stdin = bytes.NewReader(argsJSON)
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
 	out, err := cmd.Output()
 	if err != nil {
-		return LLMSpawnResult{}, fmt.Errorf("CustomCommandSpawner: exec %s: %w", c.Command, err)
+		return LLMSpawnResult{}, fmt.Errorf("CustomCommandSpawner: exec %s: %w: stderr: %s", c.Command, err, stderrBuf.String())
 	}
 	var result LLMSpawnResult
 	if err := json.Unmarshal(out, &result); err != nil {

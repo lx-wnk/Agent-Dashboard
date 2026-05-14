@@ -40,7 +40,7 @@ func (o *OllamaSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 		Messages []message `json:"messages"`
 		Stream   bool      `json:"stream"`
 	}
-	body, _ := json.Marshal(request{
+	body, err := json.Marshal(request{
 		Model: model,
 		Messages: []message{
 			{Role: "system", Content: args.SystemPrompt},
@@ -48,6 +48,9 @@ func (o *OllamaSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 		},
 		Stream: false,
 	})
+	if err != nil {
+		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: marshal request: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+"/api/chat", bytes.NewReader(body))
 	if err != nil {

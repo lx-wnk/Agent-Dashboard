@@ -97,7 +97,9 @@ func (h *Handler) getCurrent(w http.ResponseWriter, _ *http.Request) error {
 	return json.NewEncoder(w).Encode(map[string]string{"adapter": active})
 }
 
-// setCurrent updates the active adapter name in memory.
+// setCurrent updates the active adapter name in the config.
+// The change is applied to the in-memory config and persisted on next config save.
+// The running pipeline is NOT affected until the server is restarted.
 // Body: {"adapter":"ollama","config":{...optional full AdapterConfig...}}
 func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
@@ -136,7 +138,7 @@ func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 	h.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(map[string]string{"adapter": activeAdapter})
+	return json.NewEncoder(w).Encode(map[string]any{"adapter": activeAdapter, "restartRequired": true})
 }
 
 // getConfig returns the full AdapterConfig as JSON.
@@ -148,7 +150,8 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) error {
 	return json.NewEncoder(w).Encode(&snapshot)
 }
 
-// putConfig replaces the full AdapterConfig in memory.
+// putConfig replaces the full AdapterConfig from the request body.
+// Takes effect on next server restart — the running spawner is not hot-swapped.
 func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
 	var incoming config.AdapterConfig
 	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
@@ -158,6 +161,10 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
 	*h.cfg = incoming
 	snapshot := *h.cfg
 	h.mu.Unlock()
+	type response struct {
+		config.AdapterConfig
+		RestartRequired bool `json:"restartRequired"`
+	}
 	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(&snapshot)
+	return json.NewEncoder(w).Encode(response{AdapterConfig: snapshot, RestartRequired: true})
 }
