@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -260,8 +262,9 @@ func parseSessionFile(path string) (*SessionData, error) {
 	// TODO(phase1): Tasks field not yet populated — task extraction from TodoWrite/TodoRead tool inputs is deferred.
 	var recentToolNames []string
 
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
+	scanner := bufio.NewScanner(bytes.NewReader([]byte(content)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}

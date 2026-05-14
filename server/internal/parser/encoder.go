@@ -3,8 +3,11 @@ package parser
 
 import "strings"
 
+// pathEncoder is allocated once at init and reused by every EncodePath call.
+var pathEncoder = strings.NewReplacer("/", "-", ".", "-", "_", "-")
+
 // EncodePath converts an absolute path to Claude Code's directory-encoding scheme.
 // Claude replaces /, ., and _ all with - when naming project directories.
 func EncodePath(absPath string) string {
-	return strings.NewReplacer("/", "-", ".", "-", "_", "-").Replace(absPath)
+	return pathEncoder.Replace(absPath)
 }
