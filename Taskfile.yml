@@ -22,6 +22,11 @@ tasks:
     dir: server
     cmd: go build -o ../bin/agent-dashboard ./cmd/serve/...
 
+  build:cli:
+    desc: Build dashboard CLI binary
+    dir: server
+    cmd: go build -o ../bin/dashboard ./cmd/cli/...
+
   test:
     desc: Run all tests (all modules)
     cmds:
