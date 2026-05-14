@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -66,13 +67,15 @@ func (r *Registry) Load(ctx context.Context) error {
 		if len(desc.Command) > 0 {
 			cmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
 			cmd.Dir = filepath.Join(r.dir, entry.Name())
-			cmd.Env = os.Environ() // forward full env so GITHUB_CLIENT_ID etc. are available
+			cmd.Env = buildPluginEnv(desc.Env)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Start(); err != nil {
 				slog.Error("plugin: failed to start", "id", desc.ID, "err", err)
 				continue
 			}
+			// Reap the process when it exits to avoid zombie entries.
+			go func() { _ = cmd.Wait() }()
 			pluginEntry.cmd = cmd
 		}
 		if err := r.waitHealthy(ctx, pluginEntry.BaseURL); err != nil {
@@ -89,6 +92,8 @@ func (r *Registry) Load(ctx context.Context) error {
 }
 
 // Shutdown stops all plugin processes that were started by Load.
+// cmd.Wait() is handled by the goroutine launched after cmd.Start(),
+// so we only need to signal the process here.
 func (r *Registry) Shutdown() {
 	for _, p := range r.plugins {
 		if p.cmd != nil && p.cmd.Process != nil {
@@ -116,6 +121,29 @@ func (r *Registry) AllWithCapability(cap string) []Entry {
 		}
 	}
 	return out
+}
+
+// buildPluginEnv constructs a minimal environment for a plugin process.
+// It exposes only a safe base set of env vars plus any keys explicitly
+// allow-listed in the plugin's descriptor (desc.Env).
+func buildPluginEnv(allowedKeys []string) []string {
+	base := []string{"PATH", "HOME", "TMPDIR", "TEMP", "USER", "LANG", "LC_ALL"}
+	allowed := make(map[string]bool, len(base)+len(allowedKeys))
+	for _, k := range base {
+		allowed[k] = true
+	}
+	for _, k := range allowedKeys {
+		allowed[k] = true
+	}
+	var env []string
+	for _, kv := range os.Environ() {
+		if idx := strings.Index(kv, "="); idx > 0 {
+			if allowed[kv[:idx]] {
+				env = append(env, kv)
+			}
+		}
+	}
+	return env
 }
 
 func (r *Registry) waitHealthy(ctx context.Context, baseURL string) error {
