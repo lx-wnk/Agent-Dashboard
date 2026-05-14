@@ -130,11 +130,6 @@ func TestOpenAISpawner_Spawn_WritesSessionFile(t *testing.T) {
 	os.Remove(result.SessionFile)
 }
 
-func TestClaudeSpawner_Name(t *testing.T) {
-	s := &pipeline.ClaudeSpawner{}
-	assert.Equal(t, "claude", s.Name())
-}
-
 func TestOllamaSpawner_Name(t *testing.T) {
 	s := &pipeline.OllamaSpawner{}
 	assert.Equal(t, "ollama", s.Name())

@@ -21,10 +21,10 @@ type LLMSpawnArgs struct {
 type LLMSpawnResult struct {
 	// PID of the spawned process, or 0 for non-subprocess adapters.
 	PID int
-	// SessionID is a Claude session ID (for ClaudeSpawner) or synthetic ID.
+	// SessionID is a Claude session ID or synthetic ID set by the adapter.
 	SessionID string
 	// SessionFile is the path to the JSONL file the completion detector reads.
-	// For ClaudeSpawner this is discovered by the completion detector normally.
+	// For the native Claude path (nil Spawner) this is discovered by the completion detector normally.
 	// For non-subprocess adapters this must be written by the adapter itself.
 	SessionFile string
 }

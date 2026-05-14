@@ -76,7 +76,7 @@ type StageContext struct {
 	MCPToken             string
 	MCPUrl               string
 	// Spawner is the LLM adapter to use for agent-driven stages.
-	// When nil, stage handlers fall back to ClaudeSpawner / SpawnStageAgent.
+	// When nil, stage handlers fall back to SpawnStageAgent (native Claude path).
 	Spawner LLMSpawner
 
 	// SystemPromptRepo is used to fetch custom system prompt overrides for this stage.
@@ -143,7 +143,7 @@ type OrchestratorOptions struct {
 	MCPUrl   string
 
 	// Spawner selects which LLM backend runs stage agents.
-	// Defaults to ClaudeSpawner when nil.
+	// When nil, stage handlers use SpawnStageAgent (native Claude path).
 	Spawner LLMSpawner
 
 	OnPermissionRequest func(taskID string, req *ent.PermissionRequest)

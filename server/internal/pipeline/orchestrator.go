@@ -500,6 +500,9 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		if tr.PID != 0 {
 			update.PID = &tr.PID
 		}
+		if tr.SessionID != "" {
+			update.SessionID = &tr.SessionID
+		}
 		if _, err := srRepo.Update(ctx, sr.ID, update); err != nil {
 			return nil, fmt.Errorf("applyTransition.asyncRunning.updateRun: %w", err)
 		}

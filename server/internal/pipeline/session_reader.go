@@ -141,7 +141,7 @@ func ReadLastStageJsonOutput(cwd, sessionID string) (StageOutputRead, error) {
 func ReadLastStageJsonOutputFromFile(filePath string) (StageOutputRead, error) {
 	raw, err := parser.TailRead(filePath)
 	if err != nil {
-		return StageOutputRead{}, nil
+		return StageOutputRead{}, fmt.Errorf("reading synthetic session file: %w", err)
 	}
 	entries := parseJsonlLines(raw)
 	text := lastAssistantText(entries)
