@@ -243,6 +243,26 @@ func (g *gzipResponseWriter) Flush() {
 	}
 }
 
+// gzipHijackWriter extends gzipResponseWriter to also implement http.Hijacker.
+// Used when the underlying ResponseWriter supports connection hijacking (e.g. WebSocket upgrades).
+type gzipHijackWriter struct {
+	*gzipResponseWriter
+	http.Hijacker
+}
+
+var _ http.Hijacker = (*gzipHijackWriter)(nil)
+
+// newGzipWriter wraps w with gzip compression. If w also implements http.Hijacker,
+// the returned writer forwards Hijack calls to the underlying writer so chi middleware
+// and WebSocket upgrade paths continue to work correctly.
+func newGzipWriter(w http.ResponseWriter, gz *gzip.Writer) http.ResponseWriter {
+	base := &gzipResponseWriter{ResponseWriter: w, Writer: gz}
+	if h, ok := w.(http.Hijacker); ok {
+		return &gzipHijackWriter{gzipResponseWriter: base, Hijacker: h}
+	}
+	return base
+}
+
 // gzipMiddleware compresses non-SSE responses when the client accepts gzip encoding.
 func gzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -268,7 +288,7 @@ func gzipMiddleware(next http.Handler) http.Handler {
 		defer gz.Close()
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Del("Content-Length")
-		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, Writer: gz}, r)
+		next.ServeHTTP(newGzipWriter(w, gz), r)
 	})
 }
 
