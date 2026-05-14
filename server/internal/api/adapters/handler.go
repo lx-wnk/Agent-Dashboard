@@ -3,7 +3,9 @@ package adapters
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/go-chi/chi/v5"
@@ -59,15 +61,20 @@ var availableAdapters = []adapterMeta{
 
 // Handler serves the /api/adapters and /api/settings/adapters endpoints.
 type Handler struct {
-	mu  sync.RWMutex
-	cfg *config.AdapterConfig
+	mu      sync.RWMutex
+	cfg     *config.AdapterConfig
+	cfgFile string // path to the JSON config file, or "" if not loaded from a file
 }
 
 // NewHandler creates a Handler backed by the given AdapterConfig pointer.
+// cfgFile is the path to the JSON config file that was loaded at startup; it is
+// used by setCurrent to persist the new default adapter to disk so the change
+// survives a server restart. Pass "" if no config file is in use.
+//
 // The pointer must remain valid for the server lifetime; in-memory updates via
 // PUT /api/settings/adapters will mutate through it.
-func NewHandler(cfg *config.AdapterConfig) *Handler {
-	return &Handler{cfg: cfg}
+func NewHandler(cfg *config.AdapterConfig, cfgFile string) *Handler {
+	return &Handler{cfg: cfg, cfgFile: cfgFile}
 }
 
 // Mount registers all adapter routes on r.
@@ -97,9 +104,10 @@ func (h *Handler) getCurrent(w http.ResponseWriter, _ *http.Request) error {
 	return json.NewEncoder(w).Encode(map[string]string{"adapter": active})
 }
 
-// setCurrent updates the active adapter name in the in-memory config.
-// The change is NOT persisted to disk — it is lost on server restart.
-// Restart the server after updating the config file to apply changes permanently.
+// setCurrent updates the active adapter name in the in-memory config and, when a
+// config file is configured, persists the new default to disk so the change
+// survives a server restart.
+//
 // Body: {"adapter":"ollama","config":{...optional full AdapterConfig...}}
 func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
@@ -134,11 +142,63 @@ func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 			h.cfg.Stages = body.Config.Stages
 		}
 	}
-	activeAdapter := h.cfg.Default
+	snapshot := *h.cfg
 	h.mu.Unlock()
 
+	// Persist to disk so the new default survives a server restart.
+	if h.cfgFile != "" {
+		if err := persistAdapterConfig(h.cfgFile, snapshot); err != nil {
+			// Non-fatal: the in-memory change is already applied. Log and continue.
+			slog.Warn("adapters: failed to persist config to disk", "file", h.cfgFile, "err", err)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(map[string]any{"adapter": activeAdapter, "restartRequired": true})
+	return json.NewEncoder(w).Encode(map[string]any{"adapter": snapshot.Default, "restartRequired": true})
+}
+
+// persistAdapterConfig reads the existing JSON config file (if present), updates
+// the adapters key, and writes it back atomically. If the file does not exist yet
+// it is created with a minimal structure containing only the adapters section.
+func persistAdapterConfig(cfgFile string, ac config.AdapterConfig) error {
+	// Read existing file content into a generic map so we don't lose other keys.
+	raw := map[string]any{}
+	if data, err := os.ReadFile(cfgFile); err == nil {
+		// Ignore unmarshal errors — we'll just overwrite with a fresh map.
+		_ = json.Unmarshal(data, &raw)
+	}
+
+	// Merge: update only the adapters sub-tree.
+	adaptersMap := map[string]any{
+		"default": ac.Default,
+	}
+	if ac.Ollama.Host != "" || ac.Ollama.DefaultModel != "" {
+		adaptersMap["ollama"] = map[string]any{
+			"host":          ac.Ollama.Host,
+			"default_model": ac.Ollama.DefaultModel,
+		}
+	}
+	if ac.OpenAI.BaseURL != "" || ac.OpenAI.APIKeyEnv != "" || ac.OpenAI.DefaultModel != "" {
+		adaptersMap["openai"] = map[string]any{
+			"base_url":      ac.OpenAI.BaseURL,
+			"api_key_env":   ac.OpenAI.APIKeyEnv,
+			"default_model": ac.OpenAI.DefaultModel,
+		}
+	}
+	if len(ac.Stages) > 0 {
+		stages := map[string]any{}
+		for k, v := range ac.Stages {
+			stages[k] = v
+		}
+		adaptersMap["stages"] = stages
+	}
+	raw["adapters"] = adaptersMap
+
+	data, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(cfgFile, data, 0o600)
 }
 
 // getConfig returns the full AdapterConfig as JSON.

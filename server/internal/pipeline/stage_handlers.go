@@ -49,6 +49,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		spawnArgs := LLMSpawnArgs{
 			TaskID:       ctx.Task.ID,
 			StageRunID:   ctx.StageRun.ID,
+			Stage:        h.stage,
 			SystemPrompt: bundle.SystemPrompt,
 			UserPrompt:   fullUserPrompt,
 			Model:        model,
