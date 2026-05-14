@@ -234,6 +234,13 @@ func (g *gzipResponseWriter) Write(b []byte) (int, error) {
 	return g.Writer.Write(b)
 }
 
+func (g *gzipResponseWriter) Flush() {
+	_ = g.Writer.Flush()
+	if f, ok := g.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // gzipMiddleware compresses non-SSE responses when the client accepts gzip encoding.
 func gzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +261,7 @@ func gzipMiddleware(next http.Handler) http.Handler {
 		defer gz.Close()
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Del("Content-Length")
+		w.Header().Set("Vary", "Accept-Encoding")
 		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, Writer: gz}, r)
 	})
 }
