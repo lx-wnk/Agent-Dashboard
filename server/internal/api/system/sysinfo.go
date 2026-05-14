@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/platform"
@@ -114,7 +115,10 @@ func getCPUModel() string {
 
 // getCPUUsage returns a rough CPU usage percentage.
 // On Linux, reads /proc/stat deltas. On macOS, uses top -l2 -n0.
-var prevIdle, prevTotal uint64
+var (
+	cpuMu              sync.Mutex
+	prevIdle, prevTotal uint64
+)
 
 func getCPUUsage() float64 {
 	if platform.IsLinux {
@@ -149,13 +153,16 @@ func linuxCPUUsage() float64 {
 		for _, v := range vals {
 			total += v
 		}
+		cpuMu.Lock()
 		if prevTotal == 0 {
 			prevIdle, prevTotal = idle, total
+			cpuMu.Unlock()
 			return 0
 		}
 		dIdle := idle - prevIdle
 		dTotal := total - prevTotal
 		prevIdle, prevTotal = idle, total
+		cpuMu.Unlock()
 		if dTotal == 0 {
 			return 0
 		}

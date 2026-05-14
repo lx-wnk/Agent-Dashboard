@@ -147,9 +147,11 @@ func (h *Handler) PreTool(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"proceed": decision == "accept"})
 	case <-time.After(editGateTimeout):
-		// Timeout → allow by default so the agent isn't stuck.
+		// Timeout: fail-closed when secret is configured (user wants the gate),
+		// fail-open otherwise (no gate configured — don't block the agent).
+		proceed := h.secret == ""
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"proceed": true})
+		_ = json.NewEncoder(w).Encode(map[string]bool{"proceed": proceed})
 	case <-r.Context().Done():
 		// Client disconnected.
 	}

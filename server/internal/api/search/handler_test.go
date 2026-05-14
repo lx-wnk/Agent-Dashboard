@@ -9,9 +9,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
-	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 )
 
 const testJWTSecret = "search-test-secret"
@@ -36,7 +37,7 @@ func newTestRouter(t *testing.T) (*chi.Mux, *db.DBBundle) {
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
 
-	h := search.NewHandler(bundle.DB)
+	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB))
 
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))
@@ -167,7 +168,7 @@ func TestSearch_TaskVisibility_NonAdmin(t *testing.T) {
 		t.Fatalf("insert bob task: %v", err)
 	}
 
-	h := search.NewHandler(bundle.DB)
+	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB))
 	ro := chi.NewRouter()
 	ro.Use(auth.RequireAuth(testJWTSecret))
 	ro.Get("/api/search", apierr.ErrorMiddleware(h.Search))
@@ -221,7 +222,7 @@ func TestSearch_TypeAgents_NonAdmin(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
 
-	h := search.NewHandler(bundle.DB)
+	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB))
 	ro := chi.NewRouter()
 	ro.Use(auth.RequireAuth(testJWTSecret))
 	ro.Get("/api/search", apierr.ErrorMiddleware(h.Search))

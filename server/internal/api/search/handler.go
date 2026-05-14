@@ -4,8 +4,6 @@
 package search
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -16,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 )
 
@@ -46,12 +45,12 @@ type searchResponse struct {
 
 // Handler handles GET /api/search.
 type Handler struct {
-	db *sql.DB
+	searchRepo rawrepo.SearchRepo
 }
 
-// NewHandler creates a new Handler backed by the given *sql.DB.
-func NewHandler(db *sql.DB) *Handler {
-	return &Handler{db: db}
+// NewHandler creates a new Handler backed by the given SearchRepo.
+func NewHandler(searchRepo rawrepo.SearchRepo) *Handler {
+	return &Handler{searchRepo: searchRepo}
 }
 
 // Search handles GET /api/search?q=...&type=...&limit=...
@@ -99,7 +98,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if searchType == "tasks" || searchType == "all" {
-		tasks, err := h.searchTasks(r.Context(), q, payload.Sub, payload.IsAdmin, limit)
+		tasks, err := h.searchTasks(r, q, payload.Sub, payload.IsAdmin, limit)
 		if err == nil {
 			resp.Tasks = tasks
 		}
@@ -116,53 +115,33 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// searchTasks executes an FTS5 query and returns matching tasks.
-func (h *Handler) searchTasks(ctx context.Context, q, userID string, isAdmin bool, limit int) ([]taskSearchResult, error) {
+// searchTasks executes an FTS5 query via the SearchRepo and returns matching tasks.
+func (h *Handler) searchTasks(r *http.Request, q, userID string, isAdmin bool, limit int) ([]taskSearchResult, error) {
 	ftsQuery := sanitizeFtsQuery(q)
 
-	const sqlQuery = `
-SELECT t.id, t.slug, t.title, t.description, t.cwd, t.current_stage, t.priority, t.created_at
-FROM tasks t
-WHERE t.rowid IN (
-    SELECT rowid FROM task_fts WHERE task_fts MATCH ?
-    LIMIT ?
-)
-AND (t.user_id IS NULL OR t.user_id = ? OR ? = 1)
-LIMIT ?`
-
-	isAdminInt := 0
-	if isAdmin {
-		isAdminInt = 1
-	}
-
-	rows, err := h.db.QueryContext(ctx, sqlQuery, ftsQuery, limit*4, userID, isAdminInt, limit)
+	rows, err := h.searchRepo.SearchTasks(r.Context(), ftsQuery, userID, isAdmin, limit)
 	if err != nil {
 		// Return empty results gracefully — FTS errors should not be surfaced as 500.
 		slog.Warn("search: FTS query failed", "err", err, "q", ftsQuery)
 		return []taskSearchResult{}, nil
 	}
-	defer rows.Close()
 
-	var results []taskSearchResult
-	for rows.Next() {
-		var r taskSearchResult
-		var createdAt time.Time
-		var desc sql.NullString
-		if err := rows.Scan(&r.ID, &r.Slug, &r.Title, &desc, &r.Cwd, &r.CurrentStage, &r.Priority, &createdAt); err != nil {
-			continue
+	results := make([]taskSearchResult, 0, len(rows))
+	for _, row := range rows {
+		res := taskSearchResult{
+			ID:           row.ID,
+			Slug:         row.Slug,
+			Title:        row.Title,
+			Cwd:          row.Cwd,
+			CurrentStage: row.CurrentStage,
+			Priority:     row.Priority,
+			CreatedAt:    row.CreatedAt.UTC().Format(time.RFC3339),
 		}
-		if desc.Valid {
-			s := desc.String
-			r.Description = &s
+		if row.Description.Valid {
+			s := row.Description.String
+			res.Description = &s
 		}
-		r.CreatedAt = createdAt.UTC().Format(time.RFC3339)
-		results = append(results, r)
-	}
-	if err := rows.Err(); err != nil {
-		return []taskSearchResult{}, nil
-	}
-	if results == nil {
-		results = []taskSearchResult{}
+		results = append(results, res)
 	}
 	return results, nil
 }

@@ -9,12 +9,11 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 )
 
-const (
-	maxRepliesPerPID = 50
-	discoveryDir     = ".claude/dashboard-channel"
-)
+const maxRepliesPerPID = 50
 
 // Reply is a single message received from a channel bridge.
 type Reply struct {
@@ -141,7 +140,7 @@ func validateChannelToken(parentPid int, token string) bool {
 	if err != nil {
 		return false
 	}
-	path := filepath.Join(home, discoveryDir, strconv.Itoa(parentPid)+".json")
+	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(parentPid)+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false

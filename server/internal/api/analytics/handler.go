@@ -2,8 +2,8 @@
 package analytics
 
 import (
+	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -13,23 +13,30 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/analytics"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
 // Handler handles all /api/analytics/* routes.
 type Handler struct {
-	db      *sql.DB
+	// analyticsRepo handles all read queries (patterns, heatmap, cost series).
+	analyticsRepo rawrepo.AnalyticsRepo
+	// rawDB is kept solely for analytics.DiscoverPatterns, which performs an
+	// upsert-style write that does not fit the read-repo interface.
+	rawDB   *sql.DB
 	cfgRepo repo.PipelineConfigRepo
 	mu      sync.Mutex // serializes concurrent pattern refresh calls
 }
 
-// NewHandler creates a Handler backed by the given *sql.DB and config repo.
-func NewHandler(db *sql.DB, cfgRepo repo.PipelineConfigRepo) *Handler {
-	return &Handler{db: db, cfgRepo: cfgRepo}
+// NewHandler creates a Handler backed by the given repos.
+func NewHandler(analyticsRepo rawrepo.AnalyticsRepo, rawDB *sql.DB, cfgRepo repo.PipelineConfigRepo) *Handler {
+	return &Handler{analyticsRepo: analyticsRepo, rawDB: rawDB, cfgRepo: cfgRepo}
 }
 
 // Mount registers analytics routes on the given router.
 // Must be called inside a protected (JWT / bypass) group.
+// Note: uses absolute paths to match the project-wide convention in Mount methods.
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/analytics/patterns", h.getPatterns)
 	r.Post("/api/analytics/patterns/refresh", h.refreshPatterns)
@@ -47,40 +54,46 @@ type patternRow struct {
 }
 
 func (h *Handler) getPatterns(w http.ResponseWriter, r *http.Request) {
-	const q = `SELECT id, tools, frequency, last_seen_at FROM workflow_patterns ORDER BY frequency DESC LIMIT 20`
-	rows, err := h.db.QueryContext(r.Context(), q)
+	rows, err := h.analyticsRepo.GetPatterns(r.Context())
 	if err != nil {
-		jsonError(w, "failed to query patterns", http.StatusInternalServerError)
+		apierr.JSONError(w, http.StatusInternalServerError, "failed to query patterns")
 		return
 	}
-	defer rows.Close()
 
-	patterns := make([]patternRow, 0)
-	for rows.Next() {
-		var p patternRow
-		if err := rows.Scan(&p.ID, &p.Tools, &p.Frequency, &p.LastSeenAt); err != nil {
-			continue
-		}
-		patterns = append(patterns, p)
-	}
-	if err := rows.Err(); err != nil {
-		slog.Warn("analytics: patterns row scan error", "err", err)
+	patterns := make([]patternRow, 0, len(rows))
+	for _, p := range rows {
+		patterns = append(patterns, patternRow{
+			ID:         p.ID,
+			Tools:      p.Tools,
+			Frequency:  p.Frequency,
+			LastSeenAt: p.LastSeenAt,
+		})
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"patterns": patterns})
+	apierr.WriteJSON(w, http.StatusOK, map[string]any{"patterns": patterns})
 }
 
 // ─── POST /api/analytics/patterns/refresh ─────────────────────────────────────
 
 func (h *Handler) refreshPatterns(w http.ResponseWriter, r *http.Request) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if err := analytics.DiscoverPatterns(h.db); err != nil {
-		slog.Error("analytics: discover patterns failed", "err", err)
-		jsonError(w, "pattern discovery failed", http.StatusInternalServerError)
+	if !h.mu.TryLock() {
+		apierr.WriteJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": "refresh already running"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				slog.Error("analytics: pattern refresh panicked", "panic", rec)
+			}
+			h.mu.Unlock()
+		}()
+		// Use context.Background() — the request context would be cancelled as
+		// soon as the HTTP response is sent, which would abort a long scan.
+		if err := analytics.DiscoverPatterns(context.Background(), h.rawDB); err != nil {
+			slog.Error("analytics: discover patterns failed", "err", err)
+		}
+	}()
+	apierr.WriteJSON(w, http.StatusAccepted, map[string]bool{"ok": true})
 }
 
 // ─── GET /api/analytics/heatmap ───────────────────────────────────────────────
@@ -91,39 +104,20 @@ type heatmapResponse struct {
 }
 
 func (h *Handler) getHeatmap(w http.ResponseWriter, r *http.Request) {
-	// SQLite stores time as TEXT in RFC3339. strftime works on TEXT if it parses as datetime.
-	const q = `
-SELECT
-    CAST(strftime('%w', recorded_at) AS INTEGER) AS dow,
-    CAST(strftime('%H', recorded_at) AS INTEGER) AS hour,
-    SUM(cost_usd) AS total_cost
-FROM agent_cost_trends
-GROUP BY dow, hour
-`
-	rows, err := h.db.QueryContext(r.Context(), q)
+	points, err := h.analyticsRepo.GetHeatmap(r.Context())
 	if err != nil {
-		jsonError(w, fmt.Sprintf("analytics.heatmap: %v", err), http.StatusInternalServerError)
+		apierr.JSONError(w, http.StatusInternalServerError, fmt.Sprintf("analytics.heatmap: %v", err))
 		return
 	}
-	defer rows.Close()
 
 	var resp heatmapResponse
-	for rows.Next() {
-		var dow, hour int
-		var cost float64
-		if err := rows.Scan(&dow, &hour, &cost); err != nil {
-			continue
+	for _, p := range points {
+		if p.DOW >= 0 && p.DOW < 7 && p.Hour >= 0 && p.Hour < 24 {
+			resp.Grid[p.DOW][p.Hour] = p.Cost
 		}
-		if dow >= 0 && dow < 7 && hour >= 0 && hour < 24 {
-			resp.Grid[dow][hour] = cost
-		}
-	}
-	if err := rows.Err(); err != nil {
-		jsonError(w, fmt.Sprintf("analytics.heatmap: rows: %v", err), http.StatusInternalServerError)
-		return
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	apierr.WriteJSON(w, http.StatusOK, resp)
 }
 
 // ─── GET /api/analytics/cost-forecast ─────────────────────────────────────────
@@ -141,56 +135,30 @@ type forecastResponse struct {
 func (h *Handler) getCostForecast(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Last 30 days, ordered ASC.
 	since := time.Now().UTC().AddDate(0, 0, -30)
-	const q = `
-SELECT recorded_at, cost_usd
-FROM agent_cost_trends
-WHERE recorded_at >= ?
-ORDER BY recorded_at ASC
-`
-	rows, err := h.db.QueryContext(ctx, q, since.Format(time.RFC3339))
+	samples, err := h.analyticsRepo.GetCostSince(ctx, since)
 	if err != nil {
 		slog.Warn("analytics: forecast query failed", "err", err)
-		writeJSON(w, http.StatusOK, forecastResponse{Forecast: []forecastPoint{}, Alert: ""})
+		apierr.WriteJSON(w, http.StatusOK, forecastResponse{Forecast: []forecastPoint{}, Alert: ""})
 		return
 	}
-	defer rows.Close()
+
+	if len(samples) == 0 {
+		apierr.WriteJSON(w, http.StatusOK, forecastResponse{Forecast: []forecastPoint{}, Alert: ""})
+		return
+	}
 
 	// Build cumulative-sum series as {t (unix ms, normalized), y (cumulative USD)}.
 	// Normalization avoids float64 cancellation with large Unix ms values.
-	var rawSeries []struct {
-		tRaw int64
-		y    float64
-	}
+	t0 := float64(samples[0].RecordedAt.UnixMilli())
+	series := make([]dataPoint, 0, len(samples))
 	var cumCost float64
-	for rows.Next() {
-		var recordedAt time.Time
-		var cost float64
-		if err := rows.Scan(&recordedAt, &cost); err != nil {
-			continue
-		}
-		cumCost += cost
-		rawSeries = append(rawSeries, struct {
-			tRaw int64
-			y    float64
-		}{tRaw: recordedAt.UnixMilli(), y: cumCost})
-	}
-	if err := rows.Err(); err != nil {
-		jsonError(w, fmt.Sprintf("analytics.cost-forecast: rows: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if len(rawSeries) == 0 {
-		writeJSON(w, http.StatusOK, forecastResponse{Forecast: []forecastPoint{}, Alert: ""})
-		return
-	}
-
-	// Normalize timestamps relative to the first observation.
-	t0 := float64(rawSeries[0].tRaw)
-	series := make([]dataPoint, len(rawSeries))
-	for i, r := range rawSeries {
-		series[i] = dataPoint{t: float64(r.tRaw) - t0, y: r.y}
+	for _, s := range samples {
+		cumCost += s.CostUSD
+		series = append(series, dataPoint{
+			t: float64(s.RecordedAt.UnixMilli()) - t0,
+			y: cumCost,
+		})
 	}
 
 	slope, intercept := linearRegression(series)
@@ -221,7 +189,7 @@ ORDER BY recorded_at ASC
 		alert = "warn"
 	}
 
-	writeJSON(w, http.StatusOK, forecastResponse{Forecast: forecast, Alert: alert})
+	apierr.WriteJSON(w, http.StatusOK, forecastResponse{Forecast: forecast, Alert: alert})
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -249,14 +217,4 @@ func linearRegression(pts []dataPoint) (slope, intercept float64) {
 	slope = (n*sumTY - sumT*sumY) / denom
 	intercept = (sumY - slope*sumT) / n
 	return slope, intercept
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func jsonError(w http.ResponseWriter, msg string, status int) {
-	writeJSON(w, status, map[string]string{"error": msg})
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"regexp"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
@@ -15,9 +14,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
-
-var slugRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 const (
 	maxTitleChars       = 200
@@ -208,8 +206,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
-	if !slugRE.MatchString(body.Slug) {
-		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9]+(?:-[a-z0-9]+)*$")
+	if !validation.IsValidSlug(body.Slug) {
+		return apierr.NewAppError(http.StatusBadRequest, validation.SlugPatternMessage)
 	}
 	if body.Title == "" || len(body.Title) > maxTitleChars {
 		return apierr.NewAppError(http.StatusBadRequest, "title is required and must be <= 200 characters")

@@ -21,7 +21,11 @@ type EnrichedTask struct {
 
 func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) (*EnrichedTask, error) {
 	latest, _ := srRepo.GetLatestForTask(ctx, t.ID)
-	return enrichOne(ctx, t, latest, permRepo)
+	var pendingCount int
+	if latest != nil && latest.Stage == t.CurrentStage {
+		pendingCount, _ = permRepo.CountForStageRun(ctx, latest.ID)
+	}
+	return enrichOne(t, latest, pendingCount)
 }
 
 func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) ([]*EnrichedTask, error) {
@@ -36,9 +40,27 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, srRepo repo.StageRu
 	if err != nil {
 		return nil, err
 	}
+
+	// Collect stage run IDs that belong to the current stage — only those need a count.
+	srIDs := make([]string, 0, len(tasks))
+	for _, t := range tasks {
+		if sr := latestMap[t.ID]; sr != nil && sr.Stage == t.CurrentStage {
+			srIDs = append(srIDs, sr.ID)
+		}
+	}
+	pendingCounts, err := permRepo.CountForStageRunsBulk(ctx, srIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	result := make([]*EnrichedTask, len(tasks))
 	for i, t := range tasks {
-		enriched, err := enrichOne(ctx, t, latestMap[t.ID], permRepo)
+		latest := latestMap[t.ID]
+		var pendingCount int
+		if latest != nil && latest.Stage == t.CurrentStage {
+			pendingCount = pendingCounts[latest.ID]
+		}
+		enriched, err := enrichOne(t, latest, pendingCount)
 		if err != nil {
 			return nil, err
 		}
@@ -47,19 +69,13 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, srRepo repo.StageRu
 	return result, nil
 }
 
-func enrichOne(ctx context.Context, t *ent.Task, latest *ent.StageRun, permRepo repo.PermissionRepo) (*EnrichedTask, error) {
+func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int) (*EnrichedTask, error) {
 	latestBelongsToCurrent := latest != nil && latest.Stage == t.CurrentStage
 	var latestStatus *string
 	currentIteration := 0
 	if latestBelongsToCurrent {
 		latestStatus = &latest.Status
 		currentIteration = latest.Iteration
-	}
-
-	var pendingPermsCount int
-	if latestBelongsToCurrent {
-		n, _ := permRepo.CountForStageRun(ctx, latest.ID)
-		pendingPermsCount = n
 	}
 
 	hasPendingPermissions := latestStatus != nil && *latestStatus == "running" && pendingPermsCount > 0

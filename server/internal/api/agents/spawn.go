@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 )
 
@@ -45,9 +46,9 @@ type SpawnManager struct {
 	rateLimitMax    int
 	rateLimitWindow time.Duration
 
-	mu          sync.Mutex
-	attempts    []time.Time // sliding window of recent spawn attempts
-	spawnStore  map[int]*SpawnStatus
+	mu           sync.Mutex
+	userAttempts map[string][]time.Time // per-user sliding window keyed by JWT sub (or "__global__" in bypass mode)
+	spawnStore   map[int]*SpawnStatus
 }
 
 // NewSpawnManager creates a SpawnManager with the given rate limit config.
@@ -61,36 +62,42 @@ func NewSpawnManager(maxSpawns int, windowMs int) *SpawnManager {
 	return &SpawnManager{
 		rateLimitMax:    maxSpawns,
 		rateLimitWindow: time.Duration(windowMs) * time.Millisecond,
+		userAttempts:    make(map[string][]time.Time),
 		spawnStore:      make(map[int]*SpawnStatus),
 	}
 }
 
-// IsSpawnAllowed reports whether a new spawn is allowed under the rate limit.
-func (m *SpawnManager) IsSpawnAllowed() bool {
+// IsSpawnAllowed reports whether a new spawn is allowed for the given user (sub).
+// Pass "__global__" in bypass-auth mode.
+func (m *SpawnManager) IsSpawnAllowed(sub string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.pruneAttempts()
-	return len(m.attempts) < m.rateLimitMax
+	m.pruneAttempts(sub)
+	return len(m.userAttempts[sub]) < m.rateLimitMax
 }
 
-func (m *SpawnManager) recordAttempt() {
-	m.pruneAttempts()
-	m.attempts = append(m.attempts, time.Now())
+func (m *SpawnManager) recordAttempt(sub string) {
+	m.pruneAttempts(sub)
+	m.userAttempts[sub] = append(m.userAttempts[sub], time.Now())
 }
 
-func (m *SpawnManager) pruneAttempts() {
+func (m *SpawnManager) pruneAttempts(sub string) {
 	cutoff := time.Now().Add(-m.rateLimitWindow)
+	attempts := m.userAttempts[sub]
 	i := 0
-	for i < len(m.attempts) && m.attempts[i].Before(cutoff) {
+	for i < len(attempts) && attempts[i].Before(cutoff) {
 		i++
 	}
-	m.attempts = m.attempts[i:]
+	if i > 0 {
+		m.userAttempts[sub] = attempts[i:]
+	}
 }
 
 // Spawn validates the request, spawns a claude process, and returns the PID.
-func (m *SpawnManager) Spawn(body map[string]any) (int, error) {
+// sub identifies the requesting user (JWT sub claim). Pass "__global__" in bypass-auth mode.
+func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	m.mu.Lock()
-	m.recordAttempt()
+	m.recordAttempt(sub)
 	m.mu.Unlock()
 
 	prompt, _ := body["prompt"].(string)
@@ -103,6 +110,13 @@ func (m *SpawnManager) Spawn(body map[string]any) (int, error) {
 	}
 	if _, err := os.Stat(cwd); err != nil {
 		return 0, fmt.Errorf("directory does not exist: %s", cwd)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		cwdAbs, _ := filepath.Abs(cwd)
+		homeAbs, _ := filepath.Abs(home)
+		if !strings.HasPrefix(cwdAbs+string(filepath.Separator), homeAbs+string(filepath.Separator)) {
+			return 0, fmt.Errorf("cwd must be within the user home directory")
+		}
 	}
 	model, _ := body["model"].(string)
 	systemPrompt, _ := body["systemPrompt"].(string)
@@ -235,7 +249,7 @@ func (m *SpawnManager) SendMessageToChannel(pid int, message string) error {
 	if err != nil {
 		return fmt.Errorf("UserHomeDir: %w", err)
 	}
-	path := filepath.Join(home, discoveryDir, strconv.Itoa(pid)+".json")
+	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid)+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("channel not available for PID %d", pid)
@@ -286,7 +300,13 @@ func NewSpawnHandler(manager *SpawnManager) *SpawnHandler {
 
 // Spawn handles POST /api/agents/spawn.
 func (h *SpawnHandler) Spawn(w http.ResponseWriter, r *http.Request) {
-	if !h.manager.IsSpawnAllowed() {
+	// Extract user identity for per-user rate limiting.
+	sub := "__global__"
+	if payload, ok := auth.PayloadFromContext(r.Context()); ok && payload.Sub != "" {
+		sub = payload.Sub
+	}
+
+	if !h.manager.IsSpawnAllowed(sub) {
 		http.Error(w, fmt.Sprintf(`{"error":"Too many spawn requests. Max %d per %ds."}`,
 			h.manager.rateLimitMax,
 			int(h.manager.rateLimitWindow.Seconds()),
@@ -300,7 +320,7 @@ func (h *SpawnHandler) Spawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pid, err := h.manager.Spawn(body)
+	pid, err := h.manager.Spawn(sub, body)
 	if err != nil {
 		code := http.StatusBadRequest
 		if strings.HasPrefix(err.Error(), "spawn failed") || strings.HasPrefix(err.Error(), "directory does not exist") {
@@ -358,9 +378,3 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
