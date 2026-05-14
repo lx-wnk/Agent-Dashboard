@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
@@ -150,6 +151,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if entClient != nil {
 		systemPromptsHandler = systemprompts.NewHandler(systemPromptRepo)
 	}
+	adapterHandler := adapters.NewHandler(&cfg.Adapters)
 	replyStore := agents.NewReplyStore()
 
 	routerDeps := api.RouterDeps{
@@ -164,6 +166,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		RemotesHandler:       remotesHandler,
 		PresetsHandler:       presetsHandler,
 		SystemPromptsHandler: systemPromptsHandler,
+		AdapterHandler:       adapterHandler,
 		SearchHandler:        searchHandler,
 		HistoryHandler:       historyHandler,
 		RefineHandler:        refineHandler,
@@ -198,6 +201,32 @@ func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider)
 	}
 }
 
+func provideSpawner(cfg config.Config) pipeline.LLMSpawner {
+	mcpURL := fmt.Sprintf("http://127.0.0.1:%d/api/mcp", cfg.Port)
+	if cmd := config.SpawnCommandFromEnv(); cmd != "" {
+		return &pipeline.CustomCommandSpawner{Command: cmd}
+	}
+	switch cfg.Adapters.Default {
+	case "ollama":
+		return &pipeline.OllamaSpawner{
+			Host:         cfg.Adapters.Ollama.Host,
+			DefaultModel: cfg.Adapters.Ollama.DefaultModel,
+		}
+	case "openai":
+		return &pipeline.OpenAISpawner{
+			BaseURL:      cfg.Adapters.OpenAI.BaseURL,
+			APIKeyEnv:    cfg.Adapters.OpenAI.APIKeyEnv,
+			DefaultModel: cfg.Adapters.OpenAI.DefaultModel,
+		}
+	default:
+		return &pipeline.ClaudeSpawner{
+			MCPToken:     cfg.MCPToken,
+			MCPUrl:       mcpURL,
+			AllowGitPush: cfg.AllowGitPush,
+		}
+	}
+}
+
 func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroadcaster, systemPromptRepo repo.SystemPromptRepo) (*pipeline.PipelineOrchestrator, error) {
 	if client == nil {
 		return nil, nil
@@ -218,6 +247,7 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 		SystemPromptRepo: systemPromptRepo,
 		MCPToken:         cfg.MCPToken,
 		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
+		Spawner:          provideSpawner(cfg),
 		OnTaskChanged: func(taskID string, transitionKind string) {
 			tb.Broadcast(sse.TaskEvent{
 				Type:   "task_changed",
