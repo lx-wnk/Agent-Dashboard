@@ -4,6 +4,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
 import RemoteSettings from './RemoteSettings.vue'
+import SystemPromptSettings from './SystemPromptSettings.vue'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
 
@@ -14,7 +15,7 @@ const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -379,6 +380,18 @@ async function startImport() {
               <span class="text-sm flex-shrink-0">📊</span> Analytics
             </button>
           </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'systemPrompts'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'systemPrompts'"
+            >
+              <span class="text-sm flex-shrink-0">✦</span> System Prompts
+            </button>
+          </li>
         </ul>
         <div class="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700">
           <a
@@ -639,6 +652,11 @@ async function startImport() {
               </tr>
             </tbody>
           </table>
+        </section>
+
+        <!-- System Prompts -->
+        <section v-else-if="activeSection === 'systemPrompts'">
+          <SystemPromptSettings />
         </section>
 
         <!-- Analytics -->

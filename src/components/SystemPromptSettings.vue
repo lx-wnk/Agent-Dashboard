@@ -1,0 +1,293 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import AppButton from './ui/AppButton.vue'
+
+interface SystemPrompt {
+  id: string
+  scope: string
+  stage: string | null
+  content: string
+  priority: number
+  created_at: string
+  updated_at: string
+}
+
+interface PromptForm {
+  stage: string
+  priority: number
+  content: string
+}
+
+const STAGES = ['', 'implementation', 'self_review', 'finalization'] as const
+
+const prompts = ref<SystemPrompt[]>([])
+const loading = ref(true)
+const loadError = ref<string | null>(null)
+const saving = ref(false)
+const saveError = ref<string | null>(null)
+
+const showDialog = ref(false)
+const editing = ref<SystemPrompt | null>(null)
+const confirmDeleteId = ref<string | null>(null)
+
+const form = ref<PromptForm>({ stage: '', priority: 0, content: '' })
+
+async function fetchPrompts() {
+  loading.value = true
+  loadError.value = null
+  try {
+    const res = await fetch('/api/settings/system-prompts')
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    prompts.value = await res.json()
+  }
+  catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Failed to load'
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+function openCreate() {
+  editing.value = null
+  form.value = { stage: '', priority: 0, content: '' }
+  saveError.value = null
+  showDialog.value = true
+}
+
+function openEdit(p: SystemPrompt) {
+  editing.value = p
+  form.value = { stage: p.stage ?? '', priority: p.priority, content: p.content }
+  saveError.value = null
+  showDialog.value = true
+}
+
+function closeDialog() {
+  showDialog.value = false
+  editing.value = null
+}
+
+async function save() {
+  if (saving.value)
+    return
+  saveError.value = null
+  if (!form.value.content.trim()) {
+    saveError.value = 'Content is required'
+    return
+  }
+
+  saving.value = true
+  try {
+    const body = {
+      scope: 'global',
+      stage: form.value.stage || null,
+      priority: form.value.priority,
+      content: form.value.content,
+    }
+    const url = editing.value
+      ? `/api/settings/system-prompts/${editing.value.id}`
+      : '/api/settings/system-prompts'
+    const method = editing.value ? 'PUT' : 'POST'
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`)
+    }
+    closeDialog()
+    await fetchPrompts()
+  }
+  catch (e) {
+    saveError.value = e instanceof Error ? e.message : 'Save failed'
+  }
+  finally {
+    saving.value = false
+  }
+}
+
+async function deletePrompt(id: string) {
+  confirmDeleteId.value = null
+  try {
+    const res = await fetch(`/api/settings/system-prompts/${id}`, { method: 'DELETE' })
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    await fetchPrompts()
+  }
+  catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Delete failed'
+  }
+}
+
+function stageLabel(stage: string | null) {
+  if (!stage)
+    return 'All stages'
+  return stage.replace(/_/g, ' ')
+}
+
+onMounted(fetchPrompts)
+</script>
+
+<template>
+  <div>
+    <div class="flex items-start justify-between gap-3 mb-4">
+      <div class="flex-1">
+        <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+          Custom System Prompts
+        </h3>
+        <p class="text-xs text-slate-400 dark:text-slate-600">
+          Prepend custom instructions to the built-in system prompt for pipeline stage agents. Higher priority is applied first.
+        </p>
+      </div>
+      <AppButton variant="info" @click="openCreate">
+        + Add Prompt
+      </AppButton>
+    </div>
+
+    <p v-if="loadError" class="text-xs text-red-600 dark:text-red-400 mb-3">
+      {{ loadError }}
+    </p>
+
+    <div v-if="loading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+      Loading...
+    </div>
+
+    <div v-else-if="prompts.length === 0 && !loadError" class="text-center py-8 text-slate-400 dark:text-slate-600 text-sm">
+      No custom system prompts configured yet.
+    </div>
+
+    <table v-else class="w-full border-collapse text-[13px]">
+      <thead>
+        <tr>
+          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+            Stage
+          </th>
+          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+            Priority
+          </th>
+          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+            Preview
+          </th>
+          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+            Actions
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="p in prompts" :key="p.id">
+          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 whitespace-nowrap font-medium capitalize">
+            {{ stageLabel(p.stage) }}
+          </td>
+          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+            {{ p.priority }}
+          </td>
+          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-600 font-mono text-xs max-w-[320px] truncate">
+            {{ p.content.slice(0, 100) }}{{ p.content.length > 100 ? '…' : '' }}
+          </td>
+          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+            <button
+              type="button"
+              class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 mr-1"
+              @click="openEdit(p)"
+            >
+              Edit
+            </button>
+            <template v-if="confirmDeleteId === p.id">
+              <AppButton variant="danger" size="sm" class="mr-1" @click="deletePrompt(p.id)">
+                Confirm
+              </AppButton>
+              <AppButton variant="secondary" size="sm" @click="confirmDeleteId = null">
+                Cancel
+              </AppButton>
+            </template>
+            <button
+              v-else
+              type="button"
+              class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
+              @click="confirmDeleteId = p.id"
+            >
+              Delete
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Create / Edit dialog -->
+    <Transition name="dialog">
+      <div
+        v-if="showDialog"
+        class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center"
+        @click.self="closeDialog"
+      >
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-[540px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {{ editing ? 'Edit System Prompt' : 'New System Prompt' }}
+            </h2>
+            <button
+              type="button"
+              class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100"
+              @click="closeDialog"
+            >
+              &times;
+            </button>
+          </header>
+          <form class="p-5 flex flex-col gap-4" @submit.prevent="save">
+            <div class="flex flex-col gap-1">
+              <label for="sp-stage" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
+                Stage (blank = all stages)
+              </label>
+              <select
+                id="sp-stage"
+                v-model="form.stage"
+                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              >
+                <option v-for="s in STAGES" :key="s" :value="s">
+                  {{ s === '' ? 'All stages' : s.replace(/_/g, ' ') }}
+                </option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="sp-priority" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
+                Priority (higher = applied first)
+              </label>
+              <input
+                id="sp-priority"
+                v-model.number="form.priority"
+                type="number"
+                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              >
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="sp-content" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
+                Content
+              </label>
+              <textarea
+                id="sp-content"
+                v-model="form.content"
+                rows="8"
+                placeholder="Enter custom system prompt text…"
+                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500 font-mono resize-y"
+              />
+            </div>
+            <p v-if="saveError" class="text-xs text-red-600 dark:text-red-400">
+              {{ saveError }}
+            </p>
+          </form>
+          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+            <AppButton variant="secondary" @click="closeDialog">
+              Cancel
+            </AppButton>
+            <AppButton variant="info" :disabled="saving || !form.content.trim()" @click="save">
+              {{ saving ? 'Saving…' : (editing ? 'Update' : 'Create') }}
+            </AppButton>
+          </footer>
+        </div>
+      </div>
+    </Transition>
+  </div>
+</template>
