@@ -13,6 +13,7 @@ import (
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
@@ -258,6 +259,10 @@ func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConf
 	if client != nil {
 		presetsHandler = presets.NewHandler(repo.NewPermissionPresetRepo(client))
 	}
+	var systemPromptsHandler *systemprompts.Handler
+	if client != nil {
+		systemPromptsHandler = systemprompts.NewHandler(repo.NewSystemPromptRepo(client))
+	}
 	replyStore := agents.NewReplyStore()
 	_ = cfg // cfg is retained for future use; config values consumed via RouterConfig
 	return api.RouterDeps{
@@ -270,7 +275,8 @@ func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConf
 		TaskHandler:      taskHandler,
 		WebPushHandler:   webPushHandler,
 		RemotesHandler:   remotesHandler,
-		PresetsHandler:   presetsHandler,
+		PresetsHandler:        presetsHandler,
+		SystemPromptsHandler: systemPromptsHandler,
 		SearchHandler:    searchHandler,
 		HistoryHandler:   historyHandler,
 		RefineHandler:    refineHandler,

@@ -22,6 +22,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
@@ -64,7 +65,8 @@ type RouterDeps struct {
 	TaskHandler      *tasks.Handler
 	WebPushHandler   *apiwp.Handler
 	RemotesHandler   *remotes.Handler
-	PresetsHandler   *presets.Handler
+	PresetsHandler        *presets.Handler
+	SystemPromptsHandler *systemprompts.Handler
 	SearchHandler    *search.Handler
 	HistoryHandler   *apihistory.Handler
 	RefineHandler    *refineapi.Handler
@@ -176,6 +178,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.PresetsHandler != nil {
 			deps.PresetsHandler.Mount(r)
+		}
+
+		if deps.SystemPromptsHandler != nil {
+			deps.SystemPromptsHandler.Mount(r)
 		}
 
 		if deps.SearchHandler != nil {
