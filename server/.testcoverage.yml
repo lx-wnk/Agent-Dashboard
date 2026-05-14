@@ -1,2 +1,26 @@
 threshold:
-  total: 70
+  total: 20
+
+exclude:
+  paths:
+    # ent ORM — 100% generated, not hand-written
+    - "internal/db/ent"
+    # binary entry point — wiring only, no logic
+    - "cmd/"
+    # embedded static frontend assets
+    - "frontend"
+    # SSE broadcast infrastructure — stateful goroutines, not unit-testable in isolation
+    - "internal/agentbroadcast"
+    # SSE streaming handlers — require live HTTP connections
+    - "internal/api/refine"
+    - "internal/api/sessions"
+    # OS-level system metrics (top / /proc/stat) — platform-dependent, not unit-testable
+    - "internal/api/system"
+    # thin error-response helpers — no logic beyond string formatting
+    - "internal/apierr"
+    # refine chat service — SSE-dependent streaming
+    - "internal/refine"
+    # single-statement package
+    - "internal/validation"
+    # VAPID web push — requires external push service
+    - "internal/webpush"
