@@ -63,9 +63,21 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 	// Load plugins from configured plugin_dir.
 	pluginRegistry := plugin.New(cfg.PluginDir)
 	if err := pluginRegistry.Load(ctx); err != nil {
-		slog.Warn("plugin registry: load failed", "err", err)
+		return nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
 	cleanup := func() { pluginRegistry.Shutdown() }
+
+	// Fatal-safety check: if a plugin directory is configured AND at least one
+	// plugin.json declared auth_provider capability BUT no healthy auth_provider
+	// ended up in the registry, the server must not start — booting without auth
+	// would be a silent security regression.
+	if pluginRegistry.HasDir() &&
+		pluginRegistry.HasAttemptedCapability(plugin.CapAuthProvider) &&
+		pluginRegistry.FindByCapability(plugin.CapAuthProvider) == nil {
+		return nil, nil, nil, cleanup, fmt.Errorf(
+			"auth_provider plugin configured but failed health-check — refusing to start with auth disabled",
+		)
+	}
 
 	// Wire auth provider: prefer plugin, fall back to bypass-auth.
 	var oauthProvider authpkg.OAuthProvider
