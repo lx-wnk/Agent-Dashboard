@@ -2,7 +2,8 @@
 import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
-import { SLASH_COMMAND_DEFS } from '../composables/useSlashCommands'
+import { SLASH_COMMAND_DEFS, fetchDynamicCommands } from '../composables/useSlashCommands'
+import type { SlashCommandDef } from '../composables/useSlashCommands'
 
 const props = withDefaults(defineProps<{
   agent: Agent | null
@@ -24,6 +25,12 @@ const { promptInput, isSending, sendStatus, sendError, handleSend } = useAgentPr
 
 const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
 const selectedIndex = ref(0)
+const dynamicCommands = ref<SlashCommandDef[]>([])
+
+watch(() => props.agent?.cwd, async (cwd) => {
+  if (cwd)
+    dynamicCommands.value = await fetchDynamicCommands(cwd)
+}, { immediate: true })
 
 const slashSuggestions = computed(() => {
   const val = promptInput.value.trim()
@@ -32,12 +39,20 @@ const slashSuggestions = computed(() => {
   if (val.includes(' '))
     return []
   const query = val.toLowerCase()
-  return SLASH_COMMAND_DEFS
+
+  const dashboardCmds = SLASH_COMMAND_DEFS
     .filter(c => c.name.startsWith(query))
     .map(c => ({
       ...c,
       disabled: !!c.requiresTask && !props.agent?.pipelineTaskId,
     }))
+
+  const seen = new Set(dashboardCmds.map(c => c.name))
+  const sessionCmds = dynamicCommands.value
+    .filter(c => c.name.startsWith(query) && !seen.has(c.name))
+    .map(c => ({ ...c, disabled: false }))
+
+  return [...dashboardCmds, ...sessionCmds]
 })
 
 const showSuggestions = computed(() => slashSuggestions.value.length > 0)

@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { fileURLToPath, URL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
@@ -7,6 +8,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 const DASHBOARD_PORT = process.env.DASHBOARD_PORT || '13120'
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   plugins: [
     tailwindcss(),
     vue(),
@@ -70,18 +76,38 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['vue', 'vue-router'],
+          vendor: ['vue'],
           charts: ['d3'],
         },
       },
     },
   },
   server: {
-    // HMR WebSocket runs on the Express httpServer (shared port, see server/index.ts).
+    port: 5173,
     // Use 127.0.0.1 explicitly — on dual-stack IPv6 systems 'localhost' may resolve
     // to ::1 first, causing ECONNREFUSED when the server only binds to 127.0.0.1.
     proxy: {
-      '/api': `http://127.0.0.1:${DASHBOARD_PORT}`,
+      '/api': {
+        target: `http://127.0.0.1:${DASHBOARD_PORT}`,
+        changeOrigin: true,
+        ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED') return
+            console.error('[vite proxy]', err)
+          })
+        },
+      },
+      '/auth': {
+        target: `http://127.0.0.1:${DASHBOARD_PORT}`,
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED') return
+            console.error('[vite proxy]', err)
+          })
+        },
+      },
     },
   },
 })

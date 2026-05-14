@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 
 interface SystemInfo {
   cpu: { usage: number, cores: number, model: string }
@@ -10,7 +11,6 @@ interface SystemInfo {
 }
 
 const info = ref<SystemInfo | null>(null)
-let timer: ReturnType<typeof setInterval> | null = null
 
 function fmtBytes(bytes: number): string {
   if (bytes >= 1e12)
@@ -20,24 +20,19 @@ function fmtBytes(bytes: number): string {
   return `${(bytes / 1e6).toFixed(0)} MB`
 }
 
+const abortCtrl = new AbortController()
+onUnmounted(() => abortCtrl.abort())
+
 async function poll() {
   try {
-    const res = await fetch('/api/system')
-    if (res.ok)
+    const res = await fetch('/api/system', { signal: abortCtrl.signal })
+    if (res.ok && !abortCtrl.signal.aborted)
       info.value = await res.json()
   }
   catch { /* ignore */ }
 }
 
-onMounted(() => {
-  poll()
-  timer = setInterval(poll, 5000)
-})
-
-onUnmounted(() => {
-  if (timer)
-    clearInterval(timer)
-})
+useVisibilityPolling(poll, 15000)
 </script>
 
 <template>

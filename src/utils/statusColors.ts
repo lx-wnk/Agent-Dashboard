@@ -1,13 +1,29 @@
 import type { PipelineStage, StageRunStatus } from '../types'
 
 /**
+ * Maps an agent/badge status string to a human-readable display label.
+ * Single source of truth for status → label mapping (SSOT, UX-016).
+ */
+export function statusLabel(status: string): string {
+  switch (status) {
+    case 'active': return 'Active'
+    case 'waiting': return 'Waiting'
+    case 'idle': return 'Idle'
+    case 'completed': return 'Completed'
+    case 'error': return 'Error'
+    case 'info': return 'Info'
+    default: return status
+  }
+}
+
+/**
  * Tailwind classes for a pipeline-stage chip (bg + text + border).
  * Consumers must add `border` to their base class.
  */
 export function stageChipClass(stage: PipelineStage | string): string {
   switch (stage) {
     case 'on_hold':
-      return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/60'
+      return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/60'
     case 'implementation':
       return 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700'
     case 'done':
@@ -34,9 +50,9 @@ export function runStatusChipClass(status: StageRunStatus | string): string {
       return 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border-red-200 dark:border-red-700/50'
     case 'on_hold':
     case 'awaiting_user':
-      return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-700/50'
+      return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-700/50'
     default:
-      return 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700'
+      return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
   }
 }
 
@@ -49,8 +65,14 @@ export function agentSessionStatusClass(status: string): string {
     case 'active':
       return 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400'
     case 'waiting':
-      return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400'
+      return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-400'
+    case 'idle':
+      return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+    case 'completed':
+      return 'bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-400'
+    case 'error':
+      return 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400'
     default:
-      return 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
+      return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
   }
 }

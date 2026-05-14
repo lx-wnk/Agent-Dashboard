@@ -2,32 +2,87 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, upcoming]
   pull_request:
-    branches: [main]
+    branches: [main, upcoming]
 
 jobs:
-  check:
+  test:
+    name: Test (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [server, sdk]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: go.work.sum
+
+      - name: Test
+        working-directory: ${{ matrix.module }}
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Coverage
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          config: ${{ matrix.module }}/.testcoverage.yml
+          profile: ${{ matrix.module }}/coverage.out
+          source-dir: ${{ matrix.module }}
+
+  lint:
+    name: Lint (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [server, sdk]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+      - name: Lint
+        working-directory: ${{ matrix.module }}
+        run: golangci-lint run ./...
+
+  security:
+    name: Security
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: oven-sh/setup-bun@v2
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v5
         with:
-          node-version: 22
-          cache: pnpm
+          go-version: stable
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          for mod in server sdk; do
+            echo "=== $mod ===" && (cd $mod && govulncheck ./...)
+          done
 
-      - run: pnpm install --frozen-lockfile
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Build server binary
+        working-directory: server
+        run: go build -o /dev/null ./cmd/serve/...
 
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Test
-        run: pnpm test
+  pr-checks:
+    name: PR Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -49,13 +49,12 @@ export DASHBOARD_HOOKS_URL=http://127.0.0.1:13120/api/hooks/event
 ```
 
 The dashboard server also needs `DASHBOARD_HOOKS_SECRET` set (add it to the
-terminal session where you run `pnpm dev`, or add it to a `.env.local` file if
-your start script loads one).
+terminal session where you run `task dev`, or export it in `~/.zshrc`).
 
 ### 3. Restart the dashboard server
 
 ```bash
-pnpm dev
+task dev
 ```
 
 ## Verification

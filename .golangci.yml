@@ -1,0 +1,42 @@
+version: "2"
+linters:
+  enable:
+    - gosec
+    - misspell
+    - revive
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+          - gosec
+        path: _test.go
+      - linters:
+          - all
+        path: wire_gen.go
+      - linters:
+          - all
+        path: ent/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

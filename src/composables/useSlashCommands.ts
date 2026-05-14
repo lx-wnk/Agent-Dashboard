@@ -192,3 +192,31 @@ export async function dispatchSlashCommand(
       return { ok: false, message: `Unknown command "${cmd}". Type /help for an overview.` }
   }
 }
+
+interface DynamicCommand {
+  name: string
+  description: string
+  source: string
+}
+
+const dynamicCommandCache = new Map<string, SlashCommandDef[]>()
+
+export async function fetchDynamicCommands(cwd: string): Promise<SlashCommandDef[]> {
+  if (dynamicCommandCache.has(cwd))
+    return dynamicCommandCache.get(cwd)!
+  try {
+    const res = await fetch(`/api/slash-commands?cwd=${encodeURIComponent(cwd)}`)
+    if (!res.ok)
+      return []
+    const data = await res.json() as DynamicCommand[]
+    const cmds: SlashCommandDef[] = data.map(c => ({
+      name: c.name,
+      description: c.description,
+    }))
+    dynamicCommandCache.set(cwd, cmds)
+    return cmds
+  }
+  catch {
+    return []
+  }
+}

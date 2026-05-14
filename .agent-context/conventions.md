@@ -25,6 +25,7 @@
 | `DASHBOARD_HOOKS_SECRET`         | Shared bearer token for `/api/hooks/event`; recommended when hooks script runs outside localhost |
 | `DASHBOARD_HOOKS_DEBOUNCE_MS`    | Debounce window before SSE rescan after a hook event, default `100`ms |
 | `DASHBOARD_ALLOW_GIT_PULL`       | `true` or `false`, default `false`; enables `POST /api/tasks/:id/git-action` with `action:'pull'` (git pull --ff-only on task worktree) |
+| `DASHBOARD_CLAUDE_CONFIG_DIRS`   | Comma-separated list of Claude config directories to search for session JSONL files, e.g. `~/.claude-personal,~/.claude-work`. Searched before auto-detection. Useful when the dashboard process is not started with `CLAUDE_CONFIG_DIR` set, or on shared machines with multiple profiles. |
 
 ## Compaction Preservation
 

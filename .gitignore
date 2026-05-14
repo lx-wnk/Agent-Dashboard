@@ -1,5 +1,5 @@
 node_modules/
-dist/
+/dist/
 .worktrees/
 package-lock.json
 .superpowers/
@@ -22,6 +22,15 @@ package-lock.json
 # Compiled single-binary (bun build --compile)
 /dashboard
 
+# Go compiled binaries
+/server/serve
+/serve
+/bin/
+.air-tmp/
+
+# Backup/scratch files
+*.bck.yml
+
 # Local settings contain tokens — never commit
 .claude/settings.local.json
 
@@ -30,3 +39,11 @@ package-lock.json
 
 # Per-branch local todo / handoff scratch — not for shared history
 /TODOS.md
+
+# Branch review / analysis outputs — ephemeral, not for shared history
+/outputs/
+
+# Vue SPA build output — the placeholder dist/index.html is committed so go:embed
+# compiles without requiring a pnpm build first. Real build artifacts (assets/, etc.)
+# are ignored via the directory-level rule below so they don't bloat the repo.
+server/frontend/dist/assets/

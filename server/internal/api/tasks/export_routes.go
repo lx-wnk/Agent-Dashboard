@@ -1,0 +1,74 @@
+package tasks
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+)
+
+func (h *Handler) exportTasks(w http.ResponseWriter, r *http.Request) error {
+	payload, _ := auth.PayloadFromContext(r.Context())
+	tasks, err := h.taskRepo.ListForUser(r.Context(), payload.Sub, payload.IsAdmin)
+	if err != nil {
+		return fmt.Errorf("export: list tasks: %w", err)
+	}
+
+	format := r.URL.Query().Get("format")
+	if format == "csv" {
+		header := "id,slug,title,currentStage,priority,createdAt,totalCostCents,totalTokens"
+		rows := make([]string, 0, len(tasks))
+		for _, t := range tasks {
+			runs, _ := h.srRepo.ListForTask(r.Context(), t.ID)
+			totalCost, totalTokens := 0, 0
+			for _, sr := range runs {
+				totalCost += sr.CostCents
+				totalTokens += sr.TokensUsed
+			}
+			title := strings.ReplaceAll(t.Title, `"`, `""`)
+			createdAt := t.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
+			rows = append(rows, fmt.Sprintf(`%s,%s,"%s",%s,%s,%s,%d,%d`,
+				t.ID, t.Slug, title, t.CurrentStage, t.Priority, createdAt, totalCost, totalTokens))
+		}
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", `attachment; filename="tasks.csv"`)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, header)
+		for _, row := range rows {
+			fmt.Fprintln(w, row)
+		}
+		return nil
+	}
+
+	// JSON export with stage runs embedded.
+	type taskWithRuns struct {
+		*ent.Task
+		StageRuns []*ent.StageRun `json:"stageRuns"`
+	}
+	result := make([]taskWithRuns, 0, len(tasks))
+	for _, t := range tasks {
+		runs, _ := h.srRepo.ListForTask(r.Context(), t.ID)
+		result = append(result, taskWithRuns{Task: t, StageRuns: runs})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="tasks.json"`)
+	w.WriteHeader(http.StatusOK)
+	return json.NewEncoder(w).Encode(result)
+}
+
+// listFeedback returns an empty array until the feedback ent schema is added.
+func (h *Handler) listFeedback(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	if _, err := h.taskRepo.GetByID(r.Context(), id); err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.ErrNotFound
+		}
+		return fmt.Errorf("feedback.list: get task: %w", err)
+	}
+	return jsonReply(w, http.StatusOK, []any{})
+}

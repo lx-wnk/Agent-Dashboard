@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { createTwoFilesPatch } from 'diff'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 
 interface PendingEdit {
   id: string
@@ -49,31 +50,27 @@ async function respond(decision: 'accept' | 'reject') {
   edits.value.shift()
 }
 
-let pollHandle: ReturnType<typeof setInterval> | null = null
+const abortCtrl = new AbortController()
+onUnmounted(() => abortCtrl.abort())
 
 async function pollPending() {
   const url = props.sessionId
     ? `/api/hooks/pending?sessionId=${encodeURIComponent(props.sessionId)}`
     : '/api/hooks/pending'
   try {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: abortCtrl.signal })
     if (!res.ok)
       return
     const data = await res.json() as { edits: PendingEdit[] }
-    edits.value = data.edits
+    if (!abortCtrl.signal.aborted)
+      edits.value = data.edits
   }
   catch {
-    // ignore poll errors
+    // ignore poll errors (includes AbortError)
   }
 }
 
-onMounted(() => {
-  pollHandle = setInterval(pollPending, 1000)
-})
-onUnmounted(() => {
-  if (pollHandle)
-    clearInterval(pollHandle)
-})
+useVisibilityPolling(pollPending, 3000)
 </script>
 
 <template>

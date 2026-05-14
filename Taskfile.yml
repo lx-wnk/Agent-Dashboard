@@ -1,0 +1,60 @@
+# Taskfile.yml
+version: '3'
+
+tasks:
+  default:
+    cmds: [task --list]
+
+  dev:
+    desc: Start Go backend + Vite frontend (requires air)
+    deps: [dev:go, dev:frontend]
+
+  dev:go:
+    desc: Start Go backend with air hot-reload on :13120
+    cmd: "$(go env GOPATH)/bin/air -c .air.toml"
+
+  dev:frontend:
+    desc: Start Vite dev server with HMR on :5173
+    cmd: pnpm dev
+
+  build:
+    desc: Build server binary
+    dir: server
+    cmd: go build -o ../bin/agent-dashboard ./cmd/serve/...
+
+  test:
+    desc: Run all tests (all modules)
+    cmds:
+      - cd sdk && go test -race ./...
+      - cd server && go test -race ./...
+
+  test:watch:
+    desc: Watch mode tests (server module)
+    dir: server
+    cmd: go test -race ./... -count=1
+
+  lint:
+    desc: Run golangci-lint (all modules)
+    cmds:
+      - cd sdk && golangci-lint run ./...
+      - cd server && golangci-lint run ./...
+
+  generate:
+    desc: Run go generate (wire + ent)
+    dir: server
+    cmd: go generate ./...
+
+  vuln:
+    desc: Run govulncheck
+    cmds:
+      - cd sdk && govulncheck ./...
+      - cd server && govulncheck ./...
+
+  wire:
+    desc: Regenerate wire DI
+    dir: server
+    cmd: wire ./cmd/serve/...
+
+  fmt:
+    desc: Format all Go code
+    cmd: gofmt -w sdk/ server/

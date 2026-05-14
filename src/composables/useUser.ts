@@ -11,13 +11,26 @@ const isAdmin = ref(true) // default true for standalone
 const authEnabled = ref(false)
 const loaded = ref(false)
 
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleRetry() {
+  if (retryTimer)
+    return
+  retryTimer = setTimeout(() => { retryTimer = null; loadUser() }, 2000)
+}
+
 async function loadUser(): Promise<void> {
   try {
     const res = await fetch('/api/me')
     if (!res.ok) {
       authEnabled.value = true
       user.value = null
+      scheduleRetry() // server may still be starting up
       return
+    }
+    if (retryTimer) {
+      clearTimeout(retryTimer)
+      retryTimer = null
     }
     const data = await res.json() as { user: DashboardUser | null, isAdmin: boolean, authEnabled: boolean }
     user.value = data.user
@@ -25,7 +38,7 @@ async function loadUser(): Promise<void> {
     authEnabled.value = data.authEnabled
   }
   catch {
-    // network error — assume standalone
+    scheduleRetry() // network error — retry until server is up
   }
   finally {
     loaded.value = true

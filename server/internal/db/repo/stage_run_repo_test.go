@@ -1,0 +1,144 @@
+package repo_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/stretchr/testify/require"
+)
+
+func TestStageRunRepo_CreateAndGet(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-task-1")
+
+	run, err := sr.Create(ctx, repo.CreateStageRunInput{
+		TaskID:    taskID,
+		Stage:     "concept",
+		Iteration: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, taskID, run.TaskID)
+	require.Equal(t, "concept", run.Stage)
+
+	got, err := sr.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, run.ID, got.ID)
+}
+
+func TestStageRunRepo_GetLatestForTask(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-task-2")
+
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 2})
+	require.NoError(t, err)
+
+	latest, err := sr.GetLatestForTask(ctx, taskID)
+	require.NoError(t, err)
+	// Latest by created_at — run2 was created after run1.
+	require.NotEqual(t, run1.ID, latest.ID)
+	require.Equal(t, run2.ID, latest.ID)
+}
+
+func TestStageRunRepo_ListByStatus(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-task-3")
+
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+	_, err = sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 2})
+	require.NoError(t, err)
+
+	status := "running"
+	_, err = sr.Update(ctx, run1.ID, repo.UpdateStageRunInput{Status: &status})
+	require.NoError(t, err)
+
+	running, err := sr.ListByStatus(ctx, "running")
+	require.NoError(t, err)
+	require.Len(t, running, 1)
+	require.Equal(t, run1.ID, running[0].ID)
+}
+
+func TestStageRunRepo_Update_Status(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-task-4")
+	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+
+	status := "running"
+	updated, err := sr.Update(ctx, run.ID, repo.UpdateStageRunInput{Status: &status})
+	require.NoError(t, err)
+	require.Equal(t, "running", updated.Status)
+}
+
+func TestStageRunRepo_SumCompletedCostCents(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-task-5")
+
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 2})
+	require.NoError(t, err)
+	run3, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 3})
+	require.NoError(t, err)
+
+	doneCost := 100
+	status := "done"
+	_, err = sr.Update(ctx, run1.ID, repo.UpdateStageRunInput{Status: &status, CostCents: &doneCost})
+	require.NoError(t, err)
+	failCost := 100
+	failStatus := "failed"
+	_, err = sr.Update(ctx, run2.ID, repo.UpdateStageRunInput{Status: &failStatus, CostCents: &failCost})
+	require.NoError(t, err)
+	pendingCost := 50
+	_, err = sr.Update(ctx, run3.ID, repo.UpdateStageRunInput{CostCents: &pendingCost})
+	require.NoError(t, err)
+
+	sum, err := sr.SumCompletedCostCents(ctx, taskID)
+	require.NoError(t, err)
+	require.Equal(t, int64(200), sum)
+}
+
+func TestStageRunRepo_GetLatestForTasks(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID1 := createTask(t, tr, "sr-multi-1")
+	taskID2 := createTask(t, tr, "sr-multi-2")
+
+	_, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID1, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+	run1b, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID1, Stage: "concept", Iteration: 2})
+	require.NoError(t, err)
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID2, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+
+	latest, err := sr.GetLatestForTasks(ctx, []string{taskID1, taskID2})
+	require.NoError(t, err)
+	require.Equal(t, run1b.ID, latest[taskID1].ID)
+	require.Equal(t, run2.ID, latest[taskID2].ID)
+}

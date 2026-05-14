@@ -12,7 +12,7 @@ const org = import.meta.env.VITE_GITHUB_ORG ?? ''
         Access restricted to members of <strong>{{ org }}</strong>
       </p>
       <a
-        href="/auth/login"
+        href="/api/auth/github"
         class="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-surface-raised border border-border-subtle text-text-primary hover:bg-surface-hover transition-colors text-sm font-medium"
       >
         <svg viewBox="0 0 16 16" class="w-4 h-4 fill-current" aria-hidden="true">

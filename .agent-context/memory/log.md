@@ -5,3 +5,6 @@
 <!-- Examples: -->
 <!-- - (2026-01-15) Refactored auth module — moved session logic to SessionService -->
 <!-- - (2026-01-16) User confirmed: no mocking in integration tests -->
+
+- (2026-05-12) Go rework complete through Phase 6+ — MCP (19 tools, 4 scopes), channel bridge, refinement chat, history import, web push, FTS5 search, remote registrations, permission presets all implemented on feat/go-rework
+- (2026-05-12) docs: README + CONTRIBUTING rewritten for Go backend; outputs/ removed from git history via filter-repo + added to .gitignore; PR #29 (feat/go-rework → upcoming) updated

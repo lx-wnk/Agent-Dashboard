@@ -307,7 +307,7 @@ async function startImport() {
 
 <template>
   <AppModal :open="open" @close="emit('close')">
-    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-[975px] h-[700px] max-h-[85vh] flex overflow-hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-[975px] max-w-[calc(100vw-2rem)] h-[700px] max-h-[85vh] flex overflow-hidden">
       <!-- ── Sidebar ──────────────────────────────── -->
       <nav class="w-[260px] flex-shrink-0 bg-slate-50 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-700 px-3 py-5 flex flex-col">
         <div class="flex items-center justify-between px-1 pb-1 mb-2">

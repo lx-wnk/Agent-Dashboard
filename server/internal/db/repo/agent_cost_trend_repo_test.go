@@ -1,0 +1,67 @@
+package repo_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+)
+
+func TestAgentCostTrendRepo_BulkInsert(t *testing.T) {
+	client := openTestDB(t)
+	r := repo.NewAgentCostTrendRepo(client)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	rows := []repo.AgentCostRow{
+		{SessionID: "sess-1", Model: "claude-sonnet-4-6", InputTokens: 100, OutputTokens: 50, CostUSD: 0.001, RecordedAt: now.Add(-2 * time.Hour)},
+		{SessionID: "sess-2", Model: "claude-haiku-4-5", InputTokens: 200, OutputTokens: 80, CostUSD: 0.002, RecordedAt: now.Add(-1 * time.Hour)},
+		{SessionID: "sess-3", Model: "claude-opus-4-0", InputTokens: 300, OutputTokens: 120, CostUSD: 0.01, RecordedAt: now},
+	}
+
+	err := r.BulkInsert(t.Context(), rows)
+	require.NoError(t, err)
+
+	from := now.Add(-3 * time.Hour)
+	to := now.Add(1 * time.Minute)
+	results, err := r.ListByTimeRange(t.Context(), from, to)
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+
+	// Verify session IDs are all present.
+	gotIDs := make(map[string]struct{}, 3)
+	for _, res := range results {
+		gotIDs[res.SessionID] = struct{}{}
+	}
+	for _, row := range rows {
+		require.Contains(t, gotIDs, row.SessionID)
+	}
+}
+
+func TestAgentCostTrendRepo_BulkInsert_Empty(t *testing.T) {
+	client := openTestDB(t)
+	r := repo.NewAgentCostTrendRepo(client)
+
+	// Empty slice must be a no-op.
+	err := r.BulkInsert(t.Context(), nil)
+	require.NoError(t, err)
+}
+
+func TestAgentCostTrendRepo_ListByTimeRange_Filtered(t *testing.T) {
+	client := openTestDB(t)
+	r := repo.NewAgentCostTrendRepo(client)
+
+	base := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
+	rows := []repo.AgentCostRow{
+		{SessionID: "old-sess", Model: "claude-sonnet-4-6", InputTokens: 10, OutputTokens: 5, CostUSD: 0.0001, RecordedAt: base.Add(-24 * time.Hour)},
+		{SessionID: "in-range", Model: "claude-sonnet-4-6", InputTokens: 20, OutputTokens: 10, CostUSD: 0.0002, RecordedAt: base},
+		{SessionID: "future-sess", Model: "claude-sonnet-4-6", InputTokens: 30, OutputTokens: 15, CostUSD: 0.0003, RecordedAt: base.Add(24 * time.Hour)},
+	}
+	require.NoError(t, r.BulkInsert(t.Context(), rows))
+
+	results, err := r.ListByTimeRange(t.Context(), base.Add(-1*time.Hour), base.Add(1*time.Hour))
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, "in-range", results[0].SessionID)
+}

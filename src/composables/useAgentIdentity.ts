@@ -3,6 +3,8 @@ import { ref } from 'vue'
 interface AgentIdentity {
   color: string
   emoji: string
+  /** Short text label for screenreaders and non-emoji contexts, e.g. "Agent 3f" */
+  identityLabel: string
 }
 
 const STORAGE_KEY = 'agent-identities'
@@ -13,7 +15,10 @@ export const EMOJIS = ['🤖', '🦾', '🧠', '⚡', '🔬', '🛠️', '🎯',
 
 function load(): Record<string, AgentIdentity> {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+      return parsed as Record<string, AgentIdentity>
+    return {}
   }
   catch {
     return {}
@@ -37,14 +42,38 @@ function deterministicIndex(str: string, len: number): number {
   return Math.abs(hash) % len
 }
 
-const identities = ref<Record<string, AgentIdentity>>(load())
+/** Returns a short hex suffix derived from the string (last 4 hex chars of hash) */
+function hexSuffix(str: string): string {
+  let hash = 0
+  for (const ch of str)
+    hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0
+  return (hash >>> 0).toString(16).slice(-4)
+}
+
+function loadAndBackfill(): Record<string, AgentIdentity> {
+  const store = load()
+  let dirty = false
+  for (const [path, entry] of Object.entries(store)) {
+    if (!entry.identityLabel) {
+      entry.identityLabel = `Agent ${hexSuffix(path)}`
+      dirty = true
+    }
+  }
+  if (dirty)
+    persist(store)
+  return store
+}
+
+const identities = ref<Record<string, AgentIdentity>>(loadAndBackfill())
 
 export function useAgentIdentity() {
   function getIdentity(projectPath: string): AgentIdentity {
     if (!identities.value[projectPath]) {
+      const emoji = EMOJIS[deterministicIndex(`${projectPath}!`, EMOJIS.length)]
       identities.value[projectPath] = {
         color: COLORS[deterministicIndex(projectPath, COLORS.length)],
-        emoji: EMOJIS[deterministicIndex(`${projectPath}!`, EMOJIS.length)],
+        emoji,
+        identityLabel: `Agent ${hexSuffix(projectPath)}`,
       }
       persist(identities.value)
     }
