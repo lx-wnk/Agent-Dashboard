@@ -5,7 +5,7 @@ import "context"
 // OAuthProvider defines the interface for OAuth provider implementations.
 type OAuthProvider interface {
 	// BuildAuthURL returns the authorization URL for the OAuth flow.
-	BuildAuthURL(state, redirectURI string) string
+	BuildAuthURL(ctx context.Context, state, redirectURI string) string
 
 	// ExchangeCode exchanges an OAuth authorization code for an access token.
 	ExchangeCode(ctx context.Context, code, redirectURI string) (string, error)

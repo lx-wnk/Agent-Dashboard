@@ -62,7 +62,8 @@ func NewClient(clientID, clientSecret string, opts ...option) *Client {
 }
 
 // BuildAuthURL returns the GitHub authorization URL for the OAuth flow.
-func (c *Client) BuildAuthURL(state, redirectURI string) string {
+// ctx is accepted for interface conformance but not used (no network call is made).
+func (c *Client) BuildAuthURL(_ context.Context, state, redirectURI string) string {
 	v := url.Values{}
 	v.Set("client_id", c.clientID)
 	v.Set("state", state)

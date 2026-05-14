@@ -27,8 +27,8 @@ func NewAuthProvider(e Entry) auth.OAuthProvider {
 	}
 }
 
-func (p *PluginAuthProvider) BuildAuthURL(state, redirectURI string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (p *PluginAuthProvider) BuildAuthURL(ctx context.Context, state, redirectURI string) string {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	u := p.entry.BaseURL + "/capabilities/auth/authorize-url" +
 		"?state=" + url.QueryEscape(state) + "&redirect_uri=" + url.QueryEscape(redirectURI)

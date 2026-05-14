@@ -33,7 +33,7 @@ func TestClient_GetUser(t *testing.T) {
 
 func TestClient_BuildAuthURL(t *testing.T) {
 	client := githubauth.NewClient("my-client-id", "secret")
-	url := client.BuildAuthURL("my-state", "http://callback")
+	url := client.BuildAuthURL(t.Context(), "my-state", "http://callback")
 	require.Contains(t, url, "client_id=my-client-id")
 	require.Contains(t, url, "state=my-state")
 	require.Contains(t, url, "redirect_uri=")

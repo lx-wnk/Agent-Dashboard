@@ -53,7 +53,7 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
-	http.Redirect(w, r, h.deps.OAuthProvider.BuildAuthURL(state, h.deps.CallbackURL), http.StatusFound)
+	http.Redirect(w, r, h.deps.OAuthProvider.BuildAuthURL(r.Context(), state, h.deps.CallbackURL), http.StatusFound)
 	return nil
 }
 
