@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,45 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
+
+// parseAndExtractAssistantText mimics what session_reader.go does:
+// it parses JSONL lines and returns the last assistant text block content.
+// Used to verify that writeSyntheticSession writes the correct format.
+func parseAndExtractAssistantText(jsonlContent string) string {
+	type contentBlock struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	type message struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	type entry struct {
+		Type    string   `json:"type"`
+		Message *message `json:"message"`
+	}
+	var last string
+	for _, line := range strings.Split(jsonlContent, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var e entry
+		if err := json.Unmarshal([]byte(line), &e); err != nil || e.Type != "assistant" || e.Message == nil {
+			continue
+		}
+		var parts []contentBlock
+		if err := json.Unmarshal(e.Message.Content, &parts); err != nil {
+			continue
+		}
+		for _, p := range parts {
+			if p.Type == "text" && p.Text != "" {
+				last = p.Text
+			}
+		}
+	}
+	return last
+}
 
 func TestOllamaSpawner_Spawn_WritesSessionFile(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +80,14 @@ func TestOllamaSpawner_Spawn_WritesSessionFile(t *testing.T) {
 	data, err := os.ReadFile(result.SessionFile)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "assistant")
+
+	// Sub-test: the file must be parseable by the actual session reader logic
+	// and must surface the LLM content as assistant text.
+	t.Run("parser_round_trip", func(t *testing.T) {
+		text := parseAndExtractAssistantText(string(data))
+		require.NotEmpty(t, text, "no assistant text found — JSONL format mismatch (check writeSyntheticSession)")
+		assert.Contains(t, text, `"summary":"ok"`)
+	})
 
 	// Cleanup
 	os.Remove(result.SessionFile)
@@ -71,6 +119,13 @@ func TestOpenAISpawner_Spawn_WritesSessionFile(t *testing.T) {
 	data, err := os.ReadFile(result.SessionFile)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "assistant")
+
+	// Sub-test: the file must be parseable by the actual session reader logic.
+	t.Run("parser_round_trip", func(t *testing.T) {
+		text := parseAndExtractAssistantText(string(data))
+		require.NotEmpty(t, text, "no assistant text found — JSONL format mismatch (check writeSyntheticSession)")
+		assert.Contains(t, text, `"result":"done"`)
+	})
 
 	os.Remove(result.SessionFile)
 }

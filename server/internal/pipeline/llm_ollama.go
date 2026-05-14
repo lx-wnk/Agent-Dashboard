@@ -79,6 +79,9 @@ func (o *OllamaSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 // writeSyntheticSession writes a single-line JSONL file in the format the
 // completion detector expects: one assistant message whose text contains the
 // ```json ... ``` block produced by the LLM.
+//
+// The parser (session_reader.go / parseJsonlLines) expects each line to match
+// JsonlEntry: {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"..."}]}}
 func writeSyntheticSession(workDir, stageRunID, content string) (string, error) {
 	dir := filepath.Join(os.TempDir(), "dashboard-synthetic-sessions")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -91,19 +94,24 @@ func writeSyntheticSession(workDir, stageRunID, content string) (string, error) 
 		Type string `json:"type"`
 		Text string `json:"text"`
 	}
-	type line struct {
-		Type      string         `json:"type"`
+	type message struct {
 		Role      string         `json:"role"`
 		Content   []contentBlock `json:"content"`
 		Timestamp string         `json:"timestamp"`
 	}
+	type line struct {
+		Type    string  `json:"type"`
+		Message message `json:"message"`
+	}
 	entry := line{
-		Type: "message",
-		Role: "assistant",
-		Content: []contentBlock{
-			{Type: "text", Text: content},
+		Type: "assistant",
+		Message: message{
+			Role: "assistant",
+			Content: []contentBlock{
+				{Type: "text", Text: content},
+			},
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		},
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	data, err := json.Marshal(entry)
 	if err != nil {
