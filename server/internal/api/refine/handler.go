@@ -2,6 +2,7 @@
 package refine
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -156,7 +157,10 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 
 	flusher, canFlush := w.(http.Flusher)
 
-	stream, err := refine.RunRefinementTurn(r.Context(), cfg)
+	turnCtx, turnCancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer turnCancel()
+
+	stream, err := refine.RunRefinementTurn(turnCtx, cfg)
 	if err != nil {
 		// Headers already set for SSE — send error as SSE event.
 		fmt.Fprintf(w, "data: [ERROR] %s\n\n", err.Error())
@@ -183,7 +187,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 			if canFlush {
 				flusher.Flush()
 			}
-		case <-r.Context().Done():
+		case <-turnCtx.Done():
 			return
 		}
 	}

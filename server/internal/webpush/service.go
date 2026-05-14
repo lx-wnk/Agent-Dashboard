@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	webpushlib "github.com/SherClockHolmes/webpush-go"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
@@ -122,6 +123,10 @@ func (s *Service) SendToAll(ctx context.Context, payload []byte) (int, error) {
 			slog.Warn("webpush: delivery failed", "endpoint", sub.Endpoint, "err", sendErr)
 			errCount++
 			continue
+		}
+		if resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound {
+			slog.Info("webpush: pruning stale subscription", "endpoint", sub.Endpoint, "status", resp.StatusCode)
+			_ = s.subRepo.DeleteByEndpoint(ctx, sub.Endpoint)
 		}
 		_ = resp.Body.Close()
 	}
