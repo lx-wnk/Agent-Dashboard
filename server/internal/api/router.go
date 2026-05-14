@@ -201,6 +201,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
+
+		// Mount route_extension plugins (if any).
+		if deps.PluginRegistry != nil {
+			for _, entry := range deps.PluginRegistry.AllWithCapability(plugin.CapRouteExtension) {
+				id := entry.Descriptor.ID
+				r.Mount("/api/plugins/"+id, plugin.NewReverseProxy(entry))
+				slog.Info("router: mounted plugin route", "id", id, "prefix", "/api/plugins/"+id)
+			}
+		}
 	})
 
 	// Channel-reply endpoint — bearer token auth via discovery file (no JWT).
@@ -214,15 +223,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Mounted outside the JWT group so OAuth-less clients can reach it.
 	if deps.MCPHandler != nil {
 		r.With(mcp.McpAuthMiddleware(deps.ApiKeyRepo)).Post("/api/mcp", deps.MCPHandler.ServeHTTP)
-	}
-
-	// Mount route_extension plugins (if any).
-	if deps.PluginRegistry != nil {
-		for _, entry := range deps.PluginRegistry.AllWithCapability(plugin.CapRouteExtension) {
-			id := entry.Descriptor.ID
-			r.Mount("/api/plugins/"+id, plugin.NewReverseProxy(entry))
-			slog.Info("router: mounted plugin route", "id", id, "prefix", "/api/plugins/"+id)
-		}
 	}
 
 	// Vue SPA catch-all — must be last (after all API routes)

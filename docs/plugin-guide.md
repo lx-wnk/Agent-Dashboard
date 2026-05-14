@@ -37,7 +37,7 @@ The dashboard registry (`server/internal/plugin/`) reads `plugin.json`, starts t
 | `capabilities` | yes      | Array of capability strings the plugin implements (see below). |
 | `addr`         | yes      | `127.0.0.1:<port>` the plugin HTTP server binds to. |
 | `command`      | no       | Executable + args to launch the plugin. Omit if the process is already running. |
-| `env`          | no       | Env var names the plugin reads from the dashboard's environment (documentation only — the full parent environment is forwarded). |
+| `env`          | no       | Env var names to forward from the dashboard's environment. Only a fixed base set (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus any names listed here are forwarded. Any secret a plugin needs must be named in this array. |
 
 ---
 
@@ -117,7 +117,7 @@ The registry scans every subdirectory of `PLUGIN_DIR` for `plugin.json` at start
 
 - Plugins **must** bind to `127.0.0.1` only — never a public address.
 - The dashboard kills any plugin process it started on shutdown (`Registry.Shutdown()`).
-- The full parent environment is forwarded to the plugin process, so secrets set in the dashboard's environment (e.g. `GITHUB_CLIENT_SECRET`) are available without extra configuration.
+- Only a fixed base set of env vars (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus any var names listed in the `env` array in `plugin.json` are forwarded to the plugin process. Any secret a plugin needs (e.g. `GITHUB_CLIENT_SECRET`) must be named in `env`.
 - Health check timeout is **5 seconds**. Plugins that do not respond in time are considered failed and are not registered.
 
 ---

@@ -30,7 +30,7 @@ func NewAuthProvider(e Entry) auth.OAuthProvider {
 func (p *PluginAuthProvider) BuildAuthURL(state, redirectURI string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	u := "http://" + p.entry.Descriptor.Addr + "/capabilities/auth/authorize-url" +
+	u := p.entry.BaseURL + "/capabilities/auth/authorize-url" +
 		"?state=" + url.QueryEscape(state) + "&redirect_uri=" + url.QueryEscape(redirectURI)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {

@@ -5,16 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Registry discovers, starts, and health-checks plugins from a directory.
 type Registry struct {
+	mu      sync.RWMutex
 	dir     string
 	plugins []Entry
 }
@@ -60,6 +63,15 @@ func (r *Registry) Load(ctx context.Context) error {
 			slog.Warn("plugin: skip — invalid plugin.json", "dir", entry.Name(), "err", err)
 			continue
 		}
+		host, _, err := net.SplitHostPort(desc.Addr)
+		if err != nil {
+			slog.Warn("plugin: invalid addr format, skipping", "id", desc.ID, "addr", desc.Addr, "err", err)
+			continue
+		}
+		if host != "127.0.0.1" && host != "::1" && host != "localhost" {
+			slog.Warn("plugin: addr must be loopback, skipping", "id", desc.ID, "addr", desc.Addr)
+			continue
+		}
 		pluginEntry := Entry{
 			Descriptor: desc,
 			BaseURL:    "http://" + desc.Addr,
@@ -75,7 +87,11 @@ func (r *Registry) Load(ctx context.Context) error {
 				continue
 			}
 			// Reap the process when it exits to avoid zombie entries.
-			go func() { _ = cmd.Wait() }()
+			go func() {
+				if err := cmd.Wait(); err != nil {
+					slog.Error("plugin: process exited unexpectedly", "id", desc.ID, "err", err)
+				}
+			}()
 			pluginEntry.cmd = cmd
 		}
 		if err := r.waitHealthy(ctx, pluginEntry.BaseURL); err != nil {
@@ -86,7 +102,9 @@ func (r *Registry) Load(ctx context.Context) error {
 			continue
 		}
 		slog.Info("plugin: loaded", "id", desc.ID, "capabilities", desc.Capabilities)
+		r.mu.Lock()
 		r.plugins = append(r.plugins, pluginEntry)
+		r.mu.Unlock()
 	}
 	return nil
 }
@@ -95,6 +113,8 @@ func (r *Registry) Load(ctx context.Context) error {
 // cmd.Wait() is handled by the goroutine launched after cmd.Start(),
 // so we only need to signal the process here.
 func (r *Registry) Shutdown() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	for _, p := range r.plugins {
 		if p.cmd != nil && p.cmd.Process != nil {
 			_ = p.cmd.Process.Kill()
@@ -104,6 +124,8 @@ func (r *Registry) Shutdown() {
 
 // FindByCapability returns the first plugin with the given capability, or nil.
 func (r *Registry) FindByCapability(cap string) *Entry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for i := range r.plugins {
 		if r.plugins[i].Descriptor.HasCapability(cap) {
 			return &r.plugins[i]
@@ -114,6 +136,8 @@ func (r *Registry) FindByCapability(cap string) *Entry {
 
 // AllWithCapability returns all plugins with the given capability.
 func (r *Registry) AllWithCapability(cap string) []Entry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var out []Entry
 	for _, p := range r.plugins {
 		if p.Descriptor.HasCapability(cap) {
@@ -147,13 +171,14 @@ func buildPluginEnv(allowedKeys []string) []string {
 }
 
 func (r *Registry) waitHealthy(ctx context.Context, baseURL string) error {
+	healthClient := &http.Client{Timeout: 1 * time.Second}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/health", nil)
 		if err != nil {
 			return err
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := healthClient.Do(req)
 		if err == nil && resp.StatusCode == http.StatusOK {
 			_ = resp.Body.Close()
 			return nil
