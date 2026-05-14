@@ -33,6 +33,7 @@ type Config struct {
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
 	MCPToken               string `koanf:"mcp_token"`
+	Adapters               AdapterConfig `koanf:"adapters"`
 }
 
 // Defaults returns a Config populated with safe defaults.
