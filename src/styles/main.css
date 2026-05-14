@@ -22,14 +22,14 @@
 .markdown-body p { margin: 0 0 0.4em; }
 .markdown-body p:last-child { margin-bottom: 0; }
 .markdown-body code {
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(0 0 0 / 0.06);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 12px;
   font-family: var(--font-mono);
 }
 .markdown-body pre {
-  background: var(--color-slate-950);
+  background: var(--color-slate-100);
   border-radius: 4px;
   padding: 8px;
   overflow-x: auto;
@@ -37,22 +37,32 @@
 }
 .markdown-body pre code { background: none; padding: 0; }
 .markdown-body ul, .markdown-body ol { margin: 4px 0; padding-left: 1.4em; }
-.markdown-body strong { color: var(--color-slate-100); }
-.markdown-body a { color: var(--color-blue-400); }
+.markdown-body strong { color: var(--color-slate-900); }
+.markdown-body a { color: var(--color-blue-600); }
 .markdown-body table { border-collapse: collapse; width: 100%; margin: 6px 0; font-size: 12px; }
 .markdown-body th, .markdown-body td {
-  border: 1px solid var(--color-slate-700);
+  border: 1px solid var(--color-slate-300);
   padding: 4px 8px;
   text-align: left;
 }
-.markdown-body th { background: var(--color-slate-900); color: var(--color-slate-100); font-weight: 600; }
+.markdown-body th { background: var(--color-slate-100); color: var(--color-slate-900); font-weight: 600; }
 .markdown-body blockquote {
-  border-left: 3px solid var(--color-slate-700);
+  border-left: 3px solid var(--color-slate-300);
   margin: 4px 0;
   padding: 2px 10px;
-  color: var(--color-slate-500);
+  color: var(--color-slate-600);
 }
-.markdown-body hr { border: none; border-top: 1px solid var(--color-slate-700); margin: 8px 0; }
+.markdown-body hr { border: none; border-top: 1px solid var(--color-slate-300); margin: 8px 0; }
+
+/* Dark-mode overrides for markdown — only applies when .dark class is on <html> */
+.dark .markdown-body code { background: rgb(255 255 255 / 0.08); }
+.dark .markdown-body pre { background: var(--color-slate-950); }
+.dark .markdown-body strong { color: var(--color-slate-100); }
+.dark .markdown-body a { color: var(--color-blue-400); }
+.dark .markdown-body th, .dark .markdown-body td { border-color: var(--color-slate-700); }
+.dark .markdown-body th { background: var(--color-slate-900); color: var(--color-slate-100); }
+.dark .markdown-body blockquote { border-left-color: var(--color-slate-700); color: var(--color-slate-500); }
+.dark .markdown-body hr { border-top-color: var(--color-slate-700); }
 
 /* Pulse animation reused across components */
 @keyframes pulse {

@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, useId } from 'vue'
 
-const props = defineProps<{ taskId: string }>()
+const props = defineProps<{
+  taskId: string
+  cwd?: string
+}>()
+
+const emit = defineEmits<{
+  (e: 'abort'): void
+}>()
 
 const COMMANDS = [
   'pnpm test',
@@ -13,6 +20,7 @@ const COMMANDS = [
   'git status',
 ]
 
+const panelId = useId()
 const selectedCommand = ref(COMMANDS[0])
 const output = ref('')
 const exitCode = ref<number | null>(null)
@@ -41,6 +49,10 @@ async function run() {
     running.value = false
   }
 }
+
+function abort() {
+  emit('abort')
+}
 </script>
 
 <template>
@@ -48,12 +60,15 @@ async function run() {
     <button
       type="button"
       class="w-full flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"
+      :aria-expanded="expanded"
+      :aria-controls="panelId"
       @click="expanded = !expanded"
     >
       <span>Run Command in Worktree</span>
       <span class="text-xs text-slate-400">{{ expanded ? '▲' : '▼' }}</span>
     </button>
-    <div v-if="expanded" class="p-4 space-y-3">
+    <div v-show="expanded" :id="panelId" :inert="!expanded" class="p-4 space-y-3">
+      <span v-if="cwd" class="block text-xs text-slate-500 dark:text-slate-400 font-mono truncate">{{ cwd }}</span>
       <div class="flex gap-2">
         <select
           v-model="selectedCommand"
@@ -71,8 +86,16 @@ async function run() {
         >
           {{ running ? 'Running…' : 'Run' }}
         </button>
+        <button
+          v-if="running"
+          type="button"
+          class="px-3 py-1.5 text-sm rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600"
+          @click="abort"
+        >
+          Abort
+        </button>
       </div>
-      <div v-if="output" class="text-[11px] font-mono bg-slate-950 text-slate-100 rounded p-3 max-h-48 overflow-y-auto whitespace-pre-wrap">
+      <div v-if="output" role="log" aria-live="polite" class="text-[11px] font-mono bg-slate-950 text-slate-100 rounded p-3 max-h-96 overflow-y-auto resize-y whitespace-pre-wrap">
         <span
           class="block mb-1 text-[10px] font-sans"
           :class="exitCode === 0 ? 'text-green-400' : 'text-red-400'"

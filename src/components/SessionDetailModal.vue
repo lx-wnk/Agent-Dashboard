@@ -110,9 +110,20 @@ watch(
   },
 )
 
+function handleResumeKeydown(e: KeyboardEvent) {
+  if (e.isComposing || e.keyCode === 229)
+    return // IME composition in progress — do not submit
+  resumeSession()
+}
+
 async function resumeSession() {
-  if (!props.session || !resumePrompt.value.trim() || spawning.value)
+  if (!props.session || spawning.value)
     return
+  if (!resumePrompt.value.trim()) {
+    statusIsError.value = true
+    statusMsg.value = 'Please enter a prompt before resuming.'
+    return
+  }
 
   spawning.value = true
   statusMsg.value = ''
@@ -155,12 +166,12 @@ async function resumeSession() {
 </script>
 
 <template>
-  <AppModal :open="open" @close="emit('close')">
+  <AppModal :open="open" labelled-by="session-detail-title" @close="emit('close')">
     <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
       <!-- Header -->
       <header class="flex justify-between items-start px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0 gap-3">
         <div class="min-w-0 flex-1">
-          <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 mb-1.5">
+          <h2 id="session-detail-title" class="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 mb-1.5">
             {{ session?.firstPrompt ?? session?.projectName ?? 'Session' }}
           </h2>
           <div class="flex flex-wrap items-center gap-1.5">
@@ -173,7 +184,8 @@ async function resumeSession() {
         </div>
         <button
           type="button"
-          class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100 flex-shrink-0"
+          aria-label="Close"
+          class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100 flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
           @click="emit('close')"
         >
           &times;
@@ -222,19 +234,25 @@ async function resumeSession() {
             v-model="resumePrompt"
             class="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-xs px-2 py-1.5 focus:outline-none focus:border-green-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
             type="text"
+            aria-label="Follow-up prompt"
             placeholder="Follow-up prompt to resume session..."
-            @keydown.enter="resumeSession"
+            @keydown.enter="handleResumeKeydown"
           >
           <button
             type="button"
-            class="flex-shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-xs font-semibold cursor-pointer hover:text-green-600 dark:hover:text-green-400 hover:border-green-500 dark:hover:border-green-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="flex-shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 min-h-[44px] min-w-[44px] text-xs font-semibold cursor-pointer hover:text-green-600 dark:hover:text-green-400 hover:border-green-500 dark:hover:border-green-500 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="!resumePrompt.trim() || spawning"
             @click="resumeSession"
           >
             {{ spawning ? '...' : 'Resume' }}
           </button>
         </div>
-        <p v-if="statusMsg" class="text-[11px] mt-1.5" :class="statusIsError ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
+        <p
+          role="status"
+          aria-live="polite"
+          class="text-[11px] mt-1.5"
+          :class="statusMsg ? (statusIsError ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400') : 'sr-only'"
+        >
           {{ statusMsg }}
         </p>
       </footer>
