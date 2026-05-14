@@ -210,8 +210,7 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) error {
 	return json.NewEncoder(w).Encode(&snapshot)
 }
 
-// putConfig replaces the full AdapterConfig from the request body in memory.
-// The change is NOT persisted to disk — it is lost on server restart.
+// putConfig replaces the full AdapterConfig from the request body in memory and persists it to disk when a config file is configured.
 func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
 	var incoming config.AdapterConfig
 	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
@@ -221,6 +220,14 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
 	*h.cfg = incoming
 	snapshot := *h.cfg
 	h.mu.Unlock()
+
+	// Persist to disk so the config survives a server restart.
+	if h.cfgFile != "" {
+		if err := persistAdapterConfig(h.cfgFile, snapshot); err != nil {
+			slog.Warn("adapters: failed to persist config to disk", "file", h.cfgFile, "err", err)
+		}
+	}
+
 	type response struct {
 		config.AdapterConfig
 		RestartRequired bool `json:"restartRequired"`
