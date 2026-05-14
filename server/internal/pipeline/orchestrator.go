@@ -259,6 +259,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		MCPToken:             o.opts.MCPToken,
 		MCPUrl:               o.opts.MCPUrl,
 		SystemPromptRepo:     o.opts.SystemPromptRepo,
+		Spawner:              o.opts.Spawner,
 		RecordAudit: func(action string, details map[string]any) {
 			_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
 				TaskID:  task.ID,
