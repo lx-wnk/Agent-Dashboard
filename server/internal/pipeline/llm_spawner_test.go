@@ -97,7 +97,7 @@ func TestOpenAISpawner_Spawn_WritesSessionFile(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/chat/completions", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []any{
 				map[string]any{"message": map[string]any{"content": "```json\n{\"result\":\"done\"}\n```"}},
 			},
