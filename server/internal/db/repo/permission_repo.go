@@ -24,6 +24,7 @@ type PermissionRepo interface {
 	ListPendingForTask(ctx context.Context, taskID string, stageRunIDs []string) ([]*ent.PermissionRequest, error)
 	ResolvePermissionRequest(ctx context.Context, id, outcome string) error
 	CountForStageRun(ctx context.Context, stageRunID string) (int, error)
+	CountForStageRunsBulk(ctx context.Context, stageRunIDs []string) (map[string]int, error)
 }
 
 // GrantEntry describes a single permission to bulk-grant.
@@ -220,4 +221,24 @@ func (r *entPermissionRepo) CountForStageRun(ctx context.Context, stageRunID str
 		return 0, fmt.Errorf("permission.CountForStageRun: %w", err)
 	}
 	return n, nil
+}
+
+// CountForStageRunsBulk returns the count of pending (outcome IS NULL) permission
+// requests for each stage run ID in a single query, reducing N queries to 1.
+func (r *entPermissionRepo) CountForStageRunsBulk(ctx context.Context, stageRunIDs []string) (map[string]int, error) {
+	counts := make(map[string]int, len(stageRunIDs))
+	if len(stageRunIDs) == 0 {
+		return counts, nil
+	}
+	reqs, err := r.client.PermissionRequest.Query().
+		Where(permissionrequest.StageRunIDIn(stageRunIDs...), permissionrequest.OutcomeIsNil()).
+		Select(permissionrequest.FieldStageRunID).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("permission.CountForStageRunsBulk: %w", err)
+	}
+	for _, req := range reqs {
+		counts[req.StageRunID]++
+	}
+	return counts, nil
 }

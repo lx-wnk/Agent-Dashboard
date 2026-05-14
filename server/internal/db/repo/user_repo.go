@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	entuser "github.com/lx-wnk/agent-dashboard/server/internal/db/ent/user"
 )
 
@@ -21,6 +24,7 @@ type GitHubUserInfo struct {
 type UserRepo interface {
 	Upsert(ctx context.Context, info GitHubUserInfo) (*ent.User, error)
 	GetByID(ctx context.Context, id string) (*ent.User, error)
+	Delete(ctx context.Context, id string) error
 }
 
 type entUserRepo struct {
@@ -109,5 +113,43 @@ func (r *entUserRepo) GetByID(ctx context.Context, id string) (*ent.User, error)
 		return nil, fmt.Errorf("user.GetByID %s: %w", id, err)
 	}
 	return u, nil
+}
+
+// Delete permanently removes a user and anonymizes their linked data (GDPR Art. 17).
+// Within a single transaction:
+//   - Tasks owned by the user have user_id nulled (work history preserved, owner anonymized).
+//   - PermissionPresets owned by the user have user_id nulled.
+//   - RemoteRegistrations owned by the user are deleted.
+//   - The user row itself is deleted last.
+//
+// API keys are not user-scoped (no user_id column) and are therefore not touched.
+func (r *entUserRepo) Delete(ctx context.Context, id string) error {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("user.Delete begin tx %s: %w", id, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := tx.Task.Update().
+		Where(task.UserIDEQ(id)).
+		ClearUserID().
+		Exec(ctx); err != nil {
+		return fmt.Errorf("user.Delete nullify tasks %s: %w", id, err)
+	}
+	if err := tx.PermissionPreset.Update().
+		Where(permissionpreset.UserIDEQ(id)).
+		ClearUserID().
+		Exec(ctx); err != nil {
+		return fmt.Errorf("user.Delete nullify presets %s: %w", id, err)
+	}
+	if _, err := tx.RemoteRegistration.Delete().
+		Where(remoteregistration.UserIDEQ(id)).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("user.Delete remotes %s: %w", id, err)
+	}
+	if err := tx.User.DeleteOneID(id).Exec(ctx); err != nil {
+		return fmt.Errorf("user.Delete %s: %w", id, err)
+	}
+	return tx.Commit()
 }
 

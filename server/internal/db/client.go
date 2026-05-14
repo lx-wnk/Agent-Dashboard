@@ -36,7 +36,7 @@ func (b *DBBundle) Close() error {
 func Open(path string) (*DBBundle, error) {
 	// modernc.org/sqlite uses _pragma=<name>(<value>) URI parameters,
 	// not the _fk=1 shorthand used by mattn/go-sqlite3.
-	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)"
+	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-64000)&_pragma=temp_store(memory)&_pragma=mmap_size(134217728)"
 	if path == ":memory:" {
 		dsn = "file::memory:?mode=memory&_pragma=foreign_keys(1)"
 	} else {
