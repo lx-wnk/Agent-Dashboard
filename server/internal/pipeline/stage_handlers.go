@@ -16,6 +16,10 @@ func (h *agentStageHandler) RequiresAgent() bool { return true }
 
 func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) {
 	bundle := h.buildPrompt(ctx)
+	// Prepend any custom system prompts from DB (highest priority first).
+	if custom := buildCustomSystemPrompt(ctx, h.stage); custom != "" {
+		bundle.SystemPrompt = custom + "\n\n---\n\n" + bundle.SystemPrompt
+	}
 	feedback := BuildFeedbackPrefix(ctx.PriorIterationOutput)
 
 	spawnFn := h.spawnFn

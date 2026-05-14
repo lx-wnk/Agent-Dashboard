@@ -159,13 +159,14 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 	cfgRepo := repo.NewPipelineConfigRepo(client)
 
 	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
-		Client:         client,
-		TaskRepo:       taskRepo,
-		StageRunRepo:   srRepo,
-		PermissionRepo: permRepo,
-		AuditRepo:      auditRepo,
-		ConfigRepo:     cfgRepo,
-		MCPToken:       cfg.MCPToken,
+		Client:           client,
+		TaskRepo:         taskRepo,
+		StageRunRepo:     srRepo,
+		PermissionRepo:   permRepo,
+		AuditRepo:        auditRepo,
+		ConfigRepo:       cfgRepo,
+		SystemPromptRepo: repo.NewSystemPromptRepo(client),
+		MCPToken:         cfg.MCPToken,
 		MCPUrl:         fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		OnTaskChanged: func(taskID string, transitionKind string) {
 			tb.Broadcast(sse.TaskEvent{

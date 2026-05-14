@@ -56,6 +56,11 @@ func (IterateTransition) isTransition()      {}
 func (OnHoldTransition) isTransition()       {}
 func (AsyncRunningTransition) isTransition() {}
 
+// SystemPromptQuerier is a narrow interface so pipeline does not import the full repo package.
+type SystemPromptQuerier interface {
+	ListForStage(ctx context.Context, stage string) ([]*ent.SystemPrompt, error)
+}
+
 // StageContext is passed to stage handlers.
 type StageContext struct {
 	Ctx                  context.Context
@@ -69,6 +74,10 @@ type StageContext struct {
 	UserAdditionalPrompt string
 	MCPToken             string
 	MCPUrl               string
+
+	// SystemPromptRepo is used to fetch custom system prompt overrides for this stage.
+	// May be nil if the feature is not configured.
+	SystemPromptRepo SystemPromptQuerier
 
 	RecordAudit       func(action string, details map[string]any)
 	RequestPermission func(tool, pattern, reason string) *ent.PermissionRequest
@@ -114,13 +123,14 @@ func IsTerminalStage(s string) bool {
 
 // OrchestratorOptions configures the PipelineOrchestrator.
 type OrchestratorOptions struct {
-	PollInterval   time.Duration
-	Client         *ent.Client
-	TaskRepo       repo.TaskRepo
-	StageRunRepo   repo.StageRunRepo
-	PermissionRepo repo.PermissionRepo
-	AuditRepo      repo.AuditRepo
-	ConfigRepo     repo.PipelineConfigRepo
+	PollInterval     time.Duration
+	Client           *ent.Client
+	TaskRepo         repo.TaskRepo
+	StageRunRepo     repo.StageRunRepo
+	PermissionRepo   repo.PermissionRepo
+	AuditRepo        repo.AuditRepo
+	ConfigRepo       repo.PipelineConfigRepo
+	SystemPromptRepo SystemPromptQuerier
 
 	// MCPToken and MCPUrl are injected into spawned stage agents via
 	// DASHBOARD_MCP_TOKEN / DASHBOARD_MCP_URL so the channel bridge can

@@ -3,6 +3,7 @@ package pipeline
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
@@ -133,6 +134,24 @@ func BuildFeedbackPrefix(priorOutput map[string]any) string {
 		rejectedBlock = fmt.Sprintf("\n\nYour previous response was:\n```json\n%s\n```", truncated)
 	}
 	return fmt.Sprintf("## CORRECTION REQUIRED\n\nYour previous attempt was rejected with: **%s**.%s\n\nStick EXACTLY to the schema described below. Do not add or rename fields.\n\n---\n\n", validationErr, rejectedBlock)
+}
+
+// buildCustomSystemPrompt queries the SystemPromptRepo for global prompts matching the given stage,
+// combines them highest-priority-first, and returns the combined text separated by dividers.
+// Returns "" if the repo is nil or no prompts match.
+func buildCustomSystemPrompt(sc *StageContext, stage string) string {
+	if sc.SystemPromptRepo == nil {
+		return ""
+	}
+	prompts, err := sc.SystemPromptRepo.ListForStage(sc.Ctx, stage)
+	if err != nil || len(prompts) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(prompts))
+	for _, p := range prompts {
+		parts = append(parts, p.Content)
+	}
+	return strings.Join(parts, "\n\n---\n\n")
 }
 
 // SummarizeReviewFindings extracts a short actionable feedback string from a self_review output.
