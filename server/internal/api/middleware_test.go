@@ -38,9 +38,9 @@ func TestRouter_BypassAuth_LoopbackNoOAuth(t *testing.T) {
 	assert.NotEqual(t, http.StatusUnauthorized, rec.Code)
 }
 
-// TestRouter_RequireAuth_RejectsWithout401 verifies that when BypassAuth is false,
+// TestRouter_RequireAuth_Returns401WhenUnauthenticated verifies that when BypassAuth is false,
 // protected routes reject unauthenticated requests with 401.
-func TestRouter_RequireAuth_RejectsWithout401(t *testing.T) {
+func TestRouter_RequireAuth_Returns401WhenUnauthenticated(t *testing.T) {
 	deps := api.RouterDeps{
 		Config: api.RouterConfig{
 			JWTSecret:  "test-secret-minimum-32-characters-x",

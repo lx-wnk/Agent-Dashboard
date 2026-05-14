@@ -44,7 +44,9 @@ func TestAgentHandler_List_EmptyReturnsArray(t *testing.T) {
 	require.NoError(t, h.List(rec, req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	// Body must be valid JSON (null or [])
-	var got any
+	// Body must be a JSON array [], not null.
+	var got []sdk.Agent
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+	assert.NotNil(t, got, "handler must return [] not null when no agents exist")
+	assert.Empty(t, got)
 }

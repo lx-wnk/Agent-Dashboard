@@ -27,10 +27,14 @@ func NewHandler(getAgents GetAgentsFn, broadcaster *sse.Broadcaster) *Handler {
 }
 
 // List handles GET /api/agents — returns the current agent list as JSON.
+// A nil slice is normalized to an empty slice so the frontend always receives [].
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) error {
 	agents, err := h.getAgents(r.Context())
 	if err != nil {
 		return fmt.Errorf("get agents: %w", err)
+	}
+	if agents == nil {
+		agents = []sdk.Agent{}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(agents)
