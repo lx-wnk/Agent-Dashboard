@@ -63,10 +63,18 @@ func ErrorMiddleware(next HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// writeJSON writes v as JSON with the given status. Encoding errors are discarded
+// WriteJSON writes v as JSON with the given status. Encoding errors are discarded
 // because headers are already sent at this point.
-func writeJSON(w http.ResponseWriter, status int, v any) {
+func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+// JSONError writes a JSON error response with the given status and message.
+func JSONError(w http.ResponseWriter, status int, msg string) {
+	WriteJSON(w, status, map[string]string{"error": msg})
+}
+
+// writeJSON is the unexported alias kept for internal use within this package.
+func writeJSON(w http.ResponseWriter, status int, v any) { WriteJSON(w, status, v) }

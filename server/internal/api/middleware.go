@@ -3,6 +3,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -50,6 +51,46 @@ func SlogMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// RequireSameOriginForMutations blocks cross-origin mutation requests.
+// It checks the Origin or Referer header for non-GET/HEAD/OPTIONS requests
+// and rejects any that come from a different origin than the server itself.
+// This defends against drive-by CSRF in the local loopback trust model.
+//
+// Bearer-token requests (Authorization header present) are exempt: browsers
+// cannot set arbitrary Authorization headers cross-origin without a CORS
+// preflight, so they are CSRF-immune by definition.
+func RequireSameOriginForMutations(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method := r.Method
+		if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// Bearer-token clients (MCP agents, curl, Claude Code sessions) are exempt.
+		if r.Header.Get("Authorization") != "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			// No Origin header — check Referer as fallback.
+			origin = r.Header.Get("Referer")
+		}
+		// Fail-closed: if both Origin and Referer are absent for a mutating
+		// request, deny it — there is no way to verify the request source.
+		if origin == "" {
+			http.Error(w, `{"error":"missing Origin header"}`, http.StatusForbidden)
+			return
+		}
+		u, err := url.Parse(origin)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host != r.Host {
+			http.Error(w, `{"error":"cross-origin request denied"}`, http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // SecurityHeaders sets security-relevant HTTP response headers.
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +101,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		h.Set("Cross-Origin-Resource-Policy", "same-origin")
 		h.Set("Cross-Origin-Embedder-Policy", "require-corp")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
-		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://avatars.githubusercontent.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://avatars.githubusercontent.com; connect-src 'self'; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 		next.ServeHTTP(w, r)
 	})
 }
