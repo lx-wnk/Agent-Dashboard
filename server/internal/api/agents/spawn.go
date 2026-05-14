@@ -244,7 +244,7 @@ func (m *SpawnManager) GetStatus(pid int) *SpawnStatus {
 }
 
 // SendMessageToChannel forwards a message to the channel bridge for the given PID.
-func (m *SpawnManager) SendMessageToChannel(pid int, message string) error {
+func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, message string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("UserHomeDir: %w", err)
@@ -264,7 +264,7 @@ func (m *SpawnManager) SendMessageToChannel(pid int, message string) error {
 
 	body, _ := json.Marshal(map[string]string{"message": message})
 	req, err := http.NewRequestWithContext(
-		context.Background(),
+		ctx,
 		"POST",
 		fmt.Sprintf("http://127.0.0.1:%d/message", disc.Port),
 		bytes.NewReader(body),
@@ -368,7 +368,7 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"missing message"}`, http.StatusBadRequest)
 		return
 	}
-	if err := h.manager.SendMessageToChannel(pid, body.Message); err != nil {
+	if err := h.manager.SendMessageToChannel(r.Context(), pid, body.Message); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
