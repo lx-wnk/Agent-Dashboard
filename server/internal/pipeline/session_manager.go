@@ -15,18 +15,18 @@ import (
 )
 
 func isPidZombie(pid int) bool {
-	var cmd *exec.Cmd
 	if platform.IsLinux {
-		cmd = exec.Command("cat", fmt.Sprintf("/proc/%d/status", pid))
-	} else {
-		cmd = exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "stat=")
+		data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+		if err != nil {
+			return false
+		}
+		s := string(data)
+		return strings.Contains(s, "State:\tZ") || strings.Contains(s, "State: Z")
 	}
+	cmd := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "stat=")
 	out, err := cmd.Output()
 	if err != nil {
 		return false
-	}
-	if platform.IsLinux {
-		return strings.Contains(string(out), "State:\tZ") || strings.Contains(string(out), "State: Z")
 	}
 	return strings.HasPrefix(strings.TrimSpace(string(out)), "Z")
 }

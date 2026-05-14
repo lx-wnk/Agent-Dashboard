@@ -3,7 +3,6 @@ package pipeline
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -21,7 +20,7 @@ var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
 
 // dangerousBashRE matches shell patterns that must never appear in a Bash allow-list entry.
 var dangerousBashRE = regexp.MustCompile(
-	"(?i)(curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|\\bnetcat\\b|bash\\s+-c|sh\\s+-c|\\beval\\b|python\\s+-c|perl\\s+-e|ruby\\s+-e|base64\\s+-d|\\$\\(|`|&&|\\||;\\s*\\w|>\\s*\\w|<\\s*\\w|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w)",
+	"(?i)(curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|\\bnetcat\\b|bash\\s+-c|sh\\s+-c|\\beval\\b|python\\s+-c|perl\\s+-e|ruby\\s+-e|base64\\s+-d|\\$\\(|`|&&|\\||;\\s*\\w|>\\s*\\w|<\\s*\\w|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w|\\bxargs\\b|find\\s+.*-exec)",
 )
 
 const systemPromptMaxChars = 10000
@@ -118,8 +117,60 @@ func buildSpawnArgsWithChannelConfig(opts SpawnAgentOptions, channelCfgPath stri
 	return args
 }
 
+// allowedEnvPrefixes are env var prefixes always forwarded to spawned agents.
+var allowedEnvPrefixes = []string{"CLAUDE_", "DASHBOARD_"}
+
+// deniedEnvKeys are secrets that must never reach spawned agents even if they
+// match an allowedEnvPrefixes entry.
+var deniedEnvKeys = map[string]struct{}{
+	"DASHBOARD_JWT_SECRET":   {},
+	"DASHBOARD_HOOKS_SECRET": {},
+}
+
+// allowedEnvKeys are exact env var names always forwarded to spawned agents.
+var allowedEnvKeys = map[string]struct{}{
+	"PATH":            {},
+	"HOME":            {},
+	"USER":            {},
+	"LOGNAME":         {},
+	"LANG":            {},
+	"LC_ALL":          {},
+	"LC_CTYPE":        {},
+	"TERM":            {},
+	"SHELL":           {},
+	"TMPDIR":          {},
+	"TMP":             {},
+	"TEMP":            {},
+	"XDG_RUNTIME_DIR": {},
+	"XDG_CONFIG_HOME": {},
+	"GOPATH":          {},
+	"GOROOT":          {},
+	"NODE_PATH":       {},
+}
+
 func BuildSpawnEnv(opts SpawnAgentOptions) []string {
-	env := os.Environ()
+	var env []string
+	for _, e := range os.Environ() {
+		key, _, found := strings.Cut(e, "=")
+		if !found {
+			continue
+		}
+		// Deny list takes precedence over both allowedEnvKeys and allowedEnvPrefixes.
+		if _, denied := deniedEnvKeys[key]; denied {
+			continue
+		}
+		if _, ok := allowedEnvKeys[key]; ok {
+			env = append(env, e)
+			continue
+		}
+		for _, prefix := range allowedEnvPrefixes {
+			if strings.HasPrefix(key, prefix) {
+				env = append(env, e)
+				break
+			}
+		}
+	}
+	// Always inject dashboard-specific vars (override any inherited values).
 	env = append(env, fmt.Sprintf("DASHBOARD_STAGE_RUN_ID=%s", opts.StageRun.ID))
 	env = append(env, fmt.Sprintf("DASHBOARD_TASK_ID=%s", opts.Task.ID))
 	if opts.MCPToken != "" {
@@ -212,6 +263,17 @@ func ShouldCleanSettingsFile(path string) bool {
 	return managed
 }
 
+// stderrLogger forwards lines written to stderr of a spawned agent to slog.Warn.
+type stderrLogger struct{ prefix string }
+
+func (l *stderrLogger) Write(b []byte) (int, error) {
+	line := strings.TrimRight(string(b), "\n")
+	if line != "" {
+		slog.Warn("agent stderr", "prefix", l.prefix, "line", line)
+	}
+	return len(b), nil
+}
+
 func IsGitPushAllowed(t *ent.Task) bool {
 	if t.Metadata != nil {
 		if v, ok := t.Metadata["allowGitPush"].(bool); ok && v {
@@ -254,7 +316,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
-	cmd.Stderr = io.Discard
+	cmd.Stderr = &stderrLogger{prefix: fmt.Sprintf("agent[%s]", opts.Task.Slug)}
 	if err := cmd.Start(); err != nil {
 		if channelCfgPath != "" {
 			_ = os.Remove(channelCfgPath)
