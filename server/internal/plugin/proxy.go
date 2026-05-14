@@ -19,11 +19,10 @@ func NewReverseProxy(entry Entry) http.Handler {
 		})
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		req.Header.Del("Cookie")
-		req.Header.Del("Authorization")
+	proxy.Rewrite = func(r *httputil.ProxyRequest) {
+		r.SetURL(target)
+		r.Out.Header.Del("Cookie")
+		r.Out.Header.Del("Authorization")
 	}
 	prefix := "/api/plugins/" + entry.Descriptor.ID
 	return http.StripPrefix(prefix, proxy)

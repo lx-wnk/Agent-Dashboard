@@ -11,11 +11,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 )
+
+// pluginIDRe restricts plugin IDs to lowercase alphanumeric and hyphens, starting
+// with an alphanumeric character. This prevents path traversal via malformed IDs.
+var pluginIDRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // Registry discovers, starts, and health-checks plugins from a directory.
 type Registry struct {
@@ -69,6 +74,10 @@ func (r *Registry) Load(ctx context.Context) error {
 		var desc Descriptor
 		if err := json.Unmarshal(data, &desc); err != nil {
 			slog.Warn("plugin: skip — invalid plugin.json", "dir", entry.Name(), "err", err)
+			continue
+		}
+		if !pluginIDRe.MatchString(desc.ID) {
+			slog.Warn("plugin: skip — id must match ^[a-z0-9][a-z0-9-]*$", "dir", entry.Name(), "id", desc.ID)
 			continue
 		}
 		// Record every capability seen in plugin.json regardless of whether the
