@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"sort"
 )
 
@@ -105,6 +107,7 @@ func MCPHandler(registry ToolRegistry) http.HandlerFunc {
 func callHandler(def *ToolDef, ctx context.Context, args map[string]any) (result *ToolResult, err error) {
 	defer func() {
 		if r := recover(); r != nil {
+			slog.Error("mcp: handler panic", "tool", def.Name, "panic", r, "stack", string(debug.Stack()))
 			err = fmt.Errorf("handler panic: %v", r)
 		}
 	}()

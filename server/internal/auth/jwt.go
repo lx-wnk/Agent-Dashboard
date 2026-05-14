@@ -124,14 +124,10 @@ func VerifyJWT(token, secret string) (JWTPayload, error) {
 	if payload.Sub == "oauth-state" {
 		return JWTPayload{}, ErrTokenInvalid
 	}
-	// Verify issuer and audience — tolerate empty values for tokens issued
-	// before this check was added (omitempty, so old tokens omit both fields).
-	// Explicitly wrong values are always rejected.
-	// Once all tokens have expired (24h TTL) this tolerance can be tightened.
-	if payload.Iss != "" && payload.Iss != jwtIssuer {
+	if payload.Iss != jwtIssuer {
 		return JWTPayload{}, ErrTokenInvalid
 	}
-	if payload.Aud != "" && payload.Aud != jwtAudience {
+	if payload.Aud != jwtAudience {
 		return JWTPayload{}, ErrTokenInvalid
 	}
 	if time.Now().Unix() > payload.Exp {
