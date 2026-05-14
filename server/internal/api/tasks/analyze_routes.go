@@ -15,10 +15,12 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
+var claudeBin = resolvebin("claude")
+
 // activeAnalysisTasks tracks in-flight analysis PIDs to prevent duplicate spawns.
 var (
-	analysisMu          sync.Mutex
-	activeAnalysisPIDs  = map[string]int{} // taskID → PID
+	analysisMu         sync.Mutex
+	activeAnalysisPIDs = map[string]int{} // taskID → PID
 )
 
 func buildAnalysisPrompt(task *ent.Task, errorSummary string, sessionLogPaths []string) string {
@@ -140,7 +142,7 @@ func (h *Handler) analyzeTask(w http.ResponseWriter, r *http.Request) error {
 
 	prompt := buildAnalysisPrompt(task, errorSummary, sessionLogPaths)
 
-	cmd := exec.Command("claude", "-p", prompt, "--permission-mode", "acceptEdits")
+	cmd := exec.Command(claudeBin, "-p", prompt, "--permission-mode", "default")
 	cmd.Dir = cwd
 	cmd.Stdin = nil
 	cmd.Stdout = nil

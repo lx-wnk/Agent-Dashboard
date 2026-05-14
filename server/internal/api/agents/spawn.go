@@ -28,7 +28,15 @@ const (
 	channelMsgTimeout = 5 * time.Second
 )
 
-var uuidRE = regexp.MustCompile(`(?i)^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
+var (
+	claudeBin = func() string {
+		if p, err := exec.LookPath("claude"); err == nil {
+			return p
+		}
+		return "claude"
+	}()
+	uuidRE = regexp.MustCompile(`(?i)^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
+)
 
 // SpawnStatus tracks the state of a user-initiated agent spawn.
 type SpawnStatus struct {
@@ -154,7 +162,7 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		}
 	}
 
-	cmd := exec.Command("claude", args...)
+	cmd := exec.Command(claudeBin, args...)
 	cmd.Dir = cwd
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = nil
