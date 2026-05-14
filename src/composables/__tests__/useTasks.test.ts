@@ -57,17 +57,22 @@ describe('useTasks', () => {
     wrapper.unmount()
   })
 
-  it('exposes a loading ref of type boolean', async () => {
+  it('exposes a loading ref that starts as true', async () => {
     const { useTasks } = await import('../useTasks')
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
-    expect(typeof result.isLoading.value).toBe('boolean')
+    expect(result.isLoading.value).toBe(true)
     wrapper.unmount()
   })
 
-  it('exposes selectTask function', async () => {
+  it('exposes selectTask function that updates selectedTask', async () => {
     const { useTasks } = await import('../useTasks')
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     expect(typeof result.selectTask).toBe('function')
+    // Set a non-null task first, then clear it to verify null assignment works.
+    // Note: Vue wraps objects in a Proxy, so use toStrictEqual rather than toBe.
+    const fakeTask = { id: 'test-id' } as any
+    result.selectTask(fakeTask)
+    expect(result.selectedTask.value).toStrictEqual(fakeTask)
     result.selectTask(null)
     expect(result.selectedTask.value).toBeNull()
     wrapper.unmount()

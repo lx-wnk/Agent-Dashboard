@@ -27,11 +27,14 @@ func TestSessionsList_DoesNotPanic(t *testing.T) {
 
 // TestSessionsTimeline_InvalidIDReturnsBadRequest verifies that a malformed
 // sessionId returns 400 before any filesystem access.
+// Uses http.NewServeMux so that r.PathValue("sessionId") is populated correctly.
 func TestSessionsTimeline_InvalidIDReturnsBadRequest(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/sessions/{sessionId}/timeline", sessions.Timeline)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/sessions/not-a-uuid/timeline", nil)
 	rec := httptest.NewRecorder()
-
-	sessions.Timeline(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	sdk "github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 )
 
@@ -21,19 +22,20 @@ func TestGetAgents_DoesNotPanic(t *testing.T) {
 		t.Logf("GetAgents returned error (acceptable in CI): %v", err)
 		return
 	}
-	// If no error, the result must be a valid (possibly empty) slice.
+	// If no error, the result must be a valid (possibly empty) slice of the correct type.
 	require.NotNil(t, agents)
-	assert.IsType(t, []interface{}{}, []interface{}{}) // type check via slice
+	assert.IsType(t, []sdk.Agent{}, agents)
 }
 
-// TestCalculateStatus_boundaries is an additional integration check that the
-// thresholds used in GetAgents match the documented status rules.
+// TestGetAgents_ResultIsSlice is an additional integration check that GetAgents
+// returns a non-nil slice when successful.
 // (Unit coverage already exists in merger_test.go; this confirms the package
 // links correctly with the integration build tag.)
 func TestGetAgents_ResultIsSlice(t *testing.T) {
 	agents, err := merger.GetAgents(context.Background())
 	if err != nil {
 		t.Skipf("GetAgents unavailable in this environment: %v", err)
+		return
 	}
 	// Returned value must be a slice (never nil on success).
 	assert.NotNil(t, agents)

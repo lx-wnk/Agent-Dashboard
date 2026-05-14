@@ -23,10 +23,11 @@ describe('useRole', () => {
     expect(role.value).toBeDefined()
   })
 
-  it('defaults to requester when no value is stored', () => {
-    globalThis.localStorage.clear()
+  it('has a valid initial role value', () => {
+    // Note: the composable is a module-level singleton, so localStorage.clear()
+    // cannot re-trigger the initialisation read. This test verifies that role
+    // holds one of the two valid values — not which specific default was chosen.
     const { role } = useRole()
-    // Module-level singleton: role defaults to "requester" when nothing is stored.
     expect(['requester', 'reviewer']).toContain(role.value)
   })
 
@@ -39,7 +40,8 @@ describe('useRole', () => {
     const { role, toggleRole } = useRole()
     const initial = role.value
     toggleRole()
-    const toggled = initial === 'requester' ? 'reviewer' : 'requester'
-    expect(role.value).toBe(toggled)
+    // Value must have changed to the opposite role.
+    expect(role.value).not.toBe(initial)
+    expect(['requester', 'reviewer']).toContain(role.value)
   })
 })

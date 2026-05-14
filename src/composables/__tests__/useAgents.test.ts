@@ -81,14 +81,19 @@ describe('useAgents', () => {
     const { useAgents } = await import('../useAgents')
     const { wrapper } = withSetup(() => useAgents({ autoStart: true }))
     await nextTick()
-    // SSE is set up after the first tick.
-    expect(MockEventSource.instances.length).toBeGreaterThanOrEqual(0)
+    // SSE connection must be established after the first tick.
+    expect(MockEventSource.instances.length).toBeGreaterThan(0)
     wrapper.unmount()
   })
 
   it('selectAgent updates selectedAgent', async () => {
     const { useAgents } = await import('../useAgents')
     const { result, wrapper } = withSetup(() => useAgents({ autoStart: false }))
+    // Set a non-null value first, then clear it to verify null assignment works.
+    // Note: Vue wraps objects in a Proxy, so use toStrictEqual rather than toBe.
+    const fakeAgent = { sessionId: 'test' } as any
+    result.selectAgent(fakeAgent)
+    expect(result.selectedAgent.value).toStrictEqual(fakeAgent)
     result.selectAgent(null)
     expect(result.selectedAgent.value).toBeNull()
     wrapper.unmount()
