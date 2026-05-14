@@ -251,6 +251,7 @@ type gzipHijackWriter struct {
 }
 
 var _ http.Hijacker = (*gzipHijackWriter)(nil)
+var _ http.Flusher = (*gzipHijackWriter)(nil)
 
 // newGzipWriter wraps w with gzip compression. If w also implements http.Hijacker,
 // the returned writer forwards Hijack calls to the underlying writer so chi middleware
