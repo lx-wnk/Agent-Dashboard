@@ -2,6 +2,8 @@
 package permissions
 
 // AllowedToolNames is the set of tools pipeline agents may be granted.
+// Centralized here so pipeline/spawner, mcp/tools/write, and mcp/tools/control
+// all validate grants against a single source of truth.
 var AllowedToolNames = map[string]bool{
 	"Read":         true,
 	"Write":        true,
