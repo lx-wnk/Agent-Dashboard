@@ -7,7 +7,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
@@ -53,7 +53,7 @@ func RegisterWriteTools(registry mcp.ToolRegistry, d WriteDeps) {
 
 // validateTool checks whether a tool name is in the pipeline allow-list.
 func validateTool(tool string) bool {
-	return pipeline.AllowedToolNames[tool]
+	return permissions.AllowedToolNames[tool]
 }
 
 // applyTemplate bulk-grants all entries for a named template. Returns the number granted.

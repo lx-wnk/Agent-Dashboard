@@ -140,7 +140,6 @@ The following `pipeline/` symbols may be imported at runtime from `api/*` and `m
 | `ResolvedProjectDir` | `session_reader.go` | `api/tasks/analyze_routes.go` |
 | `FindNewestSessionID` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
 | `ReadLastStageJsonOutput` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
-| `AllowedToolNames` | `allowlist.go` | `mcp/tools/write.go`, `mcp/tools/control.go`, `api/tasks/handler.go` — **transitional**: scheduled to move to `server/internal/permissions/`; do not add new consumers |
 
 These are session-reader and process-monitor helpers — they do not touch the state machine (orchestrator, stage handlers, completion detector). New `pipeline/` imports from `api/*` or `mcp/*` require an explicit justification here before being added.
 

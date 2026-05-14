@@ -1,8 +1,7 @@
-package pipeline
+// Package permissions defines the domain constants for the pipeline permission model.
+package permissions
 
 // AllowedToolNames is the set of tools pipeline agents may be granted.
-// Exported so that consumers outside the pipeline package (e.g. mcp/tools)
-// can validate permission grants without duplicating the list.
 var AllowedToolNames = map[string]bool{
 	"Read":         true,
 	"Write":        true,
