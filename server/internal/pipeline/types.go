@@ -83,6 +83,13 @@ type StageContext struct {
 	// May be nil if the feature is not configured.
 	SystemPromptRepo SystemPromptQuerier
 
+	// DispatchHTTPSpawn runs the given HTTP spawn function in the goroutine pool
+	// and returns immediately. The caller should return AsyncRunningTransition{PID:0}
+	// after calling this. Results are drained by the orchestrator on the next tick.
+	// When nil (e.g. in tests without a live orchestrator), callers must invoke the
+	// spawn function synchronously.
+	DispatchHTTPSpawn func(stageRunID, taskID string, spawn func() (string, error))
+
 	RecordAudit       func(action string, details map[string]any)
 	RequestPermission func(tool, pattern, reason string) *ent.PermissionRequest
 }

@@ -28,6 +28,12 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	// When an alternative LLM adapter is configured, use it instead of the
 	// Claude CLI spawner. The adapter writes its own synthetic JSONL session
 	// file so the completion detector can read the output unchanged.
+	//
+	// HTTP adapters block for up to several minutes, so the actual Spawn call
+	// is dispatched to a bounded goroutine pool via DispatchHTTPSpawn. The
+	// transition returned here has PID=0; drainHTTPResults writes the synthetic
+	// session file path back into stage_run.output when the goroutine finishes,
+	// and finalizeCompletedAsyncRuns picks it up on the next tick.
 	if ctx.Spawner != nil {
 		model := ""
 		if ctx.Task.Metadata != nil {
@@ -40,7 +46,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 			cwd = *ctx.Task.WorktreePath
 		}
 		allowedTools := buildAllowedToolsList(ctx)
-		llmResult, err := ctx.Spawner.Spawn(ctx.Ctx, LLMSpawnArgs{
+		spawnArgs := LLMSpawnArgs{
 			TaskID:       ctx.Task.ID,
 			StageRunID:   ctx.StageRun.ID,
 			SystemPrompt: bundle.SystemPrompt,
@@ -48,17 +54,35 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 			Model:        model,
 			WorkDir:      cwd,
 			AllowedTools: allowedTools,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("agentStageHandler.Execute(%s): spawner %s: %w", h.stage, ctx.Spawner.Name(), err)
 		}
-		ctx.RecordAudit(h.stage+"_spawned", map[string]any{
-			"pid":         llmResult.PID,
-			"spawner":     ctx.Spawner.Name(),
-			"sessionFile": llmResult.SessionFile,
+		spawner := ctx.Spawner
+		stageRunID := ctx.StageRun.ID
+		taskID := ctx.Task.ID
+		spawnCtx := ctx.Ctx
+
+		ctx.RecordAudit(h.stage+"_dispatched", map[string]any{
+			"spawner":     spawner.Name(),
 			"iteration":   ctx.StageRun.Iteration,
 			"hasFeedback": len(feedback) > 0,
 		})
+
+		if ctx.DispatchHTTPSpawn != nil {
+			// Async path: dispatch to goroutine pool and return immediately.
+			ctx.DispatchHTTPSpawn(stageRunID, taskID, func() (string, error) {
+				result, err := spawner.Spawn(spawnCtx, spawnArgs)
+				if err != nil {
+					return "", fmt.Errorf("spawner %s: %w", spawner.Name(), err)
+				}
+				return result.SessionFile, nil
+			})
+			return AsyncRunningTransition{PID: 0}, nil
+		}
+
+		// Synchronous fallback for tests or environments without a live orchestrator.
+		llmResult, err := spawner.Spawn(spawnCtx, spawnArgs)
+		if err != nil {
+			return nil, fmt.Errorf("agentStageHandler.Execute(%s): spawner %s: %w", h.stage, spawner.Name(), err)
+		}
 		return AsyncRunningTransition{PID: llmResult.PID, SessionID: llmResult.SessionID, SessionFile: llmResult.SessionFile}, nil
 	}
 
