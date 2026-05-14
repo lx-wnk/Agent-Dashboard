@@ -55,7 +55,7 @@ func (r *entSystemPromptRepo) Create(ctx context.Context, in CreateSystemPromptI
 		SetPriority(in.Priority).
 		SetCreatedAt(time.Now()).
 		SetUpdatedAt(time.Now())
-	if in.Stage != nil {
+	if in.Stage != nil && *in.Stage != "" {
 		q = q.SetStage(*in.Stage)
 	}
 	if in.CreatedBy != nil {
