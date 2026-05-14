@@ -51,6 +51,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if in.Content == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "content is required")
 	}
+	// Reject non-global scopes: ListForStage hardcodes scope='global', so any
+	// other scope would create a prompt that is never applied.
+	if in.Scope != "" && in.Scope != "global" {
+		return apierr.NewAppError(http.StatusBadRequest, "only scope 'global' is currently supported")
+	}
 	if payload, ok := auth.PayloadFromContext(r.Context()); ok {
 		login := payload.Login
 		in.CreatedBy = &login
