@@ -244,6 +244,11 @@ func (g *gzipResponseWriter) Flush() {
 // gzipMiddleware compresses non-SSE responses when the client accepts gzip encoding.
 func gzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set Vary unconditionally so shared caches know this URL varies by
+		// Accept-Encoding, even for responses served without compression (RFC 7234).
+		// Use Add rather than Set to preserve any Vary values already set by handlers.
+		w.Header().Add("Vary", "Accept-Encoding")
+
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			next.ServeHTTP(w, r)
 			return
@@ -261,7 +266,6 @@ func gzipMiddleware(next http.Handler) http.Handler {
 		defer gz.Close()
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Del("Content-Length")
-		w.Header().Set("Vary", "Accept-Encoding")
 		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, Writer: gz}, r)
 	})
 }

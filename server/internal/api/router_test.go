@@ -24,20 +24,36 @@ func TestGzipResponseWriter_ImplementsFlusher(t *testing.T) {
 }
 
 // TestGzipMiddleware_SetsVaryHeader verifies Vary: Accept-Encoding is present
-// in gzip-compressed responses.
+// on all responses — both when the client requests gzip and when it does not.
+// Per RFC 7234 the header must be unconditional so shared caches never serve a
+// stale uncompressed response to a gzip-accepting client.
 func TestGzipMiddleware_SetsVaryHeader(t *testing.T) {
 	handler := gzipMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Accept-Encoding", "gzip")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
+	tests := []struct {
+		name           string
+		acceptEncoding string
+	}{
+		{name: "with gzip", acceptEncoding: "gzip"},
+		{name: "without gzip", acceptEncoding: ""},
+	}
 
-	vary := rec.Header().Get("Vary")
-	if vary != "Accept-Encoding" {
-		t.Errorf("expected Vary: Accept-Encoding, got %q", vary)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tc.acceptEncoding != "" {
+				req.Header.Set("Accept-Encoding", tc.acceptEncoding)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			vary := rec.Header().Get("Vary")
+			if vary != "Accept-Encoding" {
+				t.Errorf("expected Vary: Accept-Encoding, got %q", vary)
+			}
+		})
 	}
 }
 
