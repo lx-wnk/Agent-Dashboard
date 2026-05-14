@@ -306,8 +306,8 @@ func parseSessionFile(path string) (*SessionData, error) {
 						data.CurrentAction = b.Name
 					case "text":
 						if b.Text != "" {
-							data.LastOutput = b.Text
-							// Detect error states
+							data.LastOutput = scrubSecrets(b.Text)
+							// Detect error states (check original text before scrubbing)
 							switch {
 							case quotaRE.MatchString(b.Text):
 								data.ErrorState = "quota_exhausted"

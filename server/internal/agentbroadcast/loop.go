@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	sdk "github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
@@ -26,7 +27,12 @@ func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Durati
 				continue
 			}
 			// Wrap in {agents, trend} — SSE client expects this shape.
-			data, err := json.Marshal(map[string]any{"agents": agents, "trend": []any{}})
+			// Typed struct avoids reflection-based marshaling of map[string]any.
+			type broadcastFrame struct {
+				Agents []sdk.Agent `json:"agents"`
+				Trend  []any       `json:"trend"`
+			}
+			data, err := json.Marshal(broadcastFrame{Agents: agents, Trend: []any{}})
 			if err != nil {
 				slog.Error("agent marshal failed", "err", err)
 				continue

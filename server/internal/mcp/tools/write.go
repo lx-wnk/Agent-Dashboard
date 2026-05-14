@@ -2,13 +2,13 @@ package tools
 
 import (
 	"context"
-	"regexp"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
 // WriteDeps holds the repositories required by the write tools.
@@ -20,9 +20,6 @@ type WriteDeps struct {
 	Broadcast        func(taskID string)
 	BroadcastDeleted func(taskID string)
 }
-
-// slugRE mirrors the canonical slug validation rule from the TypeScript layer.
-var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 
 // permissionTemplates maps template names to their default tool grant lists.
 var permissionTemplates = map[string][]repo.GrantEntry{
@@ -149,7 +146,7 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"slug":               map[string]any{"type": "string", "description": "Unique slug matching [a-z0-9][a-z0-9-]{0,63}"},
+				"slug":               map[string]any{"type": "string", "description": "Unique slug matching ^[a-z0-9]+(?:-[a-z0-9]+)*$ (max 64 chars)"},
 				"title":              map[string]any{"type": "string"},
 				"cwd":                map[string]any{"type": "string", "description": "Absolute working directory path"},
 				"description":        map[string]any{"type": "string"},
@@ -173,8 +170,8 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 			if err != nil {
 				return nil, err
 			}
-			if !slugRE.MatchString(slug) {
-				return nil, mcp.Fail("invalid slug: must match [a-z0-9][a-z0-9-]{0,63}")
+			if !validation.IsValidSlug(slug) {
+				return nil, mcp.Fail("invalid slug: " + validation.SlugPatternMessage)
 			}
 			title, err := mcp.StringArg(args, "title")
 			if err != nil {

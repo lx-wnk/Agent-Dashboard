@@ -21,6 +21,11 @@ type mcpConfig struct {
 	MCPServers map[string]mcpServerEntry `json:"mcpServers"`
 }
 
+// DiscoveryDir is the subdirectory under $HOME where the channel bridge writes
+// its per-PID discovery files. Shared between the server (channelreply) and
+// the channel bridge binary to avoid duplicating the path.
+const DiscoveryDir = ".claude/dashboard-channel"
+
 // WriteTempConfig writes a temporary MCP config file that tells the claude CLI
 // how to start the dashboard-channel MCP server.
 //

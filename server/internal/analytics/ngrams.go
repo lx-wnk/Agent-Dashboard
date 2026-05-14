@@ -2,6 +2,7 @@
 package analytics
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io"
@@ -46,7 +47,8 @@ func ExtractNgrams(toolSequence []string) map[string]int {
 
 // DiscoverPatterns iterates all JSONL session files, extracts tool_use events,
 // computes 3-grams, and upserts the top-20 patterns into workflow_patterns.
-func DiscoverPatterns(db *sql.DB) error {
+// ctx is checked between project directories so the caller can cancel a long scan.
+func DiscoverPatterns(ctx context.Context, db *sql.DB) error {
 	globalCounts := make(map[string]int)
 
 	for _, configDir := range parser.AllClaudeConfigDirs() {
@@ -56,6 +58,10 @@ func DiscoverPatterns(db *sql.DB) error {
 			continue
 		}
 		for _, pDir := range projectDirs {
+			// Honour cancellation between project directories.
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if !pDir.IsDir() {
 				continue
 			}

@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
@@ -85,6 +87,24 @@ func writeAuthError(w http.ResponseWriter, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
+// lastTouched stores the last time TouchLastUsed was called per API key ID.
+var lastTouched sync.Map // map[keyID string]time.Time
+
+// touchDebounce is the minimum interval between TouchLastUsed DB writes per key.
+const touchDebounce = 60 * time.Second
+
+// shouldTouch returns true (and records the current time) only when at least
+// touchDebounce has elapsed since the last successful call for keyID.
+func shouldTouch(keyID string) bool {
+	if v, ok := lastTouched.Load(keyID); ok {
+		if time.Since(v.(time.Time)) < touchDebounce {
+			return false
+		}
+	}
+	lastTouched.Store(keyID, time.Now())
+	return true
+}
+
 // McpAuthMiddleware is a chi-compatible middleware that authenticates MCP requests.
 // It reads Bearer token → SHA-256 hash → DB lookup → resolved scopes → context.
 func McpAuthMiddleware(keyRepo repo.ApiKeyRepo) func(http.Handler) http.Handler {
@@ -104,7 +124,10 @@ func McpAuthMiddleware(keyRepo repo.ApiKeyRepo) func(http.Handler) http.Handler 
 				return
 			}
 			// Fire-and-forget: detach from request ctx so cancel/timeout doesn't suppress the write; failures are non-critical.
-			go func() { _ = keyRepo.TouchLastUsed(context.Background(), key.ID) }() //nolint:errcheck
+			// Debounced: skip the DB write if called within touchDebounce of the last write for this key.
+			if shouldTouch(key.ID) {
+				go func() { _ = keyRepo.TouchLastUsed(context.Background(), key.ID) }() //nolint:errcheck
+			}
 			info := &MCPAuthInfo{
 				KeyID:  key.ID,
 				Scopes: ResolveScopes(key.Scopes),

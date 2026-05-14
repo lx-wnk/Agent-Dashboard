@@ -147,7 +147,8 @@ func buildSessionInfo(entry jsonlFileEntry, runningEncoded map[string]bool) Sess
 
 	if tailRaw, err := TailRead(entry.filePath); err == nil {
 		if resp := extractLastAssistantText(tailRaw); resp != "" {
-			lastResponse = &resp
+			scrubbed := scrubSecrets(resp)
+			lastResponse = &scrubbed
 		}
 	}
 
@@ -157,7 +158,8 @@ func buildSessionInfo(entry jsonlFileEntry, runningEncoded map[string]bool) Sess
 		inputTokens = meta.InputTokens
 		outputTokens = meta.OutputTokens
 		if meta.FirstPrompt != "" {
-			firstPrompt = &meta.FirstPrompt
+			scrubbed := scrubSecrets(meta.FirstPrompt)
+			firstPrompt = &scrubbed
 		}
 	}
 

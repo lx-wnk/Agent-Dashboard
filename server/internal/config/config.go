@@ -34,6 +34,7 @@ type Config struct {
 	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
+	MCPToken               string `koanf:"mcp_token"`
 }
 
 // Defaults returns a Config populated with safe defaults.

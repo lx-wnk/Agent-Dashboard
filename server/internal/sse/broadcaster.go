@@ -9,7 +9,7 @@ const subscriberBufferSize = 10
 // Sends are non-blocking: if a subscriber's buffer is full, the frame is
 // dropped silently and the subscriber catches up on the next broadcast.
 type Broadcaster struct {
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	subscribers map[chan []byte]struct{}
 }
 
@@ -41,8 +41,8 @@ func (b *Broadcaster) Unsubscribe(ch chan []byte) {
 // Broadcast sends data to all subscribers. Non-blocking: frames are dropped
 // for slow consumers rather than blocking the broadcaster goroutine.
 func (b *Broadcaster) Broadcast(data []byte) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	for ch := range b.subscribers {
 		select {
 		case ch <- data:
@@ -53,7 +53,7 @@ func (b *Broadcaster) Broadcast(data []byte) {
 
 // SubscriberCount returns the number of active subscribers.
 func (b *Broadcaster) SubscriberCount() int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	return len(b.subscribers)
 }

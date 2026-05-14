@@ -36,10 +36,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-const discoveryDir = ".claude/dashboard-channel"
 
 var dashboardClient = &http.Client{Timeout: 15 * time.Second}
 
@@ -269,7 +268,7 @@ func writeDiscovery(parentPid, port int, token string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("UserHomeDir: %w", err)
 	}
-	dir := filepath.Join(home, discoveryDir)
+	dir := filepath.Join(home, channelconfig.DiscoveryDir)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("mkdir: %w", err)
 	}
