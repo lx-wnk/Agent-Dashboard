@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
@@ -69,7 +70,7 @@ func (r *entSystemPromptRepo) Create(ctx context.Context, in CreateSystemPromptI
 
 func (r *entSystemPromptRepo) List(ctx context.Context) ([]*ent.SystemPrompt, error) {
 	rows, err := r.client.SystemPrompt.Query().
-		Order(systemprompt.ByPriority()).
+		Order(systemprompt.ByPriority(sql.OrderDesc())).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("systemPrompt.List: %w", err)
@@ -86,7 +87,7 @@ func (r *entSystemPromptRepo) ListForStage(ctx context.Context, stage string) ([
 				systemprompt.StageEQ(stage),
 			),
 		).
-		Order(systemprompt.ByPriority()).
+		Order(systemprompt.ByPriority(sql.OrderDesc())).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("systemPrompt.ListForStage: %w", err)

@@ -3,6 +3,7 @@ package pipeline
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -144,7 +145,11 @@ func buildCustomSystemPrompt(sc *StageContext, stage string) string {
 		return ""
 	}
 	prompts, err := sc.SystemPromptRepo.ListForStage(sc.Ctx, stage)
-	if err != nil || len(prompts) == 0 {
+	if err != nil {
+		slog.Warn("buildCustomSystemPrompt: DB query failed", "stage", stage, "err", err)
+		return ""
+	}
+	if len(prompts) == 0 {
 		return ""
 	}
 	parts := make([]string, 0, len(prompts))

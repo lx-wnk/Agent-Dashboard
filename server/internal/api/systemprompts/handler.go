@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
@@ -49,6 +50,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	}
 	if in.Content == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "content is required")
+	}
+	if payload, ok := auth.PayloadFromContext(r.Context()); ok {
+		login := payload.Login
+		in.CreatedBy = &login
+	} else {
+		in.CreatedBy = nil
 	}
 	prompt, err := h.repo.Create(r.Context(), in)
 	if err != nil {
