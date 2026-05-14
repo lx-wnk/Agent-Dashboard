@@ -33,6 +33,13 @@ tasks:
       - cd sdk && go test -race ./...
       - cd server && go test -race ./...
 
+  test:cover:
+    desc: Run tests with coverage report (server module)
+    dir: server
+    cmds:
+      - go test -race -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out | tail -1
+
   test:watch:
     desc: Watch mode tests (server module)
     dir: server
