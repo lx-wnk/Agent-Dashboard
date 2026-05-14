@@ -16,6 +16,9 @@ type OpenAISpawner struct {
 	BaseURL      string // e.g. "https://api.openai.com/v1"
 	APIKeyEnv    string // env var name holding the API key, e.g. "OPENAI_API_KEY"
 	DefaultModel string
+	// client is shared across calls to reuse the underlying connection pool.
+	// Initialized lazily on the first Spawn call when nil (e.g. struct-literal construction).
+	client *http.Client
 }
 
 func (o *OpenAISpawner) Name() string { return "openai" }
@@ -60,8 +63,10 @@ func (o *OpenAISpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Do(req)
+	if o.client == nil {
+		o.client = &http.Client{Timeout: 5 * time.Minute}
+	}
+	resp, err := o.client.Do(req)
 	if err != nil {
 		return LLMSpawnResult{}, fmt.Errorf("OpenAISpawner: POST completions: %w", err)
 	}
