@@ -265,6 +265,35 @@ var (
 			},
 		},
 	}
+	// SystemPromptsColumns holds the columns for the "system_prompts" table.
+	SystemPromptsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "scope", Type: field.TypeString, Default: "global"},
+		{Name: "stage", Type: field.TypeString, Nullable: true},
+		{Name: "content", Type: field.TypeString, Size: 2147483647},
+		{Name: "priority", Type: field.TypeInt, Default: 0},
+		{Name: "created_by", Type: field.TypeString, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// SystemPromptsTable holds the schema information for the "system_prompts" table.
+	SystemPromptsTable = &schema.Table{
+		Name:       "system_prompts",
+		Columns:    SystemPromptsColumns,
+		PrimaryKey: []*schema.Column{SystemPromptsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "systemprompt_scope_stage",
+				Unique:  false,
+				Columns: []*schema.Column{SystemPromptsColumns[1], SystemPromptsColumns[2]},
+			},
+			{
+				Name:    "systemprompt_priority",
+				Unique:  false,
+				Columns: []*schema.Column{SystemPromptsColumns[4]},
+			},
+		},
+	}
 	// TasksColumns holds the columns for the "tasks" table.
 	TasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -417,6 +446,7 @@ var (
 		RefinementTurnsTable,
 		RemoteRegistrationsTable,
 		StageRunsTable,
+		SystemPromptsTable,
 		TasksTable,
 		TaskDependenciesTable,
 		TaskPermissionsTable,

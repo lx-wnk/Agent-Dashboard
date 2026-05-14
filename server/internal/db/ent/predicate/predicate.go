@@ -33,6 +33,9 @@ type RemoteRegistration func(*sql.Selector)
 // StageRun is the predicate function for stagerun builders.
 type StageRun func(*sql.Selector)
 
+// SystemPrompt is the predicate function for systemprompt builders.
+type SystemPrompt func(*sql.Selector)
+
 // Task is the predicate function for task builders.
 type Task func(*sql.Selector)
 
