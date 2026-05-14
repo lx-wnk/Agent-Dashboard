@@ -230,6 +230,8 @@ type gzipResponseWriter struct {
 	Writer *gzip.Writer
 }
 
+var _ http.Flusher = (*gzipResponseWriter)(nil)
+
 func (g *gzipResponseWriter) Write(b []byte) (int, error) {
 	return g.Writer.Write(b)
 }
