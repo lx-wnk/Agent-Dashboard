@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
-import ExecutionWaterfall from './ExecutionWaterfall.vue'
+// Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
+const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
 import SubAgentList from './SubAgentList.vue'

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, PipelineTask } from './types'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
@@ -15,7 +15,8 @@ import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
-import TaskModal from './components/TaskModal.vue'
+// Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
+const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
 import { useAgents } from './composables/useAgents'
 import { useTasks } from './composables/useTasks'
 import { useUser } from './composables/useUser'
