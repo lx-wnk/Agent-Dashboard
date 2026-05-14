@@ -41,11 +41,6 @@ func (c *Client) put(path string, body any, out any) error {
 	return c.do(http.MethodPut, path, body, out)
 }
 
-// delete performs DELETE {path}.
-func (c *Client) delete(path string) error {
-	return c.do(http.MethodDelete, path, nil, nil)
-}
-
 func (c *Client) do(method, path string, reqBody, out any) error {
 	var bodyReader io.Reader
 	if reqBody != nil {
