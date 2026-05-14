@@ -181,7 +181,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 
 		if deps.SystemPromptsHandler != nil {
-			deps.SystemPromptsHandler.Mount(r)
+			r.Group(func(r chi.Router) {
+				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
+				deps.SystemPromptsHandler.Mount(r)
+			})
 		}
 
 		if deps.SearchHandler != nil {
