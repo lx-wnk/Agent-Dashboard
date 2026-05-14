@@ -23,8 +23,6 @@ type Config struct {
 	Host                   string `koanf:"host"`
 	Port                   int    `koanf:"port"`
 	JWTSecret              string `koanf:"jwt_secret"`
-	GitHubClientID         string `koanf:"github_client_id"`
-	GitHubClientSecret     string `koanf:"github_client_secret"`
 	DBPath                 string `koanf:"db_path"`
 	SSEIntervalMs          int    `koanf:"sse_interval_ms"`
 	ShutdownTimeoutSeconds int    `koanf:"shutdown_timeout_seconds"`
