@@ -28,6 +28,15 @@ const (
 	defaultMaxReviewCycles     = 3
 )
 
+// httpSpawnResult carries the outcome of an asynchronous HTTP-adapter spawn.
+// Written by the goroutine pool worker and drained by tick() on the next cycle.
+type httpSpawnResult struct {
+	stageRunID  string
+	taskID      string
+	sessionFile string // path to synthetic session file written by the adapter
+	err         error
+}
+
 // PipelineOrchestrator drives the task pipeline state machine.
 type PipelineOrchestrator struct {
 	opts              OrchestratorOptions
@@ -35,6 +44,8 @@ type PipelineOrchestrator struct {
 	handlerOverrides  sync.Map // map[stage string]StageHandler — test seam
 	detectCompletion  func(*ent.StageRun, string, CompletionDeps) (CompletionResult, error)
 	configCache       sync.Map // map[key string]cachedConfig
+	httpResultCh      chan httpSpawnResult // buffered channel for goroutine pool results
+	httpPoolSem       chan struct{}        // semaphore: limits concurrent HTTP spawns
 }
 
 type cachedConfig struct {
@@ -57,10 +68,14 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 	if opts.PollInterval <= 0 {
 		opts.PollInterval = defaultPollInterval
 	}
-	return &PipelineOrchestrator{
+	poolSize := defaultMaxParallel
+	o := &PipelineOrchestrator{
 		opts:             opts,
 		detectCompletion: DetectCompletion,
-	}, nil
+		httpPoolSem:      make(chan struct{}, poolSize),
+		httpResultCh:     make(chan httpSpawnResult, poolSize*2),
+	}
+	return o, nil
 }
 
 // SetHandlerOverride replaces a stage handler — test seam only.
@@ -120,7 +135,66 @@ func (o *PipelineOrchestrator) Run(ctx context.Context) error {
 	}
 }
 
+// drainHTTPResults processes all pending goroutine-pool results without blocking.
+// Successful results write the synthetic session file path into stage_run.output
+// so finalizeCompletedAsyncRuns can pick them up on the next tick.
+// Failed results mark the stage_run directly as failed.
+func (o *PipelineOrchestrator) drainHTTPResults(ctx context.Context) {
+	for {
+		select {
+		case res := <-o.httpResultCh:
+			if res.err != nil {
+				slog.Error("orchestrator: HTTP spawn goroutine failed", "stageRunID", res.stageRunID, "err", res.err)
+				run, getErr := o.opts.StageRunRepo.GetByID(ctx, res.stageRunID)
+				if getErr != nil || run == nil || run.Status != "running" {
+					continue
+				}
+				task, taskErr := o.opts.TaskRepo.GetByID(ctx, res.taskID)
+				if taskErr != nil {
+					continue
+				}
+				if _, err := o.applyTransition(ctx, task, run, FailTransition{
+					Reason: fmt.Sprintf("HTTP adapter error: %s", res.err),
+				}); err != nil {
+					slog.Error("drainHTTPResults.applyFail", "err", err)
+				}
+			} else {
+				// Write the synthetic session file path into stage_run.output so
+				// finalizeCompletedAsyncRuns detects it on the next tick.
+				run, getErr := o.opts.StageRunRepo.GetByID(ctx, res.stageRunID)
+				if getErr != nil || run == nil {
+					continue
+				}
+				output := map[string]any{"synthetic_session_file": res.sessionFile}
+				if run.Output != nil {
+					// Merge: preserve any prior output keys (e.g. spawner name logged at spawn time).
+					merged := make(map[string]any, len(run.Output)+1)
+					for k, v := range run.Output {
+						merged[k] = v
+					}
+					merged["synthetic_session_file"] = res.sessionFile
+					output = merged
+				}
+				if _, err := o.opts.StageRunRepo.Update(ctx, res.stageRunID, repo.UpdateStageRunInput{
+					Output: output,
+				}); err != nil {
+					slog.Error("drainHTTPResults.writeSessionFile", "stageRunID", res.stageRunID, "err", err)
+				} else {
+					slog.Info("orchestrator: HTTP spawn completed — session file recorded",
+						"stageRunID", res.stageRunID, "sessionFile", res.sessionFile)
+					if o.opts.OnTaskChanged != nil {
+						o.opts.OnTaskChanged(res.taskID, "async_running")
+					}
+				}
+			}
+		default:
+			return // channel empty — nothing more to drain
+		}
+	}
+}
+
 func (o *PipelineOrchestrator) tick(ctx context.Context) error {
+	o.drainHTTPResults(ctx)
 	allRunning, err := o.opts.StageRunRepo.ListByStatus(ctx, "running", "awaiting_user", "on_hold")
 	if err != nil {
 		return fmt.Errorf("orchestrator.tick.listRunning: %w", err)
@@ -259,6 +333,20 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		MCPToken:             o.opts.MCPToken,
 		MCPUrl:               o.opts.MCPUrl,
 		SystemPromptRepo:     o.opts.SystemPromptRepo,
+		Spawner:              o.opts.Spawner,
+		DispatchHTTPSpawn: func(stageRunID, taskID string, spawn func() (string, error)) {
+			go func() {
+				o.httpPoolSem <- struct{}{} // acquire pool slot
+				defer func() { <-o.httpPoolSem }()
+				sessionFile, err := spawn()
+				o.httpResultCh <- httpSpawnResult{
+					stageRunID:  stageRunID,
+					taskID:      taskID,
+					sessionFile: sessionFile,
+					err:         err,
+				}
+			}()
+		},
 		RecordAudit: func(action string, details map[string]any) {
 			_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
 				TaskID:  task.ID,
@@ -481,9 +569,26 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		updatedRunID = sr.ID
 
 	case AsyncRunningTransition:
-		update := repo.UpdateStageRunInput{Status: strPtr("running"), Output: tr.Output}
+		output := tr.Output
+		if tr.SessionFile != "" {
+			if output == nil {
+				output = map[string]any{}
+			} else {
+				// shallow-copy to avoid mutating the caller's map
+				cp := make(map[string]any, len(output)+1)
+				for k, v := range output {
+					cp[k] = v
+				}
+				output = cp
+			}
+			output["synthetic_session_file"] = tr.SessionFile
+		}
+		update := repo.UpdateStageRunInput{Status: strPtr("running"), Output: output}
 		if tr.PID != 0 {
 			update.PID = &tr.PID
+		}
+		if tr.SessionID != "" {
+			update.SessionID = &tr.SessionID
 		}
 		if _, err := srRepo.Update(ctx, sr.ID, update); err != nil {
 			return nil, fmt.Errorf("applyTransition.asyncRunning.updateRun: %w", err)
@@ -802,17 +907,49 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 	return nil
 }
 
+// hasSyntheticSessionFile returns true when the stage_run's output already
+// contains the synthetic_session_file key written by drainHTTPResults.
+func hasSyntheticSessionFile(run *ent.StageRun) bool {
+	if run.Output == nil {
+		return false
+	}
+	sf, ok := run.Output["synthetic_session_file"].(string)
+	return ok && sf != ""
+}
+
 func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, allRunning []*ent.StageRun) error {
 	for _, run := range allRunning {
-		if run.Status != "running" || run.Pid == nil {
+		if run.Status != "running" {
 			continue
 		}
+
+		// Determine whether this run belongs to a subprocess-based agent (pid != nil)
+		// or an HTTP adapter (pid == nil).
+		//
+		// HTTP adapter runs (pid IS NULL):
+		//   - Still in flight: no synthetic_session_file in output yet → skip.
+		//   - Completed:       synthetic_session_file present → fall through to detectCompletion.
+		//
+		// Subprocess runs (pid != nil):
+		//   - Still alive → skip.
+		//   - Exited      → fall through to detectCompletion.
+		if run.Pid == nil {
+			if !hasSyntheticSessionFile(run) {
+				// HTTP goroutine has not finished yet — skip until drainHTTPResults writes the file.
+				continue
+			}
+			// Synthetic session file written — run is ready to finalize.
+		}
+		// Subprocess runs (pid != nil): fall through whether alive or exited.
+		// detectCompletion returns "still_running" for live PIDs; cost-budget and
+		// stage-timeout enforcement in that branch applies unconditionally.
+
 		task, err := o.opts.TaskRepo.GetByID(ctx, run.TaskID)
 		if err != nil {
 			continue
 		}
 		if IsTerminalStage(task.CurrentStage) {
-			if IsPidAlive(*run.Pid) {
+			if run.Pid != nil && IsPidAlive(*run.Pid) {
 				_ = syscallKill(*run.Pid)
 			}
 			if _, err := o.applyTransition(ctx, task, run, FailTransition{Reason: "task cancelled externally"}); err != nil {
@@ -831,12 +968,12 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			continue
 		}
 		if result.Kind == "still_running" {
-			// Try to attach session_id for live cross-link banner
-			if run.SessionID == nil && run.StartedAt != nil {
+			// Try to attach session_id for live cross-link banner (subprocess runs only)
+			if run.Pid != nil && run.SessionID == nil && run.StartedAt != nil {
 				go o.tryAttachSessionID(ctx, run.ID, task.ID, cwd, *run.StartedAt)
 			}
-			// Cost budget enforcement
-			if task.CostBudgetCents != nil && *task.CostBudgetCents > 0 {
+			// Cost budget enforcement (subprocess runs only — HTTP runs finalize atomically)
+			if run.Pid != nil && task.CostBudgetCents != nil && *task.CostBudgetCents > 0 {
 				spent, _ := o.opts.StageRunRepo.SumCompletedCostCents(ctx, task.ID)
 				if spent > int64(*task.CostBudgetCents) {
 					slog.Warn("orchestrator: task exceeded cost budget — killing agent",
@@ -853,27 +990,29 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 					continue
 				}
 			}
-			// Stage timeout enforcement
-			timeoutSec := o.getCachedConfigNumber(ctx, stageTimeoutKey, defaultStageTimeoutSeconds)
-			if timeoutSec > 0 && run.StartedAt != nil && time.Since(*run.StartedAt) > time.Duration(timeoutSec)*time.Second {
-				elapsed := time.Since(*run.StartedAt).Seconds()
-				slog.Warn("orchestrator: stage timed out — killing agent",
-					"runID", run.ID, "stage", run.Stage, "elapsedSec", elapsed)
-				_ = syscallKill(*run.Pid)
-				fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
-				if fresh != nil && fresh.Status == "running" {
-					if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
-						Reason: fmt.Sprintf("stage timeout: ran %.0fs (limit %ds)", elapsed, timeoutSec),
-					}); err != nil {
-						slog.Error("finalizeCompletedAsyncRuns.timeout", "err", err)
+			// Stage timeout enforcement (subprocess runs only)
+			if run.Pid != nil {
+				timeoutSec := o.getCachedConfigNumber(ctx, stageTimeoutKey, defaultStageTimeoutSeconds)
+				if timeoutSec > 0 && run.StartedAt != nil && time.Since(*run.StartedAt) > time.Duration(timeoutSec)*time.Second {
+					elapsed := time.Since(*run.StartedAt).Seconds()
+					slog.Warn("orchestrator: stage timed out — killing agent",
+						"runID", run.ID, "stage", run.Stage, "elapsedSec", elapsed)
+					_ = syscallKill(*run.Pid)
+					fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
+					if fresh != nil && fresh.Status == "running" {
+						if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
+							Reason: fmt.Sprintf("stage timeout: ran %.0fs (limit %ds)", elapsed, timeoutSec),
+						}); err != nil {
+							slog.Error("finalizeCompletedAsyncRuns.timeout", "err", err)
+						}
 					}
 				}
 			}
 			continue
 		}
 
-		// PID has exited — persist token usage
-		if run.SessionID != nil {
+		// Process exited (or HTTP adapter finished) — persist token usage for subprocess runs.
+		if run.Pid != nil && run.SessionID != nil {
 			go o.updateTokenUsage(ctx, run.ID, cwd, *run.SessionID)
 		}
 
