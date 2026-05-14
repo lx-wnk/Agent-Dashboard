@@ -144,6 +144,9 @@ The following `pipeline/` symbols may be imported at runtime from `api/*` and `m
 These are session-reader and process-monitor helpers — they do not touch the state machine (orchestrator, stage handlers, completion detector). New `pipeline/` imports from `api/*` or `mcp/*` require an explicit justification here before being added.
 
 Never import from `pipeline/` in `db/` or `plugin/` packages.
+<!-- `notifications/` is intentionally absent here: the Go backend has no `notifications/` package
+     (this was a TypeScript carry-over). If a Go `notifications/` package is introduced, this
+     rule must be updated to explicitly include it. -->
 
 ## When Modifying the Pipeline
 

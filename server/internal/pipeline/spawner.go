@@ -14,7 +14,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
-	permallowlist "github.com/lx-wnk/agent-dashboard/server/internal/permissions"
+	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
 var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
@@ -51,20 +51,20 @@ var channelAllow = []string{
 	"mcp__dashboard-channel__request_permission",
 }
 
-func BuildAllowList(permissions []*ent.TaskPermission, enableChannel, allowGitPush bool) []string {
+func BuildAllowList(perms []*ent.TaskPermission, enableChannel, allowGitPush bool) []string {
 	var allow []string
 	if enableChannel {
 		allow = append(allow, channelAllow...)
 	}
 	now := time.Now()
-	for _, p := range permissions {
+	for _, p := range perms {
 		if !p.Granted {
 			continue
 		}
 		if p.ExpiresAt != nil && p.ExpiresAt.Before(now) {
 			continue
 		}
-		if !permallowlist.AllowedToolNames[p.Tool] {
+		if !permissions.IsAllowedTool(p.Tool) {
 			continue
 		}
 		if !allowGitPush && p.Tool == "Bash" && p.Pattern != nil && gitPushRE.MatchString(*p.Pattern) {
@@ -183,8 +183,8 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	return env
 }
 
-func writeSettingsFile(cwd string, permissions []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
-	allow := BuildAllowList(permissions, enableChannel, allowGitPush)
+func writeSettingsFile(cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
+	allow := BuildAllowList(perms, enableChannel, allowGitPush)
 	if len(allow) == 0 {
 		return "", false, false, nil
 	}

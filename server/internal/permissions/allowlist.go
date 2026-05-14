@@ -1,10 +1,14 @@
 // Package permissions defines the domain constants for the pipeline permission model.
 package permissions
 
-// AllowedToolNames is the set of tools pipeline agents may be granted.
-// Centralized here so pipeline/spawner, mcp/tools/write, and mcp/tools/control
-// all validate grants against a single source of truth.
-var AllowedToolNames = map[string]bool{
+// IsAllowedTool reports whether name is in the pipeline tool allow-list.
+// Use this instead of accessing allowedToolNames directly so the set
+// cannot be mutated by other packages.
+func IsAllowedTool(name string) bool { return allowedToolNames[name] }
+
+// allowedToolNames is the unexported source of truth for grantable tools.
+// All callers must go through IsAllowedTool.
+var allowedToolNames = map[string]bool{
 	"Read":         true,
 	"Write":        true,
 	"Edit":         true,
