@@ -97,9 +97,9 @@ func (h *Handler) getCurrent(w http.ResponseWriter, _ *http.Request) error {
 	return json.NewEncoder(w).Encode(map[string]string{"adapter": active})
 }
 
-// setCurrent updates the active adapter name in the config.
-// The change is applied to the in-memory config and persisted on next config save.
-// The running pipeline is NOT affected until the server is restarted.
+// setCurrent updates the active adapter name in the in-memory config.
+// The change is NOT persisted to disk — it is lost on server restart.
+// Restart the server after updating the config file to apply changes permanently.
 // Body: {"adapter":"ollama","config":{...optional full AdapterConfig...}}
 func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
@@ -150,8 +150,8 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) error {
 	return json.NewEncoder(w).Encode(&snapshot)
 }
 
-// putConfig replaces the full AdapterConfig from the request body.
-// Takes effect on next server restart — the running spawner is not hot-swapped.
+// putConfig replaces the full AdapterConfig from the request body in memory.
+// The change is NOT persisted to disk — it is lost on server restart.
 func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
 	var incoming config.AdapterConfig
 	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
