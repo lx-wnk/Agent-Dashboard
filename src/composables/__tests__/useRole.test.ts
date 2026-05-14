@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { useRole } from '../useRole'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Provide a minimal localStorage stub (the composable reads/writes to it at module load).
 const store: Record<string, string> = {}
@@ -12,11 +11,16 @@ globalThis.localStorage = {
   key: () => null,
 }
 
-describe('useRole', () => {
-  beforeEach(() => {
-    globalThis.localStorage.clear()
-  })
+let useRole: typeof import('../useRole').useRole
 
+beforeEach(async () => {
+  globalThis.localStorage.clear()
+  vi.resetModules()
+  const mod = await import('../useRole')
+  useRole = mod.useRole
+})
+
+describe('useRole', () => {
   it('returns a role ref', () => {
     const { role } = useRole()
     expect(role).toBeDefined()
@@ -24,9 +28,6 @@ describe('useRole', () => {
   })
 
   it('has a valid initial role value', () => {
-    // Note: the composable is a module-level singleton, so localStorage.clear()
-    // cannot re-trigger the initialisation read. This test verifies that role
-    // holds one of the two valid values — not which specific default was chosen.
     const { role } = useRole()
     expect(['requester', 'reviewer']).toContain(role.value)
   })

@@ -18,13 +18,18 @@ class MockEventSource {
   }
 }
 
-beforeEach(() => {
+let useTasks: typeof import('../useTasks').useTasks
+
+beforeEach(async () => {
   MockEventSource.instances = []
   vi.stubGlobal('EventSource', MockEventSource)
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     ok: true,
     json: () => Promise.resolve([]),
   }))
+  vi.resetModules()
+  const mod = await import('../useTasks')
+  useTasks = mod.useTasks
 })
 
 afterEach(() => {
@@ -49,23 +54,20 @@ function withSetup<T>(composable: () => T) {
 }
 
 describe('useTasks', () => {
-  it('initialises with empty task list', async () => {
-    const { useTasks } = await import('../useTasks')
+  it('initialises with empty task list', () => {
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     expect(result.tasks).toBeDefined()
     expect(Array.isArray(result.tasks.value)).toBe(true)
     wrapper.unmount()
   })
 
-  it('exposes a loading ref that starts as true', async () => {
-    const { useTasks } = await import('../useTasks')
+  it('exposes a loading ref that starts as true', () => {
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     expect(result.isLoading.value).toBe(true)
     wrapper.unmount()
   })
 
-  it('exposes selectTask function that updates selectedTask', async () => {
-    const { useTasks } = await import('../useTasks')
+  it('exposes selectTask function that updates selectedTask', () => {
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     expect(typeof result.selectTask).toBe('function')
     // Set a non-null task first, then clear it to verify null assignment works.
@@ -78,8 +80,7 @@ describe('useTasks', () => {
     wrapper.unmount()
   })
 
-  it('exposes tasksByStage function', async () => {
-    const { useTasks } = await import('../useTasks')
+  it('exposes tasksByStage function', () => {
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     expect(typeof result.tasksByStage).toBe('function')
     wrapper.unmount()
