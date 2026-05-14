@@ -32,6 +32,7 @@ import (
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
@@ -70,6 +71,7 @@ type RouterDeps struct {
 	AnalyticsHandler *apianalytics.Handler
 	MCPHandler       http.Handler
 	ChannelReply     *agents.ChannelReplyHandler
+	PluginRegistry   *plugin.Registry
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -212,6 +214,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Mounted outside the JWT group so OAuth-less clients can reach it.
 	if deps.MCPHandler != nil {
 		r.With(mcp.McpAuthMiddleware(deps.ApiKeyRepo)).Post("/api/mcp", deps.MCPHandler.ServeHTTP)
+	}
+
+	// Mount route_extension plugins (if any).
+	if deps.PluginRegistry != nil {
+		for _, entry := range deps.PluginRegistry.AllWithCapability(plugin.CapRouteExtension) {
+			id := entry.Descriptor.ID
+			r.Mount("/api/plugins/"+id, plugin.NewReverseProxy(entry))
+			slog.Info("router: mounted plugin route", "id", id, "prefix", "/api/plugins/"+id)
+		}
 	}
 
 	// Vue SPA catch-all — must be last (after all API routes)

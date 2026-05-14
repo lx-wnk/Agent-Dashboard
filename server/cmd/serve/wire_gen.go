@@ -19,7 +19,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
-	githubauth "github.com/lx-wnk/agent-dashboard/server/internal/auth/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -27,16 +26,17 @@ import (
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	mcptools "github.com/lx-wnk/agent-dashboard/server/internal/mcp/tools"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
 
-func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, error) {
+func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, func(), error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	var entClient *ent.Client
 	if bundle != nil {
@@ -59,11 +59,28 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 	broadcaster := sse.NewBroadcaster()
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
-	routerConfig := provideRouterConfig(cfg)
+
+	// Load plugins from configured plugin_dir.
+	pluginRegistry := plugin.New(cfg.PluginDir)
+	if err := pluginRegistry.Load(ctx); err != nil {
+		slog.Warn("plugin registry: load failed", "err", err)
+	}
+	cleanup := func() { pluginRegistry.Shutdown() }
+
+	// Wire auth provider: prefer plugin, fall back to bypass-auth.
+	var oauthProvider authpkg.OAuthProvider
+	if entry := pluginRegistry.FindByCapability(plugin.CapAuthProvider); entry != nil {
+		oauthProvider = plugin.NewAuthProvider(*entry)
+		slog.Info("auth: using plugin provider", "plugin", entry.Descriptor.ID)
+	} else {
+		slog.Info("auth: no auth_provider plugin found — bypass-auth active for loopback")
+	}
+
+	routerConfig := provideRouterConfig(cfg, oauthProvider)
 
 	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, cleanup, err
 	}
 
 	taskHandler := provideTaskHandler(entClient, orch, taskBroadcaster)
@@ -87,27 +104,20 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 		analyticsHandler = apianalytics.NewHandler(rawrepo.NewAnalyticsRepo(bundle.DB), bundle.DB, cfgRepo)
 	}
 
-	routerDeps := provideRouterDeps(ctx, cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler, refineHandler, analyticsHandler)
+	routerDeps := provideRouterDeps(ctx, cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler, refineHandler, analyticsHandler, pluginRegistry, oauthProvider)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
-	return server, broadcaster, orch, nil
+	return server, broadcaster, orch, cleanup, nil
 }
 
 func provideDB(cfg config.Config) (*db.DBBundle, error) {
 	return db.Open(cfg.DBPath)
 }
 
-func provideOAuthProvider(cfg config.Config) authpkg.OAuthProvider {
-	if cfg.GitHubClientID == "" {
-		return nil
-	}
-	return githubauth.NewClient(cfg.GitHubClientID, cfg.GitHubClientSecret)
-}
-
-func provideRouterConfig(cfg config.Config) api.RouterConfig {
-	bypassAuth := cfg.IsLoopback() && cfg.GitHubClientID == ""
+func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider) api.RouterConfig {
+	bypassAuth := cfg.IsLoopback() && oauthProvider == nil
 	if bypassAuth {
-		slog.Info("auth bypass active — loopback + no GitHub OAuth configured; all API requests allowed without login")
+		slog.Info("auth bypass active — loopback + no auth_provider plugin configured; all API requests allowed without login")
 	}
 	return api.RouterConfig{
 		JWTSecret:         cfg.JWTSecret,
@@ -217,7 +227,7 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	return mcp.MCPHandler(registry)
 }
 
-func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler, refineHandler *refineapi.Handler, analyticsHandler *apianalytics.Handler) api.RouterDeps {
+func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler, refineHandler *refineapi.Handler, analyticsHandler *apianalytics.Handler, pluginRegistry *plugin.Registry, oauthProvider authpkg.OAuthProvider) api.RouterDeps {
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if client != nil {
@@ -233,11 +243,12 @@ func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConf
 		presetsHandler = presets.NewHandler(repo.NewPermissionPresetRepo(client))
 	}
 	replyStore := agents.NewReplyStore()
+	_ = cfg // cfg is retained for future use; config values consumed via RouterConfig
 	return api.RouterDeps{
 		Ctx:              ctx,
 		Config:           rc,
 		AgentBroadcaster: b,
-		OAuthProvider:    provideOAuthProvider(cfg),
+		OAuthProvider:    oauthProvider,
 		UserRepo:         userRepo,
 		ApiKeyRepo:       apiKeyRepo,
 		TaskHandler:      taskHandler,
@@ -250,6 +261,7 @@ func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConf
 		AnalyticsHandler: analyticsHandler,
 		MCPHandler:       mcpHandler,
 		ChannelReply:     agents.NewChannelReplyHandler(replyStore),
+		PluginRegistry:   pluginRegistry,
 	}
 }
 
