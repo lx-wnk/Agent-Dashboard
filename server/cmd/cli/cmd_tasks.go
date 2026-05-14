@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -25,7 +26,9 @@ func newTasksCmd(cfg *CLIConfig) *cobra.Command {
 			cl := newClient(*cfg)
 			path := "/api/tasks"
 			if statusFilter != "" {
-				path += "?stage=" + statusFilter
+				params := url.Values{}
+				params.Set("stage", statusFilter)
+				path += "?" + params.Encode()
 			}
 			var tasks []map[string]any
 			if err := cl.get(path, &tasks); err != nil {
@@ -97,9 +100,12 @@ func newTasksCmd(cfg *CLIConfig) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl := newClient(*cfg)
-			return cl.stream("/api/tasks/"+args[0]+"/stream", func(data []byte) {
+			if err := cl.stream(cmd.Context(), "/api/tasks/"+args[0]+"/stream", func(data []byte) {
 				fmt.Println(string(data))
-			})
+			}); err != nil {
+				return fmt.Errorf("stream error: %w", err)
+			}
+			return nil
 		},
 	}
 

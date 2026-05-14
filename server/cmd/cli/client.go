@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -80,34 +82,30 @@ func (c *Client) do(method, path string, reqBody, out any) error {
 
 // stream opens an SSE connection and calls onEvent for each data line.
 // Returns when ctx is cancelled or the server closes the stream.
-func (c *Client) stream(path string, onEvent func(data []byte)) error {
-	req, err := http.NewRequest(http.MethodGet, c.host+path, nil)
+func (c *Client) stream(ctx context.Context, path string, onEvent func([]byte)) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.host+path, nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Accept", "text/event-stream")
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
+	req.Header.Set("Accept", "text/event-stream")
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-
-	buf := make([]byte, 4096)
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 {
-			lines := strings.Split(string(buf[:n]), "\n")
-			for _, line := range lines {
-				if strings.HasPrefix(line, "data: ") {
-					onEvent([]byte(strings.TrimPrefix(line, "data: ")))
-				}
-			}
-		}
-		if err != nil {
-			return nil
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	sc := bufio.NewScanner(resp.Body)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		line := sc.Text()
+		if data, ok := strings.CutPrefix(line, "data: "); ok {
+			onEvent([]byte(data))
 		}
 	}
+	return sc.Err()
 }
