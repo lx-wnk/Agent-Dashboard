@@ -18,9 +18,21 @@ class MockEventSource {
   }
 }
 
+// Provide a minimal localStorage stub (the composable reads/writes to it at module load).
+const store: Record<string, string> = {}
+globalThis.localStorage = {
+  getItem: (k: string) => store[k] ?? null,
+  setItem: (k: string, v: string) => { store[k] = v },
+  removeItem: (k: string) => { delete store[k] },
+  clear: () => { Object.keys(store).forEach(k => delete store[k]) },
+  length: 0,
+  key: () => null,
+}
+
 let useTasks: typeof import('../useTasks').useTasks
 
 beforeEach(async () => {
+  globalThis.localStorage.clear()
   MockEventSource.instances = []
   vi.stubGlobal('EventSource', MockEventSource)
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({

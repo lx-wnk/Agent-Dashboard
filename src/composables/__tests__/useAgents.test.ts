@@ -29,13 +29,17 @@ globalThis.localStorage = {
   key: () => null,
 }
 
-beforeEach(() => {
+let useAgents: typeof import('../useAgents')
+
+beforeEach(async () => {
   MockEventSource.instances = []
   vi.stubGlobal('EventSource', MockEventSource)
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     ok: true,
     json: () => Promise.resolve([]),
   }))
+  vi.resetModules()
+  useAgents = await import('../useAgents')
 })
 
 afterEach(() => {
@@ -61,16 +65,14 @@ function withSetup<T>(composable: () => T) {
 
 describe('useAgents', () => {
   it('initialises with an agents ref', async () => {
-    const { useAgents } = await import('../useAgents')
-    const { result, wrapper } = withSetup(() => useAgents({ autoStart: false }))
+    const { result, wrapper } = withSetup(() => useAgents.useAgents({ autoStart: false }))
     expect(result.agents).toBeDefined()
     expect(Array.isArray(result.agents.value)).toBe(true)
     wrapper.unmount()
   })
 
   it('exposes filteredAgents, searchQuery and viewMode refs', async () => {
-    const { useAgents } = await import('../useAgents')
-    const { result, wrapper } = withSetup(() => useAgents({ autoStart: false }))
+    const { result, wrapper } = withSetup(() => useAgents.useAgents({ autoStart: false }))
     expect(result.filteredAgents).toBeDefined()
     expect(result.searchQuery).toBeDefined()
     expect(result.viewMode).toBeDefined()
@@ -78,8 +80,7 @@ describe('useAgents', () => {
   })
 
   it('creates an EventSource connection when autoStart is true', async () => {
-    const { useAgents } = await import('../useAgents')
-    const { wrapper } = withSetup(() => useAgents({ autoStart: true }))
+    const { wrapper } = withSetup(() => useAgents.useAgents({ autoStart: true }))
     await nextTick()
     // SSE connection must be established after the first tick.
     expect(MockEventSource.instances.length).toBeGreaterThan(0)
@@ -87,8 +88,7 @@ describe('useAgents', () => {
   })
 
   it('selectAgent updates selectedAgent', async () => {
-    const { useAgents } = await import('../useAgents')
-    const { result, wrapper } = withSetup(() => useAgents({ autoStart: false }))
+    const { result, wrapper } = withSetup(() => useAgents.useAgents({ autoStart: false }))
     // Set a non-null value first, then clear it to verify null assignment works.
     // Note: Vue wraps objects in a Proxy, so use toStrictEqual rather than toBe.
     const fakeAgent = { sessionId: 'test' } as any

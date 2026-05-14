@@ -26,17 +26,3 @@ func TestGetAgents_DoesNotPanic(t *testing.T) {
 	require.NotNil(t, agents)
 	assert.IsType(t, []sdk.Agent{}, agents)
 }
-
-// TestGetAgents_ResultIsSlice is an additional integration check that GetAgents
-// returns a non-nil slice when successful.
-// (Unit coverage already exists in merger_test.go; this confirms the package
-// links correctly with the integration build tag.)
-func TestGetAgents_ResultIsSlice(t *testing.T) {
-	agents, err := merger.GetAgents(context.Background())
-	if err != nil {
-		t.Skipf("GetAgents unavailable in this environment: %v", err)
-		return
-	}
-	// Returned value must be a slice (never nil on success).
-	assert.NotNil(t, agents)
-}
