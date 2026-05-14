@@ -20,14 +20,20 @@ var (
 
 // JWTPayload is the JWT body — matches the TypeScript JwtPayload interface.
 type JWTPayload struct {
-	Sub     string `json:"sub"`             // GitHub numeric user ID
-	Login   string `json:"login"`           // GitHub username
-	IsAdmin bool   `json:"isAdmin"`
-	Exp     int64  `json:"exp"`             // Unix timestamp
-	Iat     int64  `json:"iat,omitempty"`   // Issued-at Unix timestamp
-	Iss     string `json:"iss,omitempty"`   // Issuer
-	Aud     string `json:"aud,omitempty"`   // Audience
+	Sub            string `json:"sub"`              // GitHub numeric user ID
+	Login          string `json:"login"`            // GitHub username
+	IsAdmin        bool   `json:"isAdmin"`
+	AdminGrantedAt int64  `json:"aga,omitempty"`    // Unix timestamp when admin was granted; set iff IsAdmin==true
+	Exp            int64  `json:"exp"`              // Unix timestamp
+	Iat            int64  `json:"iat,omitempty"`    // Issued-at Unix timestamp
+	Iss            string `json:"iss,omitempty"`    // Issuer
+	Aud            string `json:"aud,omitempty"`    // Audience
 }
+
+// adminPrivilegeTTL is the maximum age of the AdminGrantedAt claim before an
+// admin-gated endpoint must force re-login. This bounds the stale-privilege
+// window to 1 hour even when the JWT itself is still valid.
+const adminPrivilegeTTL = int64(3600)
 
 // OAuthStatePayload is the payload for short-lived OAuth state tokens.
 // Kept separate from JWTPayload to prevent state tokens from being accepted
@@ -48,6 +54,9 @@ func computeHMAC(data, secret string) []byte {
 	return mac.Sum(nil)
 }
 
+const jwtIssuer = "agent-dashboard"
+const jwtAudience = "agent-dashboard"
+
 // SignJWT creates an HS256 JWT token. expiresInSeconds is added to now().
 func SignJWT(payload JWTPayload, secret string, expiresInSeconds int64) (string, error) {
 	header, err := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
@@ -57,7 +66,8 @@ func SignJWT(payload JWTPayload, secret string, expiresInSeconds int64) (string,
 	now := time.Now().Unix()
 	payload.Exp = now + expiresInSeconds
 	payload.Iat = now
-	payload.Iss = "agent-dashboard"
+	payload.Iss = jwtIssuer
+	payload.Aud = jwtAudience
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("marshal payload: %w", err)
@@ -114,8 +124,22 @@ func VerifyJWT(token, secret string) (JWTPayload, error) {
 	if payload.Sub == "oauth-state" {
 		return JWTPayload{}, ErrTokenInvalid
 	}
+	// Verify issuer and audience — tolerate empty values for tokens issued
+	// before this check was added (omitempty, so old tokens omit both fields).
+	// Explicitly wrong values are always rejected.
+	// Once all tokens have expired (24h TTL) this tolerance can be tightened.
+	if payload.Iss != "" && payload.Iss != jwtIssuer {
+		return JWTPayload{}, ErrTokenInvalid
+	}
+	if payload.Aud != "" && payload.Aud != jwtAudience {
+		return JWTPayload{}, ErrTokenInvalid
+	}
 	if time.Now().Unix() > payload.Exp {
 		return JWTPayload{}, ErrTokenExpired
+	}
+	// Reject tokens issued more than 60s in the future (clock skew guard).
+	if payload.Iat > 0 && payload.Iat > time.Now().Unix()+60 {
+		return JWTPayload{}, ErrTokenInvalid
 	}
 	return payload, nil
 }

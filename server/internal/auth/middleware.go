@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func writeUnauthorized(w http.ResponseWriter, msg string) {
@@ -46,6 +47,40 @@ func RequireAuth(secret string) func(http.Handler) http.Handler {
 func PayloadFromContext(ctx context.Context) (JWTPayload, bool) {
 	p, ok := ctx.Value(payloadKey).(JWTPayload)
 	return p, ok
+}
+
+// RequireAdmin is a chi middleware that rejects requests from non-admin users.
+// It must be used inside a RequireAuth group.
+//
+// Stale-privilege detection: if the JWT claims IsAdmin but AdminGrantedAt is
+// older than adminPrivilegeTTL (1 hour), the request is rejected with 403 and
+// the client is instructed to re-login. This bounds the window in which a
+// revoked admin still holds effective access even while their token is valid.
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, ok := PayloadFromContext(r.Context())
+		if !ok || !payload.IsAdmin {
+			writeForbidden(w, "forbidden")
+			return
+		}
+		// Enforce stale-privilege TTL when AdminGrantedAt is present.
+		// Clamp negative age (AdminGrantedAt in the future) to avoid the check
+		// always passing when the clock skew makes the subtraction negative.
+		if payload.AdminGrantedAt > 0 {
+			age := time.Now().Unix() - payload.AdminGrantedAt
+			if age < 0 || age > adminPrivilegeTTL {
+				writeForbidden(w, "admin privilege expired — please log in again")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func writeForbidden(w http.ResponseWriter, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = w.Write([]byte(`{"error":"` + msg + `"}`))
 }
 
 func extractToken(r *http.Request) string {
