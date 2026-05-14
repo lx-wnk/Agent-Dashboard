@@ -43,9 +43,10 @@ type OnHoldTransition struct {
 }
 
 type AsyncRunningTransition struct {
-	PID       int
-	SessionID string
-	Output    map[string]any
+	PID         int
+	SessionID   string
+	SessionFile string // path to synthetic JSONL; empty for Claude (discovered normally)
+	Output      map[string]any
 }
 
 func (NextTransition) isTransition()         {}

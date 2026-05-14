@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,11 +55,16 @@ func (o *OllamaSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
 	if err != nil {
 		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: POST /api/chat: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: HTTP %d: %s", resp.StatusCode, body)
+	}
 
 	var result struct {
 		Message struct {

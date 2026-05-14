@@ -135,6 +135,22 @@ func ReadLastStageJsonOutput(cwd, sessionID string) (StageOutputRead, error) {
 	return StageOutputRead{Output: ExtractJsonBlock(text), RawText: text}, nil
 }
 
+// ReadLastStageJsonOutputFromFile reads the JSONL at the given absolute path
+// directly, bypassing the normal ~/.claude/projects/... discovery. Used by
+// non-Claude adapters that write their own synthetic JSONL sessions.
+func ReadLastStageJsonOutputFromFile(filePath string) (StageOutputRead, error) {
+	raw, err := parser.TailRead(filePath)
+	if err != nil {
+		return StageOutputRead{}, nil
+	}
+	entries := parseJsonlLines(raw)
+	text := lastAssistantText(entries)
+	if text == "" {
+		return StageOutputRead{}, nil
+	}
+	return StageOutputRead{Output: ExtractJsonBlock(text), RawText: text}, nil
+}
+
 type SessionTokenSummary struct {
 	InputTokens         int
 	OutputTokens        int

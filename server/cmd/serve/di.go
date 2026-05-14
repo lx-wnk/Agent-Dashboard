@@ -202,7 +202,6 @@ func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider)
 }
 
 func provideSpawner(cfg config.Config) pipeline.LLMSpawner {
-	mcpURL := fmt.Sprintf("http://127.0.0.1:%d/api/mcp", cfg.Port)
 	if cmd := config.SpawnCommandFromEnv(); cmd != "" {
 		return &pipeline.CustomCommandSpawner{Command: cmd}
 	}
@@ -218,12 +217,8 @@ func provideSpawner(cfg config.Config) pipeline.LLMSpawner {
 			APIKeyEnv:    cfg.Adapters.OpenAI.APIKeyEnv,
 			DefaultModel: cfg.Adapters.OpenAI.DefaultModel,
 		}
-	default:
-		return &pipeline.ClaudeSpawner{
-			MCPToken:     cfg.MCPToken,
-			MCPUrl:       mcpURL,
-			AllowGitPush: cfg.AllowGitPush,
-		}
+	default: // "claude" and any unknown — nil lets stage_handlers.go use SpawnStageAgent
+		return nil
 	}
 }
 

@@ -482,7 +482,21 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		updatedRunID = sr.ID
 
 	case AsyncRunningTransition:
-		update := repo.UpdateStageRunInput{Status: strPtr("running"), Output: tr.Output}
+		output := tr.Output
+		if tr.SessionFile != "" {
+			if output == nil {
+				output = map[string]any{}
+			} else {
+				// shallow-copy to avoid mutating the caller's map
+				cp := make(map[string]any, len(output)+1)
+				for k, v := range output {
+					cp[k] = v
+				}
+				output = cp
+			}
+			output["synthetic_session_file"] = tr.SessionFile
+		}
+		update := repo.UpdateStageRunInput{Status: strPtr("running"), Output: output}
 		if tr.PID != 0 {
 			update.PID = &tr.PID
 		}

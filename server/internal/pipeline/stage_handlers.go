@@ -59,7 +59,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 			"iteration":   ctx.StageRun.Iteration,
 			"hasFeedback": len(feedback) > 0,
 		})
-		return AsyncRunningTransition{PID: llmResult.PID, SessionID: llmResult.SessionID}, nil
+		return AsyncRunningTransition{PID: llmResult.PID, SessionID: llmResult.SessionID, SessionFile: llmResult.SessionFile}, nil
 	}
 
 	spawnFn := h.spawnFn

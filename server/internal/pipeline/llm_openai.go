@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"time"
 )
 
 // OpenAISpawner calls any OpenAI-compatible chat completions endpoint.
@@ -55,11 +57,16 @@ func (o *OpenAISpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
 	if err != nil {
 		return LLMSpawnResult{}, fmt.Errorf("OpenAISpawner: POST completions: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return LLMSpawnResult{}, fmt.Errorf("OpenAISpawner: HTTP %d: %s", resp.StatusCode, body)
+	}
 
 	var result struct {
 		Choices []struct {

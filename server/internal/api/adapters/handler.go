@@ -4,6 +4,7 @@ package adapters
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
@@ -58,6 +59,7 @@ var availableAdapters = []adapterMeta{
 
 // Handler serves the /api/adapters and /api/settings/adapters endpoints.
 type Handler struct {
+	mu  sync.RWMutex
 	cfg *config.AdapterConfig
 }
 
@@ -85,7 +87,9 @@ func (h *Handler) list(w http.ResponseWriter, _ *http.Request) error {
 
 // getCurrent returns the name of the currently active adapter.
 func (h *Handler) getCurrent(w http.ResponseWriter, _ *http.Request) error {
+	h.mu.RLock()
 	active := h.cfg.Default
+	h.mu.RUnlock()
 	if active == "" {
 		active = "claude"
 	}
@@ -97,7 +101,7 @@ func (h *Handler) getCurrent(w http.ResponseWriter, _ *http.Request) error {
 // Body: {"adapter":"ollama","config":{...optional full AdapterConfig...}}
 func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
-		Adapter string              `json:"adapter"`
+		Adapter string                `json:"adapter"`
 		Config  *config.AdapterConfig `json:"config,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -118,6 +122,7 @@ func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadRequest, "unknown adapter: "+body.Adapter)
 	}
 
+	h.mu.Lock()
 	h.cfg.Default = body.Adapter
 	// If the caller also supplied a full config block, apply it.
 	if body.Config != nil {
@@ -127,15 +132,20 @@ func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 			h.cfg.Stages = body.Config.Stages
 		}
 	}
+	activeAdapter := h.cfg.Default
+	h.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(map[string]string{"adapter": h.cfg.Default})
+	return json.NewEncoder(w).Encode(map[string]string{"adapter": activeAdapter})
 }
 
 // getConfig returns the full AdapterConfig as JSON.
 func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) error {
+	h.mu.RLock()
+	snapshot := *h.cfg
+	h.mu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(h.cfg)
+	return json.NewEncoder(w).Encode(&snapshot)
 }
 
 // putConfig replaces the full AdapterConfig in memory.
@@ -144,7 +154,10 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
+	h.mu.Lock()
 	*h.cfg = incoming
+	snapshot := *h.cfg
+	h.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(h.cfg)
+	return json.NewEncoder(w).Encode(&snapshot)
 }

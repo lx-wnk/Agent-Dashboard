@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
@@ -96,6 +97,38 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 	}
 	if isPidAliveFn(pid) {
 		return CompletionResult{Kind: "still_running"}, nil
+	}
+
+	// Non-Claude adapters store the synthetic JSONL path in stage_run.output.
+	// Use it directly instead of scanning ~/.claude/projects/...
+	if sr.Output != nil {
+		if syntheticFile, ok := sr.Output["synthetic_session_file"].(string); ok && syntheticFile != "" {
+			if _, statErr := os.Stat(syntheticFile); statErr == nil {
+				read, err := ReadLastStageJsonOutputFromFile(syntheticFile)
+				if err != nil {
+					return CompletionResult{Kind: "failed", Error: fmt.Sprintf("synthetic session read error: %s", err)}, nil
+				}
+				if read.Output == nil {
+					if read.RawText != "" {
+						trimmed := read.RawText
+						if len(trimmed) > agentMessageMaxChars {
+							trimmed = trimmed[len(trimmed)-agentMessageMaxChars:]
+						}
+						return CompletionResult{
+							Kind:   "failed",
+							Error:  "adapter did not produce a ```json output block",
+							Output: map[string]any{"agentMessage": trimmed},
+						}, nil
+					}
+					return CompletionResult{Kind: "failed", Error: "no parseable json output in synthetic session"}, nil
+				}
+				v := validateFn(sr.Stage, read.Output)
+				if !v.OK {
+					return CompletionResult{Kind: "failed", Error: v.Error, Output: read.Output, Retryable: true}, nil
+				}
+				return CompletionResult{Kind: "completed", Output: read.Output}, nil
+			}
+		}
 	}
 
 	sessionID := ""
