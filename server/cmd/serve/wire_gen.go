@@ -61,8 +61,12 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
 
 	// Load plugins from configured plugin_dir.
+	// ctx is the startup context (short-lived); context.Background() is used as the
+	// server-lifetime context for watchPlugin goroutines.
+	// TODO: replace context.Background() with a real server-shutdown context once one
+	// is threaded through initializeServer (tracked in feat/plugin-system).
 	pluginRegistry := plugin.New(cfg.PluginDir)
-	if err := pluginRegistry.Load(ctx); err != nil {
+	if err := pluginRegistry.Load(ctx, context.Background()); err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
 	cleanup := func() { pluginRegistry.Shutdown() }

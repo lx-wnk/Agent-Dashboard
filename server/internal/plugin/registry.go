@@ -49,8 +49,15 @@ func New(dir string) *Registry {
 }
 
 // Load scans dir, starts each plugin process, and waits for health.
-// Call once during server startup. ctx is used for health-check timeouts.
-func (r *Registry) Load(ctx context.Context) error {
+// Call once during server startup.
+//
+// ctx is used for health-check timeouts during startup and should be a
+// short-lived context (e.g. cancelled after startup completes).
+//
+// serverCtx is the server's lifetime context and is passed to watchPlugin
+// goroutines so that restart loops stay alive for the duration of the server,
+// not just startup.
+func (r *Registry) Load(ctx, serverCtx context.Context) error {
 	if r.dir == "" {
 		return nil
 	}
@@ -102,7 +109,7 @@ func (r *Registry) Load(ctx context.Context) error {
 			pluginDir:  filepath.Join(r.dir, entry.Name()),
 		}
 		if len(desc.Command) > 0 {
-			cmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
+			cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
 			cmd.Dir = pluginEntry.pluginDir
 			cmd.Env = buildPluginEnv(desc.Env)
 			cmd.Stdout = os.Stdout
@@ -114,7 +121,7 @@ func (r *Registry) Load(ctx context.Context) error {
 			pluginEntry.cmd = cmd
 			// Watch the process; attempt auto-restart with exponential backoff on
 			// unexpected exit (max 3 retries: 1s → 5s → 30s).
-			go r.watchPlugin(ctx, pluginEntry.pluginDir, desc, cmd)
+			go r.watchPlugin(serverCtx, pluginEntry.pluginDir, desc, cmd)
 		}
 		if err := r.waitHealthy(ctx, pluginEntry.BaseURL); err != nil {
 			slog.Error("plugin: health check failed", "id", desc.ID, "err", err)
