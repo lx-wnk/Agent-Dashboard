@@ -146,15 +146,20 @@ func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 	h.mu.Unlock()
 
 	// Persist to disk so the new default survives a server restart.
-	if h.cfgFile != "" {
-		if err := persistAdapterConfig(h.cfgFile, snapshot); err != nil {
-			// Non-fatal: the in-memory change is already applied. Log and continue.
-			slog.Warn("adapters: failed to persist config to disk", "file", h.cfgFile, "err", err)
-		}
-	}
+	h.tryPersist(snapshot)
 
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(map[string]any{"adapter": snapshot.Default, "restartRequired": true})
+}
+
+// tryPersist writes snapshot to disk when a cfgFile is configured.
+// Persistence failures are non-fatal: the in-memory change is already applied.
+func (h *Handler) tryPersist(snapshot config.AdapterConfig) {
+	if h.cfgFile != "" {
+		if err := persistAdapterConfig(h.cfgFile, snapshot); err != nil {
+			slog.Warn("adapters: failed to persist config to disk", "file", h.cfgFile, "err", err)
+		}
+	}
 }
 
 // persistAdapterConfig reads the existing JSON config file (if present), updates
@@ -210,7 +215,9 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) error {
 	return json.NewEncoder(w).Encode(&snapshot)
 }
 
-// putConfig replaces the full AdapterConfig from the request body in memory and persists it to disk when a config file is configured.
+// putConfig replaces the full AdapterConfig from the request body in memory
+// and, when a config file is configured, persists it to disk so the change
+// survives a server restart.
 func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
 	var incoming config.AdapterConfig
 	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
@@ -222,11 +229,7 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
 	h.mu.Unlock()
 
 	// Persist to disk so the config survives a server restart.
-	if h.cfgFile != "" {
-		if err := persistAdapterConfig(h.cfgFile, snapshot); err != nil {
-			slog.Warn("adapters: failed to persist config to disk", "file", h.cfgFile, "err", err)
-		}
-	}
+	h.tryPersist(snapshot)
 
 	type response struct {
 		config.AdapterConfig
