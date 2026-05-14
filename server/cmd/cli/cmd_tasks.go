@@ -60,7 +60,11 @@ func newTasksCmd(cfg *CLIConfig) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl := newClient(*cfg)
-			return cl.post("/api/tasks/"+args[0]+"/cancel", nil, nil)
+			if err := cl.post("/api/tasks/"+args[0]+"/cancel", nil, nil); err != nil {
+				return err
+			}
+			fmt.Println("Task cancelled.")
+			return nil
 		},
 	}
 
@@ -96,11 +100,19 @@ func newTasksCmd(cfg *CLIConfig) *cobra.Command {
 
 	logsCmd := &cobra.Command{
 		Use:   "logs <id>",
-		Short: "Stream task stage output via SSE",
+		Short: "Stream task stage output via SSE (filtered from global broadcast)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			taskID := args[0]
 			cl := newClient(*cfg)
-			if err := cl.stream(cmd.Context(), "/api/tasks/"+args[0]+"/stream", func(data []byte) {
+			if err := cl.stream(cmd.Context(), "/api/tasks/stream", func(data []byte) {
+				var event map[string]any
+				if err := json.Unmarshal(data, &event); err != nil {
+					return
+				}
+				if event["taskId"] != taskID {
+					return
+				}
 				fmt.Println(string(data))
 			}); err != nil {
 				return fmt.Errorf("stream error: %w", err)

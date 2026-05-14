@@ -17,9 +17,12 @@ func main() {
 
 Configure it with:
   dashboard config set --url http://127.0.0.1:13120
-  dashboard config set --token mcp_your_token_here
+  dashboard config set --token <jwt>
 
-Create an API token in the dashboard web UI under Settings > API Keys.`,
+Authentication: the token must be a JWT issued by the dashboard server.
+The CLI works when the server runs in loopback bypass mode (no GitHub OAuth
+configured). MCP API keys (mcp_<hex>) do NOT work with this CLI — they only
+authenticate against POST /api/mcp.`,
 		SilenceUsage: true,
 	}
 
@@ -31,7 +34,7 @@ Create an API token in the dashboard web UI under Settings > API Keys.`,
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		loaded, err := loadConfig()
 		if err != nil {
-			return fmt.Errorf("config error: %s", err)
+			return fmt.Errorf("config error: %w", err)
 		}
 		cfg = loaded
 		if root.PersistentFlags().Changed("url") {

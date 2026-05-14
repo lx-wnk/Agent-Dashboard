@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +36,9 @@ func newConfigCmd(cfg *CLIConfig) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fresh, err := loadConfig()
 			if err != nil {
+				if !os.IsNotExist(err) {
+					return err
+				}
 				fresh = CLIConfig{}
 			}
 			if u, _ := cmd.Flags().GetString("url"); u != "" {

@@ -36,6 +36,11 @@ func (c *Client) post(path string, body any, out any) error {
 	return c.do(http.MethodPost, path, body, out)
 }
 
+// put performs PUT {path} with jsonBody and decodes the JSON response into out.
+func (c *Client) put(path string, body any, out any) error {
+	return c.do(http.MethodPut, path, body, out)
+}
+
 // delete performs DELETE {path}.
 func (c *Client) delete(path string) error {
 	return c.do(http.MethodDelete, path, nil, nil)
@@ -72,7 +77,15 @@ func (c *Client) do(method, path string, reqBody, out any) error {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		msg := strings.TrimSpace(string(body))
+		if len(msg) > 512 {
+			msg = msg[:512] + "... (truncated)"
+		}
+		ct := resp.Header.Get("Content-Type")
+		if !strings.Contains(ct, "application/json") && ct != "" {
+			return fmt.Errorf("HTTP %d (Content-Type: %s): %s", resp.StatusCode, ct, msg)
+		}
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, msg)
 	}
 	if out != nil && resp.StatusCode != http.StatusNoContent {
 		return json.NewDecoder(resp.Body).Decode(out)
