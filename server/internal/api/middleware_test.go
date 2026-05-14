@@ -33,8 +33,10 @@ func TestRouter_BypassAuth_LoopbackNoOAuth(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	// 200 or 500 (no real agent scanner) — NOT 401
-	assert.NotEqual(t, http.StatusUnauthorized, rec.Code)
+	// The agent scanner (ps) always succeeds even with no Claude processes, so the
+	// handler returns 200 with an empty array. Assert 200 specifically: a non-401
+	// but wrong code (e.g. 404 or 500) would indicate the route is missing or broken.
+	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
 // TestRouter_RequireAuth_RejectsWithout401 verifies that when BypassAuth is false,

@@ -20,9 +20,9 @@ func TestSessionsList_DoesNotPanic(t *testing.T) {
 	// The handler is a plain http.HandlerFunc — call it directly.
 	sessions.List(rec, req)
 
-	// Accept any valid HTTP status code (200 or 500) — not a panic.
-	assert.GreaterOrEqual(t, rec.Code, 200)
-	assert.Less(t, rec.Code, 600)
+	// Accept 200 (success, even with 0 sessions) or 500 (internal error from scanner).
+	// Any other code indicates a handler bug or panic.
+	assert.Contains(t, []int{http.StatusOK, http.StatusInternalServerError}, rec.Code)
 }
 
 // TestSessionsTimeline_InvalidIDReturnsBadRequest verifies that a malformed
