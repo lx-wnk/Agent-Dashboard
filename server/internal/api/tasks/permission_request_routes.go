@@ -11,7 +11,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -310,9 +309,4 @@ func resolveTemplate(name string) ([]repo.GrantEntry, error) {
 		entries[i] = repo.GrantEntry{Tool: t}
 	}
 	return entries, nil
-}
-
-// isAllowedTool validates a tool name against the pipeline allow-list.
-func isAllowedTool(tool string) bool {
-	return pipeline.AllowedToolNames[tool]
 }

@@ -18,17 +18,17 @@ import (
 
 // SystemInfo mirrors the TypeScript SystemInfo shape.
 type SystemInfo struct {
-	CPU     cpuInfo    `json:"cpu"`
-	Memory  memInfo    `json:"memory"`
-	Disk    diskInfo   `json:"disk"`
-	LoadAvg []float64  `json:"loadAvg"`
-	Uptime  float64    `json:"uptime"`
+	CPU     cpuInfo   `json:"cpu"`
+	Memory  memInfo   `json:"memory"`
+	Disk    diskInfo  `json:"disk"`
+	LoadAvg []float64 `json:"loadAvg"`
+	Uptime  float64   `json:"uptime"`
 }
 
 type cpuInfo struct {
-	Usage  float64 `json:"usage"`
-	Cores  int     `json:"cores"`
-	Model  string  `json:"model"`
+	Usage float64 `json:"usage"`
+	Cores int     `json:"cores"`
+	Model string  `json:"model"`
 }
 
 type memInfo struct {
@@ -116,7 +116,7 @@ func getCPUModel() string {
 // getCPUUsage returns a rough CPU usage percentage.
 // On Linux, reads /proc/stat deltas. On macOS, uses top -l2 -n0.
 var (
-	cpuMu              sync.Mutex
+	cpuMu               sync.Mutex
 	prevIdle, prevTotal uint64
 )
 

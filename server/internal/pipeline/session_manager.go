@@ -23,7 +23,7 @@ func isPidZombie(pid int) bool {
 		s := string(data)
 		return strings.Contains(s, "State:\tZ") || strings.Contains(s, "State: Z")
 	}
-	cmd := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "stat=")
+	cmd := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "stat=") //nolint:gosec
 	out, err := cmd.Output()
 	if err != nil {
 		return false

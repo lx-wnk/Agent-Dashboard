@@ -319,7 +319,7 @@ func callDashboard(baseURL, token, method, path string, body any) (string, error
 		}
 		br = bytes.NewReader(data)
 	}
-	req, err := http.NewRequest(method, baseURL+path, br)
+	req, err := http.NewRequest(method, baseURL+path, br) //nolint:gosec
 	if err != nil {
 		return "", fmt.Errorf("build request: %w", err)
 	}
@@ -329,7 +329,7 @@ func callDashboard(baseURL, token, method, path string, body any) (string, error
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := dashboardClient.Do(req)
+	resp, err := dashboardClient.Do(req) //nolint:gosec
 	if err != nil {
 		return "", err
 	}

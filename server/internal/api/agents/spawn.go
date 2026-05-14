@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	spawnStoreMaxAge = time.Hour
-	maxStderrBytes   = 4096
-	systemPromptMax  = 10000
+	spawnStoreMaxAge  = time.Hour
+	maxStderrBytes    = 4096
+	systemPromptMax   = 10000
 	channelMsgTimeout = 5 * time.Second
 )
 
@@ -377,4 +377,3 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
-

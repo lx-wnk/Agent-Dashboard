@@ -12,41 +12,12 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
-func setupOrchestrator(t *testing.T) (*pipeline.PipelineOrchestrator, context.Context) {
-	t.Helper()
-	bundle, err := db.Open(":memory:")
-	require.NoError(t, err)
-	client := bundle.Client
-	t.Cleanup(func() { client.Close() })
-	ctx := context.Background()
-
-	taskRepo := repo.NewTaskRepo(client)
-	srRepo := repo.NewStageRunRepo(client)
-	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
-	cfgRepo := repo.NewPipelineConfigRepo(client)
-
-	var changed []string
-	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
-		PollInterval:   100 * time.Millisecond,
-		TaskRepo:       taskRepo,
-		StageRunRepo:   srRepo,
-		PermissionRepo: permRepo,
-		AuditRepo:      auditRepo,
-		ConfigRepo:     cfgRepo,
-		OnTaskChanged:  func(taskID, kind string) { changed = append(changed, kind) },
-	})
-	require.NoError(t, err)
-	_ = changed
-	return orch, ctx
-}
-
 func TestOrchestrator_BacklogTransitionsToImplementation(t *testing.T) {
 	// This test exercises the backlog stage handler end-to-end through ProgressTask.
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
 	client := bundle.Client
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 
 	ctx := context.Background()
 	taskRepo := repo.NewTaskRepo(client)
@@ -90,7 +61,7 @@ func TestOrchestrator_AsyncRunningTransition_RecordsPI(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
 	client := bundle.Client
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 
 	ctx := context.Background()
 	taskRepo := repo.NewTaskRepo(client)
@@ -135,7 +106,7 @@ func TestOrchestrator_FailTransition_TaskStageUnchanged(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
 	client := bundle.Client
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 	ctx := context.Background()
 
 	taskRepo := repo.NewTaskRepo(client)

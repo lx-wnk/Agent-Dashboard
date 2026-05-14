@@ -491,7 +491,7 @@ func parseOutputMessages(raw string, lastOnly bool) []OutputMessage {
 		}
 
 		// Assistant messages (new format: type=="assistant"; legacy format: type=="message" with role=="assistant")
-		if e.Type != "assistant" && !(e.Type == "message" && msg.Role == "assistant") {
+		if e.Type != "assistant" && (e.Type != "message" || msg.Role != "assistant") {
 			continue
 		}
 		var blocks []rawBlock

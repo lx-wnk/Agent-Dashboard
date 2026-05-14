@@ -52,8 +52,7 @@ func registerProgressTask(registry mcp.ToolRegistry, d ControlDeps) {
 			if err != nil {
 				return nil, err
 			}
-			task, err := d.TaskRepo.GetByID(ctx, id)
-			if err != nil {
+			if _, err := d.TaskRepo.GetByID(ctx, id); err != nil {
 				return nil, mcp.Fail("Task not found: " + id)
 			}
 
@@ -69,7 +68,7 @@ func registerProgressTask(registry mcp.ToolRegistry, d ControlDeps) {
 			}
 			safeBroadcast(d.Broadcast, id)
 			// Refresh task after progression; ignore error — stale data is better than an error on success.
-			task, _ = d.TaskRepo.GetByID(ctx, id)
+			task, _ := d.TaskRepo.GetByID(ctx, id)
 			return mcp.OK(map[string]any{"task": task, "stageRun": stageRun})
 		},
 	})

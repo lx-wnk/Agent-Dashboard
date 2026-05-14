@@ -38,7 +38,10 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	entClient := bundle.Client
+	var entClient *ent.Client
+	if bundle != nil {
+		entClient = bundle.Client
+	}
 
 	var searchHandler *search.Handler
 	if bundle != nil {

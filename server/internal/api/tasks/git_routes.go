@@ -75,10 +75,10 @@ func getGitStatus(ctx context.Context, cwd string) gitStatus {
 
 	ahead, behind := 0, 0
 	if m := aheadRE.FindStringSubmatch(header); m != nil {
-		fmt.Sscanf(m[1], "%d", &ahead)
+		fmt.Sscanf(m[1], "%d", &ahead) //nolint:errcheck
 	}
 	if m := behindRE.FindStringSubmatch(header); m != nil {
-		fmt.Sscanf(m[1], "%d", &behind)
+		fmt.Sscanf(m[1], "%d", &behind) //nolint:errcheck
 	}
 
 	staged := []string{}

@@ -162,7 +162,7 @@ func Put(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}
-	if err := os.WriteFile(safe, []byte(body.Content), 0o644); err != nil {
+	if err := os.WriteFile(safe, []byte(body.Content), 0o600); err != nil {
 		http.Error(w, `{"error":"failed to write file"}`, http.StatusInternalServerError)
 		return
 	}

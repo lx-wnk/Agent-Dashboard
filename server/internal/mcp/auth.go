@@ -126,7 +126,7 @@ func McpAuthMiddleware(keyRepo repo.ApiKeyRepo) func(http.Handler) http.Handler 
 			// Fire-and-forget: detach from request ctx so cancel/timeout doesn't suppress the write; failures are non-critical.
 			// Debounced: skip the DB write if called within touchDebounce of the last write for this key.
 			if shouldTouch(key.ID) {
-				go func() { _ = keyRepo.TouchLastUsed(context.Background(), key.ID) }() //nolint:errcheck
+				go func() { _ = keyRepo.TouchLastUsed(context.Background(), key.ID) }() //nolint:errcheck,gosec
 			}
 			info := &MCPAuthInfo{
 				KeyID:  key.ID,

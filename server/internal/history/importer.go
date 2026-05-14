@@ -48,9 +48,7 @@ func NewImporter(costRepo repo.AgentCostTrendRepo) *Importer {
 // WithCollectFn returns a shallow copy of imp with fn as the file-collection function.
 // For use in tests only — overrides the default collectJSONLFiles scan.
 func (imp *Importer) WithCollectFn(fn func(string) ([]string, error)) *Importer {
-	cp := *imp
-	cp.collectFn = fn
-	return &cp
+	return &Importer{costRepo: imp.costRepo, collectFn: fn}
 }
 
 // Run starts the import in a background goroutine. Returns immediately.

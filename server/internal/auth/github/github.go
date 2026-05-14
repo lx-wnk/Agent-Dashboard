@@ -18,7 +18,7 @@ import (
 var _ auth.OAuthProvider = (*Client)(nil)
 
 const (
-	defaultGitHubTokenURL = "https://github.com/login/oauth/access_token"
+	defaultGitHubTokenURL = "https://github.com/login/oauth/access_token" //nolint:gosec
 	defaultGitHubUserURL  = "https://api.github.com/user"
 	defaultGitHubAuthURL  = "https://github.com/login/oauth/authorize"
 )

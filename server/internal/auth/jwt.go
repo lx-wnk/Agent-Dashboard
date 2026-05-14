@@ -20,14 +20,14 @@ var (
 
 // JWTPayload is the JWT body — matches the TypeScript JwtPayload interface.
 type JWTPayload struct {
-	Sub            string `json:"sub"`              // GitHub numeric user ID
-	Login          string `json:"login"`            // GitHub username
+	Sub            string `json:"sub"`   // GitHub numeric user ID
+	Login          string `json:"login"` // GitHub username
 	IsAdmin        bool   `json:"isAdmin"`
-	AdminGrantedAt int64  `json:"aga,omitempty"`    // Unix timestamp when admin was granted; set iff IsAdmin==true
-	Exp            int64  `json:"exp"`              // Unix timestamp
-	Iat            int64  `json:"iat,omitempty"`    // Issued-at Unix timestamp
-	Iss            string `json:"iss,omitempty"`    // Issuer
-	Aud            string `json:"aud,omitempty"`    // Audience
+	AdminGrantedAt int64  `json:"aga,omitempty"` // Unix timestamp when admin was granted; set iff IsAdmin==true
+	Exp            int64  `json:"exp"`           // Unix timestamp
+	Iat            int64  `json:"iat,omitempty"` // Issued-at Unix timestamp
+	Iss            string `json:"iss,omitempty"` // Issuer
+	Aud            string `json:"aud,omitempty"` // Audience
 }
 
 // adminPrivilegeTTL is the maximum age of the AdminGrantedAt claim before an

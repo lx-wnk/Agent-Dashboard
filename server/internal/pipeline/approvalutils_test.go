@@ -14,7 +14,7 @@ import (
 func TestBulkGrantConceptStagePermissions_GrantsMissingTools(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
-	defer bundle.Client.Close()
+	defer bundle.Client.Close() //nolint:errcheck
 
 	taskRepo := repo.NewTaskRepo(bundle.Client)
 	permRepo := repo.NewPermissionRepo(bundle.Client)
@@ -46,7 +46,7 @@ func TestBulkGrantConceptStagePermissions_GrantsMissingTools(t *testing.T) {
 func TestBulkGrantConceptStagePermissions_IdempotentWhenAlreadyGranted(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
-	defer bundle.Client.Close()
+	defer bundle.Client.Close() //nolint:errcheck
 
 	taskRepo := repo.NewTaskRepo(bundle.Client)
 	permRepo := repo.NewPermissionRepo(bundle.Client)

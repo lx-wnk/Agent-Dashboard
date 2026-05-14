@@ -44,7 +44,7 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("auth: build state: %w", err)
 	}
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec
 		Name:     "oauth_state",
 		Value:    state,
 		MaxAge:   300,
@@ -115,7 +115,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("auth: sign jwt: %w", err)
 	}
 
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec
 		Name:     "oauth_state",
 		MaxAge:   -1,
 		HttpOnly: true,
@@ -123,7 +123,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec
 		Name:     "auth_token",
 		Value:    token,
 		MaxAge:   86400,
