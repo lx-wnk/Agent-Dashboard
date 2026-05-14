@@ -58,7 +58,7 @@ func TestOllamaSpawner_Spawn_WritesSessionFile(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/chat", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"message": map[string]any{"content": "```json\n{\"summary\":\"ok\"}\n```"},
 		})
 	}))
@@ -90,7 +90,7 @@ func TestOllamaSpawner_Spawn_WritesSessionFile(t *testing.T) {
 	})
 
 	// Cleanup
-	os.Remove(result.SessionFile)
+	_ = os.Remove(result.SessionFile)
 }
 
 func TestOpenAISpawner_Spawn_WritesSessionFile(t *testing.T) {
@@ -127,7 +127,7 @@ func TestOpenAISpawner_Spawn_WritesSessionFile(t *testing.T) {
 		assert.Contains(t, text, `"result":"done"`)
 	})
 
-	os.Remove(result.SessionFile)
+	_ = os.Remove(result.SessionFile)
 }
 
 func TestOllamaSpawner_Name(t *testing.T) {

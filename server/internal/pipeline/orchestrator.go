@@ -939,12 +939,10 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 				continue
 			}
 			// Synthetic session file written — run is ready to finalize.
-		} else {
-			if IsPidAlive(*run.Pid) {
-				// Subprocess is still running — handled by still_running branch below.
-				// Fall through so cost-budget and stage-timeout enforcement still applies.
-			}
 		}
+		// Subprocess runs (pid != nil): fall through whether alive or exited.
+		// detectCompletion returns "still_running" for live PIDs; cost-budget and
+		// stage-timeout enforcement in that branch applies unconditionally.
 
 		task, err := o.opts.TaskRepo.GetByID(ctx, run.TaskID)
 		if err != nil {
