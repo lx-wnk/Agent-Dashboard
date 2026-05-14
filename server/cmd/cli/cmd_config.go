@@ -1,9 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/spf13/cobra"
 )
 
@@ -22,13 +19,11 @@ func newConfigCmd(cfg *CLIConfig) *cobra.Command {
 				Token string `json:"token"`
 			}
 			rc := redactedConfig{Host: cfg.Host}
-			if cfg.Token != "" {
-				if len(cfg.Token) > 8 {
-					rc.Token = cfg.Token[:4] + strings.Repeat("*", len(cfg.Token)-8) + cfg.Token[len(cfg.Token)-4:]
-				} else {
-					rc.Token = "****"
-				}
+			token := "****"
+			if cfg.Token == "" {
+				token = "(not set)"
 			}
+			rc.Token = token
 			return printJSON(rc)
 		},
 	}
@@ -37,16 +32,17 @@ func newConfigCmd(cfg *CLIConfig) *cobra.Command {
 		Use:   "set",
 		Short: "Update CLI configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fresh, err := loadConfig()
+			if err != nil {
+				fresh = CLIConfig{}
+			}
 			if u, _ := cmd.Flags().GetString("url"); u != "" {
-				cfg.Host = u
+				fresh.Host = u
 			}
 			if t, _ := cmd.Flags().GetString("token"); t != "" {
-				cfg.Token = t
+				fresh.Token = t
 			}
-			if err := saveConfig(*cfg); err != nil {
-				return fmt.Errorf("save config: %w", err)
-			}
-			return nil
+			return saveConfig(fresh)
 		},
 	}
 	setCmd.Flags().String("url", "", "Dashboard server URL")
