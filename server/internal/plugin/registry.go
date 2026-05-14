@@ -57,7 +57,7 @@ func New(dir string) *Registry {
 // serverCtx is the server's lifetime context and is passed to watchPlugin
 // goroutines so that restart loops stay alive for the duration of the server,
 // not just startup.
-func (r *Registry) Load(ctx, serverCtx context.Context) error {
+func (r *Registry) Load(ctx, serverCtx context.Context, hooks Hooks) error {
 	if r.dir == "" {
 		return nil
 	}
@@ -137,6 +137,11 @@ func (r *Registry) Load(ctx, serverCtx context.Context) error {
 		r.mu.Lock()
 		r.plugins = append(r.plugins, pluginEntry)
 		r.mu.Unlock()
+
+		// Self-registration via hooks — notify callers about newly discovered capabilities.
+		if desc.HasCapability(CapAuthProvider) && hooks.SetAuth != nil {
+			hooks.SetAuth(NewAuthProvider(pluginEntry))
+		}
 	}
 	return nil
 }

@@ -52,7 +52,7 @@ tasks:
       - cd server && golangci-lint run ./...
 
   generate:
-    desc: Run go generate (wire + ent)
+    desc: Run go generate (ent schemas)
     dir: server
     cmd: go generate ./...
 
@@ -62,10 +62,7 @@ tasks:
       - cd sdk && govulncheck ./...
       - cd server && govulncheck ./...
 
-  wire:
-    desc: Regenerate wire DI
-    dir: server
-    cmd: wire ./cmd/serve/...
+  # wire task removed — DI is hand-written in server/cmd/serve/di.go (no google/wire codegen)
 
   fmt:
     desc: Format all Go code

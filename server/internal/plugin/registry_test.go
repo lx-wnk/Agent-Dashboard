@@ -18,18 +18,18 @@ import (
 func TestRegistry_EmptyDir_LoadsNothing(t *testing.T) {
 	dir := t.TempDir()
 	r := plugin.New(dir)
-	require.NoError(t, r.Load(context.Background(), context.Background()))
+	require.NoError(t, r.Load(context.Background(), context.Background(), plugin.Hooks{}))
 	assert.Nil(t, r.FindByCapability(plugin.CapAuthProvider))
 }
 
 func TestRegistry_NonexistentDir_NoError(t *testing.T) {
 	r := plugin.New("/does/not/exist")
-	require.NoError(t, r.Load(context.Background(), context.Background()))
+	require.NoError(t, r.Load(context.Background(), context.Background(), plugin.Hooks{}))
 }
 
 func TestRegistry_EmptyPluginDir_Skipped(t *testing.T) {
 	r := plugin.New("")
-	require.NoError(t, r.Load(context.Background(), context.Background()))
+	require.NoError(t, r.Load(context.Background(), context.Background(), plugin.Hooks{}))
 }
 
 func TestRegistry_PluginWithHealthy_Loaded(t *testing.T) {
@@ -57,7 +57,7 @@ func TestRegistry_PluginWithHealthy_Loaded(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
 
 	r := plugin.New(dir)
-	require.NoError(t, r.Load(context.Background(), context.Background()))
+	require.NoError(t, r.Load(context.Background(), context.Background(), plugin.Hooks{}))
 
 	entry := r.FindByCapability(plugin.CapRouteExtension)
 	require.NotNil(t, entry)
