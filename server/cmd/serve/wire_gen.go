@@ -13,6 +13,7 @@ import (
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
@@ -94,7 +95,12 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 
 	routerConfig := provideRouterConfig(cfg, oauthProvider)
 
-	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster)
+	var systemPromptRepo repo.SystemPromptRepo
+	if entClient != nil {
+		systemPromptRepo = repo.NewSystemPromptRepo(entClient)
+	}
+
+	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster, systemPromptRepo)
 	if err != nil {
 		return nil, nil, nil, cleanup, err
 	}
@@ -120,7 +126,7 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 		analyticsHandler = apianalytics.NewHandler(rawrepo.NewAnalyticsRepo(bundle.DB), bundle.DB, cfgRepo)
 	}
 
-	routerDeps := provideRouterDeps(ctx, cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler, refineHandler, analyticsHandler, pluginRegistry, oauthProvider)
+	routerDeps := provideRouterDeps(ctx, cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler, refineHandler, analyticsHandler, pluginRegistry, oauthProvider, systemPromptRepo)
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, orch, cleanup, nil
@@ -147,7 +153,7 @@ func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider)
 	}
 }
 
-func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroadcaster) (*pipeline.PipelineOrchestrator, error) {
+func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroadcaster, systemPromptRepo repo.SystemPromptRepo) (*pipeline.PipelineOrchestrator, error) {
 	if client == nil {
 		return nil, nil
 	}
@@ -158,13 +164,14 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 	cfgRepo := repo.NewPipelineConfigRepo(client)
 
 	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
-		Client:         client,
-		TaskRepo:       taskRepo,
-		StageRunRepo:   srRepo,
-		PermissionRepo: permRepo,
-		AuditRepo:      auditRepo,
-		ConfigRepo:     cfgRepo,
-		MCPToken:       cfg.MCPToken,
+		Client:           client,
+		TaskRepo:         taskRepo,
+		StageRunRepo:     srRepo,
+		PermissionRepo:   permRepo,
+		AuditRepo:        auditRepo,
+		ConfigRepo:       cfgRepo,
+		SystemPromptRepo: systemPromptRepo,
+		MCPToken:         cfg.MCPToken,
 		MCPUrl:         fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		OnTaskChanged: func(taskID string, transitionKind string) {
 			tb.Broadcast(sse.TaskEvent{
@@ -243,7 +250,7 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	return mcp.MCPHandler(registry)
 }
 
-func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler, refineHandler *refineapi.Handler, analyticsHandler *apianalytics.Handler, pluginRegistry *plugin.Registry, oauthProvider authpkg.OAuthProvider) api.RouterDeps {
+func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler, refineHandler *refineapi.Handler, analyticsHandler *apianalytics.Handler, pluginRegistry *plugin.Registry, oauthProvider authpkg.OAuthProvider, systemPromptRepo repo.SystemPromptRepo) api.RouterDeps {
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if client != nil {
@@ -258,6 +265,10 @@ func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConf
 	if client != nil {
 		presetsHandler = presets.NewHandler(repo.NewPermissionPresetRepo(client))
 	}
+	var systemPromptsHandler *systemprompts.Handler
+	if client != nil {
+		systemPromptsHandler = systemprompts.NewHandler(systemPromptRepo)
+	}
 	replyStore := agents.NewReplyStore()
 	_ = cfg // cfg is retained for future use; config values consumed via RouterConfig
 	return api.RouterDeps{
@@ -270,7 +281,8 @@ func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConf
 		TaskHandler:      taskHandler,
 		WebPushHandler:   webPushHandler,
 		RemotesHandler:   remotesHandler,
-		PresetsHandler:   presetsHandler,
+		PresetsHandler:        presetsHandler,
+		SystemPromptsHandler: systemPromptsHandler,
 		SearchHandler:    searchHandler,
 		HistoryHandler:   historyHandler,
 		RefineHandler:    refineHandler,

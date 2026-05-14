@@ -117,6 +117,18 @@ func (f StageRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, er
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StageRunMutation", m)
 }
 
+// The SystemPromptFunc type is an adapter to allow the use of ordinary
+// function as SystemPrompt mutator.
+type SystemPromptFunc func(context.Context, *ent.SystemPromptMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SystemPromptFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SystemPromptMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SystemPromptMutation", m)
+}
+
 // The TaskFunc type is an adapter to allow the use of ordinary
 // function as Task mutator.
 type TaskFunc func(context.Context, *ent.TaskMutation) (ent.Value, error)

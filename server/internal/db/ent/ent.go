@@ -21,6 +21,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
@@ -94,6 +95,7 @@ func checkColumn(t, c string) error {
 			refinementturn.Table:     refinementturn.ValidColumn,
 			remoteregistration.Table: remoteregistration.ValidColumn,
 			stagerun.Table:           stagerun.ValidColumn,
+			systemprompt.Table:       systemprompt.ValidColumn,
 			task.Table:               task.ValidColumn,
 			taskdependency.Table:     taskdependency.ValidColumn,
 			taskpermission.Table:     taskpermission.ValidColumn,

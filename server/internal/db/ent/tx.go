@@ -30,6 +30,8 @@ type Tx struct {
 	RemoteRegistration *RemoteRegistrationClient
 	// StageRun is the client for interacting with the StageRun builders.
 	StageRun *StageRunClient
+	// SystemPrompt is the client for interacting with the SystemPrompt builders.
+	SystemPrompt *SystemPromptClient
 	// Task is the client for interacting with the Task builders.
 	Task *TaskClient
 	// TaskDependency is the client for interacting with the TaskDependency builders.
@@ -178,6 +180,7 @@ func (tx *Tx) init() {
 	tx.RefinementTurn = NewRefinementTurnClient(tx.config)
 	tx.RemoteRegistration = NewRemoteRegistrationClient(tx.config)
 	tx.StageRun = NewStageRunClient(tx.config)
+	tx.SystemPrompt = NewSystemPromptClient(tx.config)
 	tx.Task = NewTaskClient(tx.config)
 	tx.TaskDependency = NewTaskDependencyClient(tx.config)
 	tx.TaskPermission = NewTaskPermissionClient(tx.config)

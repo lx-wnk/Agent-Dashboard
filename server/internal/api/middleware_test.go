@@ -63,7 +63,9 @@ func TestRouter_RequireAuth_Returns401WhenUnauthenticated(t *testing.T) {
 // stubOAuth implements authpkg.OAuthProvider with no-op stubs.
 type stubOAuth struct{}
 
-func (s *stubOAuth) BuildAuthURL(state, redirectURI string) string { return "http://stub" }
+func (s *stubOAuth) BuildAuthURL(_ context.Context, state, redirectURI string) (string, error) {
+	return "http://stub", nil
+}
 
 func (s *stubOAuth) ExchangeCode(_ context.Context, code, redirectURI string) (string, error) {
 	return "stub-token", nil

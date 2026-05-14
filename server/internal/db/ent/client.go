@@ -24,6 +24,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
@@ -53,6 +54,8 @@ type Client struct {
 	RemoteRegistration *RemoteRegistrationClient
 	// StageRun is the client for interacting with the StageRun builders.
 	StageRun *StageRunClient
+	// SystemPrompt is the client for interacting with the SystemPrompt builders.
+	SystemPrompt *SystemPromptClient
 	// Task is the client for interacting with the Task builders.
 	Task *TaskClient
 	// TaskDependency is the client for interacting with the TaskDependency builders.
@@ -81,6 +84,7 @@ func (c *Client) init() {
 	c.RefinementTurn = NewRefinementTurnClient(c.config)
 	c.RemoteRegistration = NewRemoteRegistrationClient(c.config)
 	c.StageRun = NewStageRunClient(c.config)
+	c.SystemPrompt = NewSystemPromptClient(c.config)
 	c.Task = NewTaskClient(c.config)
 	c.TaskDependency = NewTaskDependencyClient(c.config)
 	c.TaskPermission = NewTaskPermissionClient(c.config)
@@ -186,6 +190,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		RefinementTurn:     NewRefinementTurnClient(cfg),
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
 		StageRun:           NewStageRunClient(cfg),
+		SystemPrompt:       NewSystemPromptClient(cfg),
 		Task:               NewTaskClient(cfg),
 		TaskDependency:     NewTaskDependencyClient(cfg),
 		TaskPermission:     NewTaskPermissionClient(cfg),
@@ -218,6 +223,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		RefinementTurn:     NewRefinementTurnClient(cfg),
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
 		StageRun:           NewStageRunClient(cfg),
+		SystemPrompt:       NewSystemPromptClient(cfg),
 		Task:               NewTaskClient(cfg),
 		TaskDependency:     NewTaskDependencyClient(cfg),
 		TaskPermission:     NewTaskPermissionClient(cfg),
@@ -252,8 +258,8 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentCostTrend, c.ApiKey, c.AuditLog, c.PermissionPreset, c.PermissionRequest,
-		c.PipelineConfig, c.RefinementTurn, c.RemoteRegistration, c.StageRun, c.Task,
-		c.TaskDependency, c.TaskPermission, c.User,
+		c.PipelineConfig, c.RefinementTurn, c.RemoteRegistration, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -264,8 +270,8 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentCostTrend, c.ApiKey, c.AuditLog, c.PermissionPreset, c.PermissionRequest,
-		c.PipelineConfig, c.RefinementTurn, c.RemoteRegistration, c.StageRun, c.Task,
-		c.TaskDependency, c.TaskPermission, c.User,
+		c.PipelineConfig, c.RefinementTurn, c.RemoteRegistration, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -292,6 +298,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.RemoteRegistration.mutate(ctx, m)
 	case *StageRunMutation:
 		return c.StageRun.mutate(ctx, m)
+	case *SystemPromptMutation:
+		return c.SystemPrompt.mutate(ctx, m)
 	case *TaskMutation:
 		return c.Task.mutate(ctx, m)
 	case *TaskDependencyMutation:
@@ -1566,6 +1574,139 @@ func (c *StageRunClient) mutate(ctx context.Context, m *StageRunMutation) (Value
 	}
 }
 
+// SystemPromptClient is a client for the SystemPrompt schema.
+type SystemPromptClient struct {
+	config
+}
+
+// NewSystemPromptClient returns a client for the SystemPrompt from the given config.
+func NewSystemPromptClient(c config) *SystemPromptClient {
+	return &SystemPromptClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `systemprompt.Hooks(f(g(h())))`.
+func (c *SystemPromptClient) Use(hooks ...Hook) {
+	c.hooks.SystemPrompt = append(c.hooks.SystemPrompt, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `systemprompt.Intercept(f(g(h())))`.
+func (c *SystemPromptClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SystemPrompt = append(c.inters.SystemPrompt, interceptors...)
+}
+
+// Create returns a builder for creating a SystemPrompt entity.
+func (c *SystemPromptClient) Create() *SystemPromptCreate {
+	mutation := newSystemPromptMutation(c.config, OpCreate)
+	return &SystemPromptCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SystemPrompt entities.
+func (c *SystemPromptClient) CreateBulk(builders ...*SystemPromptCreate) *SystemPromptCreateBulk {
+	return &SystemPromptCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SystemPromptClient) MapCreateBulk(slice any, setFunc func(*SystemPromptCreate, int)) *SystemPromptCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SystemPromptCreateBulk{err: fmt.Errorf("calling to SystemPromptClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SystemPromptCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SystemPromptCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SystemPrompt.
+func (c *SystemPromptClient) Update() *SystemPromptUpdate {
+	mutation := newSystemPromptMutation(c.config, OpUpdate)
+	return &SystemPromptUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SystemPromptClient) UpdateOne(_m *SystemPrompt) *SystemPromptUpdateOne {
+	mutation := newSystemPromptMutation(c.config, OpUpdateOne, withSystemPrompt(_m))
+	return &SystemPromptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SystemPromptClient) UpdateOneID(id string) *SystemPromptUpdateOne {
+	mutation := newSystemPromptMutation(c.config, OpUpdateOne, withSystemPromptID(id))
+	return &SystemPromptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SystemPrompt.
+func (c *SystemPromptClient) Delete() *SystemPromptDelete {
+	mutation := newSystemPromptMutation(c.config, OpDelete)
+	return &SystemPromptDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SystemPromptClient) DeleteOne(_m *SystemPrompt) *SystemPromptDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SystemPromptClient) DeleteOneID(id string) *SystemPromptDeleteOne {
+	builder := c.Delete().Where(systemprompt.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SystemPromptDeleteOne{builder}
+}
+
+// Query returns a query builder for SystemPrompt.
+func (c *SystemPromptClient) Query() *SystemPromptQuery {
+	return &SystemPromptQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSystemPrompt},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SystemPrompt entity by its id.
+func (c *SystemPromptClient) Get(ctx context.Context, id string) (*SystemPrompt, error) {
+	return c.Query().Where(systemprompt.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SystemPromptClient) GetX(ctx context.Context, id string) *SystemPrompt {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SystemPromptClient) Hooks() []Hook {
+	return c.hooks.SystemPrompt
+}
+
+// Interceptors returns the client interceptors.
+func (c *SystemPromptClient) Interceptors() []Interceptor {
+	return c.inters.SystemPrompt
+}
+
+func (c *SystemPromptClient) mutate(ctx context.Context, m *SystemPromptMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SystemPromptCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SystemPromptUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SystemPromptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SystemPromptDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SystemPrompt mutation op: %q", m.Op())
+	}
+}
+
 // TaskClient is a client for the Task schema.
 type TaskClient struct {
 	config
@@ -2230,12 +2371,12 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		AgentCostTrend, ApiKey, AuditLog, PermissionPreset, PermissionRequest,
-		PipelineConfig, RefinementTurn, RemoteRegistration, StageRun, Task,
-		TaskDependency, TaskPermission, User []ent.Hook
+		PipelineConfig, RefinementTurn, RemoteRegistration, StageRun, SystemPrompt,
+		Task, TaskDependency, TaskPermission, User []ent.Hook
 	}
 	inters struct {
 		AgentCostTrend, ApiKey, AuditLog, PermissionPreset, PermissionRequest,
-		PipelineConfig, RefinementTurn, RemoteRegistration, StageRun, Task,
-		TaskDependency, TaskPermission, User []ent.Interceptor
+		PipelineConfig, RefinementTurn, RemoteRegistration, StageRun, SystemPrompt,
+		Task, TaskDependency, TaskPermission, User []ent.Interceptor
 	}
 )

@@ -13,6 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
@@ -89,6 +90,26 @@ func init() {
 	stagerunDescCreatedAt := stagerunFields[14].Descriptor()
 	// stagerun.DefaultCreatedAt holds the default value on creation for the created_at field.
 	stagerun.DefaultCreatedAt = stagerunDescCreatedAt.Default.(func() time.Time)
+	systempromptFields := schema.SystemPrompt{}.Fields()
+	_ = systempromptFields
+	// systempromptDescScope is the schema descriptor for scope field.
+	systempromptDescScope := systempromptFields[1].Descriptor()
+	// systemprompt.DefaultScope holds the default value on creation for the scope field.
+	systemprompt.DefaultScope = systempromptDescScope.Default.(string)
+	// systempromptDescPriority is the schema descriptor for priority field.
+	systempromptDescPriority := systempromptFields[4].Descriptor()
+	// systemprompt.DefaultPriority holds the default value on creation for the priority field.
+	systemprompt.DefaultPriority = systempromptDescPriority.Default.(int)
+	// systempromptDescCreatedAt is the schema descriptor for created_at field.
+	systempromptDescCreatedAt := systempromptFields[6].Descriptor()
+	// systemprompt.DefaultCreatedAt holds the default value on creation for the created_at field.
+	systemprompt.DefaultCreatedAt = systempromptDescCreatedAt.Default.(func() time.Time)
+	// systempromptDescUpdatedAt is the schema descriptor for updated_at field.
+	systempromptDescUpdatedAt := systempromptFields[7].Descriptor()
+	// systemprompt.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	systemprompt.DefaultUpdatedAt = systempromptDescUpdatedAt.Default.(func() time.Time)
+	// systemprompt.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	systemprompt.UpdateDefaultUpdatedAt = systempromptDescUpdatedAt.UpdateDefault.(func() time.Time)
 	taskFields := schema.Task{}.Fields()
 	_ = taskFields
 	// taskDescTitle is the schema descriptor for title field.

@@ -77,6 +77,18 @@ func RequireAdmin(next http.Handler) http.Handler {
 	})
 }
 
+// RequireAdminOrBypass returns a chi middleware that enforces admin privileges
+// unless bypassAuth is true (loopback single-user mode, where the implicit user
+// is already treated as local admin by the rest of the stack). This mirrors the
+// RequireAuth(secret) factory pattern so bypass awareness stays in one place.
+func RequireAdminOrBypass(bypassAuth bool) func(http.Handler) http.Handler {
+	if bypassAuth {
+		// In bypass mode every request is already implicitly a local admin — pass through.
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return RequireAdmin
+}
+
 func writeForbidden(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
