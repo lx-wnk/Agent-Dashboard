@@ -81,7 +81,7 @@ async function save() {
   try {
     const body = {
       scope: 'global',
-      stage: form.value.stage || null,
+      stage: form.value.stage,
       priority: form.value.priority,
       content: form.value.content,
     }

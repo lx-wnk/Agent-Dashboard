@@ -104,7 +104,11 @@ func (r *entSystemPromptRepo) Update(ctx context.Context, id string, in UpdateSy
 		q = q.SetPriority(*in.Priority)
 	}
 	if in.Stage != nil {
-		q = q.SetStage(*in.Stage)
+		if *in.Stage == "" {
+			q = q.ClearStage()
+		} else {
+			q = q.SetStage(*in.Stage)
+		}
 	}
 	sp, err := q.Save(ctx)
 	if err != nil {
