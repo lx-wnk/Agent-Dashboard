@@ -21,25 +21,23 @@ func newConfigCmd(cfg *CLIConfig) *cobra.Command {
 	}
 
 	setCmd := &cobra.Command{
-		Use:   "set <key> <value>",
-		Short: "Set a config value (host or token)",
-		Args:  cobra.ExactArgs(2),
+		Use:   "set",
+		Short: "Update CLI configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			switch args[0] {
-			case "host":
-				cfg.Host = args[1]
-			case "token":
-				cfg.Token = args[1]
-			default:
-				return fmt.Errorf("unknown config key %q — supported: host, token", args[0])
+			if u, _ := cmd.Flags().GetString("url"); u != "" {
+				cfg.Host = u
+			}
+			if t, _ := cmd.Flags().GetString("token"); t != "" {
+				cfg.Token = t
 			}
 			if err := saveConfig(*cfg); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Printf("Set %s = %s\n", args[0], args[1])
 			return nil
 		},
 	}
+	setCmd.Flags().String("url", "", "Dashboard server URL")
+	setCmd.Flags().String("token", "", "API bearer token")
 
 	cmd.AddCommand(showCmd, setCmd)
 	return cmd
