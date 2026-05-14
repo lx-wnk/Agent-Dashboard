@@ -113,6 +113,38 @@ const orchestrator = new PipelineOrchestrator({
 
 The same pattern applies inside `StageContext` (`server/pipeline/types.ts`): stage handlers receive `recordAudit` and `requestPermission` as injected functions, not as direct DB or module references.
 
+## Go Layer Direction
+
+The Go backend enforces the same layering intent as the TypeScript rules above, expressed in Go package terms.
+
+### Permitted import graph
+
+```
+cmd/serve/main.go + di.go   ← composition root only
+        │
+        ├── api/           may import: db/repo, db/rawrepo, auth, mcp, pipeline (ProgressOpts type), plugin, sse, merger, config
+        ├── mcp/tools/     may import: db/repo, pipeline (ProgressOpts + allowlisted helpers), sse
+        ├── pipeline/      may import: db/repo, db/ent, auth, config, channelconfig, sdk (types only)
+        ├── db/repo        may import: db/ent only
+        └── plugin/        may import: auth only
+```
+
+### Runtime import whitelist for routes (api/*) and mcp/*
+
+The following `pipeline/` symbols may be imported at runtime from `api/*` and `mcp/*`. All other `pipeline/` imports from these layers must be type-only (`*pipeline.SomeType`):
+
+| Symbol | File in pipeline/ | Consumers |
+|---|---|---|
+| `ProgressOpts` | `types.go` | `api/tasks/handler.go`, `mcp/tools/control.go` |
+| `IsPidAlive` | `session_manager.go` | `api/tasks/enrich.go`, `api/tasks/analyze_routes.go` |
+| `ResolvedProjectDir` | `session_reader.go` | `api/tasks/analyze_routes.go` |
+| `FindNewestSessionID` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
+| `ReadLastStageJsonOutput` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
+
+These are session-reader and process-monitor helpers — they do not touch the state machine (orchestrator, stage handlers, completion detector). New `pipeline/` imports from `api/*` or `mcp/*` require an explicit justification here before being added.
+
+Never import from `pipeline/` in `notifications/`, `db/`, or `plugin/` packages.
+
 ## When Modifying the Pipeline
 
 - New stage transition? Add it to `StageTransition` in `server/pipeline/types.ts`, then handle it in `PipelineOrchestrator.applyTransition`. Wrap DB writes in `db.transaction()`.
