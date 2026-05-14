@@ -10,6 +10,7 @@ interface SystemPrompt {
   priority: number
   created_at: string
   updated_at: string
+  created_by?: string | null
 }
 
 interface PromptForm {
@@ -79,12 +80,18 @@ async function save() {
 
   saving.value = true
   try {
-    const body = {
-      scope: 'global',
-      stage: form.value.stage,
-      priority: form.value.priority,
-      content: form.value.content,
-    }
+    const body = editing.value
+      ? {
+          stage: form.value.stage,
+          priority: form.value.priority,
+          content: form.value.content,
+        }
+      : {
+          scope: 'global',
+          stage: form.value.stage,
+          priority: form.value.priority,
+          content: form.value.content,
+        }
     const url = editing.value
       ? `/api/settings/system-prompts/${editing.value.id}`
       : '/api/settings/system-prompts'

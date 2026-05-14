@@ -71,6 +71,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
+	if in.Content != nil && *in.Content == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "content is required")
+	}
 	prompt, err := h.repo.Update(r.Context(), id, in)
 	if err != nil {
 		return err

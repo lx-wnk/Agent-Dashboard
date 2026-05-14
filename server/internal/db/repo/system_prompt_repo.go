@@ -7,6 +7,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
 )
@@ -112,6 +113,9 @@ func (r *entSystemPromptRepo) Update(ctx context.Context, id string, in UpdateSy
 	}
 	sp, err := q.Save(ctx)
 	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: system prompt %s", apierr.ErrNotFound, id)
+		}
 		return nil, fmt.Errorf("systemPrompt.Update(%s): %w", id, err)
 	}
 	return sp, nil
@@ -119,6 +123,9 @@ func (r *entSystemPromptRepo) Update(ctx context.Context, id string, in UpdateSy
 
 func (r *entSystemPromptRepo) Delete(ctx context.Context, id string) error {
 	if err := r.client.SystemPrompt.DeleteOneID(id).Exec(ctx); err != nil {
+		if ent.IsNotFound(err) {
+			return fmt.Errorf("%w: system prompt %s", apierr.ErrNotFound, id)
+		}
 		return fmt.Errorf("systemPrompt.Delete(%s): %w", id, err)
 	}
 	return nil
