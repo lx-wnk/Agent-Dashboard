@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"testing"
+	"time"
 )
 
 // newTestHandler is a convenience constructor for tests.
@@ -128,7 +128,8 @@ func TestPreTool_WriteTool_TimeoutReturnsProceeds(t *testing.T) {
 
 	// Poll until the pending entry appears, then send an accept decision.
 	var pendingID string
-	for i := 0; i < 1000; i++ {
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
 		h.mu.Lock()
 		for id := range h.pending {
 			pendingID = id
@@ -137,7 +138,7 @@ func TestPreTool_WriteTool_TimeoutReturnsProceeds(t *testing.T) {
 		if pendingID != "" {
 			break
 		}
-		runtime.Gosched()
+		time.Sleep(time.Millisecond)
 	}
 	if pendingID == "" {
 		t.Fatal("PreTool Edit: pending entry never appeared")
