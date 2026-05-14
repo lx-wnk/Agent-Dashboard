@@ -38,7 +38,24 @@ func registerListAPIKeys(registry mcp.ToolRegistry, d KeyDeps) {
 			if err != nil {
 				return nil, mcp.Fail("list_api_keys: " + err.Error())
 			}
-			return mcp.OK(keys)
+			type keyView struct {
+				ID        string   `json:"id"`
+				Name      string   `json:"name"`
+				Scopes    []string `json:"scopes"`
+				Active    bool     `json:"active"`
+				CreatedAt string   `json:"created_at"`
+			}
+			out := make([]keyView, len(keys))
+			for i, k := range keys {
+				out[i] = keyView{
+					ID:        k.ID,
+					Name:      k.Name,
+					Scopes:    k.Scopes,
+					Active:    k.Active,
+					CreatedAt: k.CreatedAt.Format("2006-01-02T15:04:05Z"),
+				}
+			}
+			return mcp.OK(out)
 		},
 	})
 }

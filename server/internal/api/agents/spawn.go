@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -157,11 +158,14 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 
 	var channelCfgPath string
 	if enableChannel {
-		if selfBin, err := channelconfig.SelfBinaryPath(); err == nil {
-			if cfgPath, err := channelconfig.WriteTempConfig(selfBin); err == nil {
-				channelCfgPath = cfgPath
-				args = append(args, "--mcp-config", cfgPath)
-			}
+		selfBin, err := channelconfig.SelfBinaryPath()
+		if err != nil {
+			slog.Warn("spawn: channel disabled — cannot resolve self binary", "err", err)
+		} else if cfgPath, err := channelconfig.WriteTempConfig(selfBin); err != nil {
+			slog.Warn("spawn: channel disabled — cannot write MCP config", "err", err)
+		} else {
+			channelCfgPath = cfgPath
+			args = append(args, "--mcp-config", cfgPath)
 		}
 	}
 
