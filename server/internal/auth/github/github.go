@@ -63,13 +63,13 @@ func NewClient(clientID, clientSecret string, opts ...option) *Client {
 
 // BuildAuthURL returns the GitHub authorization URL for the OAuth flow.
 // ctx is accepted for interface conformance but not used (no network call is made).
-func (c *Client) BuildAuthURL(_ context.Context, state, redirectURI string) string {
+func (c *Client) BuildAuthURL(_ context.Context, state, redirectURI string) (string, error) {
 	v := url.Values{}
 	v.Set("client_id", c.clientID)
 	v.Set("state", state)
 	v.Set("redirect_uri", redirectURI)
 	v.Set("scope", "read:user")
-	return c.authURL + "?" + v.Encode()
+	return c.authURL + "?" + v.Encode(), nil
 }
 
 // ExchangeCode exchanges an OAuth authorization code for an access token.

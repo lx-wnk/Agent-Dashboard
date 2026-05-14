@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -68,7 +70,8 @@ func (r *Registry) Load(ctx context.Context) error {
 			slog.Warn("plugin: invalid addr format, skipping", "id", desc.ID, "addr", desc.Addr, "err", err)
 			continue
 		}
-		if host != "127.0.0.1" && host != "::1" && host != "localhost" {
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
 			slog.Warn("plugin: addr must be loopback, skipping", "id", desc.ID, "addr", desc.Addr)
 			continue
 		}
@@ -96,8 +99,11 @@ func (r *Registry) Load(ctx context.Context) error {
 		}
 		if err := r.waitHealthy(ctx, pluginEntry.BaseURL); err != nil {
 			slog.Error("plugin: health check failed", "id", desc.ID, "err", err)
-			if pluginEntry.cmd != nil {
-				_ = pluginEntry.cmd.Process.Kill()
+			if pluginEntry.cmd != nil && pluginEntry.cmd.Process != nil {
+				_ = pluginEntry.cmd.Process.Signal(syscall.SIGTERM)
+				time.AfterFunc(3*time.Second, func() {
+					_ = pluginEntry.cmd.Process.Kill()
+				})
 			}
 			continue
 		}
@@ -114,20 +120,26 @@ func (r *Registry) Load(ctx context.Context) error {
 // so we only need to signal the process here.
 func (r *Registry) Shutdown() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, p := range r.plugins {
+	plugins := make([]Entry, len(r.plugins))
+	copy(plugins, r.plugins)
+	r.mu.Unlock()
+
+	for _, p := range plugins {
 		if p.cmd != nil && p.cmd.Process != nil {
-			_ = p.cmd.Process.Kill()
+			_ = p.cmd.Process.Signal(syscall.SIGTERM)
+			time.AfterFunc(3*time.Second, func() {
+				_ = p.cmd.Process.Kill()
+			})
 		}
 	}
 }
 
 // FindByCapability returns the first plugin with the given capability, or nil.
-func (r *Registry) FindByCapability(cap string) *Entry {
+func (r *Registry) FindByCapability(capability string) *Entry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for i := range r.plugins {
-		if r.plugins[i].Descriptor.HasCapability(cap) {
+		if r.plugins[i].Descriptor.HasCapability(capability) {
 			return &r.plugins[i]
 		}
 	}
@@ -135,12 +147,12 @@ func (r *Registry) FindByCapability(cap string) *Entry {
 }
 
 // AllWithCapability returns all plugins with the given capability.
-func (r *Registry) AllWithCapability(cap string) []Entry {
+func (r *Registry) AllWithCapability(capability string) []Entry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var out []Entry
 	for _, p := range r.plugins {
-		if p.Descriptor.HasCapability(cap) {
+		if p.Descriptor.HasCapability(capability) {
 			out = append(out, p)
 		}
 	}
@@ -180,10 +192,12 @@ func (r *Registry) waitHealthy(ctx context.Context, baseURL string) error {
 		}
 		resp, err := healthClient.Do(req)
 		if err == nil && resp.StatusCode == http.StatusOK {
+			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 			return nil
 		}
 		if resp != nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 		}
 		select {

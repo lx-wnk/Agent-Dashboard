@@ -16,9 +16,9 @@ type Descriptor struct {
 }
 
 // HasCapability reports whether the plugin declares the given capability.
-func (d Descriptor) HasCapability(cap string) bool {
+func (d Descriptor) HasCapability(capability string) bool {
 	for _, c := range d.Capabilities {
-		if c == cap {
+		if c == capability {
 			return true
 		}
 	}

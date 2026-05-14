@@ -1,13 +1,12 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -27,34 +26,28 @@ func NewAuthProvider(e Entry) auth.OAuthProvider {
 	}
 }
 
-func (p *PluginAuthProvider) BuildAuthURL(ctx context.Context, state, redirectURI string) string {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+func (p *PluginAuthProvider) BuildAuthURL(ctx context.Context, state, redirectURI string) (string, error) {
 	u := p.entry.BaseURL + "/capabilities/auth/authorize-url" +
 		"?state=" + url.QueryEscape(state) + "&redirect_uri=" + url.QueryEscape(redirectURI)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		slog.Error("plugin BuildAuthURL: create request", "err", err)
-		return ""
+		return "", fmt.Errorf("plugin BuildAuthURL: create request: %w", err)
 	}
 	resp, err := p.client.Do(req)
 	if err != nil {
-		slog.Error("plugin BuildAuthURL: request failed", "err", err)
-		return ""
+		return "", fmt.Errorf("plugin BuildAuthURL: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("plugin BuildAuthURL: non-200", "status", resp.StatusCode)
-		return ""
+		return "", fmt.Errorf("plugin BuildAuthURL: non-200 status %d", resp.StatusCode)
 	}
 	var result struct {
 		URL string `json:"url"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		slog.Error("plugin BuildAuthURL: decode failed", "err", err)
-		return ""
+		return "", fmt.Errorf("plugin BuildAuthURL: decode failed: %w", err)
 	}
-	return result.URL
+	return result.URL, nil
 }
 
 func (p *PluginAuthProvider) ExchangeCode(ctx context.Context, code, redirectURI string) (string, error) {
@@ -67,7 +60,7 @@ func (p *PluginAuthProvider) ExchangeCode(ctx context.Context, code, redirectURI
 		return "", fmt.Errorf("plugin ExchangeCode: marshal: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		p.entry.BaseURL+"/capabilities/auth/exchange", strings.NewReader(string(body)))
+		p.entry.BaseURL+"/capabilities/auth/exchange", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("plugin ExchangeCode: create request: %w", err)
 	}
