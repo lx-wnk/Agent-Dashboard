@@ -45,7 +45,7 @@ func main() {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			srv, broadcaster, orch, cleanup, err := initializeServer(ctx, cfg)
+			srv, broadcaster, orch, cleanup, err := initializeServer(ctx, cfg, cfgFile)
 			if err != nil {
 				return err
 			}

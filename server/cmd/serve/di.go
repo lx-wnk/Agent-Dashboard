@@ -1,4 +1,4 @@
-// Dependency wiring — manually maintained.
+// Dependency wiring — auto-constructed, not generated. Add new handlers here.
 
 package main
 
@@ -34,7 +34,7 @@ import (
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
 
-func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, func(), error) {
+func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, func(), error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -67,7 +67,17 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 	// TODO: replace context.Background() with a real server-shutdown context once one
 	// is threaded through initializeServer (tracked in feat/plugin-system).
 	pluginRegistry := plugin.New(cfg.PluginDir)
-	if err := pluginRegistry.Load(ctx, context.Background()); err != nil {
+
+	// oauthProvider is set by the SetAuth hook when an auth_provider plugin passes
+	// health-check. If no auth_provider plugin is configured it stays nil, which
+	// activates bypass-auth on loopback.
+	var oauthProvider authpkg.OAuthProvider
+	if err := pluginRegistry.Load(ctx, context.Background(), plugin.Hooks{
+		SetAuth: func(p authpkg.OAuthProvider) {
+			oauthProvider = p
+			slog.Info("auth: using plugin provider")
+		},
+	}); err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
 	cleanup := func() { pluginRegistry.Shutdown() }
@@ -84,12 +94,7 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 		)
 	}
 
-	// Wire auth provider: prefer plugin, fall back to bypass-auth.
-	var oauthProvider authpkg.OAuthProvider
-	if entry := pluginRegistry.FindByCapability(plugin.CapAuthProvider); entry != nil {
-		oauthProvider = plugin.NewAuthProvider(*entry)
-		slog.Info("auth: using plugin provider", "plugin", entry.Descriptor.ID)
-	} else {
+	if oauthProvider == nil {
 		slog.Info("auth: no auth_provider plugin found — bypass-auth active for loopback")
 	}
 
@@ -126,7 +131,47 @@ func initializeServer(ctx context.Context, cfg config.Config) (*api.Server, *sse
 		analyticsHandler = apianalytics.NewHandler(rawrepo.NewAnalyticsRepo(bundle.DB), bundle.DB, cfgRepo)
 	}
 
-	routerDeps := provideRouterDeps(ctx, cfg, routerConfig, broadcaster, entClient, taskHandler, mcpHandler, searchHandler, webPushHandler, historyHandler, refineHandler, analyticsHandler, pluginRegistry, oauthProvider, systemPromptRepo)
+	// Build optional handlers that previously lived inside provideRouterDeps.
+	var userRepo repo.UserRepo
+	var apiKeyRepo repo.ApiKeyRepo
+	if entClient != nil {
+		userRepo = repo.NewUserRepo(entClient)
+		apiKeyRepo = repo.NewApiKeyRepo(entClient)
+	}
+	var remotesHandler *remotes.Handler
+	if entClient != nil {
+		remotesHandler = remotes.NewHandler(repo.NewRemoteRegistrationRepo(entClient))
+	}
+	var presetsHandler *presets.Handler
+	if entClient != nil {
+		presetsHandler = presets.NewHandler(repo.NewPermissionPresetRepo(entClient))
+	}
+	var systemPromptsHandler *systemprompts.Handler
+	if entClient != nil {
+		systemPromptsHandler = systemprompts.NewHandler(systemPromptRepo)
+	}
+	replyStore := agents.NewReplyStore()
+
+	routerDeps := api.RouterDeps{
+		Ctx:                  ctx,
+		Config:               routerConfig,
+		AgentBroadcaster:     broadcaster,
+		OAuthProvider:        oauthProvider,
+		UserRepo:             userRepo,
+		ApiKeyRepo:           apiKeyRepo,
+		TaskHandler:          taskHandler,
+		WebPushHandler:       webPushHandler,
+		RemotesHandler:       remotesHandler,
+		PresetsHandler:       presetsHandler,
+		SystemPromptsHandler: systemPromptsHandler,
+		SearchHandler:        searchHandler,
+		HistoryHandler:       historyHandler,
+		RefineHandler:        refineHandler,
+		AnalyticsHandler:     analyticsHandler,
+		MCPHandler:           mcpHandler,
+		ChannelReply:         agents.NewChannelReplyHandler(replyStore),
+		PluginRegistry:       pluginRegistry,
+	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, orch, cleanup, nil
@@ -172,7 +217,7 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 		ConfigRepo:       cfgRepo,
 		SystemPromptRepo: systemPromptRepo,
 		MCPToken:         cfg.MCPToken,
-		MCPUrl:         fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
+		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		OnTaskChanged: func(taskID string, transitionKind string) {
 			tb.Broadcast(sse.TaskEvent{
 				Type:   "task_changed",
@@ -248,49 +293,6 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 		ApiKeyRepo: apiKeyRepo,
 	})
 	return mcp.MCPHandler(registry)
-}
-
-func provideRouterDeps(ctx context.Context, cfg config.Config, rc api.RouterConfig, b *sse.Broadcaster, client *ent.Client, taskHandler *tasks.Handler, mcpHandler http.Handler, searchHandler *search.Handler, webPushHandler *apiwp.Handler, historyHandler *apihistory.Handler, refineHandler *refineapi.Handler, analyticsHandler *apianalytics.Handler, pluginRegistry *plugin.Registry, oauthProvider authpkg.OAuthProvider, systemPromptRepo repo.SystemPromptRepo) api.RouterDeps {
-	var userRepo repo.UserRepo
-	var apiKeyRepo repo.ApiKeyRepo
-	if client != nil {
-		userRepo = repo.NewUserRepo(client)
-		apiKeyRepo = repo.NewApiKeyRepo(client)
-	}
-	var remotesHandler *remotes.Handler
-	if client != nil {
-		remotesHandler = remotes.NewHandler(repo.NewRemoteRegistrationRepo(client))
-	}
-	var presetsHandler *presets.Handler
-	if client != nil {
-		presetsHandler = presets.NewHandler(repo.NewPermissionPresetRepo(client))
-	}
-	var systemPromptsHandler *systemprompts.Handler
-	if client != nil {
-		systemPromptsHandler = systemprompts.NewHandler(systemPromptRepo)
-	}
-	replyStore := agents.NewReplyStore()
-	_ = cfg // cfg is retained for future use; config values consumed via RouterConfig
-	return api.RouterDeps{
-		Ctx:              ctx,
-		Config:           rc,
-		AgentBroadcaster: b,
-		OAuthProvider:    oauthProvider,
-		UserRepo:         userRepo,
-		ApiKeyRepo:       apiKeyRepo,
-		TaskHandler:      taskHandler,
-		WebPushHandler:   webPushHandler,
-		RemotesHandler:   remotesHandler,
-		PresetsHandler:        presetsHandler,
-		SystemPromptsHandler: systemPromptsHandler,
-		SearchHandler:    searchHandler,
-		HistoryHandler:   historyHandler,
-		RefineHandler:    refineHandler,
-		AnalyticsHandler: analyticsHandler,
-		MCPHandler:       mcpHandler,
-		ChannelReply:     agents.NewChannelReplyHandler(replyStore),
-		PluginRegistry:   pluginRegistry,
-	}
 }
 
 func provideServer(cfg config.Config, handler http.Handler) *api.Server {
