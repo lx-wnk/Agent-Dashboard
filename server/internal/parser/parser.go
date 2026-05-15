@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -347,6 +348,9 @@ func ParseSessionFile(path string) (*SessionData, error) {
 				}
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		slog.Warn("parser: session scan error — partial data returned", "err", err)
 	}
 
 	if len(recentToolNames) > 5 {

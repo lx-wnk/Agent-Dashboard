@@ -23,7 +23,10 @@ type ProcessInfo struct {
 	ClaudeConfigDir string // value of CLAUDE_CONFIG_DIR in the process env, or "" for default
 }
 
-var claudeConfigDirRE = regexp.MustCompile(`CLAUDE_CONFIG_DIR=(\S+)`)
+var (
+	claudeConfigDirRE = regexp.MustCompile(`CLAUDE_CONFIG_DIR=(\S+)`)
+	pidFieldRE        = regexp.MustCompile(`^\s*(\d+)\s`)
+)
 
 // getClaudeConfigDirsBatch fetches CLAUDE_CONFIG_DIR for all given PIDs.
 // On Linux, reads /proc/{pid}/environ per-PID (file reads, no subprocess).
@@ -58,7 +61,6 @@ func getClaudeConfigDirsBatch(pids []int) map[int]string {
 	if err != nil {
 		return result
 	}
-	pidFieldRE := regexp.MustCompile(`^\s*(\d+)\s`)
 	for _, line := range strings.Split(string(out), "\n") {
 		m := pidFieldRE.FindStringSubmatch(line)
 		if m == nil {

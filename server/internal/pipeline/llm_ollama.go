@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -17,9 +18,8 @@ import (
 type OllamaSpawner struct {
 	Host         string // e.g. "http://localhost:11434"
 	DefaultModel string
-	// client is shared across calls to reuse the underlying connection pool.
-	// Initialized lazily on the first Spawn call when nil (e.g. struct-literal construction).
-	client *http.Client
+	clientOnce   sync.Once
+	client       *http.Client
 }
 
 func (o *OllamaSpawner) Name() string { return "ollama" }
@@ -61,9 +61,7 @@ func (o *OllamaSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	if o.client == nil {
-		o.client = &http.Client{Timeout: 5 * time.Minute}
-	}
+	o.clientOnce.Do(func() { o.client = &http.Client{Timeout: 5 * time.Minute} })
 	resp, err := o.client.Do(req)
 	if err != nil {
 		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: POST /api/chat: %w", err)
