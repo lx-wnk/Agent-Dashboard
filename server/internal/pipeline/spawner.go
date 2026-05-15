@@ -14,6 +14,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	permallowlist "github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
 var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
@@ -63,7 +64,7 @@ func BuildAllowList(permissions []*ent.TaskPermission, enableChannel, allowGitPu
 		if p.ExpiresAt != nil && p.ExpiresAt.Before(now) {
 			continue
 		}
-		if !AllowedToolNames[p.Tool] {
+		if !permallowlist.AllowedToolNames[p.Tool] {
 			continue
 		}
 		if !allowGitPush && p.Tool == "Bash" && p.Pattern != nil && gitPushRE.MatchString(*p.Pattern) {

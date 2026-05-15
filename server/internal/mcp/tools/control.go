@@ -6,6 +6,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
@@ -203,7 +204,7 @@ func registerGrantPermission(registry mcp.ToolRegistry, d ControlDeps) {
 			if _, err := d.TaskRepo.GetByID(ctx, taskID); err != nil {
 				return nil, mcp.Fail("Task not found: " + taskID)
 			}
-			if !pipeline.AllowedToolNames[tool] {
+			if !permissions.AllowedToolNames[tool] {
 				return nil, mcp.Fail("tool not in allow-list: " + tool)
 			}
 

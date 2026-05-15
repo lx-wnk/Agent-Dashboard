@@ -47,7 +47,7 @@ Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + Wire DI).
 
 ### SDK (`sdk/`)
 
-Go module for the `dashboard-channel` MCP stdio server. Injected into every spawned pipeline stage agent. Provides two-way permission gate and channel reply bridge. Binary compiled separately.
+Shared-types Go module (`github.com/lx-wnk/agent-dashboard/sdk`). Defines `Agent`, `AgentStatus`, `TokenUsage`, `SessionMeta`, `SubAgent`, `TaskInfo` — the canonical data model consumed by both the server (`merger/`, `api/agents/`, `agentbroadcast/`) and the dashboard-channel MCP stdio server injected into spawned stage agents. The channel bridge binary is compiled separately but shares these types with the server.
 
 ## Frontend (`src/`)
 
