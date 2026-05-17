@@ -63,17 +63,15 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
 
 	// Load plugins from configured plugin_dir.
-	// ctx is the startup context (short-lived); context.Background() is used as the
-	// server-lifetime context for watchPlugin goroutines.
-	// TODO: replace context.Background() with a real server-shutdown context once one
-	// is threaded through initializeServer (tracked in feat/plugin-system).
+	// ctx serves as both startup context (health-check timeouts) and server-lifetime
+	// context for watchPlugin goroutines — it is cancelled on SIGTERM/SIGINT by main.
 	pluginRegistry := plugin.New(cfg.PluginDir)
 
 	// oauthProvider is set by the SetAuth hook when an auth_provider plugin passes
 	// health-check. If no auth_provider plugin is configured it stays nil, which
 	// activates bypass-auth on loopback.
 	var oauthProvider authpkg.OAuthProvider
-	if err := pluginRegistry.Load(ctx, context.Background(), plugin.Hooks{
+	if err := pluginRegistry.Load(ctx, ctx, plugin.Hooks{
 		SetAuth: func(p authpkg.OAuthProvider) {
 			oauthProvider = p
 			slog.Info("auth: using plugin provider")
