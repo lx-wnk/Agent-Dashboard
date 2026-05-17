@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -250,6 +251,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 	return r
 }
 
+// gzipPool reuses gzip.Writer instances across requests to avoid the ~32 KiB
+// per-response allocation that gzip.NewWriterLevel would otherwise incur.
+var gzipPool = sync.Pool{
+	New: func() any {
+		gz, _ := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
+		return gz
+	},
+}
+
 // gzipResponseWriter wraps http.ResponseWriter to write through a gzip.Writer.
 type gzipResponseWriter struct {
 	http.ResponseWriter
@@ -307,12 +317,12 @@ func gzipMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-		defer gz.Close()
+		gz := gzipPool.Get().(*gzip.Writer)
+		gz.Reset(w)
+		defer func() {
+			_ = gz.Close()
+			gzipPool.Put(gz)
+		}()
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Del("Content-Length")
 		next.ServeHTTP(newGzipWriter(w, gz), r)

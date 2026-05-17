@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 )
 
@@ -45,12 +47,14 @@ func ExtractNgrams(toolSequence []string) map[string]int {
 	return counts
 }
 
+const discoverConcurrency = 8
+
 // DiscoverPatterns iterates all JSONL session files, extracts tool_use events,
 // computes 3-grams, and upserts the top-20 patterns into workflow_patterns.
-// ctx is checked between project directories so the caller can cancel a long scan.
+// File reads are parallelized (up to discoverConcurrency goroutines).
 func DiscoverPatterns(ctx context.Context, db *sql.DB) error {
-	globalCounts := make(map[string]int)
-
+	// Collect all JSONL file paths first so the parallel fan-out is clean.
+	var filePaths []string
 	for _, configDir := range parser.AllClaudeConfigDirs() {
 		projectsDir := filepath.Join(configDir, "projects")
 		projectDirs, err := os.ReadDir(projectsDir)
@@ -58,10 +62,6 @@ func DiscoverPatterns(ctx context.Context, db *sql.DB) error {
 			continue
 		}
 		for _, pDir := range projectDirs {
-			// Honour cancellation between project directories.
-			if err := ctx.Err(); err != nil {
-				return err
-			}
 			if !pDir.IsDir() {
 				continue
 			}
@@ -71,19 +71,54 @@ func DiscoverPatterns(ctx context.Context, db *sql.DB) error {
 				continue
 			}
 			for _, f := range files {
-				if f.IsDir() || !strings.HasSuffix(f.Name(), ".jsonl") {
-					continue
-				}
-				filePath := filepath.Join(dirPath, f.Name())
-				tools, err := extractToolsFromJSONL(filePath)
-				if err != nil {
-					slog.Debug("analytics: skip file", "path", filePath, "err", err)
-					continue
-				}
-				for gram, count := range ExtractNgrams(tools) {
-					globalCounts[gram] += count
+				if !f.IsDir() && strings.HasSuffix(f.Name(), ".jsonl") {
+					filePaths = append(filePaths, filepath.Join(dirPath, f.Name()))
 				}
 			}
+		}
+	}
+	if len(filePaths) == 0 {
+		return nil
+	}
+
+	// Parallel file reads: each goroutine produces a partial count map; merge at the end.
+	type partial = map[string]int
+	partials := make([]partial, len(filePaths))
+	for i := range partials {
+		partials[i] = make(partial)
+	}
+
+	g, gctx := errgroup.WithContext(ctx)
+	sem := make(chan struct{}, discoverConcurrency)
+	for i, path := range filePaths {
+		i, path := i, path
+		g.Go(func() error {
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-gctx.Done():
+				return gctx.Err()
+			}
+			tools, err := extractToolsFromJSONL(path)
+			if err != nil {
+				slog.Debug("analytics: skip file", "path", path, "err", err)
+				return nil
+			}
+			for gram, count := range ExtractNgrams(tools) {
+				partials[i][gram] += count
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	// Merge is sequential (g.Wait() above ensures all writes are done).
+	globalCounts := make(map[string]int)
+	for _, p := range partials {
+		for gram, count := range p {
+			globalCounts[gram] += count
 		}
 	}
 

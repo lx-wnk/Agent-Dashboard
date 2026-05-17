@@ -201,14 +201,19 @@ func (r *entStageRunRepo) SumCompletedCostCents(ctx context.Context, taskID stri
 }
 
 func (r *entStageRunRepo) GetLatestForTasks(ctx context.Context, taskIDs []string) (map[string]*ent.StageRun, error) {
+	// Bound the query: assume at most 20 iterations per task so we don't load
+	// unbounded history. A window-function subquery would be exact but requires
+	// raw SQL that cannot return typed ent.StageRun values without manual scanning.
+	limit := len(taskIDs)*20 + 20
 	runs, err := r.client.StageRun.Query().
 		Where(stagerun.TaskIDIn(taskIDs...)).
 		Order(stagerun.ByCreatedAt(sql.OrderDesc())).
+		Limit(limit).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("stagerun.GetLatestForTasks: %w", err)
 	}
-	result := make(map[string]*ent.StageRun)
+	result := make(map[string]*ent.StageRun, len(taskIDs))
 	for _, run := range runs {
 		if _, exists := result[run.TaskID]; !exists {
 			result[run.TaskID] = run

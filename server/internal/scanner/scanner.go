@@ -25,31 +25,54 @@ type ProcessInfo struct {
 
 var claudeConfigDirRE = regexp.MustCompile(`CLAUDE_CONFIG_DIR=(\S+)`)
 
-// getClaudeConfigDir reads CLAUDE_CONFIG_DIR from a process's environment.
-// On Linux it reads /proc/{pid}/environ; on macOS it uses ps ewww.
-// Returns "" when not found (caller uses the default ~/.claude path).
-func getClaudeConfigDir(pid int) string {
+// getClaudeConfigDirsBatch fetches CLAUDE_CONFIG_DIR for all given PIDs.
+// On Linux, reads /proc/{pid}/environ per-PID (file reads, no subprocess).
+// On macOS, issues a single `ps ewww -p pid1,pid2,...` call instead of one per PID.
+func getClaudeConfigDirsBatch(pids []int) map[int]string {
+	result := make(map[int]string, len(pids))
 	if platform.IsLinux {
-		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
-		if err != nil {
-			return ""
-		}
-		for _, kv := range strings.Split(string(raw), "\x00") {
-			if strings.HasPrefix(kv, "CLAUDE_CONFIG_DIR=") {
-				return strings.TrimPrefix(kv, "CLAUDE_CONFIG_DIR=")
+		for _, pid := range pids {
+			raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
+			if err != nil {
+				continue
+			}
+			for _, kv := range strings.Split(string(raw), "\x00") {
+				if strings.HasPrefix(kv, "CLAUDE_CONFIG_DIR=") {
+					result[pid] = strings.TrimPrefix(kv, "CLAUDE_CONFIG_DIR=")
+					break
+				}
 			}
 		}
-		return ""
+		return result
 	}
-	// macOS: ps ewww appends env vars after the command arguments.
-	out, err := exec.Command("ps", "ewww", "-p", strconv.Itoa(pid)).Output() //nolint:gosec // pid from ps output
+	if len(pids) == 0 {
+		return result
+	}
+	// macOS: one ps call for all PIDs — `ps ewww` prints full env after command,
+	// one line per process (www = no truncation). Each line starts with the PID.
+	pidStrs := make([]string, len(pids))
+	for i, p := range pids {
+		pidStrs[i] = strconv.Itoa(p)
+	}
+	out, err := exec.Command("ps", "ewww", "-p", strings.Join(pidStrs, ",")).Output() //nolint:gosec // pid ints formatted as strings
 	if err != nil {
-		return ""
+		return result
 	}
-	if m := claudeConfigDirRE.FindSubmatch(out); m != nil {
-		return string(m[1])
+	pidFieldRE := regexp.MustCompile(`^\s*(\d+)\s`)
+	for _, line := range strings.Split(string(out), "\n") {
+		m := pidFieldRE.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		pid, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		if cm := claudeConfigDirRE.FindStringSubmatch(line); cm != nil {
+			result[pid] = string(cm[1])
+		}
 	}
-	return ""
+	return result
 }
 
 // ParseElapsedTime converts ps etime format (e.g. "2-01:05:30") to seconds.
@@ -166,6 +189,9 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 		cwdMap = getCWDsMac(ctx, pids)
 	}
 
+	// Batch-fetch CLAUDE_CONFIG_DIR for all PIDs in one call (macOS: one ps subprocess).
+	configDirs := getClaudeConfigDirsBatch(pids)
+
 	var result []ProcessInfo
 	for _, r := range raws {
 		cwd, ok := cwdMap[r.pid]
@@ -177,7 +203,7 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 			CWD:             cwd,
 			Uptime:          ParseElapsedTime(r.etime),
 			Command:         r.command,
-			ClaudeConfigDir: getClaudeConfigDir(r.pid),
+			ClaudeConfigDir: configDirs[r.pid],
 		})
 	}
 	return result, nil

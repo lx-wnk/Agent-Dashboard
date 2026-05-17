@@ -259,8 +259,10 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 
 	// Lingering-pending gate — prevents respawn while unresolved permission_requests
 	// remain on the most recent terminal or zombie-awaiting stage_run.
+	// latest is declared here so ensureStageRun can reuse it and skip a redundant query.
+	var latest *ent.StageRun
 	if handler.RequiresAgent() {
-		latest, _ := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, task.ID, task.CurrentStage)
+		latest, _ = o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, task.ID, task.CurrentStage)
 		if latest != nil {
 			pid := 0
 			if latest.Pid != nil {
@@ -279,7 +281,9 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		}
 	}
 
-	stageRun, err := o.ensureStageRun(ctx, task)
+	// latest is non-nil only for agent-driven stages; ensureStageRun falls back to
+	// a DB query when it is nil (non-agent stages).
+	stageRun, err := o.ensureStageRun(ctx, task, latest)
 	if err != nil {
 		return nil, fmt.Errorf("orchestrator.ensureStageRun: %w", err)
 	}
@@ -647,8 +651,11 @@ func transitionKindName(t StageTransition) string {
 
 func strPtr(s string) *string { return &s }
 
-func (o *PipelineOrchestrator) ensureStageRun(ctx context.Context, task *ent.Task) (*ent.StageRun, error) {
-	existing, _ := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, task.ID, task.CurrentStage)
+func (o *PipelineOrchestrator) ensureStageRun(ctx context.Context, task *ent.Task, prefetched *ent.StageRun) (*ent.StageRun, error) {
+	existing := prefetched
+	if existing == nil {
+		existing, _ = o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, task.ID, task.CurrentStage)
+	}
 	if existing != nil {
 		if existing.Status == "pending" || existing.Status == "running" {
 			return existing, nil
@@ -721,13 +728,26 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 		return
 	}
 	candidates, _ := o.opts.TaskRepo.ListPickable(ctx)
+
+	// Batch-fetch the latest run per candidate to avoid N+1 per task.
+	candidateIDs := make([]string, len(candidates))
+	for i, t := range candidates {
+		candidateIDs[i] = t.ID
+	}
+	var latestByTask map[string]*ent.StageRun
+	if len(candidateIDs) > 0 {
+		latestByTask, _ = o.opts.StageRunRepo.GetLatestForTasks(ctx, candidateIDs)
+	}
+
 	var ready []*ent.Task
 	for _, t := range candidates {
 		if busyTaskIDs[t.ID] {
 			continue
 		}
-		latest, _ := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, t.ID, t.CurrentStage)
-		if latest != nil && (latest.Status == "awaiting_user" || latest.Status == "failed") {
+		// Only skip if the latest run is specifically on the current stage and blocking.
+		// If the latest run is for a different stage, no run exists for currentStage yet.
+		if latest := latestByTask[t.ID]; latest != nil && latest.Stage == t.CurrentStage &&
+			(latest.Status == "awaiting_user" || latest.Status == "failed") {
 			continue
 		}
 		ready = append(ready, t)
