@@ -213,6 +213,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// Spawn management — rate-limited user-initiated agent spawning and channel message forwarding.
 		// Inside the protected group so only authenticated users can spawn agents.
 		spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs)
+		go spawnMgr.StartPruner(serverCtx)
 		spawnHandler := agents.NewSpawnHandler(spawnMgr)
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)

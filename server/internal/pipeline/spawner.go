@@ -19,11 +19,6 @@ import (
 
 var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
 
-// dangerousBashRE matches shell patterns that must never appear in a Bash allow-list entry.
-var dangerousBashRE = regexp.MustCompile(
-	"(?i)(curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|\\bnetcat\\b|bash\\s+-c|sh\\s+-c|\\beval\\b|python\\s+-c|perl\\s+-e|ruby\\s+-e|base64\\s+-d|\\$\\(|`|&&|\\||;\\s*\\w|>\\s*\\w|<\\s*\\w|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w|\\bxargs\\b|find\\s+.*-exec)",
-)
-
 const systemPromptMaxChars = 10000
 
 type SpawnAgentOptions struct {
@@ -75,7 +70,7 @@ func BuildAllowList(perms []*ent.TaskPermission, enableChannel, allowGitPush boo
 				continue // blanket Bash allow is forbidden
 			}
 			normalized := strings.Join(strings.Fields(*p.Pattern), " ")
-			if dangerousBashRE.MatchString(normalized) {
+			if permissions.DangerousBashRE.MatchString(normalized) {
 				continue // dangerous shell pattern
 			}
 			allow = append(allow, fmt.Sprintf("Bash(%s)", normalized))

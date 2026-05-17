@@ -145,6 +145,8 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"content": string(content)})
 }
 
+const maxMemoryFileBytes = 1 * 1024 * 1024 // 1 MB
+
 // Put handles PUT /api/memory/*.
 // Writes content to the specified memory file.
 // Auth is enforced at router level; per-user scoping limitation applies (see List).
@@ -155,10 +157,15 @@ func Put(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"path traversal detected"}`, http.StatusBadRequest)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxMemoryFileBytes+512)
 	var body struct {
 		Content string `json:"content"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err.Error() == "http: request body too large" {
+			http.Error(w, `{"error":"file too large (max 1 MB)"}`, http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}

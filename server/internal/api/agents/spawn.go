@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -28,7 +29,15 @@ const (
 	channelMsgTimeout = 5 * time.Second
 )
 
-var uuidRE = regexp.MustCompile(`(?i)^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
+var (
+	claudeBin = func() string {
+		if p, err := exec.LookPath("claude"); err == nil {
+			return p
+		}
+		return "claude"
+	}()
+	uuidRE = regexp.MustCompile(`(?i)^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
+)
 
 // SpawnStatus tracks the state of a user-initiated agent spawn.
 type SpawnStatus struct {
@@ -113,6 +122,9 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		cwdAbs, _ := filepath.Abs(cwd)
+		if real, err := filepath.EvalSymlinks(cwdAbs); err == nil {
+			cwdAbs = real
+		}
 		homeAbs, _ := filepath.Abs(home)
 		if !strings.HasPrefix(cwdAbs+string(filepath.Separator), homeAbs+string(filepath.Separator)) {
 			return 0, fmt.Errorf("cwd must be within the user home directory")
@@ -146,15 +158,18 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 
 	var channelCfgPath string
 	if enableChannel {
-		if selfBin, err := channelconfig.SelfBinaryPath(); err == nil {
-			if cfgPath, err := channelconfig.WriteTempConfig(selfBin); err == nil {
-				channelCfgPath = cfgPath
-				args = append(args, "--mcp-config", cfgPath)
-			}
+		selfBin, err := channelconfig.SelfBinaryPath()
+		if err != nil {
+			slog.Warn("spawn: channel disabled — cannot resolve self binary", "err", err)
+		} else if cfgPath, err := channelconfig.WriteTempConfig(selfBin); err != nil {
+			slog.Warn("spawn: channel disabled — cannot write MCP config", "err", err)
+		} else {
+			channelCfgPath = cfgPath
+			args = append(args, "--mcp-config", cfgPath)
 		}
 	}
 
-	cmd := exec.Command("claude", args...)
+	cmd := exec.Command(claudeBin, args...)
 	cmd.Dir = cwd
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = nil
@@ -228,6 +243,41 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	}()
 
 	return pid, nil
+}
+
+// StartPruner starts a background goroutine that prunes spawnStore and userAttempts
+// entries older than spawnStoreMaxAge. Returns when ctx is cancelled.
+func (m *SpawnManager) StartPruner(ctx context.Context) {
+	ticker := time.NewTicker(spawnStoreMaxAge / 2)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			m.mu.Lock()
+			now := time.Now()
+			for k, s := range m.spawnStore {
+				t, err := time.Parse(time.RFC3339, s.StartedAt)
+				if err == nil && now.Sub(t) > spawnStoreMaxAge {
+					delete(m.spawnStore, k)
+				}
+			}
+			cutoff := now.Add(-m.rateLimitWindow)
+			for sub, attempts := range m.userAttempts {
+				i := 0
+				for i < len(attempts) && attempts[i].Before(cutoff) {
+					i++
+				}
+				if i == len(attempts) {
+					delete(m.userAttempts, sub)
+				} else if i > 0 {
+					m.userAttempts[sub] = attempts[i:]
+				}
+			}
+			m.mu.Unlock()
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // GetStatus returns the status of a spawned agent by PID, or nil if unknown.

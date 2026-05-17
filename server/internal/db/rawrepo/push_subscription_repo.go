@@ -24,6 +24,8 @@ type PushSubscriptionRepo interface {
 	Register(ctx context.Context, sub PushSubscription) error
 	// ListAll returns all stored subscriptions.
 	ListAll(ctx context.Context) ([]PushSubscription, error)
+	// DeleteByEndpoint removes a subscription by its push endpoint URL.
+	DeleteByEndpoint(ctx context.Context, endpoint string) error
 }
 
 type sqlPushSubscriptionRepo struct{ db *sql.DB }
@@ -71,4 +73,15 @@ func (r *sqlPushSubscriptionRepo) ListAll(ctx context.Context) ([]PushSubscripti
 		return nil, fmt.Errorf("push_subscriptions.ListAll rows: %w", err)
 	}
 	return subs, nil
+}
+
+func (r *sqlPushSubscriptionRepo) DeleteByEndpoint(ctx context.Context, endpoint string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM push_subscriptions WHERE endpoint = ?`,
+		endpoint,
+	)
+	if err != nil {
+		return fmt.Errorf("push_subscriptions.DeleteByEndpoint: %w", err)
+	}
+	return nil
 }

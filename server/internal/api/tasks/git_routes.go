@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -18,11 +19,35 @@ import (
 )
 
 var (
-	aheadRE  = regexp.MustCompile(`\[ahead (\d+)`)
-	behindRE = regexp.MustCompile(`behind (\d+)`)
-	branchRE = regexp.MustCompile(`^## ([^.]+)`)
+	aheadRE    = regexp.MustCompile(`\[ahead (\d+)`)
+	behindRE   = regexp.MustCompile(`behind (\d+)`)
+	branchRE   = regexp.MustCompile(`^## ([^.]+)`)
 	noBranchRE = regexp.MustCompile(`^## HEAD \(no branch\)`)
+
+	gitBin  = resolvebin("git")
+	pnpmBin = resolvebin("pnpm")
+
+	allowedCommands map[string][]string
 )
+
+func resolvebin(name string) string {
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	return name
+}
+
+func init() {
+	allowedCommands = map[string][]string{
+		"pnpm test":      {pnpmBin, "test", "--run"},
+		"pnpm lint":      {pnpmBin, "lint"},
+		"pnpm typecheck": {pnpmBin, "typecheck"},
+		"pnpm build":     {pnpmBin, "build"},
+		"git log":        {gitBin, "log", "--oneline", "-20"},
+		"git diff":       {gitBin, "diff", "--stat"},
+		"git status":     {gitBin, "status", "--short"},
+	}
+}
 
 type gitLastCommit struct {
 	Hash      string `json:"hash"`
@@ -46,7 +71,7 @@ type gitStatus struct {
 func runGit(ctx context.Context, cwd string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, gitBin, args...)
 	cmd.Dir = cwd
 	out, err := cmd.Output()
 	return string(out), err
@@ -183,15 +208,6 @@ func (h *Handler) gitActionHandler(w http.ResponseWriter, r *http.Request) error
 	return jsonReply(w, http.StatusOK, map[string]string{"output": output})
 }
 
-var allowedCommands = map[string][]string{
-	"pnpm test":      {"pnpm", "test", "--run"},
-	"pnpm lint":      {"pnpm", "lint"},
-	"pnpm typecheck": {"pnpm", "typecheck"},
-	"pnpm build":     {"pnpm", "build"},
-	"git log":        {"git", "log", "--oneline", "-20"},
-	"git diff":       {"git", "diff", "--stat"},
-	"git status":     {"git", "status", "--short"},
-}
 
 func (h *Handler) taskRunHandler(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
@@ -220,6 +236,13 @@ func (h *Handler) taskRunHandler(w http.ResponseWriter, r *http.Request) error {
 	cwd := task.Cwd
 	if task.WorktreePath != nil && *task.WorktreePath != "" {
 		cwd = *task.WorktreePath
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		cwdAbs, _ := filepath.Abs(cwd)
+		homeAbs, _ := filepath.Abs(home)
+		if !strings.HasPrefix(cwdAbs+string(filepath.Separator), homeAbs+string(filepath.Separator)) {
+			return apierr.NewAppError(http.StatusForbidden, "task directory is outside the user home directory")
+		}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()

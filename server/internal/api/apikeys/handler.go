@@ -92,6 +92,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 		"id":         key.ID,
 		"name":       key.Name,
 		"scopes":     key.Scopes,
+		"active":     key.Active,
 		"token":      token,
 		"created_at": key.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})

@@ -21,35 +21,21 @@ type WriteDeps struct {
 	BroadcastDeleted func(taskID string)
 }
 
-// permissionTemplates maps template names to their default tool grant lists.
-var permissionTemplates = map[string][]repo.GrantEntry{
-	"feature_implementation": {
-		{Tool: "Read"}, {Tool: "Write"}, {Tool: "Edit"}, {Tool: "MultiEdit"},
-		{Tool: "Glob"}, {Tool: "Grep"}, {Tool: "LS"}, {Tool: "Bash"}, {Tool: "WebFetch"},
-	},
-	"concept_baseline": {
-		{Tool: "Read"}, {Tool: "Glob"}, {Tool: "Grep"}, {Tool: "WebFetch"}, {Tool: "WebSearch"},
-	},
-	"research_only": {
-		{Tool: "Read"}, {Tool: "Glob"}, {Tool: "Grep"}, {Tool: "WebFetch"},
-	},
-	"test_only": {
-		{Tool: "Read"}, {Tool: "Write"}, {Tool: "Edit"}, {Tool: "Glob"}, {Tool: "Grep"}, {Tool: "Bash"},
-	},
-	"review_only": {
-		{Tool: "Read"}, {Tool: "Glob"}, {Tool: "Grep"},
-	},
-}
+// permissionTemplates is derived from permissions.TemplateTools — the single source of truth
+// for template definitions. Built at init time so the panic guard catches unknown tools.
+var permissionTemplates map[string][]repo.GrantEntry
 
 func init() {
-	// Panic at startup if any template entry references a tool not in the allow-list,
-	// so template drift is caught at build/test time rather than silently granted at runtime.
-	for name, entries := range permissionTemplates {
-		for _, e := range entries {
-			if !permissions.IsAllowedTool(e.Tool) {
-				panic("permissionTemplates[" + name + "]: unknown tool: " + e.Tool)
+	permissionTemplates = make(map[string][]repo.GrantEntry, len(permissions.TemplateTools))
+	for name, tools := range permissions.TemplateTools {
+		entries := make([]repo.GrantEntry, len(tools))
+		for i, t := range tools {
+			if !permissions.IsAllowedTool(t) {
+				panic("permissions.TemplateTools[" + name + "]: unknown tool: " + t)
 			}
+			entries[i] = repo.GrantEntry{Tool: t}
 		}
+		permissionTemplates[name] = entries
 	}
 }
 

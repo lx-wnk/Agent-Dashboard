@@ -138,7 +138,7 @@ func (imp *Importer) runImport(ctx context.Context, onProgress func(ImportProgre
 		if err := imp.costRepo.BulkInsert(ctx, rows); err != nil {
 			slog.Warn("history.import: bulk insert failed", "err", err)
 			// Whole batch failed — reflect that in error count.
-			progress.Errors += progress.Imported
+			progress.Errors += len(rows)
 			progress.Imported = 0
 		}
 	}

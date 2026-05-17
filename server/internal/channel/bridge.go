@@ -177,7 +177,11 @@ func startHTTPServer(
 	if err != nil {
 		return nil, 0, fmt.Errorf("listen: %w", err)
 	}
-	port := ln.Addr().(*net.TCPAddr).Port
+	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return nil, 0, fmt.Errorf("unexpected listener address type")
+	}
+	port := tcpAddr.Port
 
 	mux := http.NewServeMux()
 

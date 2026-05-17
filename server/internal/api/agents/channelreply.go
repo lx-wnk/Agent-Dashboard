@@ -97,7 +97,7 @@ func (h *ChannelReplyHandler) Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}
-	if body.ParentPid == 0 || body.Message == "" || body.Timestamp == "" {
+	if body.ParentPid <= 0 || body.Message == "" || body.Timestamp == "" {
 		http.Error(w, `{"error":"missing required fields"}`, http.StatusBadRequest)
 		return
 	}

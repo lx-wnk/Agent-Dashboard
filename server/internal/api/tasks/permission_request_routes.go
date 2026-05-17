@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -106,6 +108,18 @@ func (h *Handler) bulkGrantPermissions(w http.ResponseWriter, r *http.Request) e
 	for _, p := range body.Permissions {
 		if p.Tool == "" {
 			return apierr.NewAppError(http.StatusBadRequest, "each permission entry requires a tool")
+		}
+		if !permissions.IsAllowedTool(p.Tool) {
+			return apierr.NewAppError(http.StatusBadRequest, "unknown tool: "+p.Tool)
+		}
+		if p.Tool == "Bash" {
+			if p.Pattern == nil || *p.Pattern == "" {
+				return apierr.NewAppError(http.StatusBadRequest, "Bash permission requires a non-empty pattern")
+			}
+			normalized := strings.Join(strings.Fields(*p.Pattern), " ")
+			if permissions.DangerousBashRE.MatchString(normalized) {
+				return apierr.NewAppError(http.StatusBadRequest, "dangerous Bash pattern rejected")
+			}
 		}
 		e := repo.GrantEntry{Tool: p.Tool, Pattern: p.Pattern}
 		if p.ExpiresAt != nil {
@@ -293,16 +307,11 @@ func isCovered(tool string, pattern *string, perms []*ent.TaskPermission) bool {
 }
 
 // resolveTemplate expands a named permission template to GrantEntry slice.
+// Delegates to permissions.ResolveTemplate — the single source of truth for template definitions.
 func resolveTemplate(name string) ([]repo.GrantEntry, error) {
-	templates := map[string][]string{
-		"feature_implementation": {"Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "Bash", "WebFetch"},
-		"research_only":          {"Read", "Glob", "Grep", "LS", "WebFetch", "WebSearch"},
-		"test_only":              {"Read", "Write", "Edit", "Glob", "Grep", "LS", "Bash"},
-		"review_only":            {"Read", "Glob", "Grep", "LS"},
-	}
-	tools, ok := templates[name]
-	if !ok {
-		return nil, fmt.Errorf("unknown template: %s", name)
+	tools, err := permissions.ResolveTemplate(name)
+	if err != nil {
+		return nil, err
 	}
 	entries := make([]repo.GrantEntry, len(tools))
 	for i, t := range tools {
