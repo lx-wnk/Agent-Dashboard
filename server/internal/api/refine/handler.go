@@ -18,13 +18,21 @@ import (
 
 // Handler handles /api/refine routes.
 type Handler struct {
-	turns repo.RefinementTurnRepo
-	tasks repo.TaskRepo
+	turns   repo.RefinementTurnRepo
+	tasks   repo.TaskRepo
+	spawner func(ctx context.Context, cfg refine.SpawnConfig) (<-chan string, error)
 }
 
 // NewHandler creates a Handler backed by the given repos.
 func NewHandler(turns repo.RefinementTurnRepo, tasks repo.TaskRepo) *Handler {
-	return &Handler{turns: turns, tasks: tasks}
+	return &Handler{turns: turns, tasks: tasks, spawner: refine.RunRefinementTurn}
+}
+
+// WithSpawner returns a copy of h with a custom spawner (for testing).
+func (h *Handler) WithSpawner(fn func(ctx context.Context, cfg refine.SpawnConfig) (<-chan string, error)) *Handler {
+	cp := *h
+	cp.spawner = fn
+	return &cp
 }
 
 // Mount registers the refinement routes on r.
@@ -160,7 +168,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 	turnCtx, turnCancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer turnCancel()
 
-	stream, err := refine.RunRefinementTurn(turnCtx, cfg)
+	stream, err := h.spawner(turnCtx, cfg)
 	if err != nil {
 		// Headers already set for SSE — send error as SSE event.
 		fmt.Fprintf(w, "data: [ERROR] %s\n\n", err.Error())
