@@ -4,6 +4,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
 import AdapterSettings from './AdapterSettings.vue'
+import PluginSettings from './PluginSettings.vue'
 import RemoteSettings from './RemoteSettings.vue'
 import SystemPromptSettings from './SystemPromptSettings.vue'
 import AppButton from './ui/AppButton.vue'
@@ -16,7 +17,7 @@ const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'adapters'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'adapters' | 'plugins'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -401,6 +402,15 @@ async function startImport() {
             >
               <span class="text-sm flex-shrink-0">⚡</span> LLM Adapters
             </button>
+            <button
+              class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors"
+              :class="activeSection === 'plugins'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'plugins'"
+            >
+              <span class="text-sm flex-shrink-0">🔌</span> Plugins
+            </button>
           </li>
         </ul>
         <div class="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700">
@@ -672,6 +682,11 @@ async function startImport() {
         <!-- LLM Adapters -->
         <section v-else-if="activeSection === 'adapters'">
           <AdapterSettings />
+        </section>
+
+        <!-- Plugins -->
+        <section v-else-if="activeSection === 'plugins'">
+          <PluginSettings />
         </section>
 
         <!-- Analytics -->

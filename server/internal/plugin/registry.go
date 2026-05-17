@@ -204,6 +204,15 @@ func (r *Registry) HasDir() bool {
 	return r.dir != ""
 }
 
+// All returns a snapshot of all loaded plugin entries.
+func (r *Registry) All() []Entry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]Entry, len(r.plugins))
+	copy(out, r.plugins)
+	return out
+}
+
 // watchPlugin waits for cmd to exit, then attempts to restart it with
 // exponential backoff. It gives up after maxPluginRestarts attempts and
 // removes the entry from the registry.
