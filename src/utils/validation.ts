@@ -8,3 +8,6 @@ export function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 }
+
+/** Maximum characters allowed in a task description. */
+export const MAX_DESCRIPTION_CHARS = 10_000
