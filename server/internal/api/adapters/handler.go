@@ -153,6 +153,8 @@ func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 }
 
 // tryPersist writes snapshot to disk when a cfgFile is configured.
+// snapshot must be a value copy (not a pointer) taken while h.mu is held,
+// so the caller releases the lock before this function writes to disk.
 // Persistence failures are non-fatal: the in-memory change is already applied.
 func (h *Handler) tryPersist(snapshot config.AdapterConfig) {
 	if h.cfgFile != "" {
@@ -165,6 +167,7 @@ func (h *Handler) tryPersist(snapshot config.AdapterConfig) {
 // persistAdapterConfig reads the existing JSON config file (if present), updates
 // the adapters key, and writes it back atomically. If the file does not exist yet
 // it is created with a minimal structure containing only the adapters section.
+// The read-before-write preserves any keys we do not own (e.g. scanner config).
 func persistAdapterConfig(cfgFile string, ac config.AdapterConfig) error {
 	// Read existing file content into a generic map so we don't lose other keys.
 	raw := map[string]any{}
@@ -222,6 +225,18 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
 	var incoming config.AdapterConfig
 	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if incoming.Default != "" {
+		known := false
+		for _, a := range availableAdapters {
+			if a.Name == incoming.Default {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return apierr.NewAppError(http.StatusBadRequest, "unknown adapter: "+incoming.Default)
+		}
 	}
 	h.mu.Lock()
 	*h.cfg = incoming

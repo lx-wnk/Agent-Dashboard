@@ -204,7 +204,7 @@ func registerGrantPermission(registry mcp.ToolRegistry, d ControlDeps) {
 			if _, err := d.TaskRepo.GetByID(ctx, taskID); err != nil {
 				return nil, mcp.Fail("Task not found: " + taskID)
 			}
-			if !permissions.AllowedToolNames[tool] {
+			if !permissions.IsAllowedTool(tool) {
 				return nil, mcp.Fail("tool not in allow-list: " + tool)
 			}
 

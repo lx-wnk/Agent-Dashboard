@@ -110,7 +110,8 @@ func (h *Handler) PreTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only gate write-type tools.
+	// Only gate write-type tools. If new write tools are added to permissions/allowlist.go,
+	// add them here too — these two lists must stay in sync manually.
 	if body.ToolName != "Edit" && body.ToolName != "Write" && body.ToolName != "MultiEdit" {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"proceed": true})

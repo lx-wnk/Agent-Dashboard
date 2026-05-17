@@ -41,6 +41,18 @@ var permissionTemplates = map[string][]repo.GrantEntry{
 	},
 }
 
+func init() {
+	// Panic at startup if any template entry references a tool not in the allow-list,
+	// so template drift is caught at build/test time rather than silently granted at runtime.
+	for name, entries := range permissionTemplates {
+		for _, e := range entries {
+			if !permissions.IsAllowedTool(e.Tool) {
+				panic("permissionTemplates[" + name + "]: unknown tool: " + e.Tool)
+			}
+		}
+	}
+}
+
 // RegisterWriteTools registers all 6 write tools into the given registry.
 func RegisterWriteTools(registry mcp.ToolRegistry, d WriteDeps) {
 	registerCreateTask(registry, d)
@@ -53,7 +65,7 @@ func RegisterWriteTools(registry mcp.ToolRegistry, d WriteDeps) {
 
 // validateTool checks whether a tool name is in the pipeline allow-list.
 func validateTool(tool string) bool {
-	return permissions.AllowedToolNames[tool]
+	return permissions.IsAllowedTool(tool)
 }
 
 // applyTemplate bulk-grants all entries for a named template. Returns the number granted.
