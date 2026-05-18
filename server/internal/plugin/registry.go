@@ -122,11 +122,8 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 		}
 		if err := r.waitHealthy(startupCtx, pluginEntry.BaseURL); err != nil {
 			slog.Error("plugin: health check failed", "id", desc.ID, "err", err)
-			if pluginEntry.cmd != nil && pluginEntry.cmd.Process != nil {
-				_ = pluginEntry.cmd.Process.Signal(syscall.SIGTERM)
-				time.AfterFunc(3*time.Second, func() {
-					_ = pluginEntry.cmd.Process.Kill()
-				})
+			if pluginEntry.cmd != nil {
+				gracefulStop(pluginEntry.cmd)
 			}
 			continue
 		}
@@ -144,8 +141,6 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 }
 
 // Shutdown stops all plugin processes that were started by Load.
-// cmd.Wait() is handled by the goroutine launched after cmd.Start(),
-// so we only need to signal the process here.
 func (r *Registry) Shutdown() {
 	r.mu.Lock()
 	plugins := make([]Entry, len(r.plugins))
@@ -153,13 +148,32 @@ func (r *Registry) Shutdown() {
 	r.mu.Unlock()
 
 	for _, p := range plugins {
-		if p.cmd != nil && p.cmd.Process != nil {
-			_ = p.cmd.Process.Signal(syscall.SIGTERM)
-			time.AfterFunc(3*time.Second, func() {
-				_ = p.cmd.Process.Kill()
-			})
+		if p.cmd != nil {
+			gracefulStop(p.cmd)
 		}
 	}
+}
+
+// gracefulStop sends SIGTERM to cmd's process, then waits for it to exit in a
+// goroutine. If the process has not exited within 5 seconds, it is killed.
+func gracefulStop(cmd *exec.Cmd) {
+	if cmd.Process == nil {
+		return
+	}
+	_ = cmd.Process.Signal(syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+	}()
+	go func() {
+		select {
+		case <-done:
+			// process exited cleanly — nothing to do
+		case <-time.After(5 * time.Second):
+			_ = cmd.Process.Kill()
+		}
+	}()
 }
 
 // FindByCapability returns the first plugin with the given capability, or nil.
@@ -285,8 +299,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		baseURL := "http://" + desc.Addr
 		if healthErr := r.waitHealthy(ctx, baseURL); healthErr != nil {
 			slog.Error("plugin: restart failed — health check did not pass", "id", desc.ID, "err", healthErr)
-			_ = newCmd.Process.Signal(syscall.SIGTERM)
-			time.AfterFunc(3*time.Second, func() { _ = newCmd.Process.Kill() })
+			gracefulStop(newCmd)
 			r.removeByID(desc.ID)
 			return
 		}
@@ -306,6 +319,18 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 
 		current = newCmd
 	}
+}
+
+// gracefulStop sends SIGTERM to cmd and schedules a SIGKILL after 3 seconds if
+// the process has not yet exited. It is a no-op when cmd.Process is nil.
+func gracefulStop(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	_ = cmd.Process.Signal(syscall.SIGTERM)
+	time.AfterFunc(3*time.Second, func() {
+		_ = cmd.Process.Kill()
+	})
 }
 
 // removeByID removes a plugin entry from the registry by plugin ID.
