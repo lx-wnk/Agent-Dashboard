@@ -46,7 +46,7 @@ export default defineConfig({
             src: '/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable',
+            purpose: 'any',
           },
         ],
       },
@@ -54,7 +54,8 @@ export default defineConfig({
         // Raise the per-file limit to 5 MB to avoid Workbox warnings on large chunks.
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,woff2}'],
-        navigateFallback: null,
+        navigateFallback: '/offline.html',
+        navigateFallbackDenylist: [/^\/api/, /^\/auth/],
         // Do not skip waiting — let the user decide when to activate a new SW.
         skipWaiting: false,
         cleanupOutdatedCaches: true,

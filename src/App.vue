@@ -17,6 +17,8 @@ import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
 import { useAgents } from './composables/useAgents'
+import { useInstallPrompt } from './composables/useInstallPrompt'
+import { usePWA } from './composables/usePWA'
 import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { useUser } from './composables/useUser'
@@ -27,6 +29,8 @@ const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
+const { needsRefresh, updateSW } = usePWA()
+const { canInstall, promptInstall } = useInstallPrompt()
 const { toggleTheme } = useTheme()
 
 // UX-08: Shift+D toggles dark/light mode globally
@@ -265,6 +269,15 @@ onMounted(fetchQuota)
       >
         ⚙
       </button>
+      <button
+        v-if="canInstall"
+        type="button"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        title="Install Agent Dashboard as a PWA"
+        @click="promptInstall"
+      >
+        Install app
+      </button>
     </header>
 
     <div class="shrink-0"><ResourceBar /></div>
@@ -338,6 +351,22 @@ onMounted(fetchQuota)
       @open-chat="(t) => { selectTask(null); activeConceptTask = t; showRefinementChat = true }"
     />
 
+    <!-- PWA update banner: shown when a new service worker is waiting to activate. -->
+    <Transition name="toast">
+      <div
+        v-if="needsRefresh"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-900 dark:bg-slate-800 border border-slate-700 text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+      >
+        <span>A new version is available.</span>
+        <button
+          type="button"
+          class="bg-blue-600 text-white border-none rounded-md px-3 py-1 text-[12px] font-semibold cursor-pointer hover:brightness-110"
+          @click="updateSW"
+        >
+          Reload
+        </button>
+      </div>
+    </Transition>
     <Transition name="toast">
       <div
         v-if="toastMessage"
