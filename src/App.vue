@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, PipelineTask } from './types'
-import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
@@ -15,30 +15,36 @@ import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
-// Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
-const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
 import { useAgents } from './composables/useAgents'
 import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { useUser } from './composables/useUser'
 import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
+// Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
+const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
+
 const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
 const { toggleTheme } = useTheme()
 
+// UX-08: Shift+D toggles dark/light mode globally
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const tag = (e.target as HTMLElement | null)?.tagName
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT')
+      toggleTheme()
+  }
+}
+
 onMounted(() => {
   loadUser()
-  // UX-08: Shift+D toggles dark/light mode globally
-  window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      const tag = (e.target as HTMLElement | null)?.tagName
-      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT')
-        toggleTheme()
-    }
-  })
+  window.addEventListener('keydown', handleKeydown)
 })
 
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 

@@ -82,12 +82,16 @@ func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) requireSecret(w http.ResponseWriter, r *http.Request) bool {
 	if h.secret == "" {
-		http.Error(w, `{"error":"DASHBOARD_HOOKS_SECRET must be set to use the edit gate"}`, http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "DASHBOARD_HOOKS_SECRET must be set to use the edit gate"})
 		return false
 	}
 	got := bearerToken(r)
 	if subtle.ConstantTimeCompare([]byte(got), []byte(h.secret)) != 1 {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return false
 	}
 	return true
@@ -111,8 +115,9 @@ func (h *Handler) PreTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only gate write-type tools. The canonical set is permissions.WriteToolNames.
-	if !permissions.WriteToolNames[body.ToolName] {
+	// Only gate write-type tools. The canonical set is permissions.IsWriteTool —
+	// do not add names here; update the source of truth in permissions/allowlist.go instead.
+	if !permissions.IsWriteTool(body.ToolName) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"proceed": true})
 		return
