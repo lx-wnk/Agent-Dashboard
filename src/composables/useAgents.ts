@@ -1,6 +1,7 @@
 import type { Agent } from '../types'
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { SSE_RETRY_DELAY_MS } from '../utils/sse'
+import { drainPendingMessages } from './usePendingMessages'
 
 export interface TrendPoint {
   t: number
@@ -77,12 +78,20 @@ function startSSE() {
     return
   eventSource = new EventSource('/api/agents/stream')
 
+  let drainedOnReconnect = false
   eventSource.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data)
       handleAgentData(payload.agents, payload.trend)
     }
     catch { /* ignore parse errors */ }
+
+    // On the first SSE message after (re)connecting, drain any queued offline messages.
+    // This is the fallback for browsers that do not support the Background Sync API.
+    if (!drainedOnReconnect) {
+      drainedOnReconnect = true
+      void drainPendingMessages()
+    }
   }
 
   eventSource.onerror = () => {

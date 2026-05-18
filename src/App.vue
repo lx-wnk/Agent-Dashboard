@@ -15,6 +15,7 @@ import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
+import OfflineBadge from './components/OfflineBadge.vue'
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
 const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
 import { useAgents } from './composables/useAgents'
@@ -233,6 +234,7 @@ onMounted(fetchQuota)
       >
         Audit
       </button>
+      <OfflineBadge />
       <button
         type="button"
         class="bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-none rounded-md min-w-[44px] min-h-[44px] px-2.5 py-2 text-base cursor-pointer leading-none hover:text-slate-700 dark:hover:text-slate-300 hover:brightness-110"
