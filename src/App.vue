@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { Agent, PipelineTask } from './types'
-import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
+import EmptyAgentState from './components/EmptyAgentState.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import AuditSettings from './components/AuditSettings.vue'
 import CostTrend from './components/CostTrend.vue'
@@ -15,20 +16,36 @@ import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
-// Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
-const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
 import { useAgents } from './composables/useAgents'
 import { useTasks } from './composables/useTasks'
+import { useTheme } from './composables/useTheme'
 import { useUser } from './composables/useUser'
 import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
+// Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
+const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
+
 const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
+const { toggleTheme } = useTheme()
+
+// UX-08: Shift+D toggles dark/light mode globally
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const tag = (e.target as HTMLElement | null)?.tagName
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT')
+      toggleTheme()
+  }
+}
 
 onMounted(() => {
   loadUser()
+  window.addEventListener('keydown', handleKeydown)
 })
 
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 
@@ -144,6 +161,11 @@ onMounted(fetchQuota)
 <template>
   <LoginPage v-if="loaded && showLogin" />
   <div v-else-if="loaded" class="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+    <!-- UX-33: Skip-to-content link for keyboard users -->
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded focus:text-sm focus:font-semibold"
+    >Skip to main content</a>
     <header class="shrink-0 flex flex-wrap items-center gap-3 gap-y-2 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
       <h1 class="text-[18px] font-semibold text-slate-900 dark:text-slate-100">
         Claude Agent Overview
@@ -283,20 +305,26 @@ onMounted(fetchQuota)
         ≡ List
       </button>
     </div>
-    <main class="p-6 flex-1 min-h-0 overflow-y-auto">
+    <main id="main-content" class="p-6 flex-1 min-h-0 overflow-y-auto">
       <p v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600">
         Loading agents...
       </p>
       <p v-else-if="error" class="text-center py-12 text-red-600 dark:text-red-400">
         Error: {{ error }}
       </p>
-      <AgentTable v-else-if="viewMode === 'list'" :agents="filteredAgents" @select="selectAgent" />
+      <template v-else-if="viewMode === 'list'">
+        <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
+        <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />
+      </template>
       <PipelineBoard
         v-else-if="viewMode === 'pipeline'"
         @select="selectTask"
         @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
       />
-      <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
+      <template v-else>
+        <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
+        <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
+      </template>
     </main>
 
     <AgentModal :agent="selectedAgent" @close="selectAgent(null)" @navigate="(taskId: string) => navigateTo({ taskId })" />

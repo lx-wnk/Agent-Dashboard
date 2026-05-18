@@ -4,8 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Claude Agent Overview</title>
-</head>
-<body>
+  <!-- UX-32: Inline dark-mode script in <head> to prevent flash of incorrect theme -->
   <script>
     (function() {
       var stored = localStorage.getItem('agent-theme');
@@ -14,6 +13,8 @@
       if (isDark) document.documentElement.classList.add('dark');
     })();
   </script>
+</head>
+<body>
   <div id="app"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>

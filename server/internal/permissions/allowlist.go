@@ -24,6 +24,19 @@ var WriteToolNames = []string{"Edit", "Write", "MultiEdit"}
 // cannot be mutated by other packages.
 func IsAllowedTool(name string) bool { return allowedToolNames[name] }
 
+// writeToolNames is the unexported set of tools that mutate file contents.
+// External packages must use IsWriteTool to prevent mutation of the map.
+var writeToolNames = map[string]bool{
+	"Write":     true,
+	"Edit":      true,
+	"MultiEdit": true,
+}
+
+// IsWriteTool reports whether name is in the edit-gate write tool set.
+// Use this instead of accessing writeToolNames directly so the set cannot
+// be mutated by other packages.
+func IsWriteTool(name string) bool { return writeToolNames[name] }
+
 // allowedToolNames is the unexported source of truth for grantable tools.
 // All callers must go through IsAllowedTool.
 var allowedToolNames = map[string]bool{

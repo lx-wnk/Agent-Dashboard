@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
-import { computed, nextTick, ref, watch } from 'vue'
-import { useAgentPrompt } from '../composables/useAgentPrompt'
-import { SLASH_COMMAND_DEFS, fetchDynamicCommands } from '../composables/useSlashCommands'
 import type { SlashCommandDef } from '../composables/useSlashCommands'
+import { computed, nextTick, ref, useId, watch } from 'vue'
+import { fetchDynamicCommands, SLASH_COMMAND_DEFS } from '../composables/useSlashCommands'
+import { useAgentPrompt } from '../composables/useAgentPrompt'
 
 const props = withDefaults(defineProps<{
   agent: Agent | null
@@ -13,6 +13,9 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ messageSent: [msg: OutputMessage] }>()
+
+// UX-10: unique ID per component instance so multiple PromptInput cards don't share the same DOM id
+const hintId = useId()
 
 const { promptInput, isSending, sendStatus, sendError, handleSend } = useAgentPrompt(
   () => props.agent,
@@ -151,6 +154,8 @@ defineExpose({ focus })
         class="text-blue-600 dark:text-blue-400 flex-shrink-0 pb-0.5"
         :class="variant === 'full' ? 'text-[14px]' : 'text-[13px] pb-0'"
       >❯</span>
+      <!-- UX-10: sr-only hint for keyboard shortcut; referenced via aria-describedby -->
+      <span :id="hintId" class="sr-only">Press Enter to send, Shift+Enter for new line</span>
       <textarea
         v-if="variant === 'full'"
         ref="inputEl"
@@ -158,6 +163,7 @@ defineExpose({ focus })
         rows="1"
         placeholder="Enter prompt..."
         :disabled="isSending"
+        :aria-describedby="hintId"
         :aria-controls="showSuggestions ? 'slash-listbox' : undefined"
         class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
@@ -169,12 +175,14 @@ defineExpose({ focus })
         v-model="promptInput"
         placeholder="Enter prompt..."
         :disabled="isSending"
+        :aria-describedby="hintId"
         :aria-controls="showSuggestions ? 'slash-listbox' : undefined"
         class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50"
         @keydown="onKeydown"
       >
       <button
         type="button"
+        aria-label="Send message"
         class="bg-blue-600 text-white border-none rounded font-bold cursor-pointer flex-shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
         :class="variant === 'full' ? 'px-3.5 py-1.5 text-[14px]' : 'px-2.5 py-1 text-[13px]'"
         :disabled="isSending || promptInput.trim().length === 0"

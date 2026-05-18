@@ -70,7 +70,9 @@ func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 	if h.secret != "" {
 		got := bearerToken(r)
 		if subtle.ConstantTimeCompare([]byte(got), []byte(h.secret)) != 1 {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 			return
 		}
 	}
@@ -82,12 +84,16 @@ func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) requireSecret(w http.ResponseWriter, r *http.Request) bool {
 	if h.secret == "" {
-		http.Error(w, `{"error":"DASHBOARD_HOOKS_SECRET must be set to use the edit gate"}`, http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "DASHBOARD_HOOKS_SECRET must be set to use the edit gate"})
 		return false
 	}
 	got := bearerToken(r)
 	if subtle.ConstantTimeCompare([]byte(got), []byte(h.secret)) != 1 {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return false
 	}
 	return true
@@ -107,13 +113,15 @@ func (h *Handler) PreTool(w http.ResponseWriter, r *http.Request) {
 		NewContent string `json:"newContent"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
 		return
 	}
 
-	// Only gate write-type tools. The canonical list lives in permissions.WriteToolNames —
-	// do not add names here; update the source of truth instead.
-	if !isWriteTool(body.ToolName) {
+	// Only gate write-type tools. The canonical set is permissions.IsWriteTool —
+	// do not add names here; update the source of truth in permissions/allowlist.go instead.
+	if !permissions.IsWriteTool(body.ToolName) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"proceed": true})
 		return
@@ -149,9 +157,8 @@ func (h *Handler) PreTool(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"proceed": decision == "accept"})
 	case <-time.After(editGateTimeout):
-		// Timeout: fail-closed when secret is configured (user wants the gate),
-		// fail-open otherwise (no gate configured — don't block the agent).
-		proceed := h.secret == ""
+		// Timeout: fail-closed — secret is always set here (requireSecret guards entry).
+		proceed := false
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"proceed": proceed})
 	case <-r.Context().Done():
@@ -170,11 +177,15 @@ func (h *Handler) Respond(w http.ResponseWriter, r *http.Request) {
 		Decision string `json:"decision"` // "accept" | "reject"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
 		return
 	}
 	if body.Decision != "accept" && body.Decision != "reject" {
-		http.Error(w, `{"error":"decision must be accept or reject"}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "decision must be accept or reject"})
 		return
 	}
 
@@ -182,7 +193,9 @@ func (h *Handler) Respond(w http.ResponseWriter, r *http.Request) {
 	entry, ok := h.pending[body.ID]
 	h.mu.Unlock()
 	if !ok {
-		http.Error(w, `{"error":"no pending edit with that id"}`, http.StatusNotFound)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "no pending edit with that id"})
 		return
 	}
 
@@ -226,15 +239,4 @@ func bearerToken(r *http.Request) string {
 		return auth[7:]
 	}
 	return ""
-}
-
-// isWriteTool reports whether name is in the edit-gate write tool list.
-// Source of truth: permissions.WriteToolNames.
-func isWriteTool(name string) bool {
-	for _, n := range permissions.WriteToolNames {
-		if n == name {
-			return true
-		}
-	}
-	return false
 }

@@ -120,7 +120,16 @@ watch(() => props.sessionId, fetchAndRender)
       {{ error }}
     </div>
     <div v-else class="overflow-x-auto">
-      <svg ref="svgRef" class="w-full text-slate-800 dark:text-slate-200" style="min-height: 60px;" />
+      <svg
+        ref="svgRef"
+        role="img"
+        :aria-label="`Execution waterfall timeline for session ${sessionId}`"
+        class="w-full text-slate-800 dark:text-slate-200"
+        style="min-height: 60px;"
+      >
+        <title>Execution waterfall timeline</title>
+        <desc>A Gantt chart showing tool call durations over time for this session.</desc>
+      </svg>
     </div>
   </div>
 </template>
