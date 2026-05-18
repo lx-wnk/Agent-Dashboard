@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,49 +12,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
-// webhookCGNATBlock covers 100.64.0.0/10 (Carrier-Grade NAT / Tailscale).
-var webhookCGNATBlock = func() *net.IPNet {
-	_, n, _ := net.ParseCIDR("100.64.0.0/10")
-	return n
-}()
-
-// webhookDialContext re-validates resolved IPs at connection time to prevent DNS
-// rebinding attacks (where a domain passes validateWebhookURL but later resolves
-// to a private/loopback IP).
-func webhookDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
-	}
-	ips, err := net.DefaultResolver.LookupHost(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	if len(ips) == 0 {
-		return nil, fmt.Errorf("webhook: no IPs resolved for %s", host)
-	}
-	for _, ipStr := range ips {
-		ip := net.ParseIP(ipStr)
-		if ip == nil {
-			continue
-		}
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() ||
-			ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() ||
-			webhookCGNATBlock.Contains(ip) {
-			return nil, fmt.Errorf("webhook: resolved IP %s is blocked (SSRF guard)", ipStr)
-		}
-	}
-	return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, net.JoinHostPort(ips[0], port))
-}
-
 // webhookClient is the shared HTTP client used to POST webhook payloads.
-// It uses webhookDialContext to guard against DNS rebinding / SSRF at connection time.
+// validation.SafeDialContext re-validates resolved IPs at connection time to
+// prevent DNS rebinding / SSRF attacks.
 var webhookClient = &http.Client{
 	Timeout: 15 * time.Second,
 	Transport: &http.Transport{
-		DialContext: webhookDialContext,
+		DialContext: validation.SafeDialContext,
 	},
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 3 {
@@ -83,6 +49,9 @@ func validateWebhookURL(raw string) error {
 		return fmt.Errorf("webhook_url must use http or https scheme")
 	}
 	host := u.Hostname()
+	if validation.IsBlockedHost(host) {
+		return fmt.Errorf("webhook_url must not point to a private or loopback address")
+	}
 	addrs, err := net.LookupHost(host)
 	if err != nil {
 		// Unresolvable host — block it; legitimate webhooks must be DNS-resolvable.
@@ -93,7 +62,7 @@ func validateWebhookURL(raw string) error {
 		if ip == nil {
 			continue
 		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		if validation.IsBlockedIP(ip) {
 			return fmt.Errorf("webhook_url must not point to a private or loopback address")
 		}
 	}

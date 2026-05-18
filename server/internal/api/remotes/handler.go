@@ -17,25 +17,12 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
 var (
 	loopbackRE  = regexp.MustCompile(`^127\.\d+\.\d+\.\d+$`)
 	linkLocalRE = regexp.MustCompile(`^169\.254\.\d+\.\d+$`)
-
-	blockedHosts = map[string]struct{}{
-		"localhost": {},
-		"127.0.0.1": {},
-		"::1":       {},
-		"0.0.0.0":   {},
-	}
-
-	// cgnatBlock covers the Carrier-Grade NAT range (100.64.0.0/10), which is
-	// commonly used by VPNs (e.g. Tailscale) and must not be reachable via SSRF.
-	cgnatBlock = func() *net.IPNet {
-		_, n, _ := net.ParseCIDR("100.64.0.0/10")
-		return n
-	}()
 )
 
 // isSafeRemoteURL returns true when raw is a valid http/https URL that does not
@@ -54,7 +41,7 @@ func isSafeRemoteURL(raw string) bool {
 	}
 	// Normalise IPv6 brackets from url.Parse (hostname strips them).
 	h := strings.ToLower(host)
-	if _, blocked := blockedHosts[h]; blocked {
+	if validation.IsBlockedHost(h) {
 		return false
 	}
 	if loopbackRE.MatchString(h) {
@@ -66,48 +53,19 @@ func isSafeRemoteURL(raw string) bool {
 	// Additional: block any IP that net resolves as loopback, link-local,
 	// unspecified, multicast, or CGNAT (catches numeric IPv6 like ::ffff:127.0.0.1 etc.).
 	if ip := net.ParseIP(h); ip != nil {
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() ||
-			ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() ||
-			cgnatBlock.Contains(ip) {
+		if validation.IsBlockedIP(ip) {
 			return false
 		}
 	}
 	return true
 }
 
-// safeDialContext re-validates resolved IPs at connection time to prevent DNS
-// rebinding attacks (where a domain passes isSafeRemoteURL but resolves to a
-// private/loopback IP later).
-func safeDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
-	}
-	ips, err := net.DefaultResolver.LookupHost(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	for _, ipStr := range ips {
-		ip := net.ParseIP(ipStr)
-		if ip == nil {
-			continue
-		}
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() ||
-			ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() ||
-			cgnatBlock.Contains(ip) {
-			return nil, fmt.Errorf("resolved IP %s is blocked", ipStr)
-		}
-	}
-	if len(ips) == 0 {
-		return nil, fmt.Errorf("no IPs resolved for %s", host)
-	}
-	return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, net.JoinHostPort(ips[0], port))
-}
-
 var connectivityClient = &http.Client{
 	Timeout: 15 * time.Second,
 	Transport: &http.Transport{
-		DialContext: safeDialContext,
+		// validation.SafeDialContext re-validates resolved IPs at connection time
+		// to prevent DNS rebinding attacks.
+		DialContext: validation.SafeDialContext,
 	},
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if !isSafeRemoteURL(req.URL.String()) {

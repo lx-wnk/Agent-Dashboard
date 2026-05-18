@@ -20,6 +20,10 @@ export function usePWA() {
   function updateSW() {
     if (!registration?.waiting)
       return
+    // Reload the page once the new SW takes control so stale assets are replaced.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload()
+    }, { once: true })
     // Signal the waiting SW to skip waiting and take control.
     registration.waiting.postMessage({ type: 'SKIP_WAITING' })
   }
