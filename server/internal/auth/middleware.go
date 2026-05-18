@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -11,7 +12,7 @@ import (
 func writeUnauthorized(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	_, _ = w.Write([]byte(`{"error":"` + msg + `"}`))
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 type contextKey string
@@ -92,7 +93,7 @@ func RequireAdminOrBypass(bypassAuth bool) func(http.Handler) http.Handler {
 func writeForbidden(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
-	_, _ = w.Write([]byte(`{"error":"` + msg + `"}`))
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 func extractToken(r *http.Request) string {

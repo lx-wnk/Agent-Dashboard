@@ -17,6 +17,7 @@ func (RemoteRegistration) Fields() []ent.Field {
 		field.String("user_id"),
 		field.String("url"),
 		field.String("name").Optional().Nillable(),
+		// SHA-256 hex of the bearer key — not usable as an outbound Authorization header.
 		field.String("bearer_key").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}
