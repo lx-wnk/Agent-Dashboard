@@ -39,8 +39,11 @@ const columns = computed<ColumnDef[]>(() => {
         case 'completed':
           completed.push(card)
           break
-        default:
+        case 'pending':
           pending.push(card)
+          break
+        default:
+          console.warn(`KanbanBoard: unknown task status "${task.status}" — card will not be displayed`)
           break
       }
     }
@@ -84,7 +87,7 @@ const totalTasks = computed(() =>
           :key="card.id"
           tabindex="0"
           role="button"
-          :aria-label="`${card.task.subject}, ${card.agent.projectName}`"
+          :aria-label="`${card.task.subject} (${card.agent.projectName})`"
           class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5 cursor-pointer transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.3)] focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
           @click="$emit('select', card.agent)"
           @keydown.enter="$emit('select', card.agent)"
