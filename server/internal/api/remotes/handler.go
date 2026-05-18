@@ -23,6 +23,9 @@ import (
 
 // hashBearerKey returns the SHA-256 hex digest of key, or nil when key is nil.
 // The plaintext is never persisted — only the hash is stored.
+//
+// Note: if a prior build stored plaintext bearer_key values (before SHA-256 hashing was added),
+// those rows remain valid but will never match hashed lookups. Re-register the remote to fix.
 func hashBearerKey(key *string) *string {
 	if key == nil {
 		return nil

@@ -94,6 +94,7 @@ func VerifyJWT(tokenStr, secret string) (JWTPayload, error) {
 		jwt.WithIssuedAt(),
 		jwt.WithIssuer(jwtIssuer),
 		jwt.WithAudience(jwtAudience),
+		// WithLeeway applies to both iat and exp — 60 s post-expiry grace is acceptable for a local-only dashboard.
 		jwt.WithLeeway(60*time.Second),
 	)
 
