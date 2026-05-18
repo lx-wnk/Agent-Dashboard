@@ -114,7 +114,7 @@ func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 		Adapter string                `json:"adapter"`
 		Config  *config.AdapterConfig `json:"config,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
 	if body.Adapter == "" {
@@ -222,6 +222,7 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) error {
 // and, when a config file is configured, persists it to disk so the change
 // survives a server restart.
 func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 	var incoming config.AdapterConfig
 	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
