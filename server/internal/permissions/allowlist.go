@@ -15,10 +15,27 @@ var DangerousBashRE = regexp.MustCompile(
 		"|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w|\\bxargs\\b|find\\s+.*-exec)",
 )
 
+// WriteToolNames is the canonical list of write-type tools that trigger the edit gate.
+// isWriteTool in the hooks handler derives from this slice — updating this list is sufficient.
+var WriteToolNames = []string{"Edit", "Write", "MultiEdit"}
+
 // IsAllowedTool reports whether name is in the pipeline tool allow-list.
 // Use this instead of accessing allowedToolNames directly so the set
 // cannot be mutated by other packages.
 func IsAllowedTool(name string) bool { return allowedToolNames[name] }
+
+// writeToolNames is the unexported set of tools that mutate file contents.
+// External packages must use IsWriteTool to prevent mutation of the map.
+var writeToolNames = map[string]bool{
+	"Write":     true,
+	"Edit":      true,
+	"MultiEdit": true,
+}
+
+// IsWriteTool reports whether name is in the edit-gate write tool set.
+// Use this instead of accessing writeToolNames directly so the set cannot
+// be mutated by other packages.
+func IsWriteTool(name string) bool { return writeToolNames[name] }
 
 // allowedToolNames is the unexported source of truth for grantable tools.
 // All callers must go through IsAllowedTool.

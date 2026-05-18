@@ -28,8 +28,8 @@ const displayLabel = computed(() => props.label ?? statusLabel(props.variant))
 </script>
 
 <template>
-  <span class="inline-flex items-center gap-1.5 text-xs">
+  <span class="inline-flex items-center gap-1.5 text-xs" :aria-label="displayLabel">
     <span class="size-2 rounded-full flex-shrink-0" :class="dotClass[variant]" aria-hidden="true" />
-    <span :class="labelClass[variant]">{{ displayLabel }}</span>
+    <span :class="labelClass[variant]" aria-hidden="true">{{ displayLabel }}</span>
   </span>
 </template>

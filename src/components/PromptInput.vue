@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
+import type { SlashCommandDef } from '../composables/useSlashCommands'
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
 import { SLASH_COMMAND_DEFS, fetchDynamicCommands } from '../composables/useSlashCommands'
-import type { SlashCommandDef } from '../composables/useSlashCommands'
 
 const props = withDefaults(defineProps<{
   agent: Agent | null
@@ -14,6 +14,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ messageSent: [msg: OutputMessage] }>()
 
+// UX-10: unique ID per component instance so multiple PromptInput cards don't share the same DOM id
 const hintId = useId()
 const listboxId = useId()
 
@@ -182,6 +183,7 @@ defineExpose({ focus })
       >
       <button
         type="button"
+        aria-label="Send message"
         class="bg-blue-600 text-white border-none rounded font-bold cursor-pointer flex-shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
         :class="variant === 'full' ? 'px-3.5 py-1.5 text-[14px]' : 'px-2.5 py-1 text-[13px]'"
         :disabled="isSending || promptInput.trim().length === 0"
