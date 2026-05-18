@@ -111,6 +111,11 @@ func Load(cfgFile string) (Config, error) {
 		slog.Warn("DASHBOARD_HOST is non-loopback — server will expose sensitive Claude session data to the network. Use VPN/SSH tunnel only.", "host", cfg.Host)
 	}
 
+	// Warn when hooks secret is unset — /api/hooks/event will accept unauthenticated requests.
+	if cfg.HooksSecret == "" {
+		slog.Warn("DASHBOARD_HOOKS_SECRET not set — /api/hooks/event is open to any loopback caller; set a secret when running in shared environments")
+	}
+
 	return cfg, nil
 }
 

@@ -20,6 +20,15 @@ var DangerousBashRE = regexp.MustCompile(
 // cannot be mutated by other packages.
 func IsAllowedTool(name string) bool { return allowedToolNames[name] }
 
+// WriteToolNames is the set of tools that mutate file contents.
+// The hooks edit-gate (api/hooks) checks this set to decide which tool calls
+// to hold for user approval — it must not duplicate this list independently.
+var WriteToolNames = map[string]bool{
+	"Write":     true,
+	"Edit":      true,
+	"MultiEdit": true,
+}
+
 // allowedToolNames is the unexported source of truth for grantable tools.
 // All callers must go through IsAllowedTool.
 var allowedToolNames = map[string]bool{

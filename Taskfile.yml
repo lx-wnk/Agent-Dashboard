@@ -67,3 +67,7 @@ tasks:
   fmt:
     desc: Format all Go code
     cmd: gofmt -w sdk/ server/
+
+  audit:frontend:
+    desc: Audit frontend dependencies for high/critical vulnerabilities
+    cmd: pnpm audit --audit-level=high

@@ -36,7 +36,8 @@ func TestVerifyJWT_Expired(t *testing.T) {
 	secret := "test-secret-32chars-long-minimum!"
 	payload := auth.JWTPayload{Sub: "12345", Login: "testuser"}
 
-	token, err := auth.SignJWT(payload, secret, -1) // expired 1 second ago
+	// Use a TTL well outside the 60-second leeway so the expiry is unambiguous.
+	token, err := auth.SignJWT(payload, secret, -120) // expired 2 minutes ago
 	require.NoError(t, err)
 
 	_, err = auth.VerifyJWT(token, secret)

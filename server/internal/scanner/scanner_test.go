@@ -18,6 +18,16 @@ func TestParseElapsedTime(t *testing.T) {
 		{"hours minutes seconds", "01:05:30", 3930},
 		{"days hours minutes seconds", "2-01:05:30", 176730},
 		{"leading space", "  12", 12},
+		// Edge cases
+		{"zero", "0", 0},
+		{"empty string", "", 0},
+		{"whitespace only", "   ", 0},
+		{"one second", "1", 1},
+		{"exactly one minute", "01:00", 60},
+		{"exactly one hour", "01:00:00", 3600},
+		{"one day", "1-00:00:00", 86400},
+		{"large days", "10-00:00:00", 864000},
+		{"trailing space", "30  ", 30},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
