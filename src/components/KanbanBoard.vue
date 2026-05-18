@@ -70,6 +70,7 @@ const totalTasks = computed(() =>
       :aria-label="`${col.title} column, ${col.cards.length} task${col.cards.length !== 1 ? 's' : ''}`"
       class="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col min-h-[200px] max-h-[calc(100vh-250px)]"
     >
+      <span class="sr-only" aria-live="polite">{{ col.title }} column, {{ col.cards.length }} tasks</span>
       <div
         class="flex items-center gap-2 px-3.5 py-3 border-b border-slate-200 dark:border-slate-700 flex-shrink-0"
         aria-hidden="true"
@@ -88,7 +89,7 @@ const totalTasks = computed(() =>
           tabindex="0"
           role="button"
           :aria-label="`${card.task.subject} (${card.agent.projectName})`"
-          class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5 cursor-pointer transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.3)] focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+          class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5 cursor-pointer transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.3)] focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
           @click="$emit('select', card.agent)"
           @keydown.enter="$emit('select', card.agent)"
           @keydown.space.prevent="$emit('select', card.agent)"
