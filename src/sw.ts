@@ -99,8 +99,21 @@ async function replayPendingMessages(): Promise<void> {
         if (msg.id !== undefined)
           await removePendingIDB(msg.id)
       }
+      else if (res.status >= 400 && res.status < 500) {
+        // Permanent failure — remove from IDB, notify main thread
+        if (msg.id !== undefined)
+          await removePendingIDB(msg.id)
+        self.clients.matchAll().then((clients) => {
+          clients.forEach(c => c.postMessage({
+            type: 'OFFLINE_MESSAGE_FAILED',
+            messageId: msg.id,
+            status: res.status,
+          }))
+        })
+        continue // don't set anyFailed, move to next message
+      }
       else {
-        anyFailed = true
+        anyFailed = true // transient failure — signal retry
       }
     }
     catch {

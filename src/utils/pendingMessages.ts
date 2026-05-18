@@ -13,6 +13,7 @@ export interface PendingMessage {
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null
+let _replayInFlight = false
 
 export function openDB(): Promise<IDBDatabase> {
   if (dbPromise)
@@ -84,40 +85,49 @@ export async function countPending(): Promise<number> {
  * Returns the number of messages successfully replayed.
  */
 export async function replayPending(): Promise<number> {
-  let replayed = 0
-  const pending = await getAllPending()
+  if (_replayInFlight)
+    return 0
+  _replayInFlight = true
 
-  for (const msg of pending) {
-    try {
-      let res: Response
-      if (msg.useChannel) {
-        res = await fetch(`/api/agents/${msg.sessionId}/message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msg.message }),
-        })
+  try {
+    let replayed = 0
+    const pending = await getAllPending()
+
+    for (const msg of pending) {
+      try {
+        let res: Response
+        if (msg.useChannel) {
+          res = await fetch(`/api/agents/${msg.sessionId}/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg.message }),
+          })
+        }
+        else {
+          res = await fetch('/api/agents/spawn', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: msg.message,
+              cwd: msg.cwd,
+              resumeSessionId: msg.sessionId,
+            }),
+          })
+        }
+        if (res.ok) {
+          if (msg.id !== undefined)
+            await removePending(msg.id)
+          replayed++
+        }
       }
-      else {
-        res = await fetch('/api/agents/spawn', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: msg.message,
-            cwd: msg.cwd,
-            resumeSessionId: msg.sessionId,
-          }),
-        })
-      }
-      if (res.ok) {
-        if (msg.id !== undefined)
-          await removePending(msg.id)
-        replayed++
+      catch {
+        // Network still unavailable — leave in queue for next attempt
       }
     }
-    catch {
-      // Network still unavailable — leave in queue for next attempt
-    }
+
+    return replayed
   }
-
-  return replayed
+  finally {
+    _replayInFlight = false
+  }
 }
