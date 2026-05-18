@@ -6,7 +6,13 @@ import "regexp"
 // DangerousBashRE matches shell patterns that must never appear in a Bash allow-list entry.
 // Referenced by both the pipeline spawner (spawn-time) and the REST grant endpoint (grant-time).
 var DangerousBashRE = regexp.MustCompile(
-	"(?i)(curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|\\bnetcat\\b|bash\\s+-c|sh\\s+-c|\\beval\\b|python\\s+-c|perl\\s+-e|ruby\\s+-e|base64\\s+-d|\\$\\(|`|&&|\\||;\\s*\\w|>\\s*\\w|<\\s*\\w|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w|\\bxargs\\b|find\\s+.*-exec)",
+	"(?i)(curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|\\bnetcat\\b|bash\\s+-c|sh\\s+-c|\\beval\\b" +
+		// SEC-01: match versioned Python/Node/Perl/Ruby interpreters (python3, python3.11, node, nodejs, perl5, ruby3)
+		"|python[23]?(?:\\.\\d+)?\\s+-c|node(?:js)?\\s+-e|perl\\d*\\s+-e|ruby\\d*\\s+-e" +
+		"|base64\\s+-d|\\$\\(|`|&&|\\||;\\s*\\w" +
+		// SEC-02: block redirects to both relative names (>foo) and absolute paths (>/tmp/evil)
+		"|>\\s*[\\w/]|<\\s*[\\w/]" +
+		"|chmod\\s+\\+x|rm\\s+-rf|exec\\s+\\w|\\bxargs\\b|find\\s+.*-exec)",
 )
 
 // IsAllowedTool reports whether name is in the pipeline tool allow-list.
