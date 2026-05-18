@@ -1,6 +1,6 @@
-const DB_NAME = 'agent-dashboard'
-const STORE = 'pending-messages'
-const DB_VERSION = 1
+export const DB_NAME = 'agent-dashboard'
+export const STORE = 'pending-messages'
+export const DB_VERSION = 1
 
 export interface PendingMessage {
   id?: number
@@ -119,6 +119,12 @@ export async function replayPending(): Promise<number> {
             await removePending(msg.id)
           replayed++
         }
+        else if (res.status >= 400 && res.status < 500) {
+          // Permanent failure — remove to avoid infinite retry
+          if (msg.id !== undefined)
+            await removePending(msg.id)
+        }
+        // 5xx: leave in queue for retry
       }
       catch {
         // Network still unavailable — leave in queue for next attempt

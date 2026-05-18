@@ -76,6 +76,7 @@ function startSSE() {
     return
   if (typeof document !== 'undefined' && document.hidden)
     return
+  if (eventSource) stopSSE()
   eventSource = new EventSource('/api/agents/stream')
 
   let drainedOnReconnect = false

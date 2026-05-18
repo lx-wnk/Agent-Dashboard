@@ -25,15 +25,7 @@ async function registerBackgroundSync(): Promise<void> {
 }
 
 function isNetworkFailure(err: unknown): boolean {
-  if (!(err instanceof Error))
-    return false
-  const msg = err.message.toLowerCase()
-  return (
-    msg.includes('fetch')
-    || msg.includes('network')
-    || msg.includes('failed to fetch')
-    || msg.includes('networkerror')
-  )
+  return err instanceof TypeError
 }
 
 export function useAgentPrompt(

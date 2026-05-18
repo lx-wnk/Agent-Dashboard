@@ -16,7 +16,8 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     vue(),
-    // PWA intent: offline capability is limited to static assets + HTML navigation;
+    // PWA intent: offline capability is limited to precached static assets only;
+    // HTML navigation fallback is not handled (no NavigationRoute in injectManifest strategy).
     // API calls (SSE, /api/*) always require a live server connection.
     // injectManifest strategy is used so src/sw.ts can include custom Background Sync logic.
     VitePWA({

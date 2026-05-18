@@ -1,13 +1,10 @@
 /// <reference lib="webworker" />
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
+import { BACKGROUND_SYNC_TAG } from './utils/swConstants'
+import { DB_NAME, DB_VERSION, STORE } from './utils/pendingMessages'
+import type { PendingMessage } from './utils/pendingMessages'
 
 declare const self: ServiceWorkerGlobalScope
-
-const DB_NAME = 'agent-dashboard'
-const STORE = 'pending-messages'
-const DB_VERSION = 1
-// keep in sync with src/utils/swConstants.ts — SW cannot import ES modules
-const BACKGROUND_SYNC_TAG = 'replay-agent-messages'
 
 // Workbox precache manifest injected at build time by vite-plugin-pwa
 precacheAndRoute(self.__WB_MANIFEST)
@@ -33,16 +30,6 @@ function openIDB(): Promise<IDBDatabase> {
     }
     req.onerror = () => reject(req.error)
   })
-}
-
-interface PendingMessage {
-  id?: number
-  agentPid: number
-  sessionId: string
-  message: string
-  timestamp: number
-  useChannel: boolean
-  cwd?: string
 }
 
 async function getAllPendingIDB(): Promise<PendingMessage[]> {
