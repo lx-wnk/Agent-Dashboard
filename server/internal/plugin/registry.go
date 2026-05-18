@@ -321,18 +321,6 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 	}
 }
 
-// gracefulStop sends SIGTERM to cmd and schedules a SIGKILL after 3 seconds if
-// the process has not yet exited. It is a no-op when cmd.Process is nil.
-func gracefulStop(cmd *exec.Cmd) {
-	if cmd == nil || cmd.Process == nil {
-		return
-	}
-	_ = cmd.Process.Signal(syscall.SIGTERM)
-	time.AfterFunc(3*time.Second, func() {
-		_ = cmd.Process.Kill()
-	})
-}
-
 // removeByID removes a plugin entry from the registry by plugin ID.
 func (r *Registry) removeByID(id string) {
 	r.mu.Lock()
