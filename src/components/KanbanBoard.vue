@@ -43,7 +43,9 @@ const columns = computed<ColumnDef[]>(() => {
           pending.push(card)
           break
         default:
-          console.warn(`KanbanBoard: unknown task status "${task.status}" — card will not be displayed`)
+          // Unknown status — fall back to pending column so the card stays visible.
+          // Go backend emits statuses beyond the typed set (e.g. on_hold, cancelled).
+          pending.push(card)
           break
       }
     }
