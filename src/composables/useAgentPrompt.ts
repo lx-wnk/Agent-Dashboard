@@ -1,5 +1,5 @@
 import type { Agent, OutputMessage } from '../types'
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import { addPending } from '../utils/pendingMessages'
 import { BACKGROUND_SYNC_TAG } from '../utils/swConstants'
 import { dispatchSlashCommand, parseSlashCommand, SLASH_COMMAND_DEFS } from './useSlashCommands'
@@ -146,6 +146,13 @@ export function useAgentPrompt(
       }
     }
   }
+
+  const onDrainSuccess = () => {
+    if (sendStatus.value === 'queued')
+      sendStatus.value = null
+  }
+  window.addEventListener('drain-success', onDrainSuccess)
+  onUnmounted(() => window.removeEventListener('drain-success', onDrainSuccess))
 
   return { promptInput, isSending, sendStatus, sendError, handleSend }
 }

@@ -131,6 +131,9 @@ export async function replayPending(): Promise<number> {
       }
     }
 
+    if (replayed > 0)
+      window.dispatchEvent(new CustomEvent('drain-success'))
+
     return replayed
   }
   finally {

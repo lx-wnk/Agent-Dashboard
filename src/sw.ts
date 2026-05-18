@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
-import { BACKGROUND_SYNC_TAG } from './utils/swConstants'
+import { BACKGROUND_SYNC_TAG, SW_MSG_MESSAGES_REPLAYED } from './utils/swConstants'
 import { DB_NAME, DB_VERSION, STORE } from './utils/pendingMessages'
 import type { PendingMessage } from './utils/pendingMessages'
 
@@ -60,6 +60,7 @@ async function replayPendingMessages(): Promise<void> {
     return
 
   let anyFailed = false
+  let replayed = 0
   for (const msg of pending) {
     try {
       let res: Response
@@ -85,6 +86,7 @@ async function replayPendingMessages(): Promise<void> {
       if (res.ok) {
         if (msg.id !== undefined)
           await removePendingIDB(msg.id)
+        replayed++
       }
       else if (res.status >= 400 && res.status < 500) {
         // Permanent failure — remove from IDB, notify main thread
@@ -106,6 +108,11 @@ async function replayPendingMessages(): Promise<void> {
     catch {
       anyFailed = true
     }
+  }
+
+  if (replayed > 0) {
+    const clients = await self.clients.matchAll()
+    clients.forEach(c => c.postMessage({ type: SW_MSG_MESSAGES_REPLAYED, count: replayed }))
   }
 
   if (anyFailed) {
