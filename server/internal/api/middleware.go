@@ -105,7 +105,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		// SFC styles to linked .css files — no <style> tags are injected at runtime.
 		// If a third-party library that injects inline styles is added in the future,
 		// prefer SHA-256 hashes over re-adding 'unsafe-inline'.
-		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://avatars.githubusercontent.com; connect-src 'self'; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://avatars.githubusercontent.com; connect-src 'self'; font-src 'self' data:; object-src 'none'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 		next.ServeHTTP(w, r)
 	})
 }
