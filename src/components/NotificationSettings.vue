@@ -164,8 +164,8 @@ async function saveConfig() {
         {{ prefSaveOk ? `${prefSaveOk} preference saved` : '' }}
       </div>
 
-      <!-- Event preferences table -->
-      <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden text-xs">
+      <!-- Event preferences table — F039: overflow-x-auto for narrow viewports -->
+      <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto text-xs">
         <table class="w-full">
           <thead>
             <tr class="bg-slate-50 dark:bg-slate-800/50">

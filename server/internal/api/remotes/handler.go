@@ -3,6 +3,8 @@ package remotes
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +20,20 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
+
+// hashBearerKey returns the SHA-256 hex digest of key, or nil when key is nil.
+// The plaintext is never persisted — only the hash is stored.
+//
+// Note: if a prior build stored plaintext bearer_key values (before SHA-256 hashing was added),
+// those rows remain valid but will never match hashed lookups. Re-register the remote to fix.
+func hashBearerKey(key *string) *string {
+	if key == nil {
+		return nil
+	}
+	sum := sha256.Sum256([]byte(*key))
+	h := hex.EncodeToString(sum[:])
+	return &h
+}
 
 // isSafeRemoteURL returns true when raw is a valid http/https URL that does not
 // point to a loopback, link-local, or otherwise blocked host.
@@ -179,7 +195,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		UserID:    payload.Sub,
 		URL:       body.URL,
 		Name:      body.Name,
-		BearerKey: body.BearerKey,
+		BearerKey: hashBearerKey(body.BearerKey), // SEC-05: store SHA-256 hash only, never plaintext
 	})
 	if err != nil {
 		return fmt.Errorf("remotes.create: %w", err)

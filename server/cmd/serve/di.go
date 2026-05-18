@@ -58,6 +58,15 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		webPushHandler = apiwp.NewHandler(wpSvc)
 	}
 
+	// broadcaster (agent SSE) and taskBroadcaster (task SSE) are constructed here
+	// and injected into handlers. Neither the pipeline nor any sub-package holds a
+	// reference to these broadcasters — all notifications flow outward via callbacks
+	// registered in OrchestratorOptions (e.g. OnTaskChanged). This keeps the
+	// pipeline layer free of any SSE dependency and independently testable.
+	// broadcaster and taskBroadcaster are independent — never share them.
+	// broadcaster pushes Agent[] snapshots to /api/agents/stream subscribers each scan cycle.
+	// taskBase / taskBroadcaster handle typed TaskEvent messages on /api/tasks/stream.
+	// Both use sse.Broadcaster under the hood (non-blocking fan-out, drops frames for slow consumers).
 	broadcaster := sse.NewBroadcaster()
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
