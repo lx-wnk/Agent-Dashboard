@@ -1,6 +1,6 @@
 // Package parser re-exports cost estimation from the canonical pricing package.
 // All logic lives in server/internal/pricing — this file keeps the parser package API
-// unchanged so existing callers (merger, history, sessions) continue to compile.
+// unchanged so existing callers (merger, history) continue to compile.
 package parser
 
 import (
