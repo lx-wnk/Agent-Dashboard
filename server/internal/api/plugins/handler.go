@@ -25,10 +25,10 @@ func (h *Handler) Mount(r chi.Router) {
 
 // pluginInfo is intentionally a narrow DTO. Do NOT replace with direct Entry/Descriptor
 // encoding — Descriptor.Env may contain plugin auth secrets.
+// base_url is intentionally omitted (F028): clients must not proxy directly to plugins.
 type pluginInfo struct {
 	ID           string   `json:"id"`
 	Capabilities []string `json:"capabilities"`
-	BaseURL      string   `json:"base_url"`
 }
 
 func (h *Handler) list(w http.ResponseWriter, _ *http.Request) {
@@ -38,7 +38,6 @@ func (h *Handler) list(w http.ResponseWriter, _ *http.Request) {
 		out = append(out, pluginInfo{
 			ID:           info.ID,
 			Capabilities: info.Capabilities,
-			BaseURL:      info.BaseURL,
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")

@@ -114,7 +114,7 @@ func (h *Handler) setCurrent(w http.ResponseWriter, r *http.Request) error {
 		Adapter string                `json:"adapter"`
 		Config  *config.AdapterConfig `json:"config,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
 	if body.Adapter == "" {
