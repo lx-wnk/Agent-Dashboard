@@ -4,6 +4,7 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
+import EmptyAgentState from './components/EmptyAgentState.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import AuditSettings from './components/AuditSettings.vue'
 import CostTrend from './components/CostTrend.vue'
@@ -312,20 +313,7 @@ onMounted(fetchQuota)
         Error: {{ error }}
       </p>
       <template v-else-if="viewMode === 'list'">
-        <div
-          v-if="filteredAgents.length === 0"
-          class="flex flex-col items-center justify-center py-24 text-center gap-3"
-          role="status"
-          aria-label="No agents found"
-        >
-          <span class="text-4xl" aria-hidden="true">🤖</span>
-          <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">
-            {{ searchQuery ? 'No agents match your search.' : 'No agents are currently running.' }}
-          </p>
-          <p v-if="!searchQuery" class="text-slate-400 dark:text-slate-600 text-xs">
-            Start a Claude Code session or click <strong>+ New Agent</strong> to spawn one.
-          </p>
-        </div>
+        <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
         <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />
       </template>
       <PipelineBoard
@@ -334,20 +322,7 @@ onMounted(fetchQuota)
         @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
       />
       <template v-else>
-        <div
-          v-if="filteredAgents.length === 0"
-          class="flex flex-col items-center justify-center py-24 text-center gap-3"
-          role="status"
-          aria-label="No agents found"
-        >
-          <span class="text-4xl" aria-hidden="true">🤖</span>
-          <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">
-            {{ searchQuery ? 'No agents match your search.' : 'No agents are currently running.' }}
-          </p>
-          <p v-if="!searchQuery" class="text-slate-400 dark:text-slate-600 text-xs">
-            Start a Claude Code session or click <strong>+ New Agent</strong> to spawn one.
-          </p>
-        </div>
+        <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
         <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
       </template>
     </main>

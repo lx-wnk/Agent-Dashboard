@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// computeTestHMAC replicates the internal HMAC used by the auth package so that
-// tampered-token tests can produce a correctly-signed but claim-invalid token.
+// computeTestHMAC creates a valid HS256 signature for crafting tampered test tokens.
+// golang-jwt uses the same HMAC-SHA256 signing format (HMAC over "header.payload").
 func computeTestHMAC(data, secret string) []byte {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(data))
@@ -90,5 +90,41 @@ func TestVerifyJWT_WrongAudience(t *testing.T) {
 	mac := computeTestHMAC(hdr+"."+bod, secret)
 	tampered := hdr + "." + bod + "." + base64.RawURLEncoding.EncodeToString(mac)
 	_, err := auth.VerifyJWT(tampered, secret)
+	require.ErrorIs(t, err, auth.ErrTokenInvalid)
+}
+
+// TestVerifyJWT_LeewayAcceptsRecentlyExpired documents the 60-second grace period:
+// a token expired 30 seconds ago must be accepted as valid.
+func TestVerifyJWT_LeewayAcceptsRecentlyExpired(t *testing.T) {
+	secret := "test-secret-32chars-long-minimum!"
+	payload := auth.JWTPayload{Sub: "12345", Login: "testuser"}
+
+	// Expired 30 seconds ago — within the 60-second leeway window.
+	token, err := auth.SignJWT(payload, secret, -30)
+	require.NoError(t, err)
+
+	_, err = auth.VerifyJWT(token, secret)
+	require.NoError(t, err, "token expired 30s ago should be accepted within the 60s leeway")
+}
+
+// TestVerifyJWT_OAuthStateTokenRejected documents that a valid OAuth state token
+// (sub == "oauth-state") is rejected by VerifyJWT as a defense-in-depth measure
+// against cross-type token reuse.
+func TestVerifyJWT_OAuthStateTokenRejected(t *testing.T) {
+	secret := "test-secret-32chars-long-minimum!"
+	stateToken, err := auth.SignOAuthState(secret)
+	require.NoError(t, err)
+	_, err = auth.VerifyJWT(stateToken, secret)
+	require.ErrorIs(t, err, auth.ErrTokenInvalid)
+}
+
+// TestVerifyOAuthState_SessionTokenRejected documents that a regular session token
+// is rejected by VerifyOAuthState — its audience does not match the oauth-state contract.
+func TestVerifyOAuthState_SessionTokenRejected(t *testing.T) {
+	secret := "test-secret-32chars-long-minimum!"
+	claims := auth.JWTPayload{Sub: "user-123", Login: "testuser"}
+	sessionToken, err := auth.SignJWT(claims, secret, 3600)
+	require.NoError(t, err)
+	_, err = auth.VerifyOAuthState(sessionToken, secret)
 	require.ErrorIs(t, err, auth.ErrTokenInvalid)
 }

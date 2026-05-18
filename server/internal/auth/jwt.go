@@ -81,7 +81,9 @@ func SignJWT(payload JWTPayload, secret string, expiresInSeconds int64) (string,
 }
 
 // VerifyJWT validates an HS256 JWT and returns the payload.
-// Returns ErrTokenInvalid for structural/signature errors, ErrTokenExpired for expired tokens.
+// Returns ErrTokenInvalid for structural/signature errors.
+// Returns ErrTokenExpired for tokens expired beyond the 60-second grace period.
+// Within the grace period, the token is accepted as valid (jwt.WithLeeway(60s) applies to exp).
 // Rejects tokens with sub == "oauth-state" as defense-in-depth against state token reuse.
 func VerifyJWT(tokenStr, secret string) (JWTPayload, error) {
 	var claims jwtClaims
