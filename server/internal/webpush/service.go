@@ -4,6 +4,7 @@ package webpush
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -120,6 +121,10 @@ func (s *Service) SendToAll(ctx context.Context, payload []byte) (int, error) {
 			TTL:             30,
 		})
 		if sendErr != nil {
+			if resp != nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+			}
 			slog.Warn("webpush: delivery failed", "endpoint", sub.Endpoint, "err", sendErr)
 			errCount++
 			continue
@@ -128,6 +133,7 @@ func (s *Service) SendToAll(ctx context.Context, payload []byte) (int, error) {
 			slog.Info("webpush: pruning stale subscription", "endpoint", sub.Endpoint, "status", resp.StatusCode)
 			_ = s.subRepo.DeleteByEndpoint(ctx, sub.Endpoint)
 		}
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}
 	return errCount, nil

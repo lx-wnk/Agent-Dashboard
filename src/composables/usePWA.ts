@@ -55,7 +55,9 @@ export function usePWA() {
         registration = reg
         needsRefresh.value = true
       }
-      reg.addEventListener('updatefound', () => onUpdateFound(reg))
+      const onUpdate = () => onUpdateFound(reg)
+      reg.addEventListener('updatefound', onUpdate)
+      onUnmounted(() => reg.removeEventListener('updatefound', onUpdate))
     }).catch(() => {
       // Service worker not available or blocked — silently ignore.
     })
@@ -67,8 +69,8 @@ export function usePWA() {
   }
 
   onUnmounted(() => {
-    // Nothing to clean up — event listeners are on the registration object
-    // which outlives any component.
+    // getRegistration() is async; the inner onUnmounted above handles
+    // updatefound listener cleanup when the registration is available.
   })
 
   return { needsRefresh, offlineReady, updateSW, dismissUpdate }

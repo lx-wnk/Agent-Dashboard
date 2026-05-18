@@ -34,6 +34,12 @@ type Registry struct {
 type Entry struct {
 	Descriptor   Descriptor
 	cmd          *exec.Cmd
+	// cmdDone is closed by the watchPlugin goroutine when cmd.Wait() returns.
+	// It is nil when no watcher runs (no Command field in descriptor).
+	// Shutdown waits on this channel instead of calling cmd.Wait() itself,
+	// preventing two goroutines from calling Wait() on the same *exec.Cmd
+	// (which is undefined behavior in Go).
+	cmdDone      chan struct{}
 	BaseURL      string // http://{addr}
 	restartCount int
 	pluginDir    string // directory containing plugin.json, needed for restarts
@@ -120,18 +126,19 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 		if err := r.waitHealthy(startupCtx, pluginEntry.BaseURL); err != nil {
 			slog.Error("plugin: health check failed", "id", desc.ID, "err", err)
 			if pluginEntry.cmd != nil {
-				gracefulStop(pluginEntry.cmd)
+				gracefulStop(pluginEntry.cmd, nil)
 			}
 			continue
 		}
-		// Health check passed — now it is safe to start the watcher. Launching
-		// before the health check would race: if the check failed, gracefulStop
-		// would call cmd.Wait() while watchPlugin's goroutine was already blocked
-		// on the same cmd.Wait(), which is undefined behavior.
-		if pluginEntry.cmd != nil {
-			go r.watchPlugin(serverCtx, pluginEntry.pluginDir, desc, pluginEntry.cmd)
-		}
 		slog.Info("plugin: loaded", "id", desc.ID, "capabilities", desc.Capabilities)
+		if pluginEntry.cmd != nil {
+			// Health check passed — safe to launch the watcher now. Starting it
+			// before the health check would race with gracefulStop (both call
+			// cmd.Wait). Exponential backoff: 1s → 5s → 30s, max 3 retries.
+			done := make(chan struct{})
+			pluginEntry.cmdDone = done
+			go r.watchPlugin(serverCtx, pluginEntry.pluginDir, desc, pluginEntry.cmd, done)
+		}
 		r.mu.Lock()
 		r.plugins = append(r.plugins, pluginEntry)
 		r.mu.Unlock()
@@ -145,6 +152,7 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 }
 
 // Shutdown stops all plugin processes that were started by Load.
+// gracefulStop sends SIGTERM and waits up to 5s before killing. See gracefulStop for details.
 func (r *Registry) Shutdown() {
 	r.mu.Lock()
 	plugins := make([]Entry, len(r.plugins))
@@ -153,27 +161,38 @@ func (r *Registry) Shutdown() {
 
 	for _, p := range plugins {
 		if p.cmd != nil {
-			gracefulStop(p.cmd)
+			gracefulStop(p.cmd, p.cmdDone)
 		}
 	}
 }
 
-// gracefulStop sends SIGTERM to cmd's process, then waits for it to exit in a
-// goroutine. If the process has not exited within 5 seconds, it is killed.
-func gracefulStop(cmd *exec.Cmd) {
+// gracefulStop sends SIGTERM to cmd's process and waits for it to exit.
+// If watcherDone is non-nil, it is the channel closed by the goroutine that
+// owns cmd.Wait() (the watchPlugin goroutine); gracefulStop waits on it rather
+// than calling cmd.Wait() itself, avoiding a double-Wait race.
+// If watcherDone is nil, gracefulStop owns the Wait() call.
+// Either way, if the process has not exited within 5 seconds it is force-killed.
+func gracefulStop(cmd *exec.Cmd, watcherDone <-chan struct{}) {
 	if cmd.Process == nil {
 		return
 	}
 	_ = cmd.Process.Signal(syscall.SIGTERM)
-	done := make(chan struct{})
-	go func() {
-		_ = cmd.Wait()
-		close(done)
-	}()
+
+	done := watcherDone
+	if done == nil {
+		// No watcher goroutine — own the Wait() call here.
+		ownDone := make(chan struct{})
+		go func() {
+			_ = cmd.Wait()
+			close(ownDone)
+		}()
+		done = ownDone
+	}
+
 	go func() {
 		select {
 		case <-done:
-			// process exited cleanly — nothing to do
+			// process exited — nothing to do
 		case <-time.After(5 * time.Second):
 			_ = cmd.Process.Kill()
 		}
@@ -260,15 +279,27 @@ const maxPluginRestarts = 3
 
 var restartBackoff = []time.Duration{1 * time.Second, 5 * time.Second, 30 * time.Second}
 
-func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descriptor, cmd *exec.Cmd) {
+func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descriptor, cmd *exec.Cmd, done chan<- struct{}) {
 	restartCount := 0
 	current := cmd
 
+	firstWait := true
 	for {
 		err := current.Wait()
+		if firstWait {
+			// Signal Shutdown that the initial cmd has exited. Must happen exactly
+			// once so Shutdown's gracefulStop doesn't hang on a never-closed channel.
+			close(done)
+			firstWait = false
+		}
 		// A nil error means the plugin exited cleanly (e.g. during Shutdown).
 		// Only attempt restarts on non-nil errors.
 		if err == nil {
+			return
+		}
+		// If the server is shutting down, the SIGTERM we sent caused this exit —
+		// not an unexpected crash. Return silently to avoid a spurious error log.
+		if ctx.Err() != nil {
 			return
 		}
 		slog.Error("plugin: process exited unexpectedly", "id", desc.ID, "err", err)
@@ -303,7 +334,8 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		baseURL := "http://" + desc.Addr
 		if healthErr := r.waitHealthy(ctx, baseURL); healthErr != nil {
 			slog.Error("plugin: restart failed — health check did not pass", "id", desc.ID, "err", healthErr)
-			gracefulStop(newCmd)
+			// newCmd has no watcher goroutine; pass nil so gracefulStop owns Wait().
+			gracefulStop(newCmd, nil)
 			r.removeByID(desc.ID)
 			return
 		}

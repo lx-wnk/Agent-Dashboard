@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 
@@ -18,11 +17,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
-)
-
-var (
-	loopbackRE  = regexp.MustCompile(`^127\.\d+\.\d+\.\d+$`)
-	linkLocalRE = regexp.MustCompile(`^169\.254\.\d+\.\d+$`)
 )
 
 // isSafeRemoteURL returns true when raw is a valid http/https URL that does not
@@ -44,13 +38,7 @@ func isSafeRemoteURL(raw string) bool {
 	if validation.IsBlockedHost(h) {
 		return false
 	}
-	if loopbackRE.MatchString(h) {
-		return false
-	}
-	if linkLocalRE.MatchString(h) {
-		return false
-	}
-	// Additional: block any IP that net resolves as loopback, link-local,
+	// Block any IP that net resolves as loopback, link-local,
 	// unspecified, multicast, or CGNAT (catches numeric IPv6 like ::ffff:127.0.0.1 etc.).
 	if ip := net.ParseIP(h); ip != nil {
 		if validation.IsBlockedIP(ip) {
