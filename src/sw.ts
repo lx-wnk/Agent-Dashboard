@@ -6,6 +6,7 @@ declare const self: ServiceWorkerGlobalScope
 const DB_NAME = 'agent-dashboard'
 const STORE = 'pending-messages'
 const DB_VERSION = 1
+// keep in sync with src/utils/swConstants.ts — SW cannot import ES modules
 const BACKGROUND_SYNC_TAG = 'replay-agent-messages'
 
 // Workbox precache manifest injected at build time by vite-plugin-pwa
@@ -14,7 +15,11 @@ cleanupOutdatedCaches()
 
 // ---------- IndexedDB helpers (inlined — SW cannot import ES modules at runtime) ----------
 
+let _db: IDBDatabase | null = null
+
 function openIDB(): Promise<IDBDatabase> {
+  if (_db !== null)
+    return Promise.resolve(_db)
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = (e) => {
@@ -22,7 +27,10 @@ function openIDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE))
         db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true })
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      _db = req.result
+      resolve(_db)
+    }
     req.onerror = () => reject(req.error)
   })
 }

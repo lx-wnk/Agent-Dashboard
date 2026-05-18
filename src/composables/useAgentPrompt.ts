@@ -1,6 +1,7 @@
 import type { Agent, OutputMessage } from '../types'
 import { ref } from 'vue'
 import { addPending } from '../utils/pendingMessages'
+import { BACKGROUND_SYNC_TAG } from '../utils/swConstants'
 import { dispatchSlashCommand, parseSlashCommand, SLASH_COMMAND_DEFS } from './useSlashCommands'
 
 export type OnMessageSent = (msg: OutputMessage) => void
@@ -9,8 +10,6 @@ export interface AgentPromptContext {
   taskId?: string
   cwd?: string
 }
-
-const BACKGROUND_SYNC_TAG = 'replay-agent-messages'
 
 async function registerBackgroundSync(): Promise<void> {
   if (!('serviceWorker' in navigator) || !('SyncManager' in window))
@@ -30,8 +29,7 @@ function isNetworkFailure(err: unknown): boolean {
     return false
   const msg = err.message.toLowerCase()
   return (
-    err instanceof TypeError
-    || msg.includes('fetch')
+    msg.includes('fetch')
     || msg.includes('network')
     || msg.includes('failed to fetch')
     || msg.includes('networkerror')
@@ -149,9 +147,11 @@ export function useAgentPrompt(
     }
     finally {
       isSending.value = false
-      setTimeout(() => {
-        sendStatus.value = null
-      }, 3000)
+      if (sendStatus.value !== 'queued') {
+        setTimeout(() => {
+          sendStatus.value = null
+        }, 3000)
+      }
     }
   }
 
