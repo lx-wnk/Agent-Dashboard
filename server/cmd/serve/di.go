@@ -62,18 +62,15 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
 
-	// Load plugins from configured plugin_dir.
-	// ctx is the startup context (short-lived); context.Background() is used as the
-	// server-lifetime context for watchPlugin goroutines.
-	// TODO: replace context.Background() with a real server-shutdown context once one
-	// is threaded through initializeServer (tracked in feat/plugin-system).
+	// Load plugins from configured plugin_dir. ctx is the server-lifetime context
+	// (cancelled on SIGTERM/SIGINT). Load derives a 30-second startup timeout internally.
 	pluginRegistry := plugin.New(cfg.PluginDir)
 
 	// oauthProvider is set by the SetAuth hook when an auth_provider plugin passes
 	// health-check. If no auth_provider plugin is configured it stays nil, which
 	// activates bypass-auth on loopback.
 	var oauthProvider authpkg.OAuthProvider
-	if err := pluginRegistry.Load(ctx, context.Background(), plugin.Hooks{
+	if err := pluginRegistry.Load(ctx, plugin.Hooks{
 		SetAuth: func(p authpkg.OAuthProvider) {
 			oauthProvider = p
 			slog.Info("auth: using plugin provider")
@@ -123,7 +120,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 
 	var refineHandler *refineapi.Handler
 	if entClient != nil {
-		refineHandler = refineapi.NewHandler(repo.NewRefinementTurnRepo(entClient), repo.NewTaskRepo(entClient))
+		refineHandler = refineapi.NewHandler(refineapi.Deps{
+			Turns: repo.NewRefinementTurnRepo(entClient),
+			Tasks: repo.NewTaskRepo(entClient),
+		})
 	}
 
 	var analyticsHandler *apianalytics.Handler

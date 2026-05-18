@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { ApiKey, McpScope } from '../types'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
+const AdapterSettings = defineAsyncComponent(() => import('./AdapterSettings.vue'))
+const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
+const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 import RemoteSettings from './RemoteSettings.vue'
 import SystemPromptSettings from './SystemPromptSettings.vue'
 import AppButton from './ui/AppButton.vue'
@@ -15,7 +18,7 @@ const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'adapters' | 'plugins' | 'notifications'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -392,6 +395,42 @@ async function startImport() {
               <span class="text-sm flex-shrink-0">✦</span> System Prompts
             </button>
           </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'adapters'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'adapters'"
+            >
+              <span class="text-sm flex-shrink-0">⚡</span> LLM Adapters
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'plugins'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'plugins'"
+            >
+              <span class="text-sm flex-shrink-0">🔌</span> Plugins
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'notifications'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'notifications'"
+            >
+              <span class="text-sm flex-shrink-0">🔔</span> Notifications
+            </button>
+          </li>
         </ul>
         <div class="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700">
           <a
@@ -657,6 +696,21 @@ async function startImport() {
         <!-- System Prompts -->
         <section v-else-if="activeSection === 'systemPrompts'">
           <SystemPromptSettings />
+        </section>
+
+        <!-- LLM Adapters -->
+        <section v-else-if="activeSection === 'adapters'">
+          <AdapterSettings />
+        </section>
+
+        <!-- Plugins -->
+        <section v-else-if="activeSection === 'plugins'">
+          <PluginSettings />
+        </section>
+
+        <!-- Notifications -->
+        <section v-else-if="activeSection === 'notifications'">
+          <NotificationSettings />
         </section>
 
         <!-- Analytics -->

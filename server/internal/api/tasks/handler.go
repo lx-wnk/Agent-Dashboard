@@ -19,7 +19,7 @@ import (
 
 const (
 	maxTitleChars       = 200
-	maxDescriptionChars = 100000
+	maxDescriptionChars = 10_000
 )
 
 func jsonReply(w http.ResponseWriter, status int, v any) error {

@@ -3,6 +3,7 @@ package memory
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -162,7 +163,7 @@ func Put(w http.ResponseWriter, r *http.Request) {
 		Content string `json:"content"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		if err.Error() == "http: request body too large" {
+		if errors.As(err, new(*http.MaxBytesError)) {
 			http.Error(w, `{"error":"file too large (max 1 MB)"}`, http.StatusRequestEntityTooLarge)
 			return
 		}

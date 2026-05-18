@@ -47,3 +47,4 @@ package-lock.json
 # compiles without requiring a pnpm build first. Real build artifacts (assets/, etc.)
 # are ignored via the directory-level rule below so they don't bloat the repo.
 server/frontend/dist/assets/
+server/coverage.out

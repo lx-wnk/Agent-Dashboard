@@ -16,15 +16,25 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
 )
 
-// Handler handles /api/refine routes.
-type Handler struct {
-	turns repo.RefinementTurnRepo
-	tasks repo.TaskRepo
+// Deps holds the dependencies for Handler.
+type Deps struct {
+	Turns   repo.RefinementTurnRepo
+	Tasks   repo.TaskRepo
+	Spawner func(ctx context.Context, cfg refine.SpawnConfig) (<-chan string, error)
 }
 
-// NewHandler creates a Handler backed by the given repos.
-func NewHandler(turns repo.RefinementTurnRepo, tasks repo.TaskRepo) *Handler {
-	return &Handler{turns: turns, tasks: tasks}
+// Handler handles /api/refine routes.
+type Handler struct {
+	deps Deps
+}
+
+// NewHandler creates a Handler with the given dependencies.
+// If deps.Spawner is nil, refine.RunRefinementTurn is used.
+func NewHandler(deps Deps) *Handler {
+	if deps.Spawner == nil {
+		deps.Spawner = refine.RunRefinementTurn
+	}
+	return &Handler{deps: deps}
 }
 
 // Mount registers the refinement routes on r.
@@ -53,7 +63,7 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	taskID := chi.URLParam(r, "taskId")
-	turns, err := h.turns.ListForTask(r.Context(), taskID, 0)
+	turns, err := h.deps.Turns.ListForTask(r.Context(), taskID, 0)
 	if err != nil {
 		jsonError(w, "failed to list turns", http.StatusInternalServerError)
 		return
@@ -93,7 +103,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch task for title + description + working directory.
-	task, err := h.tasks.GetByID(r.Context(), taskID)
+	task, err := h.deps.Tasks.GetByID(r.Context(), taskID)
 	if err != nil {
 		jsonError(w, "task not found", http.StatusNotFound)
 		return
@@ -101,7 +111,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Fetch prior history BEFORE storing the current user turn so it does not
 	//    appear twice in the prompt (once in history, once as UserMessage).
-	history, err := h.turns.ListForTaskNewest(r.Context(), taskID, 20)
+	history, err := h.deps.Turns.ListForTaskNewest(r.Context(), taskID, 20)
 	if err != nil {
 		jsonError(w, "failed to fetch history", http.StatusInternalServerError)
 		return
@@ -109,7 +119,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Now store the user turn (it won't be included in the history slice above).
 	userRole := "user"
-	if _, err := h.turns.Create(r.Context(), repo.CreateTurnInput{
+	if _, err := h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
 		TaskID:  taskID,
 		Role:    userRole,
 		Content: body.Message,
@@ -160,7 +170,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 	turnCtx, turnCancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer turnCancel()
 
-	stream, err := refine.RunRefinementTurn(turnCtx, cfg)
+	stream, err := h.deps.Spawner(turnCtx, cfg)
 	if err != nil {
 		// Headers already set for SSE — send error as SSE event.
 		fmt.Fprintf(w, "data: [ERROR] %s\n\n", err.Error())
@@ -197,7 +207,7 @@ done:
 	assistantRole := "assistant"
 	fullResponse := strings.TrimRight(sb.String(), "\n")
 	if fullResponse != "" {
-		_, _ = h.turns.Create(r.Context(), repo.CreateTurnInput{
+		_, _ = h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
 			TaskID:  taskID,
 			Role:    assistantRole,
 			Content: fullResponse,
@@ -215,7 +225,7 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 
 	taskID := chi.URLParam(r, "taskId")
 	phase := "confirmed"
-	if _, err := h.turns.Create(r.Context(), repo.CreateTurnInput{
+	if _, err := h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
 		TaskID:  taskID,
 		Role:    "assistant",
 		Content: "confirmed",

@@ -24,6 +24,9 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 - **Memory Browser** — read and write Claude agent memory files from the dashboard
 - **Python Statusline** — shell PS1 integration (`scripts/statusline.py`)
 - **Slash Commands** — `/spawn`, `/grant`, `/cancel`, `/status`, `/session`
+- **Notification Settings UI** — per-event enable/disable toggles with per-channel routing (webhook, email, browser, system); delivery config for webhook URL and email recipient
+- **LLM Adapter Settings** — switch active backend pipeline adapter (Claude CLI, etc.) with config key reference table
+- **Plugin Status** — view loaded sidecar plugins, their capabilities, and base URLs; add plugins via `DASHBOARD_PLUGIN_DIR`
 - **Webhooks, email, browser, and system notifications**
 - **Dark/light theme, PWA support**
 

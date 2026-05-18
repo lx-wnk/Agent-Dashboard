@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -149,6 +150,15 @@ type toolUseBlock struct {
 	Input json.RawMessage `json:"input"`
 }
 
+// todoInput is the input shape for TodoWrite tool calls.
+type todoInput struct {
+	Todos []struct {
+		ID      string `json:"id"`
+		Content string `json:"content"`
+		Status  string `json:"status"`
+	} `json:"todos"`
+}
+
 // SessionData is the parsed output of a Claude Code JSONL session log.
 type SessionData struct {
 	SessionID           string
@@ -219,7 +229,7 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 	var bestByContent *SessionData
 	var bestByContentPath string
 	for _, c := range candidates {
-		data, err := parseSessionFile(c.path)
+		data, err := ParseSessionFile(c.path)
 		if err != nil {
 			continue
 		}
@@ -247,7 +257,8 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 	return nil, fmt.Errorf("no active session for %s", cwd)
 }
 
-func parseSessionFile(path string) (*SessionData, error) {
+// ParseSessionFile parses a single JSONL session file and returns its SessionData.
+func ParseSessionFile(path string) (*SessionData, error) {
 	content, err := TailRead(path)
 	if err != nil {
 		return nil, err
@@ -259,7 +270,6 @@ func parseSessionFile(path string) (*SessionData, error) {
 		LastActivity: time.Now().Add(-24 * time.Hour), // default: old
 	}
 
-	// TODO(phase1): Tasks field not yet populated — task extraction from TodoWrite/TodoRead tool inputs is deferred.
 	var recentToolNames []string
 
 	scanner := bufio.NewScanner(bytes.NewReader([]byte(content)))
@@ -307,6 +317,20 @@ func parseSessionFile(path string) (*SessionData, error) {
 						data.ToolCounts[b.Name]++
 						recentToolNames = append(recentToolNames, b.Name)
 						data.CurrentAction = b.Name
+						if b.Name == "TodoWrite" {
+							var inp todoInput
+							if err := json.Unmarshal(b.Input, &inp); err == nil {
+								tasks := make([]sdk.TaskInfo, 0, len(inp.Todos))
+								for _, td := range inp.Todos {
+									tasks = append(tasks, sdk.TaskInfo{
+										ID:      td.ID,
+										Subject: td.Content,
+										Status:  td.Status,
+									})
+								}
+								data.Tasks = tasks
+							}
+						}
 					case "text":
 						if b.Text != "" {
 							data.LastOutput = scrubSecrets(b.Text)
@@ -324,6 +348,9 @@ func parseSessionFile(path string) (*SessionData, error) {
 				}
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		slog.Warn("parser: session scan error — partial data returned", "err", err)
 	}
 
 	if len(recentToolNames) > 5 {

@@ -1,0 +1,277 @@
+package refine_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	apirefine "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
+)
+
+const testJWTSecret = "test-secret-32-chars-minimum-here"
+
+// --- fake repos ---
+
+type fakeTurnRepo struct {
+	turns   []*ent.RefinementTurn
+	counter atomic.Int64 // F055: avoid ID collisions
+}
+
+func (f *fakeTurnRepo) Create(_ context.Context, inp repo.CreateTurnInput) (*ent.RefinementTurn, error) {
+	n := f.counter.Add(1)
+	t := &ent.RefinementTurn{
+		ID:        fmt.Sprintf("turn-%d", n), // F055: monotonic counter avoids content-based ID collisions
+		TaskID:    inp.TaskID,
+		Content:   inp.Content,
+		Phase:     inp.Phase,
+		CreatedAt: time.Now(),
+	}
+	f.turns = append(f.turns, t)
+	return t, nil
+}
+
+func (f *fakeTurnRepo) ListForTask(_ context.Context, taskID string, _ int) ([]*ent.RefinementTurn, error) {
+	var out []*ent.RefinementTurn
+	for _, t := range f.turns {
+		if t.TaskID == taskID {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
+// F026: respect limit and return newest-first.
+func (f *fakeTurnRepo) ListForTaskNewest(_ context.Context, taskID string, limit int) ([]*ent.RefinementTurn, error) {
+	var out []*ent.RefinementTurn
+	for i := len(f.turns) - 1; i >= 0; i-- {
+		if f.turns[i].TaskID == taskID {
+			out = append(out, f.turns[i])
+			if limit > 0 && len(out) >= limit {
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeTurnRepo) DeleteForTask(_ context.Context, _ string) error { return nil }
+
+// F027: map-based lookup so not-found is testable.
+type fakeTaskRepo struct {
+	byID map[string]*ent.Task
+}
+
+func newFakeTaskRepo(tasks ...*ent.Task) *fakeTaskRepo {
+	m := make(map[string]*ent.Task, len(tasks))
+	for _, t := range tasks {
+		m[t.ID] = t
+	}
+	return &fakeTaskRepo{byID: m}
+}
+
+func (f *fakeTaskRepo) GetByID(_ context.Context, id string) (*ent.Task, error) {
+	if t, ok := f.byID[id]; ok {
+		return t, nil
+	}
+	return nil, errors.New("task not found")
+}
+func (f *fakeTaskRepo) Create(_ context.Context, _ repo.CreateTaskInput) (*ent.Task, error) {
+	return nil, nil
+}
+func (f *fakeTaskRepo) GetBySlug(_ context.Context, _ string) (*ent.Task, error) { return nil, nil }
+func (f *fakeTaskRepo) Update(_ context.Context, _ string, _ repo.UpdateTaskInput) (*ent.Task, error) {
+	return nil, nil
+}
+func (f *fakeTaskRepo) Delete(_ context.Context, _ string) error              { return nil }
+func (f *fakeTaskRepo) ListForUser(_ context.Context, _ string, _ bool) ([]*ent.Task, error) {
+	return nil, nil
+}
+func (f *fakeTaskRepo) ListPickable(_ context.Context) ([]*ent.Task, error)          { return nil, nil }
+func (f *fakeTaskRepo) ListByStage(_ context.Context, _ string) ([]*ent.Task, error) { return nil, nil }
+
+// --- helpers ---
+
+func authToken(t *testing.T) string {
+	t.Helper()
+	tok, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "tester", IsAdmin: false}, testJWTSecret, 3600)
+	if err != nil {
+		t.Fatalf("SignJWT: %v", err)
+	}
+	return tok
+}
+
+func makeRouter(turns *fakeTurnRepo, tasks *fakeTaskRepo, spawner func(context.Context, refine.SpawnConfig) (<-chan string, error)) http.Handler {
+	h := apirefine.NewHandler(apirefine.Deps{
+		Turns:   turns,
+		Tasks:   tasks,
+		Spawner: spawner,
+	})
+	r := chi.NewRouter()
+	r.Use(auth.RequireAuth(testJWTSecret))
+	h.Mount(r)
+	return r
+}
+
+func withAuth(t *testing.T, req *http.Request) *http.Request {
+	t.Helper()
+	req.AddCookie(&http.Cookie{Name: "auth_token", Value: authToken(t)})
+	return req
+}
+
+func noopSpawner(_ context.Context, _ refine.SpawnConfig) (<-chan string, error) {
+	ch := make(chan string)
+	close(ch)
+	return ch, nil
+}
+
+func defaultTask(t *testing.T, id string) *ent.Task {
+	t.Helper()
+	return &ent.Task{ID: id, Title: "Test Task", Cwd: t.TempDir()} // F053: t.TempDir() instead of /tmp
+}
+
+// --- tests ---
+
+func TestListTurns_Empty(t *testing.T) {
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(&fakeTurnRepo{}, tasks, noopSpawner)
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/refine/task-1/turns", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var turns []any
+	if err := json.Unmarshal(rr.Body.Bytes(), &turns); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(turns) != 0 {
+		t.Errorf("want empty list, got %d items", len(turns))
+	}
+}
+
+func TestListTurns_ReturnsTurns(t *testing.T) {
+	phase := "drafting"
+	repo := &fakeTurnRepo{
+		turns: []*ent.RefinementTurn{
+			{ID: "t1", TaskID: "task-1", Content: "Hello", CreatedAt: time.Now()},
+			{ID: "t2", TaskID: "task-1", Content: "Hi", Phase: &phase, CreatedAt: time.Now()},
+		},
+	}
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(repo, tasks, noopSpawner)
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/refine/task-1/turns", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var turns []map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &turns); err != nil {
+		t.Fatalf("unmarshal turns: %v", err)
+	}
+	if len(turns) != 2 {
+		t.Fatalf("want 2 turns, got %d", len(turns))
+	}
+}
+
+// F025: verify SSE framing and turn persistence, not just status 200.
+func TestSubmitTurn_StreamsResponse(t *testing.T) {
+	spawner := func(_ context.Context, _ refine.SpawnConfig) (<-chan string, error) {
+		ch := make(chan string, 2)
+		ch <- "Hello"
+		ch <- " world"
+		close(ch)
+		return ch, nil
+	}
+	turns := &fakeTurnRepo{}
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(turns, tasks, spawner)
+	body, _ := json.Marshal(map[string]string{"message": "test prompt"})
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/task-1/turn", bytes.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	ct := rr.Header().Get("Content-Type")
+	if !strings.HasPrefix(ct, "text/event-stream") {
+		t.Errorf("want SSE content-type, got %q", ct)
+	}
+	// F025: verify SSE frame format, not just text presence.
+	sseBody := rr.Body.String()
+	if !strings.Contains(sseBody, "data: Hello") {
+		t.Errorf("SSE body missing 'data: Hello' frame: %s", sseBody)
+	}
+	// F025: verify assistant turn was persisted after streaming.
+	var assistantStored bool
+	for _, turn := range turns.turns {
+		if turn.TaskID == "task-1" && strings.Contains(turn.Content, "Hello") {
+			assistantStored = true
+		}
+	}
+	if !assistantStored {
+		t.Error("want assistant turn to be persisted after streaming")
+	}
+}
+
+func TestSubmitTurn_RequiresMessage(t *testing.T) {
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(&fakeTurnRepo{}, tasks, noopSpawner)
+	body, _ := json.Marshal(map[string]string{"message": "   "})
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/task-1/turn", bytes.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("want 400, got %d", rr.Code)
+	}
+}
+
+// F027: test the not-found branch in submitTurn.
+func TestSubmitTurn_TaskNotFound(t *testing.T) {
+	r := makeRouter(&fakeTurnRepo{}, newFakeTaskRepo(), noopSpawner)
+	body, _ := json.Marshal(map[string]string{"message": "hello"})
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/missing-task/turn", bytes.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("want 404 for unknown task, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestConfirm_StoresSentinel(t *testing.T) {
+	repo := &fakeTurnRepo{}
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(repo, tasks, noopSpawner)
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/task-1/confirm", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	found := false
+	for _, turn := range repo.turns {
+		if turn.Phase != nil && *turn.Phase == "confirmed" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("want confirmed sentinel turn to be stored")
+	}
+}
