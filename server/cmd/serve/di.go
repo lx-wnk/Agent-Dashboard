@@ -59,9 +59,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 
 	// broadcaster and taskBroadcaster are independent — never share them.
-	// broadcaster carries raw Agent[] SSE payloads to the agent-list view.
-	// taskBroadcaster carries typed TaskEvent messages to the pipeline kanban.
-	// Mixing them would send wrong payload types to clients and corrupt both streams.
+	// broadcaster pushes Agent[] snapshots to /api/agents/stream subscribers each scan cycle.
+	// taskBase / taskBroadcaster handle typed TaskEvent messages on /api/tasks/stream.
+	// Both use sse.Broadcaster under the hood (non-blocking fan-out, drops frames for slow consumers).
 	broadcaster := sse.NewBroadcaster()
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)

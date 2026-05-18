@@ -1,7 +1,10 @@
+// F037 — parser benchmarks.
+// Run with: go test -bench=. -benchmem ./server/internal/parser/
+
 package parser_test
 
 import (
-	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -9,104 +12,50 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 )
 
-// buildSessionFile writes n assistant turns to a temp JSONL file and returns its path.
-func buildSessionFile(tb testing.TB, turns int) string {
-	tb.Helper()
+// buildBenchSession writes n assistant JSONL lines into a temp file and returns its path.
+func buildBenchSession(b *testing.B, n int) string {
+	b.Helper()
+	const lineTemplate = `{"type":"assistant","timestamp":"2025-01-15T10:30:00.000Z","message":{"role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}],"usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}` + "\n"
 
-	type usageBlock struct {
-		InputTokens         int `json:"input_tokens"`
-		OutputTokens        int `json:"output_tokens"`
-		CacheCreationTokens int `json:"cache_creation_input_tokens"`
-		CacheReadTokens     int `json:"cache_read_input_tokens"`
-	}
-	type textBlock struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	}
-	type msgBody struct {
-		Role    string     `json:"role"`
-		Model   string     `json:"model"`
-		Content []textBlock `json:"content"`
-		Usage   usageBlock  `json:"usage"`
-	}
-	type entry struct {
-		Type      string  `json:"type"`
-		Timestamp string  `json:"timestamp"`
-		Message   msgBody `json:"message"`
-	}
-
-	f, err := os.CreateTemp(tb.TempDir(), "bench*.jsonl")
+	f, err := os.CreateTemp(b.TempDir(), "bench*.jsonl")
 	if err != nil {
-		tb.Fatal(err)
+		b.Fatalf("create temp file: %v", err)
 	}
-	defer f.Close()
-
-	e := entry{
-		Type:      "assistant",
-		Timestamp: "2025-01-15T10:30:00.000Z",
-		Message: msgBody{
-			Role:  "assistant",
-			Model: "claude-sonnet-4-6",
-			Content: []textBlock{
-				{Type: "text", Text: strings.Repeat("a", 256)},
-			},
-			Usage: usageBlock{InputTokens: 1000, OutputTokens: 500},
-		},
+	var sb strings.Builder
+	for i := 0; i < n; i++ {
+		sb.WriteString(lineTemplate)
 	}
-	line, err := json.Marshal(e)
-	if err != nil {
-		tb.Fatal(err)
+	if _, err := f.WriteString(sb.String()); err != nil {
+		b.Fatalf("write temp file: %v", err)
 	}
-	line = append(line, '\n')
-
-	for i := 0; i < turns; i++ {
-		if _, err := f.Write(line); err != nil {
-			tb.Fatal(err)
-		}
-	}
+	f.Close()
 	return f.Name()
 }
 
-// BenchmarkParseSessionFile_Small measures parsing a session with ~100 turns (typical active agent).
-func BenchmarkParseSessionFile_Small(b *testing.B) {
-	path := buildSessionFile(b, 100)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, err := parser.ParseSessionFile(path); err != nil {
-			b.Fatal(err)
-		}
+// BenchmarkParseSessionFile measures ParseSessionFile over small and large files.
+func BenchmarkParseSessionFile(b *testing.B) {
+	sizes := []int{10, 100, 500}
+	for _, n := range sizes {
+		path := buildBenchSession(b, n)
+		b.Run(fmt.Sprintf("lines=%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_, _ = parser.ParseSessionFile(path)
+			}
+		})
 	}
 }
 
-// BenchmarkParseSessionFile_Large measures parsing a session with ~1000 turns (long-running agent).
-func BenchmarkParseSessionFile_Large(b *testing.B) {
-	path := buildSessionFile(b, 1000)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, err := parser.ParseSessionFile(path); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkTailRead_Small measures the raw tail-read I/O cost on a small file.
-func BenchmarkTailRead_Small(b *testing.B) {
-	path := buildSessionFile(b, 100)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, err := parser.TailRead(path); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkTailRead_Large measures the raw tail-read I/O cost when the file exceeds the 32 KB window.
-func BenchmarkTailRead_Large(b *testing.B) {
-	path := buildSessionFile(b, 2000)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, err := parser.TailRead(path); err != nil {
-			b.Fatal(err)
-		}
+// BenchmarkTailRead measures the tail-read I/O primitive on files of varying sizes.
+func BenchmarkTailRead(b *testing.B) {
+	sizes := []int{10, 200, 500}
+	for _, n := range sizes {
+		path := buildBenchSession(b, n)
+		b.Run(fmt.Sprintf("lines=%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_, _ = parser.TailRead(path)
+			}
+		})
 	}
 }
