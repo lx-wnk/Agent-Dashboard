@@ -215,13 +215,13 @@ func TestPending_WithSecret_ReturnsValidJSON(t *testing.T) {
 // a known non-write tool. This guards against the two lists drifting apart.
 func TestWriteToolNames_MatchesHookGate(t *testing.T) {
 	for _, name := range permissions.WriteToolNames {
-		if !isWriteTool(name) {
-			t.Errorf("isWriteTool(%q) = false, want true — permissions.WriteToolNames and the gate are out of sync", name)
+		if !permissions.IsWriteTool(name) {
+			t.Errorf("IsWriteTool(%q) = false, want true — permissions.WriteToolNames and the gate are out of sync", name)
 		}
 	}
 	// A tool that must never be gated.
-	if isWriteTool("Bash") {
-		t.Error("isWriteTool(\"Bash\") = true, want false")
+	if permissions.IsWriteTool("Bash") {
+		t.Error("IsWriteTool(\"Bash\") = true, want false")
 	}
 }
 

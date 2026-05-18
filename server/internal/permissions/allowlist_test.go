@@ -18,15 +18,20 @@ func TestWriteToolNames_ContainsExpectedEntries(t *testing.T) {
 		"MultiEdit": true,
 	}
 
+	got := make(map[string]bool, len(permissions.WriteToolNames))
+	for _, name := range permissions.WriteToolNames {
+		got[name] = true
+	}
+
 	// Verify every expected tool is present.
 	for tool := range want {
-		if !permissions.WriteToolNames[tool] {
+		if !got[tool] {
 			t.Errorf("WriteToolNames missing expected write tool %q", tool)
 		}
 	}
 
 	// Verify no extra tools have been silently added.
-	for tool := range permissions.WriteToolNames {
+	for tool := range got {
 		if !want[tool] {
 			t.Errorf("WriteToolNames contains unexpected tool %q — update this test if intentional", tool)
 		}
@@ -37,8 +42,12 @@ func TestWriteToolNames_ContainsExpectedEntries(t *testing.T) {
 // non-write tools are not erroneously listed in WriteToolNames.
 func TestWriteToolNames_NonWriteToolsAreAbsent(t *testing.T) {
 	nonWriteTools := []string{"Bash", "Read", "Glob", "Grep", "LS", "WebFetch", "Task", "Agent"}
+	got := make(map[string]bool, len(permissions.WriteToolNames))
+	for _, name := range permissions.WriteToolNames {
+		got[name] = true
+	}
 	for _, tool := range nonWriteTools {
-		if permissions.WriteToolNames[tool] {
+		if got[tool] {
 			t.Errorf("WriteToolNames must not contain non-write tool %q", tool)
 		}
 	}
