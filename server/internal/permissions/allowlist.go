@@ -16,7 +16,7 @@ var DangerousBashRE = regexp.MustCompile(
 )
 
 // WriteToolNames is the canonical list of write-type tools that trigger the edit gate.
-// The hooks handler must gate exactly these tools — update both together, never one alone.
+// isWriteTool in the hooks handler derives from this slice — updating this list is sufficient.
 var WriteToolNames = []string{"Edit", "Write", "MultiEdit"}
 
 // IsAllowedTool reports whether name is in the pipeline tool allow-list.

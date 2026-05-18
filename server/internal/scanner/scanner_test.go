@@ -30,8 +30,7 @@ func TestParseElapsedTime(t *testing.T) {
 		{"one day one hour", "1-01:05:30", 90330},
 		// days=2, hours=1, minutes=5, seconds=30 → 2*86400 + 1*3600 + 5*60 + 30 = 176730
 		{"two days from task", "2-01:05:30", 176730},
-		// Malformed: "1-" splits into ["1", ""] — empty part parses to 0, so result is 1*86400 = 86400.
-		// Document the actual behavior: non-numeric parts silently contribute 0.
+		// Malformed: "1-" → days=1, remainder="" → 0 parsed for HMS → result=1*86400=86400
 		{"malformed trailing dash", "1-", 86400},
 	}
 	for _, tt := range tests {
