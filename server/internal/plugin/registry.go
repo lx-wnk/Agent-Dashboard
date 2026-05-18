@@ -144,6 +144,7 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 }
 
 // Shutdown stops all plugin processes that were started by Load.
+// gracefulStop sends SIGTERM and waits up to 5s before killing. See gracefulStop for details.
 func (r *Registry) Shutdown() {
 	r.mu.Lock()
 	plugins := make([]Entry, len(r.plugins))
