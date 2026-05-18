@@ -1,5 +1,7 @@
 import type { Agent, OutputMessage } from '../types'
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
+import { addPending } from '../utils/pendingMessages'
+import { BACKGROUND_SYNC_TAG } from '../utils/swConstants'
 import { dispatchSlashCommand, parseSlashCommand, SLASH_COMMAND_DEFS } from './useSlashCommands'
 
 export type OnMessageSent = (msg: OutputMessage) => void
@@ -9,6 +11,23 @@ export interface AgentPromptContext {
   cwd?: string
 }
 
+async function registerBackgroundSync(): Promise<void> {
+  if (!('serviceWorker' in navigator) || !('SyncManager' in window))
+    return
+  try {
+    const registration = await navigator.serviceWorker.ready
+    // @ts-expect-error — SyncManager is not yet in all TypeScript lib versions
+    await registration.sync.register(BACKGROUND_SYNC_TAG)
+  }
+  catch {
+    // Background Sync not supported or SW not yet active — SSE-reconnect fallback handles this
+  }
+}
+
+function isNetworkFailure(err: unknown): boolean {
+  return err instanceof TypeError
+}
+
 export function useAgentPrompt(
   getAgent: () => Agent | null,
   onMessageSent?: OnMessageSent,
@@ -16,7 +35,7 @@ export function useAgentPrompt(
 ) {
   const promptInput = ref('')
   const isSending = ref(false)
-  const sendStatus = ref<'sent' | 'error' | null>(null)
+  const sendStatus = ref<'sent' | 'error' | 'queued' | null>(null)
   const sendError = ref('')
 
   async function handleSend() {
@@ -93,16 +112,47 @@ export function useAgentPrompt(
       sendStatus.value = 'sent'
     }
     catch (err) {
-      sendStatus.value = 'error'
-      sendError.value = err instanceof Error ? err.message : 'Failed'
+      if (isNetworkFailure(err)) {
+        const useChannel = !!(agent.channelAvailable && agent.status !== 'idle')
+        try {
+          await addPending({
+            agentPid: agent.pid,
+            sessionId: agent.sessionId,
+            message: msg,
+            timestamp: Date.now(),
+            useChannel,
+            cwd: agent.cwd,
+          })
+          await registerBackgroundSync()
+          sendStatus.value = 'queued'
+          sendError.value = 'Offline — message queued'
+        }
+        catch {
+          sendStatus.value = 'error'
+          sendError.value = 'Offline and could not queue message'
+        }
+      }
+      else {
+        sendStatus.value = 'error'
+        sendError.value = err instanceof Error ? err.message : 'Failed'
+      }
     }
     finally {
       isSending.value = false
-      setTimeout(() => {
-        sendStatus.value = null
-      }, 3000)
+      if (sendStatus.value !== 'queued') {
+        setTimeout(() => {
+          sendStatus.value = null
+        }, 3000)
+      }
     }
   }
+
+  const onDrainSuccess = () => {
+    if (sendStatus.value === 'queued')
+      sendStatus.value = null
+  }
+  window.addEventListener('drain-success', onDrainSuccess)
+  onUnmounted(() => window.removeEventListener('drain-success', onDrainSuccess))
 
   return { promptInput, isSending, sendStatus, sendError, handleSend }
 }

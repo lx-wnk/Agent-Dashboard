@@ -16,12 +16,18 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     vue(),
-    // PWA intent: offline capability is limited to static assets + HTML navigation;
+    // PWA intent: offline capability is limited to precached static assets only;
+    // HTML navigation fallback is not handled (no NavigationRoute in injectManifest strategy).
     // API calls (SSE, /api/*) always require a live server connection.
+    // injectManifest strategy is used so src/sw.ts can include custom Background Sync logic.
     VitePWA({
       // Use 'prompt' so the user controls when a new service worker activates.
       // This prevents stale cached assets from silently replacing a running session.
       registerType: 'prompt',
+      // injectManifest: custom SW at src/sw.ts handles Background Sync + precaching.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'Agent Dashboard',
@@ -50,26 +56,10 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
+      injectManifest: {
         // Raise the per-file limit to 5 MB to avoid Workbox warnings on large chunks.
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,woff2}'],
-        navigateFallback: '/offline.html',
-        navigateFallbackDenylist: [/^\/api/, /^\/auth/],
-        // Do not skip waiting — let the user decide when to activate a new SW.
-        skipWaiting: false,
-        cleanupOutdatedCaches: true,
-        runtimeCaching: [
-          {
-            // NetworkFirst for HTML navigation prevents stale shell after auth expiry.
-            urlPattern: /^\/$|\/index\.html$/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'html-cache',
-              networkTimeoutSeconds: 3,
-            },
-          },
-        ],
       },
     }),
   ],
