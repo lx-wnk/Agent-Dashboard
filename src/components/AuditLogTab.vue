@@ -94,7 +94,7 @@ watch(() => props.taskId, load)
         <template v-for="entry in entries" :key="entry.id">
           <tr class="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50">
             <td class="py-1.5 pr-3 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
-              {{ new Date(entry.timestamp).toLocaleTimeString() }}
+              <time :datetime="entry.timestamp">{{ new Date(entry.timestamp).toLocaleTimeString() }}</time>
             </td>
             <td class="py-1.5 pr-3">
               <span class="px-1.5 py-0.5 rounded-full text-[10px] font-medium" :class="ACTOR_COLORS[entry.actor] ?? ACTOR_COLORS.system">

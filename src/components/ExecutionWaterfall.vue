@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
 import * as d3 from 'd3'
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref, useId, watch } from 'vue'
 
 const props = defineProps<{ sessionId: string }>()
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+
+const titleId = useId()
+const descId = useId()
 
 interface ToolEvent {
   toolName: string
@@ -38,7 +41,7 @@ async function fetchAndRender() {
 
 function renderGantt(messages: OutputMessage[]) {
   const svg = d3.select(svgRef.value!)
-  svg.selectAll('*').remove()
+  svg.selectAll(':not(title):not(desc)').remove()
 
   if (messages.length === 0) {
     svg.append('text').attr('x', 20).attr('y', 30).text('No tool calls recorded for this session.')
@@ -120,7 +123,17 @@ watch(() => props.sessionId, fetchAndRender)
       {{ error }}
     </div>
     <div v-else class="overflow-x-auto">
-      <svg ref="svgRef" class="w-full text-slate-800 dark:text-slate-200" style="min-height: 60px;" />
+      <svg
+        ref="svgRef"
+        class="w-full text-slate-800 dark:text-slate-200"
+        style="min-height: 60px;"
+        role="img"
+        :aria-labelledby="titleId"
+        :aria-describedby="descId"
+      >
+        <title :id="titleId">Execution Waterfall</title>
+        <desc :id="descId">Gantt chart showing tool call durations over time for this session</desc>
+      </svg>
     </div>
   </div>
 </template>

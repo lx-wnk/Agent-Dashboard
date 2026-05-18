@@ -62,8 +62,16 @@ tasks:
       - cd sdk && govulncheck ./...
       - cd server && govulncheck ./...
 
+  audit:frontend:
+    desc: Run pnpm audit on frontend dependencies (fails on high or critical vulnerabilities)
+    cmd: pnpm audit --audit-level=high
+
   # wire task removed — DI is hand-written in server/cmd/serve/di.go (no google/wire codegen)
 
   fmt:
     desc: Format all Go code
     cmd: gofmt -w sdk/ server/
+
+  audit:frontend:
+    desc: Audit frontend dependencies for high/critical vulnerabilities
+    cmd: pnpm audit --audit-level=high
