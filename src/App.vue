@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, PipelineTask } from './types'
-import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
@@ -27,17 +27,22 @@ const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
 const { toggleTheme } = useTheme()
 
+// UX-08: Shift+D toggles dark/light mode globally
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const tag = (e.target as HTMLElement)?.tagName
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT')
+      toggleTheme()
+  }
+}
+
 onMounted(() => {
   loadUser()
+  window.addEventListener('keydown', handleKeydown)
+})
 
-  // UX-08: Shift+D toggles dark/light mode globally
-  window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      const tag = (e.target as HTMLElement)?.tagName
-      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT')
-        toggleTheme()
-    }
-  })
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })

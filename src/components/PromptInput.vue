@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
 import { SLASH_COMMAND_DEFS, fetchDynamicCommands } from '../composables/useSlashCommands'
 import type { SlashCommandDef } from '../composables/useSlashCommands'
@@ -13,6 +13,8 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ messageSent: [msg: OutputMessage] }>()
+
+const hintId = useId()
 
 const { promptInput, isSending, sendStatus, sendError, handleSend } = useAgentPrompt(
   () => props.agent,
@@ -120,7 +122,7 @@ defineExpose({ focus })
 
 <template>
   <div class="relative" :class="variant">
-    <span id="prompt-enter-hint" class="sr-only">Press Enter to send, Shift+Enter for new line</span>
+    <span :id="hintId" class="sr-only">Press Enter to send, Shift+Enter for new line</span>
     <div
       v-if="showSuggestions"
       id="slash-listbox"
@@ -159,7 +161,7 @@ defineExpose({ focus })
         rows="1"
         placeholder="Enter prompt..."
         :disabled="isSending"
-        aria-describedby="prompt-enter-hint"
+        :aria-describedby="hintId"
         :aria-controls="showSuggestions ? 'slash-listbox' : undefined"
         class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
@@ -171,7 +173,7 @@ defineExpose({ focus })
         v-model="promptInput"
         placeholder="Enter prompt..."
         :disabled="isSending"
-        aria-describedby="prompt-enter-hint"
+        :aria-describedby="hintId"
         :aria-controls="showSuggestions ? 'slash-listbox' : undefined"
         class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50"
         @keydown="onKeydown"

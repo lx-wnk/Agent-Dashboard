@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
 import * as d3 from 'd3'
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref, useId, watch } from 'vue'
 
 const props = defineProps<{ sessionId: string }>()
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+
+const titleId = useId()
+const descId = useId()
 
 interface ToolEvent {
   toolName: string
@@ -125,11 +128,11 @@ watch(() => props.sessionId, fetchAndRender)
         class="w-full text-slate-800 dark:text-slate-200"
         style="min-height: 60px;"
         role="img"
-        aria-labelledby="waterfall-title"
-        aria-describedby="waterfall-desc"
+        :aria-labelledby="titleId"
+        :aria-describedby="descId"
       >
-        <title id="waterfall-title">Execution Waterfall</title>
-        <desc id="waterfall-desc">Gantt chart showing tool call durations over time for this session</desc>
+        <title :id="titleId">Execution Waterfall</title>
+        <desc :id="descId">Gantt chart showing tool call durations over time for this session</desc>
       </svg>
     </div>
   </div>
