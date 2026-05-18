@@ -21,14 +21,21 @@ func TestParseElapsedTime(t *testing.T) {
 		// Edge cases
 		{"leading space", "  12", 12},
 		{"trailing space", "12  ", 12},
+		{"empty string", "", 0},
 		{"zero seconds", "00", 0},
 		{"zero minutes and seconds", "00:00", 0},
+		{"single minute", "0:05", 5},
 		{"exactly one minute", "01:00", 60},
-		{"exactly one hour", "01:00:00", 3600},
+		{"one minute thirty seconds", "1:30", 90},
+		{"exact hour", "1:00:00", 3600},
+		{"90 minutes", "1:30:00", 5400},
 		{"exactly one day", "1-00:00:00", 86400},
 		{"large day count", "10-00:00:00", 864000},
-		{"empty string", "", 0},
 		{"all zeros with days", "0-00:00:00", 0},
+		// 1 day, 1 hour, 5 minutes, 30 seconds = 86400 + 3600 + 330 = 90330
+		{"one day one hour", "1-01:05:30", 90330},
+		// Malformed: "1-" → days=1, remainder="" → 0 parsed for HMS → result=1*86400=86400
+		{"malformed trailing dash", "1-", 86400},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -1,7 +1,7 @@
-package parser_test
-
 // F037 — parser benchmarks.
 // Run with: go test -bench=. -benchmem ./server/internal/parser/
+
+package parser_test
 
 import (
 	"fmt"

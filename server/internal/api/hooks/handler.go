@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
 const (
@@ -110,9 +111,9 @@ func (h *Handler) PreTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only gate write-type tools. If new write tools are added to permissions/allowlist.go,
-	// add them here too — these two lists must stay in sync manually.
-	if body.ToolName != "Edit" && body.ToolName != "Write" && body.ToolName != "MultiEdit" {
+	// Only gate write-type tools. The canonical list lives in permissions.WriteToolNames —
+	// do not add names here; update the source of truth instead.
+	if !isWriteTool(body.ToolName) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"proceed": true})
 		return
@@ -225,4 +226,15 @@ func bearerToken(r *http.Request) string {
 		return auth[7:]
 	}
 	return ""
+}
+
+// isWriteTool reports whether name is in the edit-gate write tool list.
+// Source of truth: permissions.WriteToolNames.
+func isWriteTool(name string) bool {
+	for _, n := range permissions.WriteToolNames {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
