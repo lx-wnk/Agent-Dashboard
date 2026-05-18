@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,67 +8,12 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 )
 
-// webhookCGNATBlock covers 100.64.0.0/10 (Carrier-Grade NAT / Tailscale).
-var webhookCGNATBlock = func() *net.IPNet {
-	_, n, _ := net.ParseCIDR("100.64.0.0/10")
-	return n
-}()
-
-// webhookDialContext re-validates resolved IPs at connection time to prevent DNS
-// rebinding attacks (where a domain passes validateWebhookURL but later resolves
-// to a private/loopback IP).
-func webhookDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
-	}
-	ips, err := net.DefaultResolver.LookupHost(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	if len(ips) == 0 {
-		return nil, fmt.Errorf("webhook: no IPs resolved for %s", host)
-	}
-	for _, ipStr := range ips {
-		ip := net.ParseIP(ipStr)
-		if ip == nil {
-			continue
-		}
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() ||
-			ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() ||
-			webhookCGNATBlock.Contains(ip) {
-			return nil, fmt.Errorf("webhook: resolved IP %s is blocked (SSRF guard)", ipStr)
-		}
-	}
-	return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, net.JoinHostPort(ips[0], port))
-}
-
-// webhookClient is the shared HTTP client used to POST webhook payloads.
-// It uses webhookDialContext to guard against DNS rebinding / SSRF at connection time.
-var webhookClient = &http.Client{
-	Timeout: 15 * time.Second,
-	Transport: &http.Transport{
-		DialContext: webhookDialContext,
-	},
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 3 {
-			return errors.New("webhook: too many redirects")
-		}
-		// Strip Authorization on cross-origin redirects.
-		if len(via) > 0 && req.URL.Host != via[0].URL.Host {
-			req.Header.Del("Authorization")
-		}
-		return nil
-	},
-}
-
-// validateWebhookURL rejects loopback/private/link-local targets to prevent SSRF.
+// validateWebhookURL rejects loopback/private/link-local/CGNAT targets to prevent SSRF.
 // Only http and https schemes are allowed.
 func validateWebhookURL(raw string) error {
 	if raw == "" {
@@ -93,11 +37,21 @@ func validateWebhookURL(raw string) error {
 		if ip == nil {
 			continue
 		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return fmt.Errorf("webhook_url must not point to a private or loopback address")
+		// 100.64.0.0/10 CGNAT range
+		cgnat := net.IPNet{IP: net.ParseIP("100.64.0.0"), Mask: net.CIDRMask(10, 32)}
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+			cgnat.Contains(ip) || ip.IsUnspecified() || ip.IsMulticast() {
+			return errors.New("webhook_url must not point to a private, CGNAT, or reserved address")
 		}
 	}
 	return nil
+}
+
+var validChannels = map[string]bool{
+	"email":   true,
+	"webhook": true,
+	"browser": true,
+	"system":  true,
 }
 
 var validEventTypes = map[string]bool{
@@ -153,6 +107,11 @@ func (h *Handler) putNotificationPreference(w http.ResponseWriter, r *http.Reque
 	}
 	if body.Channels == nil {
 		return apierr.NewAppError(http.StatusBadRequest, "channels must be an array")
+	}
+	for _, ch := range body.Channels {
+		if !validChannels[ch] {
+			return apierr.NewAppError(http.StatusBadRequest, "unknown channel: "+ch)
+		}
 	}
 	enabled := true
 	if body.Enabled != nil {
