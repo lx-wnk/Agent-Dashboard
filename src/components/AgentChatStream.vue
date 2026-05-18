@@ -234,7 +234,7 @@ defineExpose({ scrollToBottom })
 </script>
 
 <template>
-  <div ref="outputEl" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed">
+  <div ref="outputEl" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed" aria-live="polite" aria-atomic="false" aria-relevant="additions">
     <div v-if="agent?.machine" class="text-slate-400 dark:text-slate-600 text-center py-12">
       Session output is not available for remote agents.
     </div>

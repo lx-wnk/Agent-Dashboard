@@ -19,14 +19,25 @@ import SpotlightSearch from './components/SpotlightSearch.vue'
 const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
 import { useAgents } from './composables/useAgents'
 import { useTasks } from './composables/useTasks'
+import { useTheme } from './composables/useTheme'
 import { useUser } from './composables/useUser'
 import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
+const { toggleTheme } = useTheme()
 
 onMounted(() => {
   loadUser()
+
+  // UX-08: Shift+D toggles dark/light mode globally
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT')
+        toggleTheme()
+    }
+  })
 })
 
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
@@ -144,6 +155,11 @@ onMounted(fetchQuota)
 <template>
   <LoginPage v-if="loaded && showLogin" />
   <div v-else-if="loaded" class="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+    <!-- UX-33: Skip-to-content link -->
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded focus:text-sm focus:font-semibold"
+    >Skip to content</a>
     <header class="shrink-0 flex flex-wrap items-center gap-3 gap-y-2 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
       <h1 class="text-[18px] font-semibold text-slate-900 dark:text-slate-100">
         Claude Agent Overview
@@ -283,7 +299,7 @@ onMounted(fetchQuota)
         ≡ List
       </button>
     </div>
-    <main class="p-6 flex-1 min-h-0 overflow-y-auto">
+    <main id="main-content" class="p-6 flex-1 min-h-0 overflow-y-auto">
       <p v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600">
         Loading agents...
       </p>

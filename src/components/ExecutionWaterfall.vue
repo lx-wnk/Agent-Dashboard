@@ -120,7 +120,17 @@ watch(() => props.sessionId, fetchAndRender)
       {{ error }}
     </div>
     <div v-else class="overflow-x-auto">
-      <svg ref="svgRef" class="w-full text-slate-800 dark:text-slate-200" style="min-height: 60px;" />
+      <svg
+        ref="svgRef"
+        class="w-full text-slate-800 dark:text-slate-200"
+        style="min-height: 60px;"
+        role="img"
+        aria-labelledby="waterfall-title"
+        aria-describedby="waterfall-desc"
+      >
+        <title id="waterfall-title">Execution Waterfall</title>
+        <desc id="waterfall-desc">Gantt chart showing tool call durations over time for this session</desc>
+      </svg>
     </div>
   </div>
 </template>
