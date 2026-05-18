@@ -235,7 +235,7 @@ defineExpose({ scrollToBottom })
 
 <template>
   <!-- UX-11: aria-live="polite" so new chat messages are announced to screen readers -->
-  <div ref="outputEl" aria-live="polite" aria-label="Chat transcript" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed">
+  <div ref="outputEl" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed" aria-live="polite" aria-atomic="false" aria-relevant="additions" aria-label="Chat transcript">
     <div v-if="agent?.machine" class="text-slate-400 dark:text-slate-600 text-center py-12">
       Session output is not available for remote agents.
     </div>

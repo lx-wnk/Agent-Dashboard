@@ -32,8 +32,8 @@ const { toggleTheme } = useTheme()
 // UX-08: Shift+D toggles dark/light mode globally
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    const tag = (e.target as HTMLElement | null)?.tagName
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT')
+    const tag = (e.target as HTMLElement)?.tagName
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !(e.target as HTMLElement).isContentEditable)
       toggleTheme()
   }
 }
@@ -45,6 +45,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  if (toastTimer)
+    clearTimeout(toastTimer)
 })
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
@@ -164,7 +166,7 @@ onMounted(fetchQuota)
     <!-- UX-33: Skip-to-content link for keyboard users -->
     <a
       href="#main-content"
-      class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded focus:text-sm focus:font-semibold"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded focus:text-sm focus:font-semibold"
     >Skip to main content</a>
     <header class="shrink-0 flex flex-wrap items-center gap-3 gap-y-2 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
       <h1 class="text-[18px] font-semibold text-slate-900 dark:text-slate-100">
@@ -339,6 +341,8 @@ onMounted(fetchQuota)
     <Transition name="toast">
       <div
         v-if="toastMessage"
+        role="status"
+        aria-live="polite"
         class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)] pointer-events-none"
       >
         {{ toastMessage }}
