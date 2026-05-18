@@ -41,7 +41,7 @@ async function fetchAndRender() {
 
 function renderGantt(messages: OutputMessage[]) {
   const svg = d3.select(svgRef.value!)
-  svg.selectAll('*').remove()
+  svg.selectAll(':not(title):not(desc)').remove()
 
   if (messages.length === 0) {
     svg.append('text').attr('x', 20).attr('y', 30).text('No tool calls recorded for this session.')

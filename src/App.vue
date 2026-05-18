@@ -31,7 +31,7 @@ const { toggleTheme } = useTheme()
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
     const tag = (e.target as HTMLElement)?.tagName
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT')
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !(e.target as HTMLElement).isContentEditable)
       toggleTheme()
   }
 }
@@ -43,6 +43,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  if (toastTimer)
+    clearTimeout(toastTimer)
 })
 
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
@@ -332,6 +334,8 @@ onMounted(fetchQuota)
     <Transition name="toast">
       <div
         v-if="toastMessage"
+        role="status"
+        aria-live="polite"
         class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)] pointer-events-none"
       >
         {{ toastMessage }}
