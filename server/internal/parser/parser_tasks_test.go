@@ -4,40 +4,50 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 )
 
+func mustMarshal(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic("json.Marshal: " + err.Error())
+	}
+	return b
+}
+
 func writeTempJSONL(t *testing.T, lines []string) string {
 	t.Helper()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "session.jsonl")
-	var content string
+	var sb strings.Builder
 	for _, l := range lines {
-		content += l + "\n"
+		sb.WriteString(l)
+		sb.WriteByte('\n')
 	}
-	if err := os.WriteFile(f, []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(f, []byte(sb.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return f
 }
 
 func assistantTodoWriteLine(todos []map[string]string) string {
-	input, _ := json.Marshal(map[string]any{"todos": todos})
-	block, _ := json.Marshal(map[string]any{
+	input := mustMarshal(map[string]any{"todos": todos})
+	block := mustMarshal(map[string]any{
 		"type":  "tool_use",
 		"name":  "TodoWrite",
 		"input": json.RawMessage(input),
 	})
-	content, _ := json.Marshal([]json.RawMessage{block})
-	msg, _ := json.Marshal(map[string]any{
+	content := mustMarshal([]json.RawMessage{block})
+	msg := mustMarshal(map[string]any{
 		"role":    "assistant",
 		"content": json.RawMessage(content),
 		"model":   "claude-opus-4-5",
 		"usage":   map[string]int{"input_tokens": 10, "output_tokens": 5},
 	})
-	line, _ := json.Marshal(map[string]any{
+	line := mustMarshal(map[string]any{
 		"type":      "assistant",
 		"timestamp": "2025-01-15T10:30:00.000Z",
 		"message":   json.RawMessage(msg),
@@ -81,11 +91,16 @@ func TestParseSessionFile_LastTodoWriteWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseSessionFile: %v", err)
 	}
+	// Verify replace semantics: second TodoWrite replaces the first entirely,
+	// not appended. Both IDs from the second write must be present with correct state.
 	if len(data.Tasks) != 2 {
 		t.Fatalf("want 2 tasks from last TodoWrite, got %d", len(data.Tasks))
 	}
 	if data.Tasks[0].Status != "done" {
 		t.Errorf("want task 0 status 'done', got %q", data.Tasks[0].Status)
+	}
+	if data.Tasks[1].ID != "2" || data.Tasks[1].Status != "in_progress" {
+		t.Errorf("want task 1 to be from last TodoWrite (id=2, in_progress), got %+v", data.Tasks[1])
 	}
 }
 

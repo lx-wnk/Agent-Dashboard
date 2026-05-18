@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,16 +26,14 @@ const testJWTSecret = "test-secret-32-chars-minimum-here"
 // --- fake repos ---
 
 type fakeTurnRepo struct {
-	turns []*ent.RefinementTurn
+	turns   []*ent.RefinementTurn
+	counter atomic.Int64 // F055: avoid ID collisions
 }
 
 func (f *fakeTurnRepo) Create(_ context.Context, inp repo.CreateTurnInput) (*ent.RefinementTurn, error) {
-	content := inp.Content
-	if len(content) > 8 {
-		content = content[:8]
-	}
+	n := f.counter.Add(1)
 	t := &ent.RefinementTurn{
-		ID:        "turn-" + inp.Role + "-" + content,
+		ID:        fmt.Sprintf("turn-%d", n), // F055: monotonic counter avoids content-based ID collisions
 		TaskID:    inp.TaskID,
 		Content:   inp.Content,
 		Phase:     inp.Phase,
@@ -52,16 +53,40 @@ func (f *fakeTurnRepo) ListForTask(_ context.Context, taskID string, _ int) ([]*
 	return out, nil
 }
 
-func (f *fakeTurnRepo) ListForTaskNewest(_ context.Context, taskID string, _ int) ([]*ent.RefinementTurn, error) {
-	return f.ListForTask(context.Background(), taskID, 0)
+// F026: respect limit and return newest-first.
+func (f *fakeTurnRepo) ListForTaskNewest(_ context.Context, taskID string, limit int) ([]*ent.RefinementTurn, error) {
+	var out []*ent.RefinementTurn
+	for i := len(f.turns) - 1; i >= 0; i-- {
+		if f.turns[i].TaskID == taskID {
+			out = append(out, f.turns[i])
+			if limit > 0 && len(out) >= limit {
+				break
+			}
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeTurnRepo) DeleteForTask(_ context.Context, _ string) error { return nil }
 
-type fakeTaskRepo struct{}
+// F027: map-based lookup so not-found is testable.
+type fakeTaskRepo struct {
+	byID map[string]*ent.Task
+}
+
+func newFakeTaskRepo(tasks ...*ent.Task) *fakeTaskRepo {
+	m := make(map[string]*ent.Task, len(tasks))
+	for _, t := range tasks {
+		m[t.ID] = t
+	}
+	return &fakeTaskRepo{byID: m}
+}
 
 func (f *fakeTaskRepo) GetByID(_ context.Context, id string) (*ent.Task, error) {
-	return &ent.Task{ID: id, Title: "Test Task", Cwd: "/tmp"}, nil
+	if t, ok := f.byID[id]; ok {
+		return t, nil
+	}
+	return nil, errors.New("task not found")
 }
 func (f *fakeTaskRepo) Create(_ context.Context, _ repo.CreateTaskInput) (*ent.Task, error) {
 	return nil, nil
@@ -74,14 +99,11 @@ func (f *fakeTaskRepo) Delete(_ context.Context, _ string) error              { 
 func (f *fakeTaskRepo) ListForUser(_ context.Context, _ string, _ bool) ([]*ent.Task, error) {
 	return nil, nil
 }
-func (f *fakeTaskRepo) ListPickable(_ context.Context) ([]*ent.Task, error)       { return nil, nil }
-func (f *fakeTaskRepo) ListByStage(_ context.Context, _ string) ([]*ent.Task, error) {
-	return nil, nil
-}
+func (f *fakeTaskRepo) ListPickable(_ context.Context) ([]*ent.Task, error)          { return nil, nil }
+func (f *fakeTaskRepo) ListByStage(_ context.Context, _ string) ([]*ent.Task, error) { return nil, nil }
 
 // --- helpers ---
 
-// authToken returns a signed JWT cookie value for test requests.
 func authToken(t *testing.T) string {
 	t.Helper()
 	tok, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "tester", IsAdmin: false}, testJWTSecret, 3600)
@@ -91,11 +113,12 @@ func authToken(t *testing.T) string {
 	return tok
 }
 
-func makeRouter(turns *fakeTurnRepo, spawner func(context.Context, refine.SpawnConfig) (<-chan string, error)) http.Handler {
-	h := apirefine.NewHandler(turns, &fakeTaskRepo{})
-	if spawner != nil {
-		h = h.WithSpawner(spawner)
-	}
+func makeRouter(turns *fakeTurnRepo, tasks *fakeTaskRepo, spawner func(context.Context, refine.SpawnConfig) (<-chan string, error)) http.Handler {
+	h := apirefine.NewHandler(apirefine.Deps{
+		Turns:   turns,
+		Tasks:   tasks,
+		Spawner: spawner,
+	})
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))
 	h.Mount(r)
@@ -114,10 +137,16 @@ func noopSpawner(_ context.Context, _ refine.SpawnConfig) (<-chan string, error)
 	return ch, nil
 }
 
+func defaultTask(t *testing.T, id string) *ent.Task {
+	t.Helper()
+	return &ent.Task{ID: id, Title: "Test Task", Cwd: t.TempDir()} // F053: t.TempDir() instead of /tmp
+}
+
 // --- tests ---
 
 func TestListTurns_Empty(t *testing.T) {
-	r := makeRouter(&fakeTurnRepo{}, noopSpawner)
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(&fakeTurnRepo{}, tasks, noopSpawner)
 	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/refine/task-1/turns", nil))
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -141,7 +170,8 @@ func TestListTurns_ReturnsTurns(t *testing.T) {
 			{ID: "t2", TaskID: "task-1", Content: "Hi", Phase: &phase, CreatedAt: time.Now()},
 		},
 	}
-	r := makeRouter(repo, noopSpawner)
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(repo, tasks, noopSpawner)
 	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/refine/task-1/turns", nil))
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -155,6 +185,7 @@ func TestListTurns_ReturnsTurns(t *testing.T) {
 	}
 }
 
+// F025: verify SSE framing and turn persistence, not just status 200.
 func TestSubmitTurn_StreamsResponse(t *testing.T) {
 	spawner := func(_ context.Context, _ refine.SpawnConfig) (<-chan string, error) {
 		ch := make(chan string, 2)
@@ -163,12 +194,15 @@ func TestSubmitTurn_StreamsResponse(t *testing.T) {
 		close(ch)
 		return ch, nil
 	}
-	r := makeRouter(&fakeTurnRepo{}, spawner)
+	turns := &fakeTurnRepo{}
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(turns, tasks, spawner)
 	body, _ := json.Marshal(map[string]string{"message": "test prompt"})
 	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/task-1/turn", bytes.NewReader(body)))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
+
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -176,13 +210,26 @@ func TestSubmitTurn_StreamsResponse(t *testing.T) {
 	if !strings.HasPrefix(ct, "text/event-stream") {
 		t.Errorf("want SSE content-type, got %q", ct)
 	}
-	if !strings.Contains(rr.Body.String(), "Hello") {
-		t.Errorf("SSE body missing streamed content: %s", rr.Body.String())
+	// F025: verify SSE frame format, not just text presence.
+	sseBody := rr.Body.String()
+	if !strings.Contains(sseBody, "data: Hello") {
+		t.Errorf("SSE body missing 'data: Hello' frame: %s", sseBody)
+	}
+	// F025: verify assistant turn was persisted after streaming.
+	var assistantStored bool
+	for _, turn := range turns.turns {
+		if turn.TaskID == "task-1" && strings.Contains(turn.Content, "Hello") {
+			assistantStored = true
+		}
+	}
+	if !assistantStored {
+		t.Error("want assistant turn to be persisted after streaming")
 	}
 }
 
 func TestSubmitTurn_RequiresMessage(t *testing.T) {
-	r := makeRouter(&fakeTurnRepo{}, noopSpawner)
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(&fakeTurnRepo{}, tasks, noopSpawner)
 	body, _ := json.Marshal(map[string]string{"message": "   "})
 	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/task-1/turn", bytes.NewReader(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -193,9 +240,23 @@ func TestSubmitTurn_RequiresMessage(t *testing.T) {
 	}
 }
 
+// F027: test the not-found branch in submitTurn.
+func TestSubmitTurn_TaskNotFound(t *testing.T) {
+	r := makeRouter(&fakeTurnRepo{}, newFakeTaskRepo(), noopSpawner)
+	body, _ := json.Marshal(map[string]string{"message": "hello"})
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/missing-task/turn", bytes.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("want 404 for unknown task, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestConfirm_StoresSentinel(t *testing.T) {
 	repo := &fakeTurnRepo{}
-	r := makeRouter(repo, noopSpawner)
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(repo, tasks, noopSpawner)
 	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/task-1/confirm", nil))
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)

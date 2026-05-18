@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import AppButton from './ui/AppButton.vue'
 
 interface NotifPref {
@@ -20,7 +20,8 @@ const KNOWN_EVENTS: { type: string; label: string; description: string }[] = [
 const CHANNELS = ['webhook', 'email', 'browser', 'system'] as const
 type Channel = typeof CHANNELS[number]
 
-const prefs = ref<Map<string, NotifPref>>(new Map())
+// F015 — use Record instead of Map for reactive correctness
+const prefs = ref<Record<string, NotifPref>>({})
 const config = ref<Record<string, string>>({})
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -30,8 +31,18 @@ const savingConfig = ref(false)
 const configSaveOk = ref(false)
 const prefSaveOk = ref<string | null>(null)
 
+// F054 — track timer IDs for cleanup on unmount
+let prefSaveOkTimer: ReturnType<typeof setTimeout> | null = null
+let configSaveOkTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (prefSaveOkTimer) clearTimeout(prefSaveOkTimer)
+  if (configSaveOkTimer) clearTimeout(configSaveOkTimer)
+})
+
 function getPref(eventType: string): NotifPref {
-  return prefs.value.get(eventType) ?? { eventType, channels: [], enabled: false }
+  // F015 — object property access instead of Map.get
+  return prefs.value[eventType] ?? { eventType, channels: [], enabled: false }
 }
 
 onMounted(async () => {
@@ -40,12 +51,16 @@ onMounted(async () => {
       fetch('/api/tasks/settings/notifications'),
       fetch('/api/tasks/settings/notification-config'),
     ])
+    // F047 — preserve which endpoint failed in the error message
     if (!prefRes.ok || !cfgRes.ok)
-      throw new Error(`HTTP ${prefRes.ok ? cfgRes.status : prefRes.status}`)
+      throw new Error(`Failed to load notification settings (HTTP ${prefRes.ok ? cfgRes.status : prefRes.status})`)
 
     const prefList: NotifPref[] = await prefRes.json()
-    for (const p of prefList)
-      prefs.value.set(p.eventType, p)
+    // F015 — build object from array instead of Map.set loop
+    prefs.value = prefList.reduce<Record<string, NotifPref>>((acc, p) => {
+      acc[p.eventType] = p
+      return acc
+    }, {})
 
     config.value = await cfgRes.json()
   }
@@ -82,9 +97,13 @@ async function savePref(eventType: string, updated: NotifPref) {
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
     const saved: NotifPref = await res.json()
-    prefs.value.set(eventType, saved)
+    // F015 — object spread assignment instead of Map.set
+    prefs.value = { ...prefs.value, [eventType]: saved }
     prefSaveOk.value = eventType
-    setTimeout(() => { if (prefSaveOk.value === eventType) prefSaveOk.value = null }, 1500)
+    // F054 — store timer ID for cleanup
+    prefSaveOkTimer = setTimeout(() => {
+      if (prefSaveOk.value === eventType) prefSaveOk.value = null
+    }, 1500)
   }
   catch (e) {
     error.value = e instanceof Error ? e.message : 'Save failed'
@@ -108,7 +127,8 @@ async function saveConfig() {
       throw new Error(`HTTP ${res.status}`)
     config.value = await res.json()
     configSaveOk.value = true
-    setTimeout(() => { configSaveOk.value = false }, 2000)
+    // F054 — store timer ID for cleanup
+    configSaveOkTimer = setTimeout(() => { configSaveOk.value = false }, 2000)
   }
   catch (e) {
     error.value = e instanceof Error ? e.message : 'Save failed'
@@ -130,28 +150,42 @@ async function saveConfig() {
       </p>
     </div>
 
-    <div v-if="loading" class="text-xs text-slate-400">
+    <!-- F011 — role="status"/role="alert" for screen reader announcements -->
+    <div v-if="loading" role="status" aria-live="polite" class="text-xs text-slate-400">
       Loading…
     </div>
-    <div v-else-if="error" class="text-xs text-red-500">
+    <div v-else-if="error" role="alert" class="text-xs text-red-500">
       {{ error }}
     </div>
 
     <template v-else>
+      <!-- F012 — screen-reader-only live region for pref save confirmation -->
+      <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">
+        {{ prefSaveOk ? `${prefSaveOk} preference saved` : '' }}
+      </div>
+
       <!-- Event preferences table -->
       <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden text-xs">
         <table class="w-full">
           <thead>
             <tr class="bg-slate-50 dark:bg-slate-800/50">
-              <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 px-3 py-2 font-medium">
+              <!-- F004 / F018 — scope="col" on all column headers -->
+              <th
+                scope="col"
+                class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 px-3 py-2 font-medium"
+              >
                 Event
               </th>
-              <th class="text-center text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 px-3 py-2 font-medium">
+              <th
+                scope="col"
+                class="text-center text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 px-3 py-2 font-medium"
+              >
                 Enabled
               </th>
               <th
                 v-for="ch in CHANNELS"
                 :key="ch"
+                scope="col"
                 class="text-center text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 px-2 py-2 font-medium capitalize"
               >
                 {{ ch }}
@@ -164,26 +198,35 @@ async function saveConfig() {
               :key="ev.type"
               class="border-t border-slate-200 dark:border-slate-700"
               :class="{ 'opacity-50': !getPref(ev.type).enabled }"
+              :aria-disabled="!getPref(ev.type).enabled"
             >
-              <td class="px-3 py-2.5">
+              <!-- F004 / F018 — row header for the event label -->
+              <th scope="row" class="px-3 py-2.5 text-left font-normal">
                 <p class="font-medium text-slate-800 dark:text-slate-200">
                   {{ ev.label }}
                 </p>
                 <p class="text-slate-400 dark:text-slate-500 text-[10px] mt-0.5">
                   {{ ev.description }}
                 </p>
-              </td>
+              </th>
               <td class="px-3 py-2.5 text-center">
+                <!-- F001 — role="switch" + aria-checked + aria-label -->
+                <!-- F002 — replace focus:outline-none with focus-visible:ring-* -->
+                <!-- F003 — h-6 w-11 for adequate touch target (24×44px) -->
                 <button
                   type="button"
-                  class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none"
+                  role="switch"
+                  :aria-checked="getPref(ev.type).enabled"
+                  :aria-label="`${ev.label} notifications`"
+                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
                   :class="getPref(ev.type).enabled ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'"
                   :disabled="savingPref === ev.type"
                   @click="toggleEnabled(ev.type)"
                 >
+                  <!-- F003 — inner thumb h-4 w-4, translate-x-5 when on -->
                   <span
-                    class="pointer-events-none inline-block h-3 w-3 rounded-full bg-white shadow transform transition-transform"
-                    :class="getPref(ev.type).enabled ? 'translate-x-3' : 'translate-x-0'"
+                    class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform"
+                    :class="getPref(ev.type).enabled ? 'translate-x-5' : 'translate-x-0'"
                   />
                 </button>
               </td>
@@ -192,9 +235,11 @@ async function saveConfig() {
                 :key="ch"
                 class="px-2 py-2.5 text-center"
               >
+                <!-- F004 — aria-label on each checkbox for full context -->
                 <input
                   type="checkbox"
                   class="cursor-pointer accent-blue-500"
+                  :aria-label="`Send ${ev.label} notifications via ${ch}`"
                   :checked="getPref(ev.type).channels.includes(ch)"
                   :disabled="!getPref(ev.type).enabled || savingPref === ev.type"
                   @change="toggleChannel(ev.type, ch)"
@@ -205,12 +250,18 @@ async function saveConfig() {
         </table>
       </div>
 
+      <!-- F043 — auto-save hint below channel table -->
+      <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+        Channel changes save automatically.
+      </p>
+
       <!-- Delivery config -->
       <div class="space-y-3">
         <h4 class="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
           Delivery Configuration
         </h4>
-        <div class="space-y-2">
+        <!-- F042 — wrap inputs + save button in a form for Enter-key submission + native validation -->
+        <form class="space-y-2" @submit.prevent="saveConfig">
           <div class="flex flex-col gap-1">
             <label class="text-xs text-slate-500 dark:text-slate-400">Webhook URL</label>
             <input
@@ -229,12 +280,17 @@ async function saveConfig() {
               class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
             >
           </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <AppButton size="sm" :disabled="savingConfig" @click="saveConfig">
-            {{ savingConfig ? 'Saving…' : configSaveOk ? 'Saved!' : 'Save Config' }}
-          </AppButton>
-        </div>
+          <div class="flex items-center gap-2">
+            <!-- F042 — type="submit" so Enter key and form submission work -->
+            <AppButton type="submit" size="sm" :disabled="savingConfig">
+              {{ savingConfig ? 'Saving…' : configSaveOk ? 'Saved!' : 'Save Config' }}
+            </AppButton>
+            <!-- F012 — aria-live announcement for save confirmation -->
+            <p v-if="configSaveOk" role="status" aria-live="polite" class="text-xs text-green-600 dark:text-green-400">
+              Settings saved.
+            </p>
+          </div>
+        </form>
       </div>
     </template>
   </div>

@@ -48,16 +48,13 @@ func New(dir string) *Registry {
 	}
 }
 
-// Load scans dir, starts each plugin process, and waits for health.
-// Call once during server startup.
-//
-// ctx is used for health-check timeouts during startup and should be a
-// short-lived context (e.g. cancelled after startup completes).
-//
-// serverCtx is the server's lifetime context and is passed to watchPlugin
-// goroutines so that restart loops stay alive for the duration of the server,
-// not just startup.
-func (r *Registry) Load(ctx, serverCtx context.Context, hooks Hooks) error {
+// Load scans dir, starts each plugin process, and performs health checks.
+// Call once during server startup. serverCtx is the server's lifetime context
+// and is cancelled on SIGTERM/SIGINT. Health checks run with an internal
+// 30-second timeout derived from serverCtx.
+func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
+	startupCtx, cancel := context.WithTimeout(serverCtx, 30*time.Second)
+	defer cancel()
 	if r.dir == "" {
 		return nil
 	}
@@ -123,7 +120,7 @@ func (r *Registry) Load(ctx, serverCtx context.Context, hooks Hooks) error {
 			// unexpected exit (max 3 retries: 1s → 5s → 30s).
 			go r.watchPlugin(serverCtx, pluginEntry.pluginDir, desc, cmd)
 		}
-		if err := r.waitHealthy(ctx, pluginEntry.BaseURL); err != nil {
+		if err := r.waitHealthy(startupCtx, pluginEntry.BaseURL); err != nil {
 			slog.Error("plugin: health check failed", "id", desc.ID, "err", err)
 			if pluginEntry.cmd != nil && pluginEntry.cmd.Process != nil {
 				_ = pluginEntry.cmd.Process.Signal(syscall.SIGTERM)
@@ -210,6 +207,31 @@ func (r *Registry) All() []Entry {
 	defer r.mu.RUnlock()
 	out := make([]Entry, len(r.plugins))
 	copy(out, r.plugins)
+	return out
+}
+
+// Info is a safe, read-only snapshot of a loaded plugin. It intentionally
+// excludes internal state (cmd, restartCount) so consumers cannot mutate
+// live plugin processes.
+type Info struct {
+	ID           string
+	Capabilities []string
+	BaseURL      string
+}
+
+// Infos returns a snapshot of all loaded plugins as Info values.
+// Use this instead of All() when only metadata is needed.
+func (r *Registry) Infos() []Info {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]Info, 0, len(r.plugins))
+	for _, e := range r.plugins {
+		out = append(out, Info{
+			ID:           e.Descriptor.ID,
+			Capabilities: e.Descriptor.Capabilities,
+			BaseURL:      e.BaseURL,
+		})
+	}
 	return out
 }
 

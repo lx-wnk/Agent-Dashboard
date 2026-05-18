@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { ApiKey, McpScope } from '../types'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
-import AdapterSettings from './AdapterSettings.vue'
-import NotificationSettings from './NotificationSettings.vue'
-import PluginSettings from './PluginSettings.vue'
+const AdapterSettings = defineAsyncComponent(() => import('./AdapterSettings.vue'))
+const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
+const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 import RemoteSettings from './RemoteSettings.vue'
 import SystemPromptSettings from './SystemPromptSettings.vue'
 import AppButton from './ui/AppButton.vue'
@@ -394,8 +394,11 @@ async function startImport() {
             >
               <span class="text-sm flex-shrink-0">✦</span> System Prompts
             </button>
+          </li>
+          <li>
             <button
-              class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors"
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'adapters'
                 ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
                 : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
@@ -403,8 +406,11 @@ async function startImport() {
             >
               <span class="text-sm flex-shrink-0">⚡</span> LLM Adapters
             </button>
+          </li>
+          <li>
             <button
-              class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors"
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'plugins'
                 ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
                 : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
@@ -412,8 +418,11 @@ async function startImport() {
             >
               <span class="text-sm flex-shrink-0">🔌</span> Plugins
             </button>
+          </li>
+          <li>
             <button
-              class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors"
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'notifications'
                 ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
                 : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"

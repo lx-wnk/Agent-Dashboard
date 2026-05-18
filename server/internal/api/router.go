@@ -31,6 +31,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -221,25 +222,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		// Mount route_extension plugins (if any).
 		if deps.PluginRegistry != nil {
-			// GET /api/plugins — list all loaded plugins with their capabilities.
-			r.Get("/api/plugins", func(w http.ResponseWriter, _ *http.Request) {
-				type pluginInfo struct {
-					ID           string   `json:"id"`
-					Capabilities []string `json:"capabilities"`
-					BaseURL      string   `json:"base_url"`
-				}
-				entries := deps.PluginRegistry.All()
-				infos := make([]pluginInfo, 0, len(entries))
-				for _, e := range entries {
-					infos = append(infos, pluginInfo{
-						ID:           e.Descriptor.ID,
-						Capabilities: e.Descriptor.Capabilities,
-						BaseURL:      e.BaseURL,
-					})
-				}
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(infos)
-			})
+			pluginsHandler := apiplugins.New(deps.PluginRegistry)
+			pluginsHandler.Mount(r)
 			for _, entry := range deps.PluginRegistry.AllWithCapability(plugin.CapRouteExtension) {
 				id := entry.Descriptor.ID
 				r.Mount("/api/plugins/"+id, plugin.NewReverseProxy(entry))

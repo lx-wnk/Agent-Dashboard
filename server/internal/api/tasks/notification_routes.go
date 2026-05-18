@@ -3,12 +3,45 @@ package tasks
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 )
+
+// validateWebhookURL rejects loopback/private/link-local targets to prevent SSRF.
+// Only http and https schemes are allowed.
+func validateWebhookURL(raw string) error {
+	if raw == "" {
+		return nil // empty = no webhook configured, always valid
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("webhook_url must use http or https scheme")
+	}
+	host := u.Hostname()
+	addrs, err := net.LookupHost(host)
+	if err != nil {
+		// Unresolvable host — block it; legitimate webhooks must be DNS-resolvable.
+		return fmt.Errorf("webhook_url host could not be resolved: %w", err)
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			continue
+		}
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("webhook_url must not point to a private or loopback address")
+		}
+	}
+	return nil
+}
 
 var validEventTypes = map[string]bool{
 	"on_hold":           true,
@@ -104,6 +137,11 @@ func (h *Handler) putNotificationConfig(w http.ResponseWriter, r *http.Request) 
 			val = ""
 		default:
 			val = fmt.Sprintf("%v", tv)
+		}
+		if k == "webhook_url" {
+			if err := validateWebhookURL(val); err != nil {
+				return apierr.NewAppError(http.StatusBadRequest, "webhook_url: "+err.Error())
+			}
 		}
 		if err := h.cfgRepo.Set(r.Context(), notifCfgPrefix+k, val); err != nil {
 			return fmt.Errorf("notif_config.put: %w", err)

@@ -228,7 +228,7 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 	var bestByContent *SessionData
 	var bestByContentPath string
 	for _, c := range candidates {
-		data, err := parseSessionFile(c.path)
+		data, err := ParseSessionFile(c.path)
 		if err != nil {
 			continue
 		}
@@ -257,12 +257,7 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 }
 
 // ParseSessionFile parses a single JSONL session file and returns its SessionData.
-// Exported for use in tests and external consumers.
 func ParseSessionFile(path string) (*SessionData, error) {
-	return parseSessionFile(path)
-}
-
-func parseSessionFile(path string) (*SessionData, error) {
 	content, err := TailRead(path)
 	if err != nil {
 		return nil, err
