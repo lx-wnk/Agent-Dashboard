@@ -58,6 +58,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		webPushHandler = apiwp.NewHandler(wpSvc)
 	}
 
+	// broadcaster is the agent SSE broadcaster: it pushes Agent[] snapshots to
+	// every /api/agents/stream subscriber on each scan cycle.
+	// taskBase / taskBroadcaster handle pipeline task events on /api/tasks/stream.
+	// Both use sse.Broadcaster under the hood (non-blocking fan-out, drops frames
+	// for slow consumers rather than blocking the scanner goroutine).
 	broadcaster := sse.NewBroadcaster()
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
