@@ -179,7 +179,9 @@ func TestListTurns_ReturnsTurns(t *testing.T) {
 		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	var turns []map[string]any
-	json.Unmarshal(rr.Body.Bytes(), &turns)
+	if err := json.Unmarshal(rr.Body.Bytes(), &turns); err != nil {
+		t.Fatalf("unmarshal turns: %v", err)
+	}
 	if len(turns) != 2 {
 		t.Fatalf("want 2 turns, got %d", len(turns))
 	}
