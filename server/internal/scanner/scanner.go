@@ -78,14 +78,27 @@ func getClaudeConfigDirsBatch(pids []int) map[int]string {
 }
 
 // ParseElapsedTime converts ps etime format (e.g. "2-01:05:30") to seconds.
-// Format: [[DD-]HH:]MM:SS — reversed after normalizing separators.
+// Format: [[DD-]HH:]MM:SS
+// The day component (before "-") is parsed independently so that "1-" yields
+// 86400 rather than 60 (which would happen if "-" were blindly replaced by ":").
 func ParseElapsedTime(etime string) int64 {
-	parts := strings.Split(strings.ReplaceAll(strings.TrimSpace(etime), "-", ":"), ":")
-	// Reverse so parts[0]=seconds, parts[1]=minutes, parts[2]=hours, parts[3]=days
+	etime = strings.TrimSpace(etime)
+	if etime == "" {
+		return 0
+	}
+
+	var days int64
+	if idx := strings.Index(etime, "-"); idx != -1 {
+		days, _ = strconv.ParseInt(etime[:idx], 10, 64)
+		etime = etime[idx+1:]
+	}
+
+	// Remaining: [[HH:]MM:]SS — split by ":" and reverse so index 0 = seconds.
+	parts := strings.Split(etime, ":")
 	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
 		parts[i], parts[j] = parts[j], parts[i]
 	}
-	multipliers := []int64{1, 60, 3600, 86400}
+	multipliers := []int64{1, 60, 3600}
 	var total int64
 	for i, p := range parts {
 		if i >= len(multipliers) {
@@ -94,7 +107,7 @@ func ParseElapsedTime(etime string) int64 {
 		n, _ := strconv.ParseInt(strings.TrimSpace(p), 10, 64)
 		total += n * multipliers[i]
 	}
-	return total
+	return days*86400 + total
 }
 
 // ParseLsofBatch parses `lsof -a -d cwd -Fn` output into a pid→cwd map.

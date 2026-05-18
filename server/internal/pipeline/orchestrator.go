@@ -12,7 +12,7 @@ import (
 	sdk "github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
-	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pricing"
 )
 
 const (
@@ -1189,7 +1189,7 @@ func (o *PipelineOrchestrator) updateTokenUsage(ctx context.Context, stageRunID,
 	if total == 0 {
 		return
 	}
-	costUsd := parser.EstimateCost(sdk.TokenUsage{
+	costUsd := pricing.EstimateCost(sdk.TokenUsage{
 		InputTokens:         summary.InputTokens,
 		OutputTokens:        summary.OutputTokens,
 		CacheCreationTokens: summary.CacheCreationTokens,

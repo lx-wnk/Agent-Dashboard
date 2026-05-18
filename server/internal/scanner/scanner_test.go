@@ -18,6 +18,21 @@ func TestParseElapsedTime(t *testing.T) {
 		{"hours minutes seconds", "01:05:30", 3930},
 		{"days hours minutes seconds", "2-01:05:30", 176730},
 		{"leading space", "  12", 12},
+		// Edge cases
+		{"empty string", "", 0},
+		{"zero seconds", "0", 0},
+		{"zero minutes and seconds", "0:00", 0},
+		{"single minute", "0:05", 5},
+		{"one minute thirty seconds", "1:30", 90},
+		{"exact hour", "1:00:00", 3600},
+		{"90 minutes", "1:30:00", 5400},
+		// 1 day, 1 hour, 5 minutes, 30 seconds = 86400 + 3600 + 330 = 90330
+		{"one day one hour", "1-01:05:30", 90330},
+		// days=2, hours=1, minutes=5, seconds=30 → 2*86400 + 1*3600 + 5*60 + 30 = 176730
+		{"two days from task", "2-01:05:30", 176730},
+		// Malformed: "1-" splits into ["1", ""] — empty part parses to 0, so result is 1*86400 = 86400.
+		// Document the actual behavior: non-numeric parts silently contribute 0.
+		{"malformed trailing dash", "1-", 86400},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

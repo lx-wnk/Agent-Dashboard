@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
 // newTestHandler is a convenience constructor for tests.
@@ -205,6 +207,21 @@ func TestPending_WithSecret_ReturnsValidJSON(t *testing.T) {
 	}
 	if _, ok := resp["edits"]; !ok {
 		t.Errorf("Pending: response missing 'edits' key, got %v", resp)
+	}
+}
+
+// TestWriteToolNames_MatchesHookGate asserts that every name in permissions.WriteToolNames
+// is treated as a write tool by isWriteTool, and that isWriteTool returns false for
+// a known non-write tool. This guards against the two lists drifting apart.
+func TestWriteToolNames_MatchesHookGate(t *testing.T) {
+	for _, name := range permissions.WriteToolNames {
+		if !isWriteTool(name) {
+			t.Errorf("isWriteTool(%q) = false, want true — permissions.WriteToolNames and the gate are out of sync", name)
+		}
+	}
+	// A tool that must never be gated.
+	if isWriteTool("Bash") {
+		t.Error("isWriteTool(\"Bash\") = true, want false")
 	}
 }
 

@@ -58,6 +58,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		webPushHandler = apiwp.NewHandler(wpSvc)
 	}
 
+	// agentBroadcaster and taskBroadcaster are independent — never share them.
+	// agentBroadcaster carries raw Agent[] SSE payloads to the agent-list view.
+	// taskBroadcaster carries typed TaskEvent messages to the pipeline kanban.
+	// Mixing them would send wrong payload types to clients and corrupt both streams.
 	broadcaster := sse.NewBroadcaster()
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
