@@ -116,9 +116,6 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 				continue
 			}
 			pluginEntry.cmd = cmd
-			// Watch the process; attempt auto-restart with exponential backoff on
-			// unexpected exit (max 3 retries: 1s → 5s → 30s).
-			go r.watchPlugin(serverCtx, pluginEntry.pluginDir, desc, cmd)
 		}
 		if err := r.waitHealthy(startupCtx, pluginEntry.BaseURL); err != nil {
 			slog.Error("plugin: health check failed", "id", desc.ID, "err", err)
@@ -128,6 +125,12 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 			continue
 		}
 		slog.Info("plugin: loaded", "id", desc.ID, "capabilities", desc.Capabilities)
+		if pluginEntry.cmd != nil {
+			// Health check passed — safe to launch the watcher now. Starting it
+			// before the health check would race with gracefulStop (both call
+			// cmd.Wait). Exponential backoff: 1s → 5s → 30s, max 3 retries.
+			go r.watchPlugin(serverCtx, pluginEntry.pluginDir, desc, pluginEntry.cmd)
+		}
 		r.mu.Lock()
 		r.plugins = append(r.plugins, pluginEntry)
 		r.mu.Unlock()
