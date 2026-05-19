@@ -1,6 +1,7 @@
 package pipeline_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -72,4 +73,86 @@ func TestBuildSpawnArgs_WithResume(t *testing.T) {
 	args := pipeline.BuildSpawnArgs(opts)
 	require.Contains(t, args, "--resume")
 	require.Contains(t, args, "abc123")
+}
+
+func TestBuildSpawnEnv_DenyListExcludesSecrets(t *testing.T) {
+	t.Setenv("DASHBOARD_JWT_SECRET", "super-secret-value")
+	t.Setenv("DASHBOARD_HOOKS_SECRET", "hook-secret-value")
+
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{ID: "t1"},
+		StageRun: &ent.StageRun{ID: "r1"},
+	}
+	env := pipeline.BuildSpawnEnv(opts)
+
+	for _, e := range env {
+		require.False(t, strings.HasPrefix(e, "DASHBOARD_JWT_SECRET="),
+			"DASHBOARD_JWT_SECRET must not appear in spawn env, got: %s", e)
+		require.False(t, strings.HasPrefix(e, "DASHBOARD_HOOKS_SECRET="),
+			"DASHBOARD_HOOKS_SECRET must not appear in spawn env, got: %s", e)
+	}
+}
+
+func TestBuildSpawnEnv_ForwardsPath(t *testing.T) {
+	t.Setenv("PATH", "/test/path:/usr/bin")
+
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{ID: "t2"},
+		StageRun: &ent.StageRun{ID: "r2"},
+	}
+	env := pipeline.BuildSpawnEnv(opts)
+
+	require.Contains(t, env, "PATH=/test/path:/usr/bin")
+}
+
+func TestBuildSpawnEnv_InjectsDashboardIdentifiers(t *testing.T) {
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{ID: "task-xyz"},
+		StageRun: &ent.StageRun{ID: "run-abc"},
+		MCPToken: "mcp-tok",
+		MCPUrl:   "http://127.0.0.1:13120/api/mcp",
+	}
+	env := pipeline.BuildSpawnEnv(opts)
+
+	require.Contains(t, env, "DASHBOARD_TASK_ID=task-xyz")
+	require.Contains(t, env, "DASHBOARD_STAGE_RUN_ID=run-abc")
+	require.Contains(t, env, "DASHBOARD_MCP_TOKEN=mcp-tok")
+	require.Contains(t, env, "DASHBOARD_MCP_URL=http://127.0.0.1:13120/api/mcp")
+}
+
+func TestBuildSpawnEnv_ArbitraryVarsNotForwarded(t *testing.T) {
+	t.Setenv("MY_SECRET_VAR", "leaked")
+
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{ID: "t3"},
+		StageRun: &ent.StageRun{ID: "r3"},
+	}
+	env := pipeline.BuildSpawnEnv(opts)
+
+	for _, e := range env {
+		require.False(t, strings.HasPrefix(e, "MY_SECRET_VAR="),
+			"arbitrary env var must not be forwarded, got: %s", e)
+	}
+}
+
+func TestBuildSpawnEnv_ForwardsDashboardPrefix(t *testing.T) {
+	t.Setenv("DASHBOARD_MCP_URL", "http://example.com")
+	t.Setenv("DASHBOARD_JWT_SECRET", "x") // deny-list must override prefix match
+
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{ID: "t4"},
+		StageRun: &ent.StageRun{ID: "r4"},
+	}
+	env := pipeline.BuildSpawnEnv(opts)
+
+	// DASHBOARD_MCP_URL should be present (set via Setenv, then overridden by injection
+	// since opts.MCPUrl is empty — but the env key itself must appear from prefix forwarding
+	// or injection; what matters is the deny-listed secret is absent)
+	for _, e := range env {
+		require.False(t, strings.HasPrefix(e, "DASHBOARD_JWT_SECRET="),
+			"DASHBOARD_JWT_SECRET must be blocked even with DASHBOARD_ prefix, got: %s", e)
+	}
+
+	// DASHBOARD_MCP_URL from the environment must be forwarded via prefix rule
+	require.Contains(t, env, "DASHBOARD_MCP_URL=http://example.com")
 }

@@ -2,7 +2,9 @@ package auth_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
 func TestHandler_GitHubRedirect_NoClientID(t *testing.T) {
@@ -138,6 +144,136 @@ func TestHandler_CreateSession_InvalidNonce(t *testing.T) {
 	r.Header.Set("Authorization", "Bearer correct-plugin-secret")
 	err := h.CreateSession(w, r)
 	require.Error(t, err)
+}
+
+// stubOAuthProvider is a trivial OAuthProvider that satisfies the interface in tests.
+type stubOAuthProvider struct{}
+
+func (s *stubOAuthProvider) BuildAuthURL(_ context.Context, _, _ string) (string, error) {
+	return "http://example.com", nil
+}
+func (s *stubOAuthProvider) ExchangeCode(_ context.Context, _, _ string) (string, error) {
+	return "tok", nil
+}
+func (s *stubOAuthProvider) GetUser(_ context.Context, _ string) (*authpkg.OAuthUserProfile, error) {
+	return &authpkg.OAuthUserProfile{ID: "1", Login: "u"}, nil
+}
+
+// openTestDB opens an in-memory SQLite DB and registers a cleanup.
+func openTestDB(t *testing.T) repo.UserRepo {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	return repo.NewUserRepo(bundle.Client)
+}
+
+func TestHandler_Callback_InPluginMode(t *testing.T) {
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:      "test-secret",
+		PluginLoginURL: "http://127.0.0.1:19001/login",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/callback?code=x&state=y", nil)
+	err := h.Callback(w, r)
+	require.Error(t, err)
+	var appErr *apierr.AppError
+	require.True(t, errors.As(err, &appErr))
+	require.Equal(t, http.StatusNotFound, appErr.Status)
+}
+
+func TestHandler_Callback_NoOAuthProvider(t *testing.T) {
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:     "test-secret",
+		OAuthProvider: nil,
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/callback", nil)
+	err := h.Callback(w, r)
+	require.Error(t, err)
+	var appErr *apierr.AppError
+	require.True(t, errors.As(err, &appErr))
+	require.Equal(t, http.StatusServiceUnavailable, appErr.Status)
+}
+
+func TestHandler_Callback_MissingStateCookie(t *testing.T) {
+	userRepo := openTestDB(t)
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:     "test-secret",
+		OAuthProvider: &stubOAuthProvider{},
+		UserRepo:      userRepo,
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/callback", nil)
+	// No oauth_state cookie set
+	err := h.Callback(w, r)
+	require.Error(t, err)
+	var appErr *apierr.AppError
+	require.True(t, errors.As(err, &appErr))
+	require.Equal(t, http.StatusBadRequest, appErr.Status)
+}
+
+func TestHandler_Callback_InvalidStateJWT(t *testing.T) {
+	userRepo := openTestDB(t)
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:     "test-secret",
+		OAuthProvider: &stubOAuthProvider{},
+		UserRepo:      userRepo,
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/callback", nil)
+	r.AddCookie(&http.Cookie{Name: "oauth_state", Value: "invalid.jwt.here"})
+	err := h.Callback(w, r)
+	require.Error(t, err)
+	var appErr *apierr.AppError
+	require.True(t, errors.As(err, &appErr))
+	require.Equal(t, http.StatusUnauthorized, appErr.Status)
+}
+
+func TestHandler_Callback_StateMismatch(t *testing.T) {
+	const jwtSecret = "test-secret"
+	userRepo := openTestDB(t)
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:     jwtSecret,
+		OAuthProvider: &stubOAuthProvider{},
+		UserRepo:      userRepo,
+	})
+
+	validState, err := authpkg.SignOAuthState(jwtSecret)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/callback?state=different-value", nil)
+	r.AddCookie(&http.Cookie{Name: "oauth_state", Value: validState})
+
+	callbackErr := h.Callback(w, r)
+	require.Error(t, callbackErr)
+	var appErr *apierr.AppError
+	require.True(t, errors.As(callbackErr, &appErr))
+	require.Equal(t, http.StatusUnauthorized, appErr.Status)
+}
+
+func TestHandler_Callback_MissingCode(t *testing.T) {
+	const jwtSecret = "test-secret"
+	userRepo := openTestDB(t)
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:     jwtSecret,
+		OAuthProvider: &stubOAuthProvider{},
+		UserRepo:      userRepo,
+	})
+
+	validState, err := authpkg.SignOAuthState(jwtSecret)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/callback?state="+validState, nil)
+	r.AddCookie(&http.Cookie{Name: "oauth_state", Value: validState})
+
+	callbackErr := h.Callback(w, r)
+	require.Error(t, callbackErr)
+	var appErr *apierr.AppError
+	require.True(t, errors.As(callbackErr, &appErr))
+	require.Equal(t, http.StatusBadRequest, appErr.Status)
 }
 
 // Ensure json import is used (Me encodes JSON on success path).

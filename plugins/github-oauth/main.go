@@ -119,6 +119,8 @@ func main() {
 		httpClient:   &http.Client{Timeout: 10 * time.Second},
 		// The GitHub OAuth callback URL points back to this plugin.
 		callbackURL: "http://" + listenAddr + "/callback",
+		tokenURL:    githubTokenURL,
+		userURL:     githubUserURL,
 	}
 
 	mux := http.NewServeMux()
@@ -158,6 +160,9 @@ type handler struct {
 	pluginSecret string
 	callbackURL  string // GitHub redirects here after OAuth
 	httpClient   *http.Client
+	// tokenURL and userURL are injectable for testing; set to package constants in main.
+	tokenURL string
+	userURL  string
 }
 
 // health responds with {"ok":true}. Required by the registry health-check.
@@ -388,7 +393,7 @@ func (h *handler) exchangeCode(ctx context.Context, code, redirectURI string) (s
 	v.Set("code", code)
 	v.Set("redirect_uri", redirectURI)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, githubTokenURL, strings.NewReader(v.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.tokenURL, strings.NewReader(v.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("exchange: build request: %w", err)
 	}
@@ -432,7 +437,7 @@ type oauthUserProfile struct {
 
 // getUser fetches the GitHub user profile for the given access token.
 func (h *handler) getUser(ctx context.Context, accessToken string) (*oauthUserProfile, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubUserURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.userURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getUser: build request: %w", err)
 	}
