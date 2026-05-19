@@ -1,24 +1,29 @@
-export interface TokenUsage {
-  inputTokens: number
-  outputTokens: number
-  cacheCreationTokens: number
-  cacheReadTokens: number
-}
+// Types generated from sdk/types.go via tygo — do not edit these directly.
+// Run `task generate` to regenerate after changing sdk/types.go.
+import type {
+  TokenUsage,
+  SessionMeta as _SessionMetaBase,
+  SubAgent as _SubAgentBase,
+  TaskInfo as _TaskInfoBase,
+  AgentStatus,
+} from './sdk.generated'
 
-export interface SessionMeta {
-  inputTokens: number
-  outputTokens: number
-  linesAdded: number
-  linesRemoved: number
-  filesModified: number
-  gitCommits: number
-  toolErrors: number
-  usesMcp: boolean
+export type { TokenUsage, AgentStatus }
+
+export interface SessionMeta extends Omit<_SessionMetaBase, 'firstPrompt'> {
   firstPrompt: string | null
 }
 
+export interface SubAgent extends Omit<_SubAgentBase, 'status' | 'currentAction'> {
+  status: 'active' | 'completed'
+  currentAction: string | null
+}
+
+export interface TaskInfo extends Omit<_TaskInfoBase, 'status'> {
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
 export const AGENT_STATUSES = ['active', 'waiting', 'idle'] as const
-export type AgentStatus = typeof AGENT_STATUSES[number]
 
 export interface Agent {
   pid: number
@@ -64,13 +69,6 @@ export interface ChannelReply {
   timestamp: string
 }
 
-export interface SubAgent {
-  id: string
-  type: string
-  status: 'active' | 'completed'
-  currentAction: string | null
-  sessionFile: string
-}
 
 export interface GitStatusLastCommit {
   hash: string
@@ -91,11 +89,6 @@ export interface GitStatus {
   remoteUrl: string | null
 }
 
-export interface TaskInfo {
-  id: string
-  subject: string
-  status: 'pending' | 'in_progress' | 'completed'
-}
 
 export interface OutputMessage {
   role: 'assistant' | 'tool_call' | 'tool_result' | 'human' | 'channel_reply' | 'task' | 'subagent'
