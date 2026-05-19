@@ -36,6 +36,29 @@ function renderMarkdown(text: string): string {
   return DOMPurify.sanitize(md.parse(text, { async: false }) as string)
 }
 
+// UX-36: helpers for <time> datetime attribute and display value.
+function isoTimestamp(ts: string | undefined): string {
+  if (!ts)
+    return ''
+  try {
+    return new Date(ts).toISOString()
+  }
+  catch {
+    return ts
+  }
+}
+
+function formatMsgTime(ts: string | undefined): string {
+  if (!ts)
+    return ''
+  try {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  catch {
+    return ''
+  }
+}
+
 const outputMessages = computed<OutputMessage[]>(() => {
   // Deduplicate: once a human message appears in sessionMessages (from JSONL),
   // remove it from localMessages to avoid showing it twice during the poll gap.
@@ -290,23 +313,42 @@ defineExpose({ scrollToBottom })
             'justify-center': entry.msg.role === 'tool_call' || entry.msg.role === 'tool_result',
           }"
         >
-          <div
-            v-if="entry.msg.role === 'human'"
-            class="max-w-[80%] px-3 py-2 rounded-xl rounded-br-sm text-[13px] leading-relaxed break-words whitespace-pre-wrap bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600"
-            :class="{ 'border border-yellow-400/40': entry.msg.queued }"
-          >
-            {{ entry.msg.content }}
+          <!-- UX-36: wrap message bubbles in column so <time> sits below each bubble -->
+          <div v-if="entry.msg.role === 'human'" class="flex flex-col items-end gap-0.5 max-w-[80%]">
+            <div
+              class="px-3 py-2 rounded-xl rounded-br-sm text-[13px] leading-relaxed break-words whitespace-pre-wrap bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600"
+              :class="{ 'border border-yellow-400/40': entry.msg.queued }"
+            >
+              {{ entry.msg.content }}
+            </div>
+            <time
+              v-if="entry.msg.timestamp"
+              :datetime="isoTimestamp(entry.msg.timestamp)"
+              class="text-[10px] text-slate-400 dark:text-slate-600 select-none"
+            >{{ formatMsgTime(entry.msg.timestamp) }}</time>
           </div>
-          <div
-            v-else-if="entry.msg.role === 'channel_reply'"
-            class="max-w-[80%] px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-l-2 border-green-500 dark:border-green-400 markdown-body"
-            v-html="renderMarkdown(entry.msg.content)"
-          />
-          <div
-            v-else-if="entry.msg.role === 'assistant'"
-            class="max-w-[80%] px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 markdown-body"
-            v-html="renderMarkdown(entry.msg.content)"
-          />
+          <div v-else-if="entry.msg.role === 'channel_reply'" class="flex flex-col items-start gap-0.5 max-w-[80%]">
+            <div
+              class="px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-l-2 border-green-500 dark:border-green-400 markdown-body"
+              v-html="renderMarkdown(entry.msg.content)"
+            />
+            <time
+              v-if="entry.msg.timestamp"
+              :datetime="isoTimestamp(entry.msg.timestamp)"
+              class="text-[10px] text-slate-400 dark:text-slate-600 select-none"
+            >{{ formatMsgTime(entry.msg.timestamp) }}</time>
+          </div>
+          <div v-else-if="entry.msg.role === 'assistant'" class="flex flex-col items-start gap-0.5 max-w-[80%]">
+            <div
+              class="px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 markdown-body"
+              v-html="renderMarkdown(entry.msg.content)"
+            />
+            <time
+              v-if="entry.msg.timestamp"
+              :datetime="isoTimestamp(entry.msg.timestamp)"
+              class="text-[10px] text-slate-400 dark:text-slate-600 select-none"
+            >{{ formatMsgTime(entry.msg.timestamp) }}</time>
+          </div>
           <div v-else-if="entry.msg.role === 'subagent'" class="flex items-center gap-1.5 px-2.5 py-1 border border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-950 text-xs text-slate-500 dark:text-slate-400">
             <span class="text-[14px] text-blue-600 dark:text-blue-400">⑂</span>
             <span class="font-semibold text-slate-900 dark:text-slate-100 text-[11px] uppercase tracking-wide">{{ entry.msg.subagentType }}</span>

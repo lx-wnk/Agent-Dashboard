@@ -42,6 +42,8 @@ func (s *Service) GenerateVAPIDKeys(ctx context.Context, subject string) (public
 	}
 
 	if subject == "" {
+		// PWA-09: VAPID subject must be a mailto: address or an https: URL.
+		// To use https: form, pass e.g. "https://yourdomain.example.com" as the subject parameter.
 		subject = "mailto:admin@localhost"
 	}
 
