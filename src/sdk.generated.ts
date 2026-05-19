@@ -55,6 +55,28 @@ export const AgentStatusWaiting = "waiting";
 export const AgentStatusIdle = "idle";
 export type AgentStatus = typeof AgentStatusActive | typeof AgentStatusWaiting | typeof AgentStatusIdle;
 /**
+ * Entrypoint describes how the Claude Code process was launched.
+ */
+export const EntrypointCLI = "cli";
+export const EntrypointDesktop = "desktop";
+export const EntrypointUnknown = "unknown";
+export type Entrypoint = typeof EntrypointCLI | typeof EntrypointDesktop | typeof EntrypointUnknown;
+/**
+ * ErrorState describes a recognisable error condition seen in the session log.
+ */
+export const ErrorStateQuotaExhausted = "quota_exhausted";
+export const ErrorStateRateLimited = "rate_limited";
+export const ErrorStateAuthFailed = "auth_failed";
+export type ErrorState = typeof ErrorStateQuotaExhausted | typeof ErrorStateRateLimited | typeof ErrorStateAuthFailed;
+/**
+ * BtwMessage is the last assistant text that appeared alongside tool calls.
+ * Message is the text content; Response is reserved for future use.
+ */
+export interface BtwMessage {
+  message: string;
+  response: string | null;
+}
+/**
  * Agent is the unified view of a running Claude Code process.
  */
 export interface Agent {
@@ -63,11 +85,11 @@ export interface Agent {
   projectPath: string;
   projectName: string;
   cwd: string;
-  entrypoint: string; // "cli" | "desktop" | "unknown"
+  entrypoint: Entrypoint;
   status: AgentStatus;
   uptime: number /* int64 */; // seconds
   lastActivity: string;
-  currentAction: string;
+  currentAction: string | null;
   lastTools: string[];
   tasks: TaskInfo[];
   subagents: SubAgent[];
@@ -76,17 +98,18 @@ export interface Agent {
   cacheCreationCostEstimate: number /* float64 */;
   cacheReadCostEstimate: number /* float64 */;
   healthScore: number /* int */;
-  model: string;
-  codeVersion: string;
+  model: string | null;
+  codeVersion: string | null;
   conversationTurns: number /* int */;
   toolCounts: { [key: string]: number /* int */};
   meta?: SessionMeta;
   channelAvailable: boolean;
-  lastOutput: string;
+  lastOutput: string | null;
   convergenceAlert: boolean;
-  convergenceToolName: string;
-  errorState: string; // "" | "quota_exhausted" | "rate_limited" | "auth_failed"
+  convergenceToolName: string | null;
+  errorState: ErrorState | null;
   pipelineTaskId?: string;
   pipelineTaskTitle?: string;
   machine?: string;
+  lastBtw: BtwMessage | null;
 }
