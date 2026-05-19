@@ -30,6 +30,18 @@ func Wrap(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
 	return apierr.ErrorMiddleware(apierr.HandlerFunc(fn))
 }
 
+// keyView is the JSON shape returned for both List and Create.
+// Field names match the ApiKey TypeScript interface (camelCase).
+type keyView struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Scopes     []string `json:"scopes"`
+	Active     bool     `json:"active"`
+	UserID     any      `json:"userId"`
+	CreatedAt  string   `json:"createdAt"`
+	LastUsedAt *string  `json:"lastUsedAt"`
+}
+
 // List returns all active API keys. Never includes key_hash or raw token.
 // GET /api/settings/api-keys
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) error {
@@ -37,21 +49,21 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("apikeys.List: %w", err)
 	}
-	type keyView struct {
-		ID        string   `json:"id"`
-		Name      string   `json:"name"`
-		Scopes    []string `json:"scopes"`
-		Active    bool     `json:"active"`
-		CreatedAt string   `json:"created_at"`
-	}
 	out := make([]keyView, len(keys))
 	for i, k := range keys {
+		var lastUsed *string
+		if k.LastUsedAt != nil {
+			s := k.LastUsedAt.Format("2006-01-02T15:04:05Z")
+			lastUsed = &s
+		}
 		out[i] = keyView{
-			ID:        k.ID,
-			Name:      k.Name,
-			Scopes:    k.Scopes,
-			Active:    k.Active,
-			CreatedAt: k.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			ID:         k.ID,
+			Name:       k.Name,
+			Scopes:     k.Scopes,
+			Active:     k.Active,
+			UserID:     nil,
+			CreatedAt:  k.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			LastUsedAt: lastUsed,
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -89,12 +101,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	return json.NewEncoder(w).Encode(map[string]any{
-		"id":         key.ID,
-		"name":       key.Name,
-		"scopes":     key.Scopes,
-		"active":     key.Active,
-		"token":      token,
-		"created_at": key.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		"key": keyView{
+			ID:         key.ID,
+			Name:       key.Name,
+			Scopes:     key.Scopes,
+			Active:     key.Active,
+			UserID:     nil,
+			CreatedAt:  key.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			LastUsedAt: nil,
+		},
+		"token": token,
 	})
 }
 
@@ -110,4 +126,41 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) error {
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
+}
+
+// Regenerate rotates the secret for an existing key in-place: same ID/name/scopes,
+// new key_hash and raw token. Returns the updated key + the one-time raw token.
+// POST /api/settings/api-keys/{id}/regenerate
+func (h *Handler) Regenerate(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return fmt.Errorf("%w: id is required", apierr.ErrBadRequest)
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return fmt.Errorf("apikeys.Regenerate: generate token: %w", err)
+	}
+	token := "mcp_" + base64.RawURLEncoding.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(token))
+	hash := hex.EncodeToString(sum[:])
+
+	key, err := h.repo.Rotate(r.Context(), id, hash)
+	if err != nil {
+		return fmt.Errorf("apikeys.Regenerate: %w", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(map[string]any{
+		"key": keyView{
+			ID:         key.ID,
+			Name:       key.Name,
+			Scopes:     key.Scopes,
+			Active:     key.Active,
+			UserID:     nil,
+			CreatedAt:  key.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			LastUsedAt: nil,
+		},
+		"token": token,
+	})
 }

@@ -16,7 +16,7 @@ type ApiKey struct{ ent.Schema }
 func (ApiKey) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").StorageKey("id"),
-		field.String("name").Unique(),
+		field.String("name"),
 		field.String("key_hash").Unique().Sensitive(),
 		field.JSON("scopes", []string{}).Default([]string{}),
 		field.Bool("active").Default(true),

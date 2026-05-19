@@ -176,6 +176,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Get("/api/settings/api-keys", ErrorMiddleware(apiKeyHandler.List))
 			r.Post("/api/settings/api-keys", ErrorMiddleware(apiKeyHandler.Create))
 			r.Delete("/api/settings/api-keys/{id}", ErrorMiddleware(apiKeyHandler.Delete))
+			r.Post("/api/settings/api-keys/{id}/regenerate", ErrorMiddleware(apiKeyHandler.Regenerate))
 		}
 
 		if deps.WebPushHandler != nil {

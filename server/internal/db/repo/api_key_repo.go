@@ -19,6 +19,7 @@ type ApiKeyRepo interface {
 	List(ctx context.Context) ([]*ent.ApiKey, error)
 	Delete(ctx context.Context, id string) error
 	TouchLastUsed(ctx context.Context, id string) error
+	Rotate(ctx context.Context, id, newHash string) (*ent.ApiKey, error)
 }
 
 type entApiKeyRepo struct {
@@ -88,4 +89,15 @@ func (r *entApiKeyRepo) TouchLastUsed(ctx context.Context, id string) error {
 		return fmt.Errorf("apikey.TouchLastUsed: %w", err)
 	}
 	return nil
+}
+
+func (r *entApiKeyRepo) Rotate(ctx context.Context, id, newHash string) (*ent.ApiKey, error) {
+	k, err := r.client.ApiKey.UpdateOneID(id).
+		SetKeyHash(newHash).
+		SetNillableLastUsedAt(nil).
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("apikey.Rotate: %w", err)
+	}
+	return k, nil
 }

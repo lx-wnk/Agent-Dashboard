@@ -40,7 +40,7 @@ var (
 	// APIKeysColumns holds the columns for the "api_keys" table.
 	APIKeysColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
-		{Name: "name", Type: field.TypeString, Unique: true},
+		{Name: "name", Type: field.TypeString},
 		{Name: "key_hash", Type: field.TypeString, Unique: true},
 		{Name: "scopes", Type: field.TypeJSON},
 		{Name: "active", Type: field.TypeBool, Default: true},

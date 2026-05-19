@@ -42,7 +42,10 @@ func TestApiKeyHandler_CreateAndList(t *testing.T) {
 	var created map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&created))
 	require.Contains(t, created, "token") // raw token shown once
-	require.Contains(t, created, "id")
+	require.Contains(t, created, "key")
+	key, ok := created["key"].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, key, "id")
 	token, ok := created["token"].(string)
 	require.True(t, ok)
 	require.True(t, len(token) > 10) // non-empty token
@@ -68,7 +71,8 @@ func TestApiKeyHandler_Delete(t *testing.T) {
 
 	var created map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&created))
-	id := created["id"].(string)
+	key := created["key"].(map[string]any)
+	id := key["id"].(string)
 
 	w2 := httptest.NewRecorder()
 	mux.ServeHTTP(w2, httptest.NewRequest(http.MethodDelete, "/api/settings/api-keys/"+id, nil))
