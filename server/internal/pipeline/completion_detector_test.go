@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ptr[T any](v T) *T { return &v }
-
 func stageRun(stage string, pid *int, sessionID *string, startedAt *time.Time) *ent.StageRun {
 	return &ent.StageRun{Stage: stage, Pid: pid, SessionID: sessionID, StartedAt: startedAt}
 }
@@ -89,4 +87,63 @@ func TestValidateStageOutput_SelfReview_MissingPassed(t *testing.T) {
 	})
 	require.False(t, v.OK)
 	require.Contains(t, v.Error, "passed")
+}
+
+func TestValidateStageOutput_Finalization_Valid(t *testing.T) {
+	v := pipeline.ValidateStageOutput("finalization", map[string]any{
+		"summary":   "all done",
+		"insights":  []any{"lesson one"},
+		"openTodos": []any{},
+		"testPlan":  []any{"run pnpm test"},
+	})
+	require.True(t, v.OK)
+}
+
+func TestValidateStageOutput_Finalization_MissingSummary(t *testing.T) {
+	v := pipeline.ValidateStageOutput("finalization", map[string]any{
+		"insights":  []any{},
+		"openTodos": []any{},
+		"testPlan":  []any{},
+	})
+	require.False(t, v.OK)
+	require.Contains(t, v.Error, "summary")
+}
+
+func TestValidateStageOutput_Finalization_MissingInsights(t *testing.T) {
+	v := pipeline.ValidateStageOutput("finalization", map[string]any{
+		"summary":   "done",
+		"openTodos": []any{},
+		"testPlan":  []any{},
+	})
+	require.False(t, v.OK)
+	require.Contains(t, v.Error, "insights")
+}
+
+func TestValidateStageOutput_Finalization_MissingOpenTodos(t *testing.T) {
+	v := pipeline.ValidateStageOutput("finalization", map[string]any{
+		"summary":  "done",
+		"insights": []any{},
+		"testPlan": []any{},
+	})
+	require.False(t, v.OK)
+}
+
+func TestValidateStageOutput_Finalization_MissingTestPlan(t *testing.T) {
+	v := pipeline.ValidateStageOutput("finalization", map[string]any{
+		"summary":   "done",
+		"insights":  []any{},
+		"openTodos": []any{},
+	})
+	require.False(t, v.OK)
+}
+
+func TestValidateStageOutput_Finalization_WrongType(t *testing.T) {
+	// summary as int instead of string → must fail
+	v := pipeline.ValidateStageOutput("finalization", map[string]any{
+		"summary":   42,
+		"insights":  []any{},
+		"openTodos": []any{},
+		"testPlan":  []any{},
+	})
+	require.False(t, v.OK)
 }

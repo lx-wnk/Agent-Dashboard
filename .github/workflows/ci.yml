@@ -32,6 +32,30 @@ jobs:
           profile: ${{ matrix.module }}/coverage.out
           source-dir: ${{ matrix.module }}
 
+  test-plugins:
+    name: Test (plugins/${{ matrix.plugin }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [github-oauth, office365-oauth]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: plugins/${{ matrix.plugin }}/go.mod
+
+      - name: Test
+        working-directory: plugins/${{ matrix.plugin }}
+        run: GOWORK=off go test -race -coverprofile=coverage.out ./...
+
+      - name: Coverage
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          config: plugins/${{ matrix.plugin }}/.testcoverage.yml
+          profile: plugins/${{ matrix.plugin }}/coverage.out
+          source-dir: plugins/${{ matrix.plugin }}
+
   lint:
     name: Lint (${{ matrix.module }})
     runs-on: ubuntu-latest
@@ -45,10 +69,28 @@ jobs:
         with:
           go-version-file: ${{ matrix.module }}/go.mod
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
       - name: Lint
         working-directory: ${{ matrix.module }}
         run: golangci-lint run ./...
+
+  lint-plugins:
+    name: Lint (plugins/${{ matrix.plugin }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [github-oauth, office365-oauth]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: plugins/${{ matrix.plugin }}/go.mod
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+      - name: Lint
+        working-directory: plugins/${{ matrix.plugin }}
+        run: GOWORK=off golangci-lint run ./...
 
   security:
     name: Security
@@ -61,14 +103,14 @@ jobs:
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          for mod in server sdk; do
-            echo "=== $mod ===" && (cd $mod && govulncheck ./...)
+          for mod in server sdk plugins/github-oauth plugins/office365-oauth; do
+            echo "=== $mod ===" && (cd "$mod" && GOWORK=off govulncheck ./...)
           done
 
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [test, lint]
+    needs: [test, lint, test-plugins, lint-plugins]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -77,6 +119,11 @@ jobs:
       - name: Build server binary
         working-directory: server
         run: go build -o /dev/null ./cmd/serve/...
+      - name: Build plugin binaries
+        run: |
+          for plugin in plugins/github-oauth plugins/office365-oauth; do
+            echo "=== building $plugin ===" && (cd "$plugin" && GOWORK=off go build -o /dev/null .)
+          done
 
   pr-checks:
     name: PR Validation

@@ -32,6 +32,63 @@ func TestRegistry_EmptyPluginDir_Skipped(t *testing.T) {
 	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
 }
 
+func TestRegistry_InvalidPluginID_Uppercase_Skipped(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "my-plugin")
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+
+	desc := plugin.Descriptor{
+		ID:           "MY-PLUGIN",
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         "127.0.0.1:19001",
+	}
+	data, _ := json.Marshal(desc)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	require.Nil(t, r.FindByCapability(plugin.CapRouteExtension))
+}
+
+func TestRegistry_InvalidPluginID_WithSpace_Skipped(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "my-plugin")
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+
+	desc := plugin.Descriptor{
+		ID:           "my plugin",
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         "127.0.0.1:19001",
+	}
+	data, _ := json.Marshal(desc)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	require.Nil(t, r.FindByCapability(plugin.CapRouteExtension))
+}
+
+func TestRegistry_NonLoopbackIP_Skipped(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "valid-plugin")
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+
+	desc := plugin.Descriptor{
+		ID:           "valid-plugin",
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         "192.168.1.100:8080",
+	}
+	data, _ := json.Marshal(desc)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	require.Nil(t, r.FindByCapability(plugin.CapRouteExtension))
+}
+
 func TestRegistry_PluginWithHealthy_Loaded(t *testing.T) {
 	// Start a real HTTP server acting as a plugin.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

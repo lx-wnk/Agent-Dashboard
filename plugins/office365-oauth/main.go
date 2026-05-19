@@ -82,14 +82,17 @@ func main() {
 	}
 
 	h := &handler{
-		clientID:     clientID,
-		clientSecret: clientSecret,
-		tenantID:     tenantID,
-		dashboardURL: strings.TrimRight(dashboardURL, "/"),
-		pluginSecret: pluginSecret,
-		allowedGroup: allowedGroup,
-		httpClient:   &http.Client{Timeout: 10 * time.Second},
-		callbackURL:  "http://" + listenAddr + "/callback",
+		clientID:        clientID,
+		clientSecret:    clientSecret,
+		tenantID:        tenantID,
+		dashboardURL:    strings.TrimRight(dashboardURL, "/"),
+		pluginSecret:    pluginSecret,
+		allowedGroup:    allowedGroup,
+		httpClient:      &http.Client{Timeout: 10 * time.Second},
+		callbackURL:     "http://" + listenAddr + "/callback",
+		tokenURL:        fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", url.PathEscape(tenantID)),
+		msGraphMeURL:    graphMeURL,
+		msGraphMemberURL: graphMemberOfURL,
 	}
 
 	mux := http.NewServeMux()
@@ -122,6 +125,10 @@ type handler struct {
 	allowedGroup string
 	callbackURL  string
 	httpClient   *http.Client
+	// injectable for testing; set from constants/tenant in main.
+	tokenURL        string
+	msGraphMeURL    string
+	msGraphMemberURL string
 }
 
 func (h *handler) health(w http.ResponseWriter, _ *http.Request) {
@@ -262,8 +269,7 @@ func (h *handler) exchangeCode(ctx context.Context, code string) (string, error)
 	v.Set("redirect_uri", h.callbackURL)
 	v.Set("grant_type", "authorization_code")
 
-	tokenURL := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", url.PathEscape(h.tenantID))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(v.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.tokenURL, strings.NewReader(v.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("exchangeCode: build request: %w", err)
 	}
@@ -304,7 +310,7 @@ type msUserProfile struct {
 }
 
 func (h *handler) getUser(ctx context.Context, accessToken string) (*msUserProfile, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, graphMeURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.msGraphMeURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getUser: build request: %w", err)
 	}
@@ -335,7 +341,7 @@ func (h *handler) getUser(ctx context.Context, accessToken string) (*msUserProfi
 }
 
 func (h *handler) isMember(ctx context.Context, accessToken, groupID string) (bool, error) {
-	nextURL := graphMemberOfURL
+	nextURL := h.msGraphMemberURL
 	for nextURL != "" {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
@@ -368,6 +374,8 @@ func (h *handler) isMember(ctx context.Context, accessToken, groupID string) (bo
 				return true, nil
 			}
 		}
+		// Trailing slash anchors the prefix — "https://graph.microsoft.com/" prevents
+		// spoofs like "https://graph.microsoft.com.evil.example.com/".
 		if page.NextLink != "" && !strings.HasPrefix(page.NextLink, "https://graph.microsoft.com/") {
 			return false, fmt.Errorf("isMember: unexpected nextLink host: %s", page.NextLink)
 		}
