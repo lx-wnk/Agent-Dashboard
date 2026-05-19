@@ -226,10 +226,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 			pluginsHandler.Mount(r)
 			for _, entry := range deps.PluginRegistry.AllWithCapability(plugin.CapRouteExtension) {
 				id := entry.Descriptor.ID
-				// TODO(F051): primary path is /api/settings/plugins/<id> — keep /api/plugins/<id> as alias until callers migrate
-				r.Mount("/api/settings/plugins/"+id, plugin.NewReverseProxy(entry))
-				r.Mount("/api/plugins/"+id, plugin.NewReverseProxy(entry))
-				slog.Info("router: mounted plugin route", "id", id, "prefix", "/api/settings/plugins/"+id)
+				r.Mount("/api/settings/plugins/"+id, plugin.NewReverseProxy(entry, "/api/settings/plugins/"+id))
+				r.Mount("/api/plugins/"+id, plugin.NewReverseProxy(entry, "/api/plugins/"+id))
+				slog.Info("router: mounted plugin route", "id", id, "canonical", "/api/settings/plugins/"+id, "alias", "/api/plugins/"+id)
 			}
 		}
 	})

@@ -8,7 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 )
 
-// Handler serves GET /api/plugins.
+// Handler serves the plugin listing endpoint (canonical: /api/settings/plugins, legacy alias: /api/plugins).
 type Handler struct {
 	reg *plugin.Registry
 }

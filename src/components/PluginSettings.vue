@@ -4,7 +4,6 @@ import { ref, onMounted } from 'vue'
 interface PluginInfo {
   id: string
   capabilities: string[]
-  baseUrl: string
 }
 
 const plugins = ref<PluginInfo[]>([])
@@ -20,7 +19,7 @@ onMounted(async () => {
   try {
     const res = await fetch('/api/settings/plugins', { credentials: 'same-origin' })
     if (!res.ok) throw new Error(`Failed to load plugins (HTTP ${res.status}: ${res.statusText})`)
-    plugins.value = (await res.json()).map((p: any) => ({ ...p, baseUrl: p.base_url }))
+    plugins.value = await res.json()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load plugins'
   } finally {
@@ -57,7 +56,6 @@ onMounted(async () => {
       >
         <div class="space-y-1">
           <p class="font-mono font-medium text-slate-800 dark:text-slate-200">{{ p.id }}</p>
-          <p class="text-slate-500">{{ p.baseUrl }}</p>
         </div>
         <div class="flex flex-wrap gap-1">
           <span
