@@ -18,7 +18,7 @@ const CAP_LABELS: Record<string, string> = {
 
 onMounted(async () => {
   try {
-    const res = await fetch('/api/plugins', { credentials: 'same-origin' })
+    const res = await fetch('/api/settings/plugins', { credentials: 'same-origin' })
     if (!res.ok) throw new Error(`Failed to load plugins (HTTP ${res.status}: ${res.statusText})`)
     plugins.value = (await res.json()).map((p: any) => ({ ...p, baseUrl: p.base_url }))
   } catch (e) {
