@@ -100,6 +100,11 @@ func Load(cfgFile string) (Config, error) {
 		return Config{}, fmt.Errorf("config: DASHBOARD_JWT_SECRET must be at least 32 characters, got %d", len(cfg.JWTSecret))
 	}
 
+	// Reject auth plugin secrets that are too short — a short shared secret offers trivial brute-force surface.
+	if cfg.AuthPluginSecret != "" && len(cfg.AuthPluginSecret) < 32 {
+		return Config{}, fmt.Errorf("config: DASHBOARD_AUTH_PLUGIN_SECRET must be at least 32 characters, got %d", len(cfg.AuthPluginSecret))
+	}
+
 	if cfg.JWTSecret == "" {
 		secret, err := randomHex(32)
 		if err != nil {

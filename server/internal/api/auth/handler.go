@@ -2,10 +2,13 @@
 package auth
 
 import (
+	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
@@ -16,12 +19,12 @@ import (
 
 // Deps holds all dependencies for the auth handler.
 type Deps struct {
-	JWTSecret     string
-	CallbackURL   string
-	OAuthProvider serverauth.OAuthProvider
-	UserRepo      repo.UserRepo
-	IsLoopback    bool   // true when Host is 127.0.0.1 / ::1 / localhost
-	BypassAuth    bool   // true when loopback + no GitHub OAuth; all requests treated as local admin
+	JWTSecret        string
+	CallbackURL      string
+	OAuthProvider    serverauth.OAuthProvider
+	UserRepo         repo.UserRepo
+	IsLoopback       bool   // true when Host is 127.0.0.1 / ::1 / localhost
+	BypassAuth       bool   // true when loopback + no GitHub OAuth; all requests treated as local admin
 	AuthPluginSecret string // shared secret for POST /api/auth/session; empty disables the endpoint
 	// PluginLoginURL is the URL of the auth plugin's login endpoint.
 	// When non-empty, GET /api/auth/github redirects here instead of handling OAuth in core.
@@ -36,6 +39,39 @@ type Handler struct {
 // NewHandler creates an auth Handler.
 func NewHandler(deps Deps) *Handler {
 	return &Handler{deps: deps}
+}
+
+// issueSession upserts the user, signs a JWT, and sets the auth_token cookie.
+// It is the single place that creates a new authenticated session.
+func (h *Handler) issueSession(ctx context.Context, w http.ResponseWriter, info repo.GitHubUserInfo) error {
+	user, err := h.deps.UserRepo.Upsert(ctx, info)
+	if err != nil {
+		return fmt.Errorf("auth: upsert user: %w", err)
+	}
+
+	tokenPayload := serverauth.JWTPayload{
+		Sub:     user.ID,
+		Login:   user.GithubLogin,
+		IsAdmin: user.IsAdmin,
+	}
+	if user.IsAdmin {
+		tokenPayload.AdminGrantedAt = time.Now().Unix()
+	}
+	jwtToken, err := serverauth.SignJWT(tokenPayload, h.deps.JWTSecret, 86400)
+	if err != nil {
+		return fmt.Errorf("auth: sign jwt: %w", err)
+	}
+
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec
+		Name:     "auth_token",
+		Value:    jwtToken,
+		MaxAge:   86400,
+		HttpOnly: true,
+		Secure:   !h.deps.IsLoopback,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+	})
+	return nil
 }
 
 // GitHubRedirect redirects the browser to the GitHub authorization URL.
@@ -76,6 +112,10 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 // Callback handles the GitHub OAuth callback.
 // GET /api/auth/callback?code=XXX&state=YYY
 func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
+	// Block the legacy in-core callback when the plugin owns the OAuth dance.
+	if h.deps.PluginLoginURL != "" {
+		return apierr.NewAppError(http.StatusNotFound, "auth callback not available in plugin mode")
+	}
 	if h.deps.OAuthProvider == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
 	}
@@ -108,27 +148,13 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("auth: get user: %w", err)
 	}
 
-	user, err := h.deps.UserRepo.Upsert(r.Context(), repo.GitHubUserInfo{
+	if err := h.issueSession(r.Context(), w, repo.GitHubUserInfo{
 		ID:          profile.ID,
 		Login:       profile.Login,
 		DisplayName: profile.DisplayName,
 		AvatarURL:   profile.AvatarURL,
-	})
-	if err != nil {
-		return fmt.Errorf("auth: upsert user: %w", err)
-	}
-
-	tokenPayload := serverauth.JWTPayload{
-		Sub:     user.ID,
-		Login:   user.GithubLogin,
-		IsAdmin: user.IsAdmin,
-	}
-	if user.IsAdmin {
-		tokenPayload.AdminGrantedAt = time.Now().Unix()
-	}
-	token, err := serverauth.SignJWT(tokenPayload, h.deps.JWTSecret, 86400)
-	if err != nil {
-		return fmt.Errorf("auth: sign jwt: %w", err)
+	}); err != nil {
+		return err
 	}
 
 	http.SetCookie(w, &http.Cookie{ //nolint:gosec
@@ -137,15 +163,6 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		HttpOnly: true,
 		Secure:   !h.deps.IsLoopback,
 		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-	})
-	http.SetCookie(w, &http.Cookie{ //nolint:gosec
-		Name:     "auth_token",
-		Value:    token,
-		MaxAge:   86400,
-		HttpOnly: true,
-		Secure:   !h.deps.IsLoopback,
-		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -184,16 +201,19 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "user store unavailable")
 	}
 
-	// Validate the shared plugin secret.
+	// Validate the shared plugin secret using constant-time comparison to prevent timing attacks.
 	authHeader := r.Header.Get("Authorization")
 	const prefix = "Bearer "
-	if len(authHeader) <= len(prefix) || authHeader[:len(prefix)] != prefix {
+	token, ok := strings.CutPrefix(authHeader, prefix)
+	if !ok || token == "" {
 		return apierr.NewAppError(http.StatusUnauthorized, "missing or invalid Authorization header")
 	}
-	token := authHeader[len(prefix):]
-	if token != h.deps.AuthPluginSecret {
+	if subtle.ConstantTimeCompare([]byte(token), []byte(h.deps.AuthPluginSecret)) != 1 {
 		return apierr.NewAppError(http.StatusUnauthorized, "invalid plugin secret")
 	}
+
+	// Limit request body to 64 KiB to prevent memory exhaustion.
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 
 	var body struct {
 		GitHubID    string `json:"github_id"`
@@ -208,38 +228,15 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadRequest, "github_id and login are required")
 	}
 
-	user, err := h.deps.UserRepo.Upsert(r.Context(), repo.GitHubUserInfo{
+	if err := h.issueSession(r.Context(), w, repo.GitHubUserInfo{
 		ID:          body.GitHubID,
 		Login:       body.Login,
 		DisplayName: body.DisplayName,
 		AvatarURL:   body.AvatarURL,
-	})
-	if err != nil {
-		return fmt.Errorf("auth: upsert user: %w", err)
+	}); err != nil {
+		return err
 	}
 
-	tokenPayload := serverauth.JWTPayload{
-		Sub:     user.ID,
-		Login:   user.GithubLogin,
-		IsAdmin: user.IsAdmin,
-	}
-	if user.IsAdmin {
-		tokenPayload.AdminGrantedAt = time.Now().Unix()
-	}
-	jwtToken, err := serverauth.SignJWT(tokenPayload, h.deps.JWTSecret, 86400)
-	if err != nil {
-		return fmt.Errorf("auth: sign jwt: %w", err)
-	}
-
-	http.SetCookie(w, &http.Cookie{ //nolint:gosec
-		Name:     "auth_token",
-		Value:    jwtToken,
-		MaxAge:   86400,
-		HttpOnly: true,
-		Secure:   !h.deps.IsLoopback,
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/",
-	})
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }

@@ -106,6 +106,10 @@ func main() {
 		slog.Error("DASHBOARD_AUTH_PLUGIN_SECRET must be set")
 		os.Exit(1)
 	}
+	if len(pluginSecret) < 32 {
+		slog.Error("DASHBOARD_AUTH_PLUGIN_SECRET must be at least 32 characters")
+		os.Exit(1)
+	}
 
 	h := &handler{
 		clientID:     clientID,
