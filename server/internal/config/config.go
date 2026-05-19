@@ -32,8 +32,12 @@ type Config struct {
 	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
-	MCPToken               string `koanf:"mcp_token"`
-	Adapters               AdapterConfig `koanf:"adapters"`
+	MCPToken string `koanf:"mcp_token"`
+	// AuthPluginSecret is the shared secret between core and auth plugins.
+	// Set via DASHBOARD_AUTH_PLUGIN_SECRET. When set, enables POST /api/auth/session
+	// so an external auth plugin can establish sessions after completing OAuth.
+	AuthPluginSecret string        `koanf:"auth_plugin_secret"`
+	Adapters         AdapterConfig `koanf:"adapters"`
 }
 
 // Defaults returns a Config populated with safe defaults.

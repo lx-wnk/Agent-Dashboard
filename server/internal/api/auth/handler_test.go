@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,20 @@ func TestHandler_GitHubRedirect_NoClientID(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/auth/github", nil)
 	err := h.GitHubRedirect(w, r)
 	require.Error(t, err) // must return error when GitHub not configured
+}
+
+func TestHandler_GitHubRedirect_PluginLoginURL(t *testing.T) {
+	// When a PluginLoginURL is set, GitHubRedirect must redirect to the plugin.
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:      "test-secret",
+		PluginLoginURL: "http://127.0.0.1:19001/login",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/github", nil)
+	err := h.GitHubRedirect(w, r)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusFound, w.Code)
+	require.Equal(t, "http://127.0.0.1:19001/login", w.Header().Get("Location"))
 }
 
 func TestHandler_Logout(t *testing.T) {
@@ -58,6 +73,41 @@ func TestHandler_Me_Authenticated(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
 	err := h.Me(w, r)
+	require.Error(t, err)
+}
+
+func TestHandler_CreateSession_NotConfigured(t *testing.T) {
+	// When AuthPluginSecret is empty, CreateSession must return 404-style error.
+	h := apiauth.NewHandler(apiauth.Deps{JWTSecret: "test-secret"})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/auth/session", nil)
+	err := h.CreateSession(w, r)
+	require.Error(t, err)
+}
+
+func TestHandler_CreateSession_WrongSecret(t *testing.T) {
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:        "test-secret",
+		AuthPluginSecret: "correct-plugin-secret",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/auth/session",
+		bytes.NewBufferString(`{"github_id":"1","login":"alice"}`))
+	r.Header.Set("Authorization", "Bearer wrong-secret")
+	err := h.CreateSession(w, r)
+	require.Error(t, err)
+}
+
+func TestHandler_CreateSession_MissingAuthHeader(t *testing.T) {
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:        "test-secret",
+		AuthPluginSecret: "correct-plugin-secret",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/auth/session",
+		bytes.NewBufferString(`{"github_id":"1","login":"alice"}`))
+	// No Authorization header
+	err := h.CreateSession(w, r)
 	require.Error(t, err)
 }
 

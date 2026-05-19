@@ -1,8 +1,13 @@
 {
   "id": "github-oauth",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "capabilities": ["auth_provider"],
   "addr": "127.0.0.1:19001",
   "command": ["./github-oauth"],
-  "env": ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"]
+  "env": [
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+    "DASHBOARD_URL",
+    "DASHBOARD_AUTH_PLUGIN_SECRET"
+  ]
 }
