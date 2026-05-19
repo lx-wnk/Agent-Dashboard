@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ptr[T any](v T) *T { return &v }
-
 func stageRun(stage string, pid *int, sessionID *string, startedAt *time.Time) *ent.StageRun {
 	return &ent.StageRun{Stage: stage, Pid: pid, SessionID: sessionID, StartedAt: startedAt}
 }

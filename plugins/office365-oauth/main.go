@@ -374,6 +374,8 @@ func (h *handler) isMember(ctx context.Context, accessToken, groupID string) (bo
 				return true, nil
 			}
 		}
+		// Trailing slash anchors the prefix — "https://graph.microsoft.com/" prevents
+		// spoofs like "https://graph.microsoft.com.evil.example.com/".
 		if page.NextLink != "" && !strings.HasPrefix(page.NextLink, "https://graph.microsoft.com/") {
 			return false, fmt.Errorf("isMember: unexpected nextLink host: %s", page.NextLink)
 		}

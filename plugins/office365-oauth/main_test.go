@@ -217,6 +217,25 @@ func TestCallback_MissingCode(t *testing.T) {
 
 // --- /callback integration ---
 
+func TestCallback_TokenExchangeError(t *testing.T) {
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "invalid_grant", http.StatusUnprocessableEntity)
+	}))
+	defer tokenSrv.Close()
+
+	h := newO365Handler(tokenSrv, nil, nil, nil)
+	const state = "csrf.nonce"
+	req := httptest.NewRequest(http.MethodGet, "/callback?state="+state+"&code=bad", nil)
+	req.AddCookie(&http.Cookie{Name: stateCookieName, Value: state})
+	rr := httptest.NewRecorder()
+	h.callback(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d", rr.Code)
+	}
+	assertErrorBody(t, rr, "code exchange failed")
+}
+
 func TestCallback_Success_NoGroupCheck(t *testing.T) {
 	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

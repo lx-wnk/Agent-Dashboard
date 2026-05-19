@@ -33,6 +33,8 @@ func TestIsBlockedIP(t *testing.T) {
 		{"unspecified 0.0.0.0", "0.0.0.0", true},
 		// Multicast
 		{"multicast 224.0.0.1", "224.0.0.1", true},
+		// IPv6 unique-local (fc00::/7, RFC 4193) — blocked via IsPrivate
+		{"IPv6 ULA fd00::1", "fd00::1", true},
 		// Public — NOT blocked
 		{"public 8.8.8.8", "8.8.8.8", false},
 		{"public 1.1.1.1", "1.1.1.1", false},
