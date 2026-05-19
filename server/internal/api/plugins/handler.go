@@ -8,7 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 )
 
-// Handler serves the plugin listing endpoint (canonical: /api/settings/plugins, legacy alias: /api/plugins).
+// Handler serves the plugin listing endpoint at /api/settings/plugins.
 type Handler struct {
 	reg *plugin.Registry
 }
@@ -19,11 +19,8 @@ func New(reg *plugin.Registry) *Handler {
 }
 
 // Mount registers plugin routes on r.
-// The canonical path is /api/settings/plugins (settings concern).
-// /api/plugins is kept as a permanent alias so existing integrations continue to work.
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/settings/plugins", h.list)
-	r.Get("/api/plugins", h.list) // TODO(F051): alias — remove after all callers migrate to /api/settings/plugins
 }
 
 // pluginInfo is intentionally a narrow DTO. Do NOT replace with direct Entry/Descriptor
