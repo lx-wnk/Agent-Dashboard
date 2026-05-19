@@ -15,6 +15,7 @@ import (
 var debugPaths = []string{
 	"/api/hooks/pending",
 	"/api/system/health",
+	"/api/system",
 	"/api/agents/stream",
 	"/api/tasks/stream",
 }
