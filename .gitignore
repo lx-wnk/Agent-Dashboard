@@ -42,6 +42,7 @@ package-lock.json
 
 # Branch review / analysis outputs — ephemeral, not for shared history
 /outputs/
+**/coverage.out
 
 # Vue SPA build output — the placeholder dist/index.html is committed so go:embed
 # compiles without requiring a pnpm build first. Real build artifacts (assets/, etc.)
