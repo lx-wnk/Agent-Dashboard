@@ -3,7 +3,6 @@ package auth_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -72,11 +71,10 @@ func TestHandler_Me_Unauthenticated(t *testing.T) {
 	require.Error(t, err) // no JWT in context → error
 }
 
-func TestHandler_Me_Authenticated(t *testing.T) {
-	// Build a valid JWT and inject it into context via cookie
-	// Since we can't easily call RequireAuth middleware in a unit test,
-	// just verify that Me returns error when no payload is in context.
-	// Full integration test is deferred to Task 32.
+func TestHandler_Me_NoContextPayload(t *testing.T) {
+	// Me returns an error when no JWT payload has been injected into context
+	// (i.e. the RequireAuth middleware did not run). Success path deferred — needs
+	// the full middleware stack or context injection helper.
 	h := apiauth.NewHandler(apiauth.Deps{JWTSecret: "test-secret"})
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
@@ -276,5 +274,3 @@ func TestHandler_Callback_MissingCode(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, appErr.Status)
 }
 
-// Ensure json import is used (Me encodes JSON on success path).
-var _ = json.Marshal

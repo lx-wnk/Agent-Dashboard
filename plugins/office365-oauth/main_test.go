@@ -158,7 +158,7 @@ func TestCallback_StateMismatch(t *testing.T) {
 	assertErrorBody(t, rr, "state mismatch")
 }
 
-func TestCallback_MalformedState(t *testing.T) {
+func TestCallback_MalformedState_NoDot(t *testing.T) {
 	h := newO365Handler(nil, nil, nil, nil)
 	const state = "nodothere"
 	req := httptest.NewRequest(http.MethodGet, "/callback?state="+state+"&code=y", nil)
@@ -336,6 +336,15 @@ func TestCallback_GroupCheck_Member(t *testing.T) {
 
 	if rr.Code != http.StatusFound {
 		t.Fatalf("expected 302, got %d: %s", rr.Code, rr.Body.String())
+	}
+	found := false
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == "auth_token" && c.Value == "sess_grp" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("auth_token cookie not forwarded after group-membership approval")
 	}
 }
 

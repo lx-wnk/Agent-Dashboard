@@ -1,7 +1,2 @@
 threshold:
   total: 55
-
-exclude:
-  paths:
-    # binary entry point — startup/validation only, not unit-testable
-    - "^main\\.go$"

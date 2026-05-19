@@ -14,28 +14,8 @@ import (
 )
 
 func TestOrchestrator_BacklogTransitionsToImplementation(t *testing.T) {
-	// This test exercises the backlog stage handler end-to-end through ProgressTask.
-	bundle, err := db.Open(":memory:")
-	require.NoError(t, err)
-	client := bundle.Client
-	defer client.Close() //nolint:errcheck
-
+	orch, taskRepo := makeTestOrchestratorWithRepos(t)
 	ctx := context.Background()
-	taskRepo := repo.NewTaskRepo(client)
-	srRepo := repo.NewStageRunRepo(client)
-	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
-	cfgRepo := repo.NewPipelineConfigRepo(client)
-
-	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
-		PollInterval:   100 * time.Millisecond,
-		TaskRepo:       taskRepo,
-		StageRunRepo:   srRepo,
-		PermissionRepo: permRepo,
-		AuditRepo:      auditRepo,
-		ConfigRepo:     cfgRepo,
-	})
-	require.NoError(t, err)
 
 	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
 		Slug:                "backlog-test",
@@ -51,7 +31,7 @@ func TestOrchestrator_BacklogTransitionsToImplementation(t *testing.T) {
 	sr, err := orch.ProgressTask(ctx, task.ID, nil)
 	require.NoError(t, err)
 	require.NotNil(t, sr)
-	require.Equal(t, "done", sr.Status) // backlog stage_run is done after transitioning
+	require.Equal(t, "done", sr.Status)
 
 	updated, err := taskRepo.GetByID(ctx, task.ID)
 	require.NoError(t, err)
@@ -59,32 +39,13 @@ func TestOrchestrator_BacklogTransitionsToImplementation(t *testing.T) {
 }
 
 func TestOrchestrator_AsyncRunningTransition_RecordsPI(t *testing.T) {
-	bundle, err := db.Open(":memory:")
-	require.NoError(t, err)
-	client := bundle.Client
-	defer client.Close() //nolint:errcheck
-
-	ctx := context.Background()
-	taskRepo := repo.NewTaskRepo(client)
-	srRepo := repo.NewStageRunRepo(client)
-	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
-	cfgRepo := repo.NewPipelineConfigRepo(client)
-
-	// Stub implementation handler: returns async_running with PID 42
-	stubHandler := &stubStageHandler{stage: "implementation", transition: pipeline.AsyncRunningTransition{PID: 42}}
-
-	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
-		TaskRepo:       taskRepo,
-		StageRunRepo:   srRepo,
-		PermissionRepo: permRepo,
-		AuditRepo:      auditRepo,
-		ConfigRepo:     cfgRepo,
+	orch, taskRepo := makeTestOrchestratorWithRepos(t)
+	orch.SetHandlerOverride("implementation", &stubStageHandler{
+		stage:      "implementation",
+		transition: pipeline.AsyncRunningTransition{PID: 42},
 	})
-	require.NoError(t, err)
-	orch.SetHandlerOverride("implementation", stubHandler)
 
-	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+	task, err := taskRepo.Create(context.Background(), repo.CreateTaskInput{
 		Slug:                "impl-test",
 		Title:               "Impl Test",
 		Cwd:                 "/tmp",
@@ -95,7 +56,7 @@ func TestOrchestrator_AsyncRunningTransition_RecordsPI(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	sr, err := orch.ProgressTask(ctx, task.ID, nil)
+	sr, err := orch.ProgressTask(context.Background(), task.ID, nil)
 	require.NoError(t, err)
 	require.NotNil(t, sr)
 	require.Equal(t, "running", sr.Status)
@@ -104,31 +65,13 @@ func TestOrchestrator_AsyncRunningTransition_RecordsPI(t *testing.T) {
 }
 
 func TestOrchestrator_FailTransition_TaskStageUnchanged(t *testing.T) {
-	bundle, err := db.Open(":memory:")
-	require.NoError(t, err)
-	client := bundle.Client
-	defer client.Close() //nolint:errcheck
-	ctx := context.Background()
-
-	taskRepo := repo.NewTaskRepo(client)
-	srRepo := repo.NewStageRunRepo(client)
-	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
-	cfgRepo := repo.NewPipelineConfigRepo(client)
-
-	stubHandler := &stubStageHandler{stage: "implementation", transition: pipeline.FailTransition{Reason: "test failure"}}
-
-	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
-		TaskRepo:       taskRepo,
-		StageRunRepo:   srRepo,
-		PermissionRepo: permRepo,
-		AuditRepo:      auditRepo,
-		ConfigRepo:     cfgRepo,
+	orch, taskRepo := makeTestOrchestratorWithRepos(t)
+	orch.SetHandlerOverride("implementation", &stubStageHandler{
+		stage:      "implementation",
+		transition: pipeline.FailTransition{Reason: "test failure"},
 	})
-	require.NoError(t, err)
-	orch.SetHandlerOverride("implementation", stubHandler)
 
-	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+	task, err := taskRepo.Create(context.Background(), repo.CreateTaskInput{
 		Slug:                "fail-test",
 		Title:               "Fail Test",
 		Cwd:                 "/tmp",
@@ -139,12 +82,11 @@ func TestOrchestrator_FailTransition_TaskStageUnchanged(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	sr, err := orch.ProgressTask(ctx, task.ID, nil)
+	sr, err := orch.ProgressTask(context.Background(), task.ID, nil)
 	require.NoError(t, err)
 	require.Equal(t, "failed", sr.Status)
 
-	// Task stage must stay at implementation (not advance on failure)
-	updated, err := taskRepo.GetByID(ctx, task.ID)
+	updated, err := taskRepo.GetByID(context.Background(), task.ID)
 	require.NoError(t, err)
 	require.Equal(t, "implementation", updated.CurrentStage)
 }
@@ -161,8 +103,8 @@ func (h *stubStageHandler) Execute(_ *pipeline.StageContext) (pipeline.StageTran
 	return h.transition, nil
 }
 
-// makeTestOrchestrator opens an in-memory SQLite DB and returns a configured orchestrator.
-func makeTestOrchestrator(t *testing.T) *pipeline.PipelineOrchestrator {
+// makeTestOrchestratorWithRepos opens an in-memory SQLite DB and returns an orchestrator + task repo.
+func makeTestOrchestratorWithRepos(t *testing.T) (*pipeline.PipelineOrchestrator, repo.TaskRepo) {
 	t.Helper()
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
@@ -183,6 +125,13 @@ func makeTestOrchestrator(t *testing.T) *pipeline.PipelineOrchestrator {
 		ConfigRepo:     cfgRepo,
 	})
 	require.NoError(t, err)
+	return orch, taskRepo
+}
+
+// makeTestOrchestrator is a convenience wrapper for tests that only need the orchestrator.
+func makeTestOrchestrator(t *testing.T) *pipeline.PipelineOrchestrator {
+	t.Helper()
+	orch, _ := makeTestOrchestratorWithRepos(t)
 	return orch
 }
 
@@ -291,8 +240,6 @@ func TestDecideCompletedTransition_SelfReview_Passed_ClearsFeedback(t *testing.T
 		_, hasFeedback := next.MetadataPatch["review_feedback"]
 		require.False(t, hasFeedback, "review_feedback must be cleared after passing review")
 	}
-	// MetaClear is an acceptable alternative when all metadata was feedback-only
-	// (the orchestrator sets MetaClear=true when rest is empty)
 }
 
 func TestDecideCompletedTransition_SelfReview_Failed_FirstCycle(t *testing.T) {
