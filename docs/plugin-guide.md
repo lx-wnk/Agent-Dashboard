@@ -215,3 +215,54 @@ The dashboard logs `plugin: loaded id=github-oauth capabilities=[auth_provider]`
 | `GET`  | `/capabilities/auth/authorize-url` | Legacy: returns GitHub authorization URL |
 | `POST` | `/capabilities/auth/exchange` | Legacy: exchanges OAuth code for access token |
 | `GET`  | `/capabilities/auth/user` | Legacy: returns user profile for Bearer token |
+
+---
+
+## Reference: office365-oauth plugin
+
+`plugins/office365-oauth/` implements the `auth_provider` capability for Microsoft single-tenant Azure AD.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `plugin.json` | Descriptor — capability `auth_provider`, addr `127.0.0.1:19002`, command `./office365-oauth` |
+| `go.mod` | Standalone module (`github.com/lx-wnk/agent-dashboard-plugin-office365-oauth`) |
+| `main.go` | HTTP server implementing standalone OAuth2 flow |
+
+### Azure App Registration
+
+1. Go to [Azure portal](https://portal.azure.com) → **Azure Active Directory** → **App registrations** → **New registration**.
+2. Set redirect URI to `http://127.0.0.1:19002/callback` (type: Web).
+3. Under **Certificates & secrets**, create a new client secret.
+4. Under **API permissions**, add `User.Read` (delegated). If using group restriction, also add `GroupMember.Read.All` (delegated). Grant admin consent.
+
+### Setup
+
+```bash
+# 1. Build the plugin binary
+cd plugins/office365-oauth
+GOWORK=off go build -o office365-oauth .
+
+# 2. Export credentials
+export AZURE_CLIENT_ID=your_application_client_id
+export AZURE_CLIENT_SECRET=your_client_secret
+export AZURE_TENANT_ID=your_tenant_directory_id
+export DASHBOARD_URL=http://127.0.0.1:13120
+export DASHBOARD_AUTH_PLUGIN_SECRET=$(openssl rand -hex 32)
+
+# Optional: restrict to a specific Azure AD group
+export OFFICE365_ALLOWED_GROUP_ID=your_group_object_id
+
+# 3. Point the dashboard at the plugin dir and start
+export PLUGIN_DIR=/path/to/plugins   # directory containing office365-oauth/
+./agent-dashboard serve
+```
+
+### Endpoint summary
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check — returns `{"ok":true}` |
+| `GET` | `/login?nonce=<jwt>` | Start OAuth dance (primary entry point) |
+| `GET` | `/callback?code=&state=` | OAuth callback — creates session, redirects to dashboard |
