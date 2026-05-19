@@ -82,6 +82,10 @@ export default defineConfig({
         target: `http://127.0.0.1:${DASHBOARD_PORT}`,
         changeOrigin: true,
         ws: true,
+        // Rewrite Origin to match the backend so RequireSameOriginForMutations passes in dev.
+        // changeOrigin rewrites Host but not Origin; without this the CSRF middleware sees
+        // Origin: localhost:5173 vs Host: 127.0.0.1:13120 and blocks mutation requests.
+        headers: { origin: `http://127.0.0.1:${DASHBOARD_PORT}` },
         configure: (proxy) => {
           proxy.on('error', (err) => {
             if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED') return
@@ -92,6 +96,7 @@ export default defineConfig({
       '/auth': {
         target: `http://127.0.0.1:${DASHBOARD_PORT}`,
         changeOrigin: true,
+        headers: { origin: `http://127.0.0.1:${DASHBOARD_PORT}` },
         configure: (proxy) => {
           proxy.on('error', (err) => {
             if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED') return
