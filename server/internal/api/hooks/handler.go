@@ -82,12 +82,13 @@ func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// requireSecret validates the bearer secret when one is configured.
+// When DASHBOARD_HOOKS_SECRET is not set the server is loopback-only,
+// so requests from the local UI are allowed through without a token —
+// matching the permissive behaviour of the /api/hooks/event endpoint.
 func (h *Handler) requireSecret(w http.ResponseWriter, r *http.Request) bool {
 	if h.secret == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "DASHBOARD_HOOKS_SECRET must be set to use the edit gate"})
-		return false
+		return true
 	}
 	got := bearerToken(r)
 	if subtle.ConstantTimeCompare([]byte(got), []byte(h.secret)) != 1 {

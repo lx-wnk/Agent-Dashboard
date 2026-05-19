@@ -66,8 +66,9 @@ func TestEvent_WithNoSecretConfigured_IsOpenWithoutAuth(t *testing.T) {
 // PreTool endpoint
 // -------------------------------------------------------------------
 
-func TestPreTool_WithoutSecret_Returns401(t *testing.T) {
-	// PreTool requires a secret even when the Event endpoint is open.
+func TestPreTool_WithoutSecret_AllowsThrough(t *testing.T) {
+	// When DASHBOARD_HOOKS_SECRET is not set the server is loopback-only,
+	// so requests are allowed through without a bearer token — matching Event behaviour.
 	h := newTestHandler("")
 	body := `{"toolName":"Bash","cwd":"/tmp"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/pre-tool", bytes.NewBufferString(body))
@@ -76,8 +77,8 @@ func TestPreTool_WithoutSecret_Returns401(t *testing.T) {
 
 	h.PreTool(w, req)
 
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("PreTool without secret configured: got status %d, want %d (secret required)", w.Code, http.StatusUnauthorized)
+	if w.Code == http.StatusUnauthorized {
+		t.Errorf("PreTool without secret configured: got 401, want request allowed through")
 	}
 }
 
@@ -177,15 +178,17 @@ func TestPreTool_WriteTool_TimeoutReturnsProceeds(t *testing.T) {
 // Pending endpoint
 // -------------------------------------------------------------------
 
-func TestPending_WithoutSecret_Returns401(t *testing.T) {
+func TestPending_WithoutSecret_AllowsThrough(t *testing.T) {
+	// When DASHBOARD_HOOKS_SECRET is not set, Pending is accessible from the local UI
+	// without a bearer token — the loopback network binding is the security boundary.
 	h := newTestHandler("")
 	req := httptest.NewRequest(http.MethodGet, "/api/hooks/pending", nil)
 	w := httptest.NewRecorder()
 
 	h.Pending(w, req)
 
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("Pending without secret: got status %d, want %d", w.Code, http.StatusUnauthorized)
+	if w.Code == http.StatusUnauthorized {
+		t.Errorf("Pending without secret configured: got 401, want request allowed through")
 	}
 }
 
