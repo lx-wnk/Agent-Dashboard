@@ -135,8 +135,13 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	var refineHandler *refineapi.Handler
 	if entClient != nil {
 		refineHandler = refineapi.NewHandler(refineapi.Deps{
-			Turns: repo.NewRefinementTurnRepo(entClient),
-			Tasks: repo.NewTaskRepo(entClient),
+			Turns:     repo.NewRefinementTurnRepo(entClient),
+			Tasks:     repo.NewTaskRepo(entClient),
+			StageRuns: repo.NewStageRunRepo(entClient),
+			Advance: func(ctx context.Context, taskID string) error {
+				_, err := orch.ProgressTask(ctx, taskID, nil)
+				return err
+			},
 		})
 	}
 

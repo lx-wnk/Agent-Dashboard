@@ -18,8 +18,13 @@ import (
 
 // Deps holds the dependencies for Handler.
 type Deps struct {
-	Turns   repo.RefinementTurnRepo
-	Tasks   repo.TaskRepo
+	Turns     repo.RefinementTurnRepo
+	Tasks     repo.TaskRepo
+	StageRuns repo.StageRunRepo
+	// Advance is called after refinement is confirmed to progress the task past
+	// the concept stage. Injected from the composition root so this package has
+	// no runtime dependency on the pipeline orchestrator.
+	Advance func(ctx context.Context, taskID string) error
 	Spawner func(ctx context.Context, cfg refine.SpawnConfig) (<-chan string, error)
 }
 
@@ -215,7 +220,7 @@ done:
 	}
 }
 
-// POST /api/refine/{taskId}/confirm — mark refinement as confirmed.
+// POST /api/refine/{taskId}/confirm — mark refinement as confirmed and advance to backlog.
 func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 	_, ok := auth.PayloadFromContext(r.Context())
 	if !ok {
@@ -224,6 +229,7 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	taskID := chi.URLParam(r, "taskId")
+
 	phase := "confirmed"
 	if _, err := h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
 		TaskID:  taskID,
@@ -235,8 +241,34 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Mark the concept stage run done and advance the task to backlog so the
+	// pipeline orchestrator can immediately pick it up for implementation.
+	if h.deps.StageRuns != nil {
+		now := time.Now()
+		done := "done"
+		if sr, err := h.deps.StageRuns.GetLatestByTaskAndStage(r.Context(), taskID, "concept"); err == nil && sr != nil {
+			_, _ = h.deps.StageRuns.Update(r.Context(), sr.ID, repo.UpdateStageRunInput{
+				Status:  &done,
+				EndedAt: &now,
+			})
+		}
+	}
+	backlog := "backlog"
+	if h.deps.Tasks != nil {
+		_, _ = h.deps.Tasks.Update(r.Context(), taskID, repo.UpdateTaskInput{CurrentStage: &backlog})
+	}
+	if h.deps.Advance != nil {
+		_ = h.deps.Advance(r.Context(), taskID)
+	}
+
+	task, err := h.deps.Tasks.GetByID(r.Context(), taskID)
+	if err != nil {
+		jsonError(w, "confirmed but could not fetch updated task", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	_ = json.NewEncoder(w).Encode(task)
 }
 
 func jsonError(w http.ResponseWriter, msg string, status int) {
