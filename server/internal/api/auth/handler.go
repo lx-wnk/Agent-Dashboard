@@ -2,10 +2,14 @@
 package auth
 
 import (
+	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
@@ -16,12 +20,16 @@ import (
 
 // Deps holds all dependencies for the auth handler.
 type Deps struct {
-	JWTSecret    string
-	CallbackURL  string
-	OAuthProvider serverauth.OAuthProvider
-	UserRepo     repo.UserRepo
-	IsLoopback   bool // true when Host is 127.0.0.1 / ::1 / localhost
-	BypassAuth   bool // true when loopback + no GitHub OAuth; all requests treated as local admin
+	JWTSecret        string
+	CallbackURL      string
+	OAuthProvider    serverauth.OAuthProvider
+	UserRepo         repo.UserRepo
+	IsLoopback       bool   // true when Host is 127.0.0.1 / ::1 / localhost
+	BypassAuth       bool   // true when loopback + no GitHub OAuth; all requests treated as local admin
+	AuthPluginSecret string // shared secret for POST /api/auth/session; empty disables the endpoint
+	// PluginLoginURL is the URL of the auth plugin's login endpoint.
+	// When non-empty, GET /api/auth/github redirects here instead of handling OAuth in core.
+	PluginLoginURL string
 }
 
 // Handler handles GitHub OAuth routes.
@@ -34,9 +42,55 @@ func NewHandler(deps Deps) *Handler {
 	return &Handler{deps: deps}
 }
 
+// issueSession upserts the user, signs a JWT, and sets the auth_token cookie.
+// It is the single place that creates a new authenticated session.
+func (h *Handler) issueSession(ctx context.Context, w http.ResponseWriter, info repo.GitHubUserInfo) error {
+	user, err := h.deps.UserRepo.Upsert(ctx, info)
+	if err != nil {
+		return fmt.Errorf("auth: upsert user: %w", err)
+	}
+
+	tokenPayload := serverauth.JWTPayload{
+		Sub:     user.ID,
+		Login:   user.GithubLogin,
+		IsAdmin: user.IsAdmin,
+	}
+	if user.IsAdmin {
+		tokenPayload.AdminGrantedAt = time.Now().Unix()
+	}
+	jwtToken, err := serverauth.SignJWT(tokenPayload, h.deps.JWTSecret, 86400)
+	if err != nil {
+		return fmt.Errorf("auth: sign jwt: %w", err)
+	}
+
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec
+		Name:     "auth_token",
+		Value:    jwtToken,
+		MaxAge:   86400,
+		HttpOnly: true,
+		Secure:   !h.deps.IsLoopback,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+	})
+	return nil
+}
+
 // GitHubRedirect redirects the browser to the GitHub authorization URL.
+// When a PluginLoginURL is configured the request is forwarded to the auth plugin,
+// which owns the entire OAuth dance and calls POST /api/auth/session when done.
 // GET /api/auth/github
 func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
+	// Plugin-driven flow: redirect to the plugin's login endpoint with a nonce.
+	if h.deps.PluginLoginURL != "" {
+		nonce, err := serverauth.GenerateNonce(h.deps.JWTSecret)
+		if err != nil {
+			return apierr.NewAppError(http.StatusInternalServerError, "failed to generate nonce")
+		}
+		redirectURL := h.deps.PluginLoginURL + "?nonce=" + url.QueryEscape(nonce)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return nil
+	}
+	// Legacy in-core flow (kept for backwards compatibility when no auth plugin is running).
 	if h.deps.OAuthProvider == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
 	}
@@ -64,6 +118,10 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 // Callback handles the GitHub OAuth callback.
 // GET /api/auth/callback?code=XXX&state=YYY
 func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
+	// Block the legacy in-core callback when the plugin owns the OAuth dance.
+	if h.deps.PluginLoginURL != "" {
+		return apierr.NewAppError(http.StatusNotFound, "auth callback not available in plugin mode")
+	}
 	if h.deps.OAuthProvider == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
 	}
@@ -96,27 +154,13 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("auth: get user: %w", err)
 	}
 
-	user, err := h.deps.UserRepo.Upsert(r.Context(), repo.GitHubUserInfo{
+	if err := h.issueSession(r.Context(), w, repo.GitHubUserInfo{
 		ID:          profile.ID,
 		Login:       profile.Login,
 		DisplayName: profile.DisplayName,
 		AvatarURL:   profile.AvatarURL,
-	})
-	if err != nil {
-		return fmt.Errorf("auth: upsert user: %w", err)
-	}
-
-	tokenPayload := serverauth.JWTPayload{
-		Sub:     user.ID,
-		Login:   user.GithubLogin,
-		IsAdmin: user.IsAdmin,
-	}
-	if user.IsAdmin {
-		tokenPayload.AdminGrantedAt = time.Now().Unix()
-	}
-	token, err := serverauth.SignJWT(tokenPayload, h.deps.JWTSecret, 86400)
-	if err != nil {
-		return fmt.Errorf("auth: sign jwt: %w", err)
+	}); err != nil {
+		return err
 	}
 
 	http.SetCookie(w, &http.Cookie{ //nolint:gosec
@@ -125,15 +169,6 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		HttpOnly: true,
 		Secure:   !h.deps.IsLoopback,
 		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-	})
-	http.SetCookie(w, &http.Cookie{ //nolint:gosec
-		Name:     "auth_token",
-		Value:    token,
-		MaxAge:   86400,
-		HttpOnly: true,
-		Secure:   !h.deps.IsLoopback,
-		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -154,6 +189,67 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 	})
 	w.WriteHeader(http.StatusNoContent)
 	return nil
+}
+
+// CreateSession accepts a user profile from a trusted auth plugin and creates a JWT session cookie.
+// POST /api/auth/session
+//
+// The request must include the shared plugin secret in the Authorization header:
+//
+//	Authorization: Bearer <DASHBOARD_AUTH_PLUGIN_SECRET>
+//
+// Body: {"github_id":"...","login":"...","display_name":"...","avatar_url":"..."}
+func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) error {
+	if h.deps.AuthPluginSecret == "" {
+		return apierr.NewAppError(http.StatusNotFound, "auth session endpoint not configured")
+	}
+	if h.deps.UserRepo == nil {
+		return apierr.NewAppError(http.StatusServiceUnavailable, "user store unavailable")
+	}
+
+	// Validate the shared plugin secret using constant-time comparison to prevent timing attacks.
+	authHeader := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	token, ok := strings.CutPrefix(authHeader, prefix)
+	if !ok || token == "" {
+		return apierr.NewAppError(http.StatusUnauthorized, "missing or invalid Authorization header")
+	}
+	if subtle.ConstantTimeCompare([]byte(token), []byte(h.deps.AuthPluginSecret)) != 1 {
+		return apierr.NewAppError(http.StatusUnauthorized, "invalid plugin secret")
+	}
+
+	// Limit request body to 64 KiB to prevent memory exhaustion.
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+
+	var body struct {
+		GitHubID    string `json:"github_id"`
+		Login       string `json:"login"`
+		DisplayName string `json:"display_name"`
+		AvatarURL   string `json:"avatar_url"`
+		Nonce       string `json:"nonce"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid request body")
+	}
+	if body.GitHubID == "" || body.Login == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "github_id and login are required")
+	}
+
+	if err := serverauth.ValidateNonce(h.deps.JWTSecret, body.Nonce); err != nil {
+		return apierr.NewAppError(http.StatusUnauthorized, "invalid or expired nonce")
+	}
+
+	if err := h.issueSession(r.Context(), w, repo.GitHubUserInfo{
+		ID:          body.GitHubID,
+		Login:       body.Login,
+		DisplayName: body.DisplayName,
+		AvatarURL:   body.AvatarURL,
+	}); err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // DeleteMe permanently removes the authenticated user's account (GDPR right-to-erasure).

@@ -24,16 +24,16 @@ var pluginIDRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // Registry discovers, starts, and health-checks plugins from a directory.
 type Registry struct {
-	mu                   sync.RWMutex
-	dir                  string
-	plugins              []Entry
+	mu                    sync.RWMutex
+	dir                   string
+	plugins               []Entry
 	attemptedCapabilities map[string]bool // capabilities seen in any plugin.json, regardless of health
 }
 
 // Entry is a loaded plugin with its descriptor and running process (if started by us).
 type Entry struct {
-	Descriptor   Descriptor
-	cmd          *exec.Cmd
+	Descriptor Descriptor
+	cmd        *exec.Cmd
 	// cmdDone is closed by the watchPlugin goroutine when cmd.Wait() returns.
 	// It is nil when no watcher runs (no Command field in descriptor).
 	// Shutdown waits on this channel instead of calling cmd.Wait() itself,
@@ -49,7 +49,7 @@ type Entry struct {
 // If dir is empty, the registry does nothing (no plugins).
 func New(dir string) *Registry {
 	return &Registry{
-		dir:                  dir,
+		dir:                   dir,
 		attemptedCapabilities: make(map[string]bool),
 	}
 }
@@ -145,7 +145,8 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 
 		// Self-registration via hooks — notify callers about newly discovered capabilities.
 		if desc.HasCapability(CapAuthProvider) && hooks.SetAuth != nil {
-			hooks.SetAuth(NewAuthProvider(pluginEntry))
+			loginURL := pluginEntry.BaseURL + "/login"
+			hooks.SetAuth(NewAuthProvider(pluginEntry), loginURL)
 		}
 	}
 	return nil

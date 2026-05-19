@@ -32,8 +32,12 @@ type Config struct {
 	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
-	MCPToken               string `koanf:"mcp_token"`
-	Adapters               AdapterConfig `koanf:"adapters"`
+	MCPToken string `koanf:"mcp_token"`
+	// AuthPluginSecret is the shared secret between core and auth plugins.
+	// Set via DASHBOARD_AUTH_PLUGIN_SECRET. When set, enables POST /api/auth/session
+	// so an external auth plugin can establish sessions after completing OAuth.
+	AuthPluginSecret string        `koanf:"auth_plugin_secret"`
+	Adapters         AdapterConfig `koanf:"adapters"`
 }
 
 // Defaults returns a Config populated with safe defaults.
@@ -94,6 +98,11 @@ func Load(cfgFile string) (Config, error) {
 	// The auto-generated secret is always 64 hex chars so this only fires for short manually-set values.
 	if cfg.JWTSecret != "" && len(cfg.JWTSecret) < 32 {
 		return Config{}, fmt.Errorf("config: DASHBOARD_JWT_SECRET must be at least 32 characters, got %d", len(cfg.JWTSecret))
+	}
+
+	// Reject auth plugin secrets that are too short — a short shared secret offers trivial brute-force surface.
+	if cfg.AuthPluginSecret != "" && len(cfg.AuthPluginSecret) < 32 {
+		return Config{}, fmt.Errorf("config: DASHBOARD_AUTH_PLUGIN_SECRET must be at least 32 characters, got %d", len(cfg.AuthPluginSecret))
 	}
 
 	if cfg.JWTSecret == "" {

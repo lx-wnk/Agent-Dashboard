@@ -9,6 +9,8 @@ import (
 // Add a new field here when a new plugin capability needs server-side wiring.
 type Hooks struct {
 	// SetAuth is called when an auth_provider plugin passes health-check.
-	SetAuth func(authpkg.OAuthProvider)
+	// loginURL is the plugin's login endpoint (base URL + /login) that
+	// core redirects to when starting the OAuth flow.
+	SetAuth func(provider authpkg.OAuthProvider, loginURL string)
 	// future capabilities: SetLLM, SetStorage, SetNotify, etc.
 }

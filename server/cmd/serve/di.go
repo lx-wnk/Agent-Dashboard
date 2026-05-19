@@ -78,14 +78,16 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// (cancelled on SIGTERM/SIGINT). Load derives a 30-second startup timeout internally.
 	pluginRegistry := plugin.New(cfg.PluginDir)
 
-	// oauthProvider is set by the SetAuth hook when an auth_provider plugin passes
-	// health-check. If no auth_provider plugin is configured it stays nil, which
-	// activates bypass-auth on loopback.
+	// oauthProvider and pluginLoginURL are set by the SetAuth hook when an auth_provider
+	// plugin passes health-check. If no auth_provider plugin is configured both stay at
+	// zero values, which activates bypass-auth on loopback.
 	var oauthProvider authpkg.OAuthProvider
+	var pluginLoginURL string
 	if err := pluginRegistry.Load(ctx, plugin.Hooks{
-		SetAuth: func(p authpkg.OAuthProvider) {
+		SetAuth: func(p authpkg.OAuthProvider, loginURL string) {
 			oauthProvider = p
-			slog.Info("auth: using plugin provider")
+			pluginLoginURL = loginURL
+			slog.Info("auth: using plugin provider", "loginURL", loginURL)
 		},
 	}); err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
@@ -108,7 +110,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		slog.Info("auth: no auth_provider plugin found — bypass-auth active for loopback")
 	}
 
-	routerConfig := provideRouterConfig(cfg, oauthProvider)
+	routerConfig := provideRouterConfig(cfg, oauthProvider, pluginLoginURL)
 
 	var systemPromptRepo repo.SystemPromptRepo
 	if entClient != nil {

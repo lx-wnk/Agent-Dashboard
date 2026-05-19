@@ -23,21 +23,21 @@ import (
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
+	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
-	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
-	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
-	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
+	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -52,6 +52,11 @@ type RouterConfig struct {
 	HooksDebounceMs   int
 	SpawnRateLimit    int
 	SpawnRateWindowMs int
+	// AuthPluginSecret is forwarded to the auth handler to protect POST /api/auth/session.
+	AuthPluginSecret string
+	// PluginLoginURL, when non-empty, causes GET /api/auth/github to redirect to the
+	// auth plugin instead of handling the OAuth dance in core.
+	PluginLoginURL string
 }
 
 // RouterDeps holds all dependencies injected into the router.
@@ -59,25 +64,25 @@ type RouterDeps struct {
 	// Ctx is the server-lifetime context. When cancelled (e.g. on shutdown) any
 	// background goroutines started by the router (e.g. debounced rescan) are
 	// also cancelled. If nil, context.Background() is used as a fallback.
-	Ctx              context.Context
-	Config           RouterConfig
-	AgentBroadcaster *sse.Broadcaster
-	OAuthProvider    authpkg.OAuthProvider
-	UserRepo         repo.UserRepo
-	ApiKeyRepo       repo.ApiKeyRepo
-	TaskHandler      *tasks.Handler
-	WebPushHandler   *apiwp.Handler
-	RemotesHandler   *remotes.Handler
-	PresetsHandler        *presets.Handler
+	Ctx                  context.Context
+	Config               RouterConfig
+	AgentBroadcaster     *sse.Broadcaster
+	OAuthProvider        authpkg.OAuthProvider
+	UserRepo             repo.UserRepo
+	ApiKeyRepo           repo.ApiKeyRepo
+	TaskHandler          *tasks.Handler
+	WebPushHandler       *apiwp.Handler
+	RemotesHandler       *remotes.Handler
+	PresetsHandler       *presets.Handler
 	SystemPromptsHandler *systemprompts.Handler
-	SearchHandler    *search.Handler
-	HistoryHandler   *apihistory.Handler
-	RefineHandler    *refineapi.Handler
-	AnalyticsHandler *apianalytics.Handler
-	AdapterHandler   *adapters.Handler
-	MCPHandler       http.Handler
-	ChannelReply     *agents.ChannelReplyHandler
-	PluginRegistry   *plugin.Registry
+	SearchHandler        *search.Handler
+	HistoryHandler       *apihistory.Handler
+	RefineHandler        *refineapi.Handler
+	AnalyticsHandler     *apianalytics.Handler
+	AdapterHandler       *adapters.Handler
+	MCPHandler           http.Handler
+	ChannelReply         *agents.ChannelReplyHandler
+	PluginRegistry       *plugin.Registry
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -119,16 +124,21 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	// Auth routes (public — OAuth dance must be unauthenticated)
 	authHandler := apiauth.NewHandler(apiauth.Deps{
-		JWTSecret:    deps.Config.JWTSecret,
-		CallbackURL:  deps.Config.CallbackURL,
-		OAuthProvider: deps.OAuthProvider,
-		UserRepo:     deps.UserRepo,
-		IsLoopback:   deps.Config.IsLoopback,
-		BypassAuth:   deps.Config.BypassAuth,
+		JWTSecret:        deps.Config.JWTSecret,
+		CallbackURL:      deps.Config.CallbackURL,
+		OAuthProvider:    deps.OAuthProvider,
+		UserRepo:         deps.UserRepo,
+		IsLoopback:       deps.Config.IsLoopback,
+		BypassAuth:       deps.Config.BypassAuth,
+		AuthPluginSecret: deps.Config.AuthPluginSecret,
+		PluginLoginURL:   deps.Config.PluginLoginURL,
 	})
 	r.Get("/api/auth/github", ErrorMiddleware(authHandler.GitHubRedirect))
 	r.Get("/api/auth/callback", ErrorMiddleware(authHandler.Callback))
 	r.Post("/api/auth/logout", ErrorMiddleware(authHandler.Logout))
+	// Plugin session endpoint — called by external auth plugins after OAuth completes.
+	// Only active when DASHBOARD_AUTH_PLUGIN_SECRET is set.
+	r.Post("/api/auth/session", ErrorMiddleware(authHandler.CreateSession))
 
 	// Protected routes (JWT required, unless auth bypass is active)
 	r.Group(func(r chi.Router) {
@@ -149,10 +159,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/slash-commands", sessions.SlashCommands)
 
 		r.Get("/api/quota", system.Quota)
-		r.Get("/api/config", system.Config)         // frontend expects /api/config
-		r.Get("/api/system/config", system.Config)  // keep old path for compatibility
-		r.Get("/api/system", system.System)         // frontend expects /api/system
-		r.Get("/api/system/system", system.System)  // keep old path for compatibility
+		r.Get("/api/config", system.Config)        // frontend expects /api/config
+		r.Get("/api/system/config", system.Config) // keep old path for compatibility
+		r.Get("/api/system", system.System)        // frontend expects /api/system
+		r.Get("/api/system/system", system.System) // keep old path for compatibility
 
 		r.Get("/api/memory", memory.List)
 		r.Get("/api/memory/*", memory.Get)

@@ -9,8 +9,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 )
 
-func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider) api.RouterConfig {
-	bypassAuth := cfg.IsLoopback() && oauthProvider == nil
+func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider, pluginLoginURL string) api.RouterConfig {
+	bypassAuth := cfg.IsLoopback() && oauthProvider == nil && pluginLoginURL == ""
 	if bypassAuth {
 		slog.Info("auth bypass active — loopback + no auth_provider plugin configured; all API requests allowed without login")
 	}
@@ -23,6 +23,8 @@ func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider)
 		HooksDebounceMs:   cfg.HooksDebounceMs,
 		SpawnRateLimit:    cfg.SpawnRateLimit,
 		SpawnRateWindowMs: cfg.SpawnRateWindowMs,
+		AuthPluginSecret:  cfg.AuthPluginSecret,
+		PluginLoginURL:    pluginLoginURL,
 	}
 }
 

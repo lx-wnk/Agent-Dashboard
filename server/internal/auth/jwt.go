@@ -2,6 +2,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -42,6 +44,11 @@ type jwtClaims struct {
 
 // oauthStateClaims is the claims type for short-lived OAuth state tokens.
 type oauthStateClaims struct {
+	jwt.RegisteredClaims
+}
+
+// nonceClaims is the claims type for short-lived OAuth flow-binding nonce tokens.
+type nonceClaims struct {
 	jwt.RegisteredClaims
 }
 
@@ -196,4 +203,66 @@ func VerifyOAuthState(tokenStr, secret string) (OAuthStatePayload, error) {
 		Exp: exp,
 		Aud: aud,
 	}, nil
+}
+
+const (
+	nonceSubject  = "auth-nonce"
+	nonceAudience = "agent-dashboard:auth-nonce"
+	nonceTTL      = 10 * time.Minute
+)
+
+// GenerateNonce returns a signed short-lived JWT for OAuth flow binding.
+// The nonce carries a random jti so each redirect produces a unique token.
+// TTL is 10 minutes; callers must validate exp via ValidateNonce.
+func GenerateNonce(secret string) (string, error) {
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate nonce: read random: %w", err)
+	}
+	jti := hex.EncodeToString(raw)
+
+	claims := nonceClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   nonceSubject,
+			Audience:  jwt.ClaimStrings{nonceAudience},
+			ID:        jti,
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(nonceTTL)),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(secret))
+	if err != nil {
+		return "", fmt.Errorf("generate nonce: sign: %w", err)
+	}
+	return signed, nil
+}
+
+// ValidateNonce parses a nonce token and returns an error if the signature is
+// invalid, the subject is wrong, or the token has expired.
+func ValidateNonce(secret, tokenStr string) error {
+	var claims nonceClaims
+	token, err := jwt.ParseWithClaims(tokenStr, &claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(secret), nil
+	},
+		jwt.WithAudience(nonceAudience),
+		// No leeway: nonces must be consumed promptly within their 10-minute window.
+		jwt.WithLeeway(0),
+	)
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return fmt.Errorf("nonce expired")
+		}
+		return fmt.Errorf("invalid nonce: %w", err)
+	}
+	if !token.Valid {
+		return fmt.Errorf("invalid nonce token")
+	}
+	if claims.Subject != nonceSubject {
+		return fmt.Errorf("invalid nonce subject")
+	}
+	return nil
 }
