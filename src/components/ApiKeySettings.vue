@@ -450,7 +450,7 @@ async function startImport() {
             Themes
           </h3>
           <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
-            Choose your preferred color scheme.
+            Choose your preferred color scheme. Tip: press <kbd class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px]">Shift+D</kbd> anywhere to toggle dark/light mode.
           </p>
           <div class="flex gap-3.5 flex-wrap">
             <button
@@ -465,6 +465,8 @@ async function startImport() {
               :class="themePref === opt.value
                 ? 'border-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]'
                 : 'border-slate-200 dark:border-slate-700 hover:border-blue-400'"
+              :aria-label="opt.value === 'dark' ? `${opt.label} (keyboard shortcut: Shift+D)` : opt.label"
+              :aria-pressed="themePref === opt.value"
               @click="setTheme(opt.value)"
             >
               <div
