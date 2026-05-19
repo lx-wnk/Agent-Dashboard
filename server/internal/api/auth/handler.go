@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -79,9 +80,14 @@ func (h *Handler) issueSession(ctx context.Context, w http.ResponseWriter, info 
 // which owns the entire OAuth dance and calls POST /api/auth/session when done.
 // GET /api/auth/github
 func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
-	// Plugin-driven flow: redirect to the plugin's login endpoint.
+	// Plugin-driven flow: redirect to the plugin's login endpoint with a nonce.
 	if h.deps.PluginLoginURL != "" {
-		http.Redirect(w, r, h.deps.PluginLoginURL, http.StatusFound)
+		nonce, err := serverauth.GenerateNonce(h.deps.JWTSecret)
+		if err != nil {
+			return apierr.NewAppError(http.StatusInternalServerError, "failed to generate nonce")
+		}
+		redirectURL := h.deps.PluginLoginURL + "?nonce=" + url.QueryEscape(nonce)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
 		return nil
 	}
 	// Legacy in-core flow (kept for backwards compatibility when no auth plugin is running).
@@ -220,12 +226,17 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) error {
 		Login       string `json:"login"`
 		DisplayName string `json:"display_name"`
 		AvatarURL   string `json:"avatar_url"`
+		Nonce       string `json:"nonce"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid request body")
 	}
 	if body.GitHubID == "" || body.Login == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "github_id and login are required")
+	}
+
+	if err := serverauth.ValidateNonce(h.deps.JWTSecret, body.Nonce); err != nil {
+		return apierr.NewAppError(http.StatusUnauthorized, "invalid or expired nonce")
 	}
 
 	if err := h.issueSession(r.Context(), w, repo.GitHubUserInfo{

@@ -166,19 +166,31 @@ func (h *handler) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 // login kicks off the GitHub OAuth flow.
-// It generates a random CSRF state, stores it in a short-lived cookie, and redirects to GitHub.
-// GET /login
+// It reads the nonce supplied by core, generates a random CSRF state, embeds the nonce
+// in the state cookie as "<csrfState>.<nonce>", and redirects to GitHub.
+// The nonce is recovered in /callback and forwarded to createCoreSession.
+// GET /login?nonce=<jwt>
 func (h *handler) login(w http.ResponseWriter, r *http.Request) {
-	state, err := randomState()
+	nonce := r.URL.Query().Get("nonce")
+	if nonce == "" {
+		writeError(w, http.StatusBadRequest, "missing nonce")
+		return
+	}
+
+	csrfState, err := randomState()
 	if err != nil {
 		slog.Error("login: generate state", "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to generate state")
 		return
 	}
 
+	// Encode as "<csrfState>.<nonce>" so both values survive the OAuth round-trip
+	// via the state cookie without needing server-side storage.
+	stateValue := csrfState + "." + nonce
+
 	http.SetCookie(w, &http.Cookie{ //nolint:gosec
 		Name:     stateCookieName,
-		Value:    state,
+		Value:    stateValue,
 		MaxAge:   stateCookieMaxAge,
 		HttpOnly: true,
 		Secure:   false, // plugin is always loopback
@@ -188,7 +200,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 
 	v := url.Values{}
 	v.Set("client_id", h.clientID)
-	v.Set("state", state)
+	v.Set("state", stateValue)
 	v.Set("redirect_uri", h.callbackURL)
 	v.Set("scope", "read:user")
 
@@ -196,8 +208,9 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 // callback handles the GitHub OAuth callback.
-// It validates the CSRF state, exchanges the code for a token, fetches the user profile,
-// and calls core's POST /api/auth/session to create a session cookie.
+// It validates the CSRF state, extracts the nonce embedded in the state value,
+// exchanges the code for a token, fetches the user profile, and calls core's
+// POST /api/auth/session (with the nonce) to create a session cookie.
 // GET /callback?code=XXX&state=YYY
 func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 	stateCookie, err := r.Cookie(stateCookieName)
@@ -209,6 +222,21 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "state mismatch")
 		return
 	}
+
+	// The state value is "<csrfState>.<nonce>"; split on the first dot to recover both.
+	// The nonce itself is a JWT which may contain dots, so we split only on the first one.
+	stateValue := stateCookie.Value
+	dotIdx := strings.Index(stateValue, ".")
+	if dotIdx < 0 {
+		writeError(w, http.StatusBadRequest, "malformed state: missing nonce")
+		return
+	}
+	nonce := stateValue[dotIdx+1:]
+	if nonce == "" {
+		writeError(w, http.StatusBadRequest, "malformed state: empty nonce")
+		return
+	}
+
 	// Clear the state cookie immediately.
 	http.SetCookie(w, &http.Cookie{ //nolint:gosec
 		Name:   stateCookieName,
@@ -236,7 +264,7 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionCookie, err := h.createCoreSession(r.Context(), profile)
+	sessionCookie, err := h.createCoreSession(r.Context(), profile, nonce)
 	if err != nil {
 		slog.Error("callback: create core session", "err", err)
 		writeError(w, http.StatusBadGateway, "failed to create session")
@@ -251,12 +279,14 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 }
 
 // createCoreSession calls core's POST /api/auth/session and returns the session cookie.
-func (h *handler) createCoreSession(ctx context.Context, profile *oauthUserProfile) (*http.Cookie, error) {
+// nonce is the flow-binding JWT issued by core on the initial redirect; core validates it.
+func (h *handler) createCoreSession(ctx context.Context, profile *oauthUserProfile, nonce string) (*http.Cookie, error) {
 	body, err := json.Marshal(map[string]string{
 		"github_id":    profile.ID,
 		"login":        profile.Login,
 		"display_name": profile.DisplayName,
 		"avatar_url":   profile.AvatarURL,
+		"nonce":        nonce,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("createCoreSession: marshal: %w", err)

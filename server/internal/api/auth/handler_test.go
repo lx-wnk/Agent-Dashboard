@@ -25,9 +25,9 @@ func TestHandler_GitHubRedirect_NoClientID(t *testing.T) {
 }
 
 func TestHandler_GitHubRedirect_PluginLoginURL(t *testing.T) {
-	// When a PluginLoginURL is set, GitHubRedirect must redirect to the plugin.
+	// When a PluginLoginURL is set, GitHubRedirect must redirect to the plugin with a nonce.
 	h := apiauth.NewHandler(apiauth.Deps{
-		JWTSecret:      "test-secret",
+		JWTSecret:      "test-secret-32chars-long-minimum!",
 		PluginLoginURL: "http://127.0.0.1:19001/login",
 	})
 	w := httptest.NewRecorder()
@@ -35,7 +35,9 @@ func TestHandler_GitHubRedirect_PluginLoginURL(t *testing.T) {
 	err := h.GitHubRedirect(w, r)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusFound, w.Code)
-	require.Equal(t, "http://127.0.0.1:19001/login", w.Header().Get("Location"))
+
+	location := w.Header().Get("Location")
+	require.Contains(t, location, "http://127.0.0.1:19001/login?nonce=", "redirect must include a nonce query param")
 }
 
 func TestHandler_Logout(t *testing.T) {
@@ -107,6 +109,33 @@ func TestHandler_CreateSession_MissingAuthHeader(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/api/auth/session",
 		bytes.NewBufferString(`{"github_id":"1","login":"alice"}`))
 	// No Authorization header
+	err := h.CreateSession(w, r)
+	require.Error(t, err)
+}
+
+func TestHandler_CreateSession_MissingNonce(t *testing.T) {
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:        "test-secret-32chars-long-minimum!",
+		AuthPluginSecret: "correct-plugin-secret",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/auth/session",
+		bytes.NewBufferString(`{"github_id":"1","login":"alice"}`))
+	r.Header.Set("Authorization", "Bearer correct-plugin-secret")
+	err := h.CreateSession(w, r)
+	// nonce is empty → ValidateNonce must reject → 401
+	require.Error(t, err)
+}
+
+func TestHandler_CreateSession_InvalidNonce(t *testing.T) {
+	h := apiauth.NewHandler(apiauth.Deps{
+		JWTSecret:        "test-secret-32chars-long-minimum!",
+		AuthPluginSecret: "correct-plugin-secret",
+	})
+	w := httptest.NewRecorder()
+	body := `{"github_id":"1","login":"alice","nonce":"not-a-valid-jwt"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/auth/session", bytes.NewBufferString(body))
+	r.Header.Set("Authorization", "Bearer correct-plugin-secret")
 	err := h.CreateSession(w, r)
 	require.Error(t, err)
 }

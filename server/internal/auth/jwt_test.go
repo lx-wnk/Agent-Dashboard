@@ -128,3 +128,51 @@ func TestVerifyOAuthState_SessionTokenRejected(t *testing.T) {
 	_, err = auth.VerifyOAuthState(sessionToken, secret)
 	require.ErrorIs(t, err, auth.ErrTokenInvalid)
 }
+
+func TestGenerateAndValidateNonce(t *testing.T) {
+	secret := "test-secret-32chars-long-minimum!"
+	nonce, err := auth.GenerateNonce(secret)
+	require.NoError(t, err)
+	require.NotEmpty(t, nonce)
+
+	err = auth.ValidateNonce(secret, nonce)
+	require.NoError(t, err)
+}
+
+func TestValidateNonce_WrongSecret(t *testing.T) {
+	nonce, err := auth.GenerateNonce("secret-a-32chars-long-minimum!!")
+	require.NoError(t, err)
+
+	err = auth.ValidateNonce("secret-b-32chars-long-minimum!!", nonce)
+	require.Error(t, err)
+}
+
+func TestValidateNonce_MalformedToken(t *testing.T) {
+	err := auth.ValidateNonce("any-secret", "not.a.valid.jwt")
+	require.Error(t, err)
+}
+
+func TestValidateNonce_EmptyToken(t *testing.T) {
+	err := auth.ValidateNonce("any-secret", "")
+	require.Error(t, err)
+}
+
+// TestValidateNonce_SessionTokenRejected ensures a valid session token is not accepted as a nonce.
+func TestValidateNonce_SessionTokenRejected(t *testing.T) {
+	secret := "test-secret-32chars-long-minimum!"
+	sessionToken, err := auth.SignJWT(auth.JWTPayload{Sub: "12345", Login: "alice"}, secret, 3600)
+	require.NoError(t, err)
+
+	err = auth.ValidateNonce(secret, sessionToken)
+	require.Error(t, err, "session token must not be accepted as a nonce")
+}
+
+// TestGenerateNonce_Uniqueness verifies that two generated nonces differ (random jti).
+func TestGenerateNonce_Uniqueness(t *testing.T) {
+	secret := "test-secret-32chars-long-minimum!"
+	n1, err := auth.GenerateNonce(secret)
+	require.NoError(t, err)
+	n2, err := auth.GenerateNonce(secret)
+	require.NoError(t, err)
+	require.NotEqual(t, n1, n2)
+}
