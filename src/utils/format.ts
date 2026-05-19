@@ -39,3 +39,10 @@ export function shortModel(model: string | null): string {
     return '—'
   return model.replace('claude-', '').replace(MODEL_TRAILING_VERSION_RE, m => ` ${m.slice(1)}`)
 }
+
+export function maskToken(token: string): string {
+  const head = token.slice(0, 8)
+  const tail = token.slice(-4)
+  const bulletCount = Math.max(8, token.length - 12)
+  return head + '•'.repeat(bulletCount) + tail
+}
