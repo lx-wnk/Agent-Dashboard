@@ -163,7 +163,7 @@ type todoInput struct {
 type SessionData struct {
 	SessionID           string
 	ProjectPath         string
-	Entrypoint          string // "cli" | "desktop" | "unknown"
+	Entrypoint          sdk.Entrypoint
 	LastActivity        time.Time
 	CurrentAction       string
 	LastTools           []string
@@ -175,8 +175,9 @@ type SessionData struct {
 	LastOutput          string
 	ConvergenceAlert    bool
 	ConvergenceToolName string
-	ErrorState          string
+	ErrorState          sdk.ErrorState
 	Meta                *sdk.SessionMeta
+	LastBtw             *sdk.BtwMessage
 }
 
 // FindSessionForProject locates the most recently active JSONL session for cwd.
@@ -266,7 +267,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 
 	data := &SessionData{
 		ToolCounts:   make(map[string]int),
-		Entrypoint:   "unknown",
+		Entrypoint:   sdk.EntrypointUnknown,
 		LastActivity: time.Now().Add(-24 * time.Hour), // default: old
 	}
 
@@ -311,9 +312,12 @@ func ParseSessionFile(path string) (*SessionData, error) {
 
 			var blocks []toolUseBlock
 			if err := json.Unmarshal(msg.Content, &blocks); err == nil {
+				var btwText string
+				hasToolUse := false
 				for _, b := range blocks {
 					switch b.Type {
 					case "tool_use":
+						hasToolUse = true
 						data.ToolCounts[b.Name]++
 						recentToolNames = append(recentToolNames, b.Name)
 						data.CurrentAction = b.Name
@@ -333,18 +337,21 @@ func ParseSessionFile(path string) (*SessionData, error) {
 						}
 					case "text":
 						if b.Text != "" {
-							data.LastOutput = scrubSecrets(b.Text)
-							// Detect error states (check original text before scrubbing)
+							btwText = scrubSecrets(b.Text)
+							data.LastOutput = btwText
 							switch {
 							case quotaRE.MatchString(b.Text):
-								data.ErrorState = "quota_exhausted"
+								data.ErrorState = sdk.ErrorStateQuotaExhausted
 							case rateRE.MatchString(b.Text):
-								data.ErrorState = "rate_limited"
+								data.ErrorState = sdk.ErrorStateRateLimited
 							case authRE.MatchString(b.Text):
-								data.ErrorState = "auth_failed"
+								data.ErrorState = sdk.ErrorStateAuthFailed
 							}
 						}
 					}
+				}
+				if hasToolUse && btwText != "" {
+					data.LastBtw = &sdk.BtwMessage{Message: btwText}
 				}
 			}
 		}
