@@ -29,7 +29,7 @@ const displayLabel = computed(() => props.label ?? statusLabel(props.variant))
 
 <template>
   <!-- UX-15: status conveyed via color dot + visible text label; sr-only provides AT fallback -->
-  <span class="inline-flex items-center gap-1.5 text-xs" role="status" :aria-label="displayLabel">
+  <span class="inline-flex items-center gap-1.5 text-xs">
     <span class="size-2 rounded-full flex-shrink-0" :class="dotClass[variant]" aria-hidden="true" />
     <span :class="labelClass[variant]" aria-hidden="true">{{ displayLabel }}</span>
     <span class="sr-only">{{ displayLabel }}</span>

@@ -322,7 +322,7 @@ defineExpose({ scrollToBottom })
               {{ entry.msg.content }}
             </div>
             <time
-              v-if="entry.msg.timestamp"
+              v-if="formatMsgTime(entry.msg.timestamp)"
               :datetime="isoTimestamp(entry.msg.timestamp)"
               class="text-[10px] text-slate-400 dark:text-slate-600 select-none"
             >{{ formatMsgTime(entry.msg.timestamp) }}</time>
@@ -333,7 +333,7 @@ defineExpose({ scrollToBottom })
               v-html="renderMarkdown(entry.msg.content)"
             />
             <time
-              v-if="entry.msg.timestamp"
+              v-if="formatMsgTime(entry.msg.timestamp)"
               :datetime="isoTimestamp(entry.msg.timestamp)"
               class="text-[10px] text-slate-400 dark:text-slate-600 select-none"
             >{{ formatMsgTime(entry.msg.timestamp) }}</time>
@@ -344,7 +344,7 @@ defineExpose({ scrollToBottom })
               v-html="renderMarkdown(entry.msg.content)"
             />
             <time
-              v-if="entry.msg.timestamp"
+              v-if="formatMsgTime(entry.msg.timestamp)"
               :datetime="isoTimestamp(entry.msg.timestamp)"
               class="text-[10px] text-slate-400 dark:text-slate-600 select-none"
             >{{ formatMsgTime(entry.msg.timestamp) }}</time>
