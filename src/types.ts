@@ -1,25 +1,40 @@
-export interface TokenUsage {
-  inputTokens: number
-  outputTokens: number
-  cacheCreationTokens: number
-  cacheReadTokens: number
-}
+// Types generated from sdk/types.go via tygo — do not edit these directly.
+// Run `task generate` to regenerate after changing sdk/types.go.
+import {
+  AgentStatusActive,
+  AgentStatusWaiting,
+  AgentStatusIdle,
+} from './sdk.generated'
+import type {
+  TokenUsage,
+  SessionMeta as _SessionMetaBase,
+  SubAgent as _SubAgentBase,
+  TaskInfo as _TaskInfoBase,
+  AgentStatus,
+} from './sdk.generated'
 
-export interface SessionMeta {
-  inputTokens: number
-  outputTokens: number
-  linesAdded: number
-  linesRemoved: number
-  filesModified: number
-  gitCommits: number
-  toolErrors: number
-  usesMcp: boolean
+export type { TokenUsage, AgentStatus }
+
+export interface SessionMeta extends Omit<_SessionMetaBase, 'firstPrompt'> {
   firstPrompt: string | null
 }
 
-export const AGENT_STATUSES = ['active', 'waiting', 'idle'] as const
-export type AgentStatus = typeof AGENT_STATUSES[number]
+export interface SubAgent extends Omit<_SubAgentBase, 'status' | 'currentAction'> {
+  status: 'active' | 'completed'
+  currentAction: string | null
+}
 
+export interface TaskInfo extends Omit<_TaskInfoBase, 'status'> {
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
+// Derived from sdk.generated consts — automatically stays in sync with sdk/types.go.
+export const AGENT_STATUSES = [AgentStatusActive, AgentStatusWaiting, AgentStatusIdle] as const
+
+// NOTE: sdk.generated.ts also exports an Agent interface generated from sdk/types.go,
+// but it is NOT used here — it lacks TS-only fields (lastBtw, machine, pipelineTaskTitle)
+// and cannot express nullable fields (model, errorState, etc.). Always import Agent from
+// this file, never from ./sdk.generated.
 export interface Agent {
   pid: number
   sessionId: string
@@ -64,13 +79,6 @@ export interface ChannelReply {
   timestamp: string
 }
 
-export interface SubAgent {
-  id: string
-  type: string
-  status: 'active' | 'completed'
-  currentAction: string | null
-  sessionFile: string
-}
 
 export interface GitStatusLastCommit {
   hash: string
@@ -91,11 +99,6 @@ export interface GitStatus {
   remoteUrl: string | null
 }
 
-export interface TaskInfo {
-  id: string
-  subject: string
-  status: 'pending' | 'in_progress' | 'completed'
-}
 
 export interface OutputMessage {
   role: 'assistant' | 'tool_call' | 'tool_result' | 'human' | 'channel_reply' | 'task' | 'subagent'

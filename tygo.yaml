@@ -1,0 +1,13 @@
+packages:
+  - path: github.com/lx-wnk/agent-dashboard/sdk
+    output_path: src/sdk.generated.ts
+    enum_style: union
+    type_mappings:
+      # AgentStatus is handled by enum_style: union (Go const block → TS union).
+      # Add overrides here if tygo output diverges from the canonical TS definition.
+    # NOTE: tygo (v0.2.21) does not support exclude_types in the YAML config —
+    # only exclude_files is available. As a result, the generated Agent interface
+    # is present in sdk.generated.ts but is intentionally NOT used by the frontend.
+    # src/types.ts defines its own Agent interface with TS-only fields (lastBtw,
+    # machine, pipelineTaskTitle) and proper nullable types. Always import Agent
+    # from src/types.ts, never from sdk.generated.ts.

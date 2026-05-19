@@ -3,6 +3,7 @@ import type { ApiKey, McpScope } from '../types'
 import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
+import { maskToken } from '../utils/format'
 const AdapterSettings = defineAsyncComponent(() => import('./AdapterSettings.vue'))
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
@@ -36,6 +37,7 @@ const createError = ref('')
 // Token reveal modal
 const revealedToken = ref<string | null>(null)
 const copyHint = ref<string | null>(null)
+const tokenVisible = ref(false)
 
 // Revoke confirmation
 const confirmRevokeId = ref<string | null>(null)
@@ -259,6 +261,7 @@ async function copyToken() {
 function dismissReveal() {
   revealedToken.value = null
   copyHint.value = null
+  tokenVisible.value = false
 }
 
 // --- Helpers ---
@@ -826,8 +829,24 @@ async function startImport() {
             <p class="text-[13px] text-slate-600 dark:text-slate-400 mb-3">
               Save this token now — it will <strong class="text-yellow-600 dark:text-yellow-400">never be shown again</strong>.
             </p>
-            <div class="font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
-              {{ revealedToken }}
+            <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
+              {{ tokenVisible ? revealedToken : maskToken(revealedToken ?? '') }}
+              <button
+                type="button"
+                class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 text-green-500 transition-colors"
+                :aria-label="tokenVisible ? 'Hide token' : 'Show token'"
+                :aria-pressed="tokenVisible"
+                @click="tokenVisible = !tokenVisible"
+              >
+                <svg v-if="tokenVisible" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
             </div>
             <div class="flex justify-end">
               <AppButton variant="info" @click="copyToken">

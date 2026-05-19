@@ -1,6 +1,6 @@
 import type { TokenUsage } from '../types'
 import { describe, expect, it } from 'vitest'
-import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from './format'
+import { maskToken, formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from './format'
 
 describe('totalTokenCount', () => {
   it('sums all four token fields', () => {
@@ -161,5 +161,35 @@ describe('shortModel', () => {
   it('does not strip mid-string digits — only a single trailing number segment', () => {
     // "claude-opus-4-6" — the trailing "-6" is a version digit so it becomes " 6"
     expect(shortModel('claude-opus-4-6')).toBe('opus-4 6')
+  })
+})
+
+describe('maskToken', () => {
+  it('masks middle of token keeping first 8 and last 4 chars', () => {
+    const token = 'mcp_abcdefghij1234'
+    // length=18: first 8 = 'mcp_abcd', last 4 = '1234', middle = 18-12 = 6 bullets
+    expect(maskToken(token)).toBe('mcp_abcd••••••1234')
+  })
+
+  it('hides short tokens completely — no tail revealed when token ≤ 12 chars', () => {
+    const token = 'mcp_1234'
+    // length=8: ≤12 chars → head only + 8 bullets, no tail
+    expect(maskToken(token)).toBe('mcp_1234••••••••')
+  })
+
+  it('handles a realistic 40-char MCP token', () => {
+    const token = 'mcp_' + 'a'.repeat(36)
+    // length=40: first 8 = 'mcp_aaaa', last 4 = 'aaaa', middle = 28 bullets
+    expect(maskToken(token)).toBe('mcp_aaaa' + '•'.repeat(28) + 'aaaa')
+  })
+
+  it('never reveals more than first 8 + last 4 chars', () => {
+    const token = 'mcp_' + 'x'.repeat(100)
+    const masked = maskToken(token)
+    expect(masked.startsWith('mcp_')).toBe(true)
+    expect(masked.endsWith('xxxx')).toBe(true)
+    expect(masked).toContain('•')
+    const visible = masked.replace(/•/g, '')
+    expect(visible).toBe(token.slice(0, 8) + token.slice(-4))
   })
 })

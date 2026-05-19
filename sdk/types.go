@@ -1,6 +1,8 @@
 // Package sdk provides shared types for the agent-dashboard modules.
 package sdk
 
+//go:generate tygo generate --config ../tygo.yaml
+
 // TokenUsage mirrors the Claude Code session token counters.
 type TokenUsage struct {
 	InputTokens         int `json:"inputTokens"`
