@@ -31,6 +31,22 @@ func CalculateStatus(lastActivity time.Time) sdk.AgentStatus {
 	}
 }
 
+// strPtr returns nil if s is empty, otherwise a pointer to s.
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// errorStatePtr returns nil if s is empty, otherwise a pointer to s.
+func errorStatePtr(s sdk.ErrorState) *sdk.ErrorState {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // GetAgents scans running Claude processes and merges them with session data.
 // Processes with no matching active session are silently skipped.
 func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
@@ -66,7 +82,7 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 				Status:                    CalculateStatus(session.LastActivity),
 				Uptime:                    proc.Uptime,
 				LastActivity:              session.LastActivity.Format(time.RFC3339),
-				CurrentAction:             session.CurrentAction,
+				CurrentAction:             strPtr(session.CurrentAction),
 				LastTools:                 append(make([]string, 0), session.LastTools...),
 				Tasks:                     append(make([]sdk.TaskInfo, 0), session.Tasks...),
 				Subagents:                 []sdk.SubAgent{},
@@ -74,14 +90,15 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 				CostEstimate:              cost,
 				CacheCreationCostEstimate: cacheCreate,
 				CacheReadCostEstimate:     cacheRead,
-				Model:                     session.Model,
+				Model:                     strPtr(session.Model),
 				ConversationTurns:         session.ConversationTurns,
 				ToolCounts:                session.ToolCounts,
 				Meta:                      session.Meta,
 				ConvergenceAlert:          session.ConvergenceAlert,
-				ConvergenceToolName:       session.ConvergenceToolName,
-				ErrorState:                session.ErrorState,
-				LastOutput:                session.LastOutput,
+				ConvergenceToolName:       strPtr(session.ConvergenceToolName),
+				ErrorState:                errorStatePtr(session.ErrorState),
+				LastOutput:                strPtr(session.LastOutput),
+				LastBtw:                   session.LastBtw,
 			}
 			return nil
 		})

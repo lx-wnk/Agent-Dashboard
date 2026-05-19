@@ -171,7 +171,7 @@ func filterAgents(agents []sdk.Agent, q string, limit int) []sdk.Agent {
 	var matched []sdk.Agent
 	for _, a := range agents {
 		if strings.Contains(strings.ToLower(a.ProjectName), lower) ||
-			strings.Contains(strings.ToLower(a.CurrentAction), lower) ||
+			(a.CurrentAction != nil && strings.Contains(strings.ToLower(*a.CurrentAction), lower)) ||
 			strings.Contains(strings.ToLower(a.CWD), lower) {
 			matched = append(matched, a)
 			if len(matched) >= limit {
