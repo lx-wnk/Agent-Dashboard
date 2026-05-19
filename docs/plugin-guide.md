@@ -54,9 +54,9 @@ The plugin implements a **standalone OAuth dance** and creates dashboard session
 ```
 Browser          Core                     Plugin              Provider
   │                │                        │                    │
-  │ GET /auth/...  │                        │                    │
+  │ GET /api/auth/github │                   │                    │
   │───────────────►│                        │                    │
-  │ 302 → /login   │                        │                    │
+  │ 302 → <plugin>/login │                  │                    │
   │◄───────────────│                        │                    │
   │ GET /login     │                        │                    │
   │───────────────────────────────────────►│                    │
@@ -82,19 +82,19 @@ Response: `{"ok":true}`
 
 **`GET /login?nonce=<jwt>`** — entry point; core forwards here with a one-time nonce.
 
-Redirects to the OAuth provider's authorization URL. Must embed the nonce in the OAuth state parameter so it survives the round-trip.
+Redirects to the OAuth provider's authorization URL. Must embed the nonce in the CSRF state value as `<csrfState>.<nonce>` — pass this combined value both as the state cookie and as the OAuth `state` parameter. The nonce is recovered in the callback by splitting the cookie value on the first `.` (the nonce is a JWT that may contain dots, so split only on the first one).
 
 **`GET /callback?code=<code>&state=<state>`** — OAuth callback.
 
-1. Validate CSRF state.
-2. Extract nonce from state.
+1. Compare the `state` query parameter against the `github_oauth_state` cookie value — reject if they differ.
+2. Extract nonce: split the cookie value on the first `.` only — everything after is the nonce (a JWT that may itself contain dots).
 3. Exchange code for access token.
 4. Fetch user profile from provider.
 5. Call `POST /api/auth/session` (see below).
 6. Forward the `auth_token` cookie to the browser.
 7. Redirect to `DASHBOARD_URL/`.
 
-**`POST /api/auth/session`** on core — called by the plugin, not the browser.
+**Calling core to create a session: `POST /api/auth/session`**
 
 Request headers:
 ```
@@ -109,7 +109,7 @@ Request body:
   "login":        "username",
   "display_name": "Full Name",
   "avatar_url":   "https://...",
-  "nonce":        "<jwt-nonce-from-GET-/login>"
+  "nonce":        "<value received as ?nonce= on GET /login — pass verbatim>"
 }
 ```
 
@@ -121,7 +121,8 @@ Response: `200 OK` with `Set-Cookie: auth_token=<jwt>`.
 |----------|-------------|
 | `DASHBOARD_URL` | Base URL of the dashboard (e.g. `http://127.0.0.1:13120`) |
 | `DASHBOARD_AUTH_PLUGIN_SECRET` | Shared secret ≥32 chars for `POST /api/auth/session` |
-| Provider credentials | Named in `plugin.json` `env` array |
+| `GITHUB_CLIENT_ID` | GitHub OAuth app client ID (github-oauth specific; name in `plugin.json` `env` array) |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret (github-oauth specific; name in `plugin.json` `env` array) |
 
 #### Legacy capability routes (deprecated)
 
@@ -210,7 +211,7 @@ The dashboard logs `plugin: loaded id=github-oauth capabilities=[auth_provider]`
 |--------|------|-------------|
 | `GET`  | `/health` | Health check — returns `{"ok":true}` |
 | `GET`  | `/login?nonce=<jwt>` | Start OAuth dance (primary entry point) |
-| `GET`  | `/callback?code=&state=` | OAuth callback — creates session, redirects to dashboard |
+| `GET`  | `/callback?code=<code>&state=<state>` | OAuth callback — creates session, redirects to dashboard |
 | `GET`  | `/capabilities/auth/authorize-url` | Legacy: returns GitHub authorization URL |
 | `POST` | `/capabilities/auth/exchange` | Legacy: exchanges OAuth code for access token |
 | `GET`  | `/capabilities/auth/user` | Legacy: returns user profile for Bearer token |
