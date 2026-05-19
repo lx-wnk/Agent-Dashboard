@@ -39,8 +39,10 @@ const revealedToken = ref<string | null>(null)
 const copyHint = ref<string | null>(null)
 const tokenVisible = ref(false)
 
-// Revoke confirmation
+// Revoke / regenerate confirmation
 const confirmRevokeId = ref<string | null>(null)
+const confirmRegenerateId = ref<string | null>(null)
+const isRegenerating = ref(false)
 
 // Permission presets
 const presets = ref<{ cwd: string, count: number }[]>([])
@@ -159,9 +161,10 @@ async function refreshPatterns() {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
-    if (showCreateDialog.value || confirmRevokeId.value || confirmResetCwd.value) {
+    if (showCreateDialog.value || confirmRevokeId.value || confirmRegenerateId.value || confirmResetCwd.value) {
       showCreateDialog.value = false
       confirmRevokeId.value = null
+      confirmRegenerateId.value = null
       confirmResetCwd.value = null
     }
     else {
@@ -190,6 +193,32 @@ async function revokeKey(key: ApiKey) {
   catch (e) {
     key.active = true
     errorMsg.value = (e as Error).message
+  }
+}
+
+// --- Regenerate key ---
+async function regenerateKey(key: ApiKey) {
+  confirmRegenerateId.value = null
+  isRegenerating.value = true
+  try {
+    const res = await fetch(`/api/settings/api-keys/${key.id}/regenerate`, { method: 'POST' })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error ?? `HTTP ${res.status}`)
+    }
+    const data = await res.json() as { key: ApiKey, token: string }
+    const idx = keys.value.findIndex(k => k.id === data.key.id)
+    if (idx !== -1)
+      keys.value.splice(idx, 1, data.key)
+    else
+      keys.value.unshift(data.key)
+    revealedToken.value = data.token
+  }
+  catch (e) {
+    errorMsg.value = (e as Error).message
+  }
+  finally {
+    isRegenerating.value = false
   }
 }
 
@@ -610,9 +639,22 @@ async function startImport() {
                         Cancel
                       </AppButton>
                     </template>
-                    <button v-else type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmRevokeId = key.id">
-                      Revoke
-                    </button>
+                    <template v-else-if="confirmRegenerateId === key.id">
+                      <AppButton variant="danger" size="sm" class="mr-1" :disabled="isRegenerating" @click="regenerateKey(key)">
+                        Confirm
+                      </AppButton>
+                      <AppButton variant="secondary" size="sm" @click="confirmRegenerateId = null">
+                        Cancel
+                      </AppButton>
+                    </template>
+                    <template v-else>
+                      <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-600 dark:hover:text-amber-400 mr-1" @click="confirmRegenerateId = key.id">
+                        Regenerate
+                      </button>
+                      <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmRevokeId = key.id">
+                        Revoke
+                      </button>
+                    </template>
                   </template>
                 </td>
               </tr>

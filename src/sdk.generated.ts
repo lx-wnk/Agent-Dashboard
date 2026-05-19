@@ -74,7 +74,7 @@ export type ErrorState = typeof ErrorStateQuotaExhausted | typeof ErrorStateRate
  */
 export interface BtwMessage {
   message: string;
-  response: string | null;
+  response?: string;
 }
 /**
  * Agent is the unified view of a running Claude Code process.
@@ -87,9 +87,9 @@ export interface Agent {
   cwd: string;
   entrypoint: Entrypoint;
   status: AgentStatus;
-  uptime: number /* int64 */; // seconds
+  uptime: number /* int64 */;
   lastActivity: string;
-  currentAction: string | null;
+  currentAction?: string;
   lastTools: string[];
   tasks: TaskInfo[];
   subagents: SubAgent[];
@@ -98,18 +98,18 @@ export interface Agent {
   cacheCreationCostEstimate: number /* float64 */;
   cacheReadCostEstimate: number /* float64 */;
   healthScore: number /* int */;
-  model: string | null;
-  codeVersion: string | null;
+  model?: string;
+  codeVersion?: string;
   conversationTurns: number /* int */;
   toolCounts: { [key: string]: number /* int */};
   meta?: SessionMeta;
   channelAvailable: boolean;
-  lastOutput: string | null;
+  lastOutput?: string;
   convergenceAlert: boolean;
-  convergenceToolName: string | null;
-  errorState: ErrorState | null;
+  convergenceToolName?: string;
+  errorState?: ErrorState;
   pipelineTaskId?: string;
   pipelineTaskTitle?: string;
   machine?: string;
-  lastBtw: BtwMessage | null;
+  lastBtw?: BtwMessage;
 }
