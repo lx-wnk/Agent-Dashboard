@@ -1,5 +1,10 @@
 // Types generated from sdk/types.go via tygo — do not edit these directly.
 // Run `task generate` to regenerate after changing sdk/types.go.
+import {
+  AgentStatusActive,
+  AgentStatusWaiting,
+  AgentStatusIdle,
+} from './sdk.generated'
 import type {
   TokenUsage,
   SessionMeta as _SessionMetaBase,
@@ -23,8 +28,13 @@ export interface TaskInfo extends Omit<_TaskInfoBase, 'status'> {
   status: 'pending' | 'in_progress' | 'completed'
 }
 
-export const AGENT_STATUSES = ['active', 'waiting', 'idle'] as const
+// Derived from sdk.generated consts — automatically stays in sync with sdk/types.go.
+export const AGENT_STATUSES = [AgentStatusActive, AgentStatusWaiting, AgentStatusIdle] as const
 
+// NOTE: sdk.generated.ts also exports an Agent interface generated from sdk/types.go,
+// but it is NOT used here — it lacks TS-only fields (lastBtw, machine, pipelineTaskTitle)
+// and cannot express nullable fields (model, errorState, etc.). Always import Agent from
+// this file, never from ./sdk.generated.
 export interface Agent {
   pid: number
   sessionId: string
