@@ -1,4 +1,12 @@
-// Dependency wiring — auto-constructed, not generated. Add new handlers here.
+// Dependency wiring — auto-constructed, not generated.
+// Domain-scoped provider functions live in sibling files:
+//   di_db.go       — database bundle
+//   di_router.go   — router config + HTTP server
+//   di_pipeline.go — orchestrator, spawners
+//   di_tasks.go    — task HTTP handler
+//   di_mcp.go      — MCP HTTP handler
+//
+// This file is the thin coordinator that assembles all domains into the final Server.
 
 package main
 
@@ -6,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
@@ -18,19 +25,15 @@ import (
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
-	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
-	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
-	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
-	mcptools "github.com/lx-wnk/agent-dashboard/server/internal/mcp/tools"
+	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
-	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
@@ -187,182 +190,4 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
 	return server, broadcaster, orch, cleanup, nil
-}
-
-func provideDB(cfg config.Config) (*db.DBBundle, error) {
-	return db.Open(cfg.DBPath)
-}
-
-func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider) api.RouterConfig {
-	bypassAuth := cfg.IsLoopback() && oauthProvider == nil
-	if bypassAuth {
-		slog.Info("auth bypass active — loopback + no auth_provider plugin configured; all API requests allowed without login")
-	}
-	return api.RouterConfig{
-		JWTSecret:         cfg.JWTSecret,
-		CallbackURL:       cfg.CallbackURL(),
-		IsLoopback:        cfg.IsLoopback(),
-		BypassAuth:        bypassAuth,
-		HooksSecret:       cfg.HooksSecret,
-		HooksDebounceMs:   cfg.HooksDebounceMs,
-		SpawnRateLimit:    cfg.SpawnRateLimit,
-		SpawnRateWindowMs: cfg.SpawnRateWindowMs,
-	}
-}
-
-// buildSpawnerForName returns the LLMSpawner for the given adapter name,
-// reading adapter-specific configuration from cfg. Returns nil for "claude" and
-// any unknown name (nil signals stage_handlers.go to use the native SpawnStageAgent path).
-func buildSpawnerForName(name string, cfg config.Config) pipeline.LLMSpawner {
-	switch name {
-	case "ollama":
-		return &pipeline.OllamaSpawner{
-			Host:         cfg.Adapters.Ollama.Host,
-			DefaultModel: cfg.Adapters.Ollama.DefaultModel,
-		}
-	case "openai":
-		return &pipeline.OpenAISpawner{
-			BaseURL:      cfg.Adapters.OpenAI.BaseURL,
-			APIKeyEnv:    cfg.Adapters.OpenAI.APIKeyEnv,
-			DefaultModel: cfg.Adapters.OpenAI.DefaultModel,
-		}
-	default: // "claude" and any unknown — nil signals native spawn path
-		return nil
-	}
-}
-
-func provideSpawner(cfg config.Config) pipeline.LLMSpawner {
-	if cmd := config.SpawnCommandFromEnv(); cmd != "" {
-		return &pipeline.CustomCommandSpawner{Command: cmd}
-	}
-
-	defaultSpawner := buildSpawnerForName(cfg.Adapters.Default, cfg)
-
-	// If no per-stage overrides are configured, return the default spawner directly.
-	if len(cfg.Adapters.Stages) == 0 {
-		return defaultSpawner
-	}
-
-	// Build per-stage spawners. Only include entries with a non-nil spawner;
-	// stages mapped to "claude" (nil) are intentionally omitted so they fall
-	// through to DefaultSpawner in PerStageSpawner.Spawn.
-	stageSpawners := make(map[string]pipeline.LLMSpawner, len(cfg.Adapters.Stages))
-	for stage, adapterName := range cfg.Adapters.Stages {
-		if s := buildSpawnerForName(adapterName, cfg); s != nil {
-			stageSpawners[stage] = s
-		}
-	}
-
-	// If no non-nil overrides exist and the default is also nil (all native Claude),
-	// no wrapping is needed.
-	if defaultSpawner == nil && len(stageSpawners) == 0 {
-		return nil
-	}
-
-	return &pipeline.PerStageSpawner{
-		DefaultSpawner: defaultSpawner,
-		StageSpawners:  stageSpawners,
-	}
-}
-
-func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroadcaster, systemPromptRepo repo.SystemPromptRepo) (*pipeline.PipelineOrchestrator, error) {
-	if client == nil {
-		return nil, nil
-	}
-	taskRepo := repo.NewTaskRepo(client)
-	srRepo := repo.NewStageRunRepo(client)
-	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
-	cfgRepo := repo.NewPipelineConfigRepo(client)
-
-	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
-		Client:           client,
-		TaskRepo:         taskRepo,
-		StageRunRepo:     srRepo,
-		PermissionRepo:   permRepo,
-		AuditRepo:        auditRepo,
-		ConfigRepo:       cfgRepo,
-		SystemPromptRepo: systemPromptRepo,
-		MCPToken:         cfg.MCPToken,
-		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
-		Spawner:          provideSpawner(cfg),
-		OnTaskChanged: func(taskID string, transitionKind string) {
-			tb.Broadcast(sse.TaskEvent{
-				Type:   "task_changed",
-				TaskID: taskID,
-				Payload: map[string]string{
-					"transitionKind": transitionKind,
-				},
-			})
-		},
-	})
-	return orch, err
-}
-
-func provideTaskHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster) *tasks.Handler {
-	if client == nil || orch == nil {
-		return nil
-	}
-	return tasks.NewHandler(tasks.Deps{
-		TaskRepo:     repo.NewTaskRepo(client),
-		SRRepo:       repo.NewStageRunRepo(client),
-		PermRepo:     repo.NewPermissionRepo(client),
-		AuditRepo:    repo.NewAuditRepo(client),
-		CfgRepo:      repo.NewPipelineConfigRepo(client),
-		DepRepo:      repo.NewDependencyRepo(client),
-		Orchestrator: orch,
-		Broadcaster:  tb,
-	})
-}
-
-func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster) http.Handler {
-	if client == nil || orch == nil {
-		return nil
-	}
-
-	taskRepo := repo.NewTaskRepo(client)
-	srRepo := repo.NewStageRunRepo(client)
-	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
-	depRepo := repo.NewDependencyRepo(client)
-	apiKeyRepo := repo.NewApiKeyRepo(client)
-
-	broadcast := func(taskID string) {
-		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: taskID, Payload: map[string]string{}})
-	}
-	broadcastDeleted := func(taskID string) {
-		tb.Broadcast(sse.TaskEvent{Type: "task_deleted", TaskID: taskID, Payload: map[string]string{}})
-	}
-
-	registry := mcp.ToolRegistry{}
-	mcptools.RegisterReadTools(registry, mcptools.ReadDeps{
-		TaskRepo:  taskRepo,
-		SRRepo:    srRepo,
-		PermRepo:  permRepo,
-		AuditRepo: auditRepo,
-	})
-	mcptools.RegisterWriteTools(registry, mcptools.WriteDeps{
-		TaskRepo:         taskRepo,
-		PermRepo:         permRepo,
-		AuditRepo:        auditRepo,
-		DepRepo:          depRepo,
-		Broadcast:        broadcast,
-		BroadcastDeleted: broadcastDeleted,
-	})
-	mcptools.RegisterControlTools(registry, mcptools.ControlDeps{
-		TaskRepo:     taskRepo,
-		SRRepo:       srRepo,
-		PermRepo:     permRepo,
-		AuditRepo:    auditRepo,
-		Orchestrator: orch,
-		Broadcast:    broadcast,
-	})
-	mcptools.RegisterKeyTools(registry, mcptools.KeyDeps{
-		ApiKeyRepo: apiKeyRepo,
-	})
-	return mcp.MCPHandler(registry)
-}
-
-func provideServer(cfg config.Config, handler http.Handler) *api.Server {
-	return api.NewServer(cfg.Addr(), handler, cfg.ShutdownTimeout())
 }
