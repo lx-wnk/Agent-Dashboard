@@ -7,7 +7,7 @@ packages:
       # Add overrides here if tygo output diverges from the canonical TS definition.
     # NOTE: tygo (v0.2.21) does not support exclude_types in the YAML config —
     # only exclude_files is available. As a result, the generated Agent interface
-    # is present in sdk.generated.ts but is intentionally NOT used by the frontend.
-    # src/types.ts defines its own Agent interface with TS-only fields (lastBtw,
-    # machine, pipelineTaskTitle) and proper nullable types. Always import Agent
-    # from src/types.ts, never from sdk.generated.ts.
+    # is present in sdk.generated.ts and IS used as the base type in src/types.ts.
+    # src/types.ts re-exports Agent as an Omit+intersection that overrides tasks,
+    # subagents, and meta with narrower local types. Always import Agent from
+    # src/types.ts (not from sdk.generated.ts directly) to get the full type.
