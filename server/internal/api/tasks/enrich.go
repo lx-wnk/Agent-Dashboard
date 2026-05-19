@@ -2,15 +2,39 @@ package tasks
 
 import (
 	"context"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
-// EnrichedTask extends Task with computed UI fields.
+// EnrichedTask is the API response shape for a task. All fields use camelCase
+// JSON keys so they match the TypeScript PipelineTask interface without a
+// client-side transform. Do not embed *ent.Task here — ent generates snake_case
+// JSON tags that would silently shadow the camelCase keys below.
 type EnrichedTask struct {
-	*ent.Task
+	ID                  string                 `json:"id"`
+	Slug                string                 `json:"slug"`
+	Title               string                 `json:"title"`
+	Description         *string                `json:"description"`
+	Cwd                 string                 `json:"cwd"`
+	WorktreePath        *string                `json:"worktreePath"`
+	SourceBranch        *string                `json:"sourceBranch"`
+	TargetBranch        *string                `json:"targetBranch"`
+	CurrentStage        string                 `json:"currentStage"`
+	Priority            string                 `json:"priority"`
+	UserID              *string                `json:"userId"`
+	ParentTaskID        *string                `json:"parentTaskId"`
+	MaxIterations       int                    `json:"maxIterations"`
+	TokenBudget         *int                   `json:"tokenBudget"`
+	CostBudgetCents     *int                   `json:"costBudgetCents"`
+	StageTimeoutSeconds int                    `json:"stageTimeoutSeconds"`
+	SilverBullet        bool                   `json:"silverBullet"`
+	Metadata            map[string]interface{} `json:"metadata"`
+	CreatedAt           time.Time              `json:"createdAt"`
+	UpdatedAt           time.Time              `json:"updatedAt"`
+	// Computed fields — not stored in DB.
 	NeedsUser                   bool    `json:"needsUser"`
 	LatestStageRunStatus        *string `json:"latestStageRunStatus"`
 	CurrentIteration            int     `json:"currentIteration"`
@@ -98,7 +122,26 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int) (*Enric
 	}
 
 	return &EnrichedTask{
-		Task:                        t,
+		ID:                          t.ID,
+		Slug:                        t.Slug,
+		Title:                       t.Title,
+		Description:                 t.Description,
+		Cwd:                         t.Cwd,
+		WorktreePath:                t.WorktreePath,
+		SourceBranch:                t.SourceBranch,
+		TargetBranch:                t.TargetBranch,
+		CurrentStage:                t.CurrentStage,
+		Priority:                    t.Priority,
+		UserID:                      t.UserID,
+		ParentTaskID:                t.ParentTaskID,
+		MaxIterations:               t.MaxIterations,
+		TokenBudget:                 t.TokenBudget,
+		CostBudgetCents:             t.CostBudgetCents,
+		StageTimeoutSeconds:         t.StageTimeoutSeconds,
+		SilverBullet:                t.SilverBullet,
+		Metadata:                    t.Metadata,
+		CreatedAt:                   t.CreatedAt,
+		UpdatedAt:                   t.UpdatedAt,
 		NeedsUser:                   needsUser,
 		LatestStageRunStatus:        latestStatus,
 		CurrentIteration:            currentIteration,
