@@ -154,7 +154,7 @@ Reserved for plugins that mount additional HTTP routes into the dashboard router
    ```
 3. Set the env var (or config key) before starting the dashboard:
    ```bash
-   export PLUGIN_DIR=/path/to/plugins
+   export DASHBOARD_PLUGIN_DIR=/path/to/plugins
    ./agent-dashboard serve
    ```
    Or add `"plugin_dir": "/path/to/plugins"` to your JSON config file.
@@ -199,7 +199,7 @@ export DASHBOARD_URL=http://127.0.0.1:13120
 export DASHBOARD_AUTH_PLUGIN_SECRET=$(openssl rand -hex 32)
 
 # 3. Point the dashboard at the plugin dir and start
-export PLUGIN_DIR=/path/to/plugins   # directory containing github-oauth/
+export DASHBOARD_PLUGIN_DIR=/path/to/plugins   # directory containing github-oauth/
 ./agent-dashboard serve
 ```
 
