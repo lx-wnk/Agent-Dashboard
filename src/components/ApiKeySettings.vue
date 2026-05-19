@@ -830,11 +830,12 @@ async function startImport() {
               Save this token now — it will <strong class="text-yellow-600 dark:text-yellow-400">never be shown again</strong>.
             </p>
             <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
-              {{ tokenVisible ? revealedToken : maskToken(revealedToken!) }}
+              {{ tokenVisible ? revealedToken : maskToken(revealedToken ?? '') }}
               <button
                 type="button"
-                class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 text-green-500 dark:text-green-500 transition-colors"
+                class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 text-green-500 transition-colors"
                 :aria-label="tokenVisible ? 'Hide token' : 'Show token'"
+                :aria-pressed="tokenVisible"
                 @click="tokenVisible = !tokenVisible"
               >
                 <svg v-if="tokenVisible" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -167,14 +167,14 @@ describe('shortModel', () => {
 describe('maskToken', () => {
   it('masks middle of token keeping first 8 and last 4 chars', () => {
     const token = 'mcp_abcdefghij1234'
-    // length=18: first 8 = 'mcp_abcd', last 4 = '1234', middle = max(8, 18-12) = 8 bullets
-    expect(maskToken(token)).toBe('mcp_abcd••••••••1234')
+    // length=18: first 8 = 'mcp_abcd', last 4 = '1234', middle = 18-12 = 6 bullets
+    expect(maskToken(token)).toBe('mcp_abcd••••••1234')
   })
 
-  it('uses at least 8 bullets for short tokens', () => {
+  it('hides short tokens completely — no tail revealed when token ≤ 12 chars', () => {
     const token = 'mcp_1234'
-    // length=8: first 8 already covers all, pad 8 bullets minimum
-    expect(maskToken(token)).toBe('mcp_1234••••••••1234')
+    // length=8: ≤12 chars → head only + 8 bullets, no tail
+    expect(maskToken(token)).toBe('mcp_1234••••••••')
   })
 
   it('handles a realistic 40-char MCP token', () => {

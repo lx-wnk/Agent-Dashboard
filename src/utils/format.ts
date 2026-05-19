@@ -42,7 +42,7 @@ export function shortModel(model: string | null): string {
 
 export function maskToken(token: string): string {
   const head = token.slice(0, 8)
+  if (token.length <= 12) return head + '•'.repeat(8)
   const tail = token.slice(-4)
-  const bulletCount = Math.max(8, token.length - 12)
-  return head + '•'.repeat(bulletCount) + tail
+  return head + '•'.repeat(token.length - 12) + tail
 }
