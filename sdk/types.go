@@ -49,6 +49,31 @@ const (
 	AgentStatusIdle    AgentStatus = "idle"
 )
 
+// Entrypoint describes how the Claude Code process was launched.
+type Entrypoint string
+
+const (
+	EntrypointCLI     Entrypoint = "cli"
+	EntrypointDesktop Entrypoint = "desktop"
+	EntrypointUnknown Entrypoint = "unknown"
+)
+
+// ErrorState describes a recognisable error condition seen in the session log.
+type ErrorState string
+
+const (
+	ErrorStateQuotaExhausted ErrorState = "quota_exhausted"
+	ErrorStateRateLimited    ErrorState = "rate_limited"
+	ErrorStateAuthFailed     ErrorState = "auth_failed"
+)
+
+// BtwMessage is the last assistant text that appeared alongside tool calls.
+// Message is the text content; Response is reserved for future use.
+type BtwMessage struct {
+	Message  string  `json:"message"`
+	Response *string `json:"response"`
+}
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
 	PID                       int            `json:"pid"`
@@ -56,11 +81,11 @@ type Agent struct {
 	ProjectPath               string         `json:"projectPath"`
 	ProjectName               string         `json:"projectName"`
 	CWD                       string         `json:"cwd"`
-	Entrypoint                string         `json:"entrypoint"` // "cli" | "desktop" | "unknown"
+	Entrypoint                Entrypoint     `json:"entrypoint"`
 	Status                    AgentStatus    `json:"status"`
-	Uptime                    int64          `json:"uptime"` // seconds
+	Uptime                    int64          `json:"uptime"`
 	LastActivity              string         `json:"lastActivity"`
-	CurrentAction             string         `json:"currentAction"`
+	CurrentAction             *string        `json:"currentAction"`
 	LastTools                 []string       `json:"lastTools"`
 	Tasks                     []TaskInfo     `json:"tasks"`
 	Subagents                 []SubAgent     `json:"subagents"`
@@ -69,17 +94,18 @@ type Agent struct {
 	CacheCreationCostEstimate float64        `json:"cacheCreationCostEstimate"`
 	CacheReadCostEstimate     float64        `json:"cacheReadCostEstimate"`
 	HealthScore               int            `json:"healthScore"`
-	Model                     string         `json:"model"`
-	CodeVersion               string         `json:"codeVersion"`
+	Model                     *string        `json:"model"`
+	CodeVersion               *string        `json:"codeVersion"`
 	ConversationTurns         int            `json:"conversationTurns"`
 	ToolCounts                map[string]int `json:"toolCounts"`
 	Meta                      *SessionMeta   `json:"meta"`
 	ChannelAvailable          bool           `json:"channelAvailable"`
-	LastOutput                string         `json:"lastOutput"`
+	LastOutput                *string        `json:"lastOutput"`
 	ConvergenceAlert          bool           `json:"convergenceAlert"`
-	ConvergenceToolName       string         `json:"convergenceToolName"`
-	ErrorState                string         `json:"errorState"` // "" | "quota_exhausted" | "rate_limited" | "auth_failed"
+	ConvergenceToolName       *string        `json:"convergenceToolName"`
+	ErrorState                *ErrorState    `json:"errorState"`
 	PipelineTaskID            string         `json:"pipelineTaskId,omitempty"`
 	PipelineTaskTitle         string         `json:"pipelineTaskTitle,omitempty"`
 	Machine                   string         `json:"machine,omitempty"`
+	LastBtw                   *BtwMessage    `json:"lastBtw"`
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/stretchr/testify/require"
 )
@@ -141,7 +142,7 @@ func TestParseSessionFile_ErrorStateQuota(t *testing.T) {
 
 	data, err := parser.ParseSessionFile(path)
 	require.NoError(t, err)
-	require.Equal(t, "quota_exhausted", data.ErrorState)
+	require.Equal(t, sdk.ErrorStateQuotaExhausted, data.ErrorState)
 }
 
 // TestParseSessionFile_ErrorStateRateLimit verifies that rate-limit text sets the error state.
@@ -153,7 +154,7 @@ func TestParseSessionFile_ErrorStateRateLimit(t *testing.T) {
 
 	data, err := parser.ParseSessionFile(path)
 	require.NoError(t, err)
-	require.Equal(t, "rate_limited", data.ErrorState)
+	require.Equal(t, sdk.ErrorStateRateLimited, data.ErrorState)
 }
 
 // TestParseSessionFile_ErrorStateAuth verifies that auth-failure text sets the error state.
@@ -165,7 +166,7 @@ func TestParseSessionFile_ErrorStateAuth(t *testing.T) {
 
 	data, err := parser.ParseSessionFile(path)
 	require.NoError(t, err)
-	require.Equal(t, "auth_failed", data.ErrorState)
+	require.Equal(t, sdk.ErrorStateAuthFailed, data.ErrorState)
 }
 
 // TestParseSessionFile_NoErrorStateOnCleanText verifies that clean output leaves ErrorState empty.

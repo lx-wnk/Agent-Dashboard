@@ -11,6 +11,7 @@ import type {
   SubAgent as _SubAgentBase,
   TaskInfo as _TaskInfoBase,
   AgentStatus,
+  Agent as _AgentBase,
 } from './sdk.generated'
 
 export type { TokenUsage, AgentStatus }
@@ -28,51 +29,18 @@ export interface TaskInfo extends Omit<_TaskInfoBase, 'status'> {
   status: 'pending' | 'in_progress' | 'completed'
 }
 
+// Agent re-exported from sdk.generated with narrowed tasks/subagents/meta types.
+// The generated base has tasks: TaskInfo[] and subagents: SubAgent[] using the broad
+// generated types; here we override them with the narrower local types.
+export type Agent = Omit<_AgentBase, 'tasks' | 'subagents' | 'meta'> & {
+  tasks: TaskInfo[]
+  subagents: SubAgent[]
+  meta: SessionMeta | null
+}
+
 // Derived from sdk.generated consts — automatically stays in sync with sdk/types.go.
 export const AGENT_STATUSES = [AgentStatusActive, AgentStatusWaiting, AgentStatusIdle] as const
 
-// NOTE: sdk.generated.ts also exports an Agent interface generated from sdk/types.go,
-// but it is NOT used here — it lacks TS-only fields (lastBtw, machine, pipelineTaskTitle)
-// and cannot express nullable fields (model, errorState, etc.). Always import Agent from
-// this file, never from ./sdk.generated.
-export interface Agent {
-  pid: number
-  sessionId: string
-  projectPath: string
-  projectName: string
-  cwd: string
-  entrypoint: 'cli' | 'desktop' | 'unknown'
-  status: AgentStatus
-  uptime: number
-  lastActivity: string
-  currentAction: string | null
-  lastTools: string[]
-  tasks: TaskInfo[]
-  subagents: SubAgent[]
-  tokenUsage: TokenUsage
-  costEstimate: number
-  cacheCreationCostEstimate: number
-  cacheReadCostEstimate: number
-  healthScore: number
-  model: string | null
-  codeVersion: string | null
-  conversationTurns: number
-  toolCounts: Record<string, number>
-  meta: SessionMeta | null
-  channelAvailable: boolean
-  lastOutput: string | null
-  lastBtw: { message: string, response: string | null } | null
-  machine?: string
-  /** Set when this agent session is running as part of a pipeline task stage. */
-  pipelineTaskId?: string
-  pipelineTaskTitle?: string
-  /** True when the last 5 tool calls are identical (same tool name and input). */
-  convergenceAlert: boolean
-  /** The tool name that triggered convergence detection; null otherwise. */
-  convergenceToolName: string | null
-  /** Non-null when the agent's JSONL contains a recognisable error signature. */
-  errorState: 'quota_exhausted' | 'rate_limited' | 'auth_failed' | null
-}
 
 export interface ChannelReply {
   message: string
