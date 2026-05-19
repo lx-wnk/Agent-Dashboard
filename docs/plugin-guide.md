@@ -47,42 +47,91 @@ The dashboard registry (`server/internal/plugin/`) reads `plugin.json`, starts t
 
 Replaces the built-in bypass-auth with a real OAuth provider. Only the first discovered `auth_provider` plugin is used.
 
+The plugin implements a **standalone OAuth dance** and creates dashboard sessions by calling core's `POST /api/auth/session`. Core has zero provider-specific knowledge — it only issues JWT session cookies when a trusted plugin presents a verified user profile.
+
+#### Standalone flow (primary)
+
+```
+Browser          Core                     Plugin              Provider
+  │                │                        │                    │
+  │ GET /auth/...  │                        │                    │
+  │───────────────►│                        │                    │
+  │ 302 → /login   │                        │                    │
+  │◄───────────────│                        │                    │
+  │ GET /login     │                        │                    │
+  │───────────────────────────────────────►│                    │
+  │ 302 → provider │                        │                    │
+  │◄───────────────────────────────────────│                    │
+  │                                         Provider OAuth dance │
+  │◄────────────────────────────────────────────────────────────│
+  │ GET /callback?code=…                   │                    │
+  │───────────────────────────────────────►│                    │
+  │                │  POST /api/auth/session│                    │
+  │                │◄───────────────────────│                    │
+  │                │  Set-Cookie: auth_token│                    │
+  │                │───────────────────────►│                    │
+  │ 302 → /        │                        │                    │
+  │◄───────────────────────────────────────│                    │
+```
+
 The plugin must implement:
 
-#### `GET /capabilities/auth/authorize-url`
+**`GET /health`** — required by registry health-check.
 
-Query parameters: `state`, `redirect_uri`
+Response: `{"ok":true}`
 
-Response `200 application/json`:
-```json
-{ "url": "https://provider.example.com/oauth/authorize?..." }
+**`GET /login?nonce=<jwt>`** — entry point; core forwards here with a one-time nonce.
+
+Redirects to the OAuth provider's authorization URL. Must embed the nonce in the OAuth state parameter so it survives the round-trip.
+
+**`GET /callback?code=<code>&state=<state>`** — OAuth callback.
+
+1. Validate CSRF state.
+2. Extract nonce from state.
+3. Exchange code for access token.
+4. Fetch user profile from provider.
+5. Call `POST /api/auth/session` (see below).
+6. Forward the `auth_token` cookie to the browser.
+7. Redirect to `DASHBOARD_URL/`.
+
+**`POST /api/auth/session`** on core — called by the plugin, not the browser.
+
+Request headers:
+```
+Authorization: Bearer <DASHBOARD_AUTH_PLUGIN_SECRET>
+Content-Type: application/json
 ```
 
-#### `POST /capabilities/auth/exchange`
-
-Request body `application/json`:
-```json
-{ "code": "<oauth-code>", "redirect_uri": "<redirect-uri>" }
-```
-
-Response `200 application/json`:
-```json
-{ "token": "<access-token>" }
-```
-
-#### `GET /capabilities/auth/user`
-
-Request header: `Authorization: Bearer <access-token>`
-
-Response `200 application/json` matching `auth.OAuthUserProfile`:
+Request body:
 ```json
 {
-  "ID":          "12345",
-  "Login":       "username",
-  "DisplayName": "Full Name",
-  "AvatarURL":   "https://..."
+  "github_id":    "12345",
+  "login":        "username",
+  "display_name": "Full Name",
+  "avatar_url":   "https://...",
+  "nonce":        "<jwt-nonce-from-GET-/login>"
 }
 ```
+
+Response: `200 OK` with `Set-Cookie: auth_token=<jwt>`.
+
+#### Required environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `DASHBOARD_URL` | Base URL of the dashboard (e.g. `http://127.0.0.1:13120`) |
+| `DASHBOARD_AUTH_PLUGIN_SECRET` | Shared secret ≥32 chars for `POST /api/auth/session` |
+| Provider credentials | Named in `plugin.json` `env` array |
+
+#### Legacy capability routes (deprecated)
+
+The following routes were used by the old in-core proxy flow and are retained for backwards compatibility. New plugins should implement the standalone flow above instead.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/capabilities/auth/authorize-url?state=&redirect_uri=` | Returns provider authorization URL |
+| `POST` | `/capabilities/auth/exchange` | Exchanges OAuth code for access token |
+| `GET`  | `/capabilities/auth/user` | Returns user profile for Bearer token |
 
 ---
 
@@ -95,21 +144,21 @@ Reserved for plugins that mount additional HTTP routes into the dashboard router
 ## How to register a plugin
 
 1. Build your plugin binary.
-2. Create a directory inside `PLUGIN_DIR` (default: unset — no plugins loaded):
+2. Create a directory under your plugin dir:
    ```
-   $PLUGIN_DIR/
+   /path/to/plugins/
    └── my-plugin/
        ├── plugin.json
        └── my-plugin   ← compiled binary
    ```
-3. Set the env var before starting the dashboard:
+3. Set the env var (or config key) before starting the dashboard:
    ```bash
    export PLUGIN_DIR=/path/to/plugins
    ./agent-dashboard serve
    ```
    Or add `"plugin_dir": "/path/to/plugins"` to your JSON config file.
 
-The registry scans every subdirectory of `PLUGIN_DIR` for `plugin.json` at startup. Missing or malformed descriptors are skipped with a warning; a failed health check kills the process and skips the plugin.
+The registry scans every subdirectory of `plugin_dir` for `plugin.json` at startup. Missing or malformed descriptors are skipped with a warning; a failed health check kills the process and skips the plugin.
 
 ---
 
@@ -117,8 +166,9 @@ The registry scans every subdirectory of `PLUGIN_DIR` for `plugin.json` at start
 
 - Plugins **must** bind to `127.0.0.1` only — never a public address.
 - The dashboard kills any plugin process it started on shutdown (`Registry.Shutdown()`).
-- Only a fixed base set of env vars (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus any var names listed in the `env` array in `plugin.json` are forwarded to the plugin process. Any secret a plugin needs (e.g. `GITHUB_CLIENT_SECRET`) must be named in `env`.
-- Health check timeout is **5 seconds**. Plugins that do not respond in time are considered failed and are not registered.
+- Only a fixed base set of env vars (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus any var names listed in the `env` array in `plugin.json` are forwarded to the plugin process.
+- `DASHBOARD_AUTH_PLUGIN_SECRET` must be at least 32 characters. Store it in a `.env` file, never commit it.
+- Health check timeout is **5 seconds**. Plugins that do not respond in time are skipped.
 
 ---
 
@@ -132,7 +182,7 @@ The registry scans every subdirectory of `PLUGIN_DIR` for `plugin.json` at start
 |---------------|---------|
 | `plugin.json` | Descriptor — capability `auth_provider`, addr `127.0.0.1:19001`, command `./github-oauth` |
 | `go.mod`      | Standalone Go module (`github.com/lx-wnk/agent-dashboard-plugin-github-oauth`) |
-| `main.go`     | HTTP server implementing all three `auth_provider` endpoints + `/health` |
+| `main.go`     | HTTP server implementing standalone OAuth flow + legacy capability routes + `/health` |
 
 ### Setup
 
@@ -144,6 +194,8 @@ GOWORK=off go build -o github-oauth .
 # 2. Export credentials
 export GITHUB_CLIENT_ID=your_client_id
 export GITHUB_CLIENT_SECRET=your_client_secret
+export DASHBOARD_URL=http://127.0.0.1:13120
+export DASHBOARD_AUTH_PLUGIN_SECRET=$(openssl rand -hex 32)
 
 # 3. Point the dashboard at the plugin dir and start
 export PLUGIN_DIR=/path/to/plugins   # directory containing github-oauth/
@@ -157,6 +209,8 @@ The dashboard logs `plugin: loaded id=github-oauth capabilities=[auth_provider]`
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET`  | `/health` | Health check — returns `{"ok":true}` |
-| `GET`  | `/capabilities/auth/authorize-url?state=&redirect_uri=` | Returns GitHub authorization URL |
-| `POST` | `/capabilities/auth/exchange` | Exchanges OAuth code for access token |
-| `GET`  | `/capabilities/auth/user` | Returns user profile for Bearer token |
+| `GET`  | `/login?nonce=<jwt>` | Start OAuth dance (primary entry point) |
+| `GET`  | `/callback?code=&state=` | OAuth callback — creates session, redirects to dashboard |
+| `GET`  | `/capabilities/auth/authorize-url` | Legacy: returns GitHub authorization URL |
+| `POST` | `/capabilities/auth/exchange` | Legacy: exchanges OAuth code for access token |
+| `GET`  | `/capabilities/auth/user` | Legacy: returns user profile for Bearer token |
