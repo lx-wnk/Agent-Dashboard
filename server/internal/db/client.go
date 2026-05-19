@@ -67,6 +67,19 @@ func Open(path string) (*DBBundle, error) {
 // by ent. Each statement is executed individually — SQLite does not support
 // multi-statement Exec calls.
 func runRawMigrations(db *sql.DB) error {
+	// Always drop and recreate the FTS sync triggers so that schema changes to
+	// trigger bodies take effect on existing databases. CREATE TRIGGER IF NOT EXISTS
+	// is a no-op when the trigger already exists, so an explicit DROP is required.
+	for _, stmt := range []string{
+		`DROP TRIGGER IF EXISTS tasks_ai`,
+		`DROP TRIGGER IF EXISTS tasks_au`,
+		`DROP TRIGGER IF EXISTS tasks_ad`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("raw migration (drop trigger): %w\nstatement: %s", err, stmt)
+		}
+	}
+
 	stmts := []string{
 		// notification_config: key-value store for VAPID keys etc.
 		`CREATE TABLE IF NOT EXISTS notification_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
@@ -84,9 +97,7 @@ func runRawMigrations(db *sql.DB) error {
 		`CREATE VIRTUAL TABLE IF NOT EXISTS task_fts USING fts5(
 			task_id UNINDEXED,
 			title,
-			description,
-			content='tasks',
-			content_rowid='rowid'
+			description
 		)`,
 
 		// Sync trigger: INSERT on tasks.
@@ -95,10 +106,10 @@ func runRawMigrations(db *sql.DB) error {
 			VALUES (new.rowid, new.id, new.title, COALESCE(new.description, ''));
 		END`,
 
-		// Sync trigger: UPDATE on tasks (delete old row, insert new row).
+		// Sync trigger: UPDATE on tasks (delete old index entry, insert new one).
+		// Uses rowid-only delete which is correct for a regular (non-content) FTS5 table.
 		`CREATE TRIGGER IF NOT EXISTS tasks_au AFTER UPDATE ON tasks BEGIN
-			INSERT INTO task_fts(task_fts, rowid, task_id, title, description)
-			VALUES ('delete', old.rowid, old.id, old.title, COALESCE(old.description, ''));
+			INSERT INTO task_fts(task_fts, rowid) VALUES ('delete', old.rowid);
 			INSERT INTO task_fts(rowid, task_id, title, description)
 			VALUES (new.rowid, new.id, new.title, COALESCE(new.description, ''));
 		END`,
@@ -115,6 +126,12 @@ func runRawMigrations(db *sql.DB) error {
 			frequency INTEGER NOT NULL DEFAULT 1,
 			last_seen_at TEXT NOT NULL
 		)`,
+
+		// api_keys.name no longer requires uniqueness — names are human labels and
+		// the token hash (key_hash) is the real unique credential identifier.
+		// This index was created by the original ent schema; drop it idempotently
+		// so existing databases are migrated without a table rebuild.
+		`DROP INDEX IF EXISTS api_keys_name_key`,
 	}
 
 	for _, stmt := range stmts {
