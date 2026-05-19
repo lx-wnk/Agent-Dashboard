@@ -170,7 +170,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 
 	authURL := fmt.Sprintf(
 		"https://login.microsoftonline.com/%s/oauth2/v2.0/authorize?%s",
-		h.tenantID, v.Encode(),
+		url.PathEscape(h.tenantID), v.Encode(),
 	)
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
@@ -205,6 +205,11 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 		Path:   "/",
 	})
 
+	if errParam := r.URL.Query().Get("error"); errParam != "" {
+		slog.Warn("callback: oauth error from provider", "error", errParam, "description", r.URL.Query().Get("error_description"))
+		writeError(w, http.StatusForbidden, "authentication denied by provider")
+		return
+	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		writeError(w, http.StatusBadRequest, "missing code")
@@ -257,7 +262,7 @@ func (h *handler) exchangeCode(ctx context.Context, code string) (string, error)
 	v.Set("redirect_uri", h.callbackURL)
 	v.Set("grant_type", "authorization_code")
 
-	tokenURL := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", h.tenantID)
+	tokenURL := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", url.PathEscape(h.tenantID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(v.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("exchangeCode: build request: %w", err)
@@ -275,7 +280,7 @@ func (h *handler) exchangeCode(ctx context.Context, code string) (string, error)
 		return "", fmt.Errorf("exchangeCode: read body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("exchangeCode: HTTP %d: %s", resp.StatusCode, body)
+		return "", fmt.Errorf("exchangeCode: HTTP %d: %s", resp.StatusCode, truncateBody(body))
 	}
 
 	var result struct {
@@ -316,7 +321,7 @@ func (h *handler) getUser(ctx context.Context, accessToken string) (*msUserProfi
 		return nil, fmt.Errorf("getUser: read body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("getUser: HTTP %d: %s", resp.StatusCode, body)
+		return nil, fmt.Errorf("getUser: HTTP %d: %s", resp.StatusCode, truncateBody(body))
 	}
 
 	var profile msUserProfile
@@ -362,6 +367,9 @@ func (h *handler) isMember(ctx context.Context, accessToken, groupID string) (bo
 			if g.ID == groupID {
 				return true, nil
 			}
+		}
+		if page.NextLink != "" && !strings.HasPrefix(page.NextLink, "https://graph.microsoft.com/") {
+			return false, fmt.Errorf("isMember: unexpected nextLink host: %s", page.NextLink)
 		}
 		nextURL = page.NextLink
 	}
@@ -415,6 +423,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func truncateBody(b []byte) string {
+	const max = 200
+	if len(b) <= max {
+		return string(b)
+	}
+	return string(b[:max]) + "…"
 }
 
 func randomState() (string, error) {
