@@ -61,8 +61,14 @@ describe('runStatusChipClass', () => {
     })
   })
 
-  it('returns a non-empty fallback for unknown statuses', () => {
+  it('pending status returns fallback class', () => {
     const cls = runStatusChipClass('pending')
+    expect(typeof cls).toBe('string')
+    expect(cls.length).toBeGreaterThan(0)
+  })
+
+  it('returns a non-empty fallback for truly unknown statuses', () => {
+    const cls = runStatusChipClass('truly-unknown-status')
     expect(typeof cls).toBe('string')
     expect(cls.length).toBeGreaterThan(0)
   })

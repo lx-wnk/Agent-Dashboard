@@ -277,8 +277,10 @@ func TestParseSessionFile_LargeFile(t *testing.T) {
 // TestAllClaudeConfigDirs_DashboardEnvOverride verifies that DASHBOARD_CLAUDE_CONFIG_DIRS
 // is listed first when set, with no duplicate entries.
 func TestAllClaudeConfigDirs_DashboardEnvOverride(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	t.Setenv("DASHBOARD_CLAUDE_CONFIG_DIRS", dir)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
 
 	dirs := parser.AllClaudeConfigDirs()
 	require.NotEmpty(t, dirs)
