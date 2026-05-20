@@ -32,7 +32,8 @@ type Config struct {
 	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
-	MCPToken string `koanf:"mcp_token"`
+	MCPToken     string `koanf:"mcp_token"`
+	WorktreeRoot string `koanf:"worktree_root"`
 	// Auth controls authentication mode.
 	// "none" (default) — bypass auth, no login required.
 	// "plugin" — require OAuth via an auth_provider plugin (GitHub, Office365, etc.).
@@ -52,6 +53,7 @@ func Defaults() Config {
 		Host:                   "127.0.0.1",
 		Port:                   13120,
 		DBPath:                 home + "/.claude/dashboard-tasks.db",
+		WorktreeRoot:           home + "/.claude/dashboard-worktrees",
 		SSEIntervalMs:          3000,
 		ShutdownTimeoutSeconds: 10,
 		HooksDebounceMs:        100,

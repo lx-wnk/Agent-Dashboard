@@ -149,6 +149,11 @@ type OrchestratorOptions struct {
 	MCPToken string
 	MCPUrl   string
 
+	// WorktreeRoot is the base directory for auto-created git worktrees.
+	// Defaults to ~/.claude/dashboard-worktrees when empty.
+	// Set via DASHBOARD_WORKTREE_ROOT.
+	WorktreeRoot string
+
 	// Spawner selects which LLM backend runs stage agents.
 	// When nil, stage handlers use SpawnStageAgent (native Claude path).
 	Spawner LLMSpawner

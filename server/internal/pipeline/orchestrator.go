@@ -281,6 +281,20 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		}
 	}
 
+	// Auto-create a git worktree when sourceBranch is set but worktreePath is not yet populated.
+	// Must happen before ensureStageRun so the spawner uses the correct cwd from the first run.
+	if handler.RequiresAgent() && task.SourceBranch != nil && *task.SourceBranch != "" &&
+		(task.WorktreePath == nil || *task.WorktreePath == "") {
+		wtPath, wtErr := ensureTaskWorktree(task, o.opts.WorktreeRoot)
+		if wtErr != nil {
+			return nil, fmt.Errorf("orchestrator: ensure worktree: %w", wtErr)
+		}
+		if task, err = o.opts.TaskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{WorktreePath: &wtPath}); err != nil {
+			return nil, fmt.Errorf("orchestrator: set worktree path: %w", err)
+		}
+		slog.Info("orchestrator: created worktree", "taskID", taskID, "path", wtPath, "branch", *task.SourceBranch)
+	}
+
 	// latest is non-nil only for agent-driven stages; ensureStageRun falls back to
 	// a DB query when it is nil (non-agent stages).
 	stageRun, err := o.ensureStageRun(ctx, task, latest)
