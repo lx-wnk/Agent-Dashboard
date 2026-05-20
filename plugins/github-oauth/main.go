@@ -9,7 +9,7 @@
 //
 //	Browser                 Core                      Plugin                  GitHub
 //	  │                       │                          │                       │
-//	  │  GET /api/auth/github  │                          │                       │
+//	  │  GET /api/auth/login  │                          │                       │
 //	  │──────────────────────►│                          │                       │
 //	  │  302 → plugin /login  │                          │                       │
 //	  │◄──────────────────────│                          │                       │
@@ -287,7 +287,7 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 // nonce is the flow-binding JWT issued by core on the initial redirect; core validates it.
 func (h *handler) createCoreSession(ctx context.Context, profile *oauthUserProfile, nonce string) (*http.Cookie, error) {
 	body, err := json.Marshal(map[string]string{
-		"github_id":    profile.ID,
+		"provider_id":    profile.ID,
 		"login":        profile.Login,
 		"display_name": profile.DisplayName,
 		"avatar_url":   profile.AvatarURL,

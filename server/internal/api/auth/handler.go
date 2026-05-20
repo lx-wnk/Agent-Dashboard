@@ -44,7 +44,7 @@ func NewHandler(deps Deps) *Handler {
 
 // issueSession upserts the user, signs a JWT, and sets the auth_token cookie.
 // It is the single place that creates a new authenticated session.
-func (h *Handler) issueSession(ctx context.Context, w http.ResponseWriter, info repo.GitHubUserInfo) error {
+func (h *Handler) issueSession(ctx context.Context, w http.ResponseWriter, info repo.ProviderUserInfo) error {
 	user, err := h.deps.UserRepo.Upsert(ctx, info)
 	if err != nil {
 		return fmt.Errorf("auth: upsert user: %w", err)
@@ -52,7 +52,7 @@ func (h *Handler) issueSession(ctx context.Context, w http.ResponseWriter, info 
 
 	tokenPayload := serverauth.JWTPayload{
 		Sub:     user.ID,
-		Login:   user.GithubLogin,
+		Login:   user.ProviderLogin,
 		IsAdmin: user.IsAdmin,
 	}
 	if user.IsAdmin {
@@ -90,7 +90,7 @@ func (h *Handler) LoginRedirect(w http.ResponseWriter, r *http.Request) error {
 		http.Redirect(w, r, redirectURL, http.StatusFound)
 		return nil
 	}
-	// Legacy in-core flow (kept for backwards compatibility when no auth plugin is running).
+	// Direct in-core flow: used when no PluginLoginURL is set but an OAuthProvider is available.
 	if h.deps.OAuthProvider == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "OAuth provider not configured")
 	}
@@ -154,7 +154,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("auth: get user: %w", err)
 	}
 
-	if err := h.issueSession(r.Context(), w, repo.GitHubUserInfo{
+	if err := h.issueSession(r.Context(), w, repo.ProviderUserInfo{
 		ID:          profile.ID,
 		Login:       profile.Login,
 		DisplayName: profile.DisplayName,
@@ -198,7 +198,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) error {
 //
 //	Authorization: Bearer <DASHBOARD_AUTH_PLUGIN_SECRET>
 //
-// Body: {"github_id":"...","login":"...","display_name":"...","avatar_url":"..."}
+// Body: {"provider_id":"...","login":"...","display_name":"...","avatar_url":"..."}
 func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) error {
 	if h.deps.AuthPluginSecret == "" {
 		return apierr.NewAppError(http.StatusNotFound, "auth session endpoint not configured")
@@ -222,7 +222,8 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) error {
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 
 	var body struct {
-		GitHubID    string `json:"github_id"`
+		ProviderID  string `json:"provider_id"`
+		GitHubID    string `json:"github_id"` // backwards-compat alias for provider_id
 		Login       string `json:"login"`
 		DisplayName string `json:"display_name"`
 		AvatarURL   string `json:"avatar_url"`
@@ -231,16 +232,20 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid request body")
 	}
-	if body.GitHubID == "" || body.Login == "" {
-		return apierr.NewAppError(http.StatusBadRequest, "github_id and login are required")
+	// Accept github_id as a backwards-compat alias for provider_id (old plugins).
+	if body.ProviderID == "" {
+		body.ProviderID = body.GitHubID
+	}
+	if body.ProviderID == "" || body.Login == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "provider_id and login are required")
 	}
 
 	if err := serverauth.ValidateNonce(h.deps.JWTSecret, body.Nonce); err != nil {
 		return apierr.NewAppError(http.StatusUnauthorized, "invalid or expired nonce")
 	}
 
-	if err := h.issueSession(r.Context(), w, repo.GitHubUserInfo{
-		ID:          body.GitHubID,
+	if err := h.issueSession(r.Context(), w, repo.ProviderUserInfo{
+		ID:          body.ProviderID,
 		Login:       body.Login,
 		DisplayName: body.DisplayName,
 		AvatarURL:   body.AvatarURL,
@@ -320,7 +325,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) error {
 	return json.NewEncoder(w).Encode(map[string]any{
 		"user": map[string]any{
 			"id":      user.ID,
-			"login":   user.GithubLogin,
+			"login":   user.ProviderLogin,
 			"isAdmin": user.IsAdmin,
 		},
 		"isAdmin":     user.IsAdmin,

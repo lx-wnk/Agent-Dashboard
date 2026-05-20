@@ -35,7 +35,8 @@ type Config struct {
 	MCPToken string `koanf:"mcp_token"`
 	// Auth controls authentication mode.
 	// "none" (default) — bypass auth, no login required.
-	// "github" — require OAuth via an auth_provider plugin (supports GitHub, Office365, etc.).
+	// "plugin" — require OAuth via an auth_provider plugin (GitHub, Office365, etc.).
+	// "github" — deprecated alias for "plugin"; accepted for backwards compatibility.
 	Auth string `koanf:"auth"`
 	// AuthPluginSecret is the shared secret between core and auth plugins.
 	// Set via DASHBOARD_AUTH_PLUGIN_SECRET. When set, enables POST /api/auth/session
@@ -99,9 +100,15 @@ func Load(cfgFile string) (Config, error) {
 		return Config{}, fmt.Errorf("config unmarshal: %w", err)
 	}
 
-	// Validate auth mode.
-	if cfg.Auth != "none" && cfg.Auth != "github" {
-		return Config{}, fmt.Errorf("config: DASHBOARD_AUTH must be \"none\" or \"github\", got %q", cfg.Auth)
+	// Validate auth mode. "github" is a deprecated alias for "plugin".
+	switch cfg.Auth {
+	case "none", "plugin":
+		// valid
+	case "github":
+		slog.Warn("DASHBOARD_AUTH=github is deprecated — use DASHBOARD_AUTH=plugin instead")
+		cfg.Auth = "plugin"
+	default:
+		return Config{}, fmt.Errorf("config: DASHBOARD_AUTH must be \"none\" or \"plugin\", got %q", cfg.Auth)
 	}
 
 	// Reject operator-set JWT secrets that are too short (< 32 chars).

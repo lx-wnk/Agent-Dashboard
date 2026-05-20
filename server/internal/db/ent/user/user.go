@@ -13,8 +13,8 @@ const (
 	Label = "user"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
-	// FieldGithubLogin holds the string denoting the github_login field in the database.
-	FieldGithubLogin = "github_login"
+	// FieldProviderLogin holds the string denoting the provider_login field in the database.
+	FieldProviderLogin = "provider_login"
 	// FieldDisplayName holds the string denoting the display_name field in the database.
 	FieldDisplayName = "display_name"
 	// FieldAvatarURL holds the string denoting the avatar_url field in the database.
@@ -32,7 +32,7 @@ const (
 // Columns holds all SQL columns for user fields.
 var Columns = []string{
 	FieldID,
-	FieldGithubLogin,
+	FieldProviderLogin,
 	FieldDisplayName,
 	FieldAvatarURL,
 	FieldIsAdmin,
@@ -65,9 +65,9 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
 }
 
-// ByGithubLogin orders the results by the github_login field.
-func ByGithubLogin(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldGithubLogin, opts...).ToFunc()
+// ByProviderLogin orders the results by the provider_login field.
+func ByProviderLogin(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProviderLogin, opts...).ToFunc()
 }
 
 // ByDisplayName orders the results by the display_name field.

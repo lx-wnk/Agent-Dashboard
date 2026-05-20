@@ -12,7 +12,7 @@ func TestUserRepo_UpsertAndGet(t *testing.T) {
 	client := openTestDB(t) // defined in api_key_repo_test.go
 	r := repo.NewUserRepo(client)
 
-	user, err := r.Upsert(t.Context(), repo.GitHubUserInfo{
+	user, err := r.Upsert(t.Context(), repo.ProviderUserInfo{
 		ID:          "123456",
 		Login:       "octocat",
 		DisplayName: "The Octocat",
@@ -20,7 +20,7 @@ func TestUserRepo_UpsertAndGet(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "123456", user.ID)
-	require.Equal(t, "octocat", user.GithubLogin)
+	require.Equal(t, "octocat", user.ProviderLogin)
 
 	got, err := r.GetByID(t.Context(), "123456")
 	require.NoError(t, err)
@@ -31,12 +31,12 @@ func TestUserRepo_Upsert_UpdatesLogin(t *testing.T) {
 	client := openTestDB(t)
 	r := repo.NewUserRepo(client)
 
-	_, err := r.Upsert(t.Context(), repo.GitHubUserInfo{ID: "7", Login: "oldname"})
+	_, err := r.Upsert(t.Context(), repo.ProviderUserInfo{ID: "7", Login: "oldname"})
 	require.NoError(t, err)
 
-	updated, err := r.Upsert(t.Context(), repo.GitHubUserInfo{ID: "7", Login: "newname"})
+	updated, err := r.Upsert(t.Context(), repo.ProviderUserInfo{ID: "7", Login: "newname"})
 	require.NoError(t, err)
-	require.Equal(t, "newname", updated.GithubLogin)
+	require.Equal(t, "newname", updated.ProviderLogin)
 }
 
 func TestUserRepo_GetByID_NotFound(t *testing.T) {

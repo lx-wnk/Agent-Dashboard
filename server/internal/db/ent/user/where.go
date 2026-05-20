@@ -64,9 +64,9 @@ func IDContainsFold(id string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldID, id))
 }
 
-// GithubLogin applies equality check predicate on the "github_login" field. It's identical to GithubLoginEQ.
-func GithubLogin(v string) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldGithubLogin, v))
+// ProviderLogin applies equality check predicate on the "provider_login" field. It's identical to ProviderLoginEQ.
+func ProviderLogin(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldProviderLogin, v))
 }
 
 // DisplayName applies equality check predicate on the "display_name" field. It's identical to DisplayNameEQ.
@@ -94,69 +94,69 @@ func LastLoginAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldLastLoginAt, v))
 }
 
-// GithubLoginEQ applies the EQ predicate on the "github_login" field.
-func GithubLoginEQ(v string) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldGithubLogin, v))
+// ProviderLoginEQ applies the EQ predicate on the "provider_login" field.
+func ProviderLoginEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldProviderLogin, v))
 }
 
-// GithubLoginNEQ applies the NEQ predicate on the "github_login" field.
-func GithubLoginNEQ(v string) predicate.User {
-	return predicate.User(sql.FieldNEQ(FieldGithubLogin, v))
+// ProviderLoginNEQ applies the NEQ predicate on the "provider_login" field.
+func ProviderLoginNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldProviderLogin, v))
 }
 
-// GithubLoginIn applies the In predicate on the "github_login" field.
-func GithubLoginIn(vs ...string) predicate.User {
-	return predicate.User(sql.FieldIn(FieldGithubLogin, vs...))
+// ProviderLoginIn applies the In predicate on the "provider_login" field.
+func ProviderLoginIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldProviderLogin, vs...))
 }
 
-// GithubLoginNotIn applies the NotIn predicate on the "github_login" field.
-func GithubLoginNotIn(vs ...string) predicate.User {
-	return predicate.User(sql.FieldNotIn(FieldGithubLogin, vs...))
+// ProviderLoginNotIn applies the NotIn predicate on the "provider_login" field.
+func ProviderLoginNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldProviderLogin, vs...))
 }
 
-// GithubLoginGT applies the GT predicate on the "github_login" field.
-func GithubLoginGT(v string) predicate.User {
-	return predicate.User(sql.FieldGT(FieldGithubLogin, v))
+// ProviderLoginGT applies the GT predicate on the "provider_login" field.
+func ProviderLoginGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldProviderLogin, v))
 }
 
-// GithubLoginGTE applies the GTE predicate on the "github_login" field.
-func GithubLoginGTE(v string) predicate.User {
-	return predicate.User(sql.FieldGTE(FieldGithubLogin, v))
+// ProviderLoginGTE applies the GTE predicate on the "provider_login" field.
+func ProviderLoginGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldProviderLogin, v))
 }
 
-// GithubLoginLT applies the LT predicate on the "github_login" field.
-func GithubLoginLT(v string) predicate.User {
-	return predicate.User(sql.FieldLT(FieldGithubLogin, v))
+// ProviderLoginLT applies the LT predicate on the "provider_login" field.
+func ProviderLoginLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldProviderLogin, v))
 }
 
-// GithubLoginLTE applies the LTE predicate on the "github_login" field.
-func GithubLoginLTE(v string) predicate.User {
-	return predicate.User(sql.FieldLTE(FieldGithubLogin, v))
+// ProviderLoginLTE applies the LTE predicate on the "provider_login" field.
+func ProviderLoginLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldProviderLogin, v))
 }
 
-// GithubLoginContains applies the Contains predicate on the "github_login" field.
-func GithubLoginContains(v string) predicate.User {
-	return predicate.User(sql.FieldContains(FieldGithubLogin, v))
+// ProviderLoginContains applies the Contains predicate on the "provider_login" field.
+func ProviderLoginContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldProviderLogin, v))
 }
 
-// GithubLoginHasPrefix applies the HasPrefix predicate on the "github_login" field.
-func GithubLoginHasPrefix(v string) predicate.User {
-	return predicate.User(sql.FieldHasPrefix(FieldGithubLogin, v))
+// ProviderLoginHasPrefix applies the HasPrefix predicate on the "provider_login" field.
+func ProviderLoginHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldProviderLogin, v))
 }
 
-// GithubLoginHasSuffix applies the HasSuffix predicate on the "github_login" field.
-func GithubLoginHasSuffix(v string) predicate.User {
-	return predicate.User(sql.FieldHasSuffix(FieldGithubLogin, v))
+// ProviderLoginHasSuffix applies the HasSuffix predicate on the "provider_login" field.
+func ProviderLoginHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldProviderLogin, v))
 }
 
-// GithubLoginEqualFold applies the EqualFold predicate on the "github_login" field.
-func GithubLoginEqualFold(v string) predicate.User {
-	return predicate.User(sql.FieldEqualFold(FieldGithubLogin, v))
+// ProviderLoginEqualFold applies the EqualFold predicate on the "provider_login" field.
+func ProviderLoginEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldProviderLogin, v))
 }
 
-// GithubLoginContainsFold applies the ContainsFold predicate on the "github_login" field.
-func GithubLoginContainsFold(v string) predicate.User {
-	return predicate.User(sql.FieldContainsFold(FieldGithubLogin, v))
+// ProviderLoginContainsFold applies the ContainsFold predicate on the "provider_login" field.
+func ProviderLoginContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldProviderLogin, v))
 }
 
 // DisplayNameEQ applies the EQ predicate on the "display_name" field.

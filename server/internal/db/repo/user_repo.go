@@ -12,8 +12,8 @@ import (
 	entuser "github.com/lx-wnk/agent-dashboard/server/internal/db/ent/user"
 )
 
-// GitHubUserInfo holds fields from the GitHub user API.
-type GitHubUserInfo struct {
+// ProviderUserInfo holds fields from the OAuth provider user API.
+type ProviderUserInfo struct {
 	ID          string
 	Login       string
 	DisplayName string
@@ -22,7 +22,7 @@ type GitHubUserInfo struct {
 
 // UserRepo manages user persistence.
 type UserRepo interface {
-	Upsert(ctx context.Context, info GitHubUserInfo) (*ent.User, error)
+	Upsert(ctx context.Context, info ProviderUserInfo) (*ent.User, error)
 	GetByID(ctx context.Context, id string) (*ent.User, error)
 	Delete(ctx context.Context, id string) error
 }
@@ -36,9 +36,9 @@ func NewUserRepo(client *ent.Client) UserRepo {
 	return &entUserRepo{client: client}
 }
 
-// Upsert creates or updates a user by GitHub ID.
-// GitHub ID is stable across username renames, making it the correct PK.
-func (r *entUserRepo) Upsert(ctx context.Context, info GitHubUserInfo) (*ent.User, error) {
+// Upsert creates or updates a user by Provider ID.
+// Provider ID is stable across username renames, making it the correct PK.
+func (r *entUserRepo) Upsert(ctx context.Context, info ProviderUserInfo) (*ent.User, error) {
 	now := time.Now()
 
 	existing, err := r.client.User.Get(ctx, info.ID)
@@ -49,7 +49,7 @@ func (r *entUserRepo) Upsert(ctx context.Context, info GitHubUserInfo) (*ent.Use
 	if existing != nil {
 		// Update the existing record with latest login data.
 		update := r.client.User.UpdateOneID(info.ID).
-			SetGithubLogin(info.Login).
+			SetProviderLogin(info.Login).
 			SetLastLoginAt(now)
 		if info.DisplayName != "" {
 			update = update.SetDisplayName(info.DisplayName)
@@ -67,7 +67,7 @@ func (r *entUserRepo) Upsert(ctx context.Context, info GitHubUserInfo) (*ent.Use
 	// Insert new user.
 	create := r.client.User.Create().
 		SetID(info.ID).
-		SetGithubLogin(info.Login).
+		SetProviderLogin(info.Login).
 		SetLastLoginAt(now)
 	if info.DisplayName != "" {
 		create = create.SetDisplayName(info.DisplayName)
@@ -87,9 +87,9 @@ func (r *entUserRepo) Upsert(ctx context.Context, info GitHubUserInfo) (*ent.Use
 }
 
 // retryAsUpdate handles the concurrent-insert race by falling back to an update.
-func (r *entUserRepo) retryAsUpdate(ctx context.Context, info GitHubUserInfo, now time.Time) (*ent.User, error) {
+func (r *entUserRepo) retryAsUpdate(ctx context.Context, info ProviderUserInfo, now time.Time) (*ent.User, error) {
 	update := r.client.User.UpdateOneID(info.ID).
-		SetGithubLogin(info.Login).
+		SetProviderLogin(info.Login).
 		SetLastLoginAt(now)
 	if info.DisplayName != "" {
 		update = update.SetDisplayName(info.DisplayName)
@@ -104,7 +104,7 @@ func (r *entUserRepo) retryAsUpdate(ctx context.Context, info GitHubUserInfo, no
 	return u, nil
 }
 
-// GetByID returns a user by their GitHub ID.
+// GetByID returns a user by their Provider ID.
 func (r *entUserRepo) GetByID(ctx context.Context, id string) (*ent.User, error) {
 	u, err := r.client.User.Query().
 		Where(entuser.IDEQ(id)).

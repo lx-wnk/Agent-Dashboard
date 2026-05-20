@@ -386,7 +386,7 @@ func (h *handler) isMember(ctx context.Context, accessToken, groupID string) (bo
 
 func (h *handler) createCoreSession(ctx context.Context, profile *msUserProfile, nonce string) (*http.Cookie, error) {
 	body, err := json.Marshal(map[string]string{
-		"github_id":    profile.ID,
+		"provider_id":    profile.ID,
 		"login":        profile.UserPrincipalName,
 		"display_name": profile.DisplayName,
 		"avatar_url":   "",

@@ -10551,7 +10551,7 @@ type UserMutation struct {
 	op            Op
 	typ           string
 	id            *string
-	github_login  *string
+	provider_login  *string
 	display_name  *string
 	avatar_url    *string
 	is_admin      *bool
@@ -10667,40 +10667,40 @@ func (m *UserMutation) IDs(ctx context.Context) ([]string, error) {
 	}
 }
 
-// SetGithubLogin sets the "github_login" field.
-func (m *UserMutation) SetGithubLogin(s string) {
-	m.github_login = &s
+// SetProviderLogin sets the "provider_login" field.
+func (m *UserMutation) SetProviderLogin(s string) {
+	m.provider_login = &s
 }
 
-// GithubLogin returns the value of the "github_login" field in the mutation.
-func (m *UserMutation) GithubLogin() (r string, exists bool) {
-	v := m.github_login
+// ProviderLogin returns the value of the "provider_login" field in the mutation.
+func (m *UserMutation) ProviderLogin() (r string, exists bool) {
+	v := m.provider_login
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldGithubLogin returns the old "github_login" field's value of the User entity.
+// OldProviderLogin returns the old "provider_login" field's value of the User entity.
 // If the User object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserMutation) OldGithubLogin(ctx context.Context) (v string, err error) {
+func (m *UserMutation) OldProviderLogin(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldGithubLogin is only allowed on UpdateOne operations")
+		return v, errors.New("OldProviderLogin is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldGithubLogin requires an ID field in the mutation")
+		return v, errors.New("OldProviderLogin requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldGithubLogin: %w", err)
+		return v, fmt.Errorf("querying old value for OldProviderLogin: %w", err)
 	}
-	return oldValue.GithubLogin, nil
+	return oldValue.ProviderLogin, nil
 }
 
-// ResetGithubLogin resets all changes to the "github_login" field.
-func (m *UserMutation) ResetGithubLogin() {
-	m.github_login = nil
+// ResetProviderLogin resets all changes to the "provider_login" field.
+func (m *UserMutation) ResetProviderLogin() {
+	m.provider_login = nil
 }
 
 // SetDisplayName sets the "display_name" field.
@@ -10957,8 +10957,8 @@ func (m *UserMutation) Type() string {
 // AddedFields().
 func (m *UserMutation) Fields() []string {
 	fields := make([]string, 0, 6)
-	if m.github_login != nil {
-		fields = append(fields, user.FieldGithubLogin)
+	if m.provider_login != nil {
+		fields = append(fields, user.FieldProviderLogin)
 	}
 	if m.display_name != nil {
 		fields = append(fields, user.FieldDisplayName)
@@ -10983,8 +10983,8 @@ func (m *UserMutation) Fields() []string {
 // schema.
 func (m *UserMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case user.FieldGithubLogin:
-		return m.GithubLogin()
+	case user.FieldProviderLogin:
+		return m.ProviderLogin()
 	case user.FieldDisplayName:
 		return m.DisplayName()
 	case user.FieldAvatarURL:
@@ -11004,8 +11004,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case user.FieldGithubLogin:
-		return m.OldGithubLogin(ctx)
+	case user.FieldProviderLogin:
+		return m.OldProviderLogin(ctx)
 	case user.FieldDisplayName:
 		return m.OldDisplayName(ctx)
 	case user.FieldAvatarURL:
@@ -11025,12 +11025,12 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 // type.
 func (m *UserMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case user.FieldGithubLogin:
+	case user.FieldProviderLogin:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetGithubLogin(v)
+		m.SetProviderLogin(v)
 		return nil
 	case user.FieldDisplayName:
 		v, ok := value.(string)
@@ -11137,8 +11137,8 @@ func (m *UserMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *UserMutation) ResetField(name string) error {
 	switch name {
-	case user.FieldGithubLogin:
-		m.ResetGithubLogin()
+	case user.FieldProviderLogin:
+		m.ResetProviderLogin()
 		return nil
 	case user.FieldDisplayName:
 		m.ResetDisplayName()

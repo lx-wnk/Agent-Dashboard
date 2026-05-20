@@ -28,16 +28,16 @@ func (_u *UserUpdate) Where(ps ...predicate.User) *UserUpdate {
 	return _u
 }
 
-// SetGithubLogin sets the "github_login" field.
-func (_u *UserUpdate) SetGithubLogin(v string) *UserUpdate {
-	_u.mutation.SetGithubLogin(v)
+// SetProviderLogin sets the "provider_login" field.
+func (_u *UserUpdate) SetProviderLogin(v string) *UserUpdate {
+	_u.mutation.SetProviderLogin(v)
 	return _u
 }
 
-// SetNillableGithubLogin sets the "github_login" field if the given value is not nil.
-func (_u *UserUpdate) SetNillableGithubLogin(v *string) *UserUpdate {
+// SetNillableProviderLogin sets the "provider_login" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableProviderLogin(v *string) *UserUpdate {
 	if v != nil {
-		_u.SetGithubLogin(*v)
+		_u.SetProviderLogin(*v)
 	}
 	return _u
 }
@@ -157,8 +157,8 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
-	if value, ok := _u.mutation.GithubLogin(); ok {
-		_spec.SetField(user.FieldGithubLogin, field.TypeString, value)
+	if value, ok := _u.mutation.ProviderLogin(); ok {
+		_spec.SetField(user.FieldProviderLogin, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.DisplayName(); ok {
 		_spec.SetField(user.FieldDisplayName, field.TypeString, value)
@@ -201,16 +201,16 @@ type UserUpdateOne struct {
 	mutation *UserMutation
 }
 
-// SetGithubLogin sets the "github_login" field.
-func (_u *UserUpdateOne) SetGithubLogin(v string) *UserUpdateOne {
-	_u.mutation.SetGithubLogin(v)
+// SetProviderLogin sets the "provider_login" field.
+func (_u *UserUpdateOne) SetProviderLogin(v string) *UserUpdateOne {
+	_u.mutation.SetProviderLogin(v)
 	return _u
 }
 
-// SetNillableGithubLogin sets the "github_login" field if the given value is not nil.
-func (_u *UserUpdateOne) SetNillableGithubLogin(v *string) *UserUpdateOne {
+// SetNillableProviderLogin sets the "provider_login" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableProviderLogin(v *string) *UserUpdateOne {
 	if v != nil {
-		_u.SetGithubLogin(*v)
+		_u.SetProviderLogin(*v)
 	}
 	return _u
 }
@@ -360,8 +360,8 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			}
 		}
 	}
-	if value, ok := _u.mutation.GithubLogin(); ok {
-		_spec.SetField(user.FieldGithubLogin, field.TypeString, value)
+	if value, ok := _u.mutation.ProviderLogin(); ok {
+		_spec.SetField(user.FieldProviderLogin, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.DisplayName(); ok {
 		_spec.SetField(user.FieldDisplayName, field.TypeString, value)

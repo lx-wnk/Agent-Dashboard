@@ -52,6 +52,13 @@ func Open(path string) (*DBBundle, error) {
 	}
 	drv := entsql.OpenDB(dialect.SQLite, sqlDB)
 	client := ent.NewClient(ent.Driver(drv))
+	// Rename github_login → provider_login before ent auto-migrate so ent finds
+	// the column under the new name and does not add a blank provider_login column
+	// alongside the old one. Idempotent: skipped when provider_login already exists.
+	if err := migrateRenameGithubLogin(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: rename github_login: %w", err)
+	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -140,4 +147,41 @@ func runRawMigrations(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// migrateRenameGithubLogin renames the users.github_login column to provider_login.
+// Runs before ent auto-migrate so ent sees the new name. Idempotent: no-op when
+// provider_login already exists (column was already renamed or DB is brand-new).
+func migrateRenameGithubLogin(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(users)`)
+	if err != nil {
+		return fmt.Errorf("PRAGMA table_info: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var hasOld, hasNew bool
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan table_info: %w", err)
+		}
+		switch name {
+		case "github_login":
+			hasOld = true
+		case "provider_login":
+			hasNew = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if hasNew || !hasOld {
+		return nil // already migrated or users table doesn't exist yet
+	}
+	_, err = db.Exec(`ALTER TABLE users RENAME COLUMN github_login TO provider_login`)
+	return err
 }

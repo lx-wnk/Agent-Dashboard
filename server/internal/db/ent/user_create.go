@@ -20,9 +20,9 @@ type UserCreate struct {
 	hooks    []Hook
 }
 
-// SetGithubLogin sets the "github_login" field.
-func (_c *UserCreate) SetGithubLogin(v string) *UserCreate {
-	_c.mutation.SetGithubLogin(v)
+// SetProviderLogin sets the "provider_login" field.
+func (_c *UserCreate) SetProviderLogin(v string) *UserCreate {
+	_c.mutation.SetProviderLogin(v)
 	return _c
 }
 
@@ -149,8 +149,8 @@ func (_c *UserCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *UserCreate) check() error {
-	if _, ok := _c.mutation.GithubLogin(); !ok {
-		return &ValidationError{Name: "github_login", err: errors.New(`ent: missing required field "User.github_login"`)}
+	if _, ok := _c.mutation.ProviderLogin(); !ok {
+		return &ValidationError{Name: "provider_login", err: errors.New(`ent: missing required field "User.provider_login"`)}
 	}
 	if _, ok := _c.mutation.IsAdmin(); !ok {
 		return &ValidationError{Name: "is_admin", err: errors.New(`ent: missing required field "User.is_admin"`)}
@@ -193,9 +193,9 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
-	if value, ok := _c.mutation.GithubLogin(); ok {
-		_spec.SetField(user.FieldGithubLogin, field.TypeString, value)
-		_node.GithubLogin = value
+	if value, ok := _c.mutation.ProviderLogin(); ok {
+		_spec.SetField(user.FieldProviderLogin, field.TypeString, value)
+		_node.ProviderLogin = value
 	}
 	if value, ok := _c.mutation.DisplayName(); ok {
 		_spec.SetField(user.FieldDisplayName, field.TypeString, value)
