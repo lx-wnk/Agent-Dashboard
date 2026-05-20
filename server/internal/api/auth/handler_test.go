@@ -17,27 +17,27 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
-func TestHandler_GitHubRedirect_NoClientID(t *testing.T) {
+func TestHandler_LoginRedirect_NoProvider(t *testing.T) {
 	h := apiauth.NewHandler(apiauth.Deps{
 		JWTSecret:   "test-secret",
 		CallbackURL: "http://localhost/api/auth/callback",
-		// GitHubClient nil: misconfigured server
+		// OAuthProvider nil: no auth_provider plugin configured
 	})
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/api/auth/github", nil)
-	err := h.GitHubRedirect(w, r)
-	require.Error(t, err) // must return error when GitHub not configured
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/login", nil)
+	err := h.LoginRedirect(w, r)
+	require.Error(t, err) // must return error when OAuth provider not configured
 }
 
-func TestHandler_GitHubRedirect_PluginLoginURL(t *testing.T) {
-	// When a PluginLoginURL is set, GitHubRedirect must redirect to the plugin with a nonce.
+func TestHandler_LoginRedirect_PluginLoginURL(t *testing.T) {
+	// When a PluginLoginURL is set, LoginRedirect must redirect to the plugin with a nonce.
 	h := apiauth.NewHandler(apiauth.Deps{
 		JWTSecret:      "test-secret-32chars-long-minimum!",
 		PluginLoginURL: "http://127.0.0.1:19001/login",
 	})
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/api/auth/github", nil)
-	err := h.GitHubRedirect(w, r)
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/login", nil)
+	err := h.LoginRedirect(w, r)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusFound, w.Code)
 

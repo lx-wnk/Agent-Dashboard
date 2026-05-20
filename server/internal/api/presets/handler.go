@@ -24,7 +24,7 @@ func NewHandler(r repo.PermissionPresetRepo) *Handler {
 
 // Mount registers all permission-preset routes on r.
 // When JWT auth is active, handlers use the authenticated user ID to scope presets.
-// When bypass auth is enabled (loopback + no GitHub OAuth), userID is nil and only global presets are accessible.
+// When bypass auth is enabled (DASHBOARD_AUTH=none), userID is nil and only global presets are accessible.
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/settings/permission-presets", apierr.ErrorMiddleware(h.list))
 	r.Delete("/api/settings/permission-presets", apierr.ErrorMiddleware(h.delete))

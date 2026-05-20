@@ -1,4 +1,4 @@
-// Package auth provides HTTP handlers for GitHub OAuth authentication.
+// Package auth provides HTTP handlers for OAuth authentication.
 package auth
 
 import (
@@ -25,14 +25,14 @@ type Deps struct {
 	OAuthProvider    serverauth.OAuthProvider
 	UserRepo         repo.UserRepo
 	IsLoopback       bool   // true when Host is 127.0.0.1 / ::1 / localhost
-	BypassAuth       bool   // true when loopback + no GitHub OAuth; all requests treated as local admin
+	BypassAuth       bool   // true when DASHBOARD_AUTH=none; all requests treated as local admin
 	AuthPluginSecret string // shared secret for POST /api/auth/session; empty disables the endpoint
 	// PluginLoginURL is the URL of the auth plugin's login endpoint.
-	// When non-empty, GET /api/auth/github redirects here instead of handling OAuth in core.
+	// When non-empty, GET /api/auth/login redirects here instead of handling OAuth in core.
 	PluginLoginURL string
 }
 
-// Handler handles GitHub OAuth routes.
+// Handler handles OAuth authentication routes.
 type Handler struct {
 	deps Deps
 }
@@ -75,11 +75,11 @@ func (h *Handler) issueSession(ctx context.Context, w http.ResponseWriter, info 
 	return nil
 }
 
-// GitHubRedirect redirects the browser to the GitHub authorization URL.
+// LoginRedirect redirects the browser to the OAuth provider's authorization URL.
 // When a PluginLoginURL is configured the request is forwarded to the auth plugin,
 // which owns the entire OAuth dance and calls POST /api/auth/session when done.
-// GET /api/auth/github
-func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
+// GET /api/auth/login
+func (h *Handler) LoginRedirect(w http.ResponseWriter, r *http.Request) error {
 	// Plugin-driven flow: redirect to the plugin's login endpoint with a nonce.
 	if h.deps.PluginLoginURL != "" {
 		nonce, err := serverauth.GenerateNonce(h.deps.JWTSecret)
@@ -92,7 +92,7 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 	}
 	// Legacy in-core flow (kept for backwards compatibility when no auth plugin is running).
 	if h.deps.OAuthProvider == nil {
-		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
+		return apierr.NewAppError(http.StatusServiceUnavailable, "OAuth provider not configured")
 	}
 	state, err := serverauth.SignOAuthState(h.deps.JWTSecret)
 	if err != nil {
@@ -115,15 +115,15 @@ func (h *Handler) GitHubRedirect(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// Callback handles the GitHub OAuth callback.
+// Callback handles the OAuth callback when core manages the OAuth dance.
 // GET /api/auth/callback?code=XXX&state=YYY
 func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) error {
-	// Block the legacy in-core callback when the plugin owns the OAuth dance.
+	// When PluginLoginURL is set the plugin owns the full OAuth dance; callback is unused.
 	if h.deps.PluginLoginURL != "" {
 		return apierr.NewAppError(http.StatusNotFound, "auth callback not available in plugin mode")
 	}
 	if h.deps.OAuthProvider == nil {
-		return apierr.NewAppError(http.StatusServiceUnavailable, "GitHub OAuth not configured")
+		return apierr.NewAppError(http.StatusServiceUnavailable, "OAuth provider not configured")
 	}
 	if h.deps.UserRepo == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "user store unavailable")

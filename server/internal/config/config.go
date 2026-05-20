@@ -35,7 +35,7 @@ type Config struct {
 	MCPToken string `koanf:"mcp_token"`
 	// Auth controls authentication mode.
 	// "none" (default) — bypass auth, no login required.
-	// "github" — require GitHub OAuth via an auth_provider plugin.
+	// "github" — require OAuth via an auth_provider plugin (supports GitHub, Office365, etc.).
 	Auth string `koanf:"auth"`
 	// AuthPluginSecret is the shared secret between core and auth plugins.
 	// Set via DASHBOARD_AUTH_PLUGIN_SECRET. When set, enables POST /api/auth/session
@@ -153,7 +153,7 @@ func (c Config) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
 }
 
-// CallbackURL returns the GitHub OAuth redirect URI derived from Host and Port.
+// CallbackURL returns the OAuth redirect URI derived from Host and Port.
 // Uses https for non-loopback hosts.
 func (c Config) CallbackURL() string {
 	scheme := "http"

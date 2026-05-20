@@ -46,7 +46,7 @@ type RouterConfig struct {
 	JWTSecret         string
 	CallbackURL       string
 	IsLoopback        bool            // true when Host is 127.0.0.1 / ::1 / localhost
-	BypassAuth        bool            // skip JWT when loopback + no GitHub OAuth configured
+	BypassAuth        bool            // skip JWT when DASHBOARD_AUTH=none
 	Embedded          http.FileSystem // Vue SPA embed (unused until Task 14)
 	HooksSecret       string
 	HooksDebounceMs   int
@@ -54,7 +54,7 @@ type RouterConfig struct {
 	SpawnRateWindowMs int
 	// AuthPluginSecret is forwarded to the auth handler to protect POST /api/auth/session.
 	AuthPluginSecret string
-	// PluginLoginURL, when non-empty, causes GET /api/auth/github to redirect to the
+	// PluginLoginURL, when non-empty, causes GET /api/auth/login to redirect to the
 	// auth plugin instead of handling the OAuth dance in core.
 	PluginLoginURL string
 }
@@ -133,7 +133,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 		AuthPluginSecret: deps.Config.AuthPluginSecret,
 		PluginLoginURL:   deps.Config.PluginLoginURL,
 	})
-	r.Get("/api/auth/github", ErrorMiddleware(authHandler.GitHubRedirect))
+	r.Get("/api/auth/login", ErrorMiddleware(authHandler.LoginRedirect))
+	r.Get("/api/auth/github", ErrorMiddleware(authHandler.LoginRedirect)) // backwards-compat alias
 	r.Get("/api/auth/callback", ErrorMiddleware(authHandler.Callback))
 	r.Post("/api/auth/logout", ErrorMiddleware(authHandler.Logout))
 	// Plugin session endpoint — called by external auth plugins after OAuth completes.
