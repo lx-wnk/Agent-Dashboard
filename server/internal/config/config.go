@@ -33,6 +33,10 @@ type Config struct {
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
 	MCPToken string `koanf:"mcp_token"`
+	// Auth controls authentication mode.
+	// "none" (default) — bypass auth, no login required.
+	// "github" — require GitHub OAuth via an auth_provider plugin.
+	Auth string `koanf:"auth"`
 	// AuthPluginSecret is the shared secret between core and auth plugins.
 	// Set via DASHBOARD_AUTH_PLUGIN_SECRET. When set, enables POST /api/auth/session
 	// so an external auth plugin can establish sessions after completing OAuth.
@@ -52,6 +56,7 @@ func Defaults() Config {
 		HooksDebounceMs:        100,
 		SpawnRateLimit:         5,
 		SpawnRateWindowMs:      60000,
+		Auth:                   "none",
 	}
 }
 
@@ -92,6 +97,11 @@ func Load(cfgFile string) (Config, error) {
 
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return Config{}, fmt.Errorf("config unmarshal: %w", err)
+	}
+
+	// Validate auth mode.
+	if cfg.Auth != "none" && cfg.Auth != "github" {
+		return Config{}, fmt.Errorf("config: DASHBOARD_AUTH must be \"none\" or \"github\", got %q", cfg.Auth)
 	}
 
 	// Reject operator-set JWT secrets that are too short (< 32 chars).

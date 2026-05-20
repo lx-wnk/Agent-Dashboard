@@ -10,9 +10,11 @@ import (
 )
 
 func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider, pluginLoginURL string) api.RouterConfig {
-	bypassAuth := cfg.IsLoopback() && oauthProvider == nil && pluginLoginURL == ""
+	bypassAuth := cfg.Auth != "github"
 	if bypassAuth {
-		slog.Info("auth bypass active — loopback + no auth_provider plugin configured; all API requests allowed without login")
+		slog.Info("auth bypass active — DASHBOARD_AUTH=none; all API requests allowed without login")
+	} else if oauthProvider == nil && pluginLoginURL == "" {
+		slog.Warn("DASHBOARD_AUTH=github but no auth provider configured — login will fail; configure DASHBOARD_PLUGIN_DIR with an auth plugin")
 	}
 	return api.RouterConfig{
 		JWTSecret:         cfg.JWTSecret,
