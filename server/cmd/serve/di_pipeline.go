@@ -86,6 +86,7 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 		MCPToken:         cfg.MCPToken,
 		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		WorktreeRoot:     cfg.WorktreeRoot,
+		ForceWorktrees:   cfg.ForceWorktrees,
 		Spawner:          provideSpawner(cfg),
 		OnTaskChanged: func(taskID string, transitionKind string) {
 			tb.Broadcast(sse.TaskEvent{

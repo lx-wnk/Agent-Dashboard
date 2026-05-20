@@ -32,8 +32,9 @@ type Config struct {
 	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
-	MCPToken     string `koanf:"mcp_token"`
-	WorktreeRoot string `koanf:"worktree_root"`
+	MCPToken       string `koanf:"mcp_token"`
+	WorktreeRoot   string `koanf:"worktree_root"`
+	ForceWorktrees bool   `koanf:"force_worktrees"`
 	// Auth controls authentication mode.
 	// "none" (default) — bypass auth, no login required.
 	// "plugin" — require OAuth via an auth_provider plugin (GitHub, Office365, etc.).

@@ -154,6 +154,11 @@ type OrchestratorOptions struct {
 	// Set via DASHBOARD_WORKTREE_ROOT.
 	WorktreeRoot string
 
+	// ForceWorktrees ensures every agent-driven task runs in an isolated git worktree,
+	// even when task.SourceBranch is not set. The branch is derived as "feat/<slug>".
+	// Set via DASHBOARD_FORCE_WORKTREES=true.
+	ForceWorktrees bool
+
 	// Spawner selects which LLM backend runs stage agents.
 	// When nil, stage handlers use SpawnStageAgent (native Claude path).
 	Spawner LLMSpawner
