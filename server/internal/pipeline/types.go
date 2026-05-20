@@ -31,6 +31,10 @@ type FailTransition struct {
 type WaitUserTransition struct {
 	Reason string
 	Output map[string]any
+	// AgentDone signals that the agent process has already exited normally
+	// (e.g. review cycle limit reached). applyTransition will clear the PID
+	// so the dead-PID reaper does not immediately re-fail the run.
+	AgentDone bool
 }
 
 type IterateTransition struct {
