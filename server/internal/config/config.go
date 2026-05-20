@@ -53,7 +53,7 @@ func Defaults() Config {
 		Host:                   "127.0.0.1",
 		Port:                   13120,
 		DBPath:                 home + "/.claude/dashboard-tasks.db",
-		WorktreeRoot:           home + "/.claude/dashboard-worktrees",
+		WorktreeRoot:           home + "/dashboard-worktrees",
 		SSEIntervalMs:          3000,
 		ShutdownTimeoutSeconds: 10,
 		HooksDebounceMs:        100,
