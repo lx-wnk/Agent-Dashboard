@@ -164,6 +164,60 @@ var (
 		Columns:    PipelineConfigsColumns,
 		PrimaryKey: []*schema.Column{PipelineConfigsColumns[0]},
 	}
+	// ProjectsColumns holds the columns for the "projects" table.
+	ProjectsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "slug", Type: field.TypeString, Unique: true},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Nullable: true},
+		{Name: "color", Type: field.TypeString, Nullable: true},
+		{Name: "default_spawner_id", Type: field.TypeString, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// ProjectsTable holds the schema information for the "projects" table.
+	ProjectsTable = &schema.Table{
+		Name:       "projects",
+		Columns:    ProjectsColumns,
+		PrimaryKey: []*schema.Column{ProjectsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "project_slug",
+				Unique:  false,
+				Columns: []*schema.Column{ProjectsColumns[1]},
+			},
+		},
+	}
+	// ProjectFoldersColumns holds the columns for the "project_folders" table.
+	ProjectFoldersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "path", Type: field.TypeString, Size: 4096},
+		{Name: "label", Type: field.TypeString, Nullable: true},
+		{Name: "is_default", Type: field.TypeBool, Default: false},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "project_folders", Type: field.TypeString},
+	}
+	// ProjectFoldersTable holds the schema information for the "project_folders" table.
+	ProjectFoldersTable = &schema.Table{
+		Name:       "project_folders",
+		Columns:    ProjectFoldersColumns,
+		PrimaryKey: []*schema.Column{ProjectFoldersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "project_folders_projects_folders",
+				Columns:    []*schema.Column{ProjectFoldersColumns[5]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "projectfolder_path_project_folders",
+				Unique:  true,
+				Columns: []*schema.Column{ProjectFoldersColumns[1], ProjectFoldersColumns[5]},
+			},
+		},
+	}
 	// RefinementTurnsColumns holds the columns for the "refinement_turns" table.
 	RefinementTurnsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -205,6 +259,33 @@ var (
 				Name:    "remoteregistration_user_id",
 				Unique:  false,
 				Columns: []*schema.Column{RemoteRegistrationsColumns[1]},
+			},
+		},
+	}
+	// SpawnersColumns holds the columns for the "spawners" table.
+	SpawnersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "slug", Type: field.TypeString, Unique: true},
+		{Name: "command", Type: field.TypeString},
+		{Name: "args", Type: field.TypeJSON},
+		{Name: "env", Type: field.TypeJSON},
+		{Name: "model_override", Type: field.TypeString, Nullable: true},
+		{Name: "description", Type: field.TypeString, Nullable: true},
+		{Name: "built_in", Type: field.TypeBool, Default: false},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// SpawnersTable holds the schema information for the "spawners" table.
+	SpawnersTable = &schema.Table{
+		Name:       "spawners",
+		Columns:    SpawnersColumns,
+		PrimaryKey: []*schema.Column{SpawnersColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "spawner_slug",
+				Unique:  false,
+				Columns: []*schema.Column{SpawnersColumns[2]},
 			},
 		},
 	}
@@ -314,6 +395,8 @@ var (
 		{Name: "stage_timeout_seconds", Type: field.TypeInt, Default: 1800},
 		{Name: "silver_bullet", Type: field.TypeBool, Default: false},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
+		{Name: "project_id", Type: field.TypeString, Nullable: true},
+		{Name: "spawner_id", Type: field.TypeString, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
@@ -334,9 +417,14 @@ var (
 				Columns: []*schema.Column{TasksColumns[11]},
 			},
 			{
+				Name:    "task_project_id",
+				Unique:  false,
+				Columns: []*schema.Column{TasksColumns[18]},
+			},
+			{
 				Name:    "task_silver_bullet_priority_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[18]},
+				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[20]},
 			},
 		},
 	}
@@ -443,8 +531,11 @@ var (
 		PermissionPresetsTable,
 		PermissionRequestsTable,
 		PipelineConfigsTable,
+		ProjectsTable,
+		ProjectFoldersTable,
 		RefinementTurnsTable,
 		RemoteRegistrationsTable,
+		SpawnersTable,
 		StageRunsTable,
 		SystemPromptsTable,
 		TasksTable,
@@ -457,6 +548,7 @@ var (
 func init() {
 	AuditLogsTable.ForeignKeys[0].RefTable = TasksTable
 	PermissionRequestsTable.ForeignKeys[0].RefTable = StageRunsTable
+	ProjectFoldersTable.ForeignKeys[0].RefTable = ProjectsTable
 	StageRunsTable.ForeignKeys[0].RefTable = TasksTable
 	TaskDependenciesTable.ForeignKeys[0].RefTable = TasksTable
 	TaskDependenciesTable.ForeignKeys[1].RefTable = TasksTable

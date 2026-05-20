@@ -230,6 +230,34 @@ func (_c *TaskCreate) SetMetadata(v map[string]interface{}) *TaskCreate {
 	return _c
 }
 
+// SetProjectID sets the "project_id" field.
+func (_c *TaskCreate) SetProjectID(v string) *TaskCreate {
+	_c.mutation.SetProjectID(v)
+	return _c
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableProjectID(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetProjectID(*v)
+	}
+	return _c
+}
+
+// SetSpawnerID sets the "spawner_id" field.
+func (_c *TaskCreate) SetSpawnerID(v string) *TaskCreate {
+	_c.mutation.SetSpawnerID(v)
+	return _c
+}
+
+// SetNillableSpawnerID sets the "spawner_id" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableSpawnerID(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetSpawnerID(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *TaskCreate) SetCreatedAt(v time.Time) *TaskCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -548,6 +576,14 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Metadata(); ok {
 		_spec.SetField(task.FieldMetadata, field.TypeJSON, value)
 		_node.Metadata = value
+	}
+	if value, ok := _c.mutation.ProjectID(); ok {
+		_spec.SetField(task.FieldProjectID, field.TypeString, value)
+		_node.ProjectID = &value
+	}
+	if value, ok := _c.mutation.SpawnerID(); ok {
+		_spec.SetField(task.FieldSpawnerID, field.TypeString, value)
+		_node.SpawnerID = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(task.FieldCreatedAt, field.TypeTime, value)

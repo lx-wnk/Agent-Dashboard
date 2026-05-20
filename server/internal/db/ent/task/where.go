@@ -145,6 +145,16 @@ func SilverBullet(v bool) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldSilverBullet, v))
 }
 
+// ProjectID applies equality check predicate on the "project_id" field. It's identical to ProjectIDEQ.
+func ProjectID(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldProjectID, v))
+}
+
+// SpawnerID applies equality check predicate on the "spawner_id" field. It's identical to SpawnerIDEQ.
+func SpawnerID(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldSpawnerID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldCreatedAt, v))
@@ -1128,6 +1138,156 @@ func MetadataIsNil() predicate.Task {
 // MetadataNotNil applies the NotNil predicate on the "metadata" field.
 func MetadataNotNil() predicate.Task {
 	return predicate.Task(sql.FieldNotNull(FieldMetadata))
+}
+
+// ProjectIDEQ applies the EQ predicate on the "project_id" field.
+func ProjectIDEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldProjectID, v))
+}
+
+// ProjectIDNEQ applies the NEQ predicate on the "project_id" field.
+func ProjectIDNEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldProjectID, v))
+}
+
+// ProjectIDIn applies the In predicate on the "project_id" field.
+func ProjectIDIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldProjectID, vs...))
+}
+
+// ProjectIDNotIn applies the NotIn predicate on the "project_id" field.
+func ProjectIDNotIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldProjectID, vs...))
+}
+
+// ProjectIDGT applies the GT predicate on the "project_id" field.
+func ProjectIDGT(v string) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldProjectID, v))
+}
+
+// ProjectIDGTE applies the GTE predicate on the "project_id" field.
+func ProjectIDGTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldProjectID, v))
+}
+
+// ProjectIDLT applies the LT predicate on the "project_id" field.
+func ProjectIDLT(v string) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldProjectID, v))
+}
+
+// ProjectIDLTE applies the LTE predicate on the "project_id" field.
+func ProjectIDLTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldProjectID, v))
+}
+
+// ProjectIDContains applies the Contains predicate on the "project_id" field.
+func ProjectIDContains(v string) predicate.Task {
+	return predicate.Task(sql.FieldContains(FieldProjectID, v))
+}
+
+// ProjectIDHasPrefix applies the HasPrefix predicate on the "project_id" field.
+func ProjectIDHasPrefix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasPrefix(FieldProjectID, v))
+}
+
+// ProjectIDHasSuffix applies the HasSuffix predicate on the "project_id" field.
+func ProjectIDHasSuffix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasSuffix(FieldProjectID, v))
+}
+
+// ProjectIDIsNil applies the IsNil predicate on the "project_id" field.
+func ProjectIDIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldProjectID))
+}
+
+// ProjectIDNotNil applies the NotNil predicate on the "project_id" field.
+func ProjectIDNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldProjectID))
+}
+
+// ProjectIDEqualFold applies the EqualFold predicate on the "project_id" field.
+func ProjectIDEqualFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldEqualFold(FieldProjectID, v))
+}
+
+// ProjectIDContainsFold applies the ContainsFold predicate on the "project_id" field.
+func ProjectIDContainsFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldContainsFold(FieldProjectID, v))
+}
+
+// SpawnerIDEQ applies the EQ predicate on the "spawner_id" field.
+func SpawnerIDEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldSpawnerID, v))
+}
+
+// SpawnerIDNEQ applies the NEQ predicate on the "spawner_id" field.
+func SpawnerIDNEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldSpawnerID, v))
+}
+
+// SpawnerIDIn applies the In predicate on the "spawner_id" field.
+func SpawnerIDIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldSpawnerID, vs...))
+}
+
+// SpawnerIDNotIn applies the NotIn predicate on the "spawner_id" field.
+func SpawnerIDNotIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldSpawnerID, vs...))
+}
+
+// SpawnerIDGT applies the GT predicate on the "spawner_id" field.
+func SpawnerIDGT(v string) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldSpawnerID, v))
+}
+
+// SpawnerIDGTE applies the GTE predicate on the "spawner_id" field.
+func SpawnerIDGTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldSpawnerID, v))
+}
+
+// SpawnerIDLT applies the LT predicate on the "spawner_id" field.
+func SpawnerIDLT(v string) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldSpawnerID, v))
+}
+
+// SpawnerIDLTE applies the LTE predicate on the "spawner_id" field.
+func SpawnerIDLTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldSpawnerID, v))
+}
+
+// SpawnerIDContains applies the Contains predicate on the "spawner_id" field.
+func SpawnerIDContains(v string) predicate.Task {
+	return predicate.Task(sql.FieldContains(FieldSpawnerID, v))
+}
+
+// SpawnerIDHasPrefix applies the HasPrefix predicate on the "spawner_id" field.
+func SpawnerIDHasPrefix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasPrefix(FieldSpawnerID, v))
+}
+
+// SpawnerIDHasSuffix applies the HasSuffix predicate on the "spawner_id" field.
+func SpawnerIDHasSuffix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasSuffix(FieldSpawnerID, v))
+}
+
+// SpawnerIDIsNil applies the IsNil predicate on the "spawner_id" field.
+func SpawnerIDIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldSpawnerID))
+}
+
+// SpawnerIDNotNil applies the NotNil predicate on the "spawner_id" field.
+func SpawnerIDNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldSpawnerID))
+}
+
+// SpawnerIDEqualFold applies the EqualFold predicate on the "spawner_id" field.
+func SpawnerIDEqualFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldEqualFold(FieldSpawnerID, v))
+}
+
+// SpawnerIDContainsFold applies the ContainsFold predicate on the "spawner_id" field.
+func SpawnerIDContainsFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldContainsFold(FieldSpawnerID, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

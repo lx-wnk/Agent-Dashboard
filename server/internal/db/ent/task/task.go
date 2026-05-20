@@ -48,6 +48,10 @@ const (
 	FieldSilverBullet = "silver_bullet"
 	// FieldMetadata holds the string denoting the metadata field in the database.
 	FieldMetadata = "metadata"
+	// FieldProjectID holds the string denoting the project_id field in the database.
+	FieldProjectID = "project_id"
+	// FieldSpawnerID holds the string denoting the spawner_id field in the database.
+	FieldSpawnerID = "spawner_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -121,6 +125,8 @@ var Columns = []string{
 	FieldStageTimeoutSeconds,
 	FieldSilverBullet,
 	FieldMetadata,
+	FieldProjectID,
+	FieldSpawnerID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -244,6 +250,16 @@ func ByStageTimeoutSeconds(opts ...sql.OrderTermOption) OrderOption {
 // BySilverBullet orders the results by the silver_bullet field.
 func BySilverBullet(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSilverBullet, opts...).ToFunc()
+}
+
+// ByProjectID orders the results by the project_id field.
+func ByProjectID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProjectID, opts...).ToFunc()
+}
+
+// BySpawnerID orders the results by the spawner_id field.
+func BySpawnerID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSpawnerID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

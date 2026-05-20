@@ -81,6 +81,30 @@ func (f PipelineConfigFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PipelineConfigMutation", m)
 }
 
+// The ProjectFunc type is an adapter to allow the use of ordinary
+// function as Project mutator.
+type ProjectFunc func(context.Context, *ent.ProjectMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ProjectFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ProjectMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProjectMutation", m)
+}
+
+// The ProjectFolderFunc type is an adapter to allow the use of ordinary
+// function as ProjectFolder mutator.
+type ProjectFolderFunc func(context.Context, *ent.ProjectFolderMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ProjectFolderFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ProjectFolderMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProjectFolderMutation", m)
+}
+
 // The RefinementTurnFunc type is an adapter to allow the use of ordinary
 // function as RefinementTurn mutator.
 type RefinementTurnFunc func(context.Context, *ent.RefinementTurnMutation) (ent.Value, error)
@@ -103,6 +127,18 @@ func (f RemoteRegistrationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RemoteRegistrationMutation", m)
+}
+
+// The SpawnerFunc type is an adapter to allow the use of ordinary
+// function as Spawner mutator.
+type SpawnerFunc func(context.Context, *ent.SpawnerMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SpawnerFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SpawnerMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SpawnerMutation", m)
 }
 
 // The StageRunFunc type is an adapter to allow the use of ordinary
