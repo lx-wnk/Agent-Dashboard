@@ -10,7 +10,7 @@ import (
 )
 
 func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider, pluginLoginURL string) api.RouterConfig {
-	bypassAuth := cfg.Auth != "github"
+	bypassAuth := cfg.Auth == "none"
 	if bypassAuth {
 		slog.Info("auth bypass active — DASHBOARD_AUTH=none; all API requests allowed without login")
 	} else if oauthProvider == nil && pluginLoginURL == "" {
