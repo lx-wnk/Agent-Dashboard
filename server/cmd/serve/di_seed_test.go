@@ -1,3 +1,8 @@
+// Tests for the boot-migration paths in di_seed.go. The deprecated config
+// types are referenced intentionally — see the file-level note in di_seed.go.
+//
+//lint:file-ignore SA1019 Boot-migration tests intentionally exercise deprecated config shapes.
+
 package main
 
 import (
@@ -31,12 +36,12 @@ func TestMigrateAdapterConfigToSpawners_Empty_NoRows(t *testing.T) {
 	require.Empty(t, spawners, "no rows should be created for an empty AdapterConfig")
 }
 
-func TestMigrateAdapterConfigToSpawners_Ollama(t *testing.T) {
+func TestMigrateAdapterConfigToSpawners_Ollama(t *testing.T) { //nolint:staticcheck // boot-migration test asserts deprecated config shape
 	t.Setenv("DASHBOARD_SPAWN_COMMAND", "")
 	r := newSpawnerRepoForTest(t)
 
-	cfg := config.Config{Adapters: config.AdapterConfig{
-		Ollama: config.OllamaConfig{Host: "http://localhost:11434", DefaultModel: "llama3"},
+	cfg := config.Config{Adapters: config.AdapterConfig{ //nolint:staticcheck // boot-migration test asserts deprecated config shape
+		Ollama: config.OllamaConfig{Host: "http://localhost:11434", DefaultModel: "llama3"}, //nolint:staticcheck // boot-migration test asserts deprecated config shape
 	}}
 
 	require.NoError(t, migrateAdapterConfigToSpawners(t.Context(), cfg, r))
@@ -52,12 +57,12 @@ func TestMigrateAdapterConfigToSpawners_Ollama(t *testing.T) {
 	require.False(t, s.BuiltIn)
 }
 
-func TestMigrateAdapterConfigToSpawners_Ollama_OnlyHost(t *testing.T) {
+func TestMigrateAdapterConfigToSpawners_Ollama_OnlyHost(t *testing.T) { //nolint:staticcheck // boot-migration test asserts deprecated config shape
 	t.Setenv("DASHBOARD_SPAWN_COMMAND", "")
 	r := newSpawnerRepoForTest(t)
 
-	cfg := config.Config{Adapters: config.AdapterConfig{
-		Ollama: config.OllamaConfig{Host: "http://localhost:11434"},
+	cfg := config.Config{Adapters: config.AdapterConfig{ //nolint:staticcheck // boot-migration test asserts deprecated config shape
+		Ollama: config.OllamaConfig{Host: "http://localhost:11434"}, //nolint:staticcheck // boot-migration test asserts deprecated config shape
 	}}
 
 	require.NoError(t, migrateAdapterConfigToSpawners(t.Context(), cfg, r))
@@ -68,12 +73,12 @@ func TestMigrateAdapterConfigToSpawners_Ollama_OnlyHost(t *testing.T) {
 		"only non-empty keys should be included")
 }
 
-func TestMigrateAdapterConfigToSpawners_OpenAI(t *testing.T) {
+func TestMigrateAdapterConfigToSpawners_OpenAI(t *testing.T) { //nolint:staticcheck // boot-migration test asserts deprecated config shape
 	t.Setenv("DASHBOARD_SPAWN_COMMAND", "")
 	r := newSpawnerRepoForTest(t)
 
-	cfg := config.Config{Adapters: config.AdapterConfig{
-		OpenAI: config.OpenAIConfig{
+	cfg := config.Config{Adapters: config.AdapterConfig{ //nolint:staticcheck // boot-migration test asserts deprecated config shape
+		OpenAI: config.OpenAIConfig{ //nolint:staticcheck // boot-migration test asserts deprecated config shape
 			BaseURL:      "https://api.openai.com/v1",
 			APIKeyEnv:    "OPENAI_API_KEY",
 			DefaultModel: "gpt-4o",
@@ -111,10 +116,10 @@ func TestMigrateAdapterConfigToSpawners_Idempotent(t *testing.T) {
 	t.Setenv("DASHBOARD_SPAWN_COMMAND", "/usr/local/bin/x")
 	r := newSpawnerRepoForTest(t)
 
-	cfg := config.Config{Adapters: config.AdapterConfig{
+	cfg := config.Config{Adapters: config.AdapterConfig{ //nolint:staticcheck // boot-migration test asserts deprecated config shape
 		Default: "ollama",
-		Ollama:  config.OllamaConfig{Host: "h"},
-		OpenAI:  config.OpenAIConfig{BaseURL: "b"},
+		Ollama:  config.OllamaConfig{Host: "h"}, //nolint:staticcheck // boot-migration test asserts deprecated config shape
+		OpenAI:  config.OpenAIConfig{BaseURL: "b"}, //nolint:staticcheck // boot-migration test asserts deprecated config shape
 	}}
 
 	require.NoError(t, migrateAdapterConfigToSpawners(t.Context(), cfg, r))

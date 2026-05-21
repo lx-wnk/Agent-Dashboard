@@ -13,13 +13,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
-// nonTerminalStages are the task.current_stage values that block project
-// deletion. Mirrors the pipeline state machine's "active" set.
-var nonTerminalStages = []string{
-	"backlog", "concept", "implementation_plan", "implementation",
-	"self_review", "finalization", "approval", "blocked",
-}
-
 // TaskProjectOps abstracts the task-side operations the project handler needs
 // when deleting a project. Implemented by repo.TaskRepo callers via the
 // adapter in router wiring. Kept narrow so the project package has no runtime

@@ -1,3 +1,10 @@
+// This file performs the one-time boot migration that lifts legacy
+// environment variables and adapter-config.json entries into Spawner rows.
+// It must reference the deprecated config types by design — they exist
+// solely so historical configurations still unmarshal cleanly here.
+//
+//lint:file-ignore SA1019 Boot-migration code intentionally consumes deprecated config shapes.
+
 package main
 
 import (
@@ -119,7 +126,7 @@ func migrateAdapterConfigToSpawners(ctx context.Context, cfg config.Config, spaw
 	// DASHBOARD_SPAWN_COMMAND — migrate to a custom-adapter row. The row's
 	// top-level command column carries the legacy env value; adapter_config
 	// stays empty because the custom adapter has no structured config keys.
-	if cmd := config.SpawnCommandFromEnv(); cmd != "" {
+	if cmd := config.SpawnCommandFromEnv(); cmd != "" { //nolint:staticcheck // boot migration reads deprecated env once
 		if err := ensureImportedCustomSpawner(ctx, spawnerRepo, cmd); err != nil {
 			return fmt.Errorf("migrateAdapterConfigToSpawners: custom: %w", err)
 		}
@@ -137,15 +144,15 @@ func migrateAdapterConfigToSpawners(ctx context.Context, cfg config.Config, spaw
 	return nil
 }
 
-func ollamaConfigured(o config.OllamaConfig) bool {
+func ollamaConfigured(o config.OllamaConfig) bool { //nolint:staticcheck // boot migration over deprecated config shape
 	return o.Host != "" || o.DefaultModel != ""
 }
 
-func openAIConfigured(o config.OpenAIConfig) bool {
+func openAIConfigured(o config.OpenAIConfig) bool { //nolint:staticcheck // boot migration over deprecated config shape
 	return o.BaseURL != "" || o.APIKeyEnv != "" || o.DefaultModel != ""
 }
 
-func ollamaAdapterConfig(o config.OllamaConfig) map[string]string {
+func ollamaAdapterConfig(o config.OllamaConfig) map[string]string { //nolint:staticcheck // boot migration over deprecated config shape
 	m := map[string]string{}
 	if o.Host != "" {
 		m["host"] = o.Host
@@ -156,7 +163,7 @@ func ollamaAdapterConfig(o config.OllamaConfig) map[string]string {
 	return m
 }
 
-func openAIAdapterConfig(o config.OpenAIConfig) map[string]string {
+func openAIAdapterConfig(o config.OpenAIConfig) map[string]string { //nolint:staticcheck // boot migration over deprecated config shape
 	m := map[string]string{}
 	if o.BaseURL != "" {
 		m["base_url"] = o.BaseURL

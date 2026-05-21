@@ -86,15 +86,15 @@ func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
 			result := make([]projectView, len(rows))
 			for i, r := range rows {
 				result[i] = projectView{
-					ID:               r.Project.ID,
-					Slug:             r.Project.Slug,
-					Name:             r.Project.Name,
-					Description:      r.Project.Description,
-					Color:            r.Project.Color,
-					DefaultSpawnerID: r.Project.DefaultSpawnerID,
+					ID:               r.ID,
+					Slug:             r.Slug,
+					Name:             r.Name,
+					Description:      r.Description,
+					Color:            r.Color,
+					DefaultSpawnerID: r.DefaultSpawnerID,
 					FolderCount:      r.FolderCount,
-					CreatedAt:        readTsFmt(r.Project.CreatedAt),
-					UpdatedAt:        readTsFmt(r.Project.UpdatedAt),
+					CreatedAt:        readTsFmt(r.CreatedAt),
+					UpdatedAt:        readTsFmt(r.UpdatedAt),
 				}
 			}
 			return mcp.OK(result)
