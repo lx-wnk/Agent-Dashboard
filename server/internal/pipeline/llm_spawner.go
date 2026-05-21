@@ -46,7 +46,6 @@ type LLMSpawner interface {
 
 // PerStageSpawner routes Spawn calls to per-stage adapters, falling back to the
 // default spawner for stages that have no explicit mapping.
-// It is built by provideSpawner when AdapterConfig.Stages is non-empty.
 type PerStageSpawner struct {
 	// DefaultSpawner is used for stages not listed in StageSpawners.
 	// May be nil to fall through to the native Claude spawn path for those stages.

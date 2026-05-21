@@ -358,7 +358,6 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		MCPToken:             o.opts.MCPToken,
 		MCPUrl:               o.opts.MCPUrl,
 		SystemPromptRepo:     o.opts.SystemPromptRepo,
-		Spawner:              o.opts.Spawner,
 		ResolveSpawner:       o.opts.ResolveSpawner,
 		DispatchHTTPSpawn: func(stageRunID, taskID string, spawn func() (string, error)) {
 			go func() {

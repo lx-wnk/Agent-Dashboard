@@ -86,9 +86,6 @@ type StageContext struct {
 	UserAdditionalPrompt string
 	MCPToken             string
 	MCPUrl               string
-	// Spawner is the LLM adapter to use for agent-driven stages.
-	// When nil, stage handlers fall back to SpawnStageAgent (native Claude path).
-	Spawner LLMSpawner
 
 	// ResolveSpawner returns the effective DB spawner row for the current task
 	// (task → project → claude-default). Stage handlers invoke this right
@@ -176,10 +173,6 @@ type OrchestratorOptions struct {
 	// even when task.SourceBranch is not set. The branch is derived as "feat/<slug>".
 	// Set via DASHBOARD_FORCE_WORKTREES=true.
 	ForceWorktrees bool
-
-	// Spawner selects which LLM backend runs stage agents.
-	// When nil, stage handlers use SpawnStageAgent (native Claude path).
-	Spawner LLMSpawner
 
 	// ResolveSpawner returns the effective DB spawner row for a task right
 	// before the native Claude path is taken. When nil, stage handlers spawn
