@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 
@@ -9,6 +10,28 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
+
+// repairSpawnerAdapterConfig replaces any row in spawners whose adapter_config
+// column is not a valid JSON value with an empty object. Defends against a
+// historical bug in this schema where the SQL DEFAULT was emitted as the
+// literal string "''{}''" instead of "{}", which then crashed every spawner
+// load with an "invalid character '\''" unmarshal error. Idempotent; runs
+// before seedSpawners so the subsequent GetBySlug call cannot trip the bug.
+func repairSpawnerAdapterConfig(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return nil
+	}
+	res, err := db.ExecContext(ctx,
+		`UPDATE spawners SET adapter_config = '{}' WHERE json_valid(adapter_config) = 0`,
+	)
+	if err != nil {
+		return fmt.Errorf("repairSpawnerAdapterConfig: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		slog.Warn("repaired spawner rows with corrupt adapter_config", "rows", n)
+	}
+	return nil
+}
 
 // claudeDefaultSpawnerSlug is the slug of the built-in spawner that exists in
 // every dashboard installation. It is the final fallback in the spawner

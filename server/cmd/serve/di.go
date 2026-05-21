@@ -132,6 +132,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		projectRepo = repo.NewProjectRepo(entClient)
 		projectFolderRepo = repo.NewProjectFolderRepo(entClient)
 		spawnerRepo = repo.NewSpawnerRepo(entClient)
+		if bundle != nil {
+			if err := repairSpawnerAdapterConfig(ctx, bundle.DB); err != nil {
+				return nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
+			}
+		}
 		if err := seedSpawners(ctx, spawnerRepo); err != nil {
 			return nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
 		}
