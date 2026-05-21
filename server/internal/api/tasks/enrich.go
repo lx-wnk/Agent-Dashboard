@@ -26,6 +26,8 @@ type EnrichedTask struct {
 	Priority            string                 `json:"priority"`
 	UserID              *string                `json:"userId"`
 	ParentTaskID        *string                `json:"parentTaskId"`
+	ProjectID           *string                `json:"projectId"`
+	SpawnerID           *string                `json:"spawnerId"`
 	MaxIterations       int                    `json:"maxIterations"`
 	TokenBudget         *int                   `json:"tokenBudget"`
 	CostBudgetCents     *int                   `json:"costBudgetCents"`
@@ -134,6 +136,8 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int) (*Enric
 		Priority:                    t.Priority,
 		UserID:                      t.UserID,
 		ParentTaskID:                t.ParentTaskID,
+		ProjectID:                   t.ProjectID,
+		SpawnerID:                   t.SpawnerID,
 		MaxIterations:               t.MaxIterations,
 		TokenBudget:                 t.TokenBudget,
 		CostBudgetCents:             t.CostBudgetCents,

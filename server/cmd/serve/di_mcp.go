@@ -22,6 +22,8 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	auditRepo := repo.NewAuditRepo(client)
 	depRepo := repo.NewDependencyRepo(client)
 	apiKeyRepo := repo.NewApiKeyRepo(client)
+	projectRepo := repo.NewProjectRepo(client)
+	spawnerRepo := repo.NewSpawnerRepo(client)
 
 	broadcast := func(taskID string) {
 		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: taskID, Payload: map[string]string{}})
@@ -32,16 +34,20 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 
 	registry := mcp.ToolRegistry{}
 	mcptools.RegisterReadTools(registry, mcptools.ReadDeps{
-		TaskRepo:  taskRepo,
-		SRRepo:    srRepo,
-		PermRepo:  permRepo,
-		AuditRepo: auditRepo,
+		TaskRepo:    taskRepo,
+		SRRepo:      srRepo,
+		PermRepo:    permRepo,
+		AuditRepo:   auditRepo,
+		ProjectRepo: projectRepo,
+		SpawnerRepo: spawnerRepo,
 	})
 	mcptools.RegisterWriteTools(registry, mcptools.WriteDeps{
 		TaskRepo:         taskRepo,
 		PermRepo:         permRepo,
 		AuditRepo:        auditRepo,
 		DepRepo:          depRepo,
+		ProjectRepo:      projectRepo,
+		SpawnerRepo:      spawnerRepo,
 		Broadcast:        broadcast,
 		BroadcastDeleted: broadcastDeleted,
 	})

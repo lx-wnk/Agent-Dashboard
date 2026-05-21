@@ -1,0 +1,316 @@
+package projects
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+)
+
+// nonTerminalStages are the task.current_stage values that block project
+// deletion. Mirrors the pipeline state machine's "active" set.
+var nonTerminalStages = []string{
+	"backlog", "concept", "implementation_plan", "implementation",
+	"self_review", "finalization", "approval", "blocked",
+}
+
+// TaskProjectOps abstracts the task-side operations the project handler needs
+// when deleting a project. Implemented by repo.TaskRepo callers via the
+// adapter in router wiring. Kept narrow so the project package has no runtime
+// dependency on the full TaskRepo interface.
+type TaskProjectOps interface {
+	// CountActiveByProject returns the number of tasks linked to projectID
+	// whose current_stage is not "done" or "cancelled".
+	CountActiveByProject(ctx context.Context, projectID string) (int, error)
+	// ClearProjectForTerminalTasks sets project_id = NULL on all tasks linked
+	// to projectID whose current_stage is "done" or "cancelled".
+	ClearProjectForTerminalTasks(ctx context.Context, projectID string) error
+}
+
+// Handler exposes CRUD endpoints for projects and their folders.
+type Handler struct {
+	projects projectRepo
+	folders  folderRepo
+	tasks    TaskProjectOps
+}
+
+// projectRepo is the subset of repo.ProjectRepo this handler needs.
+type projectRepo interface {
+	Create(ctx context.Context, name, slug string, description, color, defaultSpawnerID *string) (*ent.Project, error)
+	GetByID(ctx context.Context, id string) (*ent.Project, error)
+	GetWithFolders(ctx context.Context, id string) (*ent.Project, error)
+	ListWithFolderCount(ctx context.Context) ([]repo.ProjectWithCount, error)
+	Update(ctx context.Context, id string, name, slug *string, description, color, defaultSpawnerID *string, clearDescription, clearColor, clearDefaultSpawnerID bool) (*ent.Project, error)
+	Delete(ctx context.Context, id string) error
+}
+
+// folderRepo is the subset of repo.ProjectFolderRepo this handler needs.
+type folderRepo interface {
+	Create(ctx context.Context, projectID, path string, label *string, isDefault bool) (*ent.ProjectFolder, error)
+	GetByID(ctx context.Context, id string) (*ent.ProjectFolder, error)
+	ListByProject(ctx context.Context, projectID string) ([]*ent.ProjectFolder, error)
+	Update(ctx context.Context, id string, path, label *string, clearLabel bool, isDefault *bool) (*ent.ProjectFolder, error)
+	Delete(ctx context.Context, id string) error
+	Suggest(ctx context.Context, projectID string) ([]*ent.ProjectFolder, error)
+}
+
+// NewHandler returns a Handler wired with the given repos and task ops.
+func NewHandler(p repo.ProjectRepo, f repo.ProjectFolderRepo, tasks TaskProjectOps) *Handler {
+	return &Handler{projects: p, folders: f, tasks: tasks}
+}
+
+// Mount registers all project + folder routes on r. Caller is responsible
+// for putting r inside a JWT-protected group.
+func (h *Handler) Mount(r chi.Router) {
+	r.Get("/api/projects", apierr.ErrorMiddleware(h.List))
+	r.Post("/api/projects", apierr.ErrorMiddleware(h.Create))
+	r.Get("/api/projects/{id}", apierr.ErrorMiddleware(h.Get))
+	r.Patch("/api/projects/{id}", apierr.ErrorMiddleware(h.Update))
+	r.Delete("/api/projects/{id}", apierr.ErrorMiddleware(h.Delete))
+
+	r.Get("/api/projects/{id}/folders", apierr.ErrorMiddleware(h.ListFolders))
+	r.Post("/api/projects/{id}/folders", apierr.ErrorMiddleware(h.CreateFolder))
+	r.Get("/api/projects/{id}/folders/suggest", apierr.ErrorMiddleware(h.SuggestFolders))
+	r.Patch("/api/projects/{id}/folders/{folderId}", apierr.ErrorMiddleware(h.UpdateFolder))
+	r.Delete("/api/projects/{id}/folders/{folderId}", apierr.ErrorMiddleware(h.DeleteFolder))
+}
+
+// projectView is the JSON shape returned by all project endpoints.
+type projectView struct {
+	ID               string         `json:"id"`
+	Slug             string         `json:"slug"`
+	Name             string         `json:"name"`
+	Description      *string        `json:"description,omitempty"`
+	Color            *string        `json:"color,omitempty"`
+	DefaultSpawnerID *string        `json:"defaultSpawnerId,omitempty"`
+	FolderCount      *int           `json:"folderCount,omitempty"`
+	Folders          []folderView   `json:"folders,omitempty"`
+	CreatedAt        string         `json:"createdAt"`
+	UpdatedAt        string         `json:"updatedAt"`
+}
+
+type folderView struct {
+	ID        string  `json:"id"`
+	ProjectID string  `json:"projectId"`
+	Path      string  `json:"path"`
+	Label     *string `json:"label,omitempty"`
+	IsDefault bool    `json:"isDefault"`
+	CreatedAt string  `json:"createdAt"`
+}
+
+const isoFormat = "2006-01-02T15:04:05Z"
+
+func tsFmt(t time.Time) string { return t.UTC().Format(isoFormat) }
+
+func toProjectView(p *ent.Project, folderCount *int, folders []*ent.ProjectFolder, projectIDForFolders string) projectView {
+	pv := projectView{
+		ID:               p.ID,
+		Slug:             p.Slug,
+		Name:             p.Name,
+		Description:      p.Description,
+		Color:            p.Color,
+		DefaultSpawnerID: p.DefaultSpawnerID,
+		FolderCount:      folderCount,
+		CreatedAt:        tsFmt(p.CreatedAt),
+		UpdatedAt:        tsFmt(p.UpdatedAt),
+	}
+	if folders != nil {
+		fs := make([]folderView, len(folders))
+		for i, f := range folders {
+			fs[i] = toFolderView(f, projectIDForFolders)
+		}
+		pv.Folders = fs
+	}
+	return pv
+}
+
+func toFolderView(f *ent.ProjectFolder, projectID string) folderView {
+	return folderView{
+		ID:        f.ID,
+		ProjectID: projectID,
+		Path:      f.Path,
+		Label:     f.Label,
+		IsDefault: f.IsDefault,
+		CreatedAt: tsFmt(f.CreatedAt),
+	}
+}
+
+// List returns all projects with their folder counts.
+// GET /api/projects
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) error {
+	rows, err := h.projects.ListWithFolderCount(r.Context())
+	if err != nil {
+		return err
+	}
+	out := make([]projectView, len(rows))
+	for i, row := range rows {
+		count := row.FolderCount
+		out[i] = toProjectView(row.Project, &count, nil, "")
+	}
+	apierr.WriteJSON(w, http.StatusOK, out)
+	return nil
+}
+
+type createProjectBody struct {
+	Name             string  `json:"name"`
+	Slug             string  `json:"slug"`
+	Description      *string `json:"description"`
+	Color            *string `json:"color"`
+	DefaultSpawnerID *string `json:"defaultSpawnerId"`
+}
+
+// Create creates a new project.
+// POST /api/projects
+func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
+	var body createProjectBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if body.Name == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "name is required")
+	}
+	if !ValidateSlug(body.Slug) {
+		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
+	}
+	if body.Color != nil && *body.Color != "" && !ValidateColor(*body.Color) {
+		return apierr.NewAppError(http.StatusBadRequest, "color must be #rgb or #rrggbb hex")
+	}
+	p, err := h.projects.Create(r.Context(), body.Name, body.Slug, body.Description, body.Color, body.DefaultSpawnerID)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			return apierr.NewAppError(http.StatusConflict, "slug already exists")
+		}
+		return err
+	}
+	apierr.WriteJSON(w, http.StatusCreated, toProjectView(p, nil, nil, ""))
+	return nil
+}
+
+// Get returns a single project with its folders embedded.
+// GET /api/projects/{id}
+func (h *Handler) Get(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	p, err := h.projects.GetWithFolders(r.Context(), id)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.NewAppError(http.StatusNotFound, "project not found")
+		}
+		return err
+	}
+	folders, _ := p.Edges.FoldersOrErr()
+	count := len(folders)
+	apierr.WriteJSON(w, http.StatusOK, toProjectView(p, &count, folders, p.ID))
+	return nil
+}
+
+type updateProjectBody struct {
+	Name             *string `json:"name"`
+	Slug             *string `json:"slug"`
+	Description      json.RawMessage `json:"description"`
+	Color            json.RawMessage `json:"color"`
+	DefaultSpawnerID json.RawMessage `json:"defaultSpawnerId"`
+}
+
+// Update partially updates a project. JSON `null` clears the field; absent
+// keeps the existing value.
+// PATCH /api/projects/{id}
+func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	var body updateProjectBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if body.Slug != nil && !ValidateSlug(*body.Slug) {
+		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
+	}
+
+	description, clearDescription, err := parseNullableString(body.Description)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "description must be a string or null")
+	}
+	color, clearColor, err := parseNullableString(body.Color)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "color must be a string or null")
+	}
+	if color != nil && *color != "" && !ValidateColor(*color) {
+		return apierr.NewAppError(http.StatusBadRequest, "color must be #rgb or #rrggbb hex")
+	}
+	defaultSpawnerID, clearDefaultSpawner, err := parseNullableString(body.DefaultSpawnerID)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "defaultSpawnerId must be a string or null")
+	}
+
+	p, err := h.projects.Update(r.Context(), id,
+		body.Name, body.Slug,
+		description, color, defaultSpawnerID,
+		clearDescription, clearColor, clearDefaultSpawner,
+	)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.NewAppError(http.StatusNotFound, "project not found")
+		}
+		if ent.IsConstraintError(err) {
+			return apierr.NewAppError(http.StatusConflict, "slug already exists")
+		}
+		return err
+	}
+	apierr.WriteJSON(w, http.StatusOK, toProjectView(p, nil, nil, ""))
+	return nil
+}
+
+// Delete removes a project. Refuses (409) if any task is in a non-terminal
+// stage. Tasks in done/cancelled have their project_id cleared first.
+// DELETE /api/projects/{id}
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	if _, err := h.projects.GetByID(r.Context(), id); err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.NewAppError(http.StatusNotFound, "project not found")
+		}
+		return err
+	}
+	if h.tasks != nil {
+		active, err := h.tasks.CountActiveByProject(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		if active > 0 {
+			return apierr.NewAppError(http.StatusConflict, "project has active tasks")
+		}
+		if err := h.tasks.ClearProjectForTerminalTasks(r.Context(), id); err != nil {
+			return err
+		}
+	}
+	if err := h.projects.Delete(r.Context(), id); err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.NewAppError(http.StatusNotFound, "project not found")
+		}
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// parseNullableString decodes a PATCH field that may be absent, JSON null, or
+// a string. Returns (value, clear, err): clear=true when JSON null was sent.
+func parseNullableString(raw json.RawMessage) (*string, bool, error) {
+	if len(raw) == 0 {
+		return nil, false, nil
+	}
+	s := string(raw)
+	if s == "null" {
+		return nil, true, nil
+	}
+	var v string
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return nil, false, err
+	}
+	return &v, false, nil
+}
+
