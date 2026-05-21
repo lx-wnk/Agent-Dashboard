@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 )
@@ -21,7 +22,12 @@ func (Spawner) Fields() []ent.Field {
 		field.JSON("args", []string{}).Default([]string{}),
 		field.JSON("env", map[string]string{}).Default(map[string]string{}),
 		field.String("adapter_type").Default("claude"),
-		field.JSON("adapter_config", map[string]string{}).Default(map[string]string{}),
+		// SQL-level Default needed so SQLite ALTER TABLE ADD COLUMN succeeds
+		// on databases with existing rows (ent's Default only fires at Go
+		// Create time; JSON columns get no SQL DEFAULT without this).
+		field.JSON("adapter_config", map[string]string{}).
+			Default(map[string]string{}).
+			Annotations(entsql.Default("'{}'")),
 		field.String("model_override").Optional().Nillable(),
 		field.String("description").Optional().Nillable(),
 		field.Bool("built_in").Default(false),
