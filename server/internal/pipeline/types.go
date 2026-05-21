@@ -66,6 +66,13 @@ type SystemPromptQuerier interface {
 	ListForStage(ctx context.Context, stage string) ([]*ent.SystemPrompt, error)
 }
 
+// SpawnerResolverFunc resolves the effective DB spawner row for a task right
+// before `exec`. The pipeline only needs the resolved spawner; the actual
+// resolver lives in internal/services and is wired by the composition root.
+// Errors are propagated and abort the spawn — callers must NEVER silently
+// fall back when an explicit reference fails to load.
+type SpawnerResolverFunc func(ctx context.Context, taskID string) (*ent.Spawner, error)
+
 // StageContext is passed to stage handlers.
 type StageContext struct {
 	Ctx                  context.Context
@@ -82,6 +89,13 @@ type StageContext struct {
 	// Spawner is the LLM adapter to use for agent-driven stages.
 	// When nil, stage handlers fall back to SpawnStageAgent (native Claude path).
 	Spawner LLMSpawner
+
+	// ResolveSpawner returns the effective DB spawner row for the current task
+	// (task → project → claude-default). Stage handlers invoke this right
+	// before the native Claude spawn so the resulting ent.Spawner can be
+	// passed through SpawnAgentOptions. When nil, the legacy `claude` path
+	// is used unchanged.
+	ResolveSpawner SpawnerResolverFunc
 
 	// SystemPromptRepo is used to fetch custom system prompt overrides for this stage.
 	// May be nil if the feature is not configured.
@@ -166,6 +180,11 @@ type OrchestratorOptions struct {
 	// Spawner selects which LLM backend runs stage agents.
 	// When nil, stage handlers use SpawnStageAgent (native Claude path).
 	Spawner LLMSpawner
+
+	// ResolveSpawner returns the effective DB spawner row for a task right
+	// before the native Claude path is taken. When nil, stage handlers spawn
+	// with the legacy `claude` CLI (current behaviour).
+	ResolveSpawner SpawnerResolverFunc
 
 	OnPermissionRequest func(taskID string, req *ent.PermissionRequest)
 	OnStageFailed       func(taskID string, info StageFailedInfo)

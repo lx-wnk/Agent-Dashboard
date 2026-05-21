@@ -40,6 +40,8 @@ type CreateTaskInput struct {
 	Priority            string
 	CurrentStage        string
 	Metadata            map[string]any
+	ProjectID           *string
+	SpawnerID           *string
 }
 
 type UpdateTaskInput struct {
@@ -57,6 +59,10 @@ type UpdateTaskInput struct {
 	WorktreePath        *string
 	SourceBranch        *string
 	TargetBranch        *string
+	ProjectID           *string
+	SpawnerID           *string
+	ClearProjectID      bool
+	ClearSpawnerID      bool
 }
 
 type entTaskRepo struct{ client *ent.Client }
@@ -107,6 +113,7 @@ func (r *entTaskRepo) Create(ctx context.Context, in CreateTaskInput) (*ent.Task
 	if in.Metadata != nil {
 		q = q.SetMetadata(in.Metadata)
 	}
+	q = q.SetNillableProjectID(in.ProjectID).SetNillableSpawnerID(in.SpawnerID)
 	t, err := q.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("task.Create: %w", err)
@@ -172,6 +179,16 @@ func (r *entTaskRepo) Update(ctx context.Context, id string, in UpdateTaskInput)
 	}
 	if in.TargetBranch != nil {
 		q = q.SetTargetBranch(*in.TargetBranch)
+	}
+	if in.ClearProjectID {
+		q = q.ClearProjectID()
+	} else if in.ProjectID != nil {
+		q = q.SetProjectID(*in.ProjectID)
+	}
+	if in.ClearSpawnerID {
+		q = q.ClearSpawnerID()
+	} else if in.SpawnerID != nil {
+		q = q.SetSpawnerID(*in.SpawnerID)
 	}
 	t, err := q.Save(ctx)
 	if err != nil {

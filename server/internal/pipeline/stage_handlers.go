@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
 // agentStageHandler is the generic stage handler for agent-driven stages.
@@ -92,6 +94,19 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		spawnFn = SpawnStageAgent
 	}
 
+	// Resolve the effective DB spawner immediately before exec. Failure to
+	// resolve is fatal — we do NOT silently fall back to the bare `claude`
+	// binary when the task or its project named a spawner that could not be
+	// loaded (e.g. it was deleted out from under us). Propagate the error.
+	var resolved *ent.Spawner
+	if ctx.ResolveSpawner != nil {
+		sp, err := ctx.ResolveSpawner(ctx.Ctx, ctx.Task.ID)
+		if err != nil {
+			return nil, fmt.Errorf("agentStageHandler.Execute(%s): resolve spawner: %w", h.stage, err)
+		}
+		resolved = sp
+	}
+
 	result, err := spawnFn(SpawnAgentOptions{
 		Task:            ctx.Task,
 		StageRun:        ctx.StageRun,
@@ -102,6 +117,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		ResumeSessionID: ctx.ResumeSessionID,
 		MCPToken:        ctx.MCPToken,
 		MCPUrl:          ctx.MCPUrl,
+		Spawner:         resolved,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agentStageHandler.Execute(%s): %w", h.stage, err)

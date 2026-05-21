@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -65,7 +67,13 @@ func provideSpawner(cfg config.Config) pipeline.LLMSpawner {
 	}
 }
 
-func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroadcaster, systemPromptRepo repo.SystemPromptRepo) (*pipeline.PipelineOrchestrator, error) {
+func provideOrchestrator(
+	cfg config.Config,
+	client *ent.Client,
+	tb *sse.TaskBroadcaster,
+	systemPromptRepo repo.SystemPromptRepo,
+	spawnerResolver services.SpawnerResolver,
+) (*pipeline.PipelineOrchestrator, error) {
 	if client == nil {
 		return nil, nil
 	}
@@ -74,6 +82,14 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 	permRepo := repo.NewPermissionRepo(client)
 	auditRepo := repo.NewAuditRepo(client)
 	cfgRepo := repo.NewPipelineConfigRepo(client)
+
+	var resolveFn pipeline.SpawnerResolverFunc
+	if spawnerResolver != nil {
+		resolveFn = func(ctx context.Context, taskID string) (*ent.Spawner, error) {
+			sp, _, err := spawnerResolver.Resolve(ctx, taskID)
+			return sp, err
+		}
+	}
 
 	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
 		Client:           client,
@@ -88,6 +104,7 @@ func provideOrchestrator(cfg config.Config, client *ent.Client, tb *sse.TaskBroa
 		WorktreeRoot:     cfg.WorktreeRoot,
 		ForceWorktrees:   cfg.ForceWorktrees,
 		Spawner:          provideSpawner(cfg),
+		ResolveSpawner:   resolveFn,
 		OnTaskChanged: func(taskID string, transitionKind string) {
 			tb.Broadcast(sse.TaskEvent{
 				Type:   "task_changed",

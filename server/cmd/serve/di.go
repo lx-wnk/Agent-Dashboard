@@ -34,6 +34,7 @@ import (
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
@@ -117,7 +118,27 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		systemPromptRepo = repo.NewSystemPromptRepo(entClient)
 	}
 
-	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster, systemPromptRepo)
+	// Construct repos required by the spawner resolver BEFORE the
+	// orchestrator so the resolver can be threaded into stage handlers.
+	// Seed claude-default first so the resolver's deployment-wide fallback
+	// is guaranteed to exist for every task that lacks an explicit ref.
+	var taskRepoForResolver repo.TaskRepo
+	var projectRepo repo.ProjectRepo
+	var projectFolderRepo repo.ProjectFolderRepo
+	var spawnerRepo repo.SpawnerRepo
+	var spawnerResolver services.SpawnerResolver
+	if entClient != nil {
+		taskRepoForResolver = repo.NewTaskRepo(entClient)
+		projectRepo = repo.NewProjectRepo(entClient)
+		projectFolderRepo = repo.NewProjectFolderRepo(entClient)
+		spawnerRepo = repo.NewSpawnerRepo(entClient)
+		if err := seedSpawners(ctx, spawnerRepo); err != nil {
+			return nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
+		}
+		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo)
+	}
+
+	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver)
 	if err != nil {
 		return nil, nil, nil, cleanup, err
 	}
@@ -152,6 +173,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 
 	// Build optional handlers that previously lived inside provideRouterDeps.
+	// projectRepo, projectFolderRepo, spawnerRepo were constructed earlier
+	// for the spawner resolver — reuse those instances here.
 	var userRepo repo.UserRepo
 	var apiKeyRepo repo.ApiKeyRepo
 	if entClient != nil {
@@ -180,6 +203,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		OAuthProvider:        oauthProvider,
 		UserRepo:             userRepo,
 		ApiKeyRepo:           apiKeyRepo,
+		ProjectRepo:          projectRepo,
+		ProjectFolderRepo:    projectFolderRepo,
+		SpawnerRepo:          spawnerRepo,
+		TaskProjectOps:       newTaskProjectOps(entClient),
 		TaskHandler:          taskHandler,
 		WebPushHandler:       webPushHandler,
 		RemotesHandler:       remotesHandler,
