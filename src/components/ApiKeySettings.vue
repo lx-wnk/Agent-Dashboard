@@ -4,7 +4,6 @@ import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
 import { maskToken } from '../utils/format'
-const AdapterSettings = defineAsyncComponent(() => import('./AdapterSettings.vue'))
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 import RemoteSettings from './RemoteSettings.vue'
@@ -21,7 +20,7 @@ const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'adapters' | 'plugins' | 'notifications' | 'projects' | 'spawners'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'projects' | 'spawners'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -433,18 +432,6 @@ async function startImport() {
             <button
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'adapters'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
-              @click="activeSection = 'adapters'"
-            >
-              <span class="text-sm flex-shrink-0">⚡</span> LLM Adapters
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'plugins'
                 ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
                 : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
@@ -769,11 +756,6 @@ async function startImport() {
         <!-- System Prompts -->
         <section v-else-if="activeSection === 'systemPrompts'">
           <SystemPromptSettings />
-        </section>
-
-        <!-- LLM Adapters -->
-        <section v-else-if="activeSection === 'adapters'">
-          <AdapterSettings />
         </section>
 
         <!-- Plugins -->

@@ -29,6 +29,14 @@
 | `DASHBOARD_CLAUDE_CONFIG_DIRS`   | Comma-separated list of Claude config directories to search for session JSONL files, e.g. `~/.claude-personal,~/.claude-work`. Searched before auto-detection. Useful when the dashboard process is not started with `CLAUDE_CONFIG_DIR` set, or on shared machines with multiple profiles. |
 | `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` | Comma-separated list of additional command names or absolute path prefixes that are permitted in the `spawners.command` field, e.g. `my-claude-wrapper,/opt/company/bin`. Extends the conservative built-in allow-list without requiring a code change. Optional. |
 
+## Legacy Adapter Migration (post-merge)
+
+- `DASHBOARD_SPAWN_COMMAND` is deprecated. On first boot it is migrated to a Spawner row with `slug='imported-custom'` (`adapter_type='custom'`); after migration the env var has no runtime effect. Prefer creating Custom-adapter spawners via the UI (`/settings/spawners`) or `POST /api/spawners`.
+- `adapter-config.json` migration is idempotent and only seeds rows that are missing by reserved slug: `imported-ollama`, `imported-openai`, `imported-custom`. Editing the JSON file post-migration has no effect — edit the spawner row instead (UI or `PATCH /api/spawners/:id`).
+- The legacy `Adapters.Default` key has no equivalent in the new model. If present in `adapter-config.json` it surfaces as `slog.Warn` on boot; pick a per-project `default_spawner_id` (or per-task `spawner_id`) explicitly.
+
+See [ADR-0003 section A](../docs/architecture/adr/0003-pluggable-spawners.md) for full rationale.
+
 ## Compaction Preservation
 
 When compacting context, always preserve:

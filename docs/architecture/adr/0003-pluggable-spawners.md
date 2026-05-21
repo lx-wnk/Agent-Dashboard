@@ -148,3 +148,66 @@ and the PID exits normally, completion detection proceeds as usual.
 - **Inline `env` on the task record** — already exists (`task.metadata`).
   Retained for one-off overrides; the spawner entity is the right home for
   reusable, named configurations.
+
+## A: Adapter/Spawner Merge (2026-05)
+
+### Why
+
+The original ADR introduced `Spawner` (HOW to invoke a binary — command, args,
+env, model override) while a separate global `AdapterConfig` singleton in
+`config/` still configured WHICH LLM backend the pipeline talked to (claude
+native, ollama, openai, custom shim). The two concepts overlapped and forced
+operators to know which knob applied: `Spawner` for claude, `AdapterConfig`
+for everything else. Per-task / per-project selection only worked for the
+Spawner half — the adapter half was a single global value with no UI.
+
+### Resolution
+
+Each `Spawner` row now carries `adapter_type` (enum: `claude`, `ollama`,
+`openai`, `custom`) plus a free-form `adapter_config map[string]string` for
+adapter-specific keys (`host`, `default_model`, `base_url`, `api_key_env`).
+The catalog (`pipeline.AvailableAdapters`) is the descriptor of "what
+adapter types exist and what config keys each takes" — consumed by the UI
+to render a dynamic editor and by the factory to validate input.
+
+The resolution chain is unchanged from the original ADR:
+
+```
+task.spawner_id ?? task.project.default_spawner_id ?? claude-default
+```
+
+### Dispatch
+
+`stage_handlers.go::Execute` reads the resolved row's `adapter_type`:
+
+- `claude` (or empty) → native subprocess via `SpawnStageAgent` (existing path).
+- `ollama` / `openai` / `custom` → adapter built via
+  `pipeline.NewLLMSpawnerFromSpawner(row)`, then `LLMSpawner.Spawn(...)`.
+  Custom adapters use `CustomCommandSpawner` keyed off the row's `command`
+  column; the factory rejects `custom` rows missing a command.
+
+### Migration
+
+`migrateAdapterConfigToSpawners` runs once on boot in `di_seed.go`. Legacy
+`adapter-config.json` and the `DASHBOARD_SPAWN_COMMAND` env var are read
+and seeded into Spawner rows with reserved slugs:
+
+- `imported-ollama` — created when `Adapters.Ollama.Host` is non-empty.
+- `imported-openai` — created when `Adapters.OpenAI.BaseURL` is non-empty.
+- `imported-custom` — created when `DASHBOARD_SPAWN_COMMAND` is non-empty.
+
+A legacy `Adapters.Default` value is surfaced via `slog.Warn` because the
+new model has no concept of a global default — operators must assign
+`default_spawner_id` per project, or `spawner_id` per task. The migration is
+idempotent (slug-keyed); editing `adapter-config.json` after the first boot
+has no effect.
+
+### Deprecated
+
+- `config.AdapterConfig` types remain only to deserialize the legacy file
+  during migration. New code MUST NOT read or write them at runtime.
+- `DASHBOARD_SPAWN_COMMAND` has no runtime effect after the first boot.
+- HTTP routes `POST /api/adapters/current`, `GET /api/adapters/current`,
+  `GET /api/settings/adapters`, `PUT /api/settings/adapters` return
+  HTTP 410 Gone with a migration pointer; `GET /api/adapters` remains as
+  the read-only catalog endpoint.

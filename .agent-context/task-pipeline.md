@@ -62,8 +62,17 @@ conservative allow-list at create/update time. Extend the default list via
 `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated). CRUD requires the
 `keys:manage` MCP scope.
 
+**Adapter dispatch:** the resolved Spawner row also carries an
+`adapter_type` field. `server/internal/pipeline/stage_handlers.go::Execute`
+reads it and dispatches accordingly: `claude` (or empty) → native subprocess
+via `SpawnStageAgent`; any other value → adapter built via
+`pipeline.NewLLMSpawnerFromSpawner(row)` followed by `LLMSpawner.Spawn(...)`.
+`custom` rows require a non-empty `command` column.
+
 See [ADR-0003](../docs/architecture/adr/0003-pluggable-spawners.md) for full
-rationale, security model, and alternatives considered.
+rationale, security model, and alternatives considered. The
+adapter/spawner merge is described in
+[ADR-0003 section A](../docs/architecture/adr/0003-pluggable-spawners.md#a-adapterspawner-merge-2026-05).
 
 ## Awaiting-User Sweep
 

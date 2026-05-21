@@ -135,6 +135,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		if err := seedSpawners(ctx, spawnerRepo); err != nil {
 			return nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
 		}
+		if err := migrateAdapterConfigToSpawners(ctx, cfg, spawnerRepo); err != nil {
+			return nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
+		}
 		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo)
 	}
 
@@ -193,7 +196,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if entClient != nil {
 		systemPromptsHandler = systemprompts.NewHandler(systemPromptRepo)
 	}
-	adapterHandler := adapters.NewHandler(&cfg.Adapters, cfgFile)
+	adapterHandler := adapters.NewHandler()
 	replyStore := agents.NewReplyStore()
 
 	routerDeps := api.RouterDeps{
