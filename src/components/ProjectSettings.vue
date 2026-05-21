@@ -13,11 +13,14 @@ import {
   updateProject,
   useProjects,
 } from '../composables/useProjects'
+import { useSpawners } from '../composables/useSpawners'
 import { isAbsolutePath } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 
 // Projects composable — auto-loads on mount
 const { projects, isLoading, error, refetch } = useProjects()
+// Spawner list — feeds the default-spawner dropdown
+const { spawners } = useSpawners()
 
 // ── Edit / create project form ──────────────────────────────────────────────
 interface ProjectFormState {
@@ -399,14 +402,19 @@ watch(folderRows, () => {}, { deep: true })
           </div>
         </div>
         <div>
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="proj-spawner">Default Spawner ID (optional)</label>
-          <input
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="proj-spawner">Default Spawner (optional)</label>
+          <select
             id="proj-spawner"
             v-model="form.defaultSpawnerId"
-            type="text"
-            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
-            placeholder="spawner-id"
+            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
           >
+            <option value="">
+              None (use deployment default)
+            </option>
+            <option v-for="s in spawners" :key="s.id" :value="s.id">
+              {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
+            </option>
+          </select>
         </div>
       </div>
 
