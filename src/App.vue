@@ -413,35 +413,51 @@ onMounted(fetchQuota)
     <AuditSettings :open="showAudit" @close="showAudit = false" />
     <AppModal :open="showProjects" @close="showProjects = false">
       <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
-        <div class="flex justify-end items-center px-3 py-2 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+        <header class="flex justify-between items-start gap-3 px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Projects
+            </h2>
+            <p class="text-xs text-slate-400 dark:text-slate-600 mt-0.5">
+              Group tasks under named projects. Each project can have default folders (working directories) and a spawner override.
+            </p>
+          </div>
           <button
             type="button"
-            class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100"
+            class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100 flex-shrink-0"
             aria-label="Close"
             @click="showProjects = false"
           >
             &times;
           </button>
-        </div>
+        </header>
         <div class="flex-1 overflow-y-auto px-5 py-4">
-          <ProjectSettings v-if="showProjects" />
+          <ProjectSettings v-if="showProjects" hide-title />
         </div>
       </div>
     </AppModal>
     <AppModal :open="showSpawners" @close="showSpawners = false">
       <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
-        <div class="flex justify-end items-center px-3 py-2 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+        <header class="flex justify-between items-start gap-3 px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Spawners
+            </h2>
+            <p class="text-xs text-slate-400 dark:text-slate-600 mt-0.5">
+              Configure LLM adapters per spawner row. Built-in spawners are read-only. Each custom row picks an adapter type (claude, ollama, openai, custom) and supplies the adapter-specific config keys.
+            </p>
+          </div>
           <button
             type="button"
-            class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100"
+            class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100 flex-shrink-0"
             aria-label="Close"
             @click="showSpawners = false"
           >
             &times;
           </button>
-        </div>
+        </header>
         <div class="flex-1 overflow-y-auto px-5 py-4">
-          <SpawnerSettings v-if="showSpawners" />
+          <SpawnerSettings v-if="showSpawners" hide-title />
         </div>
       </div>
     </AppModal>

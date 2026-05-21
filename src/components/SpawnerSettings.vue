@@ -11,6 +11,8 @@ import {
 import { isAllowedSpawnerCommand } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 
+withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
+
 const { spawners, isLoading, error, refetch } = useSpawners()
 const { catalog, getByType } = useAdapterCatalog()
 
@@ -260,7 +262,7 @@ async function handleDelete(id: string) {
   <div class="flex flex-col gap-4">
     <!-- Header -->
     <div class="flex items-start justify-between gap-3">
-      <div>
+      <div v-if="!hideTitle">
         <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
           Spawners
         </h3>
@@ -268,7 +270,7 @@ async function handleDelete(id: string) {
           Configure LLM adapters per spawner row. Built-in spawners are read-only. Each custom row picks an adapter type (claude, ollama, openai, custom) and supplies the adapter-specific config keys.
         </p>
       </div>
-      <AppButton variant="info" @click="openCreate">
+      <AppButton variant="info" class="ml-auto" @click="openCreate">
         + New Spawner
       </AppButton>
     </div>
@@ -307,7 +309,7 @@ async function handleDelete(id: string) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="spawner in spawners" :key="spawner.id">
+          <tr v-for="spawner in spawners" :key="spawner.id" class="last:[&>td]:border-b-0">
             <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
               <div class="font-semibold text-slate-900 dark:text-slate-100">
                 {{ spawner.name }}

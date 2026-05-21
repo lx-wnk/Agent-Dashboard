@@ -17,6 +17,8 @@ import { useSpawners } from '../composables/useSpawners'
 import { isAbsolutePath } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 
+withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
+
 // Projects composable — auto-loads on mount
 const { projects, isLoading, error, refetch } = useProjects()
 // Spawner list — feeds the default-spawner dropdown
@@ -244,7 +246,7 @@ watch(folderRows, () => {}, { deep: true })
   <div class="flex flex-col gap-4">
     <!-- Header -->
     <div class="flex items-start justify-between gap-3">
-      <div>
+      <div v-if="!hideTitle">
         <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
           Projects
         </h3>
@@ -252,7 +254,7 @@ watch(folderRows, () => {}, { deep: true })
           Group tasks under named projects. Each project can have default folders (working directories) and a spawner override.
         </p>
       </div>
-      <AppButton variant="info" @click="openCreate">
+      <AppButton variant="info" class="ml-auto" @click="openCreate">
         + New Project
       </AppButton>
     </div>
@@ -294,7 +296,7 @@ watch(folderRows, () => {}, { deep: true })
         </tr>
       </thead>
       <tbody>
-        <tr v-for="project in projects" :key="project.id">
+        <tr v-for="project in projects" :key="project.id" class="last:[&>td]:border-b-0">
           <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
             <div class="flex items-center gap-2">
               <span
@@ -469,7 +471,7 @@ watch(folderRows, () => {}, { deep: true })
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in folderRows" :key="row._key">
+              <tr v-for="row in folderRows" :key="row._key" class="last:[&>td]:border-b-0">
                 <td class="px-2 py-1.5 border-b border-slate-200 dark:border-slate-700">
                   <input
                     v-model="row.path"
