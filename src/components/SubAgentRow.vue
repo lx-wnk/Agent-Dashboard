@@ -7,16 +7,16 @@ defineProps<{ subagent: SubAgent }>()
 
 <template>
   <tr>
-    <td class="px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-900">
+    <td class="px-3 py-1.5 border-b border-line text-xs text-fg-mute bg-card">
       <AppBadge :variant="subagent.status" />
     </td>
-    <td colspan="2" class="pl-9 pr-3 py-1.5 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-900 max-w-[350px] overflow-hidden text-ellipsis whitespace-nowrap">
-      <span class="text-slate-400 dark:text-slate-600 mr-1.5">↳</span>
+    <td colspan="2" class="pl-9 pr-3 py-1.5 border-b border-line text-xs text-fg-mute bg-card max-w-[350px] overflow-hidden text-ellipsis whitespace-nowrap">
+      <span class="text-fg-mute mr-1.5">↳</span>
       {{ subagent.type === 'unknown' ? subagent.id.substring(0, 16) : subagent.type }}
     </td>
-    <td class="px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-900">
+    <td class="px-3 py-1.5 border-b border-line text-xs text-fg-mute bg-card">
       {{ subagent.currentAction || '—' }}
     </td>
-    <td colspan="5" class="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800" />
+    <td colspan="5" class="bg-card border-b border-line" />
   </tr>
 </template>

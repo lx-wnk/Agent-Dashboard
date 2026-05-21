@@ -142,10 +142,10 @@ async function saveConfig() {
 <template>
   <div class="space-y-6">
     <div>
-      <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+      <h3 class="text-sm font-semibold text-fg-soft">
         Notifications
       </h3>
-      <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+      <p class="text-xs text-fg-mute mt-0.5">
         Configure which pipeline events trigger notifications and via which channels.
       </p>
     </div>
@@ -165,20 +165,20 @@ async function saveConfig() {
       </div>
 
       <!-- Event preferences table — F039: overflow-x-auto for narrow viewports -->
-      <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto text-xs">
+      <div class="border border-line rounded-lg overflow-x-auto text-xs">
         <table class="w-full">
           <thead>
-            <tr class="bg-slate-50 dark:bg-slate-800/50">
+            <tr class="bg-raised/50">
               <!-- F004 / F018 — scope="col" on all column headers -->
               <th
                 scope="col"
-                class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 px-3 py-2 font-medium"
+                class="text-left text-[10px] uppercase tracking-wide text-fg-faint px-3 py-2 font-medium"
               >
                 Event
               </th>
               <th
                 scope="col"
-                class="text-center text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 px-3 py-2 font-medium"
+                class="text-center text-[10px] uppercase tracking-wide text-fg-faint px-3 py-2 font-medium"
               >
                 Enabled
               </th>
@@ -186,7 +186,7 @@ async function saveConfig() {
                 v-for="ch in CHANNELS"
                 :key="ch"
                 scope="col"
-                class="text-center text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 px-2 py-2 font-medium capitalize"
+                class="text-center text-[10px] uppercase tracking-wide text-fg-faint px-2 py-2 font-medium capitalize"
               >
                 {{ ch }}
               </th>
@@ -196,16 +196,16 @@ async function saveConfig() {
             <tr
               v-for="ev in KNOWN_EVENTS"
               :key="ev.type"
-              class="border-t border-slate-200 dark:border-slate-700"
+              class="border-t border-line"
               :class="{ 'opacity-50': !getPref(ev.type).enabled }"
               :aria-disabled="!getPref(ev.type).enabled"
             >
               <!-- F004 / F018 — row header for the event label -->
               <th scope="row" class="px-3 py-2.5 text-left font-normal">
-                <p class="font-medium text-slate-800 dark:text-slate-200">
+                <p class="font-medium text-fg">
                   {{ ev.label }}
                 </p>
-                <p class="text-slate-400 dark:text-slate-500 text-[10px] mt-0.5">
+                <p class="text-fg-faint text-[10px] mt-0.5">
                   {{ ev.description }}
                 </p>
               </th>
@@ -251,33 +251,33 @@ async function saveConfig() {
       </div>
 
       <!-- F043 — auto-save hint below channel table -->
-      <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+      <p class="text-[10px] text-fg-faint mt-1">
         Channel changes save automatically.
       </p>
 
       <!-- Delivery config -->
       <div class="space-y-3">
-        <h4 class="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+        <h4 class="text-xs font-semibold text-fg-mute uppercase tracking-wide">
           Delivery Configuration
         </h4>
         <!-- F042 — wrap inputs + save button in a form for Enter-key submission + native validation -->
         <form class="space-y-2" @submit.prevent="saveConfig">
           <div class="flex flex-col gap-1">
-            <label class="text-xs text-slate-500 dark:text-slate-400">Webhook URL</label>
+            <label class="text-xs text-fg-mute">Webhook URL</label>
             <input
               v-model="config['webhook_url']"
               type="url"
               placeholder="https://hooks.example.com/..."
-              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-blue-500 font-mono"
             >
           </div>
           <div class="flex flex-col gap-1">
-            <label class="text-xs text-slate-500 dark:text-slate-400">Email recipient</label>
+            <label class="text-xs text-fg-mute">Email recipient</label>
             <input
               v-model="config['email_to']"
               type="email"
               placeholder="you@example.com"
-              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-blue-500"
             >
           </div>
           <div class="flex items-center gap-2">

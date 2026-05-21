@@ -130,7 +130,7 @@ defineExpose({ focus })
       v-if="showSuggestions"
       :id="listboxId"
       role="listbox"
-      class="absolute bottom-full left-0 right-0 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 border-b-0 rounded-t-md max-h-60 overflow-y-auto z-10"
+      class="absolute bottom-full left-0 right-0 bg-app border border-line border-b-0 rounded-t-md max-h-60 overflow-y-auto z-10"
     >
       <button
         v-for="(cmd, i) in slashSuggestions"
@@ -139,18 +139,18 @@ defineExpose({ focus })
         role="option"
         :aria-selected="i === selectedIndex"
         :disabled="cmd.disabled"
-        class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-slate-500 dark:text-slate-400 text-[13px] font-mono cursor-pointer text-left hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
-        :class="{ 'bg-slate-100 dark:bg-slate-800': i === selectedIndex }"
+        class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-fg-mute text-[13px] font-mono cursor-pointer text-left hover:bg-raised disabled:opacity-40 disabled:cursor-not-allowed"
+        :class="{ 'bg-raised': i === selectedIndex }"
         @mousedown.prevent="selectSuggestion(cmd)"
       >
         <span class="text-blue-600 dark:text-blue-400 font-semibold flex-shrink-0">{{ cmd.name }}</span>
-        <span class="text-slate-400 dark:text-slate-600 text-xs">{{ cmd.description }}</span>
-        <span v-if="cmd.usage" class="text-slate-400 dark:text-slate-500 text-[10px] ml-1">{{ cmd.usage }}</span>
+        <span class="text-fg-mute text-xs">{{ cmd.description }}</span>
+        <span v-if="cmd.usage" class="text-fg-faint text-[10px] ml-1">{{ cmd.usage }}</span>
         <span v-if="cmd.requiresTask && cmd.disabled" class="text-amber-600 text-[10px] ml-auto">requires linked task</span>
       </button>
     </div>
     <div
-      class="border-t border-slate-200 dark:border-slate-700 flex items-end"
+      class="border-t border-line flex items-end"
       :class="variant === 'full' ? 'px-4 py-2.5 gap-2 flex-shrink-0' : 'px-3 py-2 gap-1.5 items-center'"
     >
       <span
@@ -166,7 +166,7 @@ defineExpose({ focus })
         :disabled="isSending"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
-        class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
+        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono outline-none placeholder:text-fg-faint disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
         @input="autoResize"
       />
@@ -178,7 +178,7 @@ defineExpose({ focus })
         :disabled="isSending"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
-        class="flex-1 bg-transparent border-none text-slate-900 dark:text-slate-100 text-[13px] font-mono outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 disabled:opacity-50"
+        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono outline-none placeholder:text-fg-faint disabled:opacity-50"
         @keydown="onKeydown"
       >
       <button

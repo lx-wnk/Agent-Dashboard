@@ -193,14 +193,14 @@ watch(() => props.taskId, fetchAndRender)
 
 <template>
   <div class="dependency-graph">
-    <div v-if="loading" class="text-sm text-slate-500 dark:text-slate-400 p-4">
+    <div v-if="loading" class="text-sm text-fg-mute p-4">
       Loading dependency graph…
     </div>
     <div v-else-if="error" class="text-sm text-red-500 dark:text-red-400 p-4">
       {{ error }}
     </div>
     <div v-else>
-      <p class="text-xs text-slate-400 dark:text-slate-600 px-4 pt-2">
+      <p class="text-xs text-fg-mute px-4 pt-2">
         Click a node to navigate to that task. Drag to reposition.
       </p>
       <svg ref="svgRef" class="w-full" style="min-height: 400px;" aria-label="Task dependency graph" role="img" />

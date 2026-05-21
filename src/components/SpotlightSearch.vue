@@ -177,13 +177,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       role="dialog"
       aria-modal="true"
       aria-label="Quick search"
-      class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-lg overflow-hidden"
+      class="bg-card rounded-xl border border-line shadow-2xl w-full max-w-lg overflow-hidden"
     >
       <!-- Live region for result count -->
       <div aria-live="polite" class="sr-only">
         {{ flatResults.length }} results
       </div>
-      <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-line">
         <span class="text-slate-400 text-sm" aria-hidden="true">⌘K</span>
         <input
           ref="inputRef"
@@ -195,7 +195,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           aria-autocomplete="list"
           :aria-activedescendant="selectedIdx >= 0 && flatResults.length > 0 ? `spotlight-opt-${selectedIdx}` : undefined"
           placeholder="Search tasks and agents…"
-          class="flex-1 bg-transparent text-sm text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-400"
+          class="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-slate-400"
         >
         <span v-if="loading" class="text-xs text-slate-400">Searching…</span>
       </div>
@@ -226,7 +226,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors"
               :class="selectedIdx === idx
                 ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'"
+                : 'text-fg-soft hover:bg-slate-50 dark:hover:bg-slate-800'"
               @click="activate({ type: 'task', item: task })"
               @mouseenter="selectedIdx = idx"
             >
@@ -240,7 +240,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <template v-if="results.agents.length > 0">
             <div
               class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400"
-              :class="{ 'border-t border-slate-100 dark:border-slate-800 mt-1': results.tasks.length > 0 }"
+              :class="{ 'border-t border-line mt-1': results.tasks.length > 0 }"
             >
               Agents
             </div>
@@ -254,7 +254,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors"
               :class="selectedIdx === (results.tasks.length + idx)
                 ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'"
+                : 'text-fg-soft hover:bg-slate-50 dark:hover:bg-slate-800'"
               @click="activate({ type: 'agent', item: agent })"
               @mouseenter="selectedIdx = results.tasks.length + idx"
             >
@@ -265,7 +265,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </template>
         </template>
       </div>
-      <div class="px-4 py-2 border-t border-slate-100 dark:border-slate-800 flex gap-3 text-[10px] text-slate-400">
+      <div class="px-4 py-2 border-t border-line flex gap-3 text-[10px] text-slate-400">
         <span>↑↓ navigate</span>
         <span>↵ open</span>
         <span>Esc close</span>

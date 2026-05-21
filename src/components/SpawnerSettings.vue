@@ -18,7 +18,7 @@ const { catalog, getByType } = useAdapterCatalog()
 
 // ── Adapter-type display helpers ────────────────────────────────────────────
 const ADAPTER_TYPE_BADGE: Record<SpawnerAdapterType, string> = {
-  claude: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300',
+  claude: 'bg-raised text-fg-soft',
   ollama: 'bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600 dark:text-cyan-400',
   openai: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
   custom: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
@@ -263,10 +263,10 @@ async function handleDelete(id: string) {
     <!-- Header -->
     <div class="flex items-start justify-between gap-3">
       <div v-if="!hideTitle">
-        <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+        <h3 class="text-[17px] font-bold text-fg mb-1">
           Spawners
         </h3>
-        <p class="text-xs text-slate-400 dark:text-slate-600">
+        <p class="text-xs text-fg-mute">
           Configure LLM adapters per spawner row. Built-in spawners are read-only. Each custom row picks an adapter type (claude, ollama, openai, custom) and supplies the adapter-specific config keys.
         </p>
       </div>
@@ -282,7 +282,7 @@ async function handleDelete(id: string) {
       {{ deleteError }}
     </p>
 
-    <div v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+    <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
       Loading spawners...
     </div>
 
@@ -291,53 +291,53 @@ async function handleDelete(id: string) {
       <table v-if="!formVisible || spawners.length > 0" class="w-full border-collapse text-[13px]">
         <thead>
           <tr>
-            <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
               Name
             </th>
-            <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
               Adapter
             </th>
-            <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
               Detail
             </th>
-            <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
               Type
             </th>
-            <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
               Actions
             </th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="spawner in spawners" :key="spawner.id" class="last:[&>td]:border-b-0">
-            <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
-              <div class="font-semibold text-slate-900 dark:text-slate-100">
+            <td class="px-3 py-2.5 border-b border-line">
+              <div class="font-semibold text-fg">
                 {{ spawner.name }}
               </div>
-              <div v-if="spawner.description" class="text-[11px] text-slate-400 dark:text-slate-600 line-clamp-1">
+              <div v-if="spawner.description" class="text-[11px] text-fg-mute line-clamp-1">
                 {{ spawner.description }}
               </div>
             </td>
-            <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
+            <td class="px-3 py-2.5 border-b border-line">
               <span
                 class="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-px rounded"
                 :class="ADAPTER_TYPE_BADGE[adapterTypeOf(spawner)]"
               >{{ adapterTypeOf(spawner) }}</span>
             </td>
-            <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-500 dark:text-slate-400">
+            <td class="px-3 py-2.5 border-b border-line font-mono text-xs text-fg-mute">
               {{ spawnerDetail(spawner) }}
             </td>
-            <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
+            <td class="px-3 py-2.5 border-b border-line">
               <span
                 class="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-px rounded"
                 :class="spawner.builtIn
-                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                  ? 'bg-raised text-fg-mute'
                   : 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'"
               >{{ spawner.builtIn ? 'Built-in' : 'Custom' }}</span>
             </td>
-            <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+            <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
               <template v-if="spawner.builtIn">
-                <span class="text-xs text-slate-400 dark:text-slate-600">Read-only</span>
+                <span class="text-xs text-fg-mute">Read-only</span>
               </template>
               <template v-else-if="confirmDeleteId === spawner.id">
                 <AppButton variant="danger" size="sm" class="mr-1" @click="handleDelete(spawner.id)">
@@ -350,14 +350,14 @@ async function handleDelete(id: string) {
               <template v-else>
                 <button
                   type="button"
-                  class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 dark:hover:text-blue-400 mr-1"
+                  class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 dark:hover:text-blue-400 mr-1"
                   @click="openEdit(spawner)"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
-                  class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
+                  class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
                   @click="confirmDeleteId = spawner.id"
                 >
                   Delete
@@ -368,65 +368,65 @@ async function handleDelete(id: string) {
         </tbody>
       </table>
 
-      <div v-if="!formVisible && !spawners.length" class="text-center py-8 text-slate-400 dark:text-slate-600 text-sm">
+      <div v-if="!formVisible && !spawners.length" class="text-center py-8 text-fg-mute text-sm">
         No custom spawners yet.
       </div>
 
       <!-- Create / Edit form -->
-      <div v-if="formVisible" class="border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex flex-col gap-3 mt-1">
+      <div v-if="formVisible" class="border border-line rounded-lg p-4 flex flex-col gap-3 mt-1">
         <div class="flex items-center justify-between">
-          <h4 class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <h4 class="text-sm font-semibold text-fg">
             {{ isCreating ? 'New Spawner' : `Edit: ${editingSpawner?.name}` }}
           </h4>
-          <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-lg cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="closeForm">
+          <button type="button" class="bg-transparent border-none text-fg-mute text-lg cursor-pointer px-1 leading-none hover:text-fg" @click="closeForm">
             &times;
           </button>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-name">Name</label>
+            <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-name">Name</label>
             <input
               id="sp-name"
               v-model="form.name"
               type="text"
-              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
               placeholder="My Spawner"
             >
           </div>
           <div>
-            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-slug">Slug</label>
+            <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-slug">Slug</label>
             <input
               id="sp-slug"
               v-model="form.slug"
               type="text"
-              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
               placeholder="my-spawner"
             >
           </div>
           <div>
-            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-adapter-type">Adapter Type</label>
+            <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-adapter-type">Adapter Type</label>
             <select
               id="sp-adapter-type"
               v-model="form.adapterType"
-              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
               @change="onAdapterTypeChange"
             >
               <option v-for="meta in catalog" :key="meta.name" :value="meta.name">
                 {{ meta.name }}
               </option>
             </select>
-            <p v-if="currentAdapterMeta?.description" class="text-[11px] text-slate-400 dark:text-slate-600 mt-1 line-clamp-2">
+            <p v-if="currentAdapterMeta?.description" class="text-[11px] text-fg-mute mt-1 line-clamp-2">
               {{ currentAdapterMeta.description }}
             </p>
           </div>
           <div>
-            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-desc">Description (optional)</label>
+            <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-desc">Description (optional)</label>
             <input
               id="sp-desc"
               v-model="form.description"
               type="text"
-              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
               placeholder="Short description"
             >
           </div>
@@ -434,34 +434,34 @@ async function handleDelete(id: string) {
           <!-- Claude / custom: command + args + model -->
           <template v-if="showCommandFields">
             <div class="col-span-2">
-              <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-command">
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-command">
                 Command <span class="normal-case font-normal">(claude, claude-code, npx, or absolute path not under /tmp)</span>
               </label>
               <input
                 id="sp-command"
                 v-model="form.command"
                 type="text"
-                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
                 :placeholder="form.adapterType === 'claude' ? 'claude' : '/usr/local/bin/my-llm'"
               >
             </div>
             <div class="col-span-2">
-              <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-args">Args (one per line)</label>
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-args">Args (one per line)</label>
               <textarea
                 id="sp-args"
                 v-model="form.argsRaw"
                 rows="3"
-                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500 resize-none"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500 resize-none"
                 placeholder="--no-color&#10;--dangerously-skip-permissions"
               />
             </div>
             <div class="col-span-2">
-              <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-model">Model Override (optional)</label>
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-model">Model Override (optional)</label>
               <input
                 id="sp-model"
                 v-model="form.modelOverride"
                 type="text"
-                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
                 placeholder="claude-opus-4-5"
               >
             </div>
@@ -470,12 +470,12 @@ async function handleDelete(id: string) {
 
         <!-- Adapter-specific config keys (dynamic) -->
         <div v-if="currentAdapterMeta && currentAdapterMeta.configKeys.length > 0">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-2">
             Adapter Config
           </label>
           <div class="flex flex-col gap-2">
             <div v-for="k in currentAdapterMeta.configKeys" :key="k.key">
-              <label class="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1" :for="`sp-cfg-${k.key}`">
+              <label class="block text-[11px] font-medium text-fg-mute mb-1" :for="`sp-cfg-${k.key}`">
                 <span class="font-mono">{{ k.key }}</span>
                 <span v-if="k.required" class="text-red-500 ml-0.5">*</span>
               </label>
@@ -483,11 +483,11 @@ async function handleDelete(id: string) {
                 :id="`sp-cfg-${k.key}`"
                 v-model="form.adapterConfig[k.key]"
                 type="text"
-                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
                 :placeholder="k.note || ''"
                 :required="k.required"
               >
-              <p v-if="k.note" class="text-[10px] text-slate-400 dark:text-slate-600 mt-0.5">
+              <p v-if="k.note" class="text-[10px] text-fg-mute mt-0.5">
                 {{ k.note }}
               </p>
             </div>
@@ -497,12 +497,12 @@ async function handleDelete(id: string) {
         <!-- Env key/value table — only for adapters that spawn subprocesses -->
         <div v-if="showCommandFields">
           <div class="flex items-center justify-between mb-2">
-            <label class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Environment Variables</label>
-            <button type="button" class="text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800" @click="addEnvRow">
+            <label class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Environment Variables</label>
+            <button type="button" class="text-[11px] px-2 py-0.5 rounded border border-line-strong text-fg-mute hover:bg-slate-50 dark:hover:bg-slate-800" @click="addEnvRow">
               + Add
             </button>
           </div>
-          <div v-if="form.envRows.length === 0" class="text-xs text-slate-400 dark:text-slate-600">
+          <div v-if="form.envRows.length === 0" class="text-xs text-fg-mute">
             No environment variables set.
           </div>
           <div v-else class="flex flex-col gap-1.5">
@@ -510,7 +510,7 @@ async function handleDelete(id: string) {
               <input
                 v-model="row.key"
                 type="text"
-                class="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                class="flex-1 bg-card border border-line rounded px-2 py-1 text-xs font-mono text-fg focus:outline-none focus:border-blue-500"
                 placeholder="KEY"
                 :aria-label="`Environment variable name ${row._k}`"
               >
@@ -518,7 +518,7 @@ async function handleDelete(id: string) {
               <input
                 v-model="row.value"
                 type="text"
-                class="flex-[2] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                class="flex-[2] bg-card border border-line rounded px-2 py-1 text-xs font-mono text-fg focus:outline-none focus:border-blue-500"
                 placeholder="value"
                 :aria-label="`Environment variable value ${row._k}`"
               >

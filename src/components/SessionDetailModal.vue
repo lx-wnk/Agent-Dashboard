@@ -167,25 +167,25 @@ async function resumeSession() {
 
 <template>
   <AppModal :open="open" labelled-by="session-detail-title" @close="emit('close')">
-    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+    <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
       <!-- Header -->
-      <header class="flex justify-between items-start px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0 gap-3">
+      <header class="flex justify-between items-start px-5 py-4 border-b border-line flex-shrink-0 gap-3">
         <div class="min-w-0 flex-1">
-          <h2 id="session-detail-title" class="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 mb-1.5">
+          <h2 id="session-detail-title" class="text-sm font-semibold text-fg leading-snug line-clamp-2 mb-1.5">
             {{ session?.firstPrompt ?? session?.projectName ?? 'Session' }}
           </h2>
           <div class="flex flex-wrap items-center gap-1.5">
-            <code class="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[280px]">{{ session ? shortenPath(session.projectPath) : '' }}</code>
-            <span v-if="session?.model" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 uppercase tracking-wide font-mono">{{ shortModel(session.model) }}</span>
-            <span v-if="session && session.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-green-600 dark:text-green-400 font-mono">{{ formatCost(session.costEstimate) }}</span>
-            <span v-if="session" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600">{{ formatDate(session.lastModified) }}</span>
-            <span v-if="session" class="text-[10px] px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 font-mono" :title="session.sessionId">{{ session.sessionId.slice(0, 8) }}</span>
+            <code class="font-mono text-[11px] text-fg-mute truncate max-w-[280px]">{{ session ? shortenPath(session.projectPath) : '' }}</code>
+            <span v-if="session?.model" class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute uppercase tracking-wide font-mono">{{ shortModel(session.model) }}</span>
+            <span v-if="session && session.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-raised text-green-600 dark:text-green-400 font-mono">{{ formatCost(session.costEstimate) }}</span>
+            <span v-if="session" class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute">{{ formatDate(session.lastModified) }}</span>
+            <span v-if="session" class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute font-mono" :title="session.sessionId">{{ session.sessionId.slice(0, 8) }}</span>
           </div>
         </div>
         <button
           type="button"
           aria-label="Close"
-          class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100 flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
+          class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
           @click="emit('close')"
         >
           &times;
@@ -194,13 +194,13 @@ async function resumeSession() {
 
       <!-- Body: message list -->
       <div ref="scrollContainer" class="flex-1 overflow-y-auto px-4 py-3">
-        <div v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+        <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
           Loading transcript...
         </div>
         <div v-else-if="fetchError" class="text-center py-12 text-red-600 dark:text-red-400 text-sm">
           {{ fetchError }}
         </div>
-        <div v-else-if="messages.length === 0" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+        <div v-else-if="messages.length === 0" class="text-center py-12 text-fg-mute text-sm">
           No messages available.
         </div>
         <template v-else>
@@ -213,12 +213,12 @@ async function resumeSession() {
             </div>
             <!-- assistant -->
             <div v-else-if="msg.role === 'assistant'" class="flex justify-start mb-2">
-              <div class="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-[13px] px-3 py-2 rounded-lg max-w-[80%] whitespace-pre-wrap break-words">
+              <div class="bg-raised text-fg text-[13px] px-3 py-2 rounded-lg max-w-[80%] whitespace-pre-wrap break-words">
                 {{ msg.content }}
               </div>
             </div>
             <!-- tool_call -->
-            <div v-else-if="msg.role === 'tool_call'" class="text-[11px] font-mono text-slate-400 dark:text-slate-600 mb-1 pl-1">
+            <div v-else-if="msg.role === 'tool_call'" class="text-[11px] font-mono text-fg-mute mb-1 pl-1">
               &#9881; {{ msg.toolName ?? 'tool' }}
             </div>
             <!-- tool_result: skip -->
@@ -228,11 +228,11 @@ async function resumeSession() {
       </div>
 
       <!-- Footer: resume prompt -->
-      <footer class="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 px-4 py-3">
+      <footer class="flex-shrink-0 border-t border-line px-4 py-3">
         <div class="flex gap-1.5">
           <input
             v-model="resumePrompt"
-            class="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-xs px-2 py-1.5 focus:outline-none focus:border-green-500 placeholder:text-slate-400 dark:placeholder:text-slate-600"
+            class="flex-1 bg-raised border border-line rounded text-fg text-xs px-2 py-1.5 focus:outline-none focus:border-green-500 placeholder:text-fg-faint"
             type="text"
             aria-label="Follow-up prompt"
             placeholder="Follow-up prompt to resume session..."
@@ -240,7 +240,7 @@ async function resumeSession() {
           >
           <button
             type="button"
-            class="flex-shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 min-h-[44px] min-w-[44px] text-xs font-semibold cursor-pointer hover:text-green-600 dark:hover:text-green-400 hover:border-green-500 dark:hover:border-green-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="flex-shrink-0 bg-raised text-fg-mute border border-line rounded px-3 py-1.5 min-h-[44px] min-w-[44px] text-xs font-semibold cursor-pointer hover:text-green-600 dark:hover:text-green-400 hover:border-green-500 dark:hover:border-green-500 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="!resumePrompt.trim() || spawning"
             @click="resumeSession"
           >

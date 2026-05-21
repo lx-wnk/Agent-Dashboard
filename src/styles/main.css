@@ -7,6 +7,61 @@
   --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
 }
 
+/*
+ * Semantic theme tokens.
+ *
+ * `@theme inline` makes the generated utilities (bg-card, text-fg-mute, …)
+ * reference the CSS variables at runtime, so swapping the `.dark` block
+ * below retints the entire UI without rebuilding any class.
+ */
+@theme inline {
+  --color-app: var(--app);
+  --color-card: var(--card);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-soft: var(--fg-soft);
+  --color-fg-mute: var(--fg-mute);
+  --color-fg-faint: var(--fg-faint);
+}
+
+:root {
+  /* Surfaces */
+  --app: var(--color-slate-50);
+  --card: #ffffff;
+  --raised: var(--color-slate-100);
+  /* Borders */
+  --line: var(--color-slate-200);
+  --line-strong: var(--color-slate-300);
+  /* Text hierarchy (target ≥7:1 for fg/soft/mute, ≥4.5:1 for faint) */
+  --fg: var(--color-slate-900);
+  --fg-soft: var(--color-slate-700);
+  --fg-mute: var(--color-slate-600);
+  --fg-faint: var(--color-slate-500);
+}
+
+.dark {
+  --app: var(--color-slate-950);
+  --card: var(--color-slate-900);
+  --raised: var(--color-slate-800);
+  --line: var(--color-slate-700);
+  --line-strong: var(--color-slate-600);
+  --fg: var(--color-slate-100);
+  --fg-soft: var(--color-slate-200);
+  --fg-mute: var(--color-slate-300);
+  --fg-faint: var(--color-slate-400);
+}
+
+/*
+ * Global body color so Teleported overlays (modals, dialogs) inherit theme
+ * text color instead of falling back to the browser default (black).
+ */
+html, body {
+  background-color: var(--app);
+  color: var(--fg);
+}
+
 /* Scrollbar */
 :root {
   scrollbar-width: thin;

@@ -79,10 +79,10 @@ useVisibilityPolling(pollPending, 3000)
       v-if="current"
       class="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60"
     >
-      <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
-        <header class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0">
+      <div class="bg-card rounded-xl border border-line shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
+        <header class="px-5 py-3.5 border-b border-line flex items-center justify-between flex-shrink-0">
           <div>
-            <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            <h2 class="text-sm font-semibold text-fg">
               Edit Gate — {{ current.toolName }}
             </h2>
             <p class="text-xs text-slate-500 font-mono mt-0.5">
@@ -104,10 +104,10 @@ useVisibilityPolling(pollPending, 3000)
             {{ line.text }}
           </div>
         </div>
-        <footer class="px-5 py-3 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2 flex-shrink-0">
+        <footer class="px-5 py-3 border-t border-line flex justify-end gap-2 flex-shrink-0">
           <button
             type="button"
-            class="px-4 py-1.5 text-sm rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            class="px-4 py-1.5 text-sm rounded border border-line-strong text-fg-soft hover:bg-raised"
             @click="respond('reject')"
           >
             Reject

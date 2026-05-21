@@ -125,7 +125,7 @@ watch(() => props.sessionId, fetchAndRender)
     <div v-else class="overflow-x-auto">
       <svg
         ref="svgRef"
-        class="w-full text-slate-800 dark:text-slate-200"
+        class="w-full text-fg"
         style="min-height: 60px;"
         role="img"
         :aria-labelledby="titleId"

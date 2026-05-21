@@ -93,9 +93,9 @@ onMounted(loadFiles)
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-    <div class="w-64 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 overflow-y-auto bg-slate-50 dark:bg-slate-800">
-      <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200 dark:border-slate-700">
+  <div class="flex h-full min-h-0 border border-line rounded-lg overflow-hidden">
+    <div class="w-64 flex-shrink-0 border-r border-line overflow-y-auto bg-raised">
+      <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-line">
         Memory Files
       </div>
       <p v-if="error && !selectedPath" role="status" aria-live="polite" class="px-3 py-2 text-xs text-red-500 dark:text-red-400">
@@ -111,7 +111,7 @@ onMounted(loadFiles)
         class="w-full text-left px-3 py-1.5 text-xs truncate transition-colors"
         :class="selectedPath === f.path
           ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
-          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'"
+          : 'text-fg-soft hover:bg-raised'"
         @click="openFile(f.path)"
       >
         {{ f.name }}
@@ -122,7 +122,7 @@ onMounted(loadFiles)
         Select a file to edit
       </div>
       <template v-else>
-        <div class="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <div class="flex items-center justify-between px-4 py-2 border-b border-line bg-card">
           <span class="text-xs font-mono text-slate-500 truncate">
             {{ selectedPath }}
             <span v-if="dirty" class="text-amber-500 ml-1" aria-label="Unsaved changes">*</span>
@@ -136,7 +136,7 @@ onMounted(loadFiles)
         </p>
         <textarea
           v-model="content"
-          class="flex-1 resize-none p-4 font-mono text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 outline-none"
+          class="flex-1 resize-none p-4 font-mono text-xs bg-card text-fg outline-none"
           spellcheck="false"
           @input="onContentChange"
         />

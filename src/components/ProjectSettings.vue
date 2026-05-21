@@ -247,10 +247,10 @@ watch(folderRows, () => {}, { deep: true })
     <!-- Header -->
     <div class="flex items-start justify-between gap-3">
       <div v-if="!hideTitle">
-        <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+        <h3 class="text-[17px] font-bold text-fg mb-1">
           Projects
         </h3>
-        <p class="text-xs text-slate-400 dark:text-slate-600">
+        <p class="text-xs text-fg-mute">
           Group tasks under named projects. Each project can have default folders (working directories) and a spawner override.
         </p>
       </div>
@@ -268,12 +268,12 @@ watch(folderRows, () => {}, { deep: true })
     </p>
 
     <!-- Loading -->
-    <div v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+    <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
       Loading projects...
     </div>
 
     <!-- Empty -->
-    <div v-else-if="!projects.length && !formVisible" class="text-center py-8 text-slate-400 dark:text-slate-600 text-sm">
+    <div v-else-if="!projects.length && !formVisible" class="text-center py-8 text-fg-mute text-sm">
       No projects yet. Create one to group tasks and set default working directories.
     </div>
 
@@ -281,23 +281,23 @@ watch(folderRows, () => {}, { deep: true })
     <table v-else-if="!formVisible" class="w-full border-collapse text-[13px]">
       <thead>
         <tr>
-          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
             Name
           </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
             Slug
           </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
             Folders
           </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
             Actions
           </th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="project in projects" :key="project.id" class="last:[&>td]:border-b-0">
-          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
+          <td class="px-3 py-2.5 border-b border-line">
             <div class="flex items-center gap-2">
               <span
                 v-if="project.color"
@@ -305,19 +305,19 @@ watch(folderRows, () => {}, { deep: true })
                 :style="{ backgroundColor: project.color }"
                 aria-hidden="true"
               />
-              <span class="font-semibold text-slate-900 dark:text-slate-100">{{ project.name }}</span>
+              <span class="font-semibold text-fg">{{ project.name }}</span>
             </div>
-            <p v-if="project.description" class="text-[11px] text-slate-400 dark:text-slate-600 mt-0.5 line-clamp-1">
+            <p v-if="project.description" class="text-[11px] text-fg-mute mt-0.5 line-clamp-1">
               {{ project.description }}
             </p>
           </td>
-          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-500 dark:text-slate-400">
+          <td class="px-3 py-2.5 border-b border-line font-mono text-xs text-fg-mute">
             {{ project.slug }}
           </td>
-          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+          <td class="px-3 py-2.5 border-b border-line text-fg-mute">
             {{ project.folderCount ?? 0 }}
           </td>
-          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+          <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
             <template v-if="confirmDeleteId === project.id">
               <AppButton variant="danger" size="sm" class="mr-1" @click="handleDelete(project.id)">
                 Confirm Delete
@@ -329,14 +329,14 @@ watch(folderRows, () => {}, { deep: true })
             <template v-else>
               <button
                 type="button"
-                class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 dark:hover:text-blue-400 mr-1"
+                class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 dark:hover:text-blue-400 mr-1"
                 @click="openEdit(project)"
               >
                 Edit
               </button>
               <button
                 type="button"
-                class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
+                class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
                 @click="confirmDeleteId = project.id"
               >
                 Delete
@@ -350,65 +350,65 @@ watch(folderRows, () => {}, { deep: true })
     <!-- Project create/edit form -->
     <div v-if="formVisible" class="flex flex-col gap-4">
       <div class="flex items-center justify-between">
-        <h4 class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+        <h4 class="text-sm font-semibold text-fg">
           {{ isCreating ? 'New Project' : `Edit: ${editingProject?.name}` }}
         </h4>
-        <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-lg cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="closeForm">
+        <button type="button" class="bg-transparent border-none text-fg-mute text-lg cursor-pointer px-1 leading-none hover:text-fg" @click="closeForm">
           &times;
         </button>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="proj-name">Name</label>
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-name">Name</label>
           <input
             id="proj-name"
             v-model="form.name"
             type="text"
             required
-            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
             placeholder="My Project"
           >
         </div>
         <div>
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="proj-slug">Slug</label>
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-slug">Slug</label>
           <input
             id="proj-slug"
             v-model="form.slug"
             type="text"
             required
-            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
             placeholder="my-project"
           >
         </div>
         <div class="col-span-2">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="proj-desc">Description (optional)</label>
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-desc">Description (optional)</label>
           <input
             id="proj-desc"
             v-model="form.description"
             type="text"
-            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
             placeholder="Short description"
           >
         </div>
         <div>
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="proj-color">Color</label>
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-color">Color</label>
           <div class="flex items-center gap-2">
             <input
               id="proj-color"
               v-model="form.color"
               type="color"
-              class="h-8 w-12 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer p-0.5"
+              class="h-8 w-12 rounded border border-line bg-card cursor-pointer p-0.5"
             >
-            <span class="text-xs font-mono text-slate-500 dark:text-slate-400">{{ form.color }}</span>
+            <span class="text-xs font-mono text-fg-mute">{{ form.color }}</span>
           </div>
         </div>
         <div>
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="proj-spawner">Default Spawner (optional)</label>
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-spawner">Default Spawner (optional)</label>
           <select
             id="proj-spawner"
             v-model="form.defaultSpawnerId"
-            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
           >
             <option value="">
               None (use deployment default)
@@ -435,9 +435,9 @@ watch(folderRows, () => {}, { deep: true })
 
       <!-- Folder management (only shown when editing an existing project) -->
       <template v-if="!isCreating && editingProject">
-        <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-1">
+        <div class="border-t border-line pt-4 mt-1">
           <div class="flex items-center justify-between mb-3">
-            <h5 class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <h5 class="text-xs font-semibold uppercase tracking-wider text-fg-mute">
               Folders (Working Directories)
             </h5>
             <AppButton variant="secondary" size="sm" @click="addFolderRow">
@@ -447,50 +447,50 @@ watch(folderRows, () => {}, { deep: true })
           <p v-if="folderError" class="text-xs text-red-600 dark:text-red-400 mb-2">
             {{ folderError }}
           </p>
-          <div v-if="folderLoading" class="text-xs text-slate-400 dark:text-slate-600 py-3">
+          <div v-if="folderLoading" class="text-xs text-fg-mute py-3">
             Loading folders...
           </div>
-          <div v-else-if="folderRows.length === 0" class="text-xs text-slate-400 dark:text-slate-600 py-3">
+          <div v-else-if="folderRows.length === 0" class="text-xs text-fg-mute py-3">
             No folders yet. Add one to provide working-directory suggestions when creating tasks.
           </div>
           <table v-else class="w-full border-collapse text-[12px]">
             <thead>
               <tr>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-2 py-1.5 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-2 py-1.5 border-b border-line">
                   Path
                 </th>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-2 py-1.5 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-2 py-1.5 border-b border-line">
                   Label
                 </th>
-                <th class="text-center text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-2 py-1.5 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-center text-[10px] uppercase tracking-wide text-fg-mute px-2 py-1.5 border-b border-line">
                   Default
                 </th>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-2 py-1.5 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-2 py-1.5 border-b border-line">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in folderRows" :key="row._key" class="last:[&>td]:border-b-0">
-                <td class="px-2 py-1.5 border-b border-slate-200 dark:border-slate-700">
+                <td class="px-2 py-1.5 border-b border-line">
                   <input
                     v-model="row.path"
                     type="text"
-                    class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                    class="w-full bg-card border border-line rounded px-2 py-1 text-xs font-mono text-fg focus:outline-none focus:border-blue-500"
                     placeholder="/absolute/path"
                     @input="row.isDirty = true"
                   >
                 </td>
-                <td class="px-2 py-1.5 border-b border-slate-200 dark:border-slate-700">
+                <td class="px-2 py-1.5 border-b border-line">
                   <input
                     v-model="row.label"
                     type="text"
-                    class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                    class="w-full bg-card border border-line rounded px-2 py-1 text-xs text-fg focus:outline-none focus:border-blue-500"
                     placeholder="Optional label"
                     @input="row.isDirty = true"
                   >
                 </td>
-                <td class="px-2 py-1.5 border-b border-slate-200 dark:border-slate-700 text-center">
+                <td class="px-2 py-1.5 border-b border-line text-center">
                   <input
                     type="radio"
                     :name="`folder-default-${editingProject.id}`"
@@ -499,7 +499,7 @@ watch(folderRows, () => {}, { deep: true })
                     @change="setDefault(row)"
                   >
                 </td>
-                <td class="px-2 py-1.5 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                <td class="px-2 py-1.5 border-b border-line whitespace-nowrap">
                   <div class="flex items-center gap-1">
                     <button
                       v-if="row.isDirty"

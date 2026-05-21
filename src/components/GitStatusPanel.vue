@@ -85,9 +85,9 @@ watch(() => props.taskId, fetchStatus)
 </script>
 
 <template>
-  <div class="text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3.5 py-3">
+  <div class="text-sm rounded-md border border-line bg-app px-3.5 py-3">
     <!-- Loading state -->
-    <div v-if="loading && !status" class="text-slate-400 dark:text-slate-600 text-xs animate-pulse">
+    <div v-if="loading && !status" class="text-fg-mute text-xs animate-pulse">
       Loading git status…
     </div>
 
@@ -101,7 +101,7 @@ watch(() => props.taskId, fetchStatus)
       <!-- Branch + ahead/behind -->
       <div class="flex items-center justify-between gap-3 mb-2.5">
         <div class="flex items-center gap-1.5 flex-wrap">
-          <span class="font-mono text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-semibold">
+          <span class="font-mono text-xs bg-raised text-fg-soft px-2 py-0.5 rounded font-semibold">
             {{ status.branch }}
           </span>
           <span v-if="status.aheadCount > 0" class="text-[11px] text-green-600 dark:text-green-400 font-mono">
@@ -116,7 +116,7 @@ watch(() => props.taskId, fetchStatus)
         <div class="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            class="px-2 py-1 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="actionInFlight"
             @click="runAction('fetch')"
           >
@@ -124,7 +124,7 @@ watch(() => props.taskId, fetchStatus)
           </button>
           <button
             type="button"
-            class="px-2 py-1 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="actionInFlight"
             @click="runAction('pull')"
           >
@@ -135,10 +135,10 @@ watch(() => props.taskId, fetchStatus)
 
       <!-- Last commit -->
       <div v-if="status.lastCommit" class="mb-2.5 flex items-baseline gap-2 flex-wrap">
-        <code class="font-mono text-[11px] text-slate-400 dark:text-slate-600">{{ status.lastCommit.shortHash }}</code>
-        <span class="text-xs text-slate-700 dark:text-slate-300 flex-1 min-w-0 truncate">{{ status.lastCommit.message }}</span>
-        <span class="text-[11px] text-slate-400 dark:text-slate-600 shrink-0">{{ status.lastCommit.author }}</span>
-        <span class="text-[11px] text-slate-400 dark:text-slate-600 shrink-0">{{ formatRelativeDate(status.lastCommit.date) }}</span>
+        <code class="font-mono text-[11px] text-fg-mute">{{ status.lastCommit.shortHash }}</code>
+        <span class="text-xs text-fg-soft flex-1 min-w-0 truncate">{{ status.lastCommit.message }}</span>
+        <span class="text-[11px] text-fg-mute shrink-0">{{ status.lastCommit.author }}</span>
+        <span class="text-[11px] text-fg-mute shrink-0">{{ formatRelativeDate(status.lastCommit.date) }}</span>
       </div>
 
       <!-- File counts -->
@@ -152,7 +152,7 @@ watch(() => props.taskId, fetchStatus)
         <span v-if="status.unstaged.length > 0" class="text-[11px] text-yellow-600 dark:text-yellow-400 font-medium">
           {{ status.unstaged.length }} unstaged
         </span>
-        <span v-if="status.untracked.length > 0" class="text-[11px] text-slate-400 dark:text-slate-600">
+        <span v-if="status.untracked.length > 0" class="text-[11px] text-fg-mute">
           {{ status.untracked.length }} untracked
         </span>
       </div>
@@ -160,13 +160,13 @@ watch(() => props.taskId, fetchStatus)
       <!-- Clean working tree -->
       <div
         v-else-if="status.aheadCount === 0 && status.behindCount === 0"
-        class="text-[11px] text-slate-400 dark:text-slate-600 mb-2.5"
+        class="text-[11px] text-fg-mute mb-2.5"
       >
         Clean working tree
       </div>
 
       <!-- Remote URL -->
-      <div v-if="status.remoteUrl" class="text-[10px] text-slate-400 dark:text-slate-500 font-mono truncate">
+      <div v-if="status.remoteUrl" class="text-[10px] text-fg-faint font-mono truncate">
         {{ status.remoteUrl }}
       </div>
 

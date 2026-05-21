@@ -158,24 +158,24 @@ function isHighlightCol(col: ColumnDef): boolean {
 <template>
   <div class="flex flex-col h-full">
     <div class="flex items-center gap-2 mb-3 flex-shrink-0 flex-wrap">
-      <span class="text-xs text-slate-500 dark:text-slate-400">Export:</span>
+      <span class="text-xs text-fg-mute">Export:</span>
       <button
         type="button"
-        class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+        class="text-xs px-2 py-1 rounded border border-line-strong hover:bg-raised text-fg-soft"
         @click="exportTasks('json')"
       >
         JSON
       </button>
       <button
         type="button"
-        class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+        class="text-xs px-2 py-1 rounded border border-line-strong hover:bg-raised text-fg-soft"
         @click="exportTasks('csv')"
       >
         CSV
       </button>
       <!-- Project filter chips -->
       <template v-if="projectsWithTasks.projects.length > 0 || projectsWithTasks.hasUnassigned">
-        <span class="text-xs text-slate-500 dark:text-slate-400 ml-2">Project:</span>
+        <span class="text-xs text-fg-mute ml-2">Project:</span>
         <button
           v-for="p in projectsWithTasks.projects"
           :key="p.id"
@@ -183,7 +183,7 @@ function isHighlightCol(col: ColumnDef): boolean {
           class="text-xs px-2 py-1 rounded border transition-colors"
           :class="selectedProjectIds.has(p.id)
             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
-            : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'"
+            : 'border-line-strong text-fg-soft hover:bg-raised'"
           :style="selectedProjectIds.has(p.id) && p.color ? { borderColor: p.color, backgroundColor: p.color + '22', color: p.color } : {}"
           @click="toggleProjectFilter(p.id)"
         >
@@ -196,7 +196,7 @@ function isHighlightCol(col: ColumnDef): boolean {
           class="text-xs px-2 py-1 rounded border transition-colors"
           :class="selectedProjectIds.has('__none__')
             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
-            : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'"
+            : 'border-line-strong text-fg-soft hover:bg-raised'"
           @click="toggleProjectFilter('__none__')"
         >
           No project
@@ -204,7 +204,7 @@ function isHighlightCol(col: ColumnDef): boolean {
         <button
           v-if="selectedProjectIds.size > 0"
           type="button"
-          class="text-xs px-2 py-1 rounded text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+          class="text-xs px-2 py-1 rounded text-fg-mute hover:text-slate-700 dark:hover:text-slate-200"
           @click="clearProjectFilter"
         >
           Clear
@@ -219,20 +219,20 @@ function isHighlightCol(col: ColumnDef): boolean {
         :class="isHighlightCol(col)
           ? 'bg-yellow-50/30 dark:bg-yellow-950/10 border border-yellow-300/60 dark:border-yellow-700/40'
           : col.group === 'terminal'
-            ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 opacity-70'
-            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700'"
+            ? 'bg-card border border-line opacity-70'
+            : 'bg-card border border-line'"
       >
         <div
           class="flex justify-between items-center px-3 py-2.5 border-b flex-shrink-0"
           :class="isHighlightCol(col)
             ? 'border-yellow-300/60 dark:border-yellow-700/40'
-            : 'border-slate-200 dark:border-slate-700'"
+            : 'border-line'"
         >
           <span
             class="text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5"
             :class="isHighlightCol(col)
               ? 'text-yellow-700 dark:text-yellow-300'
-              : 'text-slate-500 dark:text-slate-400'"
+              : 'text-fg-mute'"
           >
             <span
               v-if="isHighlightCol(col)"
@@ -245,7 +245,7 @@ function isHighlightCol(col: ColumnDef): boolean {
             class="text-[11px] px-2 py-px rounded-full font-mono"
             :class="isHighlightCol(col)
               ? 'text-yellow-700 dark:text-yellow-300 bg-yellow-400/15 dark:bg-yellow-400/10 ring-1 ring-yellow-400/30 dark:ring-yellow-500/25'
-              : 'text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-950'"
+              : 'text-fg-mute bg-app'"
           >{{ tasks.length }}</span>
         </div>
         <div class="p-2.5 flex flex-col gap-2 overflow-y-auto">
@@ -280,7 +280,7 @@ function isHighlightCol(col: ColumnDef): boolean {
                     transform="rotate(-90 12 12)"
                   />
                 </svg>
-                <span class="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate flex-1">{{ epic.parent.title }}</span>
+                <span class="text-xs font-semibold text-fg-soft truncate flex-1">{{ epic.parent.title }}</span>
                 <span class="text-[10px] text-slate-400 flex-shrink-0">{{ epic.doneCount }}/{{ epic.totalCount }} ({{ epic.completionPct }}%)</span>
                 <span class="text-xs text-slate-400" aria-hidden="true">{{ epicExpanded[epic.parent.id] ? '▲' : '▼' }}</span>
               </button>
@@ -311,7 +311,7 @@ function isHighlightCol(col: ColumnDef): boolean {
           <div
             v-if="tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId)).length === 0
               && !epics.some(e => tasks.some(t => t.parentTaskId === e.parent.id))"
-            class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5"
+            class="text-center text-fg-mute text-[11px] py-5"
           >
             —
           </div>

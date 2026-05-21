@@ -14,7 +14,7 @@ defineEmits<{ select: [agent: Agent] }>()
       :agent="agent"
       @select="$emit('select', agent)"
     />
-    <p v-if="agents.length === 0" class="col-span-full text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+    <p v-if="agents.length === 0" class="col-span-full text-center py-12 text-fg-mute text-sm">
       No running Claude agents found.
     </p>
   </div>

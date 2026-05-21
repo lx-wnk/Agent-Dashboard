@@ -56,16 +56,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <AppModal :open="!!agent" :z-index="1000" @close="emit('close')">
-    <div v-if="agent" class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-[900px] max-h-[80vh] flex flex-col overflow-hidden">
-      <div class="bg-slate-50 dark:bg-slate-800 px-4 py-2.5 flex justify-between items-center flex-shrink-0">
+    <div v-if="agent" class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-[900px] max-h-[80vh] flex flex-col overflow-hidden">
+      <div class="bg-raised px-4 py-2.5 flex justify-between items-center flex-shrink-0">
         <div class="flex items-center gap-2.5 min-w-0">
           <AppBadge :variant="agent.status" />
           <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
-          <span class="font-semibold text-sm text-slate-900 dark:text-slate-100">{{ agent.projectName }}</span>
+          <span class="font-semibold text-sm text-fg">{{ agent.projectName }}</span>
           <MachineBadge v-if="agent.machine" :machine="agent.machine" />
-          <span class="text-[11px] text-slate-400 dark:text-slate-600 whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
+          <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
         </div>
-        <button type="button" class="bg-transparent border-none text-slate-500 dark:text-slate-400 text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100" @click="emit('close')">
+        <button type="button" class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg" @click="emit('close')">
           ✕
         </button>
       </div>
@@ -82,18 +82,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         :local-messages="localMessages"
         class="flex-1 p-4"
       />
-      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
+      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="border-t border-line flex-shrink-0">
         <details>
-          <summary class="px-4 py-2 text-xs text-slate-400 dark:text-slate-600 cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400">
+          <summary class="px-4 py-2 text-xs text-fg-mute cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400">
             Agent Details (Tasks, Tools, Subagents)
           </summary>
-          <div class="flex gap-0 px-4 pt-2 border-b border-slate-200 dark:border-slate-700">
+          <div class="flex gap-0 px-4 pt-2 border-b border-line">
             <button
               type="button"
               class="px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors"
               :class="activeDetailsTab === 'details'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'"
+                : 'border-transparent text-fg-mute hover:text-fg-soft'"
               @click="activeDetailsTab = 'details'"
             >
               Details
@@ -103,7 +103,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               class="px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors"
               :class="activeDetailsTab === 'waterfall'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'"
+                : 'border-transparent text-fg-mute hover:text-fg-soft'"
               @click="activeDetailsTab = 'waterfall'"
             >
               Waterfall
@@ -114,36 +114,36 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
             <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
             <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
-              <dt class="text-slate-500 dark:text-slate-400">
+              <dt class="text-fg-mute">
                 Input tokens
               </dt>
-              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
+              <dd class="text-fg text-right font-mono">
                 {{ formatTokens(agent.tokenUsage.inputTokens) }}
               </dd>
-              <dt class="text-slate-500 dark:text-slate-400">
+              <dt class="text-fg-mute">
                 Output tokens
               </dt>
-              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
+              <dd class="text-fg text-right font-mono">
                 {{ formatTokens(agent.tokenUsage.outputTokens) }}
               </dd>
-              <dt class="text-slate-500 dark:text-slate-400">
+              <dt class="text-fg-mute">
                 Cache write
               </dt>
-              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
+              <dd class="text-fg text-right font-mono">
                 {{ formatTokens(agent.tokenUsage.cacheCreationTokens) }}
-                <span class="text-slate-400 dark:text-slate-600 ml-1">({{ formatCost(agent.cacheCreationCostEstimate) }})</span>
+                <span class="text-fg-mute ml-1">({{ formatCost(agent.cacheCreationCostEstimate) }})</span>
               </dd>
-              <dt class="text-slate-500 dark:text-slate-400">
+              <dt class="text-fg-mute">
                 Cache read
               </dt>
-              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono">
+              <dd class="text-fg text-right font-mono">
                 {{ formatTokens(agent.tokenUsage.cacheReadTokens) }}
-                <span class="text-slate-400 dark:text-slate-600 ml-1">({{ formatCost(agent.cacheReadCostEstimate) }})</span>
+                <span class="text-fg-mute ml-1">({{ formatCost(agent.cacheReadCostEstimate) }})</span>
               </dd>
-              <dt class="text-slate-700 dark:text-slate-300 font-medium border-t border-slate-200 dark:border-slate-700 pt-1">
+              <dt class="text-fg-soft font-medium border-t border-line pt-1">
                 Total cost
               </dt>
-              <dd class="text-slate-900 dark:text-slate-100 text-right font-mono font-medium border-t border-slate-200 dark:border-slate-700 pt-1">
+              <dd class="text-fg text-right font-mono font-medium border-t border-line pt-1">
                 {{ formatCost(agent.costEstimate) }}
               </dd>
             </dl>

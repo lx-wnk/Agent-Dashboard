@@ -68,18 +68,18 @@ defineExpose({ onKeydown, visible, confirm, suggestions, selectedIndex })
 <template>
   <div
     v-if="visible"
-    class="absolute bottom-full left-0 right-0 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 border-b-0 rounded-t-md max-h-52 overflow-y-auto z-20"
+    class="absolute bottom-full left-0 right-0 bg-app border border-line border-b-0 rounded-t-md max-h-52 overflow-y-auto z-20"
   >
     <button
       v-for="(cmd, i) in suggestions"
       :key="cmd.name"
       type="button"
-      class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-slate-500 dark:text-slate-400 text-[13px] font-mono cursor-pointer text-left hover:bg-slate-100 dark:hover:bg-slate-800"
-      :class="{ 'bg-slate-100 dark:bg-slate-800': i === selectedIndex }"
+      class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-fg-mute text-[13px] font-mono cursor-pointer text-left hover:bg-raised"
+      :class="{ 'bg-raised': i === selectedIndex }"
       @mousedown.prevent="confirm(cmd)"
     >
       <span class="text-blue-600 dark:text-blue-400 font-semibold flex-shrink-0">{{ cmd.name }}</span>
-      <span class="text-slate-400 dark:text-slate-600 text-xs">{{ cmd.description }}</span>
+      <span class="text-fg-mute text-xs">{{ cmd.description }}</span>
     </button>
   </div>
 </template>

@@ -110,7 +110,7 @@ async function handleSubmit() {
 <template>
   <form class="space-y-4" @submit.prevent="handleSubmit">
     <div>
-      <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="backlog-title">
+      <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="backlog-title">
         Title
       </label>
       <AppInput
@@ -123,7 +123,7 @@ async function handleSubmit() {
     </div>
 
     <div>
-      <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="backlog-slug">
+      <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="backlog-slug">
         Slug
       </label>
       <AppInput
@@ -136,13 +136,13 @@ async function handleSubmit() {
 
     <!-- Project dropdown -->
     <div>
-      <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="backlog-project">
+      <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="backlog-project">
         Project (optional)
       </label>
       <select
         id="backlog-project"
         v-model="selectedProjectId"
-        class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500"
+        class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500"
       >
         <option value="">
           None
@@ -155,7 +155,7 @@ async function handleSubmit() {
 
     <!-- Working directory — combobox when project is selected, plain input otherwise -->
     <div>
-      <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="backlog-cwd">
+      <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="backlog-cwd">
         Working Directory
       </label>
       <input
@@ -164,7 +164,7 @@ async function handleSubmit() {
         required
         list="backlog-cwd-list"
         placeholder="/path/to/project"
-        class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500"
+        class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500"
       >
       <datalist :id="cwdDatalistId">
         <option v-for="folder in folderSuggestions" :key="folder.id" :value="folder.path">
@@ -174,7 +174,7 @@ async function handleSubmit() {
     </div>
 
     <div>
-      <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="backlog-description">
+      <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="backlog-description">
         Description
       </label>
       <AppInput
@@ -187,13 +187,13 @@ async function handleSubmit() {
     </div>
 
     <div>
-      <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="backlog-priority">
+      <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="backlog-priority">
         Priority
       </label>
       <select
         id="backlog-priority"
         v-model="priority"
-        class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500"
+        class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500"
       >
         <option value="high">
           High
@@ -209,13 +209,13 @@ async function handleSubmit() {
 
     <!-- Spawner override dropdown -->
     <div>
-      <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="backlog-spawner">
+      <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="backlog-spawner">
         Spawner Override (optional)
       </label>
       <select
         id="backlog-spawner"
         v-model="selectedSpawnerId"
-        class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500"
+        class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500"
       >
         <option value="">
           Project default

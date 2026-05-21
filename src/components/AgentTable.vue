@@ -91,7 +91,7 @@ function toggleSubagents(pid: number) {
           <th
             v-for="[field, label] in ([['status', 'Status'], ['projectName', 'Project'], ['currentAction', 'Current Action'], ['model', 'Model'], ['tokens', 'Tokens'], ['costEstimate', 'Cost'], ['uptime', 'Uptime'], ['pid', 'PID']] as const)"
             :key="field"
-            class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 sticky top-0 z-[1] cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400 transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+            class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-fg-mute border-b border-line bg-app sticky top-0 z-[1] cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400 transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
             tabindex="0"
             @click="toggleSort(field as SortField)"
             @keydown.enter="toggleSort(field as SortField)"
@@ -99,7 +99,7 @@ function toggleSubagents(pid: number) {
           >
             {{ label }}{{ sortIndicator(field as SortField) }}
           </th>
-          <th class="px-3 py-2 bg-slate-50 dark:bg-slate-950 sticky top-0 z-[1] border-b border-slate-200 dark:border-slate-800" />
+          <th class="px-3 py-2 bg-app sticky top-0 z-[1] border-b border-line" />
         </tr>
       </thead>
       <tbody>
@@ -120,7 +120,7 @@ function toggleSubagents(pid: number) {
         </template>
       </tbody>
     </table>
-    <p v-if="agents.length === 0" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+    <p v-if="agents.length === 0" class="text-center py-12 text-fg-mute text-sm">
       No running Claude agents found.
     </p>
   </div>
