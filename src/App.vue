@@ -7,6 +7,7 @@ import AgentTable from './components/AgentTable.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import AuditSettings from './components/AuditSettings.vue'
+import AppModal from './components/ui/AppModal.vue'
 import CostTrend from './components/CostTrend.vue'
 import EditGateModal from './components/EditGateModal.vue'
 import LoginPage from './components/LoginPage.vue'
@@ -27,6 +28,8 @@ import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
 const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
+const ProjectSettings = defineAsyncComponent(() => import('./components/ProjectSettings.vue'))
+const SpawnerSettings = defineAsyncComponent(() => import('./components/SpawnerSettings.vue'))
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
@@ -69,6 +72,8 @@ const showRefinementChat = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
 const showAudit = ref(false)
+const showProjects = ref(false)
+const showSpawners = ref(false)
 
 function openNewTask() {
   activeConceptTask.value = null
@@ -262,6 +267,22 @@ onMounted(fetchQuota)
       >
         Audit
       </button>
+      <button
+        type="button"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        title="Projects"
+        @click="showProjects = true"
+      >
+        Projects
+      </button>
+      <button
+        type="button"
+        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        title="Spawners"
+        @click="showSpawners = true"
+      >
+        Spawners
+      </button>
       <OfflineBadge />
       <button
         type="button"
@@ -390,6 +411,36 @@ onMounted(fetchQuota)
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
     <AuditSettings :open="showAudit" @close="showAudit = false" />
+    <AppModal :open="showProjects" @close="showProjects = false">
+      <div class="p-5">
+        <div class="flex justify-end mb-2">
+          <button
+            type="button"
+            class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100"
+            aria-label="Close"
+            @click="showProjects = false"
+          >
+            &times;
+          </button>
+        </div>
+        <ProjectSettings v-if="showProjects" />
+      </div>
+    </AppModal>
+    <AppModal :open="showSpawners" @close="showSpawners = false">
+      <div class="p-5">
+        <div class="flex justify-end mb-2">
+          <button
+            type="button"
+            class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100"
+            aria-label="Close"
+            @click="showSpawners = false"
+          >
+            &times;
+          </button>
+        </div>
+        <SpawnerSettings v-if="showSpawners" />
+      </div>
+    </AppModal>
     <EditGateModal />
     <SpotlightSearch
       @navigate-task="task => selectTask(task)"

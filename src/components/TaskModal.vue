@@ -23,6 +23,8 @@ import {
   resumeStageTask,
   retryTask,
 } from '../composables/useTasks'
+import { useProjects } from '../composables/useProjects'
+import { useSpawners } from '../composables/useSpawners'
 import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
 import AuditLogTab from './AuditLogTab.vue'
@@ -40,6 +42,66 @@ const props = defineProps<{ task: PipelineTask | null }>()
 const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
 
 const { agents } = useAgents()
+const { projects } = useProjects()
+const { spawners } = useSpawners()
+
+// Project / spawner re-assignment state
+const isAssigningProject = ref(false)
+const isAssigningSpawner = ref(false)
+const assignError = ref<string | null>(null)
+
+const currentProject = computed(() =>
+  props.task?.projectId
+    ? (projects.value.find(p => p.id === props.task!.projectId) ?? null)
+    : null,
+)
+
+const effectiveSpawner = computed(() => {
+  // Explicit spawner on task takes priority; fall back to project default
+  const spawnerId = props.task?.spawnerId
+    ?? currentProject.value?.defaultSpawnerId
+    ?? null
+  if (!spawnerId)
+    return null
+  return spawners.value.find(s => s.id === spawnerId) ?? null
+})
+
+async function patchTask(patch: { projectId?: string | null, spawnerId?: string | null }) {
+  if (!props.task)
+    return
+  assignError.value = null
+  const res = await fetch(`/api/tasks/${props.task.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    assignError.value = (err as { error?: string }).error ?? 'Failed to update task'
+  }
+}
+
+async function onProjectChange(e: Event) {
+  const value = (e.target as HTMLSelectElement).value
+  isAssigningProject.value = true
+  try {
+    await patchTask({ projectId: value || null })
+  }
+  finally {
+    isAssigningProject.value = false
+  }
+}
+
+async function onSpawnerChange(e: Event) {
+  const value = (e.target as HTMLSelectElement).value
+  isAssigningSpawner.value = true
+  try {
+    await patchTask({ spawnerId: value || null })
+  }
+  finally {
+    isAssigningSpawner.value = false
+  }
+}
 
 type Tab = 'overview' | 'stages' | 'permissions' | 'audit' | 'graph'
 const activeTab = ref<Tab>('overview')
@@ -682,6 +744,76 @@ const runtime = computed(() => {
               </dd>
             </div>
           </dl>
+
+          <!-- Project + Spawner assignment row -->
+          <section class="border-t border-slate-200 dark:border-slate-700 pt-3 flex flex-col gap-2.5">
+            <h4 class="text-[11px] font-semibold uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600">
+              Project &amp; Spawner
+            </h4>
+            <p v-if="assignError" class="text-[11px] text-red-600 dark:text-red-400">
+              {{ assignError }}
+            </p>
+            <div class="grid grid-cols-2 gap-3">
+              <!-- Project -->
+              <div>
+                <label class="block text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1" :for="`task-modal-project-${task.id}`">
+                  Project
+                </label>
+                <div class="flex items-center gap-2">
+                  <span
+                    v-if="currentProject"
+                    class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-px rounded border border-transparent flex-shrink-0"
+                    :style="currentProject.color ? { backgroundColor: currentProject.color + '22', color: currentProject.color, borderColor: currentProject.color + '55' } : {}"
+                    :class="!currentProject.color ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700' : ''"
+                  >
+                    <span aria-hidden="true">◫</span>{{ currentProject.name }}
+                  </span>
+                  <select
+                    :id="`task-modal-project-${task.id}`"
+                    :value="task.projectId ?? ''"
+                    :disabled="isAssigningProject"
+                    class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                    @change="onProjectChange"
+                  >
+                    <option value="">
+                      None
+                    </option>
+                    <option v-for="p in projects" :key="p.id" :value="p.id">
+                      {{ p.name }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+              <!-- Spawner -->
+              <div>
+                <label class="block text-[10px] uppercase tracking-[0.5px] text-slate-400 dark:text-slate-600 mb-1" :for="`task-modal-spawner-${task.id}`">
+                  Spawner
+                </label>
+                <div class="flex items-center gap-2">
+                  <span
+                    v-if="effectiveSpawner"
+                    class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-px rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex-shrink-0"
+                    :title="effectiveSpawner.description"
+                  >{{ effectiveSpawner.name }}</span>
+                  <span v-else-if="!task.spawnerId && currentProject?.defaultSpawnerId" class="text-[10px] text-slate-400 dark:text-slate-600 italic flex-shrink-0">from project</span>
+                  <select
+                    :id="`task-modal-spawner-${task.id}`"
+                    :value="task.spawnerId ?? ''"
+                    :disabled="isAssigningSpawner"
+                    class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                    @change="onSpawnerChange"
+                  >
+                    <option value="">
+                      {{ currentProject?.defaultSpawnerId ? 'Project default' : 'Default' }}
+                    </option>
+                    <option v-for="s in spawners" :key="s.id" :value="s.id">
+                      {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </section>
 
           <!-- Dependencies section -->
           <section class="mb-3 border-t border-slate-200 dark:border-slate-700 pt-3">

@@ -9,6 +9,8 @@ const NotificationSettings = defineAsyncComponent(() => import('./NotificationSe
 const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 import RemoteSettings from './RemoteSettings.vue'
 import SystemPromptSettings from './SystemPromptSettings.vue'
+import ProjectSettings from './ProjectSettings.vue'
+import SpawnerSettings from './SpawnerSettings.vue'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
 
@@ -19,7 +21,7 @@ const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'adapters' | 'plugins' | 'notifications'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'adapters' | 'plugins' | 'notifications' | 'projects' | 'spawners'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -463,6 +465,30 @@ async function startImport() {
               <span class="text-sm flex-shrink-0">🔔</span> Notifications
             </button>
           </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'projects'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'projects'"
+            >
+              <span class="text-sm flex-shrink-0">◫</span> Projects
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'spawners'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
+                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+              @click="activeSection = 'spawners'"
+            >
+              <span class="text-sm flex-shrink-0">⚙</span> Spawners
+            </button>
+          </li>
         </ul>
         <div class="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700">
           <a
@@ -758,6 +784,16 @@ async function startImport() {
         <!-- Notifications -->
         <section v-else-if="activeSection === 'notifications'">
           <NotificationSettings />
+        </section>
+
+        <!-- Projects -->
+        <section v-else-if="activeSection === 'projects'">
+          <ProjectSettings />
+        </section>
+
+        <!-- Spawners -->
+        <section v-else-if="activeSection === 'spawners'">
+          <SpawnerSettings />
         </section>
 
         <!-- Analytics -->

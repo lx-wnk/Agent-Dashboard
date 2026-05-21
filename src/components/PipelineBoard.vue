@@ -2,11 +2,55 @@
 import type { PipelineStage, PipelineTask } from '../types'
 import { computed, ref } from 'vue'
 import { useTasks } from '../composables/useTasks'
+import { useProjects } from '../composables/useProjects'
 import TaskCard from './TaskCard.vue'
 
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
 const { tasks: allTasks, tasksByStageMap } = useTasks()
+const { projects } = useProjects()
+
+const projectById = computed(() => {
+  const map = new Map<string, typeof projects.value[number]>()
+  for (const p of projects.value)
+    map.set(p.id, p)
+  return map
+})
+
+// Multi-select project filter: empty set means "show all"
+const selectedProjectIds = ref<Set<string>>(new Set())
+
+function toggleProjectFilter(projectId: string) {
+  const next = new Set(selectedProjectIds.value)
+  if (next.has(projectId))
+    next.delete(projectId)
+  else
+    next.add(projectId)
+  selectedProjectIds.value = next
+}
+
+function clearProjectFilter() {
+  selectedProjectIds.value = new Set()
+}
+
+function isFilteredByProject(task: PipelineTask): boolean {
+  if (selectedProjectIds.value.size === 0)
+    return true
+  // Tasks with no projectId are shown when "no project" chip is selected
+  if (task.projectId == null)
+    return selectedProjectIds.value.has('__none__')
+  return selectedProjectIds.value.has(task.projectId)
+}
+
+// Projects that actually have tasks (for filter chip display)
+const projectsWithTasks = computed(() => {
+  const projectIdsInUse = new Set(allTasks.value.map(t => t.projectId).filter(Boolean) as string[])
+  const hasUnassigned = allTasks.value.some(t => t.projectId == null)
+  return {
+    projects: projects.value.filter(p => projectIdsInUse.has(p.id)),
+    hasUnassigned,
+  }
+})
 
 interface Epic {
   parent: PipelineTask
@@ -80,7 +124,7 @@ function tasksForColumn(col: ColumnDef): PipelineTask[] {
     const all: PipelineTask[] = []
     for (const stageTasks of Object.values(tasksByStageMap.value)) {
       for (const task of stageTasks || []) {
-        if (task.needsUser)
+        if (task.needsUser && isFilteredByProject(task))
           all.push(task)
       }
     }
@@ -92,7 +136,7 @@ function tasksForColumn(col: ColumnDef): PipelineTask[] {
   for (const stage of col.stages) {
     const rows = tasksByStageMap.value[stage] || []
     for (const task of rows) {
-      if (!task.needsUser)
+      if (!task.needsUser && isFilteredByProject(task))
         all.push(task)
     }
   }
@@ -113,7 +157,7 @@ function isHighlightCol(col: ColumnDef): boolean {
 
 <template>
   <div class="flex flex-col h-full">
-    <div class="flex items-center gap-2 mb-3 flex-shrink-0">
+    <div class="flex items-center gap-2 mb-3 flex-shrink-0 flex-wrap">
       <span class="text-xs text-slate-500 dark:text-slate-400">Export:</span>
       <button
         type="button"
@@ -129,6 +173,43 @@ function isHighlightCol(col: ColumnDef): boolean {
       >
         CSV
       </button>
+      <!-- Project filter chips -->
+      <template v-if="projectsWithTasks.projects.length > 0 || projectsWithTasks.hasUnassigned">
+        <span class="text-xs text-slate-500 dark:text-slate-400 ml-2">Project:</span>
+        <button
+          v-for="p in projectsWithTasks.projects"
+          :key="p.id"
+          type="button"
+          class="text-xs px-2 py-1 rounded border transition-colors"
+          :class="selectedProjectIds.has(p.id)
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
+            : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'"
+          :style="selectedProjectIds.has(p.id) && p.color ? { borderColor: p.color, backgroundColor: p.color + '22', color: p.color } : {}"
+          @click="toggleProjectFilter(p.id)"
+        >
+          <span v-if="p.color" class="inline-block w-2 h-2 rounded-full mr-1 align-middle" :style="{ backgroundColor: p.color }" aria-hidden="true" />
+          {{ p.name }}
+        </button>
+        <button
+          v-if="projectsWithTasks.hasUnassigned"
+          type="button"
+          class="text-xs px-2 py-1 rounded border transition-colors"
+          :class="selectedProjectIds.has('__none__')
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
+            : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'"
+          @click="toggleProjectFilter('__none__')"
+        >
+          No project
+        </button>
+        <button
+          v-if="selectedProjectIds.size > 0"
+          type="button"
+          class="text-xs px-2 py-1 rounded text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+          @click="clearProjectFilter"
+        >
+          Clear
+        </button>
+      </template>
     </div>
     <div class="flex gap-3 overflow-x-auto pb-4 flex-1 min-h-0">
       <div
@@ -212,6 +293,7 @@ function isHighlightCol(col: ColumnDef): boolean {
                   v-for="child in epic.children.filter(c => tasks.some(t => t.id === c.id))"
                   :key="child.id"
                   :task="child"
+                  :project="child.projectId ? projectById.get(child.projectId) ?? null : null"
                   @select="emit('select', child)"
                   @open-chat="emit('openChat', child)"
                 />
@@ -222,6 +304,7 @@ function isHighlightCol(col: ColumnDef): boolean {
             v-for="task in tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId))"
             :key="task.id"
             :task="task"
+            :project="task.projectId ? projectById.get(task.projectId) ?? null : null"
             @select="(t) => emit('select', t)"
             @open-chat="(t) => emit('openChat', t)"
           />

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { PipelineStage, PipelineTask, StageRunStatus } from '../types'
+import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
 
-defineProps<{ task: PipelineTask }>()
+defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
 function shortDate(iso: string): string {
@@ -66,6 +66,17 @@ function stageLabel(stage: PipelineStage): string {
     >
       Continue Chat →
     </button>
+    <!-- Project chip -->
+    <div v-if="project" class="flex items-center gap-1">
+      <span
+        class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-px rounded border border-transparent"
+        :style="project.color ? { backgroundColor: project.color + '22', color: project.color, borderColor: project.color + '55' } : {}"
+        :class="!project.color ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700' : ''"
+        :title="`Project: ${project.name}`"
+      >
+        <span aria-hidden="true">◫</span>{{ project.name }}
+      </span>
+    </div>
     <div class="flex flex-wrap gap-1 mt-0.5">
       <span
         class="text-[10px] font-mono px-1.5 py-px rounded border"
