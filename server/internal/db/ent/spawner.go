@@ -28,6 +28,10 @@ type Spawner struct {
 	Args []string `json:"args,omitempty"`
 	// Env holds the value of the "env" field.
 	Env map[string]string `json:"env,omitempty"`
+	// AdapterType holds the value of the "adapter_type" field.
+	AdapterType string `json:"adapter_type,omitempty"`
+	// AdapterConfig holds the value of the "adapter_config" field.
+	AdapterConfig map[string]string `json:"adapter_config,omitempty"`
 	// ModelOverride holds the value of the "model_override" field.
 	ModelOverride *string `json:"model_override,omitempty"`
 	// Description holds the value of the "description" field.
@@ -46,11 +50,11 @@ func (*Spawner) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case spawner.FieldArgs, spawner.FieldEnv:
+		case spawner.FieldArgs, spawner.FieldEnv, spawner.FieldAdapterConfig:
 			values[i] = new([]byte)
 		case spawner.FieldBuiltIn:
 			values[i] = new(sql.NullBool)
-		case spawner.FieldID, spawner.FieldName, spawner.FieldSlug, spawner.FieldCommand, spawner.FieldModelOverride, spawner.FieldDescription:
+		case spawner.FieldID, spawner.FieldName, spawner.FieldSlug, spawner.FieldCommand, spawner.FieldAdapterType, spawner.FieldModelOverride, spawner.FieldDescription:
 			values[i] = new(sql.NullString)
 		case spawner.FieldCreatedAt, spawner.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -107,6 +111,20 @@ func (_m *Spawner) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.Env); err != nil {
 					return fmt.Errorf("unmarshal field env: %w", err)
+				}
+			}
+		case spawner.FieldAdapterType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field adapter_type", values[i])
+			} else if value.Valid {
+				_m.AdapterType = value.String
+			}
+		case spawner.FieldAdapterConfig:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field adapter_config", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.AdapterConfig); err != nil {
+					return fmt.Errorf("unmarshal field adapter_config: %w", err)
 				}
 			}
 		case spawner.FieldModelOverride:
@@ -191,6 +209,12 @@ func (_m *Spawner) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("env=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Env))
+	builder.WriteString(", ")
+	builder.WriteString("adapter_type=")
+	builder.WriteString(_m.AdapterType)
+	builder.WriteString(", ")
+	builder.WriteString("adapter_config=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AdapterConfig))
 	builder.WriteString(", ")
 	if v := _m.ModelOverride; v != nil {
 		builder.WriteString("model_override=")

@@ -107,16 +107,24 @@ func init() {
 	spawnerDescEnv := spawnerFields[5].Descriptor()
 	// spawner.DefaultEnv holds the default value on creation for the env field.
 	spawner.DefaultEnv = spawnerDescEnv.Default.(map[string]string)
+	// spawnerDescAdapterType is the schema descriptor for adapter_type field.
+	spawnerDescAdapterType := spawnerFields[6].Descriptor()
+	// spawner.DefaultAdapterType holds the default value on creation for the adapter_type field.
+	spawner.DefaultAdapterType = spawnerDescAdapterType.Default.(string)
+	// spawnerDescAdapterConfig is the schema descriptor for adapter_config field.
+	spawnerDescAdapterConfig := spawnerFields[7].Descriptor()
+	// spawner.DefaultAdapterConfig holds the default value on creation for the adapter_config field.
+	spawner.DefaultAdapterConfig = spawnerDescAdapterConfig.Default.(map[string]string)
 	// spawnerDescBuiltIn is the schema descriptor for built_in field.
-	spawnerDescBuiltIn := spawnerFields[8].Descriptor()
+	spawnerDescBuiltIn := spawnerFields[10].Descriptor()
 	// spawner.DefaultBuiltIn holds the default value on creation for the built_in field.
 	spawner.DefaultBuiltIn = spawnerDescBuiltIn.Default.(bool)
 	// spawnerDescCreatedAt is the schema descriptor for created_at field.
-	spawnerDescCreatedAt := spawnerFields[9].Descriptor()
+	spawnerDescCreatedAt := spawnerFields[11].Descriptor()
 	// spawner.DefaultCreatedAt holds the default value on creation for the created_at field.
 	spawner.DefaultCreatedAt = spawnerDescCreatedAt.Default.(func() time.Time)
 	// spawnerDescUpdatedAt is the schema descriptor for updated_at field.
-	spawnerDescUpdatedAt := spawnerFields[10].Descriptor()
+	spawnerDescUpdatedAt := spawnerFields[12].Descriptor()
 	// spawner.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	spawner.DefaultUpdatedAt = spawnerDescUpdatedAt.Default.(func() time.Time)
 	// spawner.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

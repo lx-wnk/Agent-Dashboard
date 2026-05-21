@@ -6246,6 +6246,8 @@ type SpawnerMutation struct {
 	args           *[]string
 	appendargs     []string
 	env            *map[string]string
+	adapter_type   *string
+	adapter_config *map[string]string
 	model_override *string
 	description    *string
 	built_in       *bool
@@ -6556,6 +6558,78 @@ func (m *SpawnerMutation) ResetEnv() {
 	m.env = nil
 }
 
+// SetAdapterType sets the "adapter_type" field.
+func (m *SpawnerMutation) SetAdapterType(s string) {
+	m.adapter_type = &s
+}
+
+// AdapterType returns the value of the "adapter_type" field in the mutation.
+func (m *SpawnerMutation) AdapterType() (r string, exists bool) {
+	v := m.adapter_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdapterType returns the old "adapter_type" field's value of the Spawner entity.
+// If the Spawner object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SpawnerMutation) OldAdapterType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdapterType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdapterType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdapterType: %w", err)
+	}
+	return oldValue.AdapterType, nil
+}
+
+// ResetAdapterType resets all changes to the "adapter_type" field.
+func (m *SpawnerMutation) ResetAdapterType() {
+	m.adapter_type = nil
+}
+
+// SetAdapterConfig sets the "adapter_config" field.
+func (m *SpawnerMutation) SetAdapterConfig(value map[string]string) {
+	m.adapter_config = &value
+}
+
+// AdapterConfig returns the value of the "adapter_config" field in the mutation.
+func (m *SpawnerMutation) AdapterConfig() (r map[string]string, exists bool) {
+	v := m.adapter_config
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdapterConfig returns the old "adapter_config" field's value of the Spawner entity.
+// If the Spawner object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SpawnerMutation) OldAdapterConfig(ctx context.Context) (v map[string]string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdapterConfig is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdapterConfig requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdapterConfig: %w", err)
+	}
+	return oldValue.AdapterConfig, nil
+}
+
+// ResetAdapterConfig resets all changes to the "adapter_config" field.
+func (m *SpawnerMutation) ResetAdapterConfig() {
+	m.adapter_config = nil
+}
+
 // SetModelOverride sets the "model_override" field.
 func (m *SpawnerMutation) SetModelOverride(s string) {
 	m.model_override = &s
@@ -6796,7 +6870,7 @@ func (m *SpawnerMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SpawnerMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 12)
 	if m.name != nil {
 		fields = append(fields, spawner.FieldName)
 	}
@@ -6811,6 +6885,12 @@ func (m *SpawnerMutation) Fields() []string {
 	}
 	if m.env != nil {
 		fields = append(fields, spawner.FieldEnv)
+	}
+	if m.adapter_type != nil {
+		fields = append(fields, spawner.FieldAdapterType)
+	}
+	if m.adapter_config != nil {
+		fields = append(fields, spawner.FieldAdapterConfig)
 	}
 	if m.model_override != nil {
 		fields = append(fields, spawner.FieldModelOverride)
@@ -6845,6 +6925,10 @@ func (m *SpawnerMutation) Field(name string) (ent.Value, bool) {
 		return m.Args()
 	case spawner.FieldEnv:
 		return m.Env()
+	case spawner.FieldAdapterType:
+		return m.AdapterType()
+	case spawner.FieldAdapterConfig:
+		return m.AdapterConfig()
 	case spawner.FieldModelOverride:
 		return m.ModelOverride()
 	case spawner.FieldDescription:
@@ -6874,6 +6958,10 @@ func (m *SpawnerMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldArgs(ctx)
 	case spawner.FieldEnv:
 		return m.OldEnv(ctx)
+	case spawner.FieldAdapterType:
+		return m.OldAdapterType(ctx)
+	case spawner.FieldAdapterConfig:
+		return m.OldAdapterConfig(ctx)
 	case spawner.FieldModelOverride:
 		return m.OldModelOverride(ctx)
 	case spawner.FieldDescription:
@@ -6927,6 +7015,20 @@ func (m *SpawnerMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEnv(v)
+		return nil
+	case spawner.FieldAdapterType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdapterType(v)
+		return nil
+	case spawner.FieldAdapterConfig:
+		v, ok := value.(map[string]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdapterConfig(v)
 		return nil
 	case spawner.FieldModelOverride:
 		v, ok := value.(string)
@@ -7041,6 +7143,12 @@ func (m *SpawnerMutation) ResetField(name string) error {
 		return nil
 	case spawner.FieldEnv:
 		m.ResetEnv()
+		return nil
+	case spawner.FieldAdapterType:
+		m.ResetAdapterType()
+		return nil
+	case spawner.FieldAdapterConfig:
+		m.ResetAdapterConfig()
 		return nil
 	case spawner.FieldModelOverride:
 		m.ResetModelOverride()

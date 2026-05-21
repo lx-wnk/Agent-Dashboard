@@ -31,6 +31,8 @@ function makeSpawner(id: string, slug: string, overrides: Partial<Spawner> = {})
     command: 'claude',
     args: [],
     env: {},
+    adapterType: 'claude',
+    adapterConfig: {},
     builtIn: false,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
@@ -140,7 +142,13 @@ describe('useSpawners', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const body = { slug: 'new-one', name: 'New', command: 'claude' }
+    const body = {
+      slug: 'new-one',
+      name: 'New',
+      command: 'claude',
+      adapterType: 'claude' as const,
+      adapterConfig: {},
+    }
     const result = await useSpawnersMod.createSpawner(body)
 
     expect(fetchMock).toHaveBeenCalledWith('/api/spawners', expect.objectContaining({
@@ -149,6 +157,36 @@ describe('useSpawners', () => {
       body: JSON.stringify(body),
     }))
     expect(result.slug).toBe('new-one')
+  })
+
+  it('createSpawner sends adapterType+adapterConfig for ollama rows', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(makeSpawner('s10', 'local-ollama', {
+        command: '',
+        adapterType: 'ollama',
+        adapterConfig: { host: 'http://x' },
+      })),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const body = {
+      slug: 'local-ollama',
+      name: 'Local Ollama',
+      command: '',
+      adapterType: 'ollama' as const,
+      adapterConfig: { host: 'http://x' },
+    }
+    const result = await useSpawnersMod.createSpawner(body)
+
+    const call = fetchMock.mock.calls[0]
+    expect(call[0]).toBe('/api/spawners')
+    const sent = JSON.parse(call[1].body)
+    expect(sent.adapterType).toBe('ollama')
+    expect(sent.adapterConfig).toEqual({ host: 'http://x' })
+    expect(sent.command).toBe('')
+    expect(result.adapterType).toBe('ollama')
+    expect(result.adapterConfig).toEqual({ host: 'http://x' })
   })
 
   it('updateSpawner PATCHes /api/spawners/:id', async () => {

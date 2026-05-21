@@ -38,10 +38,10 @@ func setupResolver(t *testing.T) *resolverFixture {
 	projectRepo := repo.NewProjectRepo(client)
 	spawnerRepo := repo.NewSpawnerRepo(client)
 
-	def, err := spawnerRepo.Create(t.Context(), "Claude Default", "claude-default", "claude", nil, nil, nil, nil, true)
+	def, err := spawnerRepo.Create(t.Context(), "Claude Default", "claude-default", "claude", nil, nil, nil, nil, "claude", nil, true)
 	require.NoError(t, err)
 
-	alt, err := spawnerRepo.Create(t.Context(), "Custom 1", "custom-1", "claude", nil, nil, nil, nil, false)
+	alt, err := spawnerRepo.Create(t.Context(), "Custom 1", "custom-1", "claude", nil, nil, nil, nil, "claude", nil, false)
 	require.NoError(t, err)
 
 	return &resolverFixture{

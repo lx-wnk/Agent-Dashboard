@@ -290,6 +290,21 @@ export interface ProjectFolder {
   createdAt: string
 }
 
+export type SpawnerAdapterType = 'claude' | 'ollama' | 'openai' | 'custom'
+
+export interface AdapterConfigKey {
+  key: string
+  type: string
+  required: boolean
+  note?: string
+}
+
+export interface AdapterMeta {
+  name: SpawnerAdapterType
+  description: string
+  configKeys: AdapterConfigKey[]
+}
+
 export interface Spawner {
   id: string
   name: string
@@ -297,6 +312,8 @@ export interface Spawner {
   command: string
   args: string[]
   env: Record<string, string>
+  adapterType: SpawnerAdapterType
+  adapterConfig: Record<string, string>
   modelOverride?: string
   description?: string
   builtIn: boolean

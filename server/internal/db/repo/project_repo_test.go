@@ -117,7 +117,7 @@ func TestProjectRepo_Update(t *testing.T) {
 
 	t.Run("set and clear defaultSpawnerID", func(t *testing.T) {
 		sr := repo.NewSpawnerRepo(client)
-		s, err := sr.Create(t.Context(), "S", "s-update", "claude", nil, nil, nil, nil, false)
+		s, err := sr.Create(t.Context(), "S", "s-update", "claude", nil, nil, nil, nil, "", nil, false)
 		require.NoError(t, err)
 
 		updated, err := r.Update(t.Context(), p.ID, nil, nil, nil, nil, &s.ID, false, false, false)

@@ -270,6 +270,8 @@ var (
 		{Name: "command", Type: field.TypeString},
 		{Name: "args", Type: field.TypeJSON},
 		{Name: "env", Type: field.TypeJSON},
+		{Name: "adapter_type", Type: field.TypeString, Default: "claude"},
+		{Name: "adapter_config", Type: field.TypeJSON},
 		{Name: "model_override", Type: field.TypeString, Nullable: true},
 		{Name: "description", Type: field.TypeString, Nullable: true},
 		{Name: "built_in", Type: field.TypeBool, Default: false},

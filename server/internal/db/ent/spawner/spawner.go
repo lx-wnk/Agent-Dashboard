@@ -23,6 +23,10 @@ const (
 	FieldArgs = "args"
 	// FieldEnv holds the string denoting the env field in the database.
 	FieldEnv = "env"
+	// FieldAdapterType holds the string denoting the adapter_type field in the database.
+	FieldAdapterType = "adapter_type"
+	// FieldAdapterConfig holds the string denoting the adapter_config field in the database.
+	FieldAdapterConfig = "adapter_config"
 	// FieldModelOverride holds the string denoting the model_override field in the database.
 	FieldModelOverride = "model_override"
 	// FieldDescription holds the string denoting the description field in the database.
@@ -45,6 +49,8 @@ var Columns = []string{
 	FieldCommand,
 	FieldArgs,
 	FieldEnv,
+	FieldAdapterType,
+	FieldAdapterConfig,
 	FieldModelOverride,
 	FieldDescription,
 	FieldBuiltIn,
@@ -67,6 +73,10 @@ var (
 	DefaultArgs []string
 	// DefaultEnv holds the default value on creation for the "env" field.
 	DefaultEnv map[string]string
+	// DefaultAdapterType holds the default value on creation for the "adapter_type" field.
+	DefaultAdapterType string
+	// DefaultAdapterConfig holds the default value on creation for the "adapter_config" field.
+	DefaultAdapterConfig map[string]string
 	// DefaultBuiltIn holds the default value on creation for the "built_in" field.
 	DefaultBuiltIn bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -98,6 +108,11 @@ func BySlug(opts ...sql.OrderTermOption) OrderOption {
 // ByCommand orders the results by the command field.
 func ByCommand(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCommand, opts...).ToFunc()
+}
+
+// ByAdapterType orders the results by the adapter_type field.
+func ByAdapterType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAdapterType, opts...).ToFunc()
 }
 
 // ByModelOverride orders the results by the model_override field.

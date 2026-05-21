@@ -1,4 +1,4 @@
-import type { Spawner } from '../types'
+import type { Spawner, SpawnerAdapterType } from '../types'
 import { onUnmounted, ref, shallowRef } from 'vue'
 import { SSE_RETRY_DELAY_MS } from '../utils/sse'
 
@@ -109,9 +109,13 @@ export interface CreateSpawnerInput {
   command: string
   args?: string[]
   env?: Record<string, string>
+  adapterType: SpawnerAdapterType
+  adapterConfig: Record<string, string>
   modelOverride?: string
   description?: string
 }
+
+export type UpdateSpawnerInput = Partial<CreateSpawnerInput>
 
 export async function createSpawner(input: CreateSpawnerInput): Promise<Spawner> {
   const res = await fetch('/api/spawners', {
@@ -126,7 +130,7 @@ export async function createSpawner(input: CreateSpawnerInput): Promise<Spawner>
   return res.json() as Promise<Spawner>
 }
 
-export async function updateSpawner(id: string, input: Partial<CreateSpawnerInput>): Promise<Spawner> {
+export async function updateSpawner(id: string, input: UpdateSpawnerInput): Promise<Spawner> {
   const res = await fetch(`/api/spawners/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

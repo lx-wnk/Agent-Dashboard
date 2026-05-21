@@ -23,11 +23,11 @@ var ErrSpawnerInUse = errors.New("spawner is still referenced by one or more tas
 
 // SpawnerRepo manages spawner persistence.
 type SpawnerRepo interface {
-	Create(ctx context.Context, name, slug, command string, args []string, env map[string]string, modelOverride, description *string, builtIn bool) (*ent.Spawner, error)
+	Create(ctx context.Context, name, slug, command string, args []string, env map[string]string, modelOverride, description *string, adapterType string, adapterConfig map[string]string, builtIn bool) (*ent.Spawner, error)
 	GetByID(ctx context.Context, id string) (*ent.Spawner, error)
 	GetBySlug(ctx context.Context, slug string) (*ent.Spawner, error)
 	List(ctx context.Context) ([]*ent.Spawner, error)
-	Update(ctx context.Context, id string, name, slug, command *string, args []string, env map[string]string, modelOverride, description *string, clearModelOverride, clearDescription bool) (*ent.Spawner, error)
+	Update(ctx context.Context, id string, name, slug, command *string, args []string, env map[string]string, modelOverride, description *string, adapterType *string, adapterConfig map[string]string, clearModelOverride, clearDescription bool) (*ent.Spawner, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -40,12 +40,18 @@ func NewSpawnerRepo(client *ent.Client) SpawnerRepo {
 	return &entSpawnerRepo{client: client}
 }
 
-func (r *entSpawnerRepo) Create(ctx context.Context, name, slug, command string, args []string, env map[string]string, modelOverride, description *string, builtIn bool) (*ent.Spawner, error) {
+func (r *entSpawnerRepo) Create(ctx context.Context, name, slug, command string, args []string, env map[string]string, modelOverride, description *string, adapterType string, adapterConfig map[string]string, builtIn bool) (*ent.Spawner, error) {
 	if args == nil {
 		args = []string{}
 	}
 	if env == nil {
 		env = map[string]string{}
+	}
+	if adapterType == "" {
+		adapterType = "claude"
+	}
+	if adapterConfig == nil {
+		adapterConfig = map[string]string{}
 	}
 	s, err := r.client.Spawner.Create().
 		SetID(uuid.New().String()).
@@ -54,6 +60,8 @@ func (r *entSpawnerRepo) Create(ctx context.Context, name, slug, command string,
 		SetCommand(command).
 		SetArgs(args).
 		SetEnv(env).
+		SetAdapterType(adapterType).
+		SetAdapterConfig(adapterConfig).
 		SetNillableModelOverride(modelOverride).
 		SetNillableDescription(description).
 		SetBuiltIn(builtIn).
@@ -92,7 +100,7 @@ func (r *entSpawnerRepo) List(ctx context.Context) ([]*ent.Spawner, error) {
 	return spawners, nil
 }
 
-func (r *entSpawnerRepo) Update(ctx context.Context, id string, name, slug, command *string, args []string, env map[string]string, modelOverride, description *string, clearModelOverride, clearDescription bool) (*ent.Spawner, error) {
+func (r *entSpawnerRepo) Update(ctx context.Context, id string, name, slug, command *string, args []string, env map[string]string, modelOverride, description *string, adapterType *string, adapterConfig map[string]string, clearModelOverride, clearDescription bool) (*ent.Spawner, error) {
 	q := r.client.Spawner.UpdateOneID(id).SetUpdatedAt(time.Now())
 	if name != nil {
 		q = q.SetName(*name)
@@ -108,6 +116,12 @@ func (r *entSpawnerRepo) Update(ctx context.Context, id string, name, slug, comm
 	}
 	if env != nil {
 		q = q.SetEnv(env)
+	}
+	if adapterType != nil {
+		q = q.SetAdapterType(*adapterType)
+	}
+	if adapterConfig != nil {
+		q = q.SetAdapterConfig(adapterConfig)
 	}
 	if clearModelOverride {
 		q = q.ClearModelOverride()

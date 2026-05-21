@@ -79,6 +79,11 @@ func Command(v string) predicate.Spawner {
 	return predicate.Spawner(sql.FieldEQ(FieldCommand, v))
 }
 
+// AdapterType applies equality check predicate on the "adapter_type" field. It's identical to AdapterTypeEQ.
+func AdapterType(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldEQ(FieldAdapterType, v))
+}
+
 // ModelOverride applies equality check predicate on the "model_override" field. It's identical to ModelOverrideEQ.
 func ModelOverride(v string) predicate.Spawner {
 	return predicate.Spawner(sql.FieldEQ(FieldModelOverride, v))
@@ -297,6 +302,71 @@ func CommandEqualFold(v string) predicate.Spawner {
 // CommandContainsFold applies the ContainsFold predicate on the "command" field.
 func CommandContainsFold(v string) predicate.Spawner {
 	return predicate.Spawner(sql.FieldContainsFold(FieldCommand, v))
+}
+
+// AdapterTypeEQ applies the EQ predicate on the "adapter_type" field.
+func AdapterTypeEQ(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldEQ(FieldAdapterType, v))
+}
+
+// AdapterTypeNEQ applies the NEQ predicate on the "adapter_type" field.
+func AdapterTypeNEQ(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldNEQ(FieldAdapterType, v))
+}
+
+// AdapterTypeIn applies the In predicate on the "adapter_type" field.
+func AdapterTypeIn(vs ...string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldIn(FieldAdapterType, vs...))
+}
+
+// AdapterTypeNotIn applies the NotIn predicate on the "adapter_type" field.
+func AdapterTypeNotIn(vs ...string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldNotIn(FieldAdapterType, vs...))
+}
+
+// AdapterTypeGT applies the GT predicate on the "adapter_type" field.
+func AdapterTypeGT(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldGT(FieldAdapterType, v))
+}
+
+// AdapterTypeGTE applies the GTE predicate on the "adapter_type" field.
+func AdapterTypeGTE(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldGTE(FieldAdapterType, v))
+}
+
+// AdapterTypeLT applies the LT predicate on the "adapter_type" field.
+func AdapterTypeLT(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldLT(FieldAdapterType, v))
+}
+
+// AdapterTypeLTE applies the LTE predicate on the "adapter_type" field.
+func AdapterTypeLTE(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldLTE(FieldAdapterType, v))
+}
+
+// AdapterTypeContains applies the Contains predicate on the "adapter_type" field.
+func AdapterTypeContains(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldContains(FieldAdapterType, v))
+}
+
+// AdapterTypeHasPrefix applies the HasPrefix predicate on the "adapter_type" field.
+func AdapterTypeHasPrefix(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldHasPrefix(FieldAdapterType, v))
+}
+
+// AdapterTypeHasSuffix applies the HasSuffix predicate on the "adapter_type" field.
+func AdapterTypeHasSuffix(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldHasSuffix(FieldAdapterType, v))
+}
+
+// AdapterTypeEqualFold applies the EqualFold predicate on the "adapter_type" field.
+func AdapterTypeEqualFold(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldEqualFold(FieldAdapterType, v))
+}
+
+// AdapterTypeContainsFold applies the ContainsFold predicate on the "adapter_type" field.
+func AdapterTypeContainsFold(v string) predicate.Spawner {
+	return predicate.Spawner(sql.FieldContainsFold(FieldAdapterType, v))
 }
 
 // ModelOverrideEQ applies the EQ predicate on the "model_override" field.

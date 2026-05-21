@@ -50,6 +50,26 @@ func (_c *SpawnerCreate) SetEnv(v map[string]string) *SpawnerCreate {
 	return _c
 }
 
+// SetAdapterType sets the "adapter_type" field.
+func (_c *SpawnerCreate) SetAdapterType(v string) *SpawnerCreate {
+	_c.mutation.SetAdapterType(v)
+	return _c
+}
+
+// SetNillableAdapterType sets the "adapter_type" field if the given value is not nil.
+func (_c *SpawnerCreate) SetNillableAdapterType(v *string) *SpawnerCreate {
+	if v != nil {
+		_c.SetAdapterType(*v)
+	}
+	return _c
+}
+
+// SetAdapterConfig sets the "adapter_config" field.
+func (_c *SpawnerCreate) SetAdapterConfig(v map[string]string) *SpawnerCreate {
+	_c.mutation.SetAdapterConfig(v)
+	return _c
+}
+
 // SetModelOverride sets the "model_override" field.
 func (_c *SpawnerCreate) SetModelOverride(v string) *SpawnerCreate {
 	_c.mutation.SetModelOverride(v)
@@ -169,6 +189,14 @@ func (_c *SpawnerCreate) defaults() {
 		v := spawner.DefaultEnv
 		_c.mutation.SetEnv(v)
 	}
+	if _, ok := _c.mutation.AdapterType(); !ok {
+		v := spawner.DefaultAdapterType
+		_c.mutation.SetAdapterType(v)
+	}
+	if _, ok := _c.mutation.AdapterConfig(); !ok {
+		v := spawner.DefaultAdapterConfig
+		_c.mutation.SetAdapterConfig(v)
+	}
 	if _, ok := _c.mutation.BuiltIn(); !ok {
 		v := spawner.DefaultBuiltIn
 		_c.mutation.SetBuiltIn(v)
@@ -199,6 +227,12 @@ func (_c *SpawnerCreate) check() error {
 	}
 	if _, ok := _c.mutation.Env(); !ok {
 		return &ValidationError{Name: "env", err: errors.New(`ent: missing required field "Spawner.env"`)}
+	}
+	if _, ok := _c.mutation.AdapterType(); !ok {
+		return &ValidationError{Name: "adapter_type", err: errors.New(`ent: missing required field "Spawner.adapter_type"`)}
+	}
+	if _, ok := _c.mutation.AdapterConfig(); !ok {
+		return &ValidationError{Name: "adapter_config", err: errors.New(`ent: missing required field "Spawner.adapter_config"`)}
 	}
 	if _, ok := _c.mutation.BuiltIn(); !ok {
 		return &ValidationError{Name: "built_in", err: errors.New(`ent: missing required field "Spawner.built_in"`)}
@@ -263,6 +297,14 @@ func (_c *SpawnerCreate) createSpec() (*Spawner, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Env(); ok {
 		_spec.SetField(spawner.FieldEnv, field.TypeJSON, value)
 		_node.Env = value
+	}
+	if value, ok := _c.mutation.AdapterType(); ok {
+		_spec.SetField(spawner.FieldAdapterType, field.TypeString, value)
+		_node.AdapterType = value
+	}
+	if value, ok := _c.mutation.AdapterConfig(); ok {
+		_spec.SetField(spawner.FieldAdapterConfig, field.TypeJSON, value)
+		_node.AdapterConfig = value
 	}
 	if value, ok := _c.mutation.ModelOverride(); ok {
 		_spec.SetField(spawner.FieldModelOverride, field.TypeString, value)

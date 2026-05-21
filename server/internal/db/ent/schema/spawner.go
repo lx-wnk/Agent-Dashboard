@@ -20,6 +20,8 @@ func (Spawner) Fields() []ent.Field {
 		field.String("command"),
 		field.JSON("args", []string{}).Default([]string{}),
 		field.JSON("env", map[string]string{}).Default(map[string]string{}),
+		field.String("adapter_type").Default("claude"),
+		field.JSON("adapter_config", map[string]string{}).Default(map[string]string{}),
 		field.String("model_override").Optional().Nillable(),
 		field.String("description").Optional().Nillable(),
 		field.Bool("built_in").Default(false),

@@ -44,6 +44,8 @@ type spawnerView struct {
 	Command       string            `json:"command"`
 	Args          []string          `json:"args"`
 	Env           map[string]string `json:"env"`
+	AdapterType   string            `json:"adapterType"`
+	AdapterConfig map[string]string `json:"adapterConfig"`
 	ModelOverride *string           `json:"modelOverride,omitempty"`
 	Description   *string           `json:"description,omitempty"`
 	BuiltIn       bool              `json:"builtIn"`
@@ -60,6 +62,14 @@ func toSpawnerView(s *ent.Spawner) spawnerView {
 	if env == nil {
 		env = map[string]string{}
 	}
+	adapterCfg := s.AdapterConfig
+	if adapterCfg == nil {
+		adapterCfg = map[string]string{}
+	}
+	adapterType := s.AdapterType
+	if adapterType == "" {
+		adapterType = "claude"
+	}
 	return spawnerView{
 		ID:            s.ID,
 		Name:          s.Name,
@@ -67,6 +77,8 @@ func toSpawnerView(s *ent.Spawner) spawnerView {
 		Command:       s.Command,
 		Args:          args,
 		Env:           env,
+		AdapterType:   adapterType,
+		AdapterConfig: adapterCfg,
 		ModelOverride: s.ModelOverride,
 		Description:   s.Description,
 		BuiltIn:       s.BuiltIn,
@@ -96,6 +108,8 @@ type createBody struct {
 	Command       string            `json:"command"`
 	Args          []string          `json:"args"`
 	Env           map[string]string `json:"env"`
+	AdapterType   string            `json:"adapterType"`
+	AdapterConfig map[string]string `json:"adapterConfig"`
 	ModelOverride *string           `json:"modelOverride"`
 	Description   *string           `json:"description"`
 }
@@ -119,8 +133,22 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 	if msg, ok := ValidateEnv(body.Env); !ok {
 		return apierr.NewAppError(http.StatusBadRequest, msg)
 	}
+	adapterType := body.AdapterType
+	if adapterType == "" {
+		adapterType = "claude"
+	}
+	if msg, ok := ValidateAdapterType(adapterType); !ok {
+		return apierr.NewAppError(http.StatusBadRequest, msg)
+	}
+	adapterCfg := body.AdapterConfig
+	if adapterCfg == nil {
+		adapterCfg = map[string]string{}
+	}
+	if msg, ok := ValidateAdapterConfig(adapterType, adapterCfg); !ok {
+		return apierr.NewAppError(http.StatusBadRequest, msg)
+	}
 
-	s, err := h.repo.Create(r.Context(), body.Name, body.Slug, body.Command, body.Args, body.Env, body.ModelOverride, body.Description, false)
+	s, err := h.repo.Create(r.Context(), body.Name, body.Slug, body.Command, body.Args, body.Env, body.ModelOverride, body.Description, adapterType, adapterCfg, false)
 	if err != nil {
 		if ent.IsConstraintError(err) {
 			return apierr.NewAppError(http.StatusConflict, "slug already exists")
@@ -152,6 +180,8 @@ type updateBody struct {
 	Command       *string           `json:"command"`
 	Args          []string          `json:"args"`
 	Env           map[string]string `json:"env"`
+	AdapterType   *string           `json:"adapterType"`
+	AdapterConfig map[string]string `json:"adapterConfig"`
 	ModelOverride json.RawMessage   `json:"modelOverride"`
 	Description   json.RawMessage   `json:"description"`
 }
@@ -186,6 +216,25 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 			return apierr.NewAppError(http.StatusBadRequest, msg)
 		}
 	}
+	if body.AdapterType != nil {
+		if msg, ok := ValidateAdapterType(*body.AdapterType); !ok {
+			return apierr.NewAppError(http.StatusBadRequest, msg)
+		}
+	}
+	// Effective adapter_type for adapter_config validation: the patched value
+	// if provided, otherwise the existing row's value.
+	effectiveAdapterType := existing.AdapterType
+	if effectiveAdapterType == "" {
+		effectiveAdapterType = "claude"
+	}
+	if body.AdapterType != nil {
+		effectiveAdapterType = *body.AdapterType
+	}
+	if body.AdapterConfig != nil {
+		if msg, ok := ValidateAdapterConfig(effectiveAdapterType, body.AdapterConfig); !ok {
+			return apierr.NewAppError(http.StatusBadRequest, msg)
+		}
+	}
 
 	modelOverride, clearModelOverride, err := parseNullableString(body.ModelOverride)
 	if err != nil {
@@ -200,6 +249,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 		body.Name, body.Slug, body.Command,
 		body.Args, body.Env,
 		modelOverride, description,
+		body.AdapterType, body.AdapterConfig,
 		clearModelOverride, clearDescription,
 	)
 	if err != nil {

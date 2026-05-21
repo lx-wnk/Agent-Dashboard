@@ -89,6 +89,26 @@ func (_u *SpawnerUpdate) SetEnv(v map[string]string) *SpawnerUpdate {
 	return _u
 }
 
+// SetAdapterType sets the "adapter_type" field.
+func (_u *SpawnerUpdate) SetAdapterType(v string) *SpawnerUpdate {
+	_u.mutation.SetAdapterType(v)
+	return _u
+}
+
+// SetNillableAdapterType sets the "adapter_type" field if the given value is not nil.
+func (_u *SpawnerUpdate) SetNillableAdapterType(v *string) *SpawnerUpdate {
+	if v != nil {
+		_u.SetAdapterType(*v)
+	}
+	return _u
+}
+
+// SetAdapterConfig sets the "adapter_config" field.
+func (_u *SpawnerUpdate) SetAdapterConfig(v map[string]string) *SpawnerUpdate {
+	_u.mutation.SetAdapterConfig(v)
+	return _u
+}
+
 // SetModelOverride sets the "model_override" field.
 func (_u *SpawnerUpdate) SetModelOverride(v string) *SpawnerUpdate {
 	_u.mutation.SetModelOverride(v)
@@ -219,6 +239,12 @@ func (_u *SpawnerUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Env(); ok {
 		_spec.SetField(spawner.FieldEnv, field.TypeJSON, value)
 	}
+	if value, ok := _u.mutation.AdapterType(); ok {
+		_spec.SetField(spawner.FieldAdapterType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AdapterConfig(); ok {
+		_spec.SetField(spawner.FieldAdapterConfig, field.TypeJSON, value)
+	}
 	if value, ok := _u.mutation.ModelOverride(); ok {
 		_spec.SetField(spawner.FieldModelOverride, field.TypeString, value)
 	}
@@ -314,6 +340,26 @@ func (_u *SpawnerUpdateOne) AppendArgs(v []string) *SpawnerUpdateOne {
 // SetEnv sets the "env" field.
 func (_u *SpawnerUpdateOne) SetEnv(v map[string]string) *SpawnerUpdateOne {
 	_u.mutation.SetEnv(v)
+	return _u
+}
+
+// SetAdapterType sets the "adapter_type" field.
+func (_u *SpawnerUpdateOne) SetAdapterType(v string) *SpawnerUpdateOne {
+	_u.mutation.SetAdapterType(v)
+	return _u
+}
+
+// SetNillableAdapterType sets the "adapter_type" field if the given value is not nil.
+func (_u *SpawnerUpdateOne) SetNillableAdapterType(v *string) *SpawnerUpdateOne {
+	if v != nil {
+		_u.SetAdapterType(*v)
+	}
+	return _u
+}
+
+// SetAdapterConfig sets the "adapter_config" field.
+func (_u *SpawnerUpdateOne) SetAdapterConfig(v map[string]string) *SpawnerUpdateOne {
+	_u.mutation.SetAdapterConfig(v)
 	return _u
 }
 
@@ -476,6 +522,12 @@ func (_u *SpawnerUpdateOne) sqlSave(ctx context.Context) (_node *Spawner, err er
 	}
 	if value, ok := _u.mutation.Env(); ok {
 		_spec.SetField(spawner.FieldEnv, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AdapterType(); ok {
+		_spec.SetField(spawner.FieldAdapterType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AdapterConfig(); ok {
+		_spec.SetField(spawner.FieldAdapterConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.ModelOverride(); ok {
 		_spec.SetField(spawner.FieldModelOverride, field.TypeString, value)
