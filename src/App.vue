@@ -413,7 +413,7 @@ onMounted(fetchQuota)
     <AuditSettings :open="showAudit" @close="showAudit = false" />
     <AppModal :open="showProjects" @close="showProjects = false">
       <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
-        <div class="flex justify-end px-5 pt-4 flex-shrink-0">
+        <div class="flex justify-end items-center px-3 py-2 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
           <button
             type="button"
             class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100"
@@ -423,14 +423,14 @@ onMounted(fetchQuota)
             &times;
           </button>
         </div>
-        <div class="flex-1 overflow-y-auto px-5 pb-5">
+        <div class="flex-1 overflow-y-auto px-5 py-4">
           <ProjectSettings v-if="showProjects" />
         </div>
       </div>
     </AppModal>
     <AppModal :open="showSpawners" @close="showSpawners = false">
       <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
-        <div class="flex justify-end px-5 pt-4 flex-shrink-0">
+        <div class="flex justify-end items-center px-3 py-2 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
           <button
             type="button"
             class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100"
@@ -440,7 +440,7 @@ onMounted(fetchQuota)
             &times;
           </button>
         </div>
-        <div class="flex-1 overflow-y-auto px-5 pb-5">
+        <div class="flex-1 overflow-y-auto px-5 py-4">
           <SpawnerSettings v-if="showSpawners" />
         </div>
       </div>
