@@ -26,7 +26,7 @@ const emit = defineEmits<{ close: [] }>()
           </button>
         </header>
         <div class="flex-1 overflow-y-auto p-5">
-          <AuditLogTab :limit="100" />
+          <AuditLogTab :limit="100" hide-title />
         </div>
       </div>
     </div>

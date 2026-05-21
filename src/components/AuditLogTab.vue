@@ -2,10 +2,11 @@
 import type { AuditEntry } from '../types'
 import { onMounted, ref, watch } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   taskId?: string
   limit?: number
-}>()
+  hideTitle?: boolean
+}>(), { hideTitle: false })
 
 const entries = ref<AuditEntry[]>([])
 const loading = ref(false)
@@ -52,10 +53,10 @@ watch(() => props.taskId, load)
 <template>
   <div class="text-xs">
     <div class="flex items-center justify-between mb-3">
-      <span class="font-semibold text-slate-700 dark:text-slate-300 text-[13px]">Audit Log</span>
+      <span v-if="!hideTitle" class="font-semibold text-slate-700 dark:text-slate-300 text-[13px]">Audit Log</span>
       <button
         type="button"
-        class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:brightness-110 disabled:opacity-40"
+        class="ml-auto px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:brightness-110 disabled:opacity-40"
         :disabled="loading"
         @click="load"
       >
@@ -92,7 +93,7 @@ watch(() => props.taskId, load)
       </thead>
       <tbody>
         <template v-for="entry in entries" :key="entry.id">
-          <tr class="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50">
+          <tr class="border-b border-slate-100 dark:border-slate-800 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-900/50">
             <td class="py-1.5 pr-3 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
               <time :datetime="entry.timestamp">{{ new Date(entry.timestamp).toLocaleTimeString() }}</time>
             </td>
