@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { Spawner } from '../types'
-import { ref } from 'vue'
+import type { Spawner, SpawnerAdapterType } from '../types'
+import { computed, ref } from 'vue'
+import { useAdapterCatalog } from '../composables/useAdapterCatalog'
 import {
   createSpawner,
   deleteSpawner,
@@ -11,16 +12,49 @@ import { isAllowedSpawnerCommand } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 
 const { spawners, isLoading, error, refetch } = useSpawners()
+const { catalog, getByType } = useAdapterCatalog()
+
+// ── Adapter-type display helpers ────────────────────────────────────────────
+const ADAPTER_TYPE_BADGE: Record<SpawnerAdapterType, string> = {
+  claude: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300',
+  ollama: 'bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600 dark:text-cyan-400',
+  openai: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
+  custom: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
+}
+
+function adapterTypeOf(spawner: Spawner): SpawnerAdapterType {
+  // Legacy rows pre-A1 may have empty adapterType; treat as claude.
+  return (spawner.adapterType || 'claude') as SpawnerAdapterType
+}
+
+function usesCommandFields(type: SpawnerAdapterType): boolean {
+  return type === 'claude' || type === 'custom'
+}
+
+function spawnerDetail(spawner: Spawner): string {
+  const type = adapterTypeOf(spawner)
+  if (usesCommandFields(type)) {
+    const args = spawner.args.length ? ` ${spawner.args.join(' ')}` : ''
+    return `${spawner.command}${args}`
+  }
+  if (type === 'ollama')
+    return spawner.adapterConfig?.host || 'http://localhost:11434'
+  if (type === 'openai')
+    return spawner.adapterConfig?.base_url || 'https://api.openai.com/v1'
+  return spawner.command
+}
 
 // ── Form state ──────────────────────────────────────────────────────────────
 interface SpawnerFormState {
   name: string
   slug: string
+  adapterType: SpawnerAdapterType
   command: string
   argsRaw: string // newline-separated
   modelOverride: string
   description: string
   envRows: { key: string, value: string, _k: number }[]
+  adapterConfig: Record<string, string>
 }
 
 let _envKey = 0
@@ -30,24 +64,55 @@ const isCreating = ref(false)
 const formVisible = ref(false)
 const formSaving = ref(false)
 const formError = ref<string | null>(null)
-const form = ref<SpawnerFormState>({
-  name: '',
-  slug: '',
-  command: 'claude',
-  argsRaw: '',
-  modelOverride: '',
-  description: '',
-  envRows: [],
-})
+const form = ref<SpawnerFormState>(emptyForm())
+
+const currentAdapterMeta = computed(() => getByType(form.value.adapterType))
+const showCommandFields = computed(() => usesCommandFields(form.value.adapterType))
 
 function emptyForm(): SpawnerFormState {
-  return { name: '', slug: '', command: 'claude', argsRaw: '', modelOverride: '', description: '', envRows: [] }
+  return {
+    name: '',
+    slug: '',
+    adapterType: 'claude',
+    command: 'claude',
+    argsRaw: '',
+    modelOverride: '',
+    description: '',
+    envRows: [],
+    adapterConfig: {},
+  }
+}
+
+function defaultCommandFor(type: SpawnerAdapterType): string {
+  return type === 'claude' ? 'claude' : ''
+}
+
+function onAdapterTypeChange(): void {
+  // Reset command to the sensible default for the newly selected adapter
+  // when the user is creating a row OR when the field is no longer relevant.
+  const type = form.value.adapterType
+  if (!usesCommandFields(type)) {
+    form.value.command = ''
+  }
+  else if (!form.value.command.trim()) {
+    form.value.command = defaultCommandFor(type)
+  }
+  // Seed missing adapter_config keys from catalog with empty strings so
+  // v-model bindings stay reactive.
+  const meta = getByType(type)
+  if (meta) {
+    for (const k of meta.configKeys) {
+      if (form.value.adapterConfig[k.key] === undefined)
+        form.value.adapterConfig[k.key] = ''
+    }
+  }
 }
 
 function openCreate() {
   editingSpawner.value = null
   isCreating.value = true
   form.value = emptyForm()
+  onAdapterTypeChange()
   formError.value = null
   formVisible.value = true
 }
@@ -57,15 +122,19 @@ function openEdit(spawner: Spawner) {
     return
   editingSpawner.value = spawner
   isCreating.value = false
+  const adapterType = adapterTypeOf(spawner)
   form.value = {
     name: spawner.name,
     slug: spawner.slug,
+    adapterType,
     command: spawner.command,
     argsRaw: spawner.args.join('\n'),
     modelOverride: spawner.modelOverride ?? '',
     description: spawner.description ?? '',
     envRows: Object.entries(spawner.env).map(([key, value]) => ({ key, value, _k: _envKey++ })),
+    adapterConfig: { ...(spawner.adapterConfig ?? {}) },
   }
+  onAdapterTypeChange()
   formError.value = null
   formVisible.value = true
 }
@@ -93,42 +162,69 @@ function buildEnvRecord(): Record<string, string> {
   return rec
 }
 
+function buildAdapterConfig(): Record<string, string> {
+  const meta = currentAdapterMeta.value
+  if (!meta)
+    return {}
+  const rec: Record<string, string> = {}
+  for (const k of meta.configKeys) {
+    const v = (form.value.adapterConfig[k.key] ?? '').trim()
+    if (v)
+      rec[k.key] = v
+  }
+  return rec
+}
+
 async function handleSave() {
   formError.value = null
-  if (!form.value.name.trim() || !form.value.slug.trim() || !form.value.command.trim()) {
-    formError.value = 'Name, slug, and command are required.'
+  if (!form.value.name.trim() || !form.value.slug.trim()) {
+    formError.value = 'Name and slug are required.'
     return
   }
-  if (!isAllowedSpawnerCommand(form.value.command.trim())) {
-    formError.value = 'Command must be one of: claude, claude-code, npx — or an absolute path not under /tmp or /var/tmp.'
-    return
+  const type = form.value.adapterType
+  if (usesCommandFields(type)) {
+    if (!form.value.command.trim()) {
+      formError.value = 'Command is required for claude/custom adapters.'
+      return
+    }
+    if (!isAllowedSpawnerCommand(form.value.command.trim())) {
+      formError.value = 'Command must be one of: claude, claude-code, npx — or an absolute path not under /tmp or /var/tmp.'
+      return
+    }
   }
+  // Adapter-config required-key validation
+  const meta = currentAdapterMeta.value
+  if (meta) {
+    for (const k of meta.configKeys) {
+      if (k.required && !(form.value.adapterConfig[k.key] ?? '').trim()) {
+        formError.value = `Adapter config "${k.key}" is required for ${type}.`
+        return
+      }
+    }
+  }
+
   formSaving.value = true
   try {
     const args = form.value.argsRaw.split('\n').map(s => s.trim()).filter(Boolean)
     const env = buildEnvRecord()
-    if (isCreating.value) {
-      await createSpawner({
-        name: form.value.name.trim(),
-        slug: form.value.slug.trim(),
-        command: form.value.command.trim(),
-        args,
-        env,
-        modelOverride: form.value.modelOverride.trim() || undefined,
-        description: form.value.description.trim() || undefined,
-      })
+    const adapterConfig = buildAdapterConfig()
+    // For non-command adapters, send empty string — backend dispatches on adapter_type.
+    const command = usesCommandFields(type) ? form.value.command.trim() : ''
+    const payload = {
+      name: form.value.name.trim(),
+      slug: form.value.slug.trim(),
+      adapterType: type,
+      adapterConfig,
+      command,
+      args: usesCommandFields(type) ? args : [],
+      env: usesCommandFields(type) ? env : {},
+      modelOverride: form.value.modelOverride.trim() || undefined,
+      description: form.value.description.trim() || undefined,
     }
-    else if (editingSpawner.value) {
-      await updateSpawner(editingSpawner.value.id, {
-        name: form.value.name.trim(),
-        slug: form.value.slug.trim(),
-        command: form.value.command.trim(),
-        args,
-        env,
-        modelOverride: form.value.modelOverride.trim() || undefined,
-        description: form.value.description.trim() || undefined,
-      })
-    }
+    if (isCreating.value)
+      await createSpawner(payload)
+    else if (editingSpawner.value)
+      await updateSpawner(editingSpawner.value.id, payload)
     await refetch()
     closeForm()
   }
@@ -169,7 +265,7 @@ async function handleDelete(id: string) {
           Spawners
         </h3>
         <p class="text-xs text-slate-400 dark:text-slate-600">
-          Configure custom Claude CLI invocations. Built-in spawners are read-only. Custom spawners can override the command, args, env, and model for pipeline stage agents.
+          Configure LLM adapters per spawner row. Built-in spawners are read-only. Each custom row picks an adapter type (claude, ollama, openai, custom) and supplies the adapter-specific config keys.
         </p>
       </div>
       <AppButton variant="info" @click="openCreate">
@@ -197,7 +293,10 @@ async function handleDelete(id: string) {
               Name
             </th>
             <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
-              Command
+              Adapter
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+              Detail
             </th>
             <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
               Type
@@ -217,9 +316,14 @@ async function handleDelete(id: string) {
                 {{ spawner.description }}
               </div>
             </td>
+            <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
+              <span
+                class="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-px rounded"
+                :class="ADAPTER_TYPE_BADGE[adapterTypeOf(spawner)]"
+              >{{ adapterTypeOf(spawner) }}</span>
+            </td>
             <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-500 dark:text-slate-400">
-              {{ spawner.command }}
-              <span v-if="spawner.args.length" class="opacity-60"> {{ spawner.args.join(' ') }}</span>
+              {{ spawnerDetail(spawner) }}
             </td>
             <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
               <span
@@ -298,37 +402,21 @@ async function handleDelete(id: string) {
               placeholder="my-spawner"
             >
           </div>
-          <div class="col-span-2">
-            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-command">
-              Command <span class="normal-case font-normal">(claude, claude-code, npx, or absolute path not under /tmp)</span>
-            </label>
-            <input
-              id="sp-command"
-              v-model="form.command"
-              type="text"
-              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
-              placeholder="claude"
-            >
-          </div>
-          <div class="col-span-2">
-            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-args">Args (one per line)</label>
-            <textarea
-              id="sp-args"
-              v-model="form.argsRaw"
-              rows="3"
-              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500 resize-none"
-              placeholder="--no-color&#10;--dangerously-skip-permissions"
-            />
-          </div>
           <div>
-            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-model">Model Override (optional)</label>
-            <input
-              id="sp-model"
-              v-model="form.modelOverride"
-              type="text"
-              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
-              placeholder="claude-opus-4-5"
+            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-adapter-type">Adapter Type</label>
+            <select
+              id="sp-adapter-type"
+              v-model="form.adapterType"
+              class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              @change="onAdapterTypeChange"
             >
+              <option v-for="meta in catalog" :key="meta.name" :value="meta.name">
+                {{ meta.name }}
+              </option>
+            </select>
+            <p v-if="currentAdapterMeta?.description" class="text-[11px] text-slate-400 dark:text-slate-600 mt-1 line-clamp-2">
+              {{ currentAdapterMeta.description }}
+            </p>
           </div>
           <div>
             <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-desc">Description (optional)</label>
@@ -340,10 +428,72 @@ async function handleDelete(id: string) {
               placeholder="Short description"
             >
           </div>
+
+          <!-- Claude / custom: command + args + model -->
+          <template v-if="showCommandFields">
+            <div class="col-span-2">
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-command">
+                Command <span class="normal-case font-normal">(claude, claude-code, npx, or absolute path not under /tmp)</span>
+              </label>
+              <input
+                id="sp-command"
+                v-model="form.command"
+                type="text"
+                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
+                :placeholder="form.adapterType === 'claude' ? 'claude' : '/usr/local/bin/my-llm'"
+              >
+            </div>
+            <div class="col-span-2">
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-args">Args (one per line)</label>
+              <textarea
+                id="sp-args"
+                v-model="form.argsRaw"
+                rows="3"
+                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500 resize-none"
+                placeholder="--no-color&#10;--dangerously-skip-permissions"
+              />
+            </div>
+            <div class="col-span-2">
+              <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1" for="sp-model">Model Override (optional)</label>
+              <input
+                id="sp-model"
+                v-model="form.modelOverride"
+                type="text"
+                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
+                placeholder="claude-opus-4-5"
+              >
+            </div>
+          </template>
         </div>
 
-        <!-- Env key/value table -->
-        <div>
+        <!-- Adapter-specific config keys (dynamic) -->
+        <div v-if="currentAdapterMeta && currentAdapterMeta.configKeys.length > 0">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-2">
+            Adapter Config
+          </label>
+          <div class="flex flex-col gap-2">
+            <div v-for="k in currentAdapterMeta.configKeys" :key="k.key">
+              <label class="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1" :for="`sp-cfg-${k.key}`">
+                <span class="font-mono">{{ k.key }}</span>
+                <span v-if="k.required" class="text-red-500 ml-0.5">*</span>
+              </label>
+              <input
+                :id="`sp-cfg-${k.key}`"
+                v-model="form.adapterConfig[k.key]"
+                type="text"
+                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-blue-500"
+                :placeholder="k.note || ''"
+                :required="k.required"
+              >
+              <p v-if="k.note" class="text-[10px] text-slate-400 dark:text-slate-600 mt-0.5">
+                {{ k.note }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Env key/value table — only for adapters that spawn subprocesses -->
+        <div v-if="showCommandFields">
           <div class="flex items-center justify-between mb-2">
             <label class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Environment Variables</label>
             <button type="button" class="text-[11px] px-2 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800" @click="addEnvRow">
