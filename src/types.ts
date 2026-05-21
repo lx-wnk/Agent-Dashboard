@@ -169,6 +169,9 @@ export interface PipelineTask {
   // gate refuses to spawn a new run while this is true; surface in UI so
   // the user sees WHY their task is parked.
   blockedByPendingPermissions?: boolean
+  // Project and spawner associations (Projects/Folders/Spawners feature).
+  projectId?: string | null
+  spawnerId?: string | null
 }
 
 export interface StageRun {
@@ -262,6 +265,43 @@ export interface NotificationPreference {
   eventType: NotificationEventType
   channels: NotificationChannel[]
   enabled: boolean
+}
+
+// Projects, Folders & Spawners
+export interface Project {
+  id: string
+  slug: string
+  name: string
+  description?: string
+  color?: string
+  defaultSpawnerId?: string | null
+  folderCount?: number
+  folders?: ProjectFolder[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectFolder {
+  id: string
+  projectId: string
+  path: string
+  label?: string
+  isDefault: boolean
+  createdAt: string
+}
+
+export interface Spawner {
+  id: string
+  name: string
+  slug: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  modelOverride?: string
+  description?: string
+  builtIn: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 // MCP API Key types
