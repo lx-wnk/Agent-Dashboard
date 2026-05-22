@@ -281,6 +281,27 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		}
 	}
 
+	// Auto-create a git worktree before spawning the agent.
+	// Triggered when: ForceWorktrees is set (global) OR task has an explicit SourceBranch.
+	// Must happen before ensureStageRun so the spawner uses the correct cwd from the first run.
+	needsWorktree := handler.RequiresAgent() &&
+		(task.WorktreePath == nil || *task.WorktreePath == "") &&
+		(o.opts.ForceWorktrees || (task.SourceBranch != nil && *task.SourceBranch != ""))
+	if needsWorktree {
+		wtPath, wtBranch, wtErr := ensureTaskWorktree(task, o.opts.WorktreeRoot)
+		if wtErr != nil {
+			return nil, fmt.Errorf("orchestrator: ensure worktree: %w", wtErr)
+		}
+		upd := repo.UpdateTaskInput{WorktreePath: &wtPath}
+		if task.SourceBranch == nil || *task.SourceBranch == "" {
+			upd.SourceBranch = &wtBranch
+		}
+		if task, err = o.opts.TaskRepo.Update(ctx, task.ID, upd); err != nil {
+			return nil, fmt.Errorf("orchestrator: set worktree path: %w", err)
+		}
+		slog.Info("orchestrator: created worktree", "taskID", taskID, "path", wtPath, "branch", wtBranch)
+	}
+
 	// latest is non-nil only for agent-driven stages; ensureStageRun falls back to
 	// a DB query when it is nil (non-agent stages).
 	stageRun, err := o.ensureStageRun(ctx, task, latest)
@@ -501,7 +522,9 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 
 	case WaitUserTransition:
 		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
-			Status: strPtr("awaiting_user"), Output: tr.Output,
+			Status:   strPtr("awaiting_user"),
+			Output:   tr.Output,
+			PIDClear: tr.AgentDone, // clear dead PID so the awaiting_user reaper does not immediately re-fail
 		}); err != nil {
 			return nil, fmt.Errorf("applyTransition.waitUser.updateRun: %w", err)
 		}
@@ -1066,8 +1089,9 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			}
 		} else {
 			if _, err := o.applyTransition(ctx, task, fresh, WaitUserTransition{
-				Reason: fmt.Sprintf("schema validation failed twice at stage %s: %s", fresh.Stage, result.Error),
-				Output: map[string]any{"validation_error": result.Error, "rejected_output": result.Output},
+				Reason:    fmt.Sprintf("schema validation failed twice at stage %s: %s", fresh.Stage, result.Error),
+				Output:    map[string]any{"validation_error": result.Error, "rejected_output": result.Output},
+				AgentDone: true,
 			}); err != nil {
 				slog.Error("finalizeCompletedAsyncRuns.applyTransition.waitUser", "err", err)
 			}
@@ -1099,8 +1123,9 @@ func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, ta
 			}
 			if cycles >= maxCycles {
 				return WaitUserTransition{
-					Reason: fmt.Sprintf("review cycle limit (%d) reached", maxCycles),
-					Output: output,
+					Reason:    fmt.Sprintf("review cycle limit (%d) reached", maxCycles),
+					Output:    output,
+					AgentDone: true,
 				}
 			}
 			meta := map[string]any{}

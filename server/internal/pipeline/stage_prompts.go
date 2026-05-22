@@ -56,10 +56,13 @@ When finished, produce a `+"```json```"+` block as your final output:
 }
 
 // SelfReviewPrompt builds the prompt for the self_review stage.
+// Self-review is read-only: no upfrontPermissionsDirective — agents must not
+// call request_permission here. Doing so causes an awaiting_user state that the
+// dead-PID reaper immediately fails when the reviewer exits normally.
 func SelfReviewPrompt(t *ent.Task, implementationOutput map[string]any) PromptBundle {
 	implJSON, _ := json.MarshalIndent(implementationOutput, "", "  ")
 	return PromptBundle{
-		SystemPrompt: fmt.Sprintf("%s\n\n%s", sharedContext, upfrontPermissionsDirective),
+		SystemPrompt: sharedContext,
 		UserPrompt: fmt.Sprintf(`## Task: %s
 
 %s
@@ -87,7 +90,7 @@ func FinalizationPrompt(t *ent.Task, stageRuns []*ent.StageRun) PromptBundle {
 		history += fmt.Sprintf("%s (iter %d): %s\n", r.Stage, r.Iteration, r.Status)
 	}
 	return PromptBundle{
-		SystemPrompt: fmt.Sprintf("%s\n\n%s", sharedContext, upfrontPermissionsDirective),
+		SystemPrompt: sharedContext,
 		UserPrompt: fmt.Sprintf(`## Task: %s
 
 %s

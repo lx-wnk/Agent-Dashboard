@@ -114,16 +114,18 @@ func runRawMigrations(db *sql.DB) error {
 		END`,
 
 		// Sync trigger: UPDATE on tasks (delete old index entry, insert new one).
-		// Uses rowid-only delete which is correct for a regular (non-content) FTS5 table.
+		// task_fts is a regular (non-content) FTS5 table, so plain DELETE by rowid
+		// is the correct removal form — the 'delete' command form is reserved for
+		// external-content/contentless tables and raises "SQL logic error" here.
 		`CREATE TRIGGER IF NOT EXISTS tasks_au AFTER UPDATE ON tasks BEGIN
-			INSERT INTO task_fts(task_fts, rowid) VALUES ('delete', old.rowid);
+			DELETE FROM task_fts WHERE rowid = old.rowid;
 			INSERT INTO task_fts(rowid, task_id, title, description)
 			VALUES (new.rowid, new.id, new.title, COALESCE(new.description, ''));
 		END`,
 
 		// Sync trigger: DELETE on tasks.
 		`CREATE TRIGGER IF NOT EXISTS tasks_ad AFTER DELETE ON tasks BEGIN
-			INSERT INTO task_fts(task_fts, rowid) VALUES ('delete', old.rowid);
+			DELETE FROM task_fts WHERE rowid = old.rowid;
 		END`,
 
 		// workflow_patterns: top ngrams discovered from JSONL session files.

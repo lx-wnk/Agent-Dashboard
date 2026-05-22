@@ -7,10 +7,10 @@
 
 | Slug | DB ID | Groups | Priority | Status |
 |---|---|---|---|---|
-| `quality-security-ci` | 90572a73 | T-01 + T-02 + T-03 | high | implementation (running) |
-| `quick-wins-multi-provider-metrics` | afd96cdb | T-04 | medium | implementation (running) |
-| `cost-analytics-quota` | 09c57f02 | T-05 + T-08 | medium | implementation (running) |
-| `developer-tooling-worktree-config` | 10f69b71 | T-06 + T-07 | medium | implementation (queued, auto-picks when slot frees) |
+| `quality-security-ci` | 90572a73 | T-01 + T-02 + T-03 | high | implementation (running, iter-1, pid 74960) |
+| `quick-wins-multi-provider-metrics` | afd96cdb | T-04 | medium | implementation (running, iter-1, pid 74963) |
+| `cost-analytics-quota` | 09c57f02 | T-05 + T-08 | medium | implementation (running, iter-1, pid 74966) |
+| `developer-tooling-worktree-config` | 10f69b71 | T-06 + T-07 | medium | implementation (failed, needsUser — retry once slot frees) |
 
 ## Completed (recent)
 

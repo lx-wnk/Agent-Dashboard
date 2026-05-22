@@ -62,6 +62,13 @@ export const EntrypointDesktop = "desktop";
 export const EntrypointUnknown = "unknown";
 export type Entrypoint = typeof EntrypointCLI | typeof EntrypointDesktop | typeof EntrypointUnknown;
 /**
+ * Provider identifies which AI coding CLI an agent process belongs to.
+ */
+export const ProviderClaude = "claude";
+export const ProviderCodex = "codex";
+export const ProviderGemini = "gemini";
+export type Provider = typeof ProviderClaude | typeof ProviderCodex | typeof ProviderGemini;
+/**
  * ErrorState describes a recognisable error condition seen in the session log.
  */
 export const ErrorStateQuotaExhausted = "quota_exhausted";
@@ -82,6 +89,7 @@ export interface BtwMessage {
 export interface Agent {
   pid: number /* int */;
   sessionId: string;
+  provider: Provider;
   projectPath: string;
   projectName: string;
   cwd: string;

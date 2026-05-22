@@ -31,6 +31,10 @@ type FailTransition struct {
 type WaitUserTransition struct {
 	Reason string
 	Output map[string]any
+	// AgentDone signals that the agent process has already exited normally
+	// (e.g. review cycle limit reached). applyTransition will clear the PID
+	// so the dead-PID reaper does not immediately re-fail the run.
+	AgentDone bool
 }
 
 type IterateTransition struct {
@@ -148,6 +152,16 @@ type OrchestratorOptions struct {
 	// authenticate back-calls to the dashboard REST API.
 	MCPToken string
 	MCPUrl   string
+
+	// WorktreeRoot is the base directory for auto-created git worktrees.
+	// Defaults to ~/dashboard-worktrees when empty.
+	// Set via DASHBOARD_WORKTREE_ROOT.
+	WorktreeRoot string
+
+	// ForceWorktrees ensures every agent-driven task runs in an isolated git worktree,
+	// even when task.SourceBranch is not set. The branch is derived as "feat/<slug>".
+	// Set via DASHBOARD_FORCE_WORKTREES=true.
+	ForceWorktrees bool
 
 	// Spawner selects which LLM backend runs stage agents.
 	// When nil, stage handlers use SpawnStageAgent (native Claude path).

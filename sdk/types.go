@@ -58,6 +58,15 @@ const (
 	EntrypointUnknown Entrypoint = "unknown"
 )
 
+// Provider identifies which AI coding CLI an agent process belongs to.
+type Provider string
+
+const (
+	ProviderClaude Provider = "claude"
+	ProviderCodex  Provider = "codex"
+	ProviderGemini Provider = "gemini"
+)
+
 // ErrorState describes a recognisable error condition seen in the session log.
 type ErrorState string
 
@@ -78,6 +87,7 @@ type BtwMessage struct {
 type Agent struct {
 	PID                       int            `json:"pid"`
 	SessionID                 string         `json:"sessionId"`
+	Provider                  Provider       `json:"provider"`
 	ProjectPath               string         `json:"projectPath"`
 	ProjectName               string         `json:"projectName"`
 	CWD                       string         `json:"cwd"`
