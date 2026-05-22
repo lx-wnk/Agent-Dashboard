@@ -34,6 +34,11 @@ function onCreated(project: Project): void {
   emit('update:selectedProjectId', project.id)
   emit('update:skipped', false)
 }
+
+function onSkip(): void {
+  emit('update:selectedProjectId', '')
+  emit('update:skipped', true)
+}
 </script>
 
 <template>
@@ -79,7 +84,14 @@ function onCreated(project: Project): void {
       />
     </div>
 
-    <div class="flex justify-end">
+    <div class="flex justify-end gap-2">
+      <AppButton
+        variant="secondary"
+        data-testid="project-step-skip"
+        @click="onSkip"
+      >
+        Skip — no project
+      </AppButton>
       <AppButton
         variant="primary"
         :disabled="!canAdvance"

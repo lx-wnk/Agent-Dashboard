@@ -68,4 +68,13 @@ describe('BacklogForm wizard', () => {
     const next = wrapper.get('[data-testid="project-step-next"]')
     expect(next.attributes('disabled')).toBeUndefined()
   })
+
+  it('skip button enables Next and clears project selection', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="project-radio-p1"]').trigger('click')
+    await wrapper.get('[data-testid="project-step-skip"]').trigger('click')
+    expect(wrapper.get('[data-testid="project-step-next"]').attributes('disabled')).toBeUndefined()
+    // After skipping, the previously selected radio should no longer be styled as selected.
+    expect(wrapper.get('[data-testid="project-radio-p1"]').classes()).not.toContain('border-blue-500')
+  })
 })
