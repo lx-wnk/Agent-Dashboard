@@ -6,8 +6,6 @@ import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
-import AuditSettings from './components/AuditSettings.vue'
-import AppModal from './components/ui/AppModal.vue'
 import CostTrend from './components/CostTrend.vue'
 import EditGateModal from './components/EditGateModal.vue'
 import LoginPage from './components/LoginPage.vue'
@@ -28,8 +26,6 @@ import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
 const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
-const ProjectSettings = defineAsyncComponent(() => import('./components/ProjectSettings.vue'))
-const SpawnerSettings = defineAsyncComponent(() => import('./components/SpawnerSettings.vue'))
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
@@ -71,9 +67,6 @@ const activeConceptTask = ref<PipelineTask | null>(null)
 const showRefinementChat = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
-const showAudit = ref(false)
-const showProjects = ref(false)
-const showSpawners = ref(false)
 
 function openNewTask() {
   activeConceptTask.value = null
@@ -259,30 +252,6 @@ onMounted(fetchQuota)
       >
         + New Agent
       </button>
-      <button
-        type="button"
-        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
-        title="Audit Log"
-        @click="showAudit = true"
-      >
-        Audit
-      </button>
-      <button
-        type="button"
-        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
-        title="Projects"
-        @click="showProjects = true"
-      >
-        Projects
-      </button>
-      <button
-        type="button"
-        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
-        title="Spawners"
-        @click="showSpawners = true"
-      >
-        Spawners
-      </button>
       <OfflineBadge />
       <button
         type="button"
@@ -410,57 +379,6 @@ onMounted(fetchQuota)
     />
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
-    <AuditSettings :open="showAudit" @close="showAudit = false" />
-    <AppModal :open="showProjects" @close="showProjects = false">
-      <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
-        <header class="flex justify-between items-start gap-3 px-5 py-4 border-b border-line flex-shrink-0">
-          <div>
-            <h2 class="text-lg font-semibold text-fg">
-              Projects
-            </h2>
-            <p class="text-xs text-fg-mute mt-0.5">
-              Group tasks under named projects. Each project can have default folders (working directories) and a spawner override.
-            </p>
-          </div>
-          <button
-            type="button"
-            class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg flex-shrink-0"
-            aria-label="Close"
-            @click="showProjects = false"
-          >
-            &times;
-          </button>
-        </header>
-        <div class="flex-1 overflow-y-auto px-5 py-4">
-          <ProjectSettings v-if="showProjects" hide-title />
-        </div>
-      </div>
-    </AppModal>
-    <AppModal :open="showSpawners" @close="showSpawners = false">
-      <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
-        <header class="flex justify-between items-start gap-3 px-5 py-4 border-b border-line flex-shrink-0">
-          <div>
-            <h2 class="text-lg font-semibold text-fg">
-              Spawners
-            </h2>
-            <p class="text-xs text-fg-mute mt-0.5">
-              Configure LLM adapters per spawner row. Built-in spawners are read-only. Each custom row picks an adapter type (claude, ollama, openai, custom) and supplies the adapter-specific config keys.
-            </p>
-          </div>
-          <button
-            type="button"
-            class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg flex-shrink-0"
-            aria-label="Close"
-            @click="showSpawners = false"
-          >
-            &times;
-          </button>
-        </header>
-        <div class="flex-1 overflow-y-auto px-5 py-4">
-          <SpawnerSettings v-if="showSpawners" hide-title />
-        </div>
-      </div>
-    </AppModal>
     <EditGateModal />
     <SpotlightSearch
       @navigate-task="task => selectTask(task)"
