@@ -48,8 +48,8 @@ function getPref(eventType: string): NotifPref {
 onMounted(async () => {
   try {
     const [prefRes, cfgRes] = await Promise.all([
-      fetch('/api/tasks/settings/notifications'),
-      fetch('/api/tasks/settings/notification-config'),
+      fetch('/api/notifications/preferences'),
+      fetch('/api/notifications/config'),
     ])
     // F047 — preserve which endpoint failed in the error message
     if (!prefRes.ok || !cfgRes.ok)
@@ -89,7 +89,7 @@ async function savePref(eventType: string, updated: NotifPref) {
   savingPref.value = eventType
   prefSaveOk.value = null
   try {
-    const res = await fetch(`/api/tasks/settings/notifications/${eventType}`, {
+    const res = await fetch(`/api/notifications/preferences/${eventType}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ channels: updated.channels, enabled: updated.enabled }),
@@ -118,7 +118,7 @@ async function saveConfig() {
   configSaveOk.value = false
   error.value = null
   try {
-    const res = await fetch('/api/tasks/settings/notification-config', {
+    const res = await fetch('/api/notifications/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config.value),

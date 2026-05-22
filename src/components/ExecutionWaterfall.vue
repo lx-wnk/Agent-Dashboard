@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
 import * as d3 from 'd3'
-import { onMounted, ref, useId, watch } from 'vue'
+import { nextTick, onMounted, ref, useId, watch } from 'vue'
 
 const props = defineProps<{ sessionId: string }>()
 
@@ -29,12 +29,14 @@ async function fetchAndRender() {
     if (!res.ok)
       throw new Error(await res.text())
     const { toolCalls } = await res.json() as { toolCalls: OutputMessage[] }
+    loading.value = false
+    await nextTick()
+    if (!svgRef.value)
+      return
     renderGantt(toolCalls)
   }
   catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Failed to load timeline'
-  }
-  finally {
     loading.value = false
   }
 }
