@@ -471,6 +471,52 @@ func TestSpawn_CustomAdapter_ReservedFlagRejected(t *testing.T) {
 	}
 }
 
+func TestSpawn_CustomAdapter_ChannelArgOverride(t *testing.T) {
+	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "npx")
+	row := &ent.Spawner{
+		ID: "spwn_arg", AdapterType: "custom", Command: "npx",
+		AdapterConfig: map[string]string{"channel_arg": "--config"},
+	}
+	repo := &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_arg": row}}
+	m := NewSpawnManager(5, 60000, repo)
+
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	capturedPtr := captureExec(t)
+
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           tmp,
+		"spawnerId":     "spwn_arg",
+		"enableChannel": true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	captured := *capturedPtr
+	if captured == nil {
+		t.Fatal("execStart not invoked")
+	}
+	// The flag name from adapter_config["channel_arg"] should be present
+	// immediately before the config path.
+	found := false
+	for i := 0; i+1 < len(captured.Args); i++ {
+		if captured.Args[i] == "--config" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected --config (channel_arg override), got args %v", captured.Args)
+	}
+	// Default --mcp-config must NOT appear.
+	for _, a := range captured.Args {
+		if a == "--mcp-config" {
+			t.Fatalf("--mcp-config must not appear when channel_arg overrides it, got args %v", captured.Args)
+		}
+	}
+}
+
 func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)

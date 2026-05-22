@@ -176,7 +176,7 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		if spawnerRow != nil {
 			spawnerIDForLog = spawnerRow.ID
 		}
-		slog.Info("spawn: projectId attached", "projectId", projectID, "spawnerId", spawnerIDForLog)
+		slog.Info("spawn: projectId attached", "sub", sub, "projectId", projectID, "spawnerId", spawnerIDForLog)
 	}
 
 	enableChannel, _ := body["enableChannel"].(bool)
@@ -229,7 +229,13 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 			slog.Warn("spawn: channel disabled — cannot write MCP config", "err", err)
 		} else {
 			channelCfgPath = cfgPath
-			args = append(args, "--mcp-config", cfgPath)
+			channelArg := "--mcp-config"
+			if spawnerRow != nil && spawnerRow.AdapterType == "custom" {
+				if v, ok := spawnerRow.AdapterConfig["channel_arg"]; ok && v != "" {
+					channelArg = v
+				}
+			}
+			args = append(args, channelArg, cfgPath)
 		}
 	}
 

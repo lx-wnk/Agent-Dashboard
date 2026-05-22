@@ -17,6 +17,10 @@ const emit = defineEmits<{ close: [] }>()
 const { projects } = useProjects()
 const { spawners } = useSpawners()
 
+const sortedProjects = computed(() =>
+  projects.value.slice().sort((a, b) => a.name.localeCompare(b.name)),
+)
+
 const dlg = useSpawnDialog({
   fetchFolders: fetchProjectFolders,
   lookupSpawner: id => spawners.value.find(s => s.id === id),
@@ -241,8 +245,13 @@ onUnmounted(() => {
             <option value="">
               — None (manual) —
             </option>
-            <option v-for="p in projects" :key="p.id" :value="p.id">
-              {{ p.name }}
+            <option
+              v-for="p in sortedProjects"
+              :key="p.id"
+              :value="p.id"
+              :disabled="p.folderCount === 0"
+            >
+              {{ p.name }}{{ p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : '' }}
             </option>
             <option value="__create__">
               + Create new project…
