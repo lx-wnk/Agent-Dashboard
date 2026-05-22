@@ -44,12 +44,14 @@ function onProjectCreated(_project: Project): void {
       @project-created="onProjectCreated"
       @next="onNext"
     />
-    <DetailsStep
-      v-else
-      :selected-project-id="selectedProjectId"
-      :skipped="skipped"
-      @back="onBack"
-      @created="onCreated"
-    />
+    <KeepAlive>
+      <DetailsStep
+        v-if="step === 2"
+        :selected-project-id="selectedProjectId"
+        :skipped="skipped"
+        @back="onBack"
+        @created="onCreated"
+      />
+    </KeepAlive>
   </div>
 </template>

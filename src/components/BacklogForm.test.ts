@@ -130,4 +130,17 @@ describe('BacklogForm wizard', () => {
     await flushPromises()
     expect(createTaskMock).toHaveBeenCalledWith(expect.not.objectContaining({ projectId: expect.anything() }))
   })
+
+  it('preserves Step 2 field values after Back → Next round-trip', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="project-radio-p1"]').trigger('click')
+    await wrapper.get('[data-testid="project-step-next"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="details-title"]').setValue('Persisted title')
+    await wrapper.get('[data-testid="details-back"]').trigger('click')
+    await wrapper.get('[data-testid="project-step-next"]').trigger('click')
+    await flushPromises()
+    const titleInput = wrapper.get('[data-testid="details-title"]').element as HTMLInputElement
+    expect(titleInput.value).toBe('Persisted title')
+  })
 })
