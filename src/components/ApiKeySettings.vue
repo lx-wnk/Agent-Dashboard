@@ -10,6 +10,7 @@ import RemoteSettings from './RemoteSettings.vue'
 import SystemPromptSettings from './SystemPromptSettings.vue'
 import ProjectSettings from './ProjectSettings.vue'
 import SpawnerSettings from './SpawnerSettings.vue'
+import AuditLogTab from './AuditLogTab.vue'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
 
@@ -810,6 +811,16 @@ async function startImport() {
           >
             {{ patternsLoading ? 'Scanning…' : 'Refresh' }}
           </button>
+
+          <div class="mt-8 pt-6 border-t border-line">
+            <h3 class="text-[17px] font-bold text-fg mb-1">
+              Audit Log
+            </h3>
+            <p class="text-xs text-fg-mute mb-4">
+              Recent dashboard events — permission grants, task transitions, spawn actions.
+            </p>
+            <AuditLogTab :limit="100" hide-title />
+          </div>
         </section>
       </div>
     </div>
