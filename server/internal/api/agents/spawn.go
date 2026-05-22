@@ -20,6 +20,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
@@ -142,6 +143,28 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	if resumeSessionID != "" && !uuidRE.MatchString(resumeSessionID) {
 		return 0, fmt.Errorf("invalid sessionId format")
 	}
+
+	// Resolve spawner if provided.
+	var spawnerRow *ent.Spawner
+	if spawnerID, ok := body["spawnerId"].(string); ok && spawnerID != "" {
+		if m.spawnerRepo == nil {
+			return 0, fmt.Errorf("spawner not configured")
+		}
+		row, err := m.spawnerRepo.GetByID(context.Background(), spawnerID)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return 0, fmt.Errorf("spawner not found")
+			}
+			return 0, fmt.Errorf("spawner lookup failed: %w", err)
+		}
+		switch row.AdapterType {
+		case "ollama", "openai":
+			return 0, fmt.Errorf("adapter %s not supported for user-initiated spawns; use pipeline tasks instead", row.AdapterType)
+		}
+		spawnerRow = row
+	}
+	_ = spawnerRow // consumed by Task 3
+
 	enableChannel, _ := body["enableChannel"].(bool)
 	if _, hasChannel := body["enableChannel"]; !hasChannel {
 		enableChannel = true // default on

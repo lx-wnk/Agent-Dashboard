@@ -2,12 +2,49 @@ package agents
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
+
+// fakeSpawnerRepo satisfies repo.SpawnerRepo for spawn tests.
+type fakeSpawnerRepo struct {
+	byID map[string]*ent.Spawner
+}
+
+func (f *fakeSpawnerRepo) Create(_ context.Context, _, _, _ string, _ []string, _ map[string]string, _, _ *string, _ string, _ map[string]string, _ bool) (*ent.Spawner, error) {
+	return nil, nil
+}
+
+func (f *fakeSpawnerRepo) GetByID(_ context.Context, id string) (*ent.Spawner, error) {
+	if s, ok := f.byID[id]; ok {
+		return s, nil
+	}
+	return nil, &ent.NotFoundError{}
+}
+
+func (f *fakeSpawnerRepo) GetBySlug(_ context.Context, _ string) (*ent.Spawner, error) {
+	return nil, &ent.NotFoundError{}
+}
+
+func (f *fakeSpawnerRepo) List(_ context.Context) ([]*ent.Spawner, error) {
+	return nil, nil
+}
+
+func (f *fakeSpawnerRepo) Update(_ context.Context, _ string, _, _, _ *string, _ []string, _ map[string]string, _, _ *string, _ *string, _ map[string]string, _, _ bool) (*ent.Spawner, error) {
+	return nil, nil
+}
+
+func (f *fakeSpawnerRepo) Delete(_ context.Context, _ string) error {
+	return nil
+}
 
 func TestNewSpawnManager_DefaultsWhenInvalidArgs(t *testing.T) {
 	// maxSpawns <= 0 and windowMs <= 0 should be clamped to safe defaults.
@@ -154,4 +191,48 @@ func TestPruneAttempts_RemovesOldEntries(t *testing.T) {
 	m.mu.Unlock()
 
 	assert.Equal(t, 0, count, "all attempts older than window should be pruned")
+}
+
+func TestSpawn_UnknownSpawnerID_Returns400(t *testing.T) {
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{}})
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":    "do thing",
+		"cwd":       tmp,
+		"spawnerId": "spwn_missing",
+	})
+	if err == nil || !strings.Contains(err.Error(), "spawner not found") {
+		t.Fatalf("expected 'spawner not found' error, got %v", err)
+	}
+}
+
+func TestSpawn_OllamaAdapter_Rejected(t *testing.T) {
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	row := &ent.Spawner{ID: "spwn_o", AdapterType: "ollama", Command: "claude"}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_o": row}})
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":    "do thing",
+		"cwd":       tmp,
+		"spawnerId": "spwn_o",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("expected adapter-not-supported error, got %v", err)
+	}
+}
+
+func TestSpawn_OpenAIAdapter_Rejected(t *testing.T) {
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	row := &ent.Spawner{ID: "spwn_x", AdapterType: "openai", Command: "claude"}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_x": row}})
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":    "do thing",
+		"cwd":       tmp,
+		"spawnerId": "spwn_x",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("expected adapter-not-supported error, got %v", err)
+	}
 }
