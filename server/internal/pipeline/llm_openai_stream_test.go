@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 )
 
@@ -23,7 +22,6 @@ func TestOpenAISpawner_SpawnStream_SSE(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	os.Setenv("OPENAI_API_KEY_FAKE", "sk-test")
 	o := &OpenAISpawner{BaseURL: srv.URL, APIKeyEnv: "OPENAI_API_KEY_FAKE", DefaultModel: "gpt-4"}
 	ch, err := o.SpawnStream(context.Background(), LLMSpawnArgs{SystemPrompt: "sys", UserPrompt: "hi"})
 	if err != nil {
