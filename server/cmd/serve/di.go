@@ -171,6 +171,12 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 				_, err := orch.ProgressTask(ctx, taskID, nil)
 				return err
 			},
+			ResolveSpawner: func(ctx context.Context, taskID string) (*ent.Spawner, services.SpawnerSource, error) {
+				if spawnerResolver == nil {
+					return nil, services.SpawnerSourceDefault, nil
+				}
+				return spawnerResolver.Resolve(ctx, taskID)
+			},
 		})
 	}
 
