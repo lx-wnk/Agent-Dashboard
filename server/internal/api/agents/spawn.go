@@ -172,7 +172,11 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 
 	projectID, _ := body["projectId"].(string)
 	if projectID != "" {
-		slog.Info("spawn: projectId attached", "projectId", projectID, "spawnerId", spawnerIDValue(spawnerRow))
+		spawnerIDForLog := ""
+		if spawnerRow != nil {
+			spawnerIDForLog = spawnerRow.ID
+		}
+		slog.Info("spawn: projectId attached", "projectId", projectID, "spawnerId", spawnerIDForLog)
 	}
 
 	enableChannel, _ := body["enableChannel"].(bool)
@@ -186,6 +190,9 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	if spawnerRow != nil {
 		if !spawners.ValidateCommand(spawnerRow.Command) {
 			return 0, fmt.Errorf("spawner command not permitted")
+		}
+		if bad := firstReservedFlag(spawnerRow.Args); bad != "" {
+			return 0, fmt.Errorf("spawner args may not include reserved flag %q", bad)
 		}
 		if spawnerRow.AdapterType == "custom" {
 			binary = spawnerRow.Command
@@ -525,9 +532,28 @@ func mergeEnv(s *ent.Spawner) []string {
 	return out
 }
 
-func spawnerIDValue(s *ent.Spawner) string {
-	if s == nil {
-		return ""
+// reservedSpawnerFlags are CLI flags the dashboard sets itself; spawner-row
+// args must not re-declare them. The list mirrors the canonical args built
+// in Spawn(): --resume, -p, --model, --system-prompt, --mcp-config.
+var reservedSpawnerFlags = map[string]struct{}{
+	"--resume":        {},
+	"-p":              {},
+	"--model":         {},
+	"--system-prompt": {},
+	"--mcp-config":    {},
+}
+
+// firstReservedFlag returns the first arg that names a reserved flag, or "".
+// Matches both "--flag" and "--flag=value" forms.
+func firstReservedFlag(args []string) string {
+	for _, a := range args {
+		head := a
+		if i := strings.IndexByte(a, '='); i >= 0 {
+			head = a[:i]
+		}
+		if _, bad := reservedSpawnerFlags[head]; bad {
+			return head
+		}
 	}
-	return s.ID
+	return ""
 }

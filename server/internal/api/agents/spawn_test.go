@@ -433,6 +433,44 @@ func TestSpawn_EnvMerge_DashboardWins(t *testing.T) {
 		"non-conflicting spawner env var must be present")
 }
 
+func TestMergeEnv_NilSpawner_StripsSecrets(t *testing.T) {
+	t.Setenv("DASHBOARD_JWT_SECRET", "x")
+	t.Setenv("DASHBOARD_HOOKS_SECRET", "y")
+	t.Setenv("DASHBOARD_KEEP_ME", "z")
+
+	env := mergeEnv(nil)
+	if envValue(env, "DASHBOARD_JWT_SECRET") != "" {
+		t.Fatalf("JWT secret must be stripped on nil-spawner path")
+	}
+	if envValue(env, "DASHBOARD_HOOKS_SECRET") != "" {
+		t.Fatalf("hooks secret must be stripped on nil-spawner path")
+	}
+	if envValue(env, "DASHBOARD_KEEP_ME") != "z" {
+		t.Fatalf("non-secret DASHBOARD vars must survive, got %q", envValue(env, "DASHBOARD_KEEP_ME"))
+	}
+}
+
+func TestSpawn_CustomAdapter_ReservedFlagRejected(t *testing.T) {
+	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "npx")
+	row := &ent.Spawner{
+		ID: "spwn_bad", AdapterType: "custom", Command: "npx",
+		Args: []string{"--model", "anything"}, // reserved
+	}
+	repo := &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_bad": row}}
+	m := NewSpawnManager(5, 60000, repo)
+
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":    "do thing",
+		"cwd":       tmp,
+		"spawnerId": "spwn_bad",
+	})
+	if err == nil || !strings.Contains(err.Error(), "reserved flag") {
+		t.Fatalf("expected reserved-flag rejection, got %v", err)
+	}
+}
+
 func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
