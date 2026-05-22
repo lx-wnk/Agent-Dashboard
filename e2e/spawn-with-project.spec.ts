@@ -33,7 +33,9 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
     headers: csrfHeaders,
     data: { name: `E2E ${slug}`, slug },
   })
-  expect(projectRes.ok()).toBe(true)
+  // toBeOK() includes the response body in failure messages — surfaces the
+  // server's actual error text instead of a bare `expected true, got false`.
+  await expect(projectRes).toBeOK()
   const project = await projectRes.json() as { id: string }
 
   // 2. Pre-seed a default folder. /tmp is safe (exists on every dev box) and
@@ -42,7 +44,7 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
     headers: csrfHeaders,
     data: { path: '/tmp', isDefault: true },
   })
-  expect(folderRes.ok()).toBe(true)
+  await expect(folderRes).toBeOK()
 
   try {
     // 3. Navigate.
@@ -66,9 +68,10 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
     const cwdInput = page.locator('[data-testid="spawn-cwd-wrap"] input')
     await expect(cwdInput).toHaveValue('/tmp')
 
-    // 8. Cancel — we don't want to actually spawn a Claude process. The modal
-    //    is the only place a Cancel button is rendered while it's open.
-    await page.getByRole('button', { name: 'Cancel' }).first().click()
+    // 8. Cancel — we don't want to actually spawn a Claude process. Scope to
+    //    the modal (AppModal renders role="dialog") so we don't accidentally
+    //    match a Cancel button elsewhere on the page.
+    await page.getByRole('dialog').getByRole('button', { name: /^cancel$/i }).click()
   }
   finally {
     // 9. Cleanup, even if an assertion above failed.
