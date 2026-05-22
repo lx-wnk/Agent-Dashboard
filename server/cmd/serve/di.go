@@ -22,10 +22,11 @@ import (
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
-	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
+	apivisualizations "github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
@@ -217,30 +218,31 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	replyStore := agents.NewReplyStore()
 
 	routerDeps := api.RouterDeps{
-		Ctx:                  ctx,
-		Config:               routerConfig,
-		AgentBroadcaster:     broadcaster,
-		OAuthProvider:        oauthProvider,
-		UserRepo:             userRepo,
-		ApiKeyRepo:           apiKeyRepo,
-		ProjectRepo:          projectRepo,
-		ProjectFolderRepo:    projectFolderRepo,
-		SpawnerRepo:          spawnerRepo,
-		TaskProjectOps:       newTaskProjectOps(entClient),
-		TaskHandler:          taskHandler,
-		WebPushHandler:       webPushHandler,
-		RemotesHandler:       remotesHandler,
-		PresetsHandler:       presetsHandler,
-		SystemPromptsHandler: systemPromptsHandler,
-		AdapterHandler:       adapterHandler,
-		SearchHandler:        searchHandler,
-		HistoryHandler:       historyHandler,
-		RefineHandler:        refineHandler,
-		AnalyticsHandler:     analyticsHandler,
-		CostHandler:          costHandler,
-		MCPHandler:           mcpHandler,
-		ChannelReply:         agents.NewChannelReplyHandler(replyStore),
-		PluginRegistry:       pluginRegistry,
+		Ctx:                   ctx,
+		Config:                routerConfig,
+		AgentBroadcaster:      broadcaster,
+		OAuthProvider:         oauthProvider,
+		UserRepo:              userRepo,
+		ApiKeyRepo:            apiKeyRepo,
+		ProjectRepo:           projectRepo,
+		ProjectFolderRepo:     projectFolderRepo,
+		SpawnerRepo:           spawnerRepo,
+		TaskProjectOps:        newTaskProjectOps(entClient),
+		TaskHandler:           taskHandler,
+		WebPushHandler:        webPushHandler,
+		RemotesHandler:        remotesHandler,
+		PresetsHandler:        presetsHandler,
+		SystemPromptsHandler:  systemPromptsHandler,
+		AdapterHandler:        adapterHandler,
+		SearchHandler:         searchHandler,
+		HistoryHandler:        historyHandler,
+		RefineHandler:         refineHandler,
+		AnalyticsHandler:      analyticsHandler,
+		CostHandler:           costHandler,
+		VisualizationsHandler: apivisualizations.NewHandler(),
+		MCPHandler:            mcpHandler,
+		ChannelReply:          agents.NewChannelReplyHandler(replyStore),
+		PluginRegistry:        pluginRegistry,
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
