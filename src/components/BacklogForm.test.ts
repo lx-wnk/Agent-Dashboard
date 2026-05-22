@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
@@ -16,6 +16,18 @@ vi.mock('../composables/useProjects', () => ({
 
 vi.mock('../composables/useSpawners', () => ({
   useSpawners: () => ({ spawners: ref([{ id: 's1', name: 'Claude default', slug: 'claude-default', command: 'claude', args: [], env: {}, adapterType: 'claude', adapterConfig: {}, builtIn: true, createdAt: '', updatedAt: '' }]) }),
+}))
+
+const createTaskMock = vi.fn().mockResolvedValue({ id: 't1', slug: 'demo', title: 'Demo' } as unknown)
+vi.mock('../composables/useTasks', () => ({
+  createTask: (input: unknown) => createTaskMock(input),
+}))
+
+vi.mock('../composables/useProjectFolders', () => ({
+  suggestFolders: vi.fn().mockResolvedValue([
+    { id: 'f1', projectId: 'p1', path: '/repos/web', isDefault: true, createdAt: '' },
+  ]),
+  createFolder: vi.fn(),
 }))
 
 import BacklogForm from './BacklogForm.vue'
@@ -76,5 +88,46 @@ describe('BacklogForm wizard', () => {
     expect(wrapper.get('[data-testid="project-step-next"]').attributes('disabled')).toBeUndefined()
     // After skipping, the previously selected radio should no longer be styled as selected.
     expect(wrapper.get('[data-testid="project-radio-p1"]').classes()).not.toContain('border-blue-500')
+  })
+
+  it('prefills cwd from the project default folder when the user advances to Step 2', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="project-radio-p1"]').trigger('click')
+    await wrapper.get('[data-testid="project-step-next"]').trigger('click')
+    await flushPromises()
+    const cwd = wrapper.get('[data-testid="details-cwd"]').element as HTMLInputElement
+    expect(cwd.value).toBe('/repos/web')
+  })
+
+  it('submits createTask with projectId when project is selected', async () => {
+    createTaskMock.mockClear()
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="project-radio-p1"]').trigger('click')
+    await wrapper.get('[data-testid="project-step-next"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="details-title"]').setValue('Demo task')
+    await wrapper.get('[data-testid="details-slug"]').setValue('demo')
+    await wrapper.get('[data-testid="details-submit"]').trigger('click')
+    await flushPromises()
+    expect(createTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'p1',
+      title: 'Demo task',
+      slug: 'demo',
+      cwd: '/repos/web',
+    }))
+  })
+
+  it('submits createTask without projectId when Step 1 is skipped', async () => {
+    createTaskMock.mockClear()
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="project-step-skip"]').trigger('click')
+    await wrapper.get('[data-testid="project-step-next"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="details-title"]').setValue('No project')
+    await wrapper.get('[data-testid="details-slug"]').setValue('no-project')
+    await wrapper.get('[data-testid="details-cwd"]').setValue('/tmp/x')
+    await wrapper.get('[data-testid="details-submit"]').trigger('click')
+    await flushPromises()
+    expect(createTaskMock).toHaveBeenCalledWith(expect.not.objectContaining({ projectId: expect.anything() }))
   })
 })
