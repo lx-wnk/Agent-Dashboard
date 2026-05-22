@@ -2,6 +2,16 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SpawnDialog from './SpawnDialog.vue'
 
+// jsdom quirks worked around in this file:
+//   1. AppModal teleports to <body>, so tests use document.querySelector
+//      rather than wrapper.find for elements inside the modal.
+//   2. AppInput uses useId() for the real <input>/<textarea> id; the
+//      `id` attribute passed in falls through to the wrapper <div>.
+//      Tests target [data-testid="…-wrap"] input/textarea to reach the
+//      real form element.
+//   3. EventSource is stubbed because useProjects()/useSpawners() open
+//      SSE on mount and jsdom has no built-in EventSource.
+
 const sampleProject = {
   id: 'prj_a',
   slug: 'alpha',
@@ -21,7 +31,7 @@ const sampleSpawner = {
   env: {},
   adapterType: 'claude' as const,
   adapterConfig: {},
-  modelOverride: 'claude-opus-4-7',
+  modelOverride: 'claude-opus-4-6',
   builtIn: false,
   createdAt: '',
   updatedAt: '',
@@ -54,6 +64,9 @@ beforeEach(() => {
     return Promise.resolve({ ok: true, json: async () => [] })
   }))
   vi.stubGlobal('EventSource', class {
+    static CONNECTING = 0
+    static OPEN = 1
+    static CLOSED = 2
     onmessage: ((e: MessageEvent) => void) | null = null
     onerror: ((e: Event) => void) | null = null
     readyState = 0
@@ -77,12 +90,9 @@ describe('spawnDialog', () => {
     expect(cwdInput).not.toBeNull()
     expect(cwdInput.value).toBe('/home/u/alpha')
 
-    // Model hydration is verified via the spawn payload in the next test —
-    // the <select> reports '' when the bound value has no matching <option>
-    // (AVAILABLE_MODELS does not include the override), but v-model carries
-    // it to the spawn body regardless.
     const modelSelect = document.querySelector('#spawn-model') as HTMLSelectElement
     expect(modelSelect).not.toBeNull()
+    expect(modelSelect.value).toBe('claude-opus-4-6')
     wrapper.unmount()
   })
 
@@ -112,7 +122,7 @@ describe('spawnDialog', () => {
     expect(body).toMatchObject({
       prompt: 'do a thing',
       cwd: '/home/u/alpha',
-      model: 'claude-opus-4-7',
+      model: 'claude-opus-4-6',
       spawnerId: 'spwn_a',
       projectId: 'prj_a',
     })
