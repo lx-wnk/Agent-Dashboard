@@ -76,6 +76,97 @@ const (
 	ErrorStateAuthFailed     ErrorState = "auth_failed"
 )
 
+// SankeyNode is one node in the tool-call Sankey diagram. ID equals Name
+// today but is kept separate so collisions across distinct sources can
+// later be disambiguated.
+type SankeyNode struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// SankeyLink is one directed source→target flow with an aggregated count.
+type SankeyLink struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Value  int    `json:"value"`
+}
+
+// SankeyMeta carries summary counters for the Sankey response.
+type SankeyMeta struct {
+	SessionCount int `json:"sessionCount"`
+	CallCount    int `json:"callCount"`
+}
+
+// SankeyData is the response payload for GET /api/visualizations/sankey.
+type SankeyData struct {
+	Nodes []SankeyNode `json:"nodes"`
+	Links []SankeyLink `json:"links"`
+	Meta  SankeyMeta   `json:"meta"`
+}
+
+// DAGNode is one node in the session DAG (tool call, assistant turn, or
+// user message). The DAG is per-session so IDs are line-local.
+type DAGNode struct {
+	ID    string `json:"id"`
+	Type  string `json:"type"` // "tool" | "assistant" | "user"
+	Label string `json:"label"`
+	Ts    string `json:"ts"` // RFC3339 timestamp, empty if absent
+}
+
+// DAGLink is one edge in the session DAG. Kind is "chrono" for time-
+// ordered succession or "result" for a tool_use → tool_result match.
+type DAGLink struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Kind   string `json:"kind"`
+}
+
+// DAGData is the response payload for GET /api/visualizations/dag.
+type DAGData struct {
+	Nodes []DAGNode `json:"nodes"`
+	Links []DAGLink `json:"links"`
+}
+
+// SpawnTreeNode is one session node in the spawn tree. Depth is computed
+// from the root via BFS. ToolCount and CostCents reflect the session,
+// not the cumulative subtree.
+type SpawnTreeNode struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Depth     int    `json:"depth"`
+	ToolCount int    `json:"toolCount"`
+	CostCents int    `json:"costCents"`
+}
+
+// SpawnTreeLink is a parent→child spawn relationship.
+type SpawnTreeLink struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+// SpawnTreeData is the response payload for GET /api/visualizations/spawn-tree.
+type SpawnTreeData struct {
+	Roots []string        `json:"roots"`
+	Nodes []SpawnTreeNode `json:"nodes"`
+	Links []SpawnTreeLink `json:"links"`
+}
+
+// CoOccurrenceMeta carries summary counters for the co-occurrence response.
+type CoOccurrenceMeta struct {
+	SessionCount int  `json:"sessionCount"`
+	Truncated    bool `json:"truncated"`
+}
+
+// CoOccurrenceData is the response payload for
+// GET /api/visualizations/co-occurrence. Matrix is square with side equal
+// to len(Tools); Matrix[i][j] = sessions containing both Tools[i] and
+// Tools[j] (diagonal = sessions containing the tool at all).
+type CoOccurrenceData struct {
+	Tools  []string         `json:"tools"`
+	Matrix [][]int          `json:"matrix"`
+	Meta   CoOccurrenceMeta `json:"meta"`
+}
+
 // BtwMessage is the last assistant text that appeared alongside tool calls.
 // Message is the text content; Response is reserved for future use.
 type BtwMessage struct {
