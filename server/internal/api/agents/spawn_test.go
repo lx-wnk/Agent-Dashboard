@@ -55,6 +55,11 @@ func captureExec(t *testing.T) **exec.Cmd {
 		// without disturbing Args/Env that consumers want to inspect.
 		cmd.Path = truePath
 		cmd.Args = []string{truePath}
+		// exec.Command stashes a LookPath error in cmd.Err when the bare
+		// binary name isn't on $PATH (e.g. CI runners without `claude`).
+		// cmd.Start short-circuits on cmd.Err before trying the rewritten
+		// Path, so we must clear it after rewriting.
+		cmd.Err = nil
 		return cmd.Start()
 	}
 	t.Cleanup(func() { execStart = orig })
