@@ -11,29 +11,39 @@ import (
 
 func TestNewSpawnManager_DefaultsWhenInvalidArgs(t *testing.T) {
 	// maxSpawns <= 0 and windowMs <= 0 should be clamped to safe defaults.
-	m := NewSpawnManager(0, 0)
+	m := NewSpawnManager(0, 0, nil)
 	require.NotNil(t, m)
 	assert.Equal(t, 5, m.rateLimitMax)
 	assert.Equal(t, 60*time.Second, m.rateLimitWindow)
 }
 
 func TestNewSpawnManager_NegativeArgsClamped(t *testing.T) {
-	m := NewSpawnManager(-1, -1)
+	m := NewSpawnManager(-1, -1, nil)
 	require.NotNil(t, m)
 	assert.Equal(t, 5, m.rateLimitMax)
 	assert.Equal(t, 60*time.Second, m.rateLimitWindow)
 }
 
+func TestNewSpawnManager_AcceptsNilRepo(t *testing.T) {
+	m := NewSpawnManager(5, 60000, nil)
+	if m == nil {
+		t.Fatal("expected non-nil manager")
+	}
+	if m.spawnerRepo != nil {
+		t.Fatalf("expected nil spawnerRepo, got %v", m.spawnerRepo)
+	}
+}
+
 const testSub = "user-123"
 
 func TestIsSpawnAllowed_FirstSpawnWithinLimit(t *testing.T) {
-	m := NewSpawnManager(3, 60000)
+	m := NewSpawnManager(3, 60000, nil)
 	assert.True(t, m.IsSpawnAllowed(testSub), "first spawn should be allowed when no attempts recorded")
 }
 
 func TestIsSpawnAllowed_UpToLimitAllowed(t *testing.T) {
 	limit := 3
-	m := NewSpawnManager(limit, 60000)
+	m := NewSpawnManager(limit, 60000, nil)
 
 	// Record limit-1 attempts manually so the next check is the last allowed one.
 	m.mu.Lock()
@@ -48,7 +58,7 @@ func TestIsSpawnAllowed_UpToLimitAllowed(t *testing.T) {
 
 func TestIsSpawnAllowed_OverLimitRejected(t *testing.T) {
 	limit := 3
-	m := NewSpawnManager(limit, 60000)
+	m := NewSpawnManager(limit, 60000, nil)
 
 	// Record exactly `limit` attempts so the next is over the limit.
 	m.mu.Lock()
@@ -64,7 +74,7 @@ func TestIsSpawnAllowed_AfterWindowExpires_AllowedAgain(t *testing.T) {
 	// Use a very short window so we can expire attempts quickly.
 	windowMs := 50
 	limit := 2
-	m := NewSpawnManager(limit, windowMs)
+	m := NewSpawnManager(limit, windowMs, nil)
 
 	// Fill the window.
 	m.mu.Lock()
@@ -83,7 +93,7 @@ func TestIsSpawnAllowed_AfterWindowExpires_AllowedAgain(t *testing.T) {
 
 func TestIsSpawnAllowed_PerUser_Isolated(t *testing.T) {
 	limit := 2
-	m := NewSpawnManager(limit, 60000)
+	m := NewSpawnManager(limit, 60000, nil)
 
 	// Fill the limit for user-A.
 	m.mu.Lock()
@@ -100,7 +110,7 @@ func TestIsSpawnAllowed_PerUser_Isolated(t *testing.T) {
 // context causes SendMessageToChannel to return promptly rather than blocking.
 // The function must not hang even if a network call is involved.
 func TestSendMessageToChannel_RespectsContextCancellation(t *testing.T) {
-	m := NewSpawnManager(5, 60000)
+	m := NewSpawnManager(5, 60000, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately before the call
@@ -126,7 +136,7 @@ func TestSendMessageToChannel_RespectsContextCancellation(t *testing.T) {
 
 func TestPruneAttempts_RemovesOldEntries(t *testing.T) {
 	windowMs := 50
-	m := NewSpawnManager(10, windowMs)
+	m := NewSpawnManager(10, windowMs, nil)
 
 	// Add one old attempt (pre-window) and one fresh one.
 	old := time.Now().Add(-200 * time.Millisecond)

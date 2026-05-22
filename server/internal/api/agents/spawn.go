@@ -20,6 +20,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
 const (
@@ -54,6 +55,7 @@ type SpawnStatus struct {
 type SpawnManager struct {
 	rateLimitMax    int
 	rateLimitWindow time.Duration
+	spawnerRepo     repo.SpawnerRepo
 
 	mu           sync.Mutex
 	userAttempts map[string][]time.Time // per-user sliding window keyed by JWT sub (or "__global__" in bypass mode)
@@ -61,7 +63,7 @@ type SpawnManager struct {
 }
 
 // NewSpawnManager creates a SpawnManager with the given rate limit config.
-func NewSpawnManager(maxSpawns int, windowMs int) *SpawnManager {
+func NewSpawnManager(maxSpawns int, windowMs int, spawnerRepo repo.SpawnerRepo) *SpawnManager {
 	if maxSpawns <= 0 {
 		maxSpawns = 5
 	}
@@ -71,6 +73,7 @@ func NewSpawnManager(maxSpawns int, windowMs int) *SpawnManager {
 	return &SpawnManager{
 		rateLimitMax:    maxSpawns,
 		rateLimitWindow: time.Duration(windowMs) * time.Millisecond,
+		spawnerRepo:     spawnerRepo,
 		userAttempts:    make(map[string][]time.Time),
 		spawnStore:      make(map[int]*SpawnStatus),
 	}
