@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { Project } from '../../types'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useSpawners } from '../../composables/useSpawners'
+import QuickCreateProjectPanel from '../QuickCreateProjectPanel.vue'
 import AppButton from '../ui/AppButton.vue'
 
 const props = defineProps<{
@@ -12,13 +14,24 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:selectedProjectId': [id: string]
   'update:skipped': [skipped: boolean]
+  'project-created': [project: Project]
   next: []
 }>()
+
+const { spawners } = useSpawners()
+const showCreate = ref(false)
 
 const canAdvance = computed(() => !!props.selectedProjectId || props.skipped)
 
 function selectProject(id: string): void {
   emit('update:selectedProjectId', id)
+  emit('update:skipped', false)
+}
+
+function onCreated(project: Project): void {
+  showCreate.value = false
+  emit('project-created', project)
+  emit('update:selectedProjectId', project.id)
   emit('update:skipped', false)
 }
 </script>
@@ -46,6 +59,24 @@ function selectProject(id: string): void {
           {{ p.folders?.[0]?.path ?? '—' }}
         </div>
       </button>
+    </div>
+
+    <button
+      v-if="!showCreate"
+      type="button"
+      data-testid="project-step-create-new"
+      class="text-xs text-blue-500 hover:underline"
+      @click="showCreate = true"
+    >
+      + Create new project
+    </button>
+
+    <div v-if="showCreate" data-testid="quick-create-panel">
+      <QuickCreateProjectPanel
+        :spawners="spawners"
+        @created="onCreated"
+        @cancel="showCreate = false"
+      />
     </div>
 
     <div class="flex justify-end">

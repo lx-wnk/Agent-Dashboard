@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PipelineTask } from '../types'
+import type { PipelineTask, Project } from '../types'
 import { ref } from 'vue'
 import { useProjects } from '../composables/useProjects'
 import ProjectStep from './backlog/ProjectStep.vue'
@@ -7,7 +7,7 @@ import DetailsStep from './backlog/DetailsStep.vue'
 
 const emit = defineEmits<{ created: [task: PipelineTask] }>()
 
-const { projects } = useProjects()
+const { projects, refetch } = useProjects()
 const step = ref<1 | 2>(1)
 const selectedProjectId = ref<string>('')
 const skipped = ref(false)
@@ -26,6 +26,10 @@ function onCreated(task: PipelineTask): void {
   selectedProjectId.value = ''
   skipped.value = false
 }
+
+function onProjectCreated(_project: Project): void {
+  void refetch?.()
+}
 </script>
 
 <template>
@@ -37,6 +41,7 @@ function onCreated(task: PipelineTask): void {
       :skipped="skipped"
       @update:selected-project-id="selectedProjectId = $event"
       @update:skipped="skipped = $event"
+      @project-created="onProjectCreated"
       @next="onNext"
     />
     <DetailsStep
