@@ -1,0 +1,3 @@
+{"type":"assistant","timestamp":"2026-05-22T11:30:00.000Z","message":{"role":"assistant","model":"claude-sonnet-4","content":[{"type":"tool_use","id":"toolu_B1","name":"Read","input":{}}]}}
+{"type":"assistant","timestamp":"2026-05-22T11:30:01.000Z","message":{"role":"assistant","model":"claude-sonnet-4","content":[{"type":"tool_use","id":"toolu_B2","name":"Grep","input":{}}]}}
+{"type":"assistant","timestamp":"2026-05-22T11:30:02.000Z","message":{"role":"assistant","model":"claude-sonnet-4","content":[{"type":"tool_use","id":"toolu_B3","name":"Bash","input":{}}]}}
