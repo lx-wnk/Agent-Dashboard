@@ -5,6 +5,8 @@
 package visualizations
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +15,11 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/analytics"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 )
+
+// requestTimeout is the per-endpoint upper bound. Spec §E hard-caps each
+// visualization scan at 5 seconds; analytics.scanSessionsForTools honors
+// ctx cancellation so this is enforced via context.WithTimeout.
+const requestTimeout = 5 * time.Second
 
 // defaultWindow is the lookback used when neither `from` nor `to` is
 // provided. Aligned with spec §A.
@@ -28,10 +35,25 @@ func NewHandler() *Handler { return &Handler{} }
 // Mount registers every visualization route on the given router. Must be
 // called from inside the JWT-protected group.
 func (h *Handler) Mount(r chi.Router) {
-	r.Get("/api/visualizations/sankey", apierr.ErrorMiddleware(h.Sankey))
-	r.Get("/api/visualizations/dag", apierr.ErrorMiddleware(h.DAG))
-	r.Get("/api/visualizations/spawn-tree", apierr.ErrorMiddleware(h.SpawnTree))
-	r.Get("/api/visualizations/co-occurrence", apierr.ErrorMiddleware(h.CoOccurrence))
+	r.Get("/api/visualizations/sankey", apierr.ErrorMiddleware(withTimeout(h.Sankey)))
+	r.Get("/api/visualizations/dag", apierr.ErrorMiddleware(withTimeout(h.DAG)))
+	r.Get("/api/visualizations/spawn-tree", apierr.ErrorMiddleware(withTimeout(h.SpawnTree)))
+	r.Get("/api/visualizations/co-occurrence", apierr.ErrorMiddleware(withTimeout(h.CoOccurrence)))
+}
+
+// withTimeout wraps an apierr.HandlerFunc so the request context is
+// cancelled after requestTimeout and the response surfaces a 503 if the
+// underlying scan honors the cancellation.
+func withTimeout(next apierr.HandlerFunc) apierr.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+		defer cancel()
+		err := next(w, r.WithContext(ctx))
+		if errors.Is(err, context.DeadlineExceeded) {
+			return apierr.NewAppError(http.StatusServiceUnavailable, "visualization timed out")
+		}
+		return err
+	}
 }
 
 // parseOpts converts the shared `session`/`from`/`to` query string into a
@@ -77,6 +99,10 @@ func parseOpts(r *http.Request, allowMultiSession bool) (analytics.ScanOpts, err
 		opts.To = time.Now().UTC()
 		opts.From = opts.To.Add(-defaultWindow)
 	}
+	// Enforce the spec §E session cap. ScanOpts.MaxSessions=0 already
+	// falls back to DefaultMaxSessions inside analytics; setting it
+	// explicitly keeps the value observable in tests + future tracing.
+	opts.MaxSessions = analytics.DefaultMaxSessions
 	return opts, nil
 }
 

@@ -1,15 +1,26 @@
 package visualizations
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 )
+
+// errorsAs is a thin wrapper so the test file can do an inline type
+// assertion against an apierr.AppError without dragging the errors
+// import into every test.
+func errorsAs(err error, target **apierr.AppError) bool {
+	return errors.As(err, target)
+}
 
 // withFakeClaudeDir points parser.AllClaudeConfigDirs at a temp dir for the
 // duration of the test. The parser package reads DASHBOARD_CLAUDE_CONFIG_DIRS
@@ -101,6 +112,29 @@ func TestHandler_CoOccurrence_EmptyConfigReturns200(t *testing.T) {
 	}
 	if got.Tools == nil {
 		t.Errorf("expected non-nil Tools slice, got nil")
+	}
+}
+
+func TestHandler_TimeoutWrapper_Returns503(t *testing.T) {
+	withFakeClaudeDir(t)
+	// Use the wrapped function directly so we can feed it a slow handler
+	// without spinning up a chi router.
+	slow := func(w http.ResponseWriter, r *http.Request) error {
+		<-r.Context().Done()
+		return r.Context().Err()
+	}
+	wrapped := withTimeout(slow)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/visualizations/sankey", nil).WithContext(ctx)
+	err := wrapped(rr, req)
+	if err == nil {
+		t.Fatalf("expected timeout error")
+	}
+	var appErr *apierr.AppError
+	if !errorsAs(err, &appErr) || appErr.Status != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 AppError, got %T %v", err, err)
 	}
 }
 
