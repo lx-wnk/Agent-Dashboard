@@ -44,6 +44,16 @@ type LLMSpawner interface {
 	Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnResult, error)
 }
 
+// StreamingLLMSpawner extends LLMSpawner with a chunked-output variant used by
+// surfaces that want SSE-style token streaming (currently /api/refine). Each
+// emitted string is one chunk; the channel is closed when the stream ends or
+// the context is cancelled. Adapters that cannot stream natively may emit the
+// full response as a single chunk before closing.
+type StreamingLLMSpawner interface {
+	LLMSpawner
+	SpawnStream(ctx context.Context, args LLMSpawnArgs) (<-chan string, error)
+}
+
 // PerStageSpawner routes Spawn calls to per-stage adapters, falling back to the
 // default spawner for stages that have no explicit mapping.
 type PerStageSpawner struct {

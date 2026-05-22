@@ -18,8 +18,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
 const (
@@ -39,6 +42,10 @@ var (
 	uuidRE = regexp.MustCompile(`(?i)^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
 )
 
+// execStart is the seam used by tests to intercept spawn args without
+// actually launching a process. Production uses cmd.Start directly.
+var execStart = func(cmd *exec.Cmd) error { return cmd.Start() }
+
 // SpawnStatus tracks the state of a user-initiated agent spawn.
 type SpawnStatus struct {
 	PID       int    `json:"pid"`
@@ -48,12 +55,14 @@ type SpawnStatus struct {
 	StartedAt string `json:"startedAt"`
 	Prompt    string `json:"prompt"`
 	Cwd       string `json:"cwd"`
+	SpawnerID string `json:"spawnerId,omitempty"`
 }
 
 // SpawnManager rate-limits and tracks user-initiated Claude agent spawns.
 type SpawnManager struct {
 	rateLimitMax    int
 	rateLimitWindow time.Duration
+	spawnerRepo     repo.SpawnerRepo
 
 	mu           sync.Mutex
 	userAttempts map[string][]time.Time // per-user sliding window keyed by JWT sub (or "__global__" in bypass mode)
@@ -61,7 +70,7 @@ type SpawnManager struct {
 }
 
 // NewSpawnManager creates a SpawnManager with the given rate limit config.
-func NewSpawnManager(maxSpawns int, windowMs int) *SpawnManager {
+func NewSpawnManager(maxSpawns int, windowMs int, spawnerRepo repo.SpawnerRepo) *SpawnManager {
 	if maxSpawns <= 0 {
 		maxSpawns = 5
 	}
@@ -71,6 +80,7 @@ func NewSpawnManager(maxSpawns int, windowMs int) *SpawnManager {
 	return &SpawnManager{
 		rateLimitMax:    maxSpawns,
 		rateLimitWindow: time.Duration(windowMs) * time.Millisecond,
+		spawnerRepo:     spawnerRepo,
 		userAttempts:    make(map[string][]time.Time),
 		spawnStore:      make(map[int]*SpawnStatus),
 	}
@@ -139,22 +149,76 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	if resumeSessionID != "" && !uuidRE.MatchString(resumeSessionID) {
 		return 0, fmt.Errorf("invalid sessionId format")
 	}
+
+	// Resolve spawner if provided.
+	var spawnerRow *ent.Spawner
+	if spawnerID, ok := body["spawnerId"].(string); ok && spawnerID != "" {
+		if m.spawnerRepo == nil {
+			return 0, fmt.Errorf("spawner not configured")
+		}
+		row, err := m.spawnerRepo.GetByID(context.Background(), spawnerID)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return 0, fmt.Errorf("spawner not found")
+			}
+			return 0, fmt.Errorf("spawner lookup failed: %w", err)
+		}
+		switch row.AdapterType {
+		case "ollama", "openai":
+			return 0, fmt.Errorf("adapter %s not supported for user-initiated spawns; use pipeline tasks instead", row.AdapterType)
+		}
+		spawnerRow = row
+	}
+
+	projectID, _ := body["projectId"].(string)
+	if projectID != "" {
+		spawnerIDForLog := ""
+		if spawnerRow != nil {
+			spawnerIDForLog = spawnerRow.ID
+		}
+		slog.Info("spawn: projectId attached", "sub", sub, "projectId", projectID, "spawnerId", spawnerIDForLog)
+	}
+
 	enableChannel, _ := body["enableChannel"].(bool)
 	if _, hasChannel := body["enableChannel"]; !hasChannel {
 		enableChannel = true // default on
 	}
 
-	var args []string
-	if resumeSessionID != "" {
-		args = append(args, "--resume", resumeSessionID)
+	// Resolve command + base args.
+	binary := claudeBin
+	var spawnerArgs []string
+	if spawnerRow != nil {
+		if !spawners.ValidateCommand(spawnerRow.Command) {
+			return 0, fmt.Errorf("spawner command not permitted")
+		}
+		if bad := firstReservedFlag(spawnerRow.Args); bad != "" {
+			return 0, fmt.Errorf("spawner args may not include reserved flag %q", bad)
+		}
+		if spawnerRow.AdapterType == "custom" {
+			binary = spawnerRow.Command
+		}
+		spawnerArgs = append(spawnerArgs, spawnerRow.Args...)
+
+		// Hydrate model from override when caller didn't supply one.
+		if model == "" && spawnerRow.ModelOverride != nil && *spawnerRow.ModelOverride != "" {
+			model = *spawnerRow.ModelOverride
+		}
 	}
-	args = append(args, "-p", prompt)
+
+	var canonicalArgs []string
+	if resumeSessionID != "" {
+		canonicalArgs = append(canonicalArgs, "--resume", resumeSessionID)
+	}
+	canonicalArgs = append(canonicalArgs, "-p", prompt)
 	if model != "" {
-		args = append(args, "--model", model)
+		canonicalArgs = append(canonicalArgs, "--model", model)
 	}
 	if systemPrompt != "" {
-		args = append(args, "--system-prompt", systemPrompt)
+		canonicalArgs = append(canonicalArgs, "--system-prompt", systemPrompt)
 	}
+
+	// Order: spawner args first, canonical args last so user-supplied flags win.
+	args := append(spawnerArgs, canonicalArgs...)
 
 	var channelCfgPath string
 	if enableChannel {
@@ -165,18 +229,25 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 			slog.Warn("spawn: channel disabled — cannot write MCP config", "err", err)
 		} else {
 			channelCfgPath = cfgPath
-			args = append(args, "--mcp-config", cfgPath)
+			channelArg := "--mcp-config"
+			if spawnerRow != nil && spawnerRow.AdapterType == "custom" {
+				if v, ok := spawnerRow.AdapterConfig["channel_arg"]; ok && v != "" {
+					channelArg = v
+				}
+			}
+			args = append(args, channelArg, cfgPath)
 		}
 	}
 
-	cmd := exec.Command(claudeBin, args...)
+	cmd := exec.Command(binary, args...)
 	cmd.Dir = cwd
+	cmd.Env = mergeEnv(spawnerRow)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	stderrPipe, _ := cmd.StderrPipe()
 
-	if err := cmd.Start(); err != nil {
+	if err := execStart(cmd); err != nil {
 		if channelCfgPath != "" {
 			_ = os.Remove(channelCfgPath)
 		}
@@ -190,6 +261,9 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		StartedAt: time.Now().UTC().Format(time.RFC3339),
 		Prompt:    prompt[:min(len(prompt), 200)],
 		Cwd:       cwd,
+	}
+	if spawnerRow != nil {
+		status.SpawnerID = spawnerRow.ID
 	}
 
 	m.mu.Lock()
@@ -426,4 +500,66 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+// mergeEnv builds the child process env per ADR-0003:
+//  1. start with os.Environ()
+//  2. overlay spawner.Env
+//  3. dashboard-controlled vars (DASHBOARD_*, CLAUDE_*) always win
+//  4. strip DASHBOARD_JWT_SECRET and DASHBOARD_HOOKS_SECRET
+func mergeEnv(s *ent.Spawner) []string {
+	merged := map[string]string{}
+	for _, kv := range os.Environ() {
+		if i := strings.IndexByte(kv, '='); i > 0 {
+			merged[kv[:i]] = kv[i+1:]
+		}
+	}
+	if s != nil {
+		for k, v := range s.Env {
+			merged[k] = v
+		}
+	}
+	for _, kv := range os.Environ() {
+		i := strings.IndexByte(kv, '=')
+		if i <= 0 {
+			continue
+		}
+		k := kv[:i]
+		if strings.HasPrefix(k, "DASHBOARD_") || strings.HasPrefix(k, "CLAUDE_") {
+			merged[k] = kv[i+1:]
+		}
+	}
+	delete(merged, "DASHBOARD_JWT_SECRET")
+	delete(merged, "DASHBOARD_HOOKS_SECRET")
+	out := make([]string, 0, len(merged))
+	for k, v := range merged {
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
+// reservedSpawnerFlags are CLI flags the dashboard sets itself; spawner-row
+// args must not re-declare them. The list mirrors the canonical args built
+// in Spawn(): --resume, -p, --model, --system-prompt, --mcp-config.
+var reservedSpawnerFlags = map[string]struct{}{
+	"--resume":        {},
+	"-p":              {},
+	"--model":         {},
+	"--system-prompt": {},
+	"--mcp-config":    {},
+}
+
+// firstReservedFlag returns the first arg that names a reserved flag, or "".
+// Matches both "--flag" and "--flag=value" forms.
+func firstReservedFlag(args []string) string {
+	for _, a := range args {
+		head := a
+		if i := strings.IndexByte(a, '='); i >= 0 {
+			head = a[:i]
+		}
+		if _, bad := reservedSpawnerFlags[head]; bad {
+			return head
+		}
+	}
+	return ""
 }

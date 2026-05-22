@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { AVAILABLE_MODELS } from '@/utils/models'
+import type { Project } from '../types'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { fetchProjectFolders } from '../composables/useProjectFolders'
+import { useProjects } from '../composables/useProjects'
+import { useSpawnDialog } from '../composables/useSpawnDialog'
+import { useSpawners } from '../composables/useSpawners'
+import { AVAILABLE_MODELS } from '../utils/models'
+import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
@@ -8,9 +14,21 @@ import AppModal from './ui/AppModal.vue'
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
+const { projects } = useProjects()
+const { spawners } = useSpawners()
+
+const sortedProjects = computed(() =>
+  projects.value.slice().sort((a, b) => a.name.localeCompare(b.name)),
+)
+
+const dlg = useSpawnDialog({
+  fetchFolders: fetchProjectFolders,
+  lookupSpawner: id => spawners.value.find(s => s.id === id),
+})
+
+const projectChoice = ref<string>('')
+const showQuickCreate = ref(false)
 const prompt = ref('')
-const cwd = ref('')
-const model = ref('')
 const systemPrompt = ref('')
 const enableChannel = ref(true)
 const skipPermissions = ref(false)
@@ -23,6 +41,8 @@ let errorTimer: ReturnType<typeof setTimeout> | null = null
 let statusPollTimer: ReturnType<typeof setTimeout> | null = null
 let autoCloseTimer: ReturnType<typeof setTimeout> | null = null
 
+const folderPickerVisible = computed(() => dlg.folders.value.length > 1)
+
 function stopStatusPoll() {
   if (statusPollTimer) {
     clearTimeout(statusPollTimer)
@@ -32,8 +52,6 @@ function stopStatusPoll() {
 
 function resetForm() {
   prompt.value = ''
-  cwd.value = ''
-  model.value = ''
   systemPrompt.value = ''
   enableChannel.value = true
   skipPermissions.value = false
@@ -41,6 +59,9 @@ function resetForm() {
   isSpawning.value = false
   errorMsg.value = ''
   spawnStatusMsg.value = ''
+  projectChoice.value = ''
+  showQuickCreate.value = false
+  dlg.clearProject()
   stopStatusPoll()
   if (errorTimer) {
     clearTimeout(errorTimer)
@@ -52,8 +73,33 @@ function resetForm() {
   }
 }
 
+watch(projectChoice, async (v) => {
+  if (v === '__create__') {
+    showQuickCreate.value = true
+    return
+  }
+  showQuickCreate.value = false
+  if (!v) {
+    dlg.clearProject()
+    return
+  }
+  const proj = projects.value.find(p => p.id === v)
+  if (proj)
+    await dlg.selectProject(proj)
+})
+
+function onProjectCreated(p: Project) {
+  showQuickCreate.value = false
+  projectChoice.value = p.id
+}
+
+function onQuickCreateCancel() {
+  showQuickCreate.value = false
+  projectChoice.value = ''
+}
+
 async function pollSpawnStatus(pid: number, attempts = 0) {
-  if (attempts > 15) { // ~30s max polling
+  if (attempts > 15) {
     stopStatusPoll()
     return
   }
@@ -61,9 +107,7 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
     const res = await fetch(`/api/agents/spawn/${pid}/status`)
     if (!res.ok)
       return
-
     const data = await res.json()
-
     if (data.status === 'running') {
       spawnStatusMsg.value = `Agent PID ${pid} running...`
       statusPollTimer = setTimeout(pollSpawnStatus, 2000, pid, attempts + 1)
@@ -80,22 +124,18 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
       isSpawning.value = false
     }
     else {
-      // exited with code 0 = success
       spawnStatusMsg.value = ''
       stopStatusPoll()
     }
   }
   catch {
-    // Network error, keep polling
     statusPollTimer = setTimeout(pollSpawnStatus, 2000, pid, attempts + 1)
   }
 }
 
 async function handleSpawn() {
-  if (isSpawning.value || !prompt.value.trim() || !cwd.value.trim())
+  if (isSpawning.value || !prompt.value.trim() || !dlg.cwd.value.trim())
     return
-
-  // Require explicit confirmation for skip-permissions
   if (skipPermissions.value && !skipPermissionsConfirmed.value) {
     skipPermissionsConfirmed.value = true
     return
@@ -107,14 +147,18 @@ async function handleSpawn() {
 
   const body: Record<string, unknown> = {
     prompt: prompt.value.trim(),
-    cwd: cwd.value.trim(),
+    cwd: dlg.cwd.value.trim(),
     enableChannel: enableChannel.value,
     skipPermissions: skipPermissions.value,
   }
-  if (model.value)
-    body.model = model.value
+  if (dlg.model.value)
+    body.model = dlg.model.value
   if (systemPrompt.value.trim())
     body.systemPrompt = systemPrompt.value.trim()
+  if (dlg.spawnerId.value)
+    body.spawnerId = dlg.spawnerId.value
+  if (dlg.project.value?.id)
+    body.projectId = dlg.project.value.id
 
   try {
     const res = await fetch('/api/agents/spawn', {
@@ -122,20 +166,14 @@ async function handleSpawn() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-
     if (!res.ok) {
       const data = await res.json().catch(() => null)
       throw new Error(data?.error || `Server responded with ${res.status}`)
     }
-
     const data = await res.json()
     const pid = data.pid as number
-
-    // Keep dialog open and poll for early exit errors
     spawnStatusMsg.value = `Agent PID ${pid} spawned, verifying...`
     pollSpawnStatus(pid)
-
-    // Auto-close after 3s if still running (no early error)
     autoCloseTimer = setTimeout(() => {
       if (isSpawning.value && !errorMsg.value) {
         resetForm()
@@ -197,22 +235,65 @@ onUnmounted(() => {
             :rows="4"
             required
             placeholder="What should the agent do?"
+            data-testid="spawn-prompt-wrap"
           />
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-project">Project</label>
+          <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
+            <option value="">
+              — None (manual) —
+            </option>
+            <option
+              v-for="p in sortedProjects"
+              :key="p.id"
+              :value="p.id"
+              :disabled="p.folderCount === 0"
+            >
+              {{ p.name }}{{ p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : '' }}
+            </option>
+            <option value="__create__">
+              + Create new project…
+            </option>
+          </select>
+        </div>
+
+        <QuickCreateProjectPanel
+          v-if="showQuickCreate"
+          :spawners="spawners"
+          @created="onProjectCreated"
+          @cancel="onQuickCreateCancel"
+        />
+
+        <div v-if="folderPickerVisible" class="mb-4">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-folder">Folder</label>
+          <select
+            id="spawn-folder"
+            :value="dlg.selectedFolderId.value ?? ''"
+            class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2"
+            @change="dlg.selectFolder(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="f in dlg.folders.value" :key="f.id" :value="f.id">
+              {{ f.label || f.path }}{{ f.isDefault ? ' (default)' : '' }}
+            </option>
+          </select>
         </div>
 
         <div class="mb-4">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-cwd">Working Directory</label>
           <AppInput
             id="spawn-cwd"
-            v-model="cwd"
+            v-model="dlg.cwd.value"
             required
             placeholder="/path/to/project"
+            data-testid="spawn-cwd-wrap"
           />
         </div>
 
         <div class="mb-4">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-model">Model</label>
-          <select id="spawn-model" v-model="model" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
+          <select id="spawn-model" v-model="dlg.model.value" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
             <option value="">
               Auto
             </option>
@@ -273,8 +354,9 @@ onUnmounted(() => {
           Cancel
         </AppButton>
         <AppButton
+          data-testid="spawn-btn"
           variant="primary"
-          :disabled="isSpawning || !prompt.trim() || !cwd.trim()"
+          :disabled="isSpawning || !prompt.trim() || !dlg.cwd.value.trim()"
           @click="handleSpawn"
         >
           {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
