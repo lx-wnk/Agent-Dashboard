@@ -10,8 +10,7 @@ export interface TrendPoint {
 }
 
 // Appended values must be kept in sync with the localStorage validator below.
-// G-E appended 'cost-analytics' for the Cost Analytics view.
-type ViewMode = 'list' | 'cards' | 'pipeline' | 'config-explorer' | 'cost-analytics'
+type ViewMode = 'list' | 'cards' | 'pipeline' | 'config-explorer' | 'cost-analytics' | 'workflows'
 
 const agents = shallowRef<Agent[]>([])
 const costTrend = ref<TrendPoint[]>([])
@@ -22,7 +21,7 @@ const searchQuery = ref('')
 const debouncedQuery = ref('')
 const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('agent-view-mode') : null
 const viewMode = ref<ViewMode>(
-  stored === 'list' || stored === 'cards' || stored === 'pipeline' || stored === 'config-explorer' || stored === 'cost-analytics' ? stored : 'cards',
+  stored === 'list' || stored === 'cards' || stored === 'pipeline' || stored === 'config-explorer' || stored === 'cost-analytics' || stored === 'workflows' ? stored : 'cards',
 )
 
 let eventSource: EventSource | null = null
