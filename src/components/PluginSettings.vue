@@ -30,12 +30,12 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
-    <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300">Loaded Plugins</h3>
-    <p class="text-xs text-slate-500 dark:text-slate-400">
+    <h3 class="text-sm font-semibold text-fg-soft">Loaded Plugins</h3>
+    <p class="text-xs text-fg-mute">
       Sidecar plugins loaded from
-      <code class="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded text-[11px]">plugin_dir</code>. Add plugins by placing a
-      <code class="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded text-[11px]">plugin.json</code> + binary in the configured directory and restarting the server.
-      Set <code class="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded text-[11px]">DASHBOARD_PLUGIN_DIR</code> to enable.
+      <code class="font-mono bg-raised px-1 rounded text-[11px]">plugin_dir</code>. Add plugins by placing a
+      <code class="font-mono bg-raised px-1 rounded text-[11px]">plugin.json</code> + binary in the configured directory and restarting the server.
+      Set <code class="font-mono bg-raised px-1 rounded text-[11px]">DASHBOARD_PLUGIN_DIR</code> to enable.
     </p>
 
     <div v-if="loading" class="text-xs text-slate-400" role="status" aria-live="polite">Loading plugins…</div>
@@ -43,19 +43,19 @@ onMounted(async () => {
     <div v-else-if="plugins.length === 0" class="text-xs text-slate-400 italic space-y-1">
       <p>No plugins loaded.</p>
       <p>
-        Set <code class="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">DASHBOARD_PLUGIN_DIR</code>
+        Set <code class="font-mono bg-raised px-1 rounded">DASHBOARD_PLUGIN_DIR</code>
         to a directory containing plugin subdirectories, each with a
-        <code class="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">plugin.json</code> manifest.
+        <code class="font-mono bg-raised px-1 rounded">plugin.json</code> manifest.
       </p>
     </div>
     <div v-else class="space-y-2">
       <div
         v-for="p in plugins"
         :key="p.id"
-        class="bg-slate-50 dark:bg-slate-800/50 rounded p-3 text-xs flex items-start justify-between gap-4"
+        class="bg-raised/50 rounded p-3 text-xs flex items-start justify-between gap-4"
       >
         <div class="space-y-1">
-          <p class="font-mono font-medium text-slate-800 dark:text-slate-200">{{ p.id }}</p>
+          <p class="font-mono font-medium text-fg">{{ p.id }}</p>
         </div>
         <div class="flex flex-wrap gap-1">
           <span

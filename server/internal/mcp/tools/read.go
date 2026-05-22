@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -10,19 +11,143 @@ import (
 
 // ReadDeps holds the repositories required by the read tools.
 type ReadDeps struct {
-	TaskRepo  repo.TaskRepo
-	SRRepo    repo.StageRunRepo
-	PermRepo  repo.PermissionRepo
-	AuditRepo repo.AuditRepo
+	TaskRepo    repo.TaskRepo
+	SRRepo      repo.StageRunRepo
+	PermRepo    repo.PermissionRepo
+	AuditRepo   repo.AuditRepo
+	ProjectRepo repo.ProjectRepo
+	SpawnerRepo repo.SpawnerRepo
 }
 
-// RegisterReadTools registers all 5 read tools into the given registry.
+// RegisterReadTools registers all read tools into the given registry.
 func RegisterReadTools(registry mcp.ToolRegistry, d ReadDeps) {
 	registerListTasks(registry, d)
 	registerGetTask(registry, d)
 	registerListStageRuns(registry, d)
 	registerListAudit(registry, d)
 	registerListPermissionRequests(registry, d)
+	registerListProjects(registry, d)
+	registerListSpawners(registry, d)
+}
+
+const readIsoFormat = "2006-01-02T15:04:05Z"
+
+func readTsFmt(t time.Time) string { return t.UTC().Format(readIsoFormat) }
+
+// projectView is the JSON shape returned by the list_projects MCP tool.
+// Mirrors the camelCase wire shape used by the projects HTTP handler.
+type projectView struct {
+	ID               string  `json:"id"`
+	Slug             string  `json:"slug"`
+	Name             string  `json:"name"`
+	Description      *string `json:"description,omitempty"`
+	Color            *string `json:"color,omitempty"`
+	DefaultSpawnerID *string `json:"defaultSpawnerId,omitempty"`
+	FolderCount      int     `json:"folderCount"`
+	CreatedAt        string  `json:"createdAt"`
+	UpdatedAt        string  `json:"updatedAt"`
+}
+
+// spawnerView is the JSON shape returned by the list_spawners MCP tool.
+// Mirrors the camelCase wire shape used by the spawners HTTP handler.
+type spawnerView struct {
+	ID            string            `json:"id"`
+	Name          string            `json:"name"`
+	Slug          string            `json:"slug"`
+	Command       string            `json:"command"`
+	Args          []string          `json:"args"`
+	Env           map[string]string `json:"env"`
+	ModelOverride *string           `json:"modelOverride,omitempty"`
+	Description   *string           `json:"description,omitempty"`
+	BuiltIn       bool              `json:"builtIn"`
+	CreatedAt     string            `json:"createdAt"`
+	UpdatedAt     string            `json:"updatedAt"`
+}
+
+// registerListProjects registers the list_projects tool.
+// Returns an array of project views, each with a `folderCount` field.
+// Scope: tasks:read.
+func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name:        "list_projects",
+		Description: "List all projects with folder counts.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+		Handler: func(ctx context.Context, _ map[string]any) (*mcp.ToolResult, error) {
+			if d.ProjectRepo == nil {
+				return nil, mcp.Fail("list_projects: project repository not configured")
+			}
+			rows, err := d.ProjectRepo.ListWithFolderCount(ctx)
+			if err != nil {
+				return nil, mcp.Fail("list_projects: " + err.Error())
+			}
+			result := make([]projectView, len(rows))
+			for i, r := range rows {
+				result[i] = projectView{
+					ID:               r.ID,
+					Slug:             r.Slug,
+					Name:             r.Name,
+					Description:      r.Description,
+					Color:            r.Color,
+					DefaultSpawnerID: r.DefaultSpawnerID,
+					FolderCount:      r.FolderCount,
+					CreatedAt:        readTsFmt(r.CreatedAt),
+					UpdatedAt:        readTsFmt(r.UpdatedAt),
+				}
+			}
+			return mcp.OK(result)
+		},
+	})
+}
+
+// registerListSpawners registers the list_spawners tool.
+// Returns an array of spawner views including built-ins.
+// Scope: tasks:read.
+func registerListSpawners(registry mcp.ToolRegistry, d ReadDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name:        "list_spawners",
+		Description: "List all spawners (built-in and custom).",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+		Handler: func(ctx context.Context, _ map[string]any) (*mcp.ToolResult, error) {
+			if d.SpawnerRepo == nil {
+				return nil, mcp.Fail("list_spawners: spawner repository not configured")
+			}
+			spawners, err := d.SpawnerRepo.List(ctx)
+			if err != nil {
+				return nil, mcp.Fail("list_spawners: " + err.Error())
+			}
+			result := make([]spawnerView, len(spawners))
+			for i, s := range spawners {
+				args := s.Args
+				if args == nil {
+					args = []string{}
+				}
+				env := s.Env
+				if env == nil {
+					env = map[string]string{}
+				}
+				result[i] = spawnerView{
+					ID:            s.ID,
+					Name:          s.Name,
+					Slug:          s.Slug,
+					Command:       s.Command,
+					Args:          args,
+					Env:           env,
+					ModelOverride: s.ModelOverride,
+					Description:   s.Description,
+					BuiltIn:       s.BuiltIn,
+					CreatedAt:     readTsFmt(s.CreatedAt),
+					UpdatedAt:     readTsFmt(s.UpdatedAt),
+				}
+			}
+			return mcp.OK(result)
+		},
+	})
 }
 
 // checkTaskAccess returns an error if the authenticated caller does not own the task.

@@ -194,14 +194,14 @@ function isPhaseMarker(idx: number): string | null {
     @click.self="emit('close')"
   >
     <div
-      class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl flex flex-col overflow-hidden shadow-2xl"
+      class="bg-card border border-line rounded-2xl flex flex-col overflow-hidden shadow-2xl"
       style="width: min(900px, 96vw); height: min(88vh, 92vh)"
     >
       <!-- Header -->
-      <div class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
-        <span class="text-base font-semibold tracking-tight text-slate-800 dark:text-slate-200">{{ chatTitle }}</span>
+      <div class="flex justify-between items-center px-5 py-4 border-b border-line shrink-0">
+        <span class="text-base font-semibold tracking-tight text-fg">{{ chatTitle }}</span>
         <button
-          class="bg-transparent border-none cursor-pointer text-base text-slate-400 dark:text-slate-500 px-2 py-1 rounded-md transition-all hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+          class="bg-transparent border-none cursor-pointer text-base text-fg-faint px-2 py-1 rounded-md transition-all hover:text-fg-soft hover:bg-raised"
           @click="emit('close')"
         >
           ✕
@@ -220,10 +220,10 @@ function isPhaseMarker(idx: number): string | null {
             ✦
           </div>
           <div class="flex flex-col gap-2">
-            <p class="text-xl font-bold tracking-tight m-0 text-slate-800 dark:text-slate-100">
+            <p class="text-xl font-bold tracking-tight m-0 text-fg">
               What would you like to build?
             </p>
-            <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed m-0 max-w-[380px]">
+            <p class="text-sm text-fg-mute leading-relaxed m-0 max-w-[380px]">
               Describe your idea — I'll guide you through analysis, spec, and implementation plan.
             </p>
           </div>
@@ -231,7 +231,7 @@ function isPhaseMarker(idx: number): string | null {
             <button
               v-for="chip in EXAMPLE_CHIPS"
               :key="chip"
-              class="px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 cursor-pointer text-sm font-medium text-slate-600 dark:text-slate-400 transition-all hover:border-blue-400 dark:hover:border-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:-translate-y-px active:translate-y-0"
+              class="px-4 py-2 rounded-full border border-line bg-raised cursor-pointer text-sm font-medium text-fg-mute transition-all hover:border-blue-400 dark:hover:border-blue-500 hover:bg-raised hover:-translate-y-px active:translate-y-0"
               @click="inputText = chip"
             >
               {{ chip }}
@@ -247,14 +247,14 @@ function isPhaseMarker(idx: number): string | null {
 
           <div
             v-if="msg.role === 'user'"
-            class="self-end max-w-[85%] px-3 py-2 rounded-xl rounded-br-sm bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 leading-relaxed break-words text-[13px] font-mono whitespace-pre-wrap"
+            class="self-end max-w-[85%] px-3 py-2 rounded-xl rounded-br-sm bg-raised text-fg-mute leading-relaxed break-words text-[13px] font-mono whitespace-pre-wrap"
           >
             <div v-if="msg.images?.length" class="flex flex-wrap gap-1.5 mb-1.5">
               <img
                 v-for="(img, i) in msg.images"
                 :key="i"
                 :src="img.dataUrl"
-                class="max-w-[180px] max-h-[120px] rounded-md object-cover border border-slate-200 dark:border-slate-700"
+                class="max-w-[180px] max-h-[120px] rounded-md object-cover border border-line"
                 alt="attachment"
               >
             </div>
@@ -270,7 +270,7 @@ function isPhaseMarker(idx: number): string | null {
         <!-- Streaming indicator -->
         <div
           v-if="isStreaming && !messages.at(-1)?.content"
-          class="self-start min-w-[52px] px-3 py-2 rounded-xl rounded-bl-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500"
+          class="self-start min-w-[52px] px-3 py-2 rounded-xl rounded-bl-sm bg-raised border border-line text-fg-faint"
         >
           <span class="dot-pulse"><span /><span /><span /></span>
         </div>
@@ -282,7 +282,7 @@ function isPhaseMarker(idx: number): string | null {
       </div>
 
       <!-- Confirm bar -->
-      <div v-if="approvalReady" class="px-5 py-3 border-t border-slate-200 dark:border-slate-700 shrink-0">
+      <div v-if="approvalReady" class="px-5 py-3 border-t border-line shrink-0">
         <button
           class="w-full py-3 px-4 rounded-xl bg-green-500 text-black font-bold text-[0.95rem] tracking-tight border-none cursor-pointer transition-all hover:opacity-90 hover:-translate-y-px"
           @click="handleConfirm"
@@ -296,11 +296,11 @@ function isPhaseMarker(idx: number): string | null {
         <div v-for="(img, idx) in pendingImages" :key="idx" class="relative inline-flex">
           <img
             :src="img.dataUrl"
-            class="max-w-[80px] max-h-[60px] rounded-md object-cover border border-slate-200 dark:border-slate-700"
+            class="max-w-[80px] max-h-[60px] rounded-md object-cover border border-line"
             alt="attachment"
           >
           <button
-            class="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 text-[10px] cursor-pointer flex items-center justify-center leading-none p-0 hover:bg-red-500 hover:text-white hover:border-red-500"
+            class="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-raised border border-line-strong text-fg-mute text-[10px] cursor-pointer flex items-center justify-center leading-none p-0 hover:bg-red-500 hover:text-white hover:border-red-500"
             @click="removeImage(idx)"
           >
             ✕
@@ -309,9 +309,9 @@ function isPhaseMarker(idx: number): string | null {
       </div>
 
       <!-- Input bar -->
-      <div class="flex gap-2 px-5 py-2.5 pb-3.5 border-t border-slate-200 dark:border-slate-700 shrink-0 items-end">
+      <div class="flex gap-2 px-5 py-2.5 pb-3.5 border-t border-line shrink-0 items-end">
         <button
-          class="w-9 h-9 rounded-xl shrink-0 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 text-lg cursor-pointer flex items-center justify-center transition-colors hover:enabled:border-blue-400 hover:enabled:text-blue-400 disabled:opacity-35 disabled:cursor-default"
+          class="w-9 h-9 rounded-xl shrink-0 bg-raised border border-line text-slate-400 text-lg cursor-pointer flex items-center justify-center transition-colors hover:enabled:border-blue-400 hover:enabled:text-blue-400 disabled:opacity-35 disabled:cursor-default"
           title="Attach image"
           :disabled="isStreaming || approvalReady"
           @click="fileInputEl?.click()"
@@ -329,7 +329,7 @@ function isPhaseMarker(idx: number): string | null {
         <textarea
           ref="textareaEl"
           v-model="inputText"
-          class="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
+          class="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-fg placeholder:text-fg-faint text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
           placeholder="Message..."
           rows="1"
           :disabled="isStreaming || approvalReady"

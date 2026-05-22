@@ -142,10 +142,10 @@ onMounted(fetchPrompts)
   <div>
     <div class="flex items-start justify-between gap-3 mb-4">
       <div class="flex-1">
-        <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+        <h3 class="text-[17px] font-bold text-fg mb-1">
           Custom System Prompts
         </h3>
-        <p class="text-xs text-slate-400 dark:text-slate-600">
+        <p class="text-xs text-fg-mute">
           Prepend custom instructions to the built-in system prompt for pipeline stage agents. Higher priority is applied first.
         </p>
       </div>
@@ -158,46 +158,46 @@ onMounted(fetchPrompts)
       {{ loadError }}
     </p>
 
-    <div v-if="loading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+    <div v-if="loading" class="text-center py-12 text-fg-mute text-sm">
       Loading...
     </div>
 
-    <div v-else-if="prompts.length === 0 && !loadError" class="text-center py-8 text-slate-400 dark:text-slate-600 text-sm">
+    <div v-else-if="prompts.length === 0 && !loadError" class="text-center py-8 text-fg-mute text-sm">
       No custom system prompts configured yet.
     </div>
 
     <table v-else class="w-full border-collapse text-[13px]">
       <thead>
         <tr>
-          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
             Stage
           </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
             Priority
           </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
             Preview
           </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
             Actions
           </th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="p in prompts" :key="p.id">
-          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 whitespace-nowrap font-medium capitalize">
+          <td class="px-3 py-2.5 border-b border-line text-fg whitespace-nowrap font-medium capitalize">
             {{ stageLabel(p.stage) }}
           </td>
-          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+          <td class="px-3 py-2.5 border-b border-line text-fg-mute">
             {{ p.priority }}
           </td>
-          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-600 font-mono text-xs max-w-[320px] truncate">
+          <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs max-w-[320px] truncate">
             {{ p.content.slice(0, 100) }}{{ p.content.length > 100 ? '…' : '' }}
           </td>
-          <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+          <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
             <button
               type="button"
-              class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 mr-1"
+              class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-raised hover:text-fg-soft mr-1"
               @click="openEdit(p)"
             >
               Edit
@@ -213,7 +213,7 @@ onMounted(fetchPrompts)
             <button
               v-else
               type="button"
-              class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
+              class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
               @click="confirmDeleteId = p.id"
             >
               Delete
@@ -230,14 +230,14 @@ onMounted(fetchPrompts)
         class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center"
         @click.self="closeDialog"
       >
-        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-[540px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        <div class="bg-card border border-line rounded-xl w-full max-w-[540px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <header class="flex justify-between items-center px-5 py-4 border-b border-line">
+            <h2 class="text-lg font-semibold text-fg">
               {{ editing ? 'Edit System Prompt' : 'New System Prompt' }}
             </h2>
             <button
               type="button"
-              class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100"
+              class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg"
               @click="closeDialog"
             >
               &times;
@@ -245,13 +245,13 @@ onMounted(fetchPrompts)
           </header>
           <form class="p-5 flex flex-col gap-4" @submit.prevent="save">
             <div class="flex flex-col gap-1">
-              <label for="sp-stage" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
+              <label for="sp-stage" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
                 Stage (blank = all stages)
               </label>
               <select
                 id="sp-stage"
                 v-model="form.stage"
-                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
               >
                 <option v-for="s in STAGES" :key="s" :value="s">
                   {{ s === '' ? 'All stages' : s.replace(/_/g, ' ') }}
@@ -259,18 +259,18 @@ onMounted(fetchPrompts)
               </select>
             </div>
             <div class="flex flex-col gap-1">
-              <label for="sp-priority" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
+              <label for="sp-priority" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
                 Priority (higher = applied first)
               </label>
               <input
                 id="sp-priority"
                 v-model.number="form.priority"
                 type="number"
-                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
               >
             </div>
             <div class="flex flex-col gap-1">
-              <label for="sp-content" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
+              <label for="sp-content" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
                 Content
               </label>
               <textarea
@@ -278,14 +278,14 @@ onMounted(fetchPrompts)
                 v-model="form.content"
                 rows="8"
                 placeholder="Enter custom system prompt text…"
-                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500 font-mono resize-y"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500 font-mono resize-y"
               />
             </div>
             <p v-if="saveError" class="text-xs text-red-600 dark:text-red-400">
               {{ saveError }}
             </p>
           </form>
-          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
             <AppButton variant="secondary" @click="closeDialog">
               Cancel
             </AppButton>

@@ -24,10 +24,16 @@ type Tx struct {
 	PermissionRequest *PermissionRequestClient
 	// PipelineConfig is the client for interacting with the PipelineConfig builders.
 	PipelineConfig *PipelineConfigClient
+	// Project is the client for interacting with the Project builders.
+	Project *ProjectClient
+	// ProjectFolder is the client for interacting with the ProjectFolder builders.
+	ProjectFolder *ProjectFolderClient
 	// RefinementTurn is the client for interacting with the RefinementTurn builders.
 	RefinementTurn *RefinementTurnClient
 	// RemoteRegistration is the client for interacting with the RemoteRegistration builders.
 	RemoteRegistration *RemoteRegistrationClient
+	// Spawner is the client for interacting with the Spawner builders.
+	Spawner *SpawnerClient
 	// StageRun is the client for interacting with the StageRun builders.
 	StageRun *StageRunClient
 	// SystemPrompt is the client for interacting with the SystemPrompt builders.
@@ -177,8 +183,11 @@ func (tx *Tx) init() {
 	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
 	tx.PermissionRequest = NewPermissionRequestClient(tx.config)
 	tx.PipelineConfig = NewPipelineConfigClient(tx.config)
+	tx.Project = NewProjectClient(tx.config)
+	tx.ProjectFolder = NewProjectFolderClient(tx.config)
 	tx.RefinementTurn = NewRefinementTurnClient(tx.config)
 	tx.RemoteRegistration = NewRemoteRegistrationClient(tx.config)
+	tx.Spawner = NewSpawnerClient(tx.config)
 	tx.StageRun = NewStageRunClient(tx.config)
 	tx.SystemPrompt = NewSystemPromptClient(tx.config)
 	tx.Task = NewTaskClient(tx.config)

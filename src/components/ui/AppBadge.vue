@@ -18,8 +18,8 @@ const dotClass: Record<Variant, string> = {
 const labelClass: Record<Variant, string> = {
   active: 'text-green-600 dark:text-green-400',
   waiting: 'text-yellow-700 dark:text-yellow-400',
-  idle: 'text-slate-600 dark:text-slate-500',
-  completed: 'text-slate-600 dark:text-slate-500',
+  idle: 'text-fg-mute',
+  completed: 'text-fg-mute',
   error: 'text-red-600 dark:text-red-400',
   info: 'text-blue-600 dark:text-blue-400',
 }

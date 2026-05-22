@@ -24,8 +24,8 @@ withDefaults(defineProps<{
     :class="[
       size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
       variant === 'primary' && 'bg-green-600 text-white hover:brightness-110',
-      variant === 'secondary' && 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:brightness-110',
-      variant === 'ghost' && 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300',
+      variant === 'secondary' && 'bg-raised text-fg-mute hover:brightness-110',
+      variant === 'ghost' && 'bg-transparent text-fg-mute hover:text-fg-soft',
       variant === 'danger' && 'bg-red-600 text-white hover:brightness-110',
       variant === 'info' && 'bg-blue-600 text-white hover:brightness-110',
     ]"

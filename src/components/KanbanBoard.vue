@@ -70,19 +70,19 @@ const totalTasks = computed(() =>
       :key="col.key"
       role="group"
       :aria-label="`${col.title} column, ${col.cards.length} task${col.cards.length !== 1 ? 's' : ''}`"
-      class="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col min-h-[200px] max-h-[calc(100vh-250px)]"
+      class="bg-card rounded-lg border border-line flex flex-col min-h-[200px] max-h-[calc(100vh-250px)]"
     >
       <span class="sr-only" aria-live="polite">{{ col.title }} column, {{ col.cards.length }} tasks</span>
       <div
-        class="flex items-center gap-2 px-3.5 py-3 border-b border-slate-200 dark:border-slate-700 flex-shrink-0"
+        class="flex items-center gap-2 px-3.5 py-3 border-b border-line flex-shrink-0"
         aria-hidden="true"
       >
         <span
           class="text-[10px] w-3.5 text-center"
-          :class="col.key === 'inProgress' ? 'text-yellow-600 dark:text-yellow-400' : col.key === 'completed' ? 'text-green-600 dark:text-green-400' : 'text-slate-400 dark:text-slate-600'"
+          :class="col.key === 'inProgress' ? 'text-yellow-600 dark:text-yellow-400' : col.key === 'completed' ? 'text-green-600 dark:text-green-400' : 'text-fg-mute'"
         >{{ col.icon }}</span>
-        <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{{ col.title }}</span>
-        <span class="ml-auto text-[11px] font-mono text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{{ col.cards.length }}</span>
+        <span class="text-xs font-semibold uppercase tracking-wider text-fg-mute">{{ col.title }}</span>
+        <span class="ml-auto text-[11px] font-mono text-fg-mute bg-raised px-2 py-0.5 rounded-full">{{ col.cards.length }}</span>
       </div>
       <div class="p-2.5 flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
         <div
@@ -91,26 +91,26 @@ const totalTasks = computed(() =>
           tabindex="0"
           role="button"
           :aria-label="`${card.task.subject} (${card.agent.projectName})`"
-          class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5 cursor-pointer transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.3)] focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+          class="bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.3)] focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
           @click="$emit('select', card.agent)"
           @keydown.enter="$emit('select', card.agent)"
           @keydown.space.prevent="$emit('select', card.agent)"
         >
-          <div class="text-[13px] text-slate-900 dark:text-slate-100 leading-snug mb-2 break-words">
+          <div class="text-[13px] text-fg leading-snug mb-2 break-words">
             {{ card.task.subject }}
           </div>
           <div class="flex items-center justify-between gap-2">
-            <span class="text-[11px] font-mono text-slate-400 dark:text-slate-600 whitespace-nowrap overflow-hidden text-ellipsis min-w-0">{{ card.agent.projectName }}</span>
+            <span class="text-[11px] font-mono text-fg-mute whitespace-nowrap overflow-hidden text-ellipsis min-w-0">{{ card.agent.projectName }}</span>
             <AppBadge :variant="card.agent.status" />
           </div>
         </div>
-        <div v-if="col.cards.length === 0" class="py-6 text-center text-[13px] text-slate-400 dark:text-slate-600 italic">
+        <div v-if="col.cards.length === 0" class="py-6 text-center text-[13px] text-fg-mute italic">
           No tasks
         </div>
       </div>
     </div>
   </div>
-  <p v-else class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+  <p v-else class="text-center py-12 text-fg-mute text-sm">
     No tasks found across agents.
   </p>
 </template>

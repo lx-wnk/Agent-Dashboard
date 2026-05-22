@@ -9,9 +9,12 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
@@ -56,6 +59,32 @@ func init() {
 	permissionrequestDescRequestedAt := permissionrequestFields[6].Descriptor()
 	// permissionrequest.DefaultRequestedAt holds the default value on creation for the requested_at field.
 	permissionrequest.DefaultRequestedAt = permissionrequestDescRequestedAt.Default.(func() time.Time)
+	projectFields := schema.Project{}.Fields()
+	_ = projectFields
+	// projectDescCreatedAt is the schema descriptor for created_at field.
+	projectDescCreatedAt := projectFields[6].Descriptor()
+	// project.DefaultCreatedAt holds the default value on creation for the created_at field.
+	project.DefaultCreatedAt = projectDescCreatedAt.Default.(func() time.Time)
+	// projectDescUpdatedAt is the schema descriptor for updated_at field.
+	projectDescUpdatedAt := projectFields[7].Descriptor()
+	// project.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	project.DefaultUpdatedAt = projectDescUpdatedAt.Default.(func() time.Time)
+	// project.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	project.UpdateDefaultUpdatedAt = projectDescUpdatedAt.UpdateDefault.(func() time.Time)
+	projectfolderFields := schema.ProjectFolder{}.Fields()
+	_ = projectfolderFields
+	// projectfolderDescPath is the schema descriptor for path field.
+	projectfolderDescPath := projectfolderFields[1].Descriptor()
+	// projectfolder.PathValidator is a validator for the "path" field. It is called by the builders before save.
+	projectfolder.PathValidator = projectfolderDescPath.Validators[0].(func(string) error)
+	// projectfolderDescIsDefault is the schema descriptor for is_default field.
+	projectfolderDescIsDefault := projectfolderFields[3].Descriptor()
+	// projectfolder.DefaultIsDefault holds the default value on creation for the is_default field.
+	projectfolder.DefaultIsDefault = projectfolderDescIsDefault.Default.(bool)
+	// projectfolderDescCreatedAt is the schema descriptor for created_at field.
+	projectfolderDescCreatedAt := projectfolderFields[4].Descriptor()
+	// projectfolder.DefaultCreatedAt holds the default value on creation for the created_at field.
+	projectfolder.DefaultCreatedAt = projectfolderDescCreatedAt.Default.(func() time.Time)
 	refinementturnFields := schema.RefinementTurn{}.Fields()
 	_ = refinementturnFields
 	// refinementturnDescCreatedAt is the schema descriptor for created_at field.
@@ -68,6 +97,38 @@ func init() {
 	remoteregistrationDescCreatedAt := remoteregistrationFields[5].Descriptor()
 	// remoteregistration.DefaultCreatedAt holds the default value on creation for the created_at field.
 	remoteregistration.DefaultCreatedAt = remoteregistrationDescCreatedAt.Default.(func() time.Time)
+	spawnerFields := schema.Spawner{}.Fields()
+	_ = spawnerFields
+	// spawnerDescArgs is the schema descriptor for args field.
+	spawnerDescArgs := spawnerFields[4].Descriptor()
+	// spawner.DefaultArgs holds the default value on creation for the args field.
+	spawner.DefaultArgs = spawnerDescArgs.Default.([]string)
+	// spawnerDescEnv is the schema descriptor for env field.
+	spawnerDescEnv := spawnerFields[5].Descriptor()
+	// spawner.DefaultEnv holds the default value on creation for the env field.
+	spawner.DefaultEnv = spawnerDescEnv.Default.(map[string]string)
+	// spawnerDescAdapterType is the schema descriptor for adapter_type field.
+	spawnerDescAdapterType := spawnerFields[6].Descriptor()
+	// spawner.DefaultAdapterType holds the default value on creation for the adapter_type field.
+	spawner.DefaultAdapterType = spawnerDescAdapterType.Default.(string)
+	// spawnerDescAdapterConfig is the schema descriptor for adapter_config field.
+	spawnerDescAdapterConfig := spawnerFields[7].Descriptor()
+	// spawner.DefaultAdapterConfig holds the default value on creation for the adapter_config field.
+	spawner.DefaultAdapterConfig = spawnerDescAdapterConfig.Default.(map[string]string)
+	// spawnerDescBuiltIn is the schema descriptor for built_in field.
+	spawnerDescBuiltIn := spawnerFields[10].Descriptor()
+	// spawner.DefaultBuiltIn holds the default value on creation for the built_in field.
+	spawner.DefaultBuiltIn = spawnerDescBuiltIn.Default.(bool)
+	// spawnerDescCreatedAt is the schema descriptor for created_at field.
+	spawnerDescCreatedAt := spawnerFields[11].Descriptor()
+	// spawner.DefaultCreatedAt holds the default value on creation for the created_at field.
+	spawner.DefaultCreatedAt = spawnerDescCreatedAt.Default.(func() time.Time)
+	// spawnerDescUpdatedAt is the schema descriptor for updated_at field.
+	spawnerDescUpdatedAt := spawnerFields[12].Descriptor()
+	// spawner.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	spawner.DefaultUpdatedAt = spawnerDescUpdatedAt.Default.(func() time.Time)
+	// spawner.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	spawner.UpdateDefaultUpdatedAt = spawnerDescUpdatedAt.UpdateDefault.(func() time.Time)
 	stagerunFields := schema.StageRun{}.Fields()
 	_ = stagerunFields
 	// stagerunDescStatus is the schema descriptor for status field.
@@ -141,11 +202,11 @@ func init() {
 	// task.DefaultSilverBullet holds the default value on creation for the silver_bullet field.
 	task.DefaultSilverBullet = taskDescSilverBullet.Default.(bool)
 	// taskDescCreatedAt is the schema descriptor for created_at field.
-	taskDescCreatedAt := taskFields[18].Descriptor()
+	taskDescCreatedAt := taskFields[20].Descriptor()
 	// task.DefaultCreatedAt holds the default value on creation for the created_at field.
 	task.DefaultCreatedAt = taskDescCreatedAt.Default.(func() time.Time)
 	// taskDescUpdatedAt is the schema descriptor for updated_at field.
-	taskDescUpdatedAt := taskFields[19].Descriptor()
+	taskDescUpdatedAt := taskFields[21].Descriptor()
 	// task.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	task.DefaultUpdatedAt = taskDescUpdatedAt.Default.(func() time.Time)
 	// task.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

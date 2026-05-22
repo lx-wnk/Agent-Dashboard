@@ -32,6 +32,12 @@ type SpawnAgentOptions struct {
 	ResumeSessionID string
 	MCPToken        string
 	MCPUrl          string
+	// Spawner is the resolved DB spawner row that controls which executable
+	// is launched and which extra env vars are seeded. When nil the spawner
+	// behaves identically to the legacy `claude` CLI path. The built-in
+	// claude-default spawner (Command="claude", empty Args/Env) is also
+	// treated as the legacy path so existing tasks spawn byte-identically.
+	Spawner *ent.Spawner
 }
 
 type SpawnResult struct {
@@ -102,7 +108,50 @@ func BuildSpawnArgs(opts SpawnAgentOptions) []string {
 		}
 		args = append(args, "--system-prompt", sp)
 	}
+	// Apply spawner ModelOverride only when no --model was already injected
+	// from opts.Model. The override is meant for spawners that target a
+	// fixed model regardless of the task's preferred model.
+	if opts.Spawner != nil && opts.Spawner.ModelOverride != nil && *opts.Spawner.ModelOverride != "" {
+		if !containsArg(args, "--model") {
+			args = append(args, "--model", *opts.Spawner.ModelOverride)
+		}
+	}
 	return args
+}
+
+func containsArg(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
+// buildExecCommand returns an *exec.Cmd configured for the resolved spawner.
+// Spawner-declared args appear BEFORE dashboard-built args so interpreter
+// flags (e.g. `npx` + package name) precede the per-task switches.
+func buildExecCommand(sp *ent.Spawner, args []string) *exec.Cmd {
+	if isLegacyClaudeSpawner(sp) {
+		return exec.Command("claude", args...)
+	}
+	combined := make([]string, 0, len(sp.Args)+len(args))
+	combined = append(combined, sp.Args...)
+	combined = append(combined, args...)
+	return exec.Command(sp.Command, combined...)
+}
+
+// isLegacyClaudeSpawner returns true when the spawner is nil or describes the
+// built-in `claude` CLI with no custom args. In that case SpawnStageAgent
+// behaves byte-identically to the pre-pluggable-spawner path.
+func isLegacyClaudeSpawner(sp *ent.Spawner) bool {
+	if sp == nil {
+		return true
+	}
+	if (sp.Command == "" || sp.Command == "claude") && len(sp.Args) == 0 {
+		return true
+	}
+	return false
 }
 
 func buildSpawnArgsWithChannelConfig(opts SpawnAgentOptions, channelCfgPath string) []string {
@@ -145,35 +194,60 @@ var allowedEnvKeys = map[string]struct{}{
 }
 
 func BuildSpawnEnv(opts SpawnAgentOptions) []string {
-	var env []string
+	// Stage 1: spawner-declared env (lowest precedence). Each entry is
+	// subject to the global deny list before reaching the merged map.
+	merged := make(map[string]string)
+	if opts.Spawner != nil {
+		for k, v := range opts.Spawner.Env {
+			if _, denied := deniedEnvKeys[k]; denied {
+				continue
+			}
+			merged[k] = v
+		}
+	}
+
+	// Stage 2: inherited process env, filtered by the allow-list/prefix
+	// rules. Always wins over a spawner-declared key of the same name.
 	for _, e := range os.Environ() {
-		key, _, found := strings.Cut(e, "=")
+		key, val, found := strings.Cut(e, "=")
 		if !found {
 			continue
 		}
-		// Deny list takes precedence over both allowedEnvKeys and allowedEnvPrefixes.
 		if _, denied := deniedEnvKeys[key]; denied {
 			continue
 		}
 		if _, ok := allowedEnvKeys[key]; ok {
-			env = append(env, e)
+			merged[key] = val
 			continue
 		}
 		for _, prefix := range allowedEnvPrefixes {
 			if strings.HasPrefix(key, prefix) {
-				env = append(env, e)
+				merged[key] = val
 				break
 			}
 		}
 	}
-	// Always inject dashboard-specific vars (override any inherited values).
-	env = append(env, fmt.Sprintf("DASHBOARD_STAGE_RUN_ID=%s", opts.StageRun.ID))
-	env = append(env, fmt.Sprintf("DASHBOARD_TASK_ID=%s", opts.Task.ID))
+
+	// Stage 3: dashboard-controlled identifiers (highest precedence).
+	merged["DASHBOARD_STAGE_RUN_ID"] = opts.StageRun.ID
+	merged["DASHBOARD_TASK_ID"] = opts.Task.ID
 	if opts.MCPToken != "" {
-		env = append(env, fmt.Sprintf("DASHBOARD_MCP_TOKEN=%s", opts.MCPToken))
+		merged["DASHBOARD_MCP_TOKEN"] = opts.MCPToken
 	}
 	if opts.MCPUrl != "" {
-		env = append(env, fmt.Sprintf("DASHBOARD_MCP_URL=%s", opts.MCPUrl))
+		merged["DASHBOARD_MCP_URL"] = opts.MCPUrl
+	}
+
+	// Final defense-in-depth pass: secrets must never leak even if a future
+	// code path puts them into `merged` above. The Stage-1 and Stage-2 loops
+	// already filter them, but this guarantees the invariant at the exit.
+	for denied := range deniedEnvKeys {
+		delete(merged, denied)
+	}
+
+	env := make([]string, 0, len(merged))
+	for k, v := range merged {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
 	return env
 }
@@ -306,7 +380,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	}
 
 	args := buildSpawnArgsWithChannelConfig(opts, channelCfgPath)
-	cmd := exec.Command("claude", args...)
+	cmd := buildExecCommand(opts.Spawner, args)
 	cmd.Dir = cwd
 	cmd.Env = BuildSpawnEnv(opts)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

@@ -4,93 +4,78 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"testing"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
-	"github.com/lx-wnk/agent-dashboard/server/internal/config"
+	"github.com/go-chi/chi/v5"
 )
 
-// TestPutConfig_PersistsToDisk verifies that a successful PUT writes the
-// adapter name to the config file on disk.
-func TestPutConfig_PersistsToDisk(t *testing.T) {
+// TestList_ReturnsCatalog verifies GET /api/adapters still returns the
+// canonical adapter catalog.
+func TestList_ReturnsCatalog(t *testing.T) {
 	t.Parallel()
 
-	f, err := os.CreateTemp(t.TempDir(), "adapter-cfg-*.json")
-	if err != nil {
-		t.Fatalf("create temp file: %v", err)
-	}
-	f.Close()
+	r := chi.NewRouter()
+	NewHandler().Mount(r)
 
-	cfg := &config.AdapterConfig{Default: "claude"}
-	h := NewHandler(cfg, f.Name())
-
-	body := `{"default":"ollama"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/settings/adapters", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest(http.MethodGet, "/api/adapters", nil)
 	w := httptest.NewRecorder()
-
-	apierr.ErrorMiddleware(h.putConfig).ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-
-	data, err := os.ReadFile(f.Name())
-	if err != nil {
-		t.Fatalf("read persisted config: %v", err)
+	if got := w.Header().Get("Content-Type"); got != "application/json" {
+		t.Errorf("expected application/json content-type, got %q", got)
 	}
-	if !strings.Contains(string(data), "ollama") {
-		t.Errorf("expected 'ollama' in persisted file, got: %s", string(data))
+
+	var catalog []map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&catalog); err != nil {
+		t.Fatalf("decode catalog: %v", err)
+	}
+	if len(catalog) == 0 {
+		t.Errorf("expected non-empty adapter catalog")
 	}
 }
 
-// TestPutConfig_NoCfgFile_NoError verifies that a PUT with no config file
-// returns 200 without panicking.
-func TestPutConfig_NoCfgFile_NoError(t *testing.T) {
+// TestRetiredEndpoints_Return410 verifies that the four legacy write endpoints
+// respond with HTTP 410 Gone and the documented migration body.
+func TestRetiredEndpoints_Return410(t *testing.T) {
 	t.Parallel()
 
-	cfg := &config.AdapterConfig{Default: "claude"}
-	h := NewHandler(cfg, "") // no file
-
-	body := `{"default":"openai"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/settings/adapters", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	apierr.ErrorMiddleware(h.putConfig).ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-// TestPutConfig_PersistFailure_NonFatal verifies that a persistence failure
-// does not prevent the handler from returning 200 with restartRequired:true.
-func TestPutConfig_PersistFailure_NonFatal(t *testing.T) {
-	t.Parallel()
-
-	cfg := &config.AdapterConfig{Default: "claude"}
-	h := NewHandler(cfg, "/dev/null/impossible") // unwritable path
-
-	body := `{"default":"custom"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/settings/adapters", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	apierr.ErrorMiddleware(h.putConfig).ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/adapters/current"},
+		{http.MethodPost, "/api/adapters/current"},
+		{http.MethodGet, "/api/settings/adapters"},
+		{http.MethodPut, "/api/settings/adapters"},
 	}
 
-	var resp map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	restart, _ := resp["restartRequired"].(bool)
-	if !restart {
-		t.Errorf("expected restartRequired:true in response, got: %v", resp)
+	r := chi.NewRouter()
+	NewHandler().Mount(r)
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusGone {
+				t.Fatalf("expected 410, got %d: %s", w.Code, w.Body.String())
+			}
+			var body map[string]string
+			if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if body["error"] != "endpoint retired" {
+				t.Errorf("unexpected error key: %q", body["error"])
+			}
+			if body["message"] == "" || body["docs"] == "" {
+				t.Errorf("expected message + docs keys, got: %+v", body)
+			}
+		})
 	}
 }

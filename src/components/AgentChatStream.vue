@@ -259,47 +259,47 @@ defineExpose({ scrollToBottom })
 <template>
   <!-- UX-11: aria-live="polite" so new chat messages are announced to screen readers -->
   <div ref="outputEl" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed" aria-live="polite" aria-atomic="false" aria-relevant="additions" aria-label="Chat transcript">
-    <div v-if="agent?.machine" class="text-slate-400 dark:text-slate-600 text-center py-12">
+    <div v-if="agent?.machine" class="text-fg-mute text-center py-12">
       Session output is not available for remote agents.
     </div>
-    <div v-else-if="isLoadingOutput" class="text-slate-400 dark:text-slate-600 text-center py-12">
+    <div v-else-if="isLoadingOutput" class="text-fg-mute text-center py-12">
       Loading session output...
     </div>
     <template v-else-if="chatEntries.length > 0">
       <template v-for="(entry, i) in chatEntries" :key="i">
         <div v-if="entry.kind === 'tool_group'" class="flex justify-center">
-          <details class="w-full border border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-950 text-xs">
-            <summary class="px-2.5 py-1 text-slate-400 dark:text-slate-600 cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400">
+          <details class="w-full border border-line rounded-md bg-app text-xs">
+            <summary class="px-2.5 py-1 text-fg-mute cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400">
               {{ entry.calls.length }} tool call{{ entry.calls.length > 1 ? 's' : '' }}
             </summary>
-            <div class="border-t border-slate-200 dark:border-slate-700 py-1">
+            <div class="border-t border-line py-1">
               <details v-for="(call, j) in entry.calls" :key="j" class="px-2.5">
-                <summary class="py-0.5 text-slate-500 dark:text-slate-400 text-[11px] cursor-pointer hover:text-slate-700 dark:hover:text-slate-300">
-                  {{ call.toolName }}<span v-if="call.filePath" class="text-slate-400 dark:text-slate-600 ml-1.5 text-[10px]">{{ call.filePath }}</span>
+                <summary class="py-0.5 text-fg-mute text-[11px] cursor-pointer hover:text-fg-soft">
+                  {{ call.toolName }}<span v-if="call.filePath" class="text-fg-mute ml-1.5 text-[10px]">{{ call.filePath }}</span>
                 </summary>
-                <pre v-if="call.result" class="bg-slate-100 dark:bg-slate-800 rounded p-2 text-[11px] text-slate-500 dark:text-slate-400 max-h-[200px] overflow-y-auto mt-1 mb-1 whitespace-pre-wrap break-words">{{ call.result }}</pre>
+                <pre v-if="call.result" class="bg-raised rounded p-2 text-[11px] text-fg-mute max-h-[200px] overflow-y-auto mt-1 mb-1 whitespace-pre-wrap break-words">{{ call.result }}</pre>
               </details>
             </div>
           </details>
         </div>
         <div v-else-if="entry.kind === 'task_group'" class="flex justify-center">
-          <div class="w-full border border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 text-xs">
+          <div class="w-full border border-line rounded-md bg-app px-2.5 py-1.5 text-xs">
             <div
               v-for="(task, j) in entry.tasks"
               :key="j"
-              class="flex items-baseline gap-1.5 py-px text-slate-500 dark:text-slate-400"
+              class="flex items-baseline gap-1.5 py-px text-fg-mute"
             >
               <span
                 class="flex-shrink-0 w-3.5 text-center font-semibold"
                 :class="{
                   'text-green-600 dark:text-green-400': task.status === 'completed',
                   'text-blue-600 dark:text-blue-400': task.status === 'in_progress',
-                  'text-slate-400 dark:text-slate-600': task.status === 'pending',
+                  'text-fg-mute': task.status === 'pending',
                 }"
               >{{ task.status === 'completed' ? '✓' : task.status === 'in_progress' ? '›' : '○' }}</span>
               <span
                 class="font-mono"
-                :class="task.status === 'completed' ? 'text-slate-400 dark:text-slate-600 line-through' : ''"
+                :class="task.status === 'completed' ? 'text-fg-mute line-through' : ''"
               >{{ task.subject }}</span>
             </div>
           </div>
@@ -316,7 +316,7 @@ defineExpose({ scrollToBottom })
           <!-- UX-36: wrap message bubbles in column so <time> sits below each bubble -->
           <div v-if="entry.msg.role === 'human'" class="flex flex-col items-end gap-0.5 max-w-[80%]">
             <div
-              class="px-3 py-2 rounded-xl rounded-br-sm text-[13px] leading-relaxed break-words whitespace-pre-wrap bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600"
+              class="px-3 py-2 rounded-xl rounded-br-sm text-[13px] leading-relaxed break-words whitespace-pre-wrap bg-raised text-fg-mute"
               :class="{ 'border border-yellow-400/40': entry.msg.queued }"
             >
               {{ entry.msg.content }}
@@ -324,43 +324,43 @@ defineExpose({ scrollToBottom })
             <time
               v-if="formatMsgTime(entry.msg.timestamp)"
               :datetime="isoTimestamp(entry.msg.timestamp)"
-              class="text-[10px] text-slate-400 dark:text-slate-600 select-none"
+              class="text-[10px] text-fg-mute select-none"
             >{{ formatMsgTime(entry.msg.timestamp) }}</time>
           </div>
           <div v-else-if="entry.msg.role === 'channel_reply'" class="flex flex-col items-start gap-0.5 max-w-[80%]">
             <div
-              class="px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-l-2 border-green-500 dark:border-green-400 markdown-body"
+              class="px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-raised text-fg-mute border-l-2 border-green-500 dark:border-green-400 markdown-body"
               v-html="renderMarkdown(entry.msg.content)"
             />
             <time
               v-if="formatMsgTime(entry.msg.timestamp)"
               :datetime="isoTimestamp(entry.msg.timestamp)"
-              class="text-[10px] text-slate-400 dark:text-slate-600 select-none"
+              class="text-[10px] text-fg-mute select-none"
             >{{ formatMsgTime(entry.msg.timestamp) }}</time>
           </div>
           <div v-else-if="entry.msg.role === 'assistant'" class="flex flex-col items-start gap-0.5 max-w-[80%]">
             <div
-              class="px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 markdown-body"
+              class="px-3 py-2 rounded-xl rounded-bl-sm text-[13px] leading-relaxed break-words bg-raised text-fg-mute markdown-body"
               v-html="renderMarkdown(entry.msg.content)"
             />
             <time
               v-if="formatMsgTime(entry.msg.timestamp)"
               :datetime="isoTimestamp(entry.msg.timestamp)"
-              class="text-[10px] text-slate-400 dark:text-slate-600 select-none"
+              class="text-[10px] text-fg-mute select-none"
             >{{ formatMsgTime(entry.msg.timestamp) }}</time>
           </div>
-          <div v-else-if="entry.msg.role === 'subagent'" class="flex items-center gap-1.5 px-2.5 py-1 border border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-950 text-xs text-slate-500 dark:text-slate-400">
+          <div v-else-if="entry.msg.role === 'subagent'" class="flex items-center gap-1.5 px-2.5 py-1 border border-line rounded-md bg-app text-xs text-fg-mute">
             <span class="text-[14px] text-blue-600 dark:text-blue-400">⑂</span>
-            <span class="font-semibold text-slate-900 dark:text-slate-100 text-[11px] uppercase tracking-wide">{{ entry.msg.subagentType }}</span>
-            <span class="text-slate-400 dark:text-slate-600">{{ entry.msg.content }}</span>
+            <span class="font-semibold text-fg text-[11px] uppercase tracking-wide">{{ entry.msg.subagentType }}</span>
+            <span class="text-fg-mute">{{ entry.msg.content }}</span>
           </div>
         </div>
       </template>
     </template>
-    <div v-else class="text-slate-400 dark:text-slate-600 text-center py-12">
+    <div v-else class="text-fg-mute text-center py-12">
       No output available for this session.
     </div>
-    <div v-if="agent?.status === 'active' && agent.currentAction" class="text-slate-400 dark:text-slate-600 text-xs italic py-1" style="animation: pulse 2s ease-in-out infinite;">
+    <div v-if="agent?.status === 'active' && agent.currentAction" class="text-fg-mute text-xs italic py-1" style="animation: pulse 2s ease-in-out infinite;">
       {{ agent.currentAction }}...
     </div>
   </div>

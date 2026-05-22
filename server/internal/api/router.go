@@ -25,10 +25,12 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/projects"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
@@ -70,6 +72,13 @@ type RouterDeps struct {
 	OAuthProvider        authpkg.OAuthProvider
 	UserRepo             repo.UserRepo
 	ApiKeyRepo           repo.ApiKeyRepo
+	ProjectRepo          repo.ProjectRepo
+	ProjectFolderRepo    repo.ProjectFolderRepo
+	SpawnerRepo          repo.SpawnerRepo
+	// TaskProjectOps lets the projects handler check for active tasks and
+	// clear project_id on done/cancelled tasks during DELETE /api/projects/{id}.
+	// May be nil; when nil the project handler skips the active-task check.
+	TaskProjectOps       projects.TaskProjectOps
 	TaskHandler          *tasks.Handler
 	WebPushHandler       *apiwp.Handler
 	RemotesHandler       *remotes.Handler
@@ -178,6 +187,22 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Post("/api/settings/api-keys", ErrorMiddleware(apiKeyHandler.Create))
 			r.Delete("/api/settings/api-keys/{id}", ErrorMiddleware(apiKeyHandler.Delete))
 			r.Post("/api/settings/api-keys/{id}/regenerate", ErrorMiddleware(apiKeyHandler.Regenerate))
+		}
+
+		// Projects + ProjectFolders — JWT-protected (no admin gate required).
+		if deps.ProjectRepo != nil && deps.ProjectFolderRepo != nil {
+			projectsHandler := projects.NewHandler(deps.ProjectRepo, deps.ProjectFolderRepo, deps.TaskProjectOps)
+			projectsHandler.Mount(r)
+		}
+
+		// Spawners — JWT + admin-or-bypass: spawner CRUD lets the operator define
+		// arbitrary processes, so it is RCE-equivalent and must be admin-only.
+		if deps.SpawnerRepo != nil {
+			r.Group(func(r chi.Router) {
+				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
+				spawnersHandler := spawners.NewHandler(deps.SpawnerRepo)
+				spawnersHandler.Mount(r)
+			})
 		}
 
 		if deps.WebPushHandler != nil {

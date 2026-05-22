@@ -177,19 +177,19 @@ onUnmounted(() => {
 
 <template>
   <AppModal :open="open" @close="emit('close')">
-    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-xl">
-      <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+    <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-xl">
+      <header class="flex justify-between items-center px-5 py-4 border-b border-line">
+        <h2 class="text-lg font-semibold text-fg">
           New Agent
         </h2>
-        <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="emit('close')">
+        <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="emit('close')">
           &times;
         </button>
       </header>
 
       <form class="p-5" @submit.prevent>
         <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-prompt">Prompt</label>
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-prompt">Prompt</label>
           <AppInput
             id="spawn-prompt"
             v-model="prompt"
@@ -201,7 +201,7 @@ onUnmounted(() => {
         </div>
 
         <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-cwd">Working Directory</label>
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-cwd">Working Directory</label>
           <AppInput
             id="spawn-cwd"
             v-model="cwd"
@@ -211,8 +211,8 @@ onUnmounted(() => {
         </div>
 
         <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-model">Model</label>
-          <select id="spawn-model" v-model="model" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-model">Model</label>
+          <select id="spawn-model" v-model="model" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
             <option value="">
               Auto
             </option>
@@ -223,7 +223,7 @@ onUnmounted(() => {
         </div>
 
         <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 mb-1.5" for="spawn-system">System Prompt</label>
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-system">System Prompt</label>
           <AppInput
             id="spawn-system"
             v-model="systemPrompt"
@@ -249,7 +249,7 @@ onUnmounted(() => {
             type="checkbox"
             @change="skipPermissionsConfirmed = false"
           >
-          <label for="spawn-yolo">Skip permission prompts <span class="text-[10px] text-slate-400 dark:text-slate-600 font-mono">(--dangerously-skip-permissions)</span></label>
+          <label for="spawn-yolo">Skip permission prompts <span class="text-[10px] text-fg-mute font-mono">(--dangerously-skip-permissions)</span></label>
         </div>
 
         <div v-if="skipPermissions" class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded p-2 px-3 text-xs leading-relaxed text-yellow-600 dark:text-yellow-400 mb-3">
@@ -268,7 +268,7 @@ onUnmounted(() => {
         </p>
       </form>
 
-      <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+      <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
         <AppButton variant="secondary" @click="emit('close')">
           Cancel
         </AppButton>

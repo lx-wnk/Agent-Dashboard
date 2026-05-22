@@ -144,6 +144,8 @@ export interface CreateTaskInput {
   priority?: 'high' | 'medium' | 'low'
   stage?: string
   template?: string
+  projectId?: string
+  spawnerId?: string
 }
 
 export async function createTask(input: CreateTaskInput): Promise<PipelineTask> {
@@ -165,6 +167,8 @@ export async function createTask(input: CreateTaskInput): Promise<PipelineTask> 
       priority: input.priority,
       stage: input.stage,
       template: input.template,
+      projectId: input.projectId,
+      spawnerId: input.spawnerId,
     }),
   })
   if (!res.ok) {

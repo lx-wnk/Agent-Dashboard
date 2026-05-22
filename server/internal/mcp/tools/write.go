@@ -17,6 +17,8 @@ type WriteDeps struct {
 	PermRepo         repo.PermissionRepo
 	AuditRepo        repo.AuditRepo
 	DepRepo          repo.DependencyRepo
+	ProjectRepo      repo.ProjectRepo
+	SpawnerRepo      repo.SpawnerRepo
 	Broadcast        func(taskID string)
 	BroadcastDeleted func(taskID string)
 }
@@ -160,6 +162,8 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				"template":           map[string]any{"type": "string", "description": "Predefined permission template name"},
 				"permissions":        map[string]any{"type": "array"},
 				"inheritPermissions": map[string]any{"type": "boolean"},
+				"projectId":          map[string]any{"type": "string", "description": "Optional project ID to associate the task with"},
+				"spawnerId":          map[string]any{"type": "string", "description": "Optional spawner ID overriding the project default"},
 			},
 			"required": []string{"slug", "title", "cwd"},
 		},
@@ -239,6 +243,25 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				if m, ok := rawMeta.(map[string]any); ok {
 					in.Metadata = m
 				}
+			}
+
+			if projectID := mcp.OptionalString(args, "projectId"); projectID != "" {
+				if d.ProjectRepo == nil {
+					return nil, mcp.Fail("create_task: project repository not configured")
+				}
+				if _, err := d.ProjectRepo.GetByID(ctx, projectID); err != nil {
+					return nil, mcp.Fail("create_task: project not found")
+				}
+				in.ProjectID = &projectID
+			}
+			if spawnerID := mcp.OptionalString(args, "spawnerId"); spawnerID != "" {
+				if d.SpawnerRepo == nil {
+					return nil, mcp.Fail("create_task: spawner repository not configured")
+				}
+				if _, err := d.SpawnerRepo.GetByID(ctx, spawnerID); err != nil {
+					return nil, mcp.Fail("create_task: spawner not found")
+				}
+				in.SpawnerID = &spawnerID
 			}
 
 			task, err := d.TaskRepo.Create(ctx, in)
@@ -400,6 +423,7 @@ func registerManageTask(registry mcp.ToolRegistry, d WriteDeps) {
 					"enum": []string{
 						"grant_permissions", "revoke_permission", "list_permissions",
 						"inherit_from_parent", "set_metadata", "set_priority", "set_budget",
+						"set_project", "set_spawner",
 					},
 				},
 				"template":       map[string]any{"type": "string"},
@@ -412,6 +436,8 @@ func registerManageTask(registry mcp.ToolRegistry, d WriteDeps) {
 				"tokenBudget":    map[string]any{"type": "integer"},
 				"costBudgetCents": map[string]any{"type": "integer"},
 				"maxIterations":  map[string]any{"type": "integer"},
+				"project_id":     map[string]any{"type": []string{"string", "null"}, "description": "Project ID, or null to clear"},
+				"spawner_id":     map[string]any{"type": []string{"string", "null"}, "description": "Spawner ID, or null to clear"},
 			},
 			"required": []string{"task_id", "action"},
 		},
@@ -445,6 +471,10 @@ func registerManageTask(registry mcp.ToolRegistry, d WriteDeps) {
 				return handleSetPriority(ctx, d, task, args)
 			case "set_budget":
 				return handleSetBudget(ctx, d, task, args)
+			case "set_project":
+				return handleSetProject(ctx, d, task, args)
+			case "set_spawner":
+				return handleSetSpawner(ctx, d, task, args)
 			default:
 				return nil, mcp.Fail("unknown action: " + action)
 			}
@@ -659,6 +689,102 @@ func handleSetBudget(ctx context.Context, d WriteDeps, task *ent.Task, args map[
 	})
 	safeBroadcast(d.Broadcast, taskID)
 	return mcp.OK(map[string]any{"action": "set_budget", "task": updated})
+}
+
+// parseAssocArg reads an association id from the args map, supporting:
+//   - missing key   → (id="", clear=false, ok=false)
+//   - explicit null → (id="", clear=true,  ok=true)
+//   - string value  → (id=<val>, clear=false, ok=true)  (empty string also treated as clear)
+//
+// Returns an error if the key is present with an incompatible type.
+func parseAssocArg(args map[string]any, key string) (id string, clear bool, ok bool, err error) {
+	raw, present := args[key]
+	if !present {
+		return "", false, false, nil
+	}
+	if raw == nil {
+		return "", true, true, nil
+	}
+	s, isStr := raw.(string)
+	if !isStr {
+		return "", false, false, mcp.Fail(key + " must be a string or null")
+	}
+	if s == "" {
+		return "", true, true, nil
+	}
+	return s, false, true, nil
+}
+
+func handleSetProject(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {
+	taskID := task.ID
+	id, clear, ok, err := parseAssocArg(args, "project_id")
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, mcp.Fail("project_id is required for set_project (string or null)")
+	}
+	in := repo.UpdateTaskInput{}
+	details := map[string]any{"source": "mcp_manage_task"}
+	if clear {
+		in.ClearProjectID = true
+		details["projectId"] = nil
+	} else {
+		if d.ProjectRepo == nil {
+			return nil, mcp.Fail("set_project: project repository not configured")
+		}
+		if _, err := d.ProjectRepo.GetByID(ctx, id); err != nil {
+			return nil, mcp.Fail("set_project: project not found")
+		}
+		in.ProjectID = &id
+		details["projectId"] = id
+	}
+	updated, err := d.TaskRepo.Update(ctx, taskID, in)
+	if err != nil {
+		return nil, mcp.Fail("set_project: " + err.Error())
+	}
+	// Audit is best-effort: a failed append must not block the user-visible operation.
+	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		TaskID: taskID, Actor: "system", Action: "project_changed", Details: details,
+	})
+	safeBroadcast(d.Broadcast, taskID)
+	return mcp.OK(map[string]any{"action": "set_project", "task": updated})
+}
+
+func handleSetSpawner(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {
+	taskID := task.ID
+	id, clear, ok, err := parseAssocArg(args, "spawner_id")
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, mcp.Fail("spawner_id is required for set_spawner (string or null)")
+	}
+	in := repo.UpdateTaskInput{}
+	details := map[string]any{"source": "mcp_manage_task"}
+	if clear {
+		in.ClearSpawnerID = true
+		details["spawnerId"] = nil
+	} else {
+		if d.SpawnerRepo == nil {
+			return nil, mcp.Fail("set_spawner: spawner repository not configured")
+		}
+		if _, err := d.SpawnerRepo.GetByID(ctx, id); err != nil {
+			return nil, mcp.Fail("set_spawner: spawner not found")
+		}
+		in.SpawnerID = &id
+		details["spawnerId"] = id
+	}
+	updated, err := d.TaskRepo.Update(ctx, taskID, in)
+	if err != nil {
+		return nil, mcp.Fail("set_spawner: " + err.Error())
+	}
+	// Audit is best-effort: a failed append must not block the user-visible operation.
+	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
+		TaskID: taskID, Actor: "system", Action: "spawner_changed", Details: details,
+	})
+	safeBroadcast(d.Broadcast, taskID)
+	return mcp.OK(map[string]any{"action": "set_spawner", "task": updated})
 }
 
 // registerAddDependency registers the add_dependency tool.

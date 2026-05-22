@@ -13,13 +13,16 @@ func provideTaskHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator,
 		return nil
 	}
 	return tasks.NewHandler(tasks.Deps{
-		TaskRepo:     repo.NewTaskRepo(client),
-		SRRepo:       repo.NewStageRunRepo(client),
-		PermRepo:     repo.NewPermissionRepo(client),
-		AuditRepo:    repo.NewAuditRepo(client),
-		CfgRepo:      repo.NewPipelineConfigRepo(client),
-		DepRepo:      repo.NewDependencyRepo(client),
-		Orchestrator: orch,
-		Broadcaster:  tb,
+		TaskRepo:          repo.NewTaskRepo(client),
+		SRRepo:            repo.NewStageRunRepo(client),
+		PermRepo:          repo.NewPermissionRepo(client),
+		AuditRepo:         repo.NewAuditRepo(client),
+		CfgRepo:           repo.NewPipelineConfigRepo(client),
+		DepRepo:           repo.NewDependencyRepo(client),
+		ProjectRepo:       repo.NewProjectRepo(client),
+		ProjectFolderRepo: repo.NewProjectFolderRepo(client),
+		SpawnerRepo:       repo.NewSpawnerRepo(client),
+		Orchestrator:      orch,
+		Broadcaster:       tb,
 	})
 }

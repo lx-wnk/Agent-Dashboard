@@ -18,8 +18,11 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
@@ -92,8 +95,11 @@ func checkColumn(t, c string) error {
 			permissionpreset.Table:   permissionpreset.ValidColumn,
 			permissionrequest.Table:  permissionrequest.ValidColumn,
 			pipelineconfig.Table:     pipelineconfig.ValidColumn,
+			project.Table:            project.ValidColumn,
+			projectfolder.Table:      projectfolder.ValidColumn,
 			refinementturn.Table:     refinementturn.ValidColumn,
 			remoteregistration.Table: remoteregistration.ValidColumn,
+			spawner.Table:            spawner.ValidColumn,
 			stagerun.Table:           stagerun.ValidColumn,
 			systemprompt.Table:       systemprompt.ValidColumn,
 			task.Table:               task.ValidColumn,

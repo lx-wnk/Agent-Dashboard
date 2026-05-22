@@ -30,7 +30,7 @@ function select(id: TemplateId) {
         class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors"
         :class="modelValue === t.id
           ? 'bg-blue-600 border-blue-600 text-white'
-          : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-blue-400'"
+          : 'bg-raised border-line-strong text-fg-soft hover:border-blue-400'"
         @click="select(t.id)"
       >
         {{ t.label }}

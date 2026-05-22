@@ -92,7 +92,7 @@ onMounted(fetchAndRender)
 
 <template>
   <div class="cost-forecast p-4">
-    <h3 class="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">
+    <h3 class="text-sm font-semibold mb-2 text-fg-soft">
       30-Day Cost Trend + 7-Day Forecast
     </h3>
     <div v-if="loading" class="text-sm text-slate-500">
@@ -112,7 +112,7 @@ onMounted(fetchAndRender)
       >
         {{ alert.message }}
       </div>
-      <svg ref="svgRef" class="w-full text-slate-800 dark:text-slate-200" style="min-height: 120px;" />
+      <svg ref="svgRef" class="w-full text-fg" style="min-height: 120px;" />
       <p class="text-[10px] text-slate-400 mt-1">
         Blue = actual cumulative cost. Orange dashed = linear regression forecast.
       </p>

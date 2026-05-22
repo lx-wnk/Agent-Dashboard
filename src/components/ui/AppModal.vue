@@ -96,7 +96,7 @@ function trapFocus(event: KeyboardEvent) {
       >
         <div
           ref="modalPanelRef"
-          class="base-modal-box"
+          class="base-modal-box outline-none"
           tabindex="-1"
           @keydown="trapFocus"
         >

@@ -9,7 +9,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
-func initTestRepo(t *testing.T, repoDir string) {
+func initRepoWithCommit(t *testing.T, repoDir string) {
 	t.Helper()
 	if err := exec.Command("git", "-C", repoDir, "init").Run(); err != nil {
 		t.Skip("git not available:", err)
@@ -19,16 +19,16 @@ func initTestRepo(t *testing.T, repoDir string) {
 		{"config", "user.name", "Test"},
 		{"commit", "--allow-empty", "-m", "init"},
 	} {
-		cmd := append([]string{"-C", repoDir}, args...)
-		if err := exec.Command("git", cmd...).Run(); err != nil {
-			t.Fatalf("git %v failed: %v", args, err)
+		full := append([]string{"-C", repoDir}, args...)
+		if err := exec.Command("git", full...).Run(); err != nil {
+			t.Fatalf("git %v: %v", args, err)
 		}
 	}
 }
 
 func TestEnsureTaskWorktree_NoSourceBranch_DerivesSlug(t *testing.T) {
 	repoDir := t.TempDir()
-	initTestRepo(t, repoDir)
+	initRepoWithCommit(t, repoDir)
 
 	task := &ent.Task{Slug: "my-task", Cwd: repoDir}
 	root := filepath.Join(t.TempDir(), "worktrees")
@@ -47,7 +47,7 @@ func TestEnsureTaskWorktree_NoSourceBranch_DerivesSlug(t *testing.T) {
 
 func TestEnsureTaskWorktree_CreatesAndIdempotent(t *testing.T) {
 	repoDir := t.TempDir()
-	initTestRepo(t, repoDir)
+	initRepoWithCommit(t, repoDir)
 
 	branch := "feat/auto-worktree-test"
 	task := &ent.Task{Slug: "wt-test", Cwd: repoDir, SourceBranch: &branch}

@@ -114,9 +114,9 @@ func runRawMigrations(db *sql.DB) error {
 		END`,
 
 		// Sync trigger: UPDATE on tasks (delete old index entry, insert new one).
-		// task_fts is a regular (non-content) FTS5 table, so plain DELETE by rowid
-		// is the correct removal form — the 'delete' command form is reserved for
-		// external-content/contentless tables and raises "SQL logic error" here.
+		// task_fts is a regular (content-owning) FTS5 table, so plain DELETE by
+		// rowid is required; the "INSERT INTO ft(ft, rowid) VALUES('delete', ...)"
+		// form is only valid for contentless FTS5 tables (content='').
 		`CREATE TRIGGER IF NOT EXISTS tasks_au AFTER UPDATE ON tasks BEGIN
 			DELETE FROM task_fts WHERE rowid = old.rowid;
 			INSERT INTO task_fts(rowid, task_id, title, description)

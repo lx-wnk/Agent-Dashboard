@@ -21,8 +21,11 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
@@ -48,10 +51,16 @@ type Client struct {
 	PermissionRequest *PermissionRequestClient
 	// PipelineConfig is the client for interacting with the PipelineConfig builders.
 	PipelineConfig *PipelineConfigClient
+	// Project is the client for interacting with the Project builders.
+	Project *ProjectClient
+	// ProjectFolder is the client for interacting with the ProjectFolder builders.
+	ProjectFolder *ProjectFolderClient
 	// RefinementTurn is the client for interacting with the RefinementTurn builders.
 	RefinementTurn *RefinementTurnClient
 	// RemoteRegistration is the client for interacting with the RemoteRegistration builders.
 	RemoteRegistration *RemoteRegistrationClient
+	// Spawner is the client for interacting with the Spawner builders.
+	Spawner *SpawnerClient
 	// StageRun is the client for interacting with the StageRun builders.
 	StageRun *StageRunClient
 	// SystemPrompt is the client for interacting with the SystemPrompt builders.
@@ -81,8 +90,11 @@ func (c *Client) init() {
 	c.PermissionPreset = NewPermissionPresetClient(c.config)
 	c.PermissionRequest = NewPermissionRequestClient(c.config)
 	c.PipelineConfig = NewPipelineConfigClient(c.config)
+	c.Project = NewProjectClient(c.config)
+	c.ProjectFolder = NewProjectFolderClient(c.config)
 	c.RefinementTurn = NewRefinementTurnClient(c.config)
 	c.RemoteRegistration = NewRemoteRegistrationClient(c.config)
+	c.Spawner = NewSpawnerClient(c.config)
 	c.StageRun = NewStageRunClient(c.config)
 	c.SystemPrompt = NewSystemPromptClient(c.config)
 	c.Task = NewTaskClient(c.config)
@@ -187,8 +199,11 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
+		Project:            NewProjectClient(cfg),
+		ProjectFolder:      NewProjectFolderClient(cfg),
 		RefinementTurn:     NewRefinementTurnClient(cfg),
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
+		Spawner:            NewSpawnerClient(cfg),
 		StageRun:           NewStageRunClient(cfg),
 		SystemPrompt:       NewSystemPromptClient(cfg),
 		Task:               NewTaskClient(cfg),
@@ -220,8 +235,11 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
+		Project:            NewProjectClient(cfg),
+		ProjectFolder:      NewProjectFolderClient(cfg),
 		RefinementTurn:     NewRefinementTurnClient(cfg),
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
+		Spawner:            NewSpawnerClient(cfg),
 		StageRun:           NewStageRunClient(cfg),
 		SystemPrompt:       NewSystemPromptClient(cfg),
 		Task:               NewTaskClient(cfg),
@@ -258,8 +276,9 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentCostTrend, c.ApiKey, c.AuditLog, c.PermissionPreset, c.PermissionRequest,
-		c.PipelineConfig, c.RefinementTurn, c.RemoteRegistration, c.StageRun,
-		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.User,
+		c.PipelineConfig, c.Project, c.ProjectFolder, c.RefinementTurn,
+		c.RemoteRegistration, c.Spawner, c.StageRun, c.SystemPrompt, c.Task,
+		c.TaskDependency, c.TaskPermission, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -270,8 +289,9 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentCostTrend, c.ApiKey, c.AuditLog, c.PermissionPreset, c.PermissionRequest,
-		c.PipelineConfig, c.RefinementTurn, c.RemoteRegistration, c.StageRun,
-		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.User,
+		c.PipelineConfig, c.Project, c.ProjectFolder, c.RefinementTurn,
+		c.RemoteRegistration, c.Spawner, c.StageRun, c.SystemPrompt, c.Task,
+		c.TaskDependency, c.TaskPermission, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -292,10 +312,16 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PermissionRequest.mutate(ctx, m)
 	case *PipelineConfigMutation:
 		return c.PipelineConfig.mutate(ctx, m)
+	case *ProjectMutation:
+		return c.Project.mutate(ctx, m)
+	case *ProjectFolderMutation:
+		return c.ProjectFolder.mutate(ctx, m)
 	case *RefinementTurnMutation:
 		return c.RefinementTurn.mutate(ctx, m)
 	case *RemoteRegistrationMutation:
 		return c.RemoteRegistration.mutate(ctx, m)
+	case *SpawnerMutation:
+		return c.Spawner.mutate(ctx, m)
 	case *StageRunMutation:
 		return c.StageRun.mutate(ctx, m)
 	case *SystemPromptMutation:
@@ -1143,6 +1169,304 @@ func (c *PipelineConfigClient) mutate(ctx context.Context, m *PipelineConfigMuta
 	}
 }
 
+// ProjectClient is a client for the Project schema.
+type ProjectClient struct {
+	config
+}
+
+// NewProjectClient returns a client for the Project from the given config.
+func NewProjectClient(c config) *ProjectClient {
+	return &ProjectClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `project.Hooks(f(g(h())))`.
+func (c *ProjectClient) Use(hooks ...Hook) {
+	c.hooks.Project = append(c.hooks.Project, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `project.Intercept(f(g(h())))`.
+func (c *ProjectClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Project = append(c.inters.Project, interceptors...)
+}
+
+// Create returns a builder for creating a Project entity.
+func (c *ProjectClient) Create() *ProjectCreate {
+	mutation := newProjectMutation(c.config, OpCreate)
+	return &ProjectCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Project entities.
+func (c *ProjectClient) CreateBulk(builders ...*ProjectCreate) *ProjectCreateBulk {
+	return &ProjectCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ProjectClient) MapCreateBulk(slice any, setFunc func(*ProjectCreate, int)) *ProjectCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ProjectCreateBulk{err: fmt.Errorf("calling to ProjectClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ProjectCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ProjectCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Project.
+func (c *ProjectClient) Update() *ProjectUpdate {
+	mutation := newProjectMutation(c.config, OpUpdate)
+	return &ProjectUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ProjectClient) UpdateOne(_m *Project) *ProjectUpdateOne {
+	mutation := newProjectMutation(c.config, OpUpdateOne, withProject(_m))
+	return &ProjectUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ProjectClient) UpdateOneID(id string) *ProjectUpdateOne {
+	mutation := newProjectMutation(c.config, OpUpdateOne, withProjectID(id))
+	return &ProjectUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Project.
+func (c *ProjectClient) Delete() *ProjectDelete {
+	mutation := newProjectMutation(c.config, OpDelete)
+	return &ProjectDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ProjectClient) DeleteOne(_m *Project) *ProjectDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ProjectClient) DeleteOneID(id string) *ProjectDeleteOne {
+	builder := c.Delete().Where(project.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ProjectDeleteOne{builder}
+}
+
+// Query returns a query builder for Project.
+func (c *ProjectClient) Query() *ProjectQuery {
+	return &ProjectQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeProject},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Project entity by its id.
+func (c *ProjectClient) Get(ctx context.Context, id string) (*Project, error) {
+	return c.Query().Where(project.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ProjectClient) GetX(ctx context.Context, id string) *Project {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryFolders queries the folders edge of a Project.
+func (c *ProjectClient) QueryFolders(_m *Project) *ProjectFolderQuery {
+	query := (&ProjectFolderClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, id),
+			sqlgraph.To(projectfolder.Table, projectfolder.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.FoldersTable, project.FoldersColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ProjectClient) Hooks() []Hook {
+	return c.hooks.Project
+}
+
+// Interceptors returns the client interceptors.
+func (c *ProjectClient) Interceptors() []Interceptor {
+	return c.inters.Project
+}
+
+func (c *ProjectClient) mutate(ctx context.Context, m *ProjectMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ProjectCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ProjectUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ProjectUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ProjectDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Project mutation op: %q", m.Op())
+	}
+}
+
+// ProjectFolderClient is a client for the ProjectFolder schema.
+type ProjectFolderClient struct {
+	config
+}
+
+// NewProjectFolderClient returns a client for the ProjectFolder from the given config.
+func NewProjectFolderClient(c config) *ProjectFolderClient {
+	return &ProjectFolderClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `projectfolder.Hooks(f(g(h())))`.
+func (c *ProjectFolderClient) Use(hooks ...Hook) {
+	c.hooks.ProjectFolder = append(c.hooks.ProjectFolder, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `projectfolder.Intercept(f(g(h())))`.
+func (c *ProjectFolderClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ProjectFolder = append(c.inters.ProjectFolder, interceptors...)
+}
+
+// Create returns a builder for creating a ProjectFolder entity.
+func (c *ProjectFolderClient) Create() *ProjectFolderCreate {
+	mutation := newProjectFolderMutation(c.config, OpCreate)
+	return &ProjectFolderCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ProjectFolder entities.
+func (c *ProjectFolderClient) CreateBulk(builders ...*ProjectFolderCreate) *ProjectFolderCreateBulk {
+	return &ProjectFolderCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ProjectFolderClient) MapCreateBulk(slice any, setFunc func(*ProjectFolderCreate, int)) *ProjectFolderCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ProjectFolderCreateBulk{err: fmt.Errorf("calling to ProjectFolderClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ProjectFolderCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ProjectFolderCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ProjectFolder.
+func (c *ProjectFolderClient) Update() *ProjectFolderUpdate {
+	mutation := newProjectFolderMutation(c.config, OpUpdate)
+	return &ProjectFolderUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ProjectFolderClient) UpdateOne(_m *ProjectFolder) *ProjectFolderUpdateOne {
+	mutation := newProjectFolderMutation(c.config, OpUpdateOne, withProjectFolder(_m))
+	return &ProjectFolderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ProjectFolderClient) UpdateOneID(id string) *ProjectFolderUpdateOne {
+	mutation := newProjectFolderMutation(c.config, OpUpdateOne, withProjectFolderID(id))
+	return &ProjectFolderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ProjectFolder.
+func (c *ProjectFolderClient) Delete() *ProjectFolderDelete {
+	mutation := newProjectFolderMutation(c.config, OpDelete)
+	return &ProjectFolderDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ProjectFolderClient) DeleteOne(_m *ProjectFolder) *ProjectFolderDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ProjectFolderClient) DeleteOneID(id string) *ProjectFolderDeleteOne {
+	builder := c.Delete().Where(projectfolder.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ProjectFolderDeleteOne{builder}
+}
+
+// Query returns a query builder for ProjectFolder.
+func (c *ProjectFolderClient) Query() *ProjectFolderQuery {
+	return &ProjectFolderQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeProjectFolder},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ProjectFolder entity by its id.
+func (c *ProjectFolderClient) Get(ctx context.Context, id string) (*ProjectFolder, error) {
+	return c.Query().Where(projectfolder.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ProjectFolderClient) GetX(ctx context.Context, id string) *ProjectFolder {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryProject queries the project edge of a ProjectFolder.
+func (c *ProjectFolderClient) QueryProject(_m *ProjectFolder) *ProjectQuery {
+	query := (&ProjectClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(projectfolder.Table, projectfolder.FieldID, id),
+			sqlgraph.To(project.Table, project.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, projectfolder.ProjectTable, projectfolder.ProjectColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ProjectFolderClient) Hooks() []Hook {
+	return c.hooks.ProjectFolder
+}
+
+// Interceptors returns the client interceptors.
+func (c *ProjectFolderClient) Interceptors() []Interceptor {
+	return c.inters.ProjectFolder
+}
+
+func (c *ProjectFolderClient) mutate(ctx context.Context, m *ProjectFolderMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ProjectFolderCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ProjectFolderUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ProjectFolderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ProjectFolderDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ProjectFolder mutation op: %q", m.Op())
+	}
+}
+
 // RefinementTurnClient is a client for the RefinementTurn schema.
 type RefinementTurnClient struct {
 	config
@@ -1406,6 +1730,139 @@ func (c *RemoteRegistrationClient) mutate(ctx context.Context, m *RemoteRegistra
 		return (&RemoteRegistrationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown RemoteRegistration mutation op: %q", m.Op())
+	}
+}
+
+// SpawnerClient is a client for the Spawner schema.
+type SpawnerClient struct {
+	config
+}
+
+// NewSpawnerClient returns a client for the Spawner from the given config.
+func NewSpawnerClient(c config) *SpawnerClient {
+	return &SpawnerClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `spawner.Hooks(f(g(h())))`.
+func (c *SpawnerClient) Use(hooks ...Hook) {
+	c.hooks.Spawner = append(c.hooks.Spawner, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `spawner.Intercept(f(g(h())))`.
+func (c *SpawnerClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Spawner = append(c.inters.Spawner, interceptors...)
+}
+
+// Create returns a builder for creating a Spawner entity.
+func (c *SpawnerClient) Create() *SpawnerCreate {
+	mutation := newSpawnerMutation(c.config, OpCreate)
+	return &SpawnerCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Spawner entities.
+func (c *SpawnerClient) CreateBulk(builders ...*SpawnerCreate) *SpawnerCreateBulk {
+	return &SpawnerCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SpawnerClient) MapCreateBulk(slice any, setFunc func(*SpawnerCreate, int)) *SpawnerCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SpawnerCreateBulk{err: fmt.Errorf("calling to SpawnerClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SpawnerCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SpawnerCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Spawner.
+func (c *SpawnerClient) Update() *SpawnerUpdate {
+	mutation := newSpawnerMutation(c.config, OpUpdate)
+	return &SpawnerUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SpawnerClient) UpdateOne(_m *Spawner) *SpawnerUpdateOne {
+	mutation := newSpawnerMutation(c.config, OpUpdateOne, withSpawner(_m))
+	return &SpawnerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SpawnerClient) UpdateOneID(id string) *SpawnerUpdateOne {
+	mutation := newSpawnerMutation(c.config, OpUpdateOne, withSpawnerID(id))
+	return &SpawnerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Spawner.
+func (c *SpawnerClient) Delete() *SpawnerDelete {
+	mutation := newSpawnerMutation(c.config, OpDelete)
+	return &SpawnerDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SpawnerClient) DeleteOne(_m *Spawner) *SpawnerDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SpawnerClient) DeleteOneID(id string) *SpawnerDeleteOne {
+	builder := c.Delete().Where(spawner.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SpawnerDeleteOne{builder}
+}
+
+// Query returns a query builder for Spawner.
+func (c *SpawnerClient) Query() *SpawnerQuery {
+	return &SpawnerQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSpawner},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Spawner entity by its id.
+func (c *SpawnerClient) Get(ctx context.Context, id string) (*Spawner, error) {
+	return c.Query().Where(spawner.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SpawnerClient) GetX(ctx context.Context, id string) *Spawner {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SpawnerClient) Hooks() []Hook {
+	return c.hooks.Spawner
+}
+
+// Interceptors returns the client interceptors.
+func (c *SpawnerClient) Interceptors() []Interceptor {
+	return c.inters.Spawner
+}
+
+func (c *SpawnerClient) mutate(ctx context.Context, m *SpawnerMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SpawnerCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SpawnerUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SpawnerUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SpawnerDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Spawner mutation op: %q", m.Op())
 	}
 }
 
@@ -2371,12 +2828,14 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		AgentCostTrend, ApiKey, AuditLog, PermissionPreset, PermissionRequest,
-		PipelineConfig, RefinementTurn, RemoteRegistration, StageRun, SystemPrompt,
-		Task, TaskDependency, TaskPermission, User []ent.Hook
+		PipelineConfig, Project, ProjectFolder, RefinementTurn, RemoteRegistration,
+		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
+		User []ent.Hook
 	}
 	inters struct {
 		AgentCostTrend, ApiKey, AuditLog, PermissionPreset, PermissionRequest,
-		PipelineConfig, RefinementTurn, RemoteRegistration, StageRun, SystemPrompt,
-		Task, TaskDependency, TaskPermission, User []ent.Interceptor
+		PipelineConfig, Project, ProjectFolder, RefinementTurn, RemoteRegistration,
+		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
+		User []ent.Interceptor
 	}
 )

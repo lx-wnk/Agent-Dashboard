@@ -11,10 +11,10 @@ defineProps<{
     aria-label="No agents found"
   >
     <span class="text-4xl" aria-hidden="true">🤖</span>
-    <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">
+    <p class="text-fg-mute text-sm font-medium">
       {{ searchQuery ? 'No agents match your search.' : 'No agents are currently running.' }}
     </p>
-    <p v-if="!searchQuery" class="text-slate-400 dark:text-slate-600 text-xs">
+    <p v-if="!searchQuery" class="text-fg-mute text-xs">
       Start a Claude Code session or click <strong>+ New Agent</strong> to spawn one.
     </p>
   </div>

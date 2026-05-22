@@ -38,10 +38,10 @@ const tokenDelta = computed(() => {
 </script>
 
 <template>
-  <div v-if="sparkData.length >= 2" class="flex flex-col gap-1 px-6 py-1.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+  <div v-if="sparkData.length >= 2" class="flex flex-col gap-1 px-6 py-1.5 bg-card border-b border-line">
     <div class="flex items-center gap-2">
-      <span class="text-[11px] text-slate-400 dark:text-slate-600">Cost trend (3min)</span>
-      <span v-if="costDelta !== null" class="text-[11px] font-mono" :class="costDelta > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-600'">
+      <span class="text-[11px] text-fg-mute">Cost trend (3min)</span>
+      <span v-if="costDelta !== null" class="text-[11px] font-mono" :class="costDelta > 0 ? 'text-red-600 dark:text-red-400' : 'text-fg-mute'">
         {{ costDelta > 0 ? '+' : '' }}${{ costDelta.toFixed(2) }}
       </span>
       <span v-if="tokenDelta !== null && tokenDelta > 0" class="text-[11px] font-mono text-blue-600 dark:text-blue-400">

@@ -39,6 +39,41 @@ Stateless helpers consumed by `routes/*` and `mcp/*` (and, where appropriate, by
 
 `stageTimeoutSeconds` (pipeline_config key, default 1800) is enforced by the orchestrator's tick loop. If a stage agent's PID is still alive after this many seconds, the orchestrator sends SIGTERM and applies a `fail` transition, freeing its runner slot. Set to `0` to disable. Written via `UPDATE pipeline_config SET value='3600' WHERE key='stageTimeoutSeconds'` (or INSERT if absent).
 
+## Spawner Resolution
+
+`server/internal/services/spawner_resolver.go` resolves the effective spawner for a stage agent using the following precedence:
+
+```
+task.spawner_id ?? task.project.default_spawner_id ?? claude-default
+```
+
+Resolution happens once, immediately before `exec`, inside
+`server/internal/pipeline/spawner.go`. The built-in `claude-default`
+spawner preserves current behaviour for tasks and projects that do not set
+a spawner.
+
+**Env-merge order:** custom-spawner `env` is applied first; dashboard vars
+(`DASHBOARD_*`, `CLAUDE_*`) are overlaid afterward and always win.
+`DASHBOARD_JWT_SECRET` and `DASHBOARD_HOOKS_SECRET` are never forwarded to
+spawned agents.
+
+**Command allow-list:** the `spawners.command` field is validated against a
+conservative allow-list at create/update time. Extend the default list via
+`DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated). CRUD requires the
+`keys:manage` MCP scope.
+
+**Adapter dispatch:** the resolved Spawner row also carries an
+`adapter_type` field. `server/internal/pipeline/stage_handlers.go::Execute`
+reads it and dispatches accordingly: `claude` (or empty) → native subprocess
+via `SpawnStageAgent`; any other value → adapter built via
+`pipeline.NewLLMSpawnerFromSpawner(row)` followed by `LLMSpawner.Spawn(...)`.
+`custom` rows require a non-empty `command` column.
+
+See [ADR-0003](../docs/architecture/adr/0003-pluggable-spawners.md) for full
+rationale, security model, and alternatives considered. The
+adapter/spawner merge is described in
+[ADR-0003 section A](../docs/architecture/adr/0003-pluggable-spawners.md#a-adapterspawner-merge-2026-05).
+
 ## Awaiting-User Sweep
 
 `awaitingUserTimeoutSeconds` (pipeline_config key, default 14400 = 4h) governs `sweepAwaitingUserRuns` in the orchestrator tick. Two zombie modes are reaped: (1) any `awaiting_user` stage_run whose PID is gone is immediately marked `failed` (stage timeout itself only inspects status='running' runs, so without this sweep dead-PID awaits would stay zombie forever); (2) any `awaiting_user` run whose PID is still alive but whose `started_at` is older than this limit is SIGTERMed and failed — defends against agents that busy-wait via shell polling loops (`until [ -e /tmp/x ]; do sleep N; done`) instead of yielding to the `request_permission` MCP gate. Set to `0` to disable the wallclock branch (the dead-PID branch always runs).

@@ -2,11 +2,55 @@
 import type { PipelineStage, PipelineTask } from '../types'
 import { computed, ref } from 'vue'
 import { useTasks } from '../composables/useTasks'
+import { useProjects } from '../composables/useProjects'
 import TaskCard from './TaskCard.vue'
 
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
 const { tasks: allTasks, tasksByStageMap } = useTasks()
+const { projects } = useProjects()
+
+const projectById = computed(() => {
+  const map = new Map<string, typeof projects.value[number]>()
+  for (const p of projects.value)
+    map.set(p.id, p)
+  return map
+})
+
+// Multi-select project filter: empty set means "show all"
+const selectedProjectIds = ref<Set<string>>(new Set())
+
+function toggleProjectFilter(projectId: string) {
+  const next = new Set(selectedProjectIds.value)
+  if (next.has(projectId))
+    next.delete(projectId)
+  else
+    next.add(projectId)
+  selectedProjectIds.value = next
+}
+
+function clearProjectFilter() {
+  selectedProjectIds.value = new Set()
+}
+
+function isFilteredByProject(task: PipelineTask): boolean {
+  if (selectedProjectIds.value.size === 0)
+    return true
+  // Tasks with no projectId are shown when "no project" chip is selected
+  if (task.projectId == null)
+    return selectedProjectIds.value.has('__none__')
+  return selectedProjectIds.value.has(task.projectId)
+}
+
+// Projects that actually have tasks (for filter chip display)
+const projectsWithTasks = computed(() => {
+  const projectIdsInUse = new Set(allTasks.value.map(t => t.projectId).filter(Boolean) as string[])
+  const hasUnassigned = allTasks.value.some(t => t.projectId == null)
+  return {
+    projects: projects.value.filter(p => projectIdsInUse.has(p.id)),
+    hasUnassigned,
+  }
+})
 
 interface Epic {
   parent: PipelineTask
@@ -80,7 +124,7 @@ function tasksForColumn(col: ColumnDef): PipelineTask[] {
     const all: PipelineTask[] = []
     for (const stageTasks of Object.values(tasksByStageMap.value)) {
       for (const task of stageTasks || []) {
-        if (task.needsUser)
+        if (task.needsUser && isFilteredByProject(task))
           all.push(task)
       }
     }
@@ -92,7 +136,7 @@ function tasksForColumn(col: ColumnDef): PipelineTask[] {
   for (const stage of col.stages) {
     const rows = tasksByStageMap.value[stage] || []
     for (const task of rows) {
-      if (!task.needsUser)
+      if (!task.needsUser && isFilteredByProject(task))
         all.push(task)
     }
   }
@@ -113,22 +157,59 @@ function isHighlightCol(col: ColumnDef): boolean {
 
 <template>
   <div class="flex flex-col h-full">
-    <div class="flex items-center gap-2 mb-3 flex-shrink-0">
-      <span class="text-xs text-slate-500 dark:text-slate-400">Export:</span>
+    <div class="flex items-center gap-2 mb-3 flex-shrink-0 flex-wrap">
+      <span class="text-xs text-fg-mute">Export:</span>
       <button
         type="button"
-        class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+        class="text-xs px-2 py-1 rounded border border-line-strong hover:bg-raised text-fg-soft"
         @click="exportTasks('json')"
       >
         JSON
       </button>
       <button
         type="button"
-        class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+        class="text-xs px-2 py-1 rounded border border-line-strong hover:bg-raised text-fg-soft"
         @click="exportTasks('csv')"
       >
         CSV
       </button>
+      <!-- Project filter chips -->
+      <template v-if="projectsWithTasks.projects.length > 0 || projectsWithTasks.hasUnassigned">
+        <span class="text-xs text-fg-mute ml-2">Project:</span>
+        <button
+          v-for="p in projectsWithTasks.projects"
+          :key="p.id"
+          type="button"
+          class="text-xs px-2 py-1 rounded border transition-colors"
+          :class="selectedProjectIds.has(p.id)
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
+            : 'border-line-strong text-fg-soft hover:bg-raised'"
+          :style="selectedProjectIds.has(p.id) && p.color ? { borderColor: p.color, backgroundColor: p.color + '22', color: p.color } : {}"
+          @click="toggleProjectFilter(p.id)"
+        >
+          <span v-if="p.color" class="inline-block w-2 h-2 rounded-full mr-1 align-middle" :style="{ backgroundColor: p.color }" aria-hidden="true" />
+          {{ p.name }}
+        </button>
+        <button
+          v-if="projectsWithTasks.hasUnassigned"
+          type="button"
+          class="text-xs px-2 py-1 rounded border transition-colors"
+          :class="selectedProjectIds.has('__none__')
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
+            : 'border-line-strong text-fg-soft hover:bg-raised'"
+          @click="toggleProjectFilter('__none__')"
+        >
+          No project
+        </button>
+        <button
+          v-if="selectedProjectIds.size > 0"
+          type="button"
+          class="text-xs px-2 py-1 rounded text-fg-mute hover:text-slate-700 dark:hover:text-slate-200"
+          @click="clearProjectFilter"
+        >
+          Clear
+        </button>
+      </template>
     </div>
     <div class="flex gap-3 overflow-x-auto pb-4 flex-1 min-h-0">
       <div
@@ -138,20 +219,20 @@ function isHighlightCol(col: ColumnDef): boolean {
         :class="isHighlightCol(col)
           ? 'bg-yellow-50/30 dark:bg-yellow-950/10 border border-yellow-300/60 dark:border-yellow-700/40'
           : col.group === 'terminal'
-            ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 opacity-70'
-            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700'"
+            ? 'bg-card border border-line opacity-70'
+            : 'bg-card border border-line'"
       >
         <div
           class="flex justify-between items-center px-3 py-2.5 border-b flex-shrink-0"
           :class="isHighlightCol(col)
             ? 'border-yellow-300/60 dark:border-yellow-700/40'
-            : 'border-slate-200 dark:border-slate-700'"
+            : 'border-line'"
         >
           <span
             class="text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5"
             :class="isHighlightCol(col)
               ? 'text-yellow-700 dark:text-yellow-300'
-              : 'text-slate-500 dark:text-slate-400'"
+              : 'text-fg-mute'"
           >
             <span
               v-if="isHighlightCol(col)"
@@ -164,7 +245,7 @@ function isHighlightCol(col: ColumnDef): boolean {
             class="text-[11px] px-2 py-px rounded-full font-mono"
             :class="isHighlightCol(col)
               ? 'text-yellow-700 dark:text-yellow-300 bg-yellow-400/15 dark:bg-yellow-400/10 ring-1 ring-yellow-400/30 dark:ring-yellow-500/25'
-              : 'text-slate-400 dark:text-slate-600 bg-slate-50 dark:bg-slate-950'"
+              : 'text-fg-mute bg-app'"
           >{{ tasks.length }}</span>
         </div>
         <div class="p-2.5 flex flex-col gap-2 overflow-y-auto">
@@ -199,7 +280,7 @@ function isHighlightCol(col: ColumnDef): boolean {
                     transform="rotate(-90 12 12)"
                   />
                 </svg>
-                <span class="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate flex-1">{{ epic.parent.title }}</span>
+                <span class="text-xs font-semibold text-fg-soft truncate flex-1">{{ epic.parent.title }}</span>
                 <span class="text-[10px] text-slate-400 flex-shrink-0">{{ epic.doneCount }}/{{ epic.totalCount }} ({{ epic.completionPct }}%)</span>
                 <span class="text-xs text-slate-400" aria-hidden="true">{{ epicExpanded[epic.parent.id] ? '▲' : '▼' }}</span>
               </button>
@@ -212,6 +293,7 @@ function isHighlightCol(col: ColumnDef): boolean {
                   v-for="child in epic.children.filter(c => tasks.some(t => t.id === c.id))"
                   :key="child.id"
                   :task="child"
+                  :project="child.projectId ? projectById.get(child.projectId) ?? null : null"
                   @select="emit('select', child)"
                   @open-chat="emit('openChat', child)"
                 />
@@ -222,13 +304,14 @@ function isHighlightCol(col: ColumnDef): boolean {
             v-for="task in tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId))"
             :key="task.id"
             :task="task"
+            :project="task.projectId ? projectById.get(task.projectId) ?? null : null"
             @select="(t) => emit('select', t)"
             @open-chat="(t) => emit('openChat', t)"
           />
           <div
             v-if="tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId)).length === 0
               && !epics.some(e => tasks.some(t => t.parentTaskId === e.parent.id))"
-            class="text-center text-slate-400 dark:text-slate-600 text-[11px] py-5"
+            class="text-center text-fg-mute text-[11px] py-5"
           >
             —
           </div>

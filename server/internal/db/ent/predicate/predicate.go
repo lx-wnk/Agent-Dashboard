@@ -24,11 +24,20 @@ type PermissionRequest func(*sql.Selector)
 // PipelineConfig is the predicate function for pipelineconfig builders.
 type PipelineConfig func(*sql.Selector)
 
+// Project is the predicate function for project builders.
+type Project func(*sql.Selector)
+
+// ProjectFolder is the predicate function for projectfolder builders.
+type ProjectFolder func(*sql.Selector)
+
 // RefinementTurn is the predicate function for refinementturn builders.
 type RefinementTurn func(*sql.Selector)
 
 // RemoteRegistration is the predicate function for remoteregistration builders.
 type RemoteRegistration func(*sql.Selector)
+
+// Spawner is the predicate function for spawner builders.
+type Spawner func(*sql.Selector)
 
 // StageRun is the predicate function for stagerun builders.
 type StageRun func(*sql.Selector)

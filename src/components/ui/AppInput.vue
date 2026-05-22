@@ -40,7 +40,7 @@ const resizeClass: Record<ResizeProp, string> = {
     <label
       v-if="label"
       :for="inputId"
-      class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+      class="block text-sm font-medium text-fg-soft mb-1"
     >{{ label }}</label>
     <textarea
       v-if="type === 'textarea'"
@@ -51,7 +51,7 @@ const resizeClass: Record<ResizeProp, string> = {
       :rows="rows"
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="error ? errorId : undefined"
-      class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50 font-sans"
+      class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50 font-sans"
       :class="resizeClass[resize]"
       @input="$emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
     />
@@ -63,7 +63,7 @@ const resizeClass: Record<ResizeProp, string> = {
       :disabled="disabled"
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="error ? errorId : undefined"
-      class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50 font-sans"
+      class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50 font-sans"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     >
     <p

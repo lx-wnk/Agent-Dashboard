@@ -344,6 +344,46 @@ func (_u *TaskUpdate) ClearMetadata() *TaskUpdate {
 	return _u
 }
 
+// SetProjectID sets the "project_id" field.
+func (_u *TaskUpdate) SetProjectID(v string) *TaskUpdate {
+	_u.mutation.SetProjectID(v)
+	return _u
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableProjectID(v *string) *TaskUpdate {
+	if v != nil {
+		_u.SetProjectID(*v)
+	}
+	return _u
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (_u *TaskUpdate) ClearProjectID() *TaskUpdate {
+	_u.mutation.ClearProjectID()
+	return _u
+}
+
+// SetSpawnerID sets the "spawner_id" field.
+func (_u *TaskUpdate) SetSpawnerID(v string) *TaskUpdate {
+	_u.mutation.SetSpawnerID(v)
+	return _u
+}
+
+// SetNillableSpawnerID sets the "spawner_id" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableSpawnerID(v *string) *TaskUpdate {
+	if v != nil {
+		_u.SetSpawnerID(*v)
+	}
+	return _u
+}
+
+// ClearSpawnerID clears the value of the "spawner_id" field.
+func (_u *TaskUpdate) ClearSpawnerID() *TaskUpdate {
+	_u.mutation.ClearSpawnerID()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *TaskUpdate) SetUpdatedAt(v time.Time) *TaskUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -687,6 +727,18 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.MetadataCleared() {
 		_spec.ClearField(task.FieldMetadata, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ProjectID(); ok {
+		_spec.SetField(task.FieldProjectID, field.TypeString, value)
+	}
+	if _u.mutation.ProjectIDCleared() {
+		_spec.ClearField(task.FieldProjectID, field.TypeString)
+	}
+	if value, ok := _u.mutation.SpawnerID(); ok {
+		_spec.SetField(task.FieldSpawnerID, field.TypeString, value)
+	}
+	if _u.mutation.SpawnerIDCleared() {
+		_spec.ClearField(task.FieldSpawnerID, field.TypeString)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(task.FieldUpdatedAt, field.TypeTime, value)
@@ -1248,6 +1300,46 @@ func (_u *TaskUpdateOne) ClearMetadata() *TaskUpdateOne {
 	return _u
 }
 
+// SetProjectID sets the "project_id" field.
+func (_u *TaskUpdateOne) SetProjectID(v string) *TaskUpdateOne {
+	_u.mutation.SetProjectID(v)
+	return _u
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableProjectID(v *string) *TaskUpdateOne {
+	if v != nil {
+		_u.SetProjectID(*v)
+	}
+	return _u
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (_u *TaskUpdateOne) ClearProjectID() *TaskUpdateOne {
+	_u.mutation.ClearProjectID()
+	return _u
+}
+
+// SetSpawnerID sets the "spawner_id" field.
+func (_u *TaskUpdateOne) SetSpawnerID(v string) *TaskUpdateOne {
+	_u.mutation.SetSpawnerID(v)
+	return _u
+}
+
+// SetNillableSpawnerID sets the "spawner_id" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableSpawnerID(v *string) *TaskUpdateOne {
+	if v != nil {
+		_u.SetSpawnerID(*v)
+	}
+	return _u
+}
+
+// ClearSpawnerID clears the value of the "spawner_id" field.
+func (_u *TaskUpdateOne) ClearSpawnerID() *TaskUpdateOne {
+	_u.mutation.ClearSpawnerID()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *TaskUpdateOne) SetUpdatedAt(v time.Time) *TaskUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -1621,6 +1713,18 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if _u.mutation.MetadataCleared() {
 		_spec.ClearField(task.FieldMetadata, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ProjectID(); ok {
+		_spec.SetField(task.FieldProjectID, field.TypeString, value)
+	}
+	if _u.mutation.ProjectIDCleared() {
+		_spec.ClearField(task.FieldProjectID, field.TypeString)
+	}
+	if value, ok := _u.mutation.SpawnerID(); ok {
+		_spec.SetField(task.FieldSpawnerID, field.TypeString, value)
+	}
+	if _u.mutation.SpawnerIDCleared() {
+		_spec.ClearField(task.FieldSpawnerID, field.TypeString)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(task.FieldUpdatedAt, field.TypeTime, value)

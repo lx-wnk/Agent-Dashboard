@@ -38,38 +38,47 @@ type OrchestratorIface interface {
 
 // Handler handles task REST endpoints.
 type Handler struct {
-	taskRepo     repo.TaskRepo
-	srRepo       repo.StageRunRepo
-	permRepo     repo.PermissionRepo
-	auditRepo    repo.AuditRepo
-	cfgRepo      repo.PipelineConfigRepo
-	depRepo      repo.DependencyRepo
-	orchestrator OrchestratorIface
-	broadcaster  *sse.TaskBroadcaster
+	taskRepo          repo.TaskRepo
+	srRepo            repo.StageRunRepo
+	permRepo          repo.PermissionRepo
+	auditRepo         repo.AuditRepo
+	cfgRepo           repo.PipelineConfigRepo
+	depRepo           repo.DependencyRepo
+	projectRepo       repo.ProjectRepo
+	projectFolderRepo repo.ProjectFolderRepo
+	spawnerRepo       repo.SpawnerRepo
+	orchestrator      OrchestratorIface
+	broadcaster       *sse.TaskBroadcaster
 }
 
 // Deps groups all constructor dependencies.
 type Deps struct {
-	TaskRepo     repo.TaskRepo
-	SRRepo       repo.StageRunRepo
-	PermRepo     repo.PermissionRepo
-	AuditRepo    repo.AuditRepo
-	CfgRepo      repo.PipelineConfigRepo
-	DepRepo      repo.DependencyRepo
-	Orchestrator OrchestratorIface
-	Broadcaster  *sse.TaskBroadcaster
+	TaskRepo          repo.TaskRepo
+	SRRepo            repo.StageRunRepo
+	PermRepo          repo.PermissionRepo
+	AuditRepo         repo.AuditRepo
+	CfgRepo           repo.PipelineConfigRepo
+	DepRepo           repo.DependencyRepo
+	ProjectRepo       repo.ProjectRepo
+	ProjectFolderRepo repo.ProjectFolderRepo
+	SpawnerRepo       repo.SpawnerRepo
+	Orchestrator      OrchestratorIface
+	Broadcaster       *sse.TaskBroadcaster
 }
 
 func NewHandler(deps Deps) *Handler {
 	return &Handler{
-		taskRepo:     deps.TaskRepo,
-		srRepo:       deps.SRRepo,
-		permRepo:     deps.PermRepo,
-		auditRepo:    deps.AuditRepo,
-		cfgRepo:      deps.CfgRepo,
-		depRepo:      deps.DepRepo,
-		orchestrator: deps.Orchestrator,
-		broadcaster:  deps.Broadcaster,
+		taskRepo:          deps.TaskRepo,
+		srRepo:            deps.SRRepo,
+		permRepo:          deps.PermRepo,
+		auditRepo:         deps.AuditRepo,
+		cfgRepo:           deps.CfgRepo,
+		depRepo:           deps.DepRepo,
+		projectRepo:       deps.ProjectRepo,
+		projectFolderRepo: deps.ProjectFolderRepo,
+		spawnerRepo:       deps.SpawnerRepo,
+		orchestrator:      deps.Orchestrator,
+		broadcaster:       deps.Broadcaster,
 	}
 }
 
@@ -202,6 +211,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		Stage         string  `json:"stage"`
 		SilverBullet  bool    `json:"silverBullet"`
 		MaxIterations int     `json:"maxIterations"`
+		ProjectID     string  `json:"projectId"`
+		SpawnerID     string  `json:"spawnerId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -218,6 +229,36 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if _, err := h.taskRepo.GetBySlug(r.Context(), body.Slug); err == nil {
 		return apierr.NewAppError(http.StatusConflict, "slug already exists")
 	}
+
+	// Resolve optional project + spawner. Empty string = unset.
+	var projectIDPtr, spawnerIDPtr *string
+	if body.ProjectID != "" {
+		if h.projectRepo == nil {
+			return apierr.NewAppError(http.StatusInternalServerError, "project repo not configured")
+		}
+		if _, err := h.projectRepo.GetByID(r.Context(), body.ProjectID); err != nil {
+			if ent.IsNotFound(err) {
+				return apierr.NewAppError(http.StatusNotFound, "project not found")
+			}
+			return fmt.Errorf("tasks.create.projectLookup: %w", err)
+		}
+		pid := body.ProjectID
+		projectIDPtr = &pid
+	}
+	if body.SpawnerID != "" {
+		if h.spawnerRepo == nil {
+			return apierr.NewAppError(http.StatusInternalServerError, "spawner repo not configured")
+		}
+		if _, err := h.spawnerRepo.GetByID(r.Context(), body.SpawnerID); err != nil {
+			if ent.IsNotFound(err) {
+				return apierr.NewAppError(http.StatusNotFound, "spawner not found")
+			}
+			return fmt.Errorf("tasks.create.spawnerLookup: %w", err)
+		}
+		sid := body.SpawnerID
+		spawnerIDPtr = &sid
+	}
+
 	priority := body.Priority
 	if priority == "" {
 		priority = "medium"
@@ -243,27 +284,65 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		SilverBullet:        body.SilverBullet,
 		MaxIterations:       maxIter,
 		StageTimeoutSeconds: 1800,
+		ProjectID:           projectIDPtr,
+		SpawnerID:           spawnerIDPtr,
 	})
 	if err != nil {
 		return fmt.Errorf("tasks.create: %w", err)
 	}
 	enriched, _ := EnrichTask(r.Context(), task, h.srRepo, h.permRepo)
 	h.broadcaster.Broadcast(sse.TaskEvent{Type: "task_created", TaskID: task.ID, Payload: enriched})
+
+	// Non-blocking cwd_not_in_project warning when project is set and cwd does
+	// not match any of its folder paths exactly. Response shape stays flat for
+	// the no-warning path (backwards-compat); a wrapper is used only when the
+	// warning fires.
+	if projectIDPtr != nil && h.projectFolderRepo != nil {
+		if warn := h.cwdNotInProjectWarning(r.Context(), *projectIDPtr, body.Cwd); warn {
+			return jsonReply(w, http.StatusCreated, map[string]any{
+				"task":    enriched,
+				"warning": "cwd_not_in_project",
+			})
+		}
+	}
 	return jsonReply(w, http.StatusCreated, enriched)
+}
+
+// cwdNotInProjectWarning returns true when the given cwd does not exactly match
+// any folder.path of the given project. A folder-list lookup failure is treated
+// as "no warning" so the create/update path never blocks on this check.
+func (h *Handler) cwdNotInProjectWarning(ctx context.Context, projectID, cwd string) bool {
+	if cwd == "" || h.projectFolderRepo == nil {
+		return false
+	}
+	folders, err := h.projectFolderRepo.ListByProject(ctx, projectID)
+	if err != nil || len(folders) == 0 {
+		return false
+	}
+	for _, f := range folders {
+		if f.Path == cwd {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
-	if _, err := h.taskRepo.GetByID(r.Context(), id); err != nil {
+	existing, err := h.taskRepo.GetByID(r.Context(), id)
+	if err != nil {
 		return apierr.ErrNotFound
 	}
 	var body struct {
-		Title         *string `json:"title"`
-		Description   *string `json:"description"`
-		Priority      *string `json:"priority"`
-		SilverBullet  *bool   `json:"silverBullet"`
-		MaxIterations *int    `json:"maxIterations"`
-		CurrentStage  *string `json:"currentStage"`
+		Title         *string         `json:"title"`
+		Description   *string         `json:"description"`
+		Priority      *string         `json:"priority"`
+		SilverBullet  *bool           `json:"silverBullet"`
+		MaxIterations *int            `json:"maxIterations"`
+		CurrentStage  *string         `json:"currentStage"`
+		Cwd           *string         `json:"cwd"`
+		ProjectID     json.RawMessage `json:"projectId"`
+		SpawnerID     json.RawMessage `json:"spawnerId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -271,18 +350,90 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	if body.CurrentStage != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "currentStage cannot be set via PATCH — use /progress, /cancel, or /retry")
 	}
+
+	// Parse nullable projectId / spawnerId: absent = leave, null = clear, string = set.
+	projectIDPtr, clearProject, err := parseNullableString(body.ProjectID)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "projectId must be a string or null")
+	}
+	spawnerIDPtr, clearSpawner, err := parseNullableString(body.SpawnerID)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "spawnerId must be a string or null")
+	}
+
+	if projectIDPtr != nil {
+		if h.projectRepo == nil {
+			return apierr.NewAppError(http.StatusInternalServerError, "project repo not configured")
+		}
+		if _, err := h.projectRepo.GetByID(r.Context(), *projectIDPtr); err != nil {
+			if ent.IsNotFound(err) {
+				return apierr.NewAppError(http.StatusNotFound, "project not found")
+			}
+			return fmt.Errorf("tasks.update.projectLookup: %w", err)
+		}
+	}
+	if spawnerIDPtr != nil {
+		if h.spawnerRepo == nil {
+			return apierr.NewAppError(http.StatusInternalServerError, "spawner repo not configured")
+		}
+		if _, err := h.spawnerRepo.GetByID(r.Context(), *spawnerIDPtr); err != nil {
+			if ent.IsNotFound(err) {
+				return apierr.NewAppError(http.StatusNotFound, "spawner not found")
+			}
+			return fmt.Errorf("tasks.update.spawnerLookup: %w", err)
+		}
+	}
+
 	updated, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{
-		Title:         body.Title,
-		Description:   body.Description,
-		Priority:      body.Priority,
-		SilverBullet:  body.SilverBullet,
-		MaxIterations: body.MaxIterations,
+		Title:          body.Title,
+		Description:    body.Description,
+		Priority:       body.Priority,
+		SilverBullet:   body.SilverBullet,
+		MaxIterations:  body.MaxIterations,
+		ProjectID:      projectIDPtr,
+		SpawnerID:      spawnerIDPtr,
+		ClearProjectID: clearProject,
+		ClearSpawnerID: clearSpawner,
 	})
 	if err != nil {
 		return fmt.Errorf("tasks.update: %w", err)
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
+
+	// cwd_not_in_project warning applies when either cwd or projectId was in
+	// this PATCH body. The PATCH does not actually mutate cwd (no setter
+	// exposed yet), so we compare the post-update task's cwd against the
+	// effective project's folders.
+	_ = existing
+	cwdInPatch := body.Cwd != nil
+	projectInPatch := projectIDPtr != nil || clearProject
+	if cwdInPatch || projectInPatch {
+		if updated.ProjectID != nil && h.cwdNotInProjectWarning(r.Context(), *updated.ProjectID, updated.Cwd) {
+			enriched, _ := EnrichTask(r.Context(), updated, h.srRepo, h.permRepo)
+			return jsonReply(w, http.StatusOK, map[string]any{
+				"task":    enriched,
+				"warning": "cwd_not_in_project",
+			})
+		}
+	}
 	return jsonReply(w, http.StatusOK, updated)
+}
+
+// parseNullableString decodes a PATCH field that may be absent, JSON null, or
+// a string. Returns (value, clear, err): clear=true when JSON null was sent.
+func parseNullableString(raw json.RawMessage) (*string, bool, error) {
+	if len(raw) == 0 {
+		return nil, false, nil
+	}
+	s := string(raw)
+	if s == "null" {
+		return nil, true, nil
+	}
+	var v string
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return nil, false, err
+	}
+	return &v, false, nil
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {

@@ -7,6 +7,7 @@ import AgentTable from './components/AgentTable.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import AuditSettings from './components/AuditSettings.vue'
+import AppModal from './components/ui/AppModal.vue'
 import CostTrend from './components/CostTrend.vue'
 import EditGateModal from './components/EditGateModal.vue'
 import LoginPage from './components/LoginPage.vue'
@@ -27,6 +28,8 @@ import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
 const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
+const ProjectSettings = defineAsyncComponent(() => import('./components/ProjectSettings.vue'))
+const SpawnerSettings = defineAsyncComponent(() => import('./components/SpawnerSettings.vue'))
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
@@ -69,6 +72,8 @@ const showRefinementChat = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
 const showAudit = ref(false)
+const showProjects = ref(false)
+const showSpawners = ref(false)
 
 function openNewTask() {
   activeConceptTask.value = null
@@ -167,26 +172,26 @@ onMounted(fetchQuota)
 
 <template>
   <LoginPage v-if="loaded && showLogin" />
-  <div v-else-if="loaded" class="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+  <div v-else-if="loaded" class="h-screen flex flex-col bg-app text-fg font-sans">
     <!-- UX-33: Skip-to-content link for keyboard users -->
     <a
       href="#main-content"
       class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded focus:text-sm focus:font-semibold"
     >Skip to main content</a>
-    <header class="shrink-0 flex flex-wrap items-center gap-3 gap-y-2 px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-      <h1 class="text-[18px] font-semibold text-slate-900 dark:text-slate-100">
+    <header class="shrink-0 flex flex-wrap items-center gap-3 gap-y-2 px-6 py-4 border-b border-line bg-card">
+      <h1 class="text-[18px] font-semibold text-fg">
         Claude Agent Overview
       </h1>
-      <span class="text-xs text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+      <span class="text-xs text-fg-mute bg-raised px-2.5 py-0.5 rounded-full">
         <template v-if="viewMode !== 'pipeline'">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</template>
         <template v-else>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</template>
       </span>
-      <span v-if="totalCost > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">{{ formatCost(totalCost) }}</span>
-      <span v-if="totalTokens > 0" class="text-xs text-green-600 dark:text-green-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-mono">{{ formatTokens(totalTokens) }} tokens</span>
+      <span v-if="totalCost > 0" class="text-xs text-green-600 dark:text-green-400 bg-raised px-2.5 py-0.5 rounded-full font-mono">{{ formatCost(totalCost) }}</span>
+      <span v-if="totalTokens > 0" class="text-xs text-green-600 dark:text-green-400 bg-raised px-2.5 py-0.5 rounded-full font-mono">{{ formatTokens(totalTokens) }} tokens</span>
       <div v-if="quota && quota.limit" class="flex items-center gap-1.5" :title="`${quota.tokensUsed.toLocaleString()} / ${quota.limit.toLocaleString()} tokens — ${quotaPeriodEndLabel}`">
         <span class="text-[10px] text-slate-400">Quota</span>
         <div
-          class="w-20 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
+          class="w-20 h-1.5 bg-raised rounded-full overflow-hidden"
           role="progressbar"
           :aria-valuenow="quotaPct"
           aria-valuemin="0"
@@ -209,13 +214,13 @@ onMounted(fetchQuota)
         v-model="searchQuery"
         type="text"
         :placeholder="viewMode === 'pipeline' ? 'Search tasks...' : 'Search agents...'"
-        class="ml-auto bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-1.5 text-[13px] text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 w-[200px] focus:outline-none focus:border-blue-500 focus:w-[260px] transition-[width] duration-200"
+        class="ml-auto bg-raised border border-line rounded-md px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[200px] focus:outline-none focus:border-blue-500 focus:w-[260px] transition-[width] duration-200"
       >
-      <div class="flex bg-slate-100 dark:bg-slate-800 rounded-md overflow-hidden">
+      <div class="flex bg-raised rounded-md overflow-hidden">
         <button
           type="button"
           class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
-          :class="viewMode !== 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300'"
+          :class="viewMode !== 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
           title="Agent monitoring dashboard"
           @click="viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
         >
@@ -224,7 +229,7 @@ onMounted(fetchQuota)
         <button
           type="button"
           class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
-          :class="viewMode === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300'"
+          :class="viewMode === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
           title="Task pipeline kanban"
           @click="viewMode = 'pipeline'"
         >
@@ -233,7 +238,7 @@ onMounted(fetchQuota)
       </div>
       <button
         type="button"
-        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
         @click="showSessions = true"
       >
         Sessions
@@ -256,16 +261,32 @@ onMounted(fetchQuota)
       </button>
       <button
         type="button"
-        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
         title="Audit Log"
         @click="showAudit = true"
       >
         Audit
       </button>
+      <button
+        type="button"
+        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        title="Projects"
+        @click="showProjects = true"
+      >
+        Projects
+      </button>
+      <button
+        type="button"
+        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        title="Spawners"
+        @click="showSpawners = true"
+      >
+        Spawners
+      </button>
       <OfflineBadge />
       <button
         type="button"
-        class="bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-none rounded-md min-w-[44px] min-h-[44px] px-2.5 py-2 text-base cursor-pointer leading-none hover:text-slate-700 dark:hover:text-slate-300 hover:brightness-110"
+        class="bg-raised text-fg-mute border-none rounded-md min-w-[44px] min-h-[44px] px-2.5 py-2 text-base cursor-pointer leading-none hover:text-fg-soft hover:brightness-110"
         title="Settings"
         @click="showSettings = true"
       >
@@ -274,7 +295,7 @@ onMounted(fetchQuota)
       <button
         v-if="canInstall"
         type="button"
-        class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
+        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
         title="Install Agent Dashboard as a PWA"
         @click="promptInstall"
       >
@@ -285,10 +306,10 @@ onMounted(fetchQuota)
     <div class="shrink-0"><ResourceBar /></div>
     <div class="shrink-0"><CostTrend :trend="costTrend" /></div>
 
-    <div v-if="scriptPath" class="shrink-0 flex items-center gap-2 px-6 py-1.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-xs">
-      <span class="text-slate-400 dark:text-slate-600 whitespace-nowrap">Channel script:</span>
+    <div v-if="scriptPath" class="shrink-0 flex items-center gap-2 px-6 py-1.5 bg-card border-b border-line text-xs">
+      <span class="text-fg-mute whitespace-nowrap">Channel script:</span>
       <code
-        class="font-mono text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded cursor-pointer select-all transition-colors hover:text-green-600 dark:hover:text-green-400 focus-visible:outline-2 focus-visible:outline-blue-500"
+        class="font-mono text-[11px] text-fg-mute bg-app px-2 py-0.5 rounded cursor-pointer select-all transition-colors hover:text-green-600 dark:hover:text-green-400 focus-visible:outline-2 focus-visible:outline-blue-500"
         tabindex="0"
         role="button"
         :title="copied ? 'Copied!' : 'Click to copy'"
@@ -301,12 +322,12 @@ onMounted(fetchQuota)
 
     <div
       v-show="viewMode !== 'pipeline'"
-      class="shrink-0 flex items-center gap-1 px-6 py-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+      class="shrink-0 flex items-center gap-1 px-6 py-2 border-b border-line bg-card"
     >
       <button
         type="button"
         class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
-        :class="viewMode === 'cards' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400'"
+        :class="viewMode === 'cards' ? 'bg-raised text-fg-soft' : 'bg-transparent text-fg-mute hover:text-slate-500 dark:hover:text-slate-400'"
         title="Card view"
         @click="viewMode = 'cards'"
       >
@@ -315,7 +336,7 @@ onMounted(fetchQuota)
       <button
         type="button"
         class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
-        :class="viewMode === 'list' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400'"
+        :class="viewMode === 'list' ? 'bg-raised text-fg-soft' : 'bg-transparent text-fg-mute hover:text-slate-500 dark:hover:text-slate-400'"
         title="List view"
         @click="viewMode = 'list'"
       >
@@ -323,7 +344,7 @@ onMounted(fetchQuota)
       </button>
     </div>
     <main id="main-content" class="p-6 flex-1 min-h-0 overflow-y-auto">
-      <p v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600">
+      <p v-if="isLoading" class="text-center py-12 text-fg-mute">
         Loading agents...
       </p>
       <p v-else-if="error" class="text-center py-12 text-red-600 dark:text-red-400">
@@ -374,7 +395,7 @@ onMounted(fetchQuota)
         v-if="toastMessage"
         role="status"
         aria-live="polite"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)] pointer-events-none"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-raised border border-line text-fg px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)] pointer-events-none"
       >
         {{ toastMessage }}
       </div>
@@ -390,13 +411,63 @@ onMounted(fetchQuota)
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
     <AuditSettings :open="showAudit" @close="showAudit = false" />
+    <AppModal :open="showProjects" @close="showProjects = false">
+      <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
+        <header class="flex justify-between items-start gap-3 px-5 py-4 border-b border-line flex-shrink-0">
+          <div>
+            <h2 class="text-lg font-semibold text-fg">
+              Projects
+            </h2>
+            <p class="text-xs text-fg-mute mt-0.5">
+              Group tasks under named projects. Each project can have default folders (working directories) and a spawner override.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg flex-shrink-0"
+            aria-label="Close"
+            @click="showProjects = false"
+          >
+            &times;
+          </button>
+        </header>
+        <div class="flex-1 overflow-y-auto px-5 py-4">
+          <ProjectSettings v-if="showProjects" hide-title />
+        </div>
+      </div>
+    </AppModal>
+    <AppModal :open="showSpawners" @close="showSpawners = false">
+      <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
+        <header class="flex justify-between items-start gap-3 px-5 py-4 border-b border-line flex-shrink-0">
+          <div>
+            <h2 class="text-lg font-semibold text-fg">
+              Spawners
+            </h2>
+            <p class="text-xs text-fg-mute mt-0.5">
+              Configure LLM adapters per spawner row. Built-in spawners are read-only. Each custom row picks an adapter type (claude, ollama, openai, custom) and supplies the adapter-specific config keys.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg flex-shrink-0"
+            aria-label="Close"
+            @click="showSpawners = false"
+          >
+            &times;
+          </button>
+        </header>
+        <div class="flex-1 overflow-y-auto px-5 py-4">
+          <SpawnerSettings v-if="showSpawners" hide-title />
+        </div>
+      </div>
+    </AppModal>
     <EditGateModal />
     <SpotlightSearch
       @navigate-task="task => selectTask(task)"
       @navigate-agent="agent => selectAgent(agent)"
     />
   </div>
-  <div v-else class="min-h-screen bg-slate-50 dark:bg-slate-950" />
+  <div v-else class="min-h-screen bg-app" />
 </template>
 
 <style>

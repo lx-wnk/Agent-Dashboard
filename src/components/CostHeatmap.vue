@@ -39,7 +39,7 @@ onMounted(fetchHeatmap)
 
 <template>
   <div class="cost-heatmap p-4">
-    <h3 class="text-sm font-semibold mb-3 text-slate-700 dark:text-slate-300">
+    <h3 class="text-sm font-semibold mb-3 text-fg-soft">
       Cost by Day & Hour
     </h3>
     <div v-if="loading" class="text-sm text-slate-500">

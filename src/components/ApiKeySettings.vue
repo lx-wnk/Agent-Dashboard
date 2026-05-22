@@ -4,11 +4,12 @@ import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
 import { maskToken } from '../utils/format'
-const AdapterSettings = defineAsyncComponent(() => import('./AdapterSettings.vue'))
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 import RemoteSettings from './RemoteSettings.vue'
 import SystemPromptSettings from './SystemPromptSettings.vue'
+import ProjectSettings from './ProjectSettings.vue'
+import SpawnerSettings from './SpawnerSettings.vue'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
 
@@ -19,7 +20,7 @@ const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'adapters' | 'plugins' | 'notifications'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'projects' | 'spawners'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -343,14 +344,14 @@ async function startImport() {
 
 <template>
   <AppModal :open="open" @close="emit('close')">
-    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-[975px] max-w-[calc(100vw-2rem)] h-[700px] max-h-[85vh] flex overflow-hidden">
+    <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-[975px] max-w-[calc(100vw-2rem)] h-[700px] max-h-[85vh] flex overflow-hidden">
       <!-- ── Sidebar ──────────────────────────────── -->
-      <nav class="w-[260px] flex-shrink-0 bg-slate-50 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-700 px-3 py-5 flex flex-col">
+      <nav class="w-[260px] flex-shrink-0 bg-app border-r border-line px-3 py-5 flex flex-col">
         <div class="flex items-center justify-between px-1 pb-1 mb-2">
-          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100">
+          <h2 class="text-base font-bold text-fg">
             Settings
           </h2>
-          <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="emit('close')">
+          <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="emit('close')">
             &times;
           </button>
         </div>
@@ -360,8 +361,8 @@ async function startImport() {
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'appearance'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
               @click="activeSection = 'appearance'"
             >
               <span class="text-sm flex-shrink-0">◑</span> Appearance
@@ -372,8 +373,8 @@ async function startImport() {
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'apiKeys'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
               @click="activeSection = 'apiKeys'"
             >
               <span class="text-sm flex-shrink-0">⬡</span> API Keys
@@ -384,8 +385,8 @@ async function startImport() {
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'remotes'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
               @click="activeSection = 'remotes'"
             >
               <span class="text-sm flex-shrink-0">⌂</span> Meine Remotes
@@ -396,8 +397,8 @@ async function startImport() {
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'permissionPresets'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
               @click="activeSection = 'permissionPresets'"
             >
               <span class="text-sm flex-shrink-0">⚿</span> Permissions
@@ -408,8 +409,8 @@ async function startImport() {
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'analytics'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
               @click="activeSection = 'analytics'"
             >
               <span class="text-sm flex-shrink-0">📊</span> Analytics
@@ -420,8 +421,8 @@ async function startImport() {
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'systemPrompts'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
               @click="activeSection = 'systemPrompts'"
             >
               <span class="text-sm flex-shrink-0">✦</span> System Prompts
@@ -431,21 +432,9 @@ async function startImport() {
             <button
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'adapters'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
-              @click="activeSection = 'adapters'"
-            >
-              <span class="text-sm flex-shrink-0">⚡</span> LLM Adapters
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'plugins'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
               @click="activeSection = 'plugins'"
             >
               <span class="text-sm flex-shrink-0">🔌</span> Plugins
@@ -456,17 +445,41 @@ async function startImport() {
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'notifications'
-                ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-                : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'"
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
               @click="activeSection = 'notifications'"
             >
               <span class="text-sm flex-shrink-0">🔔</span> Notifications
             </button>
           </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'projects'
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              @click="activeSection = 'projects'"
+            >
+              <span class="text-sm flex-shrink-0">◫</span> Projects
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'spawners'
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              @click="activeSection = 'spawners'"
+            >
+              <span class="text-sm flex-shrink-0">⚙</span> Spawners
+            </button>
+          </li>
         </ul>
-        <div class="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700">
+        <div class="mt-auto pt-3 border-t border-line">
           <a
-            class="text-xs text-slate-400 dark:text-slate-600 no-underline block px-1.5 py-1 rounded hover:text-slate-500 dark:hover:text-slate-400 transition-colors"
+            class="text-xs text-fg-mute no-underline block px-1.5 py-1 rounded hover:text-slate-500 dark:hover:text-slate-400 transition-colors"
             href="https://github.com/lx-wnk/Agent-Dashboard/issues/new/choose"
             target="_blank"
             rel="noopener noreferrer"
@@ -478,11 +491,11 @@ async function startImport() {
       <div class="flex-1 overflow-y-auto px-7 py-7">
         <!-- Appearance -->
         <section v-if="activeSection === 'appearance'">
-          <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+          <h3 class="text-[17px] font-bold text-fg mb-1">
             Themes
           </h3>
-          <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
-            Choose your preferred color scheme. Tip: press <kbd class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px]">Shift+D</kbd> anywhere to toggle dark/light mode.
+          <p class="text-xs text-fg-mute mb-5">
+            Choose your preferred color scheme. Tip: press <kbd class="px-1 py-0.5 rounded bg-raised font-mono text-[11px]">Shift+D</kbd> anywhere to toggle dark/light mode.
           </p>
           <div class="flex gap-3.5 flex-wrap">
             <button
@@ -496,7 +509,7 @@ async function startImport() {
               class="w-40 border-2 rounded-lg overflow-hidden cursor-pointer bg-transparent p-0 transition-all font-sans"
               :class="themePref === opt.value
                 ? 'border-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]'
-                : 'border-slate-200 dark:border-slate-700 hover:border-blue-400'"
+                : 'border-line hover:border-blue-400'"
               :aria-label="opt.value === 'dark' ? `${opt.label} (keyboard shortcut: Shift+D)` : opt.label"
               :aria-pressed="themePref === opt.value"
               @click="setTheme(opt.value)"
@@ -554,7 +567,7 @@ async function startImport() {
                   </div>
                 </div>
               </div>
-              <div class="px-2.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 flex items-center gap-1.5 bg-white dark:bg-slate-900">
+              <div class="px-2.5 py-2 text-xs font-medium text-fg-mute border-t border-line flex items-center gap-1.5 bg-card">
                 <span class="w-3.5 text-blue-500 font-bold text-[13px]">{{ themePref === opt.value ? '✓' : '' }}</span>
                 {{ opt.label }}
               </div>
@@ -566,10 +579,10 @@ async function startImport() {
         <section v-else-if="activeSection === 'apiKeys'">
           <div class="flex items-start justify-between gap-3 mb-4">
             <div class="flex-1">
-              <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+              <h3 class="text-[17px] font-bold text-fg mb-1">
                 API Keys
               </h3>
-              <p class="text-xs text-slate-400 dark:text-slate-600">
+              <p class="text-xs text-fg-mute">
                 Manage MCP API keys for external access to this dashboard.
               </p>
             </div>
@@ -580,56 +593,56 @@ async function startImport() {
           <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mb-3">
             {{ errorMsg }}
           </p>
-          <div v-if="isLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+          <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
             Loading keys...
           </div>
-          <div v-else-if="keys.length === 0 && !errorMsg" class="text-center py-8 text-slate-400 dark:text-slate-600 text-sm">
+          <div v-else-if="keys.length === 0 && !errorMsg" class="text-center py-8 text-fg-mute text-sm">
             No API keys yet. Create one to allow MCP clients to connect.
           </div>
           <table v-else class="w-full border-collapse text-[13px]">
             <thead>
               <tr>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
                   Name
                 </th>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
                   Scopes
                 </th>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
                   Created
                 </th>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
                   Last Used
                 </th>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
                   Status
                 </th>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="key in keys" :key="key.id" :class="{ 'opacity-45': !key.active }">
-                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-medium whitespace-nowrap">
+                <td class="px-3 py-2.5 border-b border-line text-fg font-medium whitespace-nowrap">
                   {{ key.name }}
                 </td>
-                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
+                <td class="px-3 py-2.5 border-b border-line">
                   <div class="flex flex-wrap gap-1">
-                    <span v-for="scope in key.scopes" :key="scope" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-1.5 py-px rounded font-mono">{{ scope }}</span>
+                    <span v-for="scope in key.scopes" :key="scope" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute bg-raised px-1.5 py-px rounded font-mono">{{ scope }}</span>
                   </div>
                 </td>
-                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-mono text-xs">
+                <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
                   {{ formatDate(key.createdAt) }}
                 </td>
-                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-mono text-xs">
+                <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
                   {{ formatDate(key.lastUsedAt) }}
                 </td>
-                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
+                <td class="px-3 py-2.5 border-b border-line">
                   <span v-if="key.active" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400">Active</span>
-                  <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600">Revoked</span>
+                  <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute">Revoked</span>
                 </td>
-                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
+                <td class="px-3 py-2.5 border-b border-line">
                   <template v-if="key.active">
                     <template v-if="confirmRevokeId === key.id">
                       <AppButton variant="danger" size="sm" class="mr-1" @click="revokeKey(key)">
@@ -648,10 +661,10 @@ async function startImport() {
                       </AppButton>
                     </template>
                     <template v-else>
-                      <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-600 dark:hover:text-amber-400 mr-1" @click="confirmRegenerateId = key.id">
+                      <button type="button" class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-600 dark:hover:text-amber-400 mr-1" @click="confirmRegenerateId = key.id">
                         Regenerate
                       </button>
-                      <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmRevokeId = key.id">
+                      <button type="button" class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmRevokeId = key.id">
                         Revoke
                       </button>
                     </template>
@@ -660,8 +673,8 @@ async function startImport() {
               </tr>
             </tbody>
           </table>
-          <div class="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
-            <h3 class="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">
+          <div class="mt-4 border-t border-line pt-4">
+            <h3 class="text-sm font-semibold mb-2 text-fg-soft">
               Historical Data
             </h3>
             <button
@@ -685,44 +698,44 @@ async function startImport() {
 
         <!-- Permission presets -->
         <section v-else-if="activeSection === 'permissionPresets'">
-          <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+          <h3 class="text-[17px] font-bold text-fg mb-1">
             Permissions
           </h3>
-          <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
+          <p class="text-xs text-fg-mute mb-5">
             Auto-saved tool permissions per project. Reset removes all stored permissions for this project.
           </p>
-          <div v-if="presetsLoading" class="text-center py-12 text-slate-400 dark:text-slate-600 text-sm">
+          <div v-if="presetsLoading" class="text-center py-12 text-fg-mute text-sm">
             Loading...
           </div>
           <p v-else-if="presetsError" class="text-xs text-red-600 dark:text-red-400 mb-3">
             {{ presetsError }}
           </p>
-          <div v-else-if="presets.length === 0" class="text-center py-8 text-slate-400 dark:text-slate-600 text-sm">
+          <div v-else-if="presets.length === 0" class="text-center py-8 text-fg-mute text-sm">
             No saved permissions.
           </div>
           <table v-else class="w-full border-collapse text-[13px]">
             <thead>
               <tr>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
                   Project
                 </th>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
                   Count
                 </th>
-                <th class="text-left text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="p in presets" :key="p.cwd">
-                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-mono text-xs break-all">
+                <td class="px-3 py-2.5 border-b border-line text-fg font-mono text-xs break-all">
                   {{ p.cwd }}
                 </td>
-                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                <td class="px-3 py-2.5 border-b border-line text-fg-mute whitespace-nowrap">
                   {{ p.count }} {{ p.count === 1 ? 'Tool' : 'Tools' }}
                 </td>
-                <td class="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
                   <template v-if="confirmResetCwd === p.cwd">
                     <AppButton variant="danger" size="sm" class="mr-1" @click="resetPresets(p.cwd)">
                       Yes, reset
@@ -731,7 +744,7 @@ async function startImport() {
                       Cancel
                     </AppButton>
                   </template>
-                  <button v-else type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmResetCwd = p.cwd">
+                  <button v-else type="button" class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmResetCwd = p.cwd">
                     Reset
                   </button>
                 </td>
@@ -745,11 +758,6 @@ async function startImport() {
           <SystemPromptSettings />
         </section>
 
-        <!-- LLM Adapters -->
-        <section v-else-if="activeSection === 'adapters'">
-          <AdapterSettings />
-        </section>
-
         <!-- Plugins -->
         <section v-else-if="activeSection === 'plugins'">
           <PluginSettings />
@@ -760,33 +768,43 @@ async function startImport() {
           <NotificationSettings />
         </section>
 
+        <!-- Projects -->
+        <section v-else-if="activeSection === 'projects'">
+          <ProjectSettings />
+        </section>
+
+        <!-- Spawners -->
+        <section v-else-if="activeSection === 'spawners'">
+          <SpawnerSettings />
+        </section>
+
         <!-- Analytics -->
         <section v-else-if="activeSection === 'analytics'">
-          <h3 class="text-[17px] font-bold text-slate-900 dark:text-slate-100 mb-1">
+          <h3 class="text-[17px] font-bold text-fg mb-1">
             Workflow Patterns
           </h3>
-          <p class="text-xs text-slate-400 dark:text-slate-600 mb-5">
+          <p class="text-xs text-fg-mute mb-5">
             Top 3-tool sequences discovered across all sessions.
           </p>
           <p v-if="patternsError" class="text-xs text-red-500 mb-3">
             {{ patternsError }}
           </p>
-          <div v-else-if="patterns.length === 0" class="text-sm text-slate-400 dark:text-slate-600">
+          <div v-else-if="patterns.length === 0" class="text-sm text-fg-mute">
             No patterns discovered yet.
           </div>
           <ul v-else class="space-y-1 mb-4">
             <li
               v-for="p in patterns"
               :key="p.tools"
-              class="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded flex justify-between"
+              class="text-xs font-mono bg-raised px-2 py-1 rounded flex justify-between"
             >
-              <span class="text-slate-700 dark:text-slate-300">{{ p.tools }}</span>
+              <span class="text-fg-soft">{{ p.tools }}</span>
               <span class="text-slate-400">×{{ p.frequency }}</span>
             </li>
           </ul>
           <button
             type="button"
-            class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="text-xs px-2 py-1 rounded border border-line-strong text-fg-mute hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="patternsLoading"
             @click="refreshPatterns"
           >
@@ -799,22 +817,22 @@ async function startImport() {
     <!-- Create key dialog -->
     <Transition name="dialog">
       <div v-if="showCreateDialog" class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center" @click.self="closeCreateDialog">
-        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <header class="flex justify-between items-center px-5 py-4 border-b border-line">
+            <h2 class="text-lg font-semibold text-fg">
               Create API Key
             </h2>
-            <button type="button" class="bg-transparent border-none text-slate-400 dark:text-slate-600 text-2xl cursor-pointer px-1 leading-none hover:text-slate-900 dark:hover:text-slate-100" @click="closeCreateDialog">
+            <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="closeCreateDialog">
               &times;
             </button>
           </header>
           <form class="p-5" @submit.prevent="handleCreate">
             <div class="flex flex-col gap-1 mb-3.5">
-              <label for="key-name" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Name</label>
+              <label for="key-name" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Name</label>
               <input
                 id="key-name"
                 v-model="newKeyName"
-                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
                 type="text"
                 required
                 placeholder="e.g. CI pipeline key"
@@ -822,11 +840,11 @@ async function startImport() {
               >
             </div>
             <div class="flex flex-col gap-1 mb-3.5">
-              <label for="key-group" class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">Role / Scope Group</label>
+              <label for="key-group" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Role / Scope Group</label>
               <select
                 id="key-group"
                 v-model="newKeyGroup"
-                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
               >
                 <option value="viewer">
                   Viewer — tasks:read
@@ -846,7 +864,7 @@ async function startImport() {
               {{ createError }}
             </p>
           </form>
-          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
             <AppButton variant="secondary" @click="closeCreateDialog">
               Cancel
             </AppButton>
@@ -861,14 +879,14 @@ async function startImport() {
     <!-- Token reveal dialog -->
     <Transition name="dialog">
       <div v-if="revealedToken" class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center" @click.self="dismissReveal">
-        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <header class="flex justify-between items-center px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <header class="flex justify-between items-center px-5 py-4 border-b border-line">
+            <h2 class="text-lg font-semibold text-fg">
               Your new API key
             </h2>
           </header>
           <div class="p-5">
-            <p class="text-[13px] text-slate-600 dark:text-slate-400 mb-3">
+            <p class="text-[13px] text-fg-mute mb-3">
               Save this token now — it will <strong class="text-yellow-600 dark:text-yellow-400">never be shown again</strong>.
             </p>
             <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
@@ -898,7 +916,7 @@ async function startImport() {
               </AppButton>
             </div>
           </div>
-          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
             <AppButton variant="secondary" @click="dismissReveal">
               Done — I have saved the token
             </AppButton>

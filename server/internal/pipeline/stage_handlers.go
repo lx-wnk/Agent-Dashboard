@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
 // agentStageHandler is the generic stage handler for agent-driven stages.
@@ -25,21 +27,44 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	feedback := BuildFeedbackPrefix(ctx.PriorIterationOutput)
 	fullUserPrompt := feedback + bundle.UserPrompt + buildAdditionalPromptSuffix(ctx.UserAdditionalPrompt)
 
-	// When an alternative LLM adapter is configured, use it instead of the
-	// Claude CLI spawner. The adapter writes its own synthetic JSONL session
-	// file so the completion detector can read the output unchanged.
-	//
-	// HTTP adapters block for up to several minutes, so the actual Spawn call
-	// is dispatched to a bounded goroutine pool via DispatchHTTPSpawn. The
-	// transition returned here has PID=0; drainHTTPResults writes the synthetic
-	// session file path back into stage_run.output when the goroutine finishes,
-	// and finalizeCompletedAsyncRuns picks it up on the next tick.
-	if ctx.Spawner != nil {
+	// Resolve the effective DB spawner immediately before exec. Failure to
+	// resolve is fatal — we do NOT silently fall back to the bare `claude`
+	// binary when the task or its project named a spawner that could not be
+	// loaded (e.g. it was deleted out from under us). Propagate the error.
+	var resolved *ent.Spawner
+	if ctx.ResolveSpawner != nil {
+		sp, err := ctx.ResolveSpawner(ctx.Ctx, ctx.Task.ID)
+		if err != nil {
+			return nil, fmt.Errorf("agentStageHandler.Execute(%s): resolve spawner: %w", h.stage, err)
+		}
+		resolved = sp
+	}
+
+	// LLM-adapter path: when the resolved row declares a non-Claude adapter
+	// type, build the corresponding LLMSpawner and dispatch via the HTTP/
+	// custom-command abstraction. The adapter writes its own synthetic JSONL
+	// session file so the completion detector can read the output unchanged.
+	if resolved != nil && resolved.AdapterType != "" && resolved.AdapterType != "claude" {
+		adapter, err := NewLLMSpawnerFromSpawner(resolved)
+		if err != nil {
+			return nil, fmt.Errorf("agentStageHandler.Execute(%s): build adapter: %w", h.stage, err)
+		}
+		if adapter == nil {
+			// Defensive: factory returned nil for a non-claude type, which
+			// should never happen unless the catalog and factory drift apart.
+			return nil, fmt.Errorf("agentStageHandler.Execute(%s): adapter factory returned nil for adapter_type %q", h.stage, resolved.AdapterType)
+		}
+
 		model := ""
 		if ctx.Task.Metadata != nil {
 			if m, ok := ctx.Task.Metadata["model"].(string); ok {
 				model = m
 			}
+		}
+		// Per-spawner ModelOverride wins over the task metadata model — mirrors
+		// the native-path behaviour in spawner.go::buildClaudeArgs.
+		if resolved.ModelOverride != nil && *resolved.ModelOverride != "" {
+			model = *resolved.ModelOverride
 		}
 		cwd := ctx.Task.Cwd
 		if ctx.Task.WorktreePath != nil && *ctx.Task.WorktreePath != "" {
@@ -56,13 +81,13 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 			WorkDir:      cwd,
 			AllowedTools: allowedTools,
 		}
-		spawner := ctx.Spawner
 		stageRunID := ctx.StageRun.ID
 		taskID := ctx.Task.ID
 		spawnCtx := ctx.Ctx
 
 		ctx.RecordAudit(h.stage+"_dispatched", map[string]any{
-			"spawner":     spawner.Name(),
+			"spawner":     adapter.Name(),
+			"adapterType": resolved.AdapterType,
 			"iteration":   ctx.StageRun.Iteration,
 			"hasFeedback": len(feedback) > 0,
 		})
@@ -70,9 +95,9 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		if ctx.DispatchHTTPSpawn != nil {
 			// Async path: dispatch to goroutine pool and return immediately.
 			ctx.DispatchHTTPSpawn(stageRunID, taskID, func() (string, error) {
-				result, err := spawner.Spawn(spawnCtx, spawnArgs)
+				result, err := adapter.Spawn(spawnCtx, spawnArgs)
 				if err != nil {
-					return "", fmt.Errorf("spawner %s: %w", spawner.Name(), err)
+					return "", fmt.Errorf("spawner %s: %w", adapter.Name(), err)
 				}
 				return result.SessionFile, nil
 			})
@@ -80,13 +105,16 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		}
 
 		// Synchronous fallback for tests or environments without a live orchestrator.
-		llmResult, err := spawner.Spawn(spawnCtx, spawnArgs)
+		llmResult, err := adapter.Spawn(spawnCtx, spawnArgs)
 		if err != nil {
-			return nil, fmt.Errorf("agentStageHandler.Execute(%s): spawner %s: %w", h.stage, spawner.Name(), err)
+			return nil, fmt.Errorf("agentStageHandler.Execute(%s): spawner %s: %w", h.stage, adapter.Name(), err)
 		}
 		return AsyncRunningTransition{PID: llmResult.PID, SessionID: llmResult.SessionID, SessionFile: llmResult.SessionFile}, nil
 	}
 
+	// Native Claude path: resolved is either nil, claude-default, or any row
+	// with AdapterType=="claude" / "". Behaviour is byte-identical to the
+	// pre-adapter-merge code path.
 	spawnFn := h.spawnFn
 	if spawnFn == nil {
 		spawnFn = SpawnStageAgent
@@ -102,6 +130,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		ResumeSessionID: ctx.ResumeSessionID,
 		MCPToken:        ctx.MCPToken,
 		MCPUrl:          ctx.MCPUrl,
+		Spawner:         resolved,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agentStageHandler.Execute(%s): %w", h.stage, err)

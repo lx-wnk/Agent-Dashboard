@@ -43,12 +43,12 @@ function formatDuration(ms: number | null): string {
 </script>
 
 <template>
-  <div v-if="rows.length === 0" class="text-sm text-slate-400 dark:text-slate-600 italic">
+  <div v-if="rows.length === 0" class="text-sm text-fg-mute italic">
     No completed stages yet.
   </div>
   <table v-else class="w-full text-[13px] border-collapse">
     <thead>
-      <tr class="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+      <tr class="text-left text-fg-mute border-b border-line">
         <th class="pb-1 font-medium">
           Stage
         </th>
@@ -70,35 +70,35 @@ function formatDuration(ms: number | null): string {
       <tr
         v-for="(row, i) in rows"
         :key="i"
-        class="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+        class="border-b border-line hover:bg-slate-50 dark:hover:bg-slate-800/50"
       >
-        <td class="py-1 pr-2 text-slate-700 dark:text-slate-300 capitalize">
+        <td class="py-1 pr-2 text-fg-soft capitalize">
           {{ row.stage.replace('_', ' ') }}
         </td>
-        <td class="py-1 text-center text-slate-500 dark:text-slate-400">
+        <td class="py-1 text-center text-fg-mute">
           {{ row.iteration }}
         </td>
-        <td class="py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+        <td class="py-1 text-right font-mono text-fg-soft">
           {{ formatTokens(row.tokensUsed) }}
         </td>
-        <td class="py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+        <td class="py-1 text-right font-mono text-fg-soft">
           {{ formatCost(centsToUsd(row.costCents)) }}
         </td>
-        <td class="py-1 text-right font-mono text-slate-500 dark:text-slate-400">
+        <td class="py-1 text-right font-mono text-fg-mute">
           {{ formatDuration(stageDurationMs(row)) }}
         </td>
       </tr>
     </tbody>
     <tfoot>
-      <tr class="border-t border-slate-300 dark:border-slate-600 font-medium">
-        <td class="pt-1 text-slate-700 dark:text-slate-300">
+      <tr class="border-t border-line-strong font-medium">
+        <td class="pt-1 text-fg-soft">
           Total
         </td>
         <td />
-        <td class="pt-1 text-right font-mono text-slate-900 dark:text-slate-100">
+        <td class="pt-1 text-right font-mono text-fg">
           {{ formatTokens(totalTokens) }}
         </td>
-        <td class="pt-1 text-right font-mono text-slate-900 dark:text-slate-100">
+        <td class="pt-1 text-right font-mono text-fg">
           {{ formatCost(totalCostUsd) }}
         </td>
         <td />

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { PipelineStage, PipelineTask, StageRunStatus } from '../types'
+import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
 
-defineProps<{ task: PipelineTask }>()
+defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
 function shortDate(iso: string): string {
@@ -40,7 +40,7 @@ function stageLabel(stage: PipelineStage): string {
 
 <template>
   <div
-    class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-2.5 cursor-pointer transition-all flex flex-col gap-1.5"
+    class="bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer transition-all flex flex-col gap-1.5"
     :class="task.isBlocked ? 'opacity-60 hover:opacity-85' : 'hover:border-blue-500 dark:hover:border-blue-400 hover:-translate-y-px'"
     tabindex="0"
     role="button"
@@ -51,12 +51,12 @@ function stageLabel(stage: PipelineStage): string {
   >
     <div class="flex justify-between items-baseline gap-2">
       <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
-      <span class="text-[10px] text-slate-400 dark:text-slate-600">{{ shortDate(task.createdAt) }}</span>
+      <span class="text-[10px] text-fg-mute">{{ shortDate(task.createdAt) }}</span>
     </div>
-    <div class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 leading-tight line-clamp-2">
+    <div class="text-[13px] font-semibold text-fg leading-tight line-clamp-2">
       {{ task.title }}
     </div>
-    <div v-if="task.description" class="text-[11px] text-slate-400 dark:text-slate-600 leading-snug line-clamp-2">
+    <div v-if="task.description" class="text-[11px] text-fg-mute leading-snug line-clamp-2">
       {{ task.description }}
     </div>
     <button
@@ -66,6 +66,17 @@ function stageLabel(stage: PipelineStage): string {
     >
       Continue Chat →
     </button>
+    <!-- Project chip -->
+    <div v-if="project" class="flex items-center gap-1">
+      <span
+        class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-px rounded border border-transparent"
+        :style="project.color ? { backgroundColor: project.color + '22', color: project.color, borderColor: project.color + '55' } : {}"
+        :class="!project.color ? 'bg-raised text-fg-mute border-line' : ''"
+        :title="`Project: ${project.name}`"
+      >
+        <span aria-hidden="true">◫</span>{{ project.name }}
+      </span>
+    </div>
     <div class="flex flex-wrap gap-1 mt-0.5">
       <span
         class="text-[10px] font-mono px-1.5 py-px rounded border"
@@ -87,11 +98,11 @@ function stageLabel(stage: PipelineStage): string {
         class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
         title="Respawn blocked: previous run still has unresolved permission requests"
       >&#9888; blocked by permissions</span>
-      <span v-if="task.worktreePath" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Has worktree">WT</span>
-      <span v-if="task.sourceBranch" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700">{{ task.sourceBranch }}</span>
-      <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700" title="Follow-up task">↳</span>
+      <span v-if="task.worktreePath" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line" title="Has worktree">WT</span>
+      <span v-if="task.sourceBranch" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line">{{ task.sourceBranch }}</span>
+      <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line" title="Follow-up task">↳</span>
       <span v-if="task.isUnsatisfiable" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50" title="Unsatisfiable dep">⚠ Unsatisfiable dep</span>
-      <span v-else-if="task.isBlocked" class="text-[10px] font-mono px-1.5 py-px rounded border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700/50" title="Waiting for prerequisite">🔒 Blocked</span>
+      <span v-else-if="task.isBlocked" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line/50" title="Waiting for prerequisite">🔒 Blocked</span>
       <span v-if="task.currentStage === 'implementation'" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50">
         max iter {{ task.maxIterations }}
       </span>
