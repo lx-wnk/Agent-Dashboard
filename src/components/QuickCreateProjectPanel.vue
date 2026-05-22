@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import type { Project, ProjectFolder, Spawner } from '../types'
+import type { Project, Spawner } from '../types'
 import { computed, ref, watch } from 'vue'
+import { createProject, deleteProject } from '../composables/useProjects'
+import { createFolder } from '../composables/useProjectFolders'
 import { slugify } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 
@@ -32,8 +34,9 @@ watch(defaultClaudeSpawner, (v) => {
 }, { immediate: true })
 
 function onSlugInput(e: Event): void {
-  slug.value = (e.target as HTMLInputElement).value
-  slugDirty.value = true
+  const v = (e.target as HTMLInputElement).value
+  slug.value = v
+  slugDirty.value = v.length > 0
 }
 
 const inputClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500'
@@ -48,29 +51,17 @@ async function submit(): Promise<void> {
   isSubmitting.value = true
   errorMsg.value = ''
 
-  const projectBody: Record<string, unknown> = {
+  const projectInput = {
     name: name.value.trim(),
     slug: slug.value.trim() || slugify(name.value),
+    ...(description.value.trim() ? { description: description.value.trim() } : {}),
+    ...(color.value.trim() ? { color: color.value.trim() } : {}),
+    ...(defaultSpawnerId.value ? { defaultSpawnerId: defaultSpawnerId.value } : {}),
   }
-  if (description.value.trim())
-    projectBody.description = description.value.trim()
-  if (color.value.trim())
-    projectBody.color = color.value.trim()
-  if (defaultSpawnerId.value)
-    projectBody.defaultSpawnerId = defaultSpawnerId.value
 
   let project: Project
   try {
-    const res = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(projectBody),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-      throw new Error((err as { error?: string }).error || `Failed (${res.status})`)
-    }
-    project = await res.json() as Project
+    project = await createProject(projectInput)
   }
   catch (e) {
     errorMsg.value = (e as Error).message
@@ -79,21 +70,12 @@ async function submit(): Promise<void> {
   }
 
   try {
-    const res = await fetch(`/api/projects/${project.id}/folders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: path.value.trim(), isDefault: true }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-      throw new Error((err as { error?: string }).error || `Folder create failed (${res.status})`)
-    }
-    const folder = await res.json() as ProjectFolder
+    const folder = await createFolder(project.id, { path: path.value.trim(), isDefault: true })
     emit('created', { ...project, folders: [folder] })
   }
   catch (e) {
     errorMsg.value = (e as Error).message
-    await fetch(`/api/projects/${project.id}`, { method: 'DELETE' }).catch(() => {})
+    await deleteProject(project.id).catch(() => {})
   }
   finally {
     isSubmitting.value = false
