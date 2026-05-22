@@ -19,6 +19,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
 const testJWTSecret = "test-secret-32-chars-minimum-here"
@@ -252,6 +253,48 @@ func TestSubmitTurn_TaskNotFound(t *testing.T) {
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("want 404 for unknown task, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestSubmitTurn_CallsResolverAndForwardsSpawnerToSpawnFunc(t *testing.T) {
+	resolved := &ent.Spawner{ID: "sp-1", AdapterType: "claude"}
+	var gotTaskID string
+	var gotSpawner *ent.Spawner
+	turns := &fakeTurnRepo{}
+	tasks := newFakeTaskRepo(defaultTask(t, "task-under-test"))
+	deps := apirefine.Deps{
+		Turns: turns,
+		Tasks: tasks,
+		ResolveSpawner: func(_ context.Context, taskID string) (*ent.Spawner, services.SpawnerSource, error) {
+			gotTaskID = taskID
+			return resolved, services.SpawnerSourceTask, nil
+		},
+		Spawner: func(_ context.Context, _ refine.SpawnConfig, sp *ent.Spawner) (<-chan string, error) {
+			gotSpawner = sp
+			ch := make(chan string)
+			close(ch)
+			return ch, nil
+		},
+	}
+	h := apirefine.NewHandler(deps)
+	r := chi.NewRouter()
+	r.Use(auth.RequireAuth(testJWTSecret))
+	h.Mount(r)
+
+	body, _ := json.Marshal(map[string]string{"message": "hello"})
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/task-under-test/turn", bytes.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if gotTaskID != "task-under-test" {
+		t.Errorf("resolver task id: got %q want %q", gotTaskID, "task-under-test")
+	}
+	if gotSpawner != resolved {
+		t.Errorf("spawner forwarded to Spawn fn: got %v want %v", gotSpawner, resolved)
 	}
 }
 

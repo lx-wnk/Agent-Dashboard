@@ -15,6 +15,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
 // Deps holds the dependencies for Handler.
@@ -27,6 +28,10 @@ type Deps struct {
 	// no runtime dependency on the pipeline orchestrator.
 	Advance func(ctx context.Context, taskID string) error
 	Spawner func(ctx context.Context, cfg refine.SpawnConfig, sp *ent.Spawner) (<-chan string, error)
+	// ResolveSpawner returns the effective spawner row for the given task. If nil,
+	// the handler falls back to passing nil to the Spawner function (which then
+	// uses the legacy `claude -p` exec path).
+	ResolveSpawner func(ctx context.Context, taskID string) (*ent.Spawner, services.SpawnerSource, error)
 }
 
 // Handler handles /api/refine routes.
@@ -176,7 +181,21 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 	turnCtx, turnCancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer turnCancel()
 
-	stream, err := h.deps.Spawner(turnCtx, cfg, nil)
+	var resolvedSpawner *ent.Spawner
+	if h.deps.ResolveSpawner != nil {
+		sp, _, err := h.deps.ResolveSpawner(r.Context(), taskID)
+		if err != nil {
+			// SSE error frame, then close — do not silently fall through.
+			fmt.Fprintf(w, "data: [ERROR] spawner resolution failed: %s\n\n", err.Error())
+			if canFlush {
+				flusher.Flush()
+			}
+			return
+		}
+		resolvedSpawner = sp
+	}
+
+	stream, err := h.deps.Spawner(turnCtx, cfg, resolvedSpawner)
 	if err != nil {
 		// Headers already set for SSE — send error as SSE event.
 		fmt.Fprintf(w, "data: [ERROR] %s\n\n", err.Error())
