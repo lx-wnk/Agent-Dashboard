@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -41,6 +42,10 @@ var (
 	uuidRE = regexp.MustCompile(`(?i)^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
 )
 
+// execStart is the seam used by tests to intercept spawn args without
+// actually launching a process. Production uses cmd.Start directly.
+var execStart = func(cmd *exec.Cmd) error { return cmd.Start() }
+
 // SpawnStatus tracks the state of a user-initiated agent spawn.
 type SpawnStatus struct {
 	PID       int    `json:"pid"`
@@ -50,6 +55,7 @@ type SpawnStatus struct {
 	StartedAt string `json:"startedAt"`
 	Prompt    string `json:"prompt"`
 	Cwd       string `json:"cwd"`
+	SpawnerID string `json:"spawnerId,omitempty"`
 }
 
 // SpawnManager rate-limits and tracks user-initiated Claude agent spawns.
@@ -163,24 +169,49 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		}
 		spawnerRow = row
 	}
-	_ = spawnerRow // consumed by Task 3
+
+	projectID, _ := body["projectId"].(string)
+	if projectID != "" {
+		slog.Info("spawn: projectId attached", "projectId", projectID, "spawnerId", spawnerIDValue(spawnerRow))
+	}
 
 	enableChannel, _ := body["enableChannel"].(bool)
 	if _, hasChannel := body["enableChannel"]; !hasChannel {
 		enableChannel = true // default on
 	}
 
-	var args []string
-	if resumeSessionID != "" {
-		args = append(args, "--resume", resumeSessionID)
+	// Resolve command + base args.
+	binary := claudeBin
+	var spawnerArgs []string
+	if spawnerRow != nil {
+		if !spawners.ValidateCommand(spawnerRow.Command) {
+			return 0, fmt.Errorf("spawner command not permitted")
+		}
+		if spawnerRow.AdapterType == "custom" {
+			binary = spawnerRow.Command
+		}
+		spawnerArgs = append(spawnerArgs, spawnerRow.Args...)
+
+		// Hydrate model from override when caller didn't supply one.
+		if model == "" && spawnerRow.ModelOverride != nil && *spawnerRow.ModelOverride != "" {
+			model = *spawnerRow.ModelOverride
+		}
 	}
-	args = append(args, "-p", prompt)
+
+	var canonicalArgs []string
+	if resumeSessionID != "" {
+		canonicalArgs = append(canonicalArgs, "--resume", resumeSessionID)
+	}
+	canonicalArgs = append(canonicalArgs, "-p", prompt)
 	if model != "" {
-		args = append(args, "--model", model)
+		canonicalArgs = append(canonicalArgs, "--model", model)
 	}
 	if systemPrompt != "" {
-		args = append(args, "--system-prompt", systemPrompt)
+		canonicalArgs = append(canonicalArgs, "--system-prompt", systemPrompt)
 	}
+
+	// Order: spawner args first, canonical args last so user-supplied flags win.
+	args := append(spawnerArgs, canonicalArgs...)
 
 	var channelCfgPath string
 	if enableChannel {
@@ -195,14 +226,15 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		}
 	}
 
-	cmd := exec.Command(claudeBin, args...)
+	cmd := exec.Command(binary, args...)
 	cmd.Dir = cwd
+	cmd.Env = mergeEnv(spawnerRow)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	stderrPipe, _ := cmd.StderrPipe()
 
-	if err := cmd.Start(); err != nil {
+	if err := execStart(cmd); err != nil {
 		if channelCfgPath != "" {
 			_ = os.Remove(channelCfgPath)
 		}
@@ -216,6 +248,9 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		StartedAt: time.Now().UTC().Format(time.RFC3339),
 		Prompt:    prompt[:min(len(prompt), 200)],
 		Cwd:       cwd,
+	}
+	if spawnerRow != nil {
+		status.SpawnerID = spawnerRow.ID
 	}
 
 	m.mu.Lock()
@@ -452,4 +487,47 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+// mergeEnv builds the child process env per ADR-0003:
+//  1. start with os.Environ()
+//  2. overlay spawner.Env
+//  3. dashboard-controlled vars (DASHBOARD_*, CLAUDE_*) always win
+//  4. strip DASHBOARD_JWT_SECRET and DASHBOARD_HOOKS_SECRET
+func mergeEnv(s *ent.Spawner) []string {
+	merged := map[string]string{}
+	for _, kv := range os.Environ() {
+		if i := strings.IndexByte(kv, '='); i > 0 {
+			merged[kv[:i]] = kv[i+1:]
+		}
+	}
+	if s != nil {
+		for k, v := range s.Env {
+			merged[k] = v
+		}
+	}
+	for _, kv := range os.Environ() {
+		i := strings.IndexByte(kv, '=')
+		if i <= 0 {
+			continue
+		}
+		k := kv[:i]
+		if strings.HasPrefix(k, "DASHBOARD_") || strings.HasPrefix(k, "CLAUDE_") {
+			merged[k] = kv[i+1:]
+		}
+	}
+	delete(merged, "DASHBOARD_JWT_SECRET")
+	delete(merged, "DASHBOARD_HOOKS_SECRET")
+	out := make([]string, 0, len(merged))
+	for k, v := range merged {
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
+func spawnerIDValue(s *ent.Spawner) string {
+	if s == nil {
+		return ""
+	}
+	return s.ID
 }

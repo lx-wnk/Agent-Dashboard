@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,6 +14,54 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
+
+// containsConsecutive returns true if args contains a followed immediately by b.
+func containsConsecutive(args []string, a, b string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == a && args[i+1] == b {
+			return true
+		}
+	}
+	return false
+}
+
+func envValue(env []string, key string) string {
+	prefix := key + "="
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			return kv[len(prefix):]
+		}
+	}
+	return ""
+}
+
+// captureExec swaps execStart so the manager-built *exec.Cmd is captured
+// (with its original Args/Path/Env intact) and then redirected to launch a
+// benign 'true' process. The downstream goroutines see a valid cmd.Process,
+// while assertions can inspect the original Args/Path/Env.
+func captureExec(t *testing.T) **exec.Cmd {
+	t.Helper()
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Fatalf("could not locate 'true' binary: %v", err)
+	}
+	var captured *exec.Cmd
+	orig := execStart
+	execStart = func(cmd *exec.Cmd) error {
+		// Snapshot the originally-built command for assertions.
+		snapshot := *cmd
+		captured = &snapshot
+		// Redirect the actual exec to /usr/bin/true (or wherever 'true' lives)
+		// without disturbing Args/Env that consumers want to inspect.
+		cmd.Path = truePath
+		cmd.Args = []string{truePath}
+		return cmd.Start()
+	}
+	t.Cleanup(func() { execStart = orig })
+	return &captured
+}
+
+func strPtr(s string) *string { return &s }
 
 // fakeSpawnerRepo satisfies repo.SpawnerRepo for spawn tests.
 type fakeSpawnerRepo struct {
@@ -235,4 +284,181 @@ func TestSpawn_OpenAIAdapter_Rejected(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "not supported") {
 		t.Fatalf("expected adapter-not-supported error, got %v", err)
 	}
+}
+
+func TestSpawn_ClaudeAdapter_HydratesModelFromOverride(t *testing.T) {
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	captured := captureExec(t)
+
+	row := &ent.Spawner{
+		ID:            "spwn_claude",
+		AdapterType:   "claude",
+		Command:       "claude",
+		ModelOverride: strPtr("claude-opus-4-7"),
+	}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_claude": row}})
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           tmp,
+		"spawnerId":     "spwn_claude",
+		"enableChannel": false,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	require.NotNil(t, *captured, "expected execStart to be called")
+	assert.True(t,
+		containsConsecutive((*captured).Args, "--model", "claude-opus-4-7"),
+		"expected --model claude-opus-4-7 in args, got %v", (*captured).Args,
+	)
+}
+
+func TestSpawn_BodyModelOverridesSpawnerModelOverride(t *testing.T) {
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	captured := captureExec(t)
+
+	row := &ent.Spawner{
+		ID:            "spwn_claude",
+		AdapterType:   "claude",
+		Command:       "claude",
+		ModelOverride: strPtr("claude-opus-4-7"),
+	}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_claude": row}})
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           tmp,
+		"spawnerId":     "spwn_claude",
+		"model":         "claude-sonnet-4-6",
+		"enableChannel": false,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	require.NotNil(t, *captured)
+	assert.True(t,
+		containsConsecutive((*captured).Args, "--model", "claude-sonnet-4-6"),
+		"expected body model to win, got %v", (*captured).Args,
+	)
+	for _, a := range (*captured).Args {
+		assert.NotEqual(t, "claude-opus-4-7", a, "spawner override must not appear when body model is set")
+	}
+}
+
+func TestSpawn_CustomAdapter_UsesSpawnerCommand(t *testing.T) {
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "npx")
+	captured := captureExec(t)
+
+	row := &ent.Spawner{
+		ID:          "spwn_custom",
+		AdapterType: "custom",
+		Command:     "npx",
+		Args:        []string{"--", "claude-clone"},
+	}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_custom": row}})
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           tmp,
+		"spawnerId":     "spwn_custom",
+		"enableChannel": false,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	require.NotNil(t, *captured)
+	path := (*captured).Path
+	assert.True(t, path == "npx" || strings.HasSuffix(path, "/npx"),
+		"expected captured.Path to be 'npx' or end with '/npx', got %q", path)
+	assert.True(t,
+		containsConsecutive((*captured).Args, "--", "claude-clone"),
+		"expected spawner args '-- claude-clone' before canonical args, got %v", (*captured).Args,
+	)
+}
+
+func TestSpawn_CustomAdapter_DisallowedCommandRejected(t *testing.T) {
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "")
+
+	row := &ent.Spawner{
+		ID:          "spwn_bad",
+		AdapterType: "custom",
+		Command:     "rm",
+	}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_bad": row}})
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           tmp,
+		"spawnerId":     "spwn_bad",
+		"enableChannel": false,
+	})
+	if err == nil || !strings.Contains(err.Error(), "not permitted") {
+		t.Fatalf("expected 'not permitted' error, got %v", err)
+	}
+}
+
+func TestSpawn_EnvMerge_DashboardWins(t *testing.T) {
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	t.Setenv("DASHBOARD_MCP_TOKEN", "from-dashboard")
+	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	captured := captureExec(t)
+
+	row := &ent.Spawner{
+		ID:          "spwn_env",
+		AdapterType: "claude",
+		Command:     "claude",
+		Env: map[string]string{
+			"DASHBOARD_MCP_TOKEN": "from-spawner",
+			"MY_CUSTOM":           "hello",
+		},
+	}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_env": row}})
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           tmp,
+		"spawnerId":     "spwn_env",
+		"enableChannel": false,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	require.NotNil(t, *captured)
+	assert.Equal(t, "from-dashboard", envValue((*captured).Env, "DASHBOARD_MCP_TOKEN"),
+		"dashboard env var must win over spawner env")
+	assert.Equal(t, "hello", envValue((*captured).Env, "MY_CUSTOM"),
+		"non-conflicting spawner env var must be present")
+}
+
+func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {
+	tmp, _ := filepath.EvalSymlinks(os.TempDir())
+	t.Setenv("HOME", tmp)
+	t.Setenv("DASHBOARD_JWT_SECRET", "x")
+	t.Setenv("DASHBOARD_HOOKS_SECRET", "y")
+	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	captured := captureExec(t)
+
+	row := &ent.Spawner{
+		ID:          "spwn_sec",
+		AdapterType: "claude",
+		Command:     "claude",
+	}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_sec": row}})
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           tmp,
+		"spawnerId":     "spwn_sec",
+		"enableChannel": false,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	require.NotNil(t, *captured)
+	assert.Equal(t, "", envValue((*captured).Env, "DASHBOARD_JWT_SECRET"),
+		"DASHBOARD_JWT_SECRET must be stripped from child env")
+	assert.Equal(t, "", envValue((*captured).Env, "DASHBOARD_HOOKS_SECRET"),
+		"DASHBOARD_HOOKS_SECRET must be stripped from child env")
 }
