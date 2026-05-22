@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -38,4 +39,53 @@ func (c *CustomCommandSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LL
 		return LLMSpawnResult{}, fmt.Errorf("CustomCommandSpawner: decode result: %w", err)
 	}
 	return result, nil
+}
+
+// SpawnStream exec's the custom command with LLMSpawnArgs JSON on stdin and
+// scans stdout line by line. Each non-empty line is emitted as a chunk. The
+// channel closes when the process exits or the context is cancelled.
+func (c *CustomCommandSpawner) SpawnStream(ctx context.Context, args LLMSpawnArgs) (<-chan string, error) {
+	argsJSON, err := json.Marshal(args)
+	if err != nil {
+		return nil, fmt.Errorf("CustomCommandSpawner.SpawnStream: marshal args: %w", err)
+	}
+	cmd := exec.CommandContext(ctx, c.Command)
+	cmd.Stdin = bytes.NewReader(argsJSON)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("CustomCommandSpawner.SpawnStream: stdout pipe: %w", err)
+	}
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("CustomCommandSpawner.SpawnStream: start %s: %w", c.Command, err)
+	}
+
+	ch := make(chan string, 16)
+	go func() {
+		defer close(ch)
+		scanner := bufio.NewScanner(stdout)
+		scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				continue
+			}
+			select {
+			case ch <- line:
+			case <-ctx.Done():
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
+				return
+			}
+		}
+		if err := cmd.Wait(); err != nil {
+			msg := "[ERROR] CustomCommandSpawner.SpawnStream: " + err.Error()
+			if s := stderrBuf.String(); s != "" {
+				msg += " — " + s
+			}
+			ch <- msg
+		}
+	}()
+	return ch, nil
 }

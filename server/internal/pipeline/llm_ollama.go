@@ -88,6 +88,89 @@ func (o *OllamaSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 	return LLMSpawnResult{PID: 0, SessionID: "ollama-" + args.StageRunID, SessionFile: sessionFile}, nil
 }
 
+// SpawnStream calls Ollama's /api/chat with stream:true and emits message.content
+// chunks on the returned channel. The channel is closed when the stream ends or
+// the context is cancelled.
+func (o *OllamaSpawner) SpawnStream(ctx context.Context, args LLMSpawnArgs) (<-chan string, error) {
+	model := args.Model
+	if model == "" {
+		model = o.DefaultModel
+	}
+	host := o.Host
+	if host == "" {
+		host = "http://localhost:11434"
+	}
+
+	type message struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	type request struct {
+		Model    string    `json:"model"`
+		Messages []message `json:"messages"`
+		Stream   bool      `json:"stream"`
+	}
+	body, err := json.Marshal(request{
+		Model: model,
+		Messages: []message{
+			{Role: "system", Content: args.SystemPrompt},
+			{Role: "user", Content: args.UserPrompt},
+		},
+		Stream: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("OllamaSpawner.SpawnStream: marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+"/api/chat", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("OllamaSpawner.SpawnStream: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	o.clientOnce.Do(func() { o.client = &http.Client{Timeout: 5 * time.Minute} })
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("OllamaSpawner.SpawnStream: POST /api/chat: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("OllamaSpawner.SpawnStream: HTTP %d: %s", resp.StatusCode, body)
+	}
+
+	ch := make(chan string, 16)
+	go func() {
+		defer close(ch)
+		defer resp.Body.Close()
+		dec := json.NewDecoder(resp.Body)
+		for dec.More() {
+			var chunk struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+				Done bool `json:"done"`
+			}
+			if err := dec.Decode(&chunk); err != nil {
+				ch <- "[ERROR] OllamaSpawner.SpawnStream: decode: " + err.Error()
+				return
+			}
+			if chunk.Done {
+				return
+			}
+			if chunk.Message.Content == "" {
+				continue
+			}
+			select {
+			case ch <- chunk.Message.Content:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return ch, nil
+}
+
 // writeSyntheticSession writes a single-line JSONL file in the format the
 // completion detector expects: one assistant message whose text contains the
 // ```json ... ``` block produced by the LLM.
