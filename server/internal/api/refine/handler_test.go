@@ -113,7 +113,7 @@ func authToken(t *testing.T) string {
 	return tok
 }
 
-func makeRouter(turns *fakeTurnRepo, tasks *fakeTaskRepo, spawner func(context.Context, refine.SpawnConfig) (<-chan string, error)) http.Handler {
+func makeRouter(turns *fakeTurnRepo, tasks *fakeTaskRepo, spawner func(context.Context, refine.SpawnConfig, *ent.Spawner) (<-chan string, error)) http.Handler {
 	h := apirefine.NewHandler(apirefine.Deps{
 		Turns:   turns,
 		Tasks:   tasks,
@@ -131,7 +131,7 @@ func withAuth(t *testing.T, req *http.Request) *http.Request {
 	return req
 }
 
-func noopSpawner(_ context.Context, _ refine.SpawnConfig) (<-chan string, error) {
+func noopSpawner(_ context.Context, _ refine.SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
 	ch := make(chan string)
 	close(ch)
 	return ch, nil
@@ -189,7 +189,7 @@ func TestListTurns_ReturnsTurns(t *testing.T) {
 
 // F025: verify SSE framing and turn persistence, not just status 200.
 func TestSubmitTurn_StreamsResponse(t *testing.T) {
-	spawner := func(_ context.Context, _ refine.SpawnConfig) (<-chan string, error) {
+	spawner := func(_ context.Context, _ refine.SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
 		ch := make(chan string, 2)
 		ch <- "Hello"
 		ch <- " world"

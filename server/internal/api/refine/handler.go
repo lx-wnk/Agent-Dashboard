@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
 )
@@ -25,7 +26,7 @@ type Deps struct {
 	// the concept stage. Injected from the composition root so this package has
 	// no runtime dependency on the pipeline orchestrator.
 	Advance func(ctx context.Context, taskID string) error
-	Spawner func(ctx context.Context, cfg refine.SpawnConfig) (<-chan string, error)
+	Spawner func(ctx context.Context, cfg refine.SpawnConfig, sp *ent.Spawner) (<-chan string, error)
 }
 
 // Handler handles /api/refine routes.
@@ -175,7 +176,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 	turnCtx, turnCancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer turnCancel()
 
-	stream, err := h.deps.Spawner(turnCtx, cfg)
+	stream, err := h.deps.Spawner(turnCtx, cfg, nil)
 	if err != nil {
 		// Headers already set for SSE — send error as SSE event.
 		fmt.Fprintf(w, "data: [ERROR] %s\n\n", err.Error())
