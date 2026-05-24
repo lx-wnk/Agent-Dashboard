@@ -22,3 +22,9 @@ func EstimateCacheCreationCost(usage sdk.TokenUsage, model string) float64 {
 func EstimateCacheReadCost(usage sdk.TokenUsage, model string) float64 {
 	return pricing.EstimateCacheReadCost(usage, model)
 }
+
+// HasPricing reports whether the pricing table contains an exact entry for the
+// given model.
+func HasPricing(model string) bool {
+	return pricing.HasPricing(model)
+}

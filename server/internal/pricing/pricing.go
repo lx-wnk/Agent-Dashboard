@@ -31,6 +31,14 @@ func lookupModel(model string) modelPricingEntry {
 	return p
 }
 
+// HasPricing reports whether the pricing table contains an exact entry for the
+// given model. Used by callers that need to distinguish "we have no idea what
+// this costs" (e.g. Codex / Gemini models) from "Claude model, default-priced".
+func HasPricing(model string) bool {
+	_, ok := modelPricing[model]
+	return ok
+}
+
 // EstimateCost returns the estimated USD cost for a given token usage and model.
 func EstimateCost(usage sdk.TokenUsage, model string) float64 {
 	p := lookupModel(model)

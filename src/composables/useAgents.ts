@@ -24,6 +24,13 @@ const viewMode = ref<ViewMode>(
   stored === 'list' || stored === 'cards' || stored === 'pipeline' || stored === 'config-explorer' || stored === 'cost-analytics' || stored === 'workflows' ? stored : 'cards',
 )
 
+// Provider filter — append-only addition to the existing search/view UI.
+// When true, only agents with provider === 'claude' (or unset, treated as
+// claude) are shown. Persisted to localStorage so the preference survives
+// page reloads.
+const hideNonClaudeStored = typeof localStorage !== 'undefined' ? localStorage.getItem('agent-hide-non-claude') : null
+const hideNonClaude = ref<boolean>(hideNonClaudeStored === 'true')
+
 let eventSource: EventSource | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null
 let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
@@ -119,9 +126,12 @@ function stopSSE() {
 
 const filteredAgents = computed(() => {
   const q = debouncedQuery.value.toLowerCase().trim()
+  let list = agents.value
+  if (hideNonClaude.value)
+    list = list.filter(a => !a.provider || a.provider === 'claude')
   if (!q)
-    return agents.value
-  return agents.value.filter(a =>
+    return list
+  return list.filter(a =>
     a.projectName.toLowerCase().includes(q)
     || a.projectPath.toLowerCase().includes(q)
     || (a.lastOutput?.toLowerCase().includes(q) ?? false)
@@ -144,6 +154,12 @@ watch(searchQuery, (q) => {
 watch(viewMode, (v) => {
   if (typeof localStorage !== 'undefined')
     localStorage.setItem('agent-view-mode', v)
+})
+
+// Persist provider filter
+watch(hideNonClaude, (v) => {
+  if (typeof localStorage !== 'undefined')
+    localStorage.setItem('agent-hide-non-claude', String(v))
 })
 
 function startPolling() {
@@ -209,6 +225,7 @@ export function useAgents(options?: { autoStart?: boolean }) {
     error,
     searchQuery,
     viewMode,
+    hideNonClaude,
     selectAgent,
     startStream: startDataStream,
   }

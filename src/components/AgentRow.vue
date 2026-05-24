@@ -3,6 +3,7 @@ import type { Agent } from '../types'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import MachineBadge from './MachineBadge.vue'
+import ProviderBadge from './ProviderBadge.vue'
 import AppBadge from './ui/AppBadge.vue'
 
 defineProps<{ agent: Agent, expanded: boolean }>()
@@ -31,6 +32,7 @@ const { getIdentity } = useAgentIdentity()
         class="inline-block w-2 h-2 rounded-full mr-1 flex-shrink-0"
       />
       {{ agent.projectName }}
+      <ProviderBadge :provider="agent.provider" />
       <span
         v-if="agent.channelAvailable"
         title="Channel active"
@@ -48,7 +50,8 @@ const { getIdentity } = useAgentIdentity()
       {{ formatTokens(totalTokenCount(agent.tokenUsage)) }}
     </td>
     <td class="px-3 py-2.5 border-b border-line text-xs font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
-      {{ formatCost(agent.costEstimate) }}
+      <span v-if="agent.costUnknown" class="text-fg-mute" title="Cost unknown — no pricing data for this provider/model">?</span>
+      <template v-else>{{ formatCost(agent.costEstimate) }}</template>
     </td>
     <td class="w-20 px-3 py-2.5 border-b border-line text-xs text-fg-mute">
       {{ formatUptime(agent.uptime) }}

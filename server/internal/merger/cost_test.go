@@ -46,3 +46,51 @@ func TestCalculateStatus_FutureTimestamp(t *testing.T) {
 	got := merger.CalculateStatus(future)
 	require.Equal(t, sdk.AgentStatusActive, got)
 }
+
+// TestEstimateCostForProvider verifies the cost-gate logic for the various
+// provider/model combinations.
+func TestEstimateCostForProvider(t *testing.T) {
+	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+
+	t.Run("claude with known model uses pricing", func(t *testing.T) {
+		got := merger.EstimateCostForProvider(sdk.ProviderClaude, usage, "claude-sonnet-4-6")
+		require.False(t, got.Unknown)
+		require.Greater(t, got.Total, 0.0)
+	})
+
+	t.Run("claude with unknown model falls back to default pricing", func(t *testing.T) {
+		// Sentinel "unknown" Claude models silently default to sonnet pricing —
+		// pre-existing behaviour preserved for backwards compatibility.
+		got := merger.EstimateCostForProvider(sdk.ProviderClaude, usage, "claude-future-9")
+		require.False(t, got.Unknown)
+		require.Greater(t, got.Total, 0.0)
+	})
+
+	t.Run("codex with unknown model is CostUnknown", func(t *testing.T) {
+		got := merger.EstimateCostForProvider(sdk.ProviderCodex, usage, "gpt-5")
+		require.True(t, got.Unknown)
+		require.Equal(t, 0.0, got.Total)
+		require.Equal(t, 0.0, got.CacheCreate)
+		require.Equal(t, 0.0, got.CacheRead)
+	})
+
+	t.Run("gemini with unknown model is CostUnknown", func(t *testing.T) {
+		got := merger.EstimateCostForProvider(sdk.ProviderGemini, usage, "gemini-2.5-pro")
+		require.True(t, got.Unknown)
+		require.Equal(t, 0.0, got.Total)
+	})
+
+	t.Run("empty provider defaults to claude pricing", func(t *testing.T) {
+		got := merger.EstimateCostForProvider("", usage, "claude-sonnet-4-6")
+		require.False(t, got.Unknown)
+		require.Greater(t, got.Total, 0.0)
+	})
+
+	t.Run("codex with a known claude model name still prices", func(t *testing.T) {
+		// Defensive: if a non-Claude session somehow records a known model name,
+		// the table lookup wins — we don't artificially gate it.
+		got := merger.EstimateCostForProvider(sdk.ProviderCodex, usage, "claude-sonnet-4-6")
+		require.False(t, got.Unknown)
+		require.Greater(t, got.Total, 0.0)
+	})
+}
