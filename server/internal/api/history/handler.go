@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
 // client is a registered SSE consumer for a user's import progress.
@@ -121,10 +122,7 @@ func (h *Handler) streamStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := payload.Sub
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.Header().Set("Connection", "keep-alive")
+	sse.WriteHeaders(w)
 
 	flusher, canFlush := w.(http.Flusher)
 

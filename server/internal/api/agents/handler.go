@@ -49,10 +49,7 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
+	sse.WriteHeaders(w)
 
 	// Send current state immediately so client doesn't wait for first tick.
 	// Wrap in {agents, trend} — the SSE client expects this shape.
