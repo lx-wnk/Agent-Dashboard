@@ -37,6 +37,7 @@ import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
 import WorktreeCommandRunner from './WorktreeCommandRunner.vue'
+import WorktreePanel from './WorktreePanel.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
 const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
@@ -673,13 +674,6 @@ const runtime = computed(() => {
                 {{ task.cwd }}
               </dd>
             </div>
-            <div v-if="task.worktreePath" class="contents">
-              <dt class="text-fg-mute text-[11px] uppercase tracking-[0.5px]">
-                Worktree
-              </dt><dd class="font-mono text-xs text-fg truncate">
-                {{ task.worktreePath }}
-              </dd>
-            </div>
             <div v-if="task.sourceBranch" class="contents">
               <dt class="text-fg-mute text-[11px] uppercase tracking-[0.5px]">
                 Source
@@ -744,6 +738,14 @@ const runtime = computed(() => {
               </dd>
             </div>
           </dl>
+
+          <!-- Worktree live status -->
+          <WorktreePanel
+            v-if="task.worktreePath"
+            :task-id="task.id"
+            :worktree-path="task.worktreePath"
+            :active="!!task"
+          />
 
           <!-- Project + Spawner assignment row -->
           <section class="border-t border-line pt-3 flex flex-col gap-2.5">

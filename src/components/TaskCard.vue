@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
+import WorktreePill from './WorktreePill.vue'
 
 defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
@@ -98,7 +99,7 @@ function stageLabel(stage: PipelineStage): string {
         class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
         title="Respawn blocked: previous run still has unresolved permission requests"
       >&#9888; blocked by permissions</span>
-      <span v-if="task.worktreePath" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line" title="Has worktree">WT</span>
+      <WorktreePill v-if="task.worktreePath" :task-id="task.id" />
       <span v-if="task.sourceBranch" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line">{{ task.sourceBranch }}</span>
       <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line" title="Follow-up task">↳</span>
       <span v-if="task.isUnsatisfiable" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50" title="Unsatisfiable dep">⚠ Unsatisfiable dep</span>
