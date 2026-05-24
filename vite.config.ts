@@ -7,7 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 const DASHBOARD_PORT = process.env.DASHBOARD_PORT || '13120'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -73,6 +73,10 @@ export default defineConfig({
       },
     },
   },
+  // Strip console.* and debugger statements from production bundles to avoid
+  // leaking diagnostic data (session IDs, payload shapes) into user DevTools.
+  // Applied at build time only — `vite dev` keeps console output for debugging.
+  esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : {},
   server: {
     port: 5173,
     // Use 127.0.0.1 explicitly — on dual-stack IPv6 systems 'localhost' may resolve
@@ -106,4 +110,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

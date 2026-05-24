@@ -145,14 +145,11 @@ async function fetchOutput(sessionId: string) {
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
-    // eslint-disable-next-line no-console
-    console.debug('[AgentChatStream] fetchOutput', sessionId, 'msgs:', data.messages?.length)
     sessionMessages.value = data.messages
     await nextTick()
     scrollToBottom()
   }
   catch (e) {
-    // eslint-disable-next-line no-console
     console.error('[AgentChatStream] fetchOutput error', sessionId, e)
     sessionMessages.value = []
   }
