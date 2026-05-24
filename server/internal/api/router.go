@@ -62,6 +62,12 @@ type RouterConfig struct {
 	// PluginLoginURL, when non-empty, causes GET /api/auth/login to redirect to the
 	// auth plugin instead of handling the OAuth dance in core.
 	PluginLoginURL string
+	// LoopbackHostConfig configures the DNS-rebinding protection middleware.
+	// The zero value applies the default loopback whitelist (127.0.0.1, localhost, ::1).
+	LoopbackHostConfig RequireLoopbackHostConfig
+	// AuthRateLimiterConfig configures the per-IP rate limiter applied to auth,
+	// MCP, and bulk-resolve endpoints. The zero value uses safe defaults (10 r/s, burst 20).
+	AuthRateLimiterConfig IPRateLimiterConfig
 }
 
 // RouterDeps holds all dependencies injected into the router.
@@ -108,11 +114,17 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	r := chi.NewRouter()
 
+	// Build the per-IP rate limiter once; it owns its cleanup goroutine.
+	authRateLimiter := NewIPRateLimiter(deps.Config.AuthRateLimiterConfig)
+
 	// Global middleware (applied to every request)
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
 	r.Use(SlogMiddleware)
 	r.Use(chimiddleware.Recoverer)
+	// F-SEC-005: reject requests whose Host header is not in the loopback whitelist.
+	// This closes the DNS-rebinding vector when DASHBOARD_AUTH=none is in effect.
+	r.Use(RequireLoopbackHost(deps.Config.LoopbackHostConfig))
 	r.Use(SecurityHeaders)
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +149,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	r.Get("/api/hooks/pending", hooksHandler.Pending)
 
 	// Auth routes (public — OAuth dance must be unauthenticated)
+	// F-SEC-010: per-IP rate limit prevents auth-probing and SHA-256 amplification DoS.
 	authHandler := apiauth.NewHandler(apiauth.Deps{
 		JWTSecret:        deps.Config.JWTSecret,
 		CallbackURL:      deps.Config.CallbackURL,
@@ -147,13 +160,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 		AuthPluginSecret: deps.Config.AuthPluginSecret,
 		PluginLoginURL:   deps.Config.PluginLoginURL,
 	})
-	r.Get("/api/auth/login", ErrorMiddleware(authHandler.LoginRedirect))
-	r.Get("/api/auth/github", ErrorMiddleware(authHandler.LoginRedirect)) // backwards-compat alias
-	r.Get("/api/auth/callback", ErrorMiddleware(authHandler.Callback))
-	r.Post("/api/auth/logout", ErrorMiddleware(authHandler.Logout))
+	r.With(authRateLimiter).Get("/api/auth/login", ErrorMiddleware(authHandler.LoginRedirect))
+	r.With(authRateLimiter).Get("/api/auth/github", ErrorMiddleware(authHandler.LoginRedirect)) // backwards-compat alias
+	r.With(authRateLimiter).Get("/api/auth/callback", ErrorMiddleware(authHandler.Callback))
+	r.With(authRateLimiter).Post("/api/auth/logout", ErrorMiddleware(authHandler.Logout))
 	// Plugin session endpoint — called by external auth plugins after OAuth completes.
 	// Only active when DASHBOARD_AUTH_PLUGIN_SECRET is set.
-	r.Post("/api/auth/session", ErrorMiddleware(authHandler.CreateSession))
+	r.With(authRateLimiter).Post("/api/auth/session", ErrorMiddleware(authHandler.CreateSession))
 
 	// Protected routes (JWT required, unless auth bypass is active)
 	r.Group(func(r chi.Router) {
@@ -161,6 +174,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// in bypass mode it is the primary CSRF defence; in auth mode it is
 		// defence-in-depth on top of JWT validation.
 		r.Use(RequireSameOriginForMutations)
+		// F-SEC-010: per-IP rate limit on all protected endpoints — catches
+		// bulk-resolve, permission-request creation, and any other high-cost
+		// pipeline paths. 10 r/s burst 20 is well above normal UI usage.
+		r.Use(authRateLimiter)
 		if !deps.Config.BypassAuth {
 			r.Use(authpkg.RequireAuth(deps.Config.JWTSecret))
 		}
@@ -300,9 +317,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// MCP endpoint — Bearer token auth (API key), not JWT session auth.
+	// F-SEC-010: per-IP rate limit prevents SHA-256 amplification DoS on the
+	// API-key lookup path. Applied alongside the existing auth middleware.
 	// Mounted outside the JWT group so OAuth-less clients can reach it.
 	if deps.MCPHandler != nil {
-		r.With(mcp.McpAuthMiddleware(deps.ApiKeyRepo)).Post("/api/mcp", deps.MCPHandler.ServeHTTP)
+		r.With(authRateLimiter, mcp.McpAuthMiddleware(deps.ApiKeyRepo)).Post("/api/mcp", deps.MCPHandler.ServeHTTP)
 	}
 
 	// Vue SPA catch-all — must be last (after all API routes)

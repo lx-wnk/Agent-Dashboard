@@ -54,6 +54,7 @@ func TestRouter_RequireAuth_Returns401WhenUnauthenticated(t *testing.T) {
 	router := api.NewRouter(deps)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/agents", nil)
+	req.Host = "127.0.0.1:13120"
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
