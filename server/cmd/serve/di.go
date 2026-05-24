@@ -19,6 +19,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
+	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
@@ -186,6 +187,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		analyticsHandler = apianalytics.NewHandler(rawrepo.NewAnalyticsRepo(bundle.DB), bundle.DB, cfgRepo)
 	}
 
+	var costHandler *apicost.Handler
+	if bundle != nil {
+		costHandler = apicost.NewHandler(bundle.DB)
+	}
+
 	// Build optional handlers that previously lived inside provideRouterDeps.
 	// projectRepo, projectFolderRepo, spawnerRepo were constructed earlier
 	// for the spawner resolver — reuse those instances here.
@@ -231,6 +237,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		HistoryHandler:       historyHandler,
 		RefineHandler:        refineHandler,
 		AnalyticsHandler:     analyticsHandler,
+		CostHandler:          costHandler,
 		MCPHandler:           mcpHandler,
 		ChannelReply:         agents.NewChannelReplyHandler(replyStore),
 		PluginRegistry:       pluginRegistry,

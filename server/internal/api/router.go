@@ -21,6 +21,7 @@ import (
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
 	apiconfig "github.com/lx-wnk/agent-dashboard/server/internal/api/config"
+	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
@@ -89,6 +90,7 @@ type RouterDeps struct {
 	HistoryHandler       *apihistory.Handler
 	RefineHandler        *refineapi.Handler
 	AnalyticsHandler     *apianalytics.Handler
+	CostHandler          *apicost.Handler
 	AdapterHandler       *adapters.Handler
 	MCPHandler           http.Handler
 	ChannelReply         *agents.ChannelReplyHandler
@@ -247,6 +249,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.AdapterHandler != nil {
 			deps.AdapterHandler.Mount(r)
+		}
+
+		// Cost analytics — aggregated spend by model, day, and week.
+		// Mounted at the END of the protected group to keep route additions
+		// append-only and free of merge conflicts with other parallel feature groups.
+		if deps.CostHandler != nil {
+			deps.CostHandler.Mount(r)
 		}
 
 		// Spawn management — rate-limited user-initiated agent spawning and channel message forwarding.
