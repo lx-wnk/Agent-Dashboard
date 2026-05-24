@@ -8,12 +8,9 @@ import BacklogForm from './components/BacklogForm.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import AppModal from './components/ui/AppModal.vue'
-import CostAnalyticsView from './components/CostAnalyticsView.vue'
 import CostTrend from './components/CostTrend.vue'
 import EditGateModal from './components/EditGateModal.vue'
 import LoginPage from './components/LoginPage.vue'
-import ConfigExplorer from './components/ConfigExplorer.vue'
-import PipelineBoard from './components/PipelineBoard.vue'
 import RefinementChat from './components/RefinementChat.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
@@ -21,7 +18,6 @@ import SystemMetricsPanel from './components/SystemMetricsPanel.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
 import OfflineBadge from './components/OfflineBadge.vue'
-import WorkflowsView from './components/WorkflowsView.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { usePWA } from './composables/usePWA'
@@ -30,6 +26,11 @@ import { useTheme } from './composables/useTheme'
 import { useUser } from './composables/useUser'
 import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
+// F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
+const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
+const ConfigExplorer = defineAsyncComponent(() => import('./components/ConfigExplorer.vue'))
+const PipelineBoard = defineAsyncComponent(() => import('./components/PipelineBoard.vue'))
+const WorkflowsView = defineAsyncComponent(() => import('./components/WorkflowsView.vue'))
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
 const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
 
@@ -37,7 +38,7 @@ const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
 const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
-const { toggleTheme } = useTheme()
+const { theme, toggleTheme } = useTheme()
 
 // UX-08: Shift+D toggles dark/light mode globally
 function handleKeydown(e: KeyboardEvent) {
@@ -105,16 +106,37 @@ function copyScript() {
   }, 2000)
 }
 
+// F-UIUX-011: 5 s default duration; hover pause/resume keeps toast visible while pointer rests on it
+const TOAST_DURATION_MS = 5000
 const toastMessage = ref<string | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
+let toastPaused = false
 
-function showToast(msg: string) {
-  toastMessage.value = msg
+function startToastTimer() {
   if (toastTimer)
     clearTimeout(toastTimer)
   toastTimer = setTimeout(() => {
-    toastMessage.value = null
-  }, 3500)
+    if (!toastPaused)
+      toastMessage.value = null
+  }, TOAST_DURATION_MS)
+}
+
+function pauseToast() {
+  toastPaused = true
+  if (toastTimer)
+    clearTimeout(toastTimer)
+}
+
+function resumeToast() {
+  toastPaused = false
+  if (toastMessage.value)
+    startToastTimer()
+}
+
+function showToast(msg: string) {
+  toastMessage.value = msg
+  toastPaused = false
+  startToastTimer()
 }
 
 function navigateTo(target: { agent?: Agent, taskId?: string }) {
@@ -219,19 +241,23 @@ onMounted(fetchQuota)
         </div>
         <span class="text-[10px] text-slate-400">{{ quotaPct }}%</span>
       </div>
+      <!-- F-UIUX-017: descriptive aria-label so screen readers announce the field's purpose -->
       <input
         v-model="searchQuery"
         type="text"
+        :aria-label="viewMode === 'pipeline' ? 'Search tasks' : 'Search agents and tasks'"
         :placeholder="viewMode === 'pipeline' ? 'Search tasks...' : 'Search agents...'"
         class="ml-auto bg-raised border border-line rounded-md px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[200px] focus:outline-none focus:border-blue-500 focus:w-[260px] transition-[width] duration-200"
       >
-      <div class="flex bg-raised rounded-md overflow-hidden">
+      <!-- F-UIUX-018: role="group" + aria-pressed make the toggle semantics audible to screen readers -->
+      <div role="group" aria-label="View mode" class="flex bg-raised rounded-md overflow-hidden">
         <button
           type="button"
           class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
-          :class="viewMode !== 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
+          :class="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
+          :aria-pressed="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows'"
           title="Agent monitoring dashboard"
-          @click="viewMode = viewMode === 'pipeline' ? 'cards' : viewMode"
+          @click="viewMode = viewMode === 'pipeline' || viewMode === 'config-explorer' || viewMode === 'workflows' ? 'cards' : viewMode"
         >
           Dashboard
         </button>
@@ -239,6 +265,7 @@ onMounted(fetchQuota)
           type="button"
           class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
           :class="viewMode === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
+          :aria-pressed="viewMode === 'pipeline'"
           title="Task pipeline kanban"
           @click="viewMode = 'pipeline'"
         >
@@ -248,6 +275,7 @@ onMounted(fetchQuota)
           type="button"
           class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
           :class="viewMode === 'config-explorer' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
+          :aria-pressed="viewMode === 'config-explorer'"
           title="Browse installed skills, slash commands, and memory files"
           @click="viewMode = 'config-explorer'"
         >
@@ -257,6 +285,7 @@ onMounted(fetchQuota)
           type="button"
           class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
           :class="viewMode === 'workflows' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
+          :aria-pressed="viewMode === 'workflows'"
           title="D3 workflow visualizations"
           @click="viewMode = 'workflows'"
         >
@@ -296,13 +325,26 @@ onMounted(fetchQuota)
         + New Agent
       </button>
       <OfflineBadge />
+      <!-- F-UIUX-005: visible theme-toggle button (previously keyboard-only via Shift+D) -->
       <button
         type="button"
         class="bg-raised text-fg-mute border-none rounded-md min-w-[44px] min-h-[44px] px-2.5 py-2 text-base cursor-pointer leading-none hover:text-fg-soft hover:brightness-110"
+        aria-label="Toggle dark mode (Shift+D)"
+        :aria-pressed="theme === 'dark'"
+        :title="theme === 'dark' ? 'Switch to light mode (Shift+D)' : 'Switch to dark mode (Shift+D)'"
+        @click="toggleTheme"
+      >
+        <span aria-hidden="true">{{ theme === 'dark' ? '☀' : '🌙' }}</span>
+      </button>
+      <!-- F-UIUX-004: aria-label + aria-hidden glyph -->
+      <button
+        type="button"
+        class="bg-raised text-fg-mute border-none rounded-md min-w-[44px] min-h-[44px] px-2.5 py-2 text-base cursor-pointer leading-none hover:text-fg-soft hover:brightness-110"
+        aria-label="Settings"
         title="Settings"
         @click="showSettings = true"
       >
-        ⚙
+        <span aria-hidden="true">⚙</span>
       </button>
       <button
         v-if="canInstall"
@@ -375,7 +417,8 @@ onMounted(fetchQuota)
         Claude only
       </button>
     </div>
-    <main id="main-content" class="p-6 flex-1 min-h-0 overflow-y-auto">
+    <!-- F-UIUX-023: tabindex="-1" lets the skip-link focus this element programmatically -->
+    <main id="main-content" tabindex="-1" class="p-6 flex-1 min-h-0 overflow-y-auto">
       <p v-if="isLoading" class="text-center py-12 text-fg-mute">
         Loading agents...
       </p>
@@ -416,27 +459,34 @@ onMounted(fetchQuota)
     />
 
     <!-- PWA update banner: shown when a new service worker is waiting to activate. -->
+    <!-- F-UIUX-016: role="status" + aria-live so screen readers announce the update without user focus -->
     <Transition name="toast">
       <div
         v-if="needsRefresh"
+        role="status"
+        aria-live="polite"
         class="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-900 dark:bg-slate-800 border border-slate-700 text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
       >
         <span>A new version is available.</span>
         <button
           type="button"
           class="bg-blue-600 text-white border-none rounded-md px-3 py-1 text-[12px] font-semibold cursor-pointer hover:brightness-110"
+          aria-label="A new version is available, reload to apply"
           @click="updateSW"
         >
           Reload
         </button>
       </div>
     </Transition>
+    <!-- F-UIUX-011: pointer-events enabled so hover pause works; timer resumes on mouseleave -->
     <Transition name="toast">
       <div
         v-if="toastMessage"
         role="status"
         aria-live="polite"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-raised border border-line text-fg px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)] pointer-events-none"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-raised border border-line text-fg px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+        @mouseenter="pauseToast"
+        @mouseleave="resumeToast"
       >
         {{ toastMessage }}
       </div>
