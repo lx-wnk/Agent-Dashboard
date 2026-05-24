@@ -8,6 +8,7 @@ import BacklogForm from './components/BacklogForm.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import AppModal from './components/ui/AppModal.vue'
+import CostAnalyticsView from './components/CostAnalyticsView.vue'
 import CostTrend from './components/CostTrend.vue'
 import EditGateModal from './components/EditGateModal.vue'
 import LoginPage from './components/LoginPage.vue'
@@ -344,6 +345,16 @@ onMounted(fetchQuota)
       >
         ≡ List
       </button>
+      <!-- G-E: Cost Analytics chip (append-only) -->
+      <button
+        type="button"
+        class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
+        :class="viewMode === 'cost-analytics' ? 'bg-raised text-fg-soft' : 'bg-transparent text-fg-mute hover:text-slate-500 dark:hover:text-slate-400'"
+        title="Cost analytics — aggregated spend by model, day, week"
+        @click="viewMode = 'cost-analytics'"
+      >
+        ◷ Cost Analytics
+      </button>
     </div>
     <main id="main-content" class="p-6 flex-1 min-h-0 overflow-y-auto">
       <p v-if="isLoading" class="text-center py-12 text-fg-mute">
@@ -362,6 +373,8 @@ onMounted(fetchQuota)
         @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
       />
       <ConfigExplorer v-else-if="viewMode === 'config-explorer'" />
+      <!-- G-E: cost-analytics view (append-only branch) -->
+      <CostAnalyticsView v-else-if="viewMode === 'cost-analytics'" />
       <template v-else>
         <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
         <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
