@@ -29,14 +29,6 @@ const editorHref = computed(() => {
   return `file://${props.worktreePath}`
 })
 
-const aheadBehindLabel = computed(() => {
-  const s = status.value
-  if (!s)
-    return null
-  if (s.ahead == null && s.behind == null)
-    return 'no base'
-  return `↑ ${s.ahead ?? 0}   ↓ ${s.behind ?? 0}`
-})
 </script>
 
 <template>
@@ -125,7 +117,7 @@ const aheadBehindLabel = computed(() => {
     </dl>
 
     <p
-      v-if="status && (isLoading || aheadBehindLabel)"
+      v-if="status"
       class="text-[10px] text-fg-mute"
     >
       Refreshes every 30 s while this modal is open.
