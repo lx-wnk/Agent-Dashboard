@@ -268,9 +268,16 @@ func listSkillDirs(dir string) []string {
 		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		// Resolve symlinks: only include entries that have a SKILL.md.
+		// Reject symlinks at the skill-directory level so the listing cannot
+		// be redirected to a SKILL.md outside the configured root.
+		if e.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		// os.Lstat avoids following a symlink that lands inside the skill
+		// directory; the SKILL.md must be a regular file.
 		skillFile := filepath.Join(dir, e.Name(), "SKILL.md")
-		if _, err := os.Stat(skillFile); err != nil {
+		info, err := os.Lstat(skillFile)
+		if err != nil || !info.Mode().IsRegular() {
 			continue
 		}
 		names = append(names, e.Name())
@@ -280,6 +287,8 @@ func listSkillDirs(dir string) []string {
 }
 
 // listCommandFiles returns absolute paths of *.md files directly inside dir.
+// Symlinks are rejected to prevent a malicious entry (e.g. cmd.md →
+// /etc/passwd) from being read through readCommandFile.
 func listCommandFiles(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -288,6 +297,9 @@ func listCommandFiles(dir string) []string {
 	var out []string
 	for _, e := range entries {
 		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		if e.Type()&os.ModeSymlink != 0 {
 			continue
 		}
 		if !strings.HasSuffix(e.Name(), ".md") {
