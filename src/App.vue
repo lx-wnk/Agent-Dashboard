@@ -15,6 +15,7 @@ import PipelineBoard from './components/PipelineBoard.vue'
 import RefinementChat from './components/RefinementChat.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
+import SystemMetricsPanel from './components/SystemMetricsPanel.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
 import OfflineBadge from './components/OfflineBadge.vue'
@@ -294,6 +295,7 @@ onMounted(fetchQuota)
     </header>
 
     <div class="shrink-0"><ResourceBar /></div>
+    <div class="shrink-0"><SystemMetricsPanel /></div>
     <div class="shrink-0"><CostTrend :trend="costTrend" /></div>
 
     <div v-if="scriptPath" class="shrink-0 flex items-center gap-2 px-6 py-1.5 bg-card border-b border-line text-xs">

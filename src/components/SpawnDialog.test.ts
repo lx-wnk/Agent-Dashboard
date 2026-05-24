@@ -86,7 +86,7 @@ describe('spawnDialog', () => {
     await flushPromises()
     await flushPromises()
 
-    const cwdInput = document.querySelector('[data-testid="spawn-cwd-wrap"] input') as HTMLInputElement
+    const cwdInput = document.querySelector('[data-testid="spawn-cwd-wrap"]') as HTMLInputElement
     expect(cwdInput).not.toBeNull()
     expect(cwdInput.value).toBe('/home/u/alpha')
 
@@ -105,7 +105,7 @@ describe('spawnDialog', () => {
     await flushPromises()
     await flushPromises()
 
-    const promptInput = document.querySelector('[data-testid="spawn-prompt-wrap"] textarea') as HTMLTextAreaElement
+    const promptInput = document.querySelector('[data-testid="spawn-prompt-wrap"]') as HTMLTextAreaElement
     expect(promptInput).not.toBeNull()
     setInputValue(promptInput, 'do a thing')
     await flushPromises()
