@@ -157,12 +157,21 @@ The Go backend enforces the same layering intent as the TypeScript rules above, 
 ```
 cmd/serve/main.go + di.go   ← composition root only
         │
-        ├── api/           may import: db/repo, db/rawrepo, auth, mcp, pipeline (ProgressOpts + allowlisted helpers — see table below), plugin, sse, merger, config
-        ├── mcp/tools/     may import: db/repo, pipeline (ProgressOpts + allowlisted helpers), sse
-        ├── pipeline/      may import: db/repo, db/ent, auth, config, channelconfig, sdk (types only)
+        ├── api/           may import: db/repo, db/rawrepo, auth, mcp, pipeline (ProgressOpts + allowlisted helpers — see table below), plugin, sse, merger, config, services
+        ├── mcp/tools/     may import: db/repo, pipeline (ProgressOpts + allowlisted helpers), sse, services
+        ├── pipeline/      may import: db/repo, db/ent, auth, config, channelconfig, sdk (types only), services
+        ├── services/      may import: db/repo, db/ent, auth, config, paths, platform, sdk (types only); never imports pipeline/, api/, mcp/, or plugin/ at runtime
         ├── db/repo        may import: db/ent only
         └── plugin/        may import: auth only
 ```
+
+`services/` mirrors the TypeScript Rule 3 above: it hosts stateless
+helpers (worktree manager, spawner resolver, resource recommender,
+approval utils) that may be composed by routes, MCP tools, and the
+pipeline itself, but must never reach back into those layers at runtime.
+Type-only imports from `pipeline/` are permitted so a service can express
+its inputs/outputs in pipeline terms without taking a runtime dependency
+on the orchestrator.
 
 ### Runtime import whitelist for routes (api/*) and mcp/*
 
