@@ -81,8 +81,61 @@ func claudeProjectsDir() string {
 
 // AllClaudeConfigDirs returns all Claude config directories to search.
 // Exported for use by packages that need JSONL file discovery (e.g., analytics).
+// Deprecated: use AllAgentConfigDirs for multi-provider discovery.
 func AllClaudeConfigDirs() []string {
 	return allClaudeConfigDirs()
+}
+
+// ProviderConfigDir associates a provider identifier with a config directory path.
+type ProviderConfigDir struct {
+	Provider sdk.Provider
+	Path     string
+}
+
+// AllAgentConfigDirs returns config directories for all supported providers.
+// Claude directories are listed first; Codex (~/.codex or CODEX_HOME) and
+// Gemini (~/.gemini) are appended when present on disk.
+// Missing directories are silently skipped — no error is returned.
+func AllAgentConfigDirs() []ProviderConfigDir {
+	home, _ := os.UserHomeDir()
+	var result []ProviderConfigDir
+
+	// Claude: all configured dirs
+	for _, d := range allClaudeConfigDirs() {
+		result = append(result, ProviderConfigDir{Provider: sdk.ProviderClaude, Path: d})
+	}
+
+	// Codex: ~/.codex or $CODEX_HOME
+	// Session structure: ~/.codex/projects/{encoded}/{sessionId}.jsonl  (best-guess, research-confirmed absent)
+	// If CODEX_HOME is set, prefer it; otherwise fall back to ~/.codex.
+	// Note: as of 2026-05, the Codex CLI (openai/codex) does not yet write JSONL
+	// session logs; this detection is a forward-compatible stub that will activate
+	// once Codex supports local session persistence.
+	codexDir := os.Getenv("CODEX_HOME")
+	if codexDir == "" {
+		codexDir = filepath.Join(home, ".codex")
+	}
+	if dirExists(codexDir) {
+		result = append(result, ProviderConfigDir{Provider: sdk.ProviderCodex, Path: codexDir})
+	}
+
+	// Gemini CLI: ~/.gemini
+	// Session structure: ~/.gemini/projects/{encoded}/{sessionId}.jsonl  (best-guess)
+	// Note: as of 2026-05, the Gemini CLI (google-gemini/gemini-cli) stores sessions
+	// under ~/.gemini/tmp/{sessionId}/ as markdown, not JSONL. This stub activates
+	// if/when Gemini CLI adopts JSONL-compatible session logs.
+	geminiDir := filepath.Join(home, ".gemini")
+	if dirExists(geminiDir) {
+		result = append(result, ProviderConfigDir{Provider: sdk.ProviderGemini, Path: geminiDir})
+	}
+
+	return result
+}
+
+// dirExists reports whether path exists and is a directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // ClaudeProjectsDir returns the Claude projects directory — exported for use by pipeline package.
