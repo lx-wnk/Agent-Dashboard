@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -23,6 +24,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
 const (
@@ -63,6 +65,7 @@ type SpawnManager struct {
 	rateLimitMax    int
 	rateLimitWindow time.Duration
 	spawnerRepo     repo.SpawnerRepo
+	spawnPolicy     services.SpawnPolicy
 
 	mu           sync.Mutex
 	userAttempts map[string][]time.Time // per-user sliding window keyed by JWT sub (or "__global__" in bypass mode)
@@ -70,17 +73,23 @@ type SpawnManager struct {
 }
 
 // NewSpawnManager creates a SpawnManager with the given rate limit config.
-func NewSpawnManager(maxSpawns int, windowMs int, spawnerRepo repo.SpawnerRepo) *SpawnManager {
+// policy controls which working directories may be used as spawn cwd; pass nil
+// to enforce only the sensitive-dir blacklist (development / bypass-auth mode).
+func NewSpawnManager(maxSpawns int, windowMs int, spawnerRepo repo.SpawnerRepo, policy services.SpawnPolicy) *SpawnManager {
 	if maxSpawns <= 0 {
 		maxSpawns = 5
 	}
 	if windowMs <= 0 {
 		windowMs = 60_000
 	}
+	if policy == nil {
+		policy = services.NewSpawnPolicy(nil)
+	}
 	return &SpawnManager{
 		rateLimitMax:    maxSpawns,
 		rateLimitWindow: time.Duration(windowMs) * time.Millisecond,
 		spawnerRepo:     spawnerRepo,
+		spawnPolicy:     policy,
 		userAttempts:    make(map[string][]time.Time),
 		spawnStore:      make(map[int]*SpawnStatus),
 	}
@@ -130,15 +139,8 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	if _, err := os.Stat(cwd); err != nil {
 		return 0, fmt.Errorf("directory does not exist: %s", cwd)
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		cwdAbs, _ := filepath.Abs(cwd)
-		if real, err := filepath.EvalSymlinks(cwdAbs); err == nil {
-			cwdAbs = real
-		}
-		homeAbs, _ := filepath.Abs(home)
-		if !strings.HasPrefix(cwdAbs+string(filepath.Separator), homeAbs+string(filepath.Separator)) {
-			return 0, fmt.Errorf("cwd must be within the user home directory")
-		}
+	if err := m.spawnPolicy.Allow(context.Background(), cwd); err != nil {
+		return 0, err
 	}
 	model, _ := body["model"].(string)
 	systemPrompt, _ := body["systemPrompt"].(string)
@@ -447,8 +449,9 @@ func (h *SpawnHandler) Spawn(w http.ResponseWriter, r *http.Request) {
 	pid, err := h.manager.Spawn(sub, body)
 	if err != nil {
 		code := http.StatusBadRequest
-		if strings.HasPrefix(err.Error(), "spawn failed") || strings.HasPrefix(err.Error(), "directory does not exist") {
-			code = http.StatusBadRequest
+		if errors.Is(err, services.ErrCwdBlacklisted) || errors.Is(err, services.ErrCwdNotAllowed) {
+			slog.Warn("spawn rejected", "cwd", body["cwd"], "user", sub, "reason", err.Error())
+			code = http.StatusForbidden
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
