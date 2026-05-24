@@ -63,7 +63,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
           <span class="font-semibold text-sm text-fg">{{ agent.projectName }}</span>
           <MachineBadge v-if="agent.machine" :machine="agent.machine" />
-          <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
+          <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ shortModel(agent.model ?? null) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
         </div>
         <button type="button" class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg" @click="emit('close')">
           ✕
