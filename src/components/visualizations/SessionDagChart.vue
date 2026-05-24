@@ -13,6 +13,11 @@ const svgRef = ref<SVGSVGElement | null>(null)
 
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
 
+// Holds the active force simulation so render() can stop the previous one
+// before starting a fresh tick loop, and so onUnmounted can halt any in-
+// flight alpha decay when the component is torn down.
+let activeSim: d3.Simulation<DAGNodeFlat, DAGLinkFlat> | null = null
+
 interface DAGNodeFlat {
   id: string
   type: string
@@ -38,6 +43,11 @@ const NODE_COLORS: Record<string, string> = {
 function render() {
   if (!svgRef.value || !props.data)
     return
+  // Halt any prior simulation before drawing — d3 otherwise keeps the
+  // alpha timer alive and accumulates tick handlers each time props.data
+  // changes.
+  activeSim?.stop()
+  activeSim = null
   const svg = d3.select(svgRef.value)
   svg.selectAll('*').remove()
   if (props.data.nodes.length === 0)
@@ -55,6 +65,7 @@ function render() {
     .force('charge', d3.forceManyBody<DAGNodeFlat>().strength(-220))
     .force('center', d3.forceCenter(width / 2, height / 2))
     .force('collision', d3.forceCollide<DAGNodeFlat>(18))
+  activeSim = sim
 
   const linkSel = svg.append('g')
     .selectAll('line')
@@ -92,6 +103,8 @@ function render() {
 watch(() => props.data, render, { immediate: true })
 
 onUnmounted(() => {
+  activeSim?.stop()
+  activeSim = null
   if (svgRef.value)
     d3.select(svgRef.value).selectAll('*').remove()
 })

@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 import type { CoOccurrenceData, DAGData, SankeyData, SpawnTreeData } from '../sdk.generated'
-import { reactive, shallowRef, watch } from 'vue'
+import { getCurrentScope, onScopeDispose, reactive, shallowRef, watch } from 'vue'
 
 export interface WorkflowsFilters {
   sessionId?: string
@@ -145,6 +145,13 @@ export function useWorkflows(filters: Ref<WorkflowsFilters>): UseWorkflowsReturn
     abortAll()
     void fetchTab(activeTab.value)
   }, { deep: true })
+
+  // Abort all outstanding fetches when the owning component unmounts so
+  // their .then/.catch handlers don't write into reactive state that the
+  // consumer has already torn down. Only registers when called inside a
+  // component setup (getCurrentScope() is non-null).
+  if (getCurrentScope())
+    onScopeDispose(abortAll)
 
   // Kick off the first fetch on the default tab.
   void fetchTab(activeTab.value)
