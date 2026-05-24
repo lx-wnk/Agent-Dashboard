@@ -175,7 +175,10 @@ func (p *httpOAuthProvider) ExchangeCode(ctx context.Context, code, _ string) (s
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("ExchangeCode: read body: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("ExchangeCode: HTTP %d", resp.StatusCode)
 	}
@@ -201,7 +204,10 @@ func (p *httpOAuthProvider) GetUser(ctx context.Context, accessToken string) (*a
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("GetUser: read body: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GetUser: HTTP %d", resp.StatusCode)
 	}
@@ -227,7 +233,7 @@ func (p *httpOAuthProvider) GetUser(ctx context.Context, accessToken string) (*a
 //   - code→token exchange via mock GitHub token endpoint
 //   - user profile fetched via mock GitHub user endpoint
 //   - auth_token JWT cookie set with HttpOnly, correct SameSite and Secure flags
-//   - GET /api/me returns the expected user after the cookie is set
+//   - oauth_state cookie cleared (MaxAge < 0) after consumption
 func TestHandler_Callback_HappyPath(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -292,11 +298,14 @@ func TestHandler_Callback_HappyPath(t *testing.T) {
 			require.Equal(t, http.StatusFound, w.Code)
 			require.Equal(t, "/", w.Header().Get("Location"))
 
-			// Locate the auth_token cookie in the response.
-			var authCookie *http.Cookie
+			// Locate the auth_token and oauth_state cookies in the response.
+			var authCookie, stateCookie *http.Cookie
 			for _, c := range w.Result().Cookies() {
-				if c.Name == "auth_token" {
+				switch c.Name {
+				case "auth_token":
 					authCookie = c
+				case "oauth_state":
+					stateCookie = c
 				}
 			}
 			require.NotNil(t, authCookie, "auth_token cookie must be set")
@@ -306,6 +315,11 @@ func TestHandler_Callback_HappyPath(t *testing.T) {
 			require.Equal(t, http.SameSiteStrictMode, authCookie.SameSite,
 				"SameSite must be Strict for session cookies")
 			require.Greater(t, authCookie.MaxAge, 0, "MaxAge must be positive")
+
+			// oauth_state must be cleared after consumption to prevent replay.
+			require.NotNil(t, stateCookie, "oauth_state cookie must be cleared on response")
+			require.Less(t, stateCookie.MaxAge, 0,
+				"oauth_state MaxAge must be negative to instruct browser to delete it")
 
 			// JWT must be verifiable with the same secret.
 			payload, err := authpkg.VerifyJWT(authCookie.Value, jwtSecret)
