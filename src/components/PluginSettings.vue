@@ -1,31 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { usePlugins } from '../composables/usePlugins'
 
-interface PluginInfo {
-  id: string
-  capabilities: string[]
-}
-
-const plugins = ref<PluginInfo[]>([])
-const loading = ref(true)
-const error = ref<string | null>(null)
+const { plugins, loading, error } = usePlugins()
 
 const CAP_LABELS: Record<string, string> = {
   auth_provider: 'Auth Provider',
   route_extension: 'Route Extension',
 }
-
-onMounted(async () => {
-  try {
-    const res = await fetch('/api/settings/plugins', { credentials: 'same-origin' })
-    if (!res.ok) throw new Error(`Failed to load plugins (HTTP ${res.status}: ${res.statusText})`)
-    plugins.value = await res.json()
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to load plugins'
-  } finally {
-    loading.value = false
-  }
-})
 </script>
 
 <template>

@@ -1,16 +1,7 @@
 <script setup lang="ts">
-import { onUnmounted, ref } from 'vue'
-import { useVisibilityPolling } from '../composables/useVisibilityPolling'
+import { useSystemResources } from '../composables/useSystemResources'
 
-interface SystemInfo {
-  cpu: { usage: number, cores: number, model: string }
-  memory: { total: number, used: number, available: number, usagePercent: number }
-  disk: { total: number, used: number, available: number, usagePercent: number, mount: string }
-  loadAvg: number[]
-  uptime: number
-}
-
-const info = ref<SystemInfo | null>(null)
+const { info } = useSystemResources()
 
 function fmtBytes(bytes: number): string {
   if (bytes >= 1e12)
@@ -19,20 +10,6 @@ function fmtBytes(bytes: number): string {
     return `${(bytes / 1e9).toFixed(1)} GB`
   return `${(bytes / 1e6).toFixed(0)} MB`
 }
-
-const abortCtrl = new AbortController()
-onUnmounted(() => abortCtrl.abort())
-
-async function poll() {
-  try {
-    const res = await fetch('/api/system', { signal: abortCtrl.signal })
-    if (res.ok && !abortCtrl.signal.aborted)
-      info.value = await res.json()
-  }
-  catch { /* ignore */ }
-}
-
-useVisibilityPolling(poll, 15000)
 </script>
 
 <template>

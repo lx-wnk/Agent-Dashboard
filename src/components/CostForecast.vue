@@ -1,36 +1,13 @@
 <script setup lang="ts">
 import * as d3 from 'd3'
-import { onMounted, ref } from 'vue'
-
-interface TrendPoint { t: number, y: number }
-interface ForecastPoint { t: number, projectedCost: number }
-interface Alert { level: 'warn' | 'critical', message: string }
+import { ref, watch } from 'vue'
+import { useCostForecast } from '../composables/useCostForecast'
+import type { ForecastTrendPoint, ForecastPoint } from '../composables/useCostForecast'
 
 const svgRef = ref<SVGSVGElement | null>(null)
-const alerts = ref<Alert[]>([])
-const loading = ref(false)
-const error = ref<string | null>(null)
+const { trend, forecast, alerts, loading, error } = useCostForecast()
 
-async function fetchAndRender() {
-  loading.value = true
-  error.value = null
-  try {
-    const res = await fetch('/api/analytics/cost-forecast')
-    if (!res.ok)
-      throw new Error(await res.text())
-    const data = await res.json() as { trend: TrendPoint[], forecast: ForecastPoint[], alerts: Alert[] }
-    alerts.value = data.alerts
-    renderChart(data.trend, data.forecast)
-  }
-  catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Failed to load forecast'
-  }
-  finally {
-    loading.value = false
-  }
-}
-
-function renderChart(trend: TrendPoint[], forecast: ForecastPoint[]) {
+function renderChart(trendData: ForecastTrendPoint[], forecastData: ForecastPoint[]) {
   if (!svgRef.value)
     return
 
@@ -44,8 +21,8 @@ function renderChart(trend: TrendPoint[], forecast: ForecastPoint[]) {
   svg.attr('height', H + margin.top + margin.bottom)
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
-  const allT = [...trend.map(p => p.t), ...forecast.map(p => p.t)]
-  const allY = [...trend.map(p => p.y), ...forecast.map(p => p.projectedCost)]
+  const allT = [...trendData.map(p => p.t), ...forecastData.map(p => p.t)]
+  const allY = [...trendData.map(p => p.y), ...forecastData.map(p => p.projectedCost)]
   const x = d3.scaleTime()
     .domain([new Date(Math.min(...allT)), new Date(Math.max(...allT))])
     .range([0, W])
@@ -53,9 +30,9 @@ function renderChart(trend: TrendPoint[], forecast: ForecastPoint[]) {
     .domain([0, Math.max(0.01, ...allY) * 1.1])
     .range([H, 0])
 
-  const trendLine = d3.line<TrendPoint>().x(d => x(new Date(d.t))).y(d => y(d.y))
+  const trendLine = d3.line<ForecastTrendPoint>().x(d => x(new Date(d.t))).y(d => y(d.y))
   g.append('path')
-    .datum(trend)
+    .datum(trendData)
     .attr('fill', 'none')
     .attr('stroke', '#3b82f6')
     .attr('stroke-width', 2)
@@ -64,9 +41,9 @@ function renderChart(trend: TrendPoint[], forecast: ForecastPoint[]) {
   const forecastLine = d3.line<ForecastPoint>()
     .x(d => x(new Date(d.t)))
     .y(d => y(d.projectedCost))
-  const bridge: ForecastPoint[] = trend.length > 0 && forecast.length > 0
-    ? [{ t: trend[trend.length - 1].t, projectedCost: trend[trend.length - 1].y }, ...forecast]
-    : forecast
+  const bridge: ForecastPoint[] = trendData.length > 0 && forecastData.length > 0
+    ? [{ t: trendData[trendData.length - 1].t, projectedCost: trendData[trendData.length - 1].y }, ...forecastData]
+    : forecastData
   g.append('path')
     .datum(bridge)
     .attr('fill', 'none')
@@ -87,7 +64,11 @@ function renderChart(trend: TrendPoint[], forecast: ForecastPoint[]) {
     .attr('font-size', '10px')
 }
 
-onMounted(fetchAndRender)
+// Re-render chart whenever trend/forecast data changes after fetch completes
+watch([trend, forecast], ([t, f]) => {
+  if (t.length > 0 || f.length > 0)
+    renderChart(t, f)
+})
 </script>
 
 <template>

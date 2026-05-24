@@ -3,26 +3,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { formatCost, shortModel } from '../utils/format'
 import AppModal from './ui/AppModal.vue'
 import SessionDetailModal from './SessionDetailModal.vue'
-
-interface SessionInfo {
-  sessionId: string
-  projectPath: string
-  projectName: string
-  lastModified: string
-  model: string | null
-  firstPrompt: string | null
-  lastResponse: string | null
-  totalInputTokens: number
-  totalOutputTokens: number
-  costEstimate: number
-  isRunning: boolean
-}
+import { useSessions } from '../composables/useSessions'
+import type { SessionInfo } from '../composables/useSessions'
 
 const props = defineProps<{ open: boolean, homeDir: string }>()
 const emit = defineEmits<{ close: [] }>()
 
-const sessions = ref<SessionInfo[]>([])
-const isLoading = ref(false)
+const { sessions, loading: isLoading, refetch: loadSessions } = useSessions()
+
 const search = ref('')
 const selectedSession = ref<SessionInfo | null>(null)
 
@@ -59,17 +47,6 @@ function shortenPath(path: string): string {
     return `~${path.slice(props.homeDir.length)}`
   }
   return path
-}
-
-async function loadSessions() {
-  isLoading.value = true
-  try {
-    const res = await fetch('/api/sessions')
-    if (res.ok)
-      sessions.value = await res.json()
-  }
-  catch { /* ignore */ }
-  isLoading.value = false
 }
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null
