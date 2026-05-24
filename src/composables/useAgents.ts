@@ -9,7 +9,7 @@ export interface TrendPoint {
   tokens: number
 }
 
-type ViewMode = 'list' | 'cards' | 'pipeline'
+type ViewMode = 'list' | 'cards' | 'pipeline' | 'config-explorer'
 
 const agents = shallowRef<Agent[]>([])
 const costTrend = ref<TrendPoint[]>([])
@@ -20,7 +20,7 @@ const searchQuery = ref('')
 const debouncedQuery = ref('')
 const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('agent-view-mode') : null
 const viewMode = ref<ViewMode>(
-  stored === 'list' || stored === 'cards' || stored === 'pipeline' ? stored : 'cards',
+  stored === 'list' || stored === 'cards' || stored === 'pipeline' || stored === 'config-explorer' ? stored : 'cards',
 )
 
 let eventSource: EventSource | null = null

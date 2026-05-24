@@ -9,6 +9,7 @@ import ApiKeySettings from './components/ApiKeySettings.vue'
 import CostTrend from './components/CostTrend.vue'
 import EditGateModal from './components/EditGateModal.vue'
 import LoginPage from './components/LoginPage.vue'
+import ConfigExplorer from './components/ConfigExplorer.vue'
 import PipelineBoard from './components/PipelineBoard.vue'
 import RefinementChat from './components/RefinementChat.vue'
 import ResourceBar from './components/ResourceBar.vue'
@@ -228,6 +229,15 @@ onMounted(fetchQuota)
         >
           Kanban
         </button>
+        <button
+          type="button"
+          class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
+          :class="viewMode === 'config-explorer' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
+          title="Browse installed skills, slash commands, and memory files"
+          @click="viewMode = 'config-explorer'"
+        >
+          Config
+        </button>
       </div>
       <button
         type="button"
@@ -290,7 +300,7 @@ onMounted(fetchQuota)
     </div>
 
     <div
-      v-show="viewMode !== 'pipeline'"
+      v-show="viewMode !== 'pipeline' && viewMode !== 'config-explorer'"
       class="shrink-0 flex items-center gap-1 px-6 py-2 border-b border-line bg-card"
     >
       <button
@@ -328,6 +338,7 @@ onMounted(fetchQuota)
         @select="selectTask"
         @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
       />
+      <ConfigExplorer v-else-if="viewMode === 'config-explorer'" />
       <template v-else>
         <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
         <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
