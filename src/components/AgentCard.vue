@@ -43,7 +43,7 @@ const healthChipClass = computed(() => {
         <AppBadge :variant="agent.status" />
         <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
         <span class="font-semibold text-[13px] text-fg whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
-        <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ shortModel(agent.model) }} · {{ formatCost(agent.costEstimate) }}</span>
+        <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ shortModel(agent.model ?? null) }} · {{ formatCost(agent.costEstimate) }}</span>
         <span
           class="text-[10px] font-mono px-1.5 py-0.5 rounded"
           :class="healthChipClass"

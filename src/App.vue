@@ -4,8 +4,10 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
+import BacklogForm from './components/BacklogForm.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
+import AppModal from './components/ui/AppModal.vue'
 import CostTrend from './components/CostTrend.vue'
 import EditGateModal from './components/EditGateModal.vue'
 import LoginPage from './components/LoginPage.vue'
@@ -13,6 +15,7 @@ import PipelineBoard from './components/PipelineBoard.vue'
 import RefinementChat from './components/RefinementChat.vue'
 import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
+import SystemMetricsPanel from './components/SystemMetricsPanel.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
 import OfflineBadge from './components/OfflineBadge.vue'
@@ -65,12 +68,22 @@ watch(loaded, (isLoaded) => {
 const showSpawnDialog = ref(false)
 const activeConceptTask = ref<PipelineTask | null>(null)
 const showRefinementChat = ref(false)
+const showBacklogForm = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
 
 function openNewTask() {
   activeConceptTask.value = null
   showRefinementChat.value = true
+}
+
+function openBacklogForm() {
+  showBacklogForm.value = true
+}
+
+function onBacklogTaskCreated(task: PipelineTask) {
+  showBacklogForm.value = false
+  selectTask(task)
 }
 const scriptPath = ref('')
 const homeDir = ref('')
@@ -245,6 +258,15 @@ onMounted(fetchQuota)
         + New Task
       </button>
       <button
+        v-if="viewMode === 'pipeline'"
+        type="button"
+        class="bg-raised text-fg border border-line rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
+        data-testid="open-backlog-form"
+        @click="openBacklogForm"
+      >
+        + Backlog
+      </button>
+      <button
         v-else
         type="button"
         class="bg-green-600 text-white border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
@@ -273,6 +295,7 @@ onMounted(fetchQuota)
     </header>
 
     <div class="shrink-0"><ResourceBar /></div>
+    <div class="shrink-0"><SystemMetricsPanel /></div>
     <div class="shrink-0"><CostTrend :trend="costTrend" /></div>
 
     <div v-if="scriptPath" class="shrink-0 flex items-center gap-2 px-6 py-1.5 bg-card border-b border-line text-xs">
@@ -377,6 +400,24 @@ onMounted(fetchQuota)
       @close="showRefinementChat = false; activeConceptTask = null"
       @confirmed="showRefinementChat = false; activeConceptTask = null"
     />
+    <AppModal :open="showBacklogForm" @close="showBacklogForm = false">
+      <div class="bg-app border border-line rounded-lg p-5 w-full max-w-xl">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold text-fg">
+            New Backlog Task
+          </h2>
+          <button
+            type="button"
+            class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg"
+            data-testid="close-backlog-form"
+            @click="showBacklogForm = false"
+          >
+            ✕
+          </button>
+        </div>
+        <BacklogForm @created="onBacklogTaskCreated" />
+      </div>
+    </AppModal>
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
     <EditGateModal />

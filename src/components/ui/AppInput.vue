@@ -1,3 +1,9 @@
+<script lang="ts">
+export default {
+  inheritAttrs: false,
+}
+</script>
+
 <script setup lang="ts">
 import { useId } from 'vue'
 
@@ -45,6 +51,7 @@ const resizeClass: Record<ResizeProp, string> = {
     <textarea
       v-if="type === 'textarea'"
       :id="inputId"
+      v-bind="$attrs"
       :value="modelValue"
       :placeholder="placeholder"
       :disabled="disabled"
@@ -58,6 +65,7 @@ const resizeClass: Record<ResizeProp, string> = {
     <input
       v-else
       :id="inputId"
+      v-bind="$attrs"
       :value="modelValue"
       :placeholder="placeholder"
       :disabled="disabled"

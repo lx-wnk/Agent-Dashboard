@@ -42,7 +42,7 @@ const { getIdentity } = useAgentIdentity()
       {{ agent.currentAction || '—' }}
     </td>
     <td class="px-3 py-2.5 border-b border-line text-xs text-fg-mute whitespace-nowrap">
-      {{ shortModel(agent.model) }}
+      {{ shortModel(agent.model ?? null) }}
     </td>
     <td class="px-3 py-2.5 border-b border-line text-xs font-mono text-fg-mute whitespace-nowrap">
       {{ formatTokens(totalTokenCount(agent.tokenUsage)) }}
