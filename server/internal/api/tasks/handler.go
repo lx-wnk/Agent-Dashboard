@@ -609,10 +609,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
+	sse.WriteHeaders(w)
 	flusher.Flush()
 
 	sub := h.broadcaster.Subscribe()

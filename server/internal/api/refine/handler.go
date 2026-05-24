@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
 // Deps holds the dependencies for Handler.
@@ -171,10 +172,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set SSE headers before starting the stream.
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.Header().Set("Connection", "keep-alive")
+	sse.WriteHeaders(w)
 
 	flusher, canFlush := w.(http.Flusher)
 
