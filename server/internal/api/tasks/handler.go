@@ -42,6 +42,7 @@ type Handler struct {
 	srRepo            repo.StageRunRepo
 	permRepo          repo.PermissionRepo
 	auditRepo         repo.AuditRepo
+	auditEventRepo    repo.AuditEventRepo
 	cfgRepo           repo.PipelineConfigRepo
 	depRepo           repo.DependencyRepo
 	projectRepo       repo.ProjectRepo
@@ -58,6 +59,7 @@ type Deps struct {
 	SRRepo            repo.StageRunRepo
 	PermRepo          repo.PermissionRepo
 	AuditRepo         repo.AuditRepo
+	AuditEventRepo    repo.AuditEventRepo
 	CfgRepo           repo.PipelineConfigRepo
 	DepRepo           repo.DependencyRepo
 	ProjectRepo       repo.ProjectRepo
@@ -74,6 +76,7 @@ func NewHandler(deps Deps) *Handler {
 		srRepo:            deps.SRRepo,
 		permRepo:          deps.PermRepo,
 		auditRepo:         deps.AuditRepo,
+		auditEventRepo:    deps.AuditEventRepo,
 		cfgRepo:           deps.CfgRepo,
 		depRepo:           deps.DepRepo,
 		projectRepo:       deps.ProjectRepo,

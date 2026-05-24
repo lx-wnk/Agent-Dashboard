@@ -7,6 +7,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
@@ -47,6 +48,12 @@ func init() {
 	apikeyDescCreatedAt := apikeyFields[5].Descriptor()
 	// apikey.DefaultCreatedAt holds the default value on creation for the created_at field.
 	apikey.DefaultCreatedAt = apikeyDescCreatedAt.Default.(func() time.Time)
+	auditeventFields := schema.AuditEvent{}.Fields()
+	_ = auditeventFields
+	// auditeventDescTs is the schema descriptor for ts field.
+	auditeventDescTs := auditeventFields[1].Descriptor()
+	// auditevent.DefaultTs holds the default value on creation for the ts field.
+	auditevent.DefaultTs = auditeventDescTs.Default.(func() time.Time)
 	auditlogFields := schema.AuditLog{}.Fields()
 	_ = auditlogFields
 	// auditlogDescTimestamp is the schema descriptor for timestamp field.
