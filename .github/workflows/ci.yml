@@ -95,19 +95,26 @@ jobs:
         run: GOWORK=off golangci-lint run ./...
 
   security:
-    name: Security
+    name: Security (${{ matrix.module }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - server
+          - sdk
+          - plugins/github-oauth
+          - plugins/office365-oauth
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: ${{ matrix.module }}/go.mod
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          for mod in server sdk plugins/github-oauth plugins/office365-oauth; do
-            echo "=== $mod ===" && (cd "$mod" && GOWORK=off govulncheck ./...)
-          done
+        working-directory: ${{ matrix.module }}
+        run: GOWORK=off govulncheck ./...
 
   build:
     name: Build
