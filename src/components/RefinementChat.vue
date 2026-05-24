@@ -1,17 +1,14 @@
 <script setup lang="ts">
 import type { ImageAttachment } from '../composables/useRefinementChat'
 import type { PipelineTask } from '../types'
-import DOMPurify from 'dompurify'
-import { Marked } from 'marked'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
 import { createTask } from '../composables/useTasks'
+import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
 
 const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
 
 const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask], taskCreated: [task: PipelineTask] }>()
-
-const md = new Marked({ breaks: true, gfm: true })
 
 const PHASE_DONE_RE = /__phase_done:\s*\w+/g
 const REFINED_TITLE_RE = /^\*{0,2}[Rr]efined\s+[Tt]itle[^\n]*\n?/gm
@@ -24,8 +21,10 @@ function cleanContent(text: string): string {
     .trimEnd()
 }
 
+// Component-specific preprocessing (cleanContent) runs BEFORE the shared
+// DOMPurify-sanitized markdown pipeline. See `src/utils/markdown.ts`.
 function renderMarkdown(text: string): string {
-  return DOMPurify.sanitize(md.parse(cleanContent(text), { async: false }) as string)
+  return renderMarkdownShared(cleanContent(text))
 }
 
 const currentTask = ref<PipelineTask | null>(props.task)

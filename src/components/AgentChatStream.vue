@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
-import DOMPurify from 'dompurify'
-import { Marked } from 'marked'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { renderMarkdown } from '../utils/markdown'
 
 interface ToolGroup {
   kind: 'tool_group'
@@ -29,12 +28,6 @@ let lastReplyTimestamp: string | null = null
 let fetchingReplies = false
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 const channelReplies = ref<OutputMessage[]>([])
-
-const md = new Marked({ breaks: true, gfm: true })
-
-function renderMarkdown(text: string): string {
-  return DOMPurify.sanitize(md.parse(text, { async: false }) as string)
-}
 
 // UX-36: helpers for <time> datetime attribute and display value.
 function isoTimestamp(ts: string | undefined): string {
