@@ -74,7 +74,6 @@ function handleVisibilityChange() {
     }
   }
   else {
-    fetchAgents()
     startSSE()
   }
 }
