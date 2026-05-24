@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import MachineBadge from './MachineBadge.vue'
+import ProviderBadge from './ProviderBadge.vue'
 import PromptInput from './PromptInput.vue'
 import AppBadge from './ui/AppBadge.vue'
 
@@ -43,7 +44,12 @@ const healthChipClass = computed(() => {
         <AppBadge :variant="agent.status" />
         <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
         <span class="font-semibold text-[13px] text-fg whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
-        <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ shortModel(agent.model ?? null) }} · {{ formatCost(agent.costEstimate) }}</span>
+        <ProviderBadge :provider="agent.provider" />
+        <span class="text-[11px] text-fg-mute whitespace-nowrap">
+          {{ shortModel(agent.model) }} ·
+          <span v-if="agent.costUnknown" title="Cost unknown — no pricing data for this provider/model">?</span>
+          <template v-else>{{ formatCost(agent.costEstimate) }}</template>
+        </span>
         <span
           class="text-[10px] font-mono px-1.5 py-0.5 rounded"
           :class="healthChipClass"

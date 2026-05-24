@@ -57,7 +57,7 @@ onUnmounted(() => {
   if (toastTimer)
     clearTimeout(toastTimer)
 })
-const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
+const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 
 // Start data streams only after auth is confirmed — avoids 401 flood while login page is shown
@@ -345,7 +345,6 @@ onMounted(fetchQuota)
       >
         ≡ List
       </button>
-      <!-- G-E: Cost Analytics chip (append-only) -->
       <button
         type="button"
         class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
@@ -354,6 +353,16 @@ onMounted(fetchQuota)
         @click="viewMode = 'cost-analytics'"
       >
         ◷ Cost Analytics
+      </button>
+      <button
+        type="button"
+        class="ml-2 border border-line px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
+        :class="hideNonClaude ? 'bg-blue-600 text-white border-blue-600' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
+        :title="hideNonClaude ? 'Showing only Claude agents — click to show all' : 'Hide Codex/Gemini agents'"
+        :aria-pressed="hideNonClaude"
+        @click="hideNonClaude = !hideNonClaude"
+      >
+        Claude only
       </button>
     </div>
     <main id="main-content" class="p-6 flex-1 min-h-0 overflow-y-auto">
