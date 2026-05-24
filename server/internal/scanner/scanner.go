@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/platform"
 )
 
@@ -20,7 +21,8 @@ type ProcessInfo struct {
 	CWD             string
 	Uptime          int64 // seconds
 	Command         string
-	ClaudeConfigDir string // value of CLAUDE_CONFIG_DIR in the process env, or "" for default
+	ClaudeConfigDir string       // value of CLAUDE_CONFIG_DIR in the process env, or "" for default
+	Provider        sdk.Provider // detected AI coding CLI provider; defaults to ProviderClaude
 }
 
 var (
@@ -182,7 +184,7 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 			continue
 		}
 		comm := strings.Join(fields[2:], " ")
-		if !strings.HasSuffix(comm, "/claude") && comm != "claude" {
+		if DetectProviderFromCommand(comm) == "" {
 			continue
 		}
 		pid, err := strconv.Atoi(fields[0])
@@ -219,7 +221,33 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 			Uptime:          ParseElapsedTime(r.etime),
 			Command:         r.command,
 			ClaudeConfigDir: configDirs[r.pid],
+			Provider:        DetectProviderFromCommand(r.command),
 		})
 	}
 	return result, nil
+}
+
+// DetectProviderFromCommand maps a process command name to a provider.
+// Matches both bare names (e.g. "claude") and absolute paths
+// (e.g. "/usr/local/bin/codex"). Returns "" when the command does not
+// belong to any supported AI coding CLI.
+func DetectProviderFromCommand(comm string) sdk.Provider {
+	comm = strings.TrimSpace(comm)
+	if comm == "" {
+		return ""
+	}
+	// Strip arguments — only look at argv[0].
+	if i := strings.IndexByte(comm, ' '); i >= 0 {
+		comm = comm[:i]
+	}
+	base := filepath.Base(comm)
+	switch base {
+	case "claude":
+		return sdk.ProviderClaude
+	case "codex":
+		return sdk.ProviderCodex
+	case "gemini":
+		return sdk.ProviderGemini
+	}
+	return ""
 }

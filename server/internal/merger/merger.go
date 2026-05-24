@@ -47,6 +47,29 @@ func errorStatePtr(s sdk.ErrorState) *sdk.ErrorState {
 	return &s
 }
 
+// CostBreakdown holds estimated costs plus the "unknown" sentinel.
+type CostBreakdown struct {
+	Total       float64
+	CacheCreate float64
+	CacheRead   float64
+	Unknown     bool
+}
+
+// EstimateCostForProvider returns the cost breakdown for a session, gated by
+// provider awareness: non-Claude providers without a known pricing entry are
+// flagged as Unknown=true with all costs zeroed. Claude sessions always use
+// the pricing table (with default-model fallback) — unchanged from prior behaviour.
+func EstimateCostForProvider(provider sdk.Provider, usage sdk.TokenUsage, model string) CostBreakdown {
+	if provider != "" && provider != sdk.ProviderClaude && !parser.HasPricing(model) {
+		return CostBreakdown{Unknown: true}
+	}
+	return CostBreakdown{
+		Total:       parser.EstimateCost(usage, model),
+		CacheCreate: parser.EstimateCacheCreationCost(usage, model),
+		CacheRead:   parser.EstimateCacheReadCost(usage, model),
+	}
+}
+
 // GetAgents scans running Claude processes and merges them with session data.
 // Processes with no matching active session are silently skipped.
 func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
@@ -68,13 +91,16 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 				return nil // skip processes with no matching session; zero value left at agents[i]
 			}
 
-			cost := parser.EstimateCost(session.TokenUsage, session.Model)
-			cacheCreate := parser.EstimateCacheCreationCost(session.TokenUsage, session.Model)
-			cacheRead := parser.EstimateCacheReadCost(session.TokenUsage, session.Model)
+			provider := proc.Provider
+			if provider == "" {
+				provider = sdk.ProviderClaude
+			}
+			c := EstimateCostForProvider(provider, session.TokenUsage, session.Model)
 
 			agents[i] = sdk.Agent{
 				PID:                       proc.PID,
 				SessionID:                 session.SessionID,
+				Provider:                  provider,
 				ProjectPath:               proc.CWD,
 				ProjectName:               filepath.Base(proc.CWD),
 				CWD:                       proc.CWD,
@@ -87,9 +113,10 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 				Tasks:                     append(make([]sdk.TaskInfo, 0), session.Tasks...),
 				Subagents:                 []sdk.SubAgent{},
 				TokenUsage:                session.TokenUsage,
-				CostEstimate:              cost,
-				CacheCreationCostEstimate: cacheCreate,
-				CacheReadCostEstimate:     cacheRead,
+				CostEstimate:              c.Total,
+				CacheCreationCostEstimate: c.CacheCreate,
+				CacheReadCostEstimate:     c.CacheRead,
+				CostUnknown:               c.Unknown,
 				Model:                     strPtr(session.Model),
 				ConversationTurns:         session.ConversationTurns,
 				ToolCounts:                session.ToolCounts,
