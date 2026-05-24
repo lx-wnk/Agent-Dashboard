@@ -4,18 +4,17 @@ package projects
 import (
 	"regexp"
 	"strings"
-)
 
-// SlugRE mirrors SLUG_RE in src/utils/validation.ts: lowercase alnum + hyphen,
-// must start with alnum, total length 1..64.
-var SlugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
+)
 
 // ColorRE matches #rgb or #rrggbb hex colors (case-insensitive).
 var ColorRE = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
 // ValidateSlug returns true when s is a valid slug.
+// Delegates to the canonical validation package — do not define a local copy.
 func ValidateSlug(s string) bool {
-	return SlugRE.MatchString(s)
+	return validation.IsValidSlug(s)
 }
 
 // ValidateColor returns true when c is a valid 3- or 6-digit hex color.
