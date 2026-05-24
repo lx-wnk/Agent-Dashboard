@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestBuildSankey_LinearFixture(t *testing.T) {
@@ -164,6 +165,24 @@ func TestBuildSpawnTree_ParentChildFromSubagentDir(t *testing.T) {
 	}
 	for _, id := range []string{parent, child1, child2} {
 		if err := os.WriteFile(filepath.Join(projectDir, id+".jsonl"), parentData, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Force the iteration order that previously triggered a parent-clobber
+	// bug: DiscoverSessions sorts by mtime descending, so making the parent
+	// the newest file means it is processed FIRST. The parent then creates
+	// child recs with .parent set; without the fix, the subsequent child
+	// iterations would overwrite recs[childID] and drop the parent link.
+	// This filesystem-dependent ordering is why CI (different mtime
+	// resolution / filesystem) caught the bug while local mac runs masked it.
+	base := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	mtimes := map[string]time.Time{
+		child1: base,
+		child2: base.Add(time.Minute),
+		parent: base.Add(2 * time.Minute), // newest → processed first
+	}
+	for id, ts := range mtimes {
+		if err := os.Chtimes(filepath.Join(projectDir, id+".jsonl"), ts, ts); err != nil {
 			t.Fatal(err)
 		}
 	}

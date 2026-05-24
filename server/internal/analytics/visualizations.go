@@ -322,7 +322,16 @@ func BuildSpawnTree(ctx context.Context, opts ScanOpts, dirs []string) (sdk.Spaw
 		if err == nil {
 			toolCount = len(calls)
 		}
-		recs[sf.SessionID] = &rec{sessionID: sf.SessionID, toolCount: toolCount}
+		// Preserve any parent already recorded by an earlier iteration —
+		// a sibling that processed this session's parent first would have
+		// created the rec with .parent set. Overwriting unconditionally
+		// would clobber that link whenever DiscoverSessions returns the
+		// parent before the child (filesystem-dependent mtime ordering).
+		if existing, ok := recs[sf.SessionID]; ok {
+			existing.toolCount = toolCount
+		} else {
+			recs[sf.SessionID] = &rec{sessionID: sf.SessionID, toolCount: toolCount}
+		}
 
 		// Look for subagent directories next to this jsonl, plus any
 		// nested subagents/*.jsonl that this session itself spawned.
