@@ -76,6 +76,109 @@ export const ErrorStateRateLimited = "rate_limited";
 export const ErrorStateAuthFailed = "auth_failed";
 export type ErrorState = typeof ErrorStateQuotaExhausted | typeof ErrorStateRateLimited | typeof ErrorStateAuthFailed;
 /**
+ * SankeyNode is one node in the tool-call Sankey diagram. ID equals Name
+ * today but is kept separate so collisions across distinct sources can
+ * later be disambiguated.
+ */
+export interface SankeyNode {
+  id: string;
+  name: string;
+}
+/**
+ * SankeyLink is one directed source→target flow with an aggregated count.
+ */
+export interface SankeyLink {
+  source: string;
+  target: string;
+  value: number /* int */;
+}
+/**
+ * SankeyMeta carries summary counters for the Sankey response.
+ */
+export interface SankeyMeta {
+  sessionCount: number /* int */;
+  callCount: number /* int */;
+}
+/**
+ * SankeyData is the response payload for GET /api/visualizations/sankey.
+ */
+export interface SankeyData {
+  nodes: SankeyNode[];
+  links: SankeyLink[];
+  meta: SankeyMeta;
+}
+/**
+ * DAGNode is one node in the session DAG (tool call, assistant turn, or
+ * user message). The DAG is per-session so IDs are line-local.
+ */
+export interface DAGNode {
+  id: string;
+  type: string; // "tool" | "assistant" | "user"
+  label: string;
+  ts: string; // RFC3339 timestamp, empty if absent
+}
+/**
+ * DAGLink is one edge in the session DAG. Kind is "chrono" for time-
+ * ordered succession or "result" for a tool_use → tool_result match.
+ */
+export interface DAGLink {
+  source: string;
+  target: string;
+  kind: string;
+}
+/**
+ * DAGData is the response payload for GET /api/visualizations/dag.
+ */
+export interface DAGData {
+  nodes: DAGNode[];
+  links: DAGLink[];
+}
+/**
+ * SpawnTreeNode is one session node in the spawn tree. Depth is computed
+ * from the root via BFS. ToolCount and CostCents reflect the session,
+ * not the cumulative subtree.
+ */
+export interface SpawnTreeNode {
+  id: string;
+  label: string;
+  depth: number /* int */;
+  toolCount: number /* int */;
+  costCents: number /* int */;
+}
+/**
+ * SpawnTreeLink is a parent→child spawn relationship.
+ */
+export interface SpawnTreeLink {
+  source: string;
+  target: string;
+}
+/**
+ * SpawnTreeData is the response payload for GET /api/visualizations/spawn-tree.
+ */
+export interface SpawnTreeData {
+  roots: string[];
+  nodes: SpawnTreeNode[];
+  links: SpawnTreeLink[];
+}
+/**
+ * CoOccurrenceMeta carries summary counters for the co-occurrence response.
+ */
+export interface CoOccurrenceMeta {
+  sessionCount: number /* int */;
+  truncated: boolean;
+}
+/**
+ * CoOccurrenceData is the response payload for
+ * GET /api/visualizations/co-occurrence. Matrix is square with side equal
+ * to len(Tools); Matrix[i][j] = sessions containing both Tools[i] and
+ * Tools[j] (diagonal = sessions containing the tool at all).
+ */
+export interface CoOccurrenceData {
+  tools: string[];
+  matrix: number /* int */[][];
+  meta: CoOccurrenceMeta;
+}
+/**
  * BtwMessage is the last assistant text that appeared alongside tool calls.
  * Message is the text content; Response is reserved for future use.
  */

@@ -21,6 +21,7 @@ import SystemMetricsPanel from './components/SystemMetricsPanel.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
 import OfflineBadge from './components/OfflineBadge.vue'
+import WorkflowsView from './components/WorkflowsView.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { usePWA } from './composables/usePWA'
@@ -252,6 +253,15 @@ onMounted(fetchQuota)
         >
           Config
         </button>
+        <button
+          type="button"
+          class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
+          :class="viewMode === 'workflows' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
+          title="D3 workflow visualizations"
+          @click="viewMode = 'workflows'"
+        >
+          Workflows
+        </button>
       </div>
       <button
         type="button"
@@ -278,7 +288,7 @@ onMounted(fetchQuota)
         + Backlog
       </button>
       <button
-        v-else
+        v-else-if="viewMode !== 'workflows' && viewMode !== 'config-explorer'"
         type="button"
         class="bg-green-600 text-white border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
         @click="showSpawnDialog = true"
@@ -324,7 +334,7 @@ onMounted(fetchQuota)
     </div>
 
     <div
-      v-show="viewMode !== 'pipeline' && viewMode !== 'config-explorer'"
+      v-show="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows'"
       class="shrink-0 flex items-center gap-1 px-6 py-2 border-b border-line bg-card"
     >
       <button
@@ -373,8 +383,14 @@ onMounted(fetchQuota)
         @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
       />
       <ConfigExplorer v-else-if="viewMode === 'config-explorer'" />
-      <!-- G-E: cost-analytics view (append-only branch) -->
       <CostAnalyticsView v-else-if="viewMode === 'cost-analytics'" />
+      <WorkflowsView
+        v-else-if="viewMode === 'workflows'"
+        @navigate="(sessionId) => {
+          const a = agents.find(x => x.sessionId === sessionId)
+          if (a) selectAgent(a)
+        }"
+      />
       <template v-else>
         <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
         <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />

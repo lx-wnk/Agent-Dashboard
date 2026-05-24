@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -24,8 +23,6 @@ const (
 	maxPatterns = 20
 	maxFileSize = 10 * 1024 * 1024 // 10 MB per file cap
 )
-
-var toolNameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 
 // patternEntry holds a discovered ngram and its occurrence count.
 type patternEntry struct {
@@ -247,7 +244,7 @@ func parseToolsFromRaw(raw string) []string {
 			if err := json.Unmarshal(rawBlock, &block); err != nil {
 				continue
 			}
-			if block.Type == "tool_use" && toolNameRE.MatchString(block.Name) {
+			if block.Type == "tool_use" && ToolNameRE.MatchString(block.Name) {
 				tools = append(tools, block.Name)
 			}
 		}

@@ -18,8 +18,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
-	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
+	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apiconfig "github.com/lx-wnk/agent-dashboard/server/internal/api/config"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
@@ -36,6 +36,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -68,33 +69,34 @@ type RouterDeps struct {
 	// Ctx is the server-lifetime context. When cancelled (e.g. on shutdown) any
 	// background goroutines started by the router (e.g. debounced rescan) are
 	// also cancelled. If nil, context.Background() is used as a fallback.
-	Ctx                  context.Context
-	Config               RouterConfig
-	AgentBroadcaster     *sse.Broadcaster
-	OAuthProvider        authpkg.OAuthProvider
-	UserRepo             repo.UserRepo
-	ApiKeyRepo           repo.ApiKeyRepo
-	ProjectRepo          repo.ProjectRepo
-	ProjectFolderRepo    repo.ProjectFolderRepo
-	SpawnerRepo          repo.SpawnerRepo
+	Ctx               context.Context
+	Config            RouterConfig
+	AgentBroadcaster  *sse.Broadcaster
+	OAuthProvider     authpkg.OAuthProvider
+	UserRepo          repo.UserRepo
+	ApiKeyRepo        repo.ApiKeyRepo
+	ProjectRepo       repo.ProjectRepo
+	ProjectFolderRepo repo.ProjectFolderRepo
+	SpawnerRepo       repo.SpawnerRepo
 	// TaskProjectOps lets the projects handler check for active tasks and
 	// clear project_id on done/cancelled tasks during DELETE /api/projects/{id}.
 	// May be nil; when nil the project handler skips the active-task check.
-	TaskProjectOps       projects.TaskProjectOps
-	TaskHandler          *tasks.Handler
-	WebPushHandler       *apiwp.Handler
-	RemotesHandler       *remotes.Handler
-	PresetsHandler       *presets.Handler
-	SystemPromptsHandler *systemprompts.Handler
-	SearchHandler        *search.Handler
-	HistoryHandler       *apihistory.Handler
-	RefineHandler        *refineapi.Handler
-	AnalyticsHandler     *apianalytics.Handler
-	CostHandler          *apicost.Handler
-	AdapterHandler       *adapters.Handler
-	MCPHandler           http.Handler
-	ChannelReply         *agents.ChannelReplyHandler
-	PluginRegistry       *plugin.Registry
+	TaskProjectOps        projects.TaskProjectOps
+	TaskHandler           *tasks.Handler
+	WebPushHandler        *apiwp.Handler
+	RemotesHandler        *remotes.Handler
+	PresetsHandler        *presets.Handler
+	SystemPromptsHandler  *systemprompts.Handler
+	SearchHandler         *search.Handler
+	HistoryHandler        *apihistory.Handler
+	RefineHandler         *refineapi.Handler
+	AnalyticsHandler      *apianalytics.Handler
+	CostHandler           *apicost.Handler
+	VisualizationsHandler *visualizations.Handler
+	AdapterHandler        *adapters.Handler
+	MCPHandler            http.Handler
+	ChannelReply          *agents.ChannelReplyHandler
+	PluginRegistry        *plugin.Registry
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -245,6 +247,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.AnalyticsHandler != nil {
 			deps.AnalyticsHandler.Mount(r)
+		}
+
+		if deps.VisualizationsHandler != nil {
+			deps.VisualizationsHandler.Mount(r)
 		}
 
 		if deps.AdapterHandler != nil {
