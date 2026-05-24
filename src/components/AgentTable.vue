@@ -102,23 +102,26 @@ function toggleSubagents(pid: number) {
           <th class="px-3 py-2 bg-app sticky top-0 z-[1] border-b border-line" />
         </tr>
       </thead>
-      <tbody>
-        <template v-for="agent in sortedAgents" :key="agent.pid">
+      <template v-for="agent in sortedAgents" :key="agent.pid">
+        <tbody>
           <AgentRow
             :agent="agent"
             :expanded="expandedPids.has(agent.pid)"
             @select="$emit('select', agent)"
             @toggle-subagents="toggleSubagents(agent.pid)"
           />
-          <template v-if="expandedPids.has(agent.pid)">
-            <SubAgentRow
-              v-for="sub in agent.subagents"
-              :key="sub.id"
-              :subagent="sub"
-            />
-          </template>
-        </template>
-      </tbody>
+        </tbody>
+        <tbody
+          v-if="expandedPids.has(agent.pid)"
+          :id="`subagents-${agent.sessionId}`"
+        >
+          <SubAgentRow
+            v-for="sub in agent.subagents"
+            :key="sub.id"
+            :subagent="sub"
+          />
+        </tbody>
+      </template>
     </table>
     <p v-if="agents.length === 0" class="text-center py-12 text-fg-mute text-sm">
       No running Claude agents found.
