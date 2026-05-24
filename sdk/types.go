@@ -83,6 +83,17 @@ type BtwMessage struct {
 	Response *string `json:"response"`
 }
 
+// WorktreeStatusDTO describes the live git state of a task's worktree.
+// Ahead and Behind are pointers so JSON null is preserved when the base
+// branch cannot be resolved on `origin` (e.g. local-only base).
+type WorktreeStatusDTO struct {
+	Branch    string `json:"branch"`
+	Ahead     *int   `json:"ahead"`
+	Behind    *int   `json:"behind"`
+	Dirty     bool   `json:"dirty"`
+	FileCount int    `json:"fileCount"`
+}
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
 	PID                       int            `json:"pid"`
@@ -118,4 +129,7 @@ type Agent struct {
 	PipelineTaskTitle         string         `json:"pipelineTaskTitle,omitempty"`
 	Machine                   string         `json:"machine,omitempty"`
 	LastBtw                   *BtwMessage    `json:"lastBtw"`
+	// CostUnknown is true when the provider does not expose token counts and
+	// cost cannot be estimated. CostEstimate will be 0 in this case.
+	CostUnknown               bool           `json:"costUnknown,omitempty"`
 }
