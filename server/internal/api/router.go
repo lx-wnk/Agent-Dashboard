@@ -20,6 +20,7 @@ import (
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
+	apiconfig "github.com/lx-wnk/agent-dashboard/server/internal/api/config"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
@@ -256,6 +257,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
+
+		// Config explorer — read-only enumeration of installed skills, slash
+		// commands, and known memory files. No path query params accepted;
+		// enumeration is from fixed filesystem prefixes only.
+		r.Get("/api/config/skills", apiconfig.Skills)
+		r.Get("/api/config/commands", apiconfig.Commands)
+		r.Get("/api/config/memory", apiconfig.Memory)
 
 		// Mount route_extension plugins (if any).
 		if deps.PluginRegistry != nil {
