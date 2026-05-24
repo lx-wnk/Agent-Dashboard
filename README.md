@@ -2,7 +2,23 @@
 
 Real-time monitoring and control dashboard for locally running Claude Code agents. Displays token usage, costs, tool activity, tasks, and subagents — and lets you send instructions or spawn new agents directly from the browser.
 
-![Status](https://img.shields.io/badge/status-active-green)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Vue 3](https://img.shields.io/badge/vue-3-4FC08D?logo=vue.js&logoColor=white)](https://vuejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Status](https://img.shields.io/badge/status-active-brightgreen)](https://github.com/lx-wnk/Agent-Dashboard)
+
+![Dashboard screenshot](./docs/screenshots/dashboard.png)
+
+## Use this if…
+
+- You run multiple Claude Code agents in parallel and want a single pane of glass for all of them
+- You want to track token usage and API-equivalent cost across sessions without sending data to a third-party SaaS
+- You need a structured multi-stage task pipeline (concept → implementation → review → done) with permission gates and parallel execution
+- You want to send follow-up instructions to running agents, spawn new ones, and get browser push notifications — all from a local web UI
+- Privacy matters: the dashboard is **local-first**, binds to `127.0.0.1` only, and makes no outbound connections unless you opt in to an integration
+
+> 📄 [Privacy policy](./PRIVACY.md)
 
 ## Features
 
