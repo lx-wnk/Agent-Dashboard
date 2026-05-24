@@ -111,58 +111,76 @@ async function handleSubmit(): Promise<void> {
       </button>
     </div>
 
-    <input
-      data-testid="details-title"
-      :value="title"
-      placeholder="What should the agent do?"
-      :class="fieldClass"
-      @input="onTitleInput"
-    >
+    <div class="flex flex-col gap-1">
+      <label for="details-title" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Title</label>
+      <input
+        id="details-title"
+        data-testid="details-title"
+        :value="title"
+        placeholder="What should the agent do?"
+        :class="fieldClass"
+        @input="onTitleInput"
+      >
+    </div>
 
-    <input
-      data-testid="details-slug"
-      :value="slug"
-      placeholder="task-slug"
-      :class="fieldClass"
-      @input="onSlugInput"
-    >
+    <div class="flex flex-col gap-1">
+      <label for="details-slug" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Slug</label>
+      <input
+        id="details-slug"
+        data-testid="details-slug"
+        :value="slug"
+        placeholder="task-slug"
+        :class="fieldClass"
+        @input="onSlugInput"
+      >
+    </div>
 
-    <input
-      data-testid="details-cwd"
-      :value="cwd"
-      list="details-cwd-list"
-      placeholder="/path/to/project"
-      :class="fieldClass"
-      @input="onCwdInput"
-    >
-    <datalist id="details-cwd-list">
-      <option v-for="folder in folderSuggestions" :key="folder.id" :value="folder.path">
-        {{ folder.label || folder.path }}
-      </option>
-    </datalist>
+    <div class="flex flex-col gap-1">
+      <label for="details-cwd" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Working Directory</label>
+      <input
+        id="details-cwd"
+        data-testid="details-cwd"
+        :value="cwd"
+        list="details-cwd-list"
+        placeholder="/path/to/project"
+        :class="fieldClass"
+        @input="onCwdInput"
+      >
+      <datalist id="details-cwd-list">
+        <option v-for="folder in folderSuggestions" :key="folder.id" :value="folder.path">
+          {{ folder.label || folder.path }}
+        </option>
+      </datalist>
+    </div>
 
     <AppInput v-model="description" type="textarea" :rows="3" placeholder="Additional context (optional)" />
 
-    <select v-model="priority" :class="fieldClass">
-      <option value="high">
-        High
-      </option>
-      <option value="medium">
-        Medium
-      </option>
-      <option value="low">
-        Low
-      </option>
-    </select>
+    <div class="flex flex-col gap-1">
+      <label for="details-priority" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Priority</label>
+      <select id="details-priority" v-model="priority" :class="fieldClass">
+        <option value="high">
+          High
+        </option>
+        <option value="medium">
+          Medium
+        </option>
+        <option value="low">
+          Low
+        </option>
+      </select>
+    </div>
 
-    <select v-model="selectedSpawnerId" :class="fieldClass">
-      <option value="">
-        {{ selectedProjectId ? 'Project default' : 'Claude default' }}
-      </option>
-      <option v-for="s in spawners" :key="s.id" :value="s.id">
-        {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
-      </option>
-    </select>
+    <div class="flex flex-col gap-1">
+      <label for="details-spawner" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Spawner</label>
+      <select id="details-spawner" v-model="selectedSpawnerId" :class="fieldClass">
+        <option value="">
+          {{ selectedProjectId ? 'Project default' : 'Claude default' }}
+        </option>
+        <option v-for="s in spawners" :key="s.id" :value="s.id">
+          {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
+        </option>
+      </select>
+    </div>
 
     <PermissionTemplatePicker v-model="selectedTemplate" />
 
