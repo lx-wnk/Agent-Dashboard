@@ -84,6 +84,18 @@ export interface BtwMessage {
   response?: string;
 }
 /**
+ * WorktreeStatusDTO describes the live git state of a task's worktree.
+ * Ahead and Behind are pointers so JSON null is preserved when the base
+ * branch cannot be resolved on `origin` (e.g. local-only base).
+ */
+export interface WorktreeStatusDTO {
+  branch: string;
+  ahead?: number /* int */;
+  behind?: number /* int */;
+  dirty: boolean;
+  fileCount: number /* int */;
+}
+/**
  * Agent is the unified view of a running Claude Code process.
  */
 export interface Agent {

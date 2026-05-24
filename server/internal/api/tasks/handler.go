@@ -49,6 +49,7 @@ type Handler struct {
 	spawnerRepo       repo.SpawnerRepo
 	orchestrator      OrchestratorIface
 	broadcaster       *sse.TaskBroadcaster
+	worktreeMgr       WorktreeStatusProvider
 }
 
 // Deps groups all constructor dependencies.
@@ -64,6 +65,7 @@ type Deps struct {
 	SpawnerRepo       repo.SpawnerRepo
 	Orchestrator      OrchestratorIface
 	Broadcaster       *sse.TaskBroadcaster
+	WorktreeMgr       WorktreeStatusProvider
 }
 
 func NewHandler(deps Deps) *Handler {
@@ -79,6 +81,7 @@ func NewHandler(deps Deps) *Handler {
 		spawnerRepo:       deps.SpawnerRepo,
 		orchestrator:      deps.Orchestrator,
 		broadcaster:       deps.Broadcaster,
+		worktreeMgr:       deps.WorktreeMgr,
 	}
 }
 
@@ -133,6 +136,9 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/tasks/{id}/git-status", apierr.ErrorMiddleware(h.getGitStatusHandler))
 	r.Post("/api/tasks/{id}/git-action", apierr.ErrorMiddleware(h.gitActionHandler))
 	r.Post("/api/tasks/{id}/run", apierr.ErrorMiddleware(h.taskRunHandler))
+
+	// Worktree status (branch, ahead/behind vs origin/<base>, dirty flag).
+	r.Get("/api/tasks/{id}/worktree", apierr.ErrorMiddleware(h.getWorktreeStatusHandler))
 
 	// Notification preferences + config.
 	r.Get("/api/notifications/preferences", apierr.ErrorMiddleware(h.listNotificationPreferences))
