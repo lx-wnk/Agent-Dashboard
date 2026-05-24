@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
@@ -216,12 +217,25 @@ func (r *entTaskRepo) ListForUser(ctx context.Context, userID string, isAdmin bo
 	return tasks, nil
 }
 
+// ListPickable returns tasks eligible for the runner picker, sorted by SQL for
+// the criteria that map cleanly to ORDER BY:
+//   - silver_bullet DESC   (true first — binary column, trivially sortable)
+//   - created_at ASC       (FIFO within same tier)
+//
+// Priority and stage-index ordering cannot be expressed as simple SQL ORDER BY
+// (both require custom rank maps) and are applied by sortPickCandidates /
+// sortByStageIndex in runner_picker.go after the query returns.
+// F-PERF-010: removed the incorrect ascending BySilverBullet() SQL order and
+// added the correct DESC direction; created_at ASC is explicit for clarity.
 func (r *entTaskRepo) ListPickable(ctx context.Context) ([]*ent.Task, error) {
 	tasks, err := r.client.Task.Query().
 		Where(
 			task.CurrentStageNotIn("done", "cancelled", "on_hold", "concept"),
 		).
-		Order(task.BySilverBullet(), task.ByCreatedAt()).
+		Order(
+			task.BySilverBullet(sql.OrderDesc()),
+			task.ByCreatedAt(sql.OrderAsc()),
+		).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("task.ListPickable: %w", err)
