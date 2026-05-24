@@ -46,7 +46,7 @@ const healthChipClass = computed(() => {
         <span class="font-semibold text-[13px] text-fg whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
         <ProviderBadge :provider="agent.provider" />
         <span class="text-[11px] text-fg-mute whitespace-nowrap">
-          {{ shortModel(agent.model) }} ·
+          {{ shortModel(agent.model ?? null) }} ·
           <span v-if="agent.costUnknown" title="Cost unknown — no pricing data for this provider/model">?</span>
           <template v-else>{{ formatCost(agent.costEstimate) }}</template>
         </span>
