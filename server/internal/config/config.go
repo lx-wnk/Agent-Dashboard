@@ -134,16 +134,30 @@ func Load(cfgFile string) (Config, error) {
 		slog.Warn("DASHBOARD_JWT_SECRET not set — generated ephemeral secret; sessions will invalidate on restart")
 	}
 
-	// Warn when binding to a non-loopback address — dashboard reads sensitive session data.
+	// Refuse boot when binding to a non-loopback address unless the operator has
+	// explicitly opted in via DASHBOARD_REMOTES_ENABLED=true. The dashboard reads
+	// sensitive Claude session data; accidental public exposure is a high-impact mistake.
 	loopback := map[string]bool{"127.0.0.1": true, "::1": true, "localhost": true}
 	if !loopback[cfg.Host] {
+		remotesEnabled := strings.EqualFold(os.Getenv("DASHBOARD_REMOTES_ENABLED"), "true")
+		if !remotesEnabled {
+			return Config{}, fmt.Errorf(
+				"config: DASHBOARD_HOST=%q is a non-loopback address and would expose sensitive Claude session data to the network. "+
+					"Set DASHBOARD_REMOTES_ENABLED=true to confirm this is intentional (use a VPN or SSH tunnel), "+
+					"or set DASHBOARD_HOST=127.0.0.1 to bind to loopback only",
+				cfg.Host,
+			)
+		}
 		slog.Warn("DASHBOARD_HOST is non-loopback — server will expose sensitive Claude session data to the network. Use VPN/SSH tunnel only.", "host", cfg.Host)
 	}
 
-	// Warn when hooks secret is unset — /api/hooks/event will accept unauthenticated requests.
-	if cfg.HooksSecret == "" {
-		slog.Warn("DASHBOARD_HOOKS_SECRET not set — /api/hooks/event is open to any loopback caller; set a secret when running in shared environments")
+	// Auto-generate and persist hooks secret when DASHBOARD_HOOKS_SECRET is not set.
+	// This ensures /api/hooks/event is always protected, even on first boot.
+	hooksSecret, err := loadOrGenerateHooksSecret(cfg.HooksSecret)
+	if err != nil {
+		return Config{}, err
 	}
+	cfg.HooksSecret = hooksSecret
 
 	return cfg, nil
 }

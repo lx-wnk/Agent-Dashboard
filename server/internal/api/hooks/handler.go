@@ -52,10 +52,9 @@ type pendingEntry struct {
 }
 
 // New creates a Handler with the given shared secret and rescan callback.
-// When secret is non-empty it is required for all hook endpoints. When empty,
-// /api/hooks/event is open (loopback-only by network binding) but PreTool,
-// Respond, and Pending still require the secret to prevent unauthenticated
-// tool-gate manipulation.
+// The secret is required on every hook endpoint — missing or wrong bearer
+// tokens are rejected with 401. Config.Load always provides a non-empty
+// secret (auto-generated on first boot when DASHBOARD_HOOKS_SECRET is not set).
 func New(secret string, onEvent OnEventFn) *Handler {
 	return &Handler{
 		secret:  secret,
@@ -65,16 +64,12 @@ func New(secret string, onEvent OnEventFn) *Handler {
 }
 
 // Event handles POST /api/hooks/event.
-// Validates the optional bearer secret, acknowledges 204, and triggers a debounced rescan.
+// Validates the bearer secret and acknowledges 204 on success.
+// A missing or incorrect secret always returns 401 — the secret is always
+// set (auto-generated at boot when DASHBOARD_HOOKS_SECRET is not configured).
 func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
-	if h.secret != "" {
-		got := bearerToken(r)
-		if subtle.ConstantTimeCompare([]byte(got), []byte(h.secret)) != 1 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
-			return
-		}
+	if !h.requireSecret(w, r) {
+		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 	if h.onEvent != nil {
@@ -82,10 +77,10 @@ func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// requireSecret validates the bearer secret when one is configured.
-// When DASHBOARD_HOOKS_SECRET is not set the server is loopback-only,
-// so requests from the local UI are allowed through without a token —
-// matching the permissive behaviour of the /api/hooks/event endpoint.
+// requireSecret validates the bearer secret on every request.
+// Config.Load always provides a non-empty secret (auto-generated when
+// DASHBOARD_HOOKS_SECRET env is unset), so the empty-secret branch is a
+// defence-in-depth fallback for callers that bypass config loading in tests.
 func (h *Handler) requireSecret(w http.ResponseWriter, r *http.Request) bool {
 	if h.secret == "" {
 		return true

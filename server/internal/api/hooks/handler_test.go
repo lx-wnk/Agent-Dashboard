@@ -47,18 +47,33 @@ func TestEvent_WithWrongSecret_Returns401(t *testing.T) {
 	}
 }
 
-func TestEvent_WithNoSecretConfigured_IsOpenWithoutAuth(t *testing.T) {
-	// When DASHBOARD_HOOKS_SECRET is empty the event endpoint accepts any request
-	// (server is loopback-only so this is intentional for local use).
+// TestEvent_WithNoSecretConfigured_DefenceInDepth verifies that when the handler is
+// constructed with an empty secret (only possible if the caller bypasses config.Load),
+// the event endpoint still passes through — this is a defence-in-depth corner case,
+// not the normal operating mode. In production, config.Load always provides a secret.
+func TestEvent_WithNoSecretConfigured_DefenceInDepth(t *testing.T) {
 	h := newTestHandler("")
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/event", nil)
-	// No Authorization header at all.
 	w := httptest.NewRecorder()
 
 	h.Event(w, req)
 
+	// Empty secret → requireSecret allows through (defence-in-depth fallback).
 	if w.Code != http.StatusNoContent {
-		t.Errorf("Event with no secret configured (no auth header): got status %d, want %d", w.Code, http.StatusNoContent)
+		t.Errorf("Event with empty secret (test bypass): got status %d, want %d", w.Code, http.StatusNoContent)
+	}
+}
+
+func TestEvent_WithMissingBearer_Returns401(t *testing.T) {
+	h := newTestHandler("mysecret")
+	req := httptest.NewRequest(http.MethodPost, "/api/hooks/event", nil)
+	// Deliberately no Authorization header.
+	w := httptest.NewRecorder()
+
+	h.Event(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Event with missing bearer: got status %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 
@@ -66,9 +81,9 @@ func TestEvent_WithNoSecretConfigured_IsOpenWithoutAuth(t *testing.T) {
 // PreTool endpoint
 // -------------------------------------------------------------------
 
-func TestPreTool_WithoutSecret_AllowsThrough(t *testing.T) {
-	// When DASHBOARD_HOOKS_SECRET is not set the server is loopback-only,
-	// so requests are allowed through without a bearer token — matching Event behaviour.
+func TestPreTool_WithoutSecret_DefenceInDepthAllowsThrough(t *testing.T) {
+	// Empty-secret handler is a test-only bypass — config.Load always provides a secret.
+	// requireSecret allows through when secret is empty (defence-in-depth fallback).
 	h := newTestHandler("")
 	body := `{"toolName":"Bash","cwd":"/tmp"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/pre-tool", bytes.NewBufferString(body))
@@ -78,7 +93,7 @@ func TestPreTool_WithoutSecret_AllowsThrough(t *testing.T) {
 	h.PreTool(w, req)
 
 	if w.Code == http.StatusUnauthorized {
-		t.Errorf("PreTool without secret configured: got 401, want request allowed through")
+		t.Errorf("PreTool with empty secret (test bypass): got 401, want request allowed through")
 	}
 }
 
@@ -178,9 +193,8 @@ func TestPreTool_WriteTool_TimeoutReturnsProceeds(t *testing.T) {
 // Pending endpoint
 // -------------------------------------------------------------------
 
-func TestPending_WithoutSecret_AllowsThrough(t *testing.T) {
-	// When DASHBOARD_HOOKS_SECRET is not set, Pending is accessible from the local UI
-	// without a bearer token — the loopback network binding is the security boundary.
+func TestPending_WithoutSecret_DefenceInDepthAllowsThrough(t *testing.T) {
+	// Empty-secret handler is a test-only bypass — config.Load always provides a secret.
 	h := newTestHandler("")
 	req := httptest.NewRequest(http.MethodGet, "/api/hooks/pending", nil)
 	w := httptest.NewRecorder()
@@ -188,7 +202,7 @@ func TestPending_WithoutSecret_AllowsThrough(t *testing.T) {
 	h.Pending(w, req)
 
 	if w.Code == http.StatusUnauthorized {
-		t.Errorf("Pending without secret configured: got 401, want request allowed through")
+		t.Errorf("Pending with empty secret (test bypass): got 401, want request allowed through")
 	}
 }
 
