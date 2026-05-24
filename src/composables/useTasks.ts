@@ -122,10 +122,23 @@ function applyEvent(event: TaskEvent) {
         selectedTask.value = null
       break
     }
-    case 'permission_request':
     case 'stage_run_updated':
-      void refreshTask(event.taskId)
+    case 'permission_request': {
+      // Server now includes the enriched task as payload (F-PERF-013). Apply
+      // it directly when present to avoid a round-trip refetch. Fall back to
+      // refetch for legacy events that carry no payload (e.g. in-flight during
+      // a rolling restart).
+      const task = event.payload as PipelineTask | undefined
+      if (task?.id) {
+        tasks.value = tasks.value.map(t => t.id === task.id ? task : t)
+        if (selectedTask.value?.id === task.id)
+          selectedTask.value = task
+      }
+      else {
+        void refreshTask(event.taskId)
+      }
       break
+    }
   }
 }
 

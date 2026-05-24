@@ -18,6 +18,11 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
+// testCtx returns a background context for use in tests.
+func testCtx(_ *testing.T) context.Context {
+	return context.Background()
+}
+
 const testJWTSecret = "test-secret-for-tasks"
 
 // withAuth adds a valid JWT cookie to the request so RequireAuth passes.
@@ -63,6 +68,34 @@ func newTestHandler(t *testing.T) (*tasks.Handler, *chi.Mux) {
 	r.Use(auth.RequireAuth(testJWTSecret))
 	h.Mount(r)
 	return h, r
+}
+
+// newTestHandlerWithBroadcaster creates a Handler against the provided client
+// and returns its TaskBroadcaster so tests can subscribe to emitted events.
+func newTestHandlerWithBroadcaster(t *testing.T, client *ent.Client) (*sse.TaskBroadcaster, *chi.Mux) {
+	t.Helper()
+	taskRepo := repo.NewTaskRepo(client)
+	srRepo := repo.NewStageRunRepo(client)
+	permRepo := repo.NewPermissionRepo(client)
+	auditRepo := repo.NewAuditRepo(client)
+	cfgRepo := repo.NewPipelineConfigRepo(client)
+
+	broadcaster := sse.NewTaskBroadcaster(sse.NewBroadcaster())
+
+	h := tasks.NewHandler(tasks.Deps{
+		TaskRepo:     taskRepo,
+		SRRepo:       srRepo,
+		PermRepo:     permRepo,
+		AuditRepo:    auditRepo,
+		CfgRepo:      cfgRepo,
+		Orchestrator: &noopOrchestrator{},
+		Broadcaster:  broadcaster,
+	})
+
+	r := chi.NewRouter()
+	r.Use(auth.RequireAuth(testJWTSecret))
+	h.Mount(r)
+	return broadcaster, r
 }
 
 // noopOrchestrator satisfies tasks.OrchestratorIface without touching the DB.

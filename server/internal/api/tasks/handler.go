@@ -165,6 +165,12 @@ func (h *Handler) Mount(r chi.Router) {
 }
 
 func (h *Handler) broadcastEnrichedUpdate(ctx context.Context, taskID string) {
+	h.broadcastEnrichedEvent(ctx, "task_updated", taskID)
+}
+
+// broadcastEnrichedEvent fetches and enriches the task, then broadcasts it with the given event type.
+// Marshalling or DB errors are silently dropped — the 60-second polling fallback will catch any missed update.
+func (h *Handler) broadcastEnrichedEvent(ctx context.Context, eventType string, taskID string) {
 	t, err := h.taskRepo.GetByID(ctx, taskID)
 	if err != nil {
 		return
@@ -173,7 +179,7 @@ func (h *Handler) broadcastEnrichedUpdate(ctx context.Context, taskID string) {
 	if err != nil {
 		return
 	}
-	h.broadcaster.Broadcast(sse.TaskEvent{Type: "task_updated", TaskID: taskID, Payload: enriched})
+	h.broadcaster.Broadcast(sse.TaskEvent{Type: eventType, TaskID: taskID, Payload: enriched})
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {

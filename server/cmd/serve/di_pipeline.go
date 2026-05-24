@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -49,13 +51,24 @@ func provideOrchestrator(
 		WorktreeRoot:     cfg.WorktreeRoot,
 		ForceWorktrees:   cfg.ForceWorktrees,
 		ResolveSpawner:   resolveFn,
-		OnTaskChanged: func(taskID string, transitionKind string) {
+		OnTaskChanged: func(taskID string, _ string) {
+			// Broadcast stage_run_updated with the enriched task so the client can
+			// apply the update directly without a round-trip refetch (F-PERF-013).
+			ctx := context.Background()
+			t, err := taskRepo.GetByID(ctx, taskID)
+			if err != nil {
+				slog.Warn("OnTaskChanged: task lookup failed", "taskID", taskID, "err", err)
+				return
+			}
+			enriched, err := tasks.EnrichTask(ctx, t, srRepo, permRepo)
+			if err != nil {
+				slog.Warn("OnTaskChanged: enrich failed", "taskID", taskID, "err", err)
+				return
+			}
 			tb.Broadcast(sse.TaskEvent{
-				Type:   "task_changed",
-				TaskID: taskID,
-				Payload: map[string]string{
-					"transitionKind": transitionKind,
-				},
+				Type:    "stage_run_updated",
+				TaskID:  taskID,
+				Payload: enriched,
 			})
 		},
 	})
