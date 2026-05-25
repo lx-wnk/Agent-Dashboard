@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
@@ -178,5 +177,3 @@ func scanStageRun(rows *sql.Rows) (*ent.StageRun, error) {
 	return &sr, nil
 }
 
-// Ensure time import is used (CreatedAt is time.Time in ent.StageRun).
-var _ = time.Time{}
