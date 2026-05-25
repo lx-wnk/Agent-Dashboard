@@ -153,7 +153,7 @@ async function handleSubmit(): Promise<void> {
       </datalist>
     </div>
 
-    <AppInput v-model="description" type="textarea" :rows="3" placeholder="Additional context (optional)" />
+    <AppInput v-model="description" type="textarea" :rows="3" label="Description" placeholder="Additional context (optional)" />
 
     <div class="flex flex-col gap-1">
       <label for="details-priority" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Priority</label>
