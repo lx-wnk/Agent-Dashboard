@@ -25,8 +25,15 @@ const (
 type AuditEventRepo interface {
 	// RecordAudit writes a single audit event. userID may be nil for system actions.
 	RecordAudit(ctx context.Context, userID *string, action, target string, metadata map[string]any) error
+	// RecordTaskAudit writes a task-scoped audit event. Sets task_id for indexed
+	// per-task queries via ListForTask. userID may be nil for system actions.
+	RecordTaskAudit(ctx context.Context, taskID string, userID *string, action, target string, metadata map[string]any) error
 	// List returns audit events matching the given filters, newest-first.
 	List(ctx context.Context, f AuditEventFilters) ([]*ent.AuditEvent, error)
+	// ListForTask returns all audit events for the given task, oldest-first.
+	ListForTask(ctx context.Context, taskID string) ([]*ent.AuditEvent, error)
+	// ListAll returns events newest-first with pagination. Convenience wrapper.
+	ListAll(ctx context.Context, limit, offset int) ([]*ent.AuditEvent, error)
 }
 
 // AuditEventFilters controls which events are returned by List.
@@ -58,6 +65,37 @@ func (r *entAuditEventRepo) RecordAudit(ctx context.Context, userID *string, act
 		return fmt.Errorf("audit_event.RecordAudit: %w", err)
 	}
 	return nil
+}
+
+func (r *entAuditEventRepo) RecordTaskAudit(ctx context.Context, taskID string, userID *string, action, target string, metadata map[string]any) error {
+	q := r.client.AuditEvent.Create().
+		SetID(uuid.New().String()).
+		SetAction(action).
+		SetTarget(target).
+		SetTaskID(taskID).
+		SetNillableUserID(userID)
+	if metadata != nil {
+		q = q.SetMetadata(metadata)
+	}
+	if _, err := q.Save(ctx); err != nil {
+		return fmt.Errorf("audit_event.RecordTaskAudit: %w", err)
+	}
+	return nil
+}
+
+func (r *entAuditEventRepo) ListForTask(ctx context.Context, taskID string) ([]*ent.AuditEvent, error) {
+	events, err := r.client.AuditEvent.Query().
+		Where(auditevent.TaskID(taskID)).
+		Order(auditevent.ByTs()).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("audit_event.ListForTask: %w", err)
+	}
+	return events, nil
+}
+
+func (r *entAuditEventRepo) ListAll(ctx context.Context, limit, offset int) ([]*ent.AuditEvent, error) {
+	return r.List(ctx, AuditEventFilters{Limit: limit, Offset: offset})
 }
 
 func (r *entAuditEventRepo) List(ctx context.Context, f AuditEventFilters) ([]*ent.AuditEvent, error) {

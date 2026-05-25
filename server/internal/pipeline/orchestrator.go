@@ -466,10 +466,8 @@ func (o *PipelineOrchestrator) recoverRunningStageRuns(ctx context.Context) {
 	running, _ := o.opts.StageRunRepo.ListByStatus(ctx, "running")
 	for _, run := range running {
 		decision := DecideRecovery(run)
-		_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
-			TaskID: run.TaskID, Actor: "system", Action: "recovery_decision",
-			Details: map[string]any{"stage": run.Stage, "iteration": run.Iteration, "decision": decision.Kind, "reason": decision.Reason},
-		})
+		_ = o.opts.AuditRepo.RecordTaskAudit(ctx, run.TaskID, nil, "recovery_decision", "task:"+run.TaskID,
+			map[string]any{"stage": run.Stage, "iteration": run.Iteration, "decision": decision.Kind, "reason": decision.Reason})
 		if decision.Kind == "alive" {
 			continue
 		}

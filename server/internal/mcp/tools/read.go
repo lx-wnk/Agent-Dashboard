@@ -14,7 +14,7 @@ type ReadDeps struct {
 	TaskRepo    repo.TaskRepo
 	SRRepo      repo.StageRunRepo
 	PermRepo    repo.PermissionRepo
-	AuditRepo   repo.AuditRepo
+	AuditRepo   repo.AuditEventRepo
 	ProjectRepo repo.ProjectRepo
 	SpawnerRepo repo.SpawnerRepo
 }
@@ -314,7 +314,7 @@ func registerListAudit(registry mcp.ToolRegistry, d ReadDeps) {
 				return nil, mcp.Fail("list_audit: " + err.Error())
 			}
 			if entries == nil {
-				entries = []*ent.AuditLog{}
+				entries = []*ent.AuditEvent{}
 			}
 			return mcp.OK(entries)
 		},

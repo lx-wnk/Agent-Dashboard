@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/predicate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
@@ -420,21 +419,6 @@ func (_u *TaskUpdate) AddPermissions(v ...*TaskPermission) *TaskUpdate {
 	return _u.AddPermissionIDs(ids...)
 }
 
-// AddAuditLogIDs adds the "audit_logs" edge to the AuditLog entity by IDs.
-func (_u *TaskUpdate) AddAuditLogIDs(ids ...string) *TaskUpdate {
-	_u.mutation.AddAuditLogIDs(ids...)
-	return _u
-}
-
-// AddAuditLogs adds the "audit_logs" edges to the AuditLog entity.
-func (_u *TaskUpdate) AddAuditLogs(v ...*AuditLog) *TaskUpdate {
-	ids := make([]string, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddAuditLogIDs(ids...)
-}
-
 // AddDependencyIDs adds the "dependencies" edge to the TaskDependency entity by IDs.
 func (_u *TaskUpdate) AddDependencyIDs(ids ...string) *TaskUpdate {
 	_u.mutation.AddDependencyIDs(ids...)
@@ -510,27 +494,6 @@ func (_u *TaskUpdate) RemovePermissions(v ...*TaskPermission) *TaskUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePermissionIDs(ids...)
-}
-
-// ClearAuditLogs clears all "audit_logs" edges to the AuditLog entity.
-func (_u *TaskUpdate) ClearAuditLogs() *TaskUpdate {
-	_u.mutation.ClearAuditLogs()
-	return _u
-}
-
-// RemoveAuditLogIDs removes the "audit_logs" edge to AuditLog entities by IDs.
-func (_u *TaskUpdate) RemoveAuditLogIDs(ids ...string) *TaskUpdate {
-	_u.mutation.RemoveAuditLogIDs(ids...)
-	return _u
-}
-
-// RemoveAuditLogs removes "audit_logs" edges to AuditLog entities.
-func (_u *TaskUpdate) RemoveAuditLogs(v ...*AuditLog) *TaskUpdate {
-	ids := make([]string, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveAuditLogIDs(ids...)
 }
 
 // ClearDependencies clears all "dependencies" edges to the TaskDependency entity.
@@ -826,51 +789,6 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(taskpermission.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.AuditLogsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   task.AuditLogsTable,
-			Columns: []string{task.AuditLogsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(auditlog.FieldID, field.TypeString),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedAuditLogsIDs(); len(nodes) > 0 && !_u.mutation.AuditLogsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   task.AuditLogsTable,
-			Columns: []string{task.AuditLogsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(auditlog.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.AuditLogsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   task.AuditLogsTable,
-			Columns: []string{task.AuditLogsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(auditlog.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -1376,21 +1294,6 @@ func (_u *TaskUpdateOne) AddPermissions(v ...*TaskPermission) *TaskUpdateOne {
 	return _u.AddPermissionIDs(ids...)
 }
 
-// AddAuditLogIDs adds the "audit_logs" edge to the AuditLog entity by IDs.
-func (_u *TaskUpdateOne) AddAuditLogIDs(ids ...string) *TaskUpdateOne {
-	_u.mutation.AddAuditLogIDs(ids...)
-	return _u
-}
-
-// AddAuditLogs adds the "audit_logs" edges to the AuditLog entity.
-func (_u *TaskUpdateOne) AddAuditLogs(v ...*AuditLog) *TaskUpdateOne {
-	ids := make([]string, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddAuditLogIDs(ids...)
-}
-
 // AddDependencyIDs adds the "dependencies" edge to the TaskDependency entity by IDs.
 func (_u *TaskUpdateOne) AddDependencyIDs(ids ...string) *TaskUpdateOne {
 	_u.mutation.AddDependencyIDs(ids...)
@@ -1466,27 +1369,6 @@ func (_u *TaskUpdateOne) RemovePermissions(v ...*TaskPermission) *TaskUpdateOne 
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePermissionIDs(ids...)
-}
-
-// ClearAuditLogs clears all "audit_logs" edges to the AuditLog entity.
-func (_u *TaskUpdateOne) ClearAuditLogs() *TaskUpdateOne {
-	_u.mutation.ClearAuditLogs()
-	return _u
-}
-
-// RemoveAuditLogIDs removes the "audit_logs" edge to AuditLog entities by IDs.
-func (_u *TaskUpdateOne) RemoveAuditLogIDs(ids ...string) *TaskUpdateOne {
-	_u.mutation.RemoveAuditLogIDs(ids...)
-	return _u
-}
-
-// RemoveAuditLogs removes "audit_logs" edges to AuditLog entities.
-func (_u *TaskUpdateOne) RemoveAuditLogs(v ...*AuditLog) *TaskUpdateOne {
-	ids := make([]string, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveAuditLogIDs(ids...)
 }
 
 // ClearDependencies clears all "dependencies" edges to the TaskDependency entity.
@@ -1812,51 +1694,6 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(taskpermission.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.AuditLogsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   task.AuditLogsTable,
-			Columns: []string{task.AuditLogsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(auditlog.FieldID, field.TypeString),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedAuditLogsIDs(); len(nodes) > 0 && !_u.mutation.AuditLogsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   task.AuditLogsTable,
-			Columns: []string{task.AuditLogsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(auditlog.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.AuditLogsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   task.AuditLogsTable,
-			Columns: []string{task.AuditLogsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(auditlog.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

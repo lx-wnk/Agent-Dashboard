@@ -12,7 +12,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditlog"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/predicate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
@@ -29,7 +28,6 @@ type TaskQuery struct {
 	predicates       []predicate.Task
 	withStageRuns    *StageRunQuery
 	withPermissions  *TaskPermissionQuery
-	withAuditLogs    *AuditLogQuery
 	withDependencies *TaskDependencyQuery
 	withDependents   *TaskDependencyQuery
 	// intermediate query (i.e. traversal path).
@@ -105,28 +103,6 @@ func (_q *TaskQuery) QueryPermissions() *TaskPermissionQuery {
 			sqlgraph.From(task.Table, task.FieldID, selector),
 			sqlgraph.To(taskpermission.Table, taskpermission.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, task.PermissionsTable, task.PermissionsColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
-}
-
-// QueryAuditLogs chains the current query on the "audit_logs" edge.
-func (_q *TaskQuery) QueryAuditLogs() *AuditLogQuery {
-	query := (&AuditLogClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(task.Table, task.FieldID, selector),
-			sqlgraph.To(auditlog.Table, auditlog.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, task.AuditLogsTable, task.AuditLogsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -372,7 +348,6 @@ func (_q *TaskQuery) Clone() *TaskQuery {
 		predicates:       append([]predicate.Task{}, _q.predicates...),
 		withStageRuns:    _q.withStageRuns.Clone(),
 		withPermissions:  _q.withPermissions.Clone(),
-		withAuditLogs:    _q.withAuditLogs.Clone(),
 		withDependencies: _q.withDependencies.Clone(),
 		withDependents:   _q.withDependents.Clone(),
 		// clone intermediate query.
@@ -400,17 +375,6 @@ func (_q *TaskQuery) WithPermissions(opts ...func(*TaskPermissionQuery)) *TaskQu
 		opt(query)
 	}
 	_q.withPermissions = query
-	return _q
-}
-
-// WithAuditLogs tells the query-builder to eager-load the nodes that are connected to
-// the "audit_logs" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *TaskQuery) WithAuditLogs(opts ...func(*AuditLogQuery)) *TaskQuery {
-	query := (&AuditLogClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withAuditLogs = query
 	return _q
 }
 
@@ -514,10 +478,9 @@ func (_q *TaskQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Task, e
 	var (
 		nodes       = []*Task{}
 		_spec       = _q.querySpec()
-		loadedTypes = [5]bool{
+		loadedTypes = [4]bool{
 			_q.withStageRuns != nil,
 			_q.withPermissions != nil,
-			_q.withAuditLogs != nil,
 			_q.withDependencies != nil,
 			_q.withDependents != nil,
 		}
@@ -551,13 +514,6 @@ func (_q *TaskQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Task, e
 		if err := _q.loadPermissions(ctx, query, nodes,
 			func(n *Task) { n.Edges.Permissions = []*TaskPermission{} },
 			func(n *Task, e *TaskPermission) { n.Edges.Permissions = append(n.Edges.Permissions, e) }); err != nil {
-			return nil, err
-		}
-	}
-	if query := _q.withAuditLogs; query != nil {
-		if err := _q.loadAuditLogs(ctx, query, nodes,
-			func(n *Task) { n.Edges.AuditLogs = []*AuditLog{} },
-			func(n *Task, e *AuditLog) { n.Edges.AuditLogs = append(n.Edges.AuditLogs, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -623,36 +579,6 @@ func (_q *TaskQuery) loadPermissions(ctx context.Context, query *TaskPermissionQ
 	}
 	query.Where(predicate.TaskPermission(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(task.PermissionsColumn), fks...))
-	}))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		fk := n.TaskID
-		node, ok := nodeids[fk]
-		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "task_id" returned %v for node %v`, fk, n.ID)
-		}
-		assign(node, n)
-	}
-	return nil
-}
-func (_q *TaskQuery) loadAuditLogs(ctx context.Context, query *AuditLogQuery, nodes []*Task, init func(*Task), assign func(*Task, *AuditLog)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[string]*Task)
-	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
-		}
-	}
-	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(auditlog.FieldTaskID)
-	}
-	query.Where(predicate.AuditLog(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(task.AuditLogsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

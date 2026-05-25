@@ -27,7 +27,7 @@ func provideOrchestrator(
 	taskRepo := repo.NewTaskRepo(client)
 	srRepo := repo.NewStageRunRepo(client)
 	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
+	auditRepo := repo.NewAuditEventRepo(client)
 	cfgRepo := repo.NewPipelineConfigRepo(client)
 
 	var resolveFn pipeline.SpawnerResolverFunc

@@ -72,15 +72,13 @@ type TaskEdges struct {
 	StageRuns []*StageRun `json:"stage_runs,omitempty"`
 	// Permissions holds the value of the permissions edge.
 	Permissions []*TaskPermission `json:"permissions,omitempty"`
-	// AuditLogs holds the value of the audit_logs edge.
-	AuditLogs []*AuditLog `json:"audit_logs,omitempty"`
 	// Dependencies holds the value of the dependencies edge.
 	Dependencies []*TaskDependency `json:"dependencies,omitempty"`
 	// Dependents holds the value of the dependents edge.
 	Dependents []*TaskDependency `json:"dependents,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [5]bool
+	loadedTypes [4]bool
 }
 
 // StageRunsOrErr returns the StageRuns value or an error if the edge
@@ -101,19 +99,10 @@ func (e TaskEdges) PermissionsOrErr() ([]*TaskPermission, error) {
 	return nil, &NotLoadedError{edge: "permissions"}
 }
 
-// AuditLogsOrErr returns the AuditLogs value or an error if the edge
-// was not loaded in eager-loading.
-func (e TaskEdges) AuditLogsOrErr() ([]*AuditLog, error) {
-	if e.loadedTypes[2] {
-		return e.AuditLogs, nil
-	}
-	return nil, &NotLoadedError{edge: "audit_logs"}
-}
-
 // DependenciesOrErr returns the Dependencies value or an error if the edge
 // was not loaded in eager-loading.
 func (e TaskEdges) DependenciesOrErr() ([]*TaskDependency, error) {
-	if e.loadedTypes[3] {
+	if e.loadedTypes[2] {
 		return e.Dependencies, nil
 	}
 	return nil, &NotLoadedError{edge: "dependencies"}
@@ -122,7 +111,7 @@ func (e TaskEdges) DependenciesOrErr() ([]*TaskDependency, error) {
 // DependentsOrErr returns the Dependents value or an error if the edge
 // was not loaded in eager-loading.
 func (e TaskEdges) DependentsOrErr() ([]*TaskDependency, error) {
-	if e.loadedTypes[4] {
+	if e.loadedTypes[3] {
 		return e.Dependents, nil
 	}
 	return nil, &NotLoadedError{edge: "dependents"}
@@ -323,11 +312,6 @@ func (_m *Task) QueryStageRuns() *StageRunQuery {
 // QueryPermissions queries the "permissions" edge of the Task entity.
 func (_m *Task) QueryPermissions() *TaskPermissionQuery {
 	return NewTaskClient(_m.config).QueryPermissions(_m)
-}
-
-// QueryAuditLogs queries the "audit_logs" edge of the Task entity.
-func (_m *Task) QueryAuditLogs() *AuditLogQuery {
-	return NewTaskClient(_m.config).QueryAuditLogs(_m)
 }
 
 // QueryDependencies queries the "dependencies" edge of the Task entity.

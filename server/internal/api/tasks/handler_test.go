@@ -49,7 +49,7 @@ func newTestHandler(t *testing.T) (*tasks.Handler, *chi.Mux) {
 	taskRepo := repo.NewTaskRepo(client)
 	srRepo := repo.NewStageRunRepo(client)
 	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
+	auditRepo := repo.NewAuditEventRepo(client)
 	cfgRepo := repo.NewPipelineConfigRepo(client)
 
 	broadcaster := sse.NewTaskBroadcaster(sse.NewBroadcaster())
@@ -77,7 +77,7 @@ func newTestHandlerWithBroadcaster(t *testing.T, client *ent.Client) (*sse.TaskB
 	taskRepo := repo.NewTaskRepo(client)
 	srRepo := repo.NewStageRunRepo(client)
 	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
+	auditRepo := repo.NewAuditEventRepo(client)
 	cfgRepo := repo.NewPipelineConfigRepo(client)
 
 	broadcaster := sse.NewTaskBroadcaster(sse.NewBroadcaster())

@@ -148,12 +148,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 			}()
 		},
 		RecordAudit: func(action string, details map[string]any) {
-			_ = o.opts.AuditRepo.Append(ctx, repo.AppendAuditInput{
-				TaskID:  task.ID,
-				Actor:   "orchestrator",
-				Action:  action,
-				Details: details,
-			})
+			_ = o.opts.AuditRepo.RecordTaskAudit(ctx, task.ID, nil, action, "task:"+task.ID, details)
 		},
 		RequestPermission: func(tool, pattern, reason string) *ent.PermissionRequest {
 			pat := (*string)(nil)
