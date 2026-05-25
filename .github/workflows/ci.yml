@@ -32,6 +32,19 @@ jobs:
           profile: ${{ matrix.module }}/coverage.out
           source-dir: ${{ matrix.module }}
 
+      - name: Per-package coverage gate (pipeline + services)
+        if: matrix.module == 'server'
+        # Floor is intentionally set to the current per-package coverage so the
+        # gate catches regressions immediately. Ratchet upward toward 70 as
+        # tests are added. Override per-run via repo/Actions env if needed.
+        env:
+          COVERAGE_THRESHOLD: '20'
+        run: |
+          cd server
+          go tool cover -func=coverage.out > coverage.func.txt
+          cd ..
+          bash scripts/coverage-gate.sh server/coverage.func.txt 'internal/pipeline' 'internal/services'
+
   test-plugins:
     name: Test (plugins/${{ matrix.plugin }})
     runs-on: ubuntu-latest
@@ -133,6 +146,35 @@ jobs:
           for plugin in plugins/github-oauth plugins/office365-oauth; do
             echo "=== building $plugin ===" && (cd "$plugin" && GOWORK=off go build -o /dev/null .)
           done
+
+  bundle-size:
+    name: Bundle Size Check
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+      - name: Build frontend
+        run: pnpm build
+      - name: Verify build artifacts present
+        run: test -d dist/assets || { echo "dist/assets missing — vite build did not emit SPA assets"; exit 1; }
+      - name: Check bundle-size budget
+        # Thresholds can be tightened/loosened via env without editing the script.
+        # Per-chunk JS budgets: vendor (vue) 200 KB, charts (d3) 400 KB, index 100 KB.
+        env:
+          JS_MAX_GZIP_KB: '100'
+          JS_VENDOR_MAX_GZIP_KB: '200'
+          JS_CHARTS_MAX_GZIP_KB: '400'
+          CSS_MAX_GZIP_KB: '30'
+        run: bash scripts/check-bundle-size.sh dist/assets
 
   pr-checks:
     name: PR Validation
