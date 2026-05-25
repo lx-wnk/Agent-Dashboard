@@ -17,7 +17,8 @@ func TestBroadcaster_SubscribeReceivesData(t *testing.T) {
 
 	select {
 	case data := <-ch:
-		require.Equal(t, `{"test":true}`, string(data))
+		// Broadcaster formats fully-formed SSE data frames. (Issue 2b)
+		require.Equal(t, "data: {\"test\":true}\n\n", string(data))
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout: no data received")
 	}
@@ -53,13 +54,13 @@ func TestBroadcaster_MultipleSubscribers(t *testing.T) {
 
 	select {
 	case data := <-ch1:
-		require.Equal(t, "hello", string(data))
+		require.Equal(t, "data: hello\n\n", string(data))
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("ch1 timeout")
 	}
 	select {
 	case data := <-ch2:
-		require.Equal(t, "hello", string(data))
+		require.Equal(t, "data: hello\n\n", string(data))
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("ch2 timeout")
 	}
@@ -90,4 +91,32 @@ func TestBroadcaster_BroadcastToZeroSubscribers(t *testing.T) {
 	b := sse.NewBroadcaster()
 	// Must not panic
 	b.Broadcast([]byte("no one listening"))
+}
+
+// TestBroadcaster_UnsubscribeDuringBroadcast verifies that a concurrent
+// Unsubscribe while send() is running does not panic with "send on closed channel".
+// This is the regression test for Issue 2a (per-channel closed-flag with mutex).
+func TestBroadcaster_UnsubscribeDuringBroadcast(t *testing.T) {
+	const iterations = 500
+
+	for i := 0; i < iterations; i++ {
+		b := sse.NewBroadcaster()
+		ch := b.Subscribe()
+
+		ready := make(chan struct{})
+		done := make(chan struct{})
+
+		go func() {
+			close(ready)
+			// Rapidly unsubscribe while the main goroutine broadcasts.
+			b.Unsubscribe(ch)
+			close(done)
+		}()
+
+		<-ready
+		// Must not panic even if Unsubscribe races with send().
+		b.Broadcast([]byte("race"))
+
+		<-done
+	}
 }
