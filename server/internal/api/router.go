@@ -43,6 +43,7 @@ import (
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -289,7 +290,16 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		// Spawn management — rate-limited user-initiated agent spawning and channel message forwarding.
 		// Inside the protected group so only authenticated users can spawn agents.
-		spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs, deps.SpawnerRepo)
+		//
+		// Build the cwd allow-list from registered project folder paths (F-SEC-001).
+		// Sensitive home dirs (~/.ssh, ~/.aws, etc.) are always blocked regardless.
+		var spawnPolicy services.SpawnPolicy
+		if deps.ProjectRepo != nil && deps.ProjectFolderRepo != nil {
+			spawnPolicy = services.NewSpawnPolicy(services.ProjectFolderRootsProvider(deps.ProjectRepo, deps.ProjectFolderRepo))
+		} else {
+			spawnPolicy = services.NewSpawnPolicy(nil)
+		}
+		spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs, deps.SpawnerRepo, spawnPolicy)
 		go spawnMgr.StartPruner(serverCtx)
 		spawnHandler := agents.NewSpawnHandler(spawnMgr)
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
