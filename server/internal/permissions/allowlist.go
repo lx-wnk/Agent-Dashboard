@@ -3,6 +3,7 @@ package permissions
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -96,64 +97,11 @@ var shellInjectionRE = regexp.MustCompile(
 		`|;\s*\w`, // semicolon-chained command
 )
 
-// DangerousBashRE is retained for backward compatibility with existing callers
-// (spawner.go, permission_request_routes.go).  New code should use
-// IsSafeBashPattern instead, which provides allow-list semantics rather than
-// block-list semantics.
-//
-// The regex matches patterns that must never appear in a Bash allow-list entry.
-// It intentionally overlaps with IsSafeBashPattern — both must agree that a
-// pattern is dangerous before it can be rejected.
-var DangerousBashRE = regexp.MustCompile(
-	`(?i)` +
-		// Explicit dangerous commands not reachable via safeBashCommands.
-		`\bsudo\b` +
-		`|\bcurl\b` +
-		`|\bwget\b` +
-		`|\bnc\b|\bncat\b|\bnetcat\b` +
-		`|bash\s+-c|sh\s+-c|dash\s+-c|zsh\s+-c` +
-		`|\beval\b` +
-		// Interpreters not in the safe list (pypy, perl, ruby, node -e, etc.).
-		`|python[23]?(?:\.\d+)?\s+-c` +
-		`|pypy\d*(?:\.\d+)?` +
-		`|node(?:js)?\s+-e` +
-		`|perl\d*\s+-e` +
-		`|ruby\d*\s+-e` +
-		`|deno\s+eval` +
-		`|bun\s+eval` +
-		// Encoding / decoding that could hide payloads.
-		`|base64\s+-d` +
-		`|xxd\s+-r` +
-		// Shell-injection constructs.
-		`|\$\(|<\(` + // command/process substitution
-		"|`" + // backtick
-		// Redirect to arbitrary paths (e.g. >file, >/tmp/x).
-		`|>\s*[\w/]` +
-		`|<\s*[\w/]` +
-		// Destructive file operations.
-		`|chmod\s+\+x` +
-		`|rm\s+-rf` +
-		`|exec\s+\w` +
-		// Lateral-movement via xargs regardless of path prefix.
-		`|(?:^|/)xargs\b` +
-		// find -exec (arbitrary command execution).
-		`|find\s+.*-exec` +
-		// Semicolon / AND chains to a non-empty token.
-		`|;\s*\w` +
-		`|&&\s*\w` +
-		// Pipe to another command.
-		`|\|\s*\w` +
-		// Hex/unicode escape sequences that could encode the above.
-		`|\\x[0-9a-fA-F]{2}` +
-		`|\\u[0-9a-fA-F]{4}`,
-)
-
 // IsSafeBashPattern reports whether pattern is acceptable as a Bash allow-list
 // entry.  It applies allow-list semantics: the first token of the pattern must
 // be a known-safe command name (after stripping any absolute path prefix), and
 // the full pattern must not contain shell injection constructs.
 //
-// Callers should prefer IsSafeBashPattern over DangerousBashRE for new code.
 // Returning false means the pattern is rejected; the reason is returned for
 // diagnostic purposes.
 func IsSafeBashPattern(pattern string) (bool, string) {
@@ -186,11 +134,6 @@ func IsSafeBashPattern(pattern string) (bool, string) {
 		return false, "shell injection construct detected in pattern"
 	}
 
-	// Also run DangerousBashRE as a belt-and-suspenders check.
-	if DangerousBashRE.MatchString(pattern) {
-		return false, "dangerous bash pattern detected"
-	}
-
 	return true, ""
 }
 
@@ -210,6 +153,40 @@ var ErrWebFetchPatternRequired = errors.New(
 func ValidateWebFetchPattern(pattern *string) error {
 	if pattern == nil || strings.TrimSpace(*pattern) == "" {
 		return ErrWebFetchPatternRequired
+	}
+	return nil
+}
+
+// ValidateGrantEntry applies all grant-time security checks for a single
+// (tool, pattern) pair.  It is the single source of truth shared by both
+// the MCP write path and the REST permission-grant endpoints.
+//
+// Checks applied, in order:
+//  1. Tool must be in the pipeline allow-list.
+//  2. Bash grants must carry a non-empty pattern and that pattern must pass
+//     IsSafeBashPattern (allow-list semantics).
+//  3. WebFetch grants must carry a non-empty domain pattern.
+//
+// Returns a descriptive error on the first failing check; nil means the entry
+// is safe to persist.
+func ValidateGrantEntry(tool, pattern string) error {
+	if !IsAllowedTool(tool) {
+		return fmt.Errorf("tool not in allow-list: %s", tool)
+	}
+	if tool == "Bash" {
+		normalized := strings.Join(strings.Fields(pattern), " ")
+		if normalized == "" {
+			return errors.New("Bash permission requires a non-empty pattern")
+		}
+		if ok, reason := IsSafeBashPattern(normalized); !ok {
+			return fmt.Errorf("unsafe Bash pattern: %s", reason)
+		}
+	}
+	if tool == "WebFetch" {
+		p := pattern
+		if err := ValidateWebFetchPattern(&p); err != nil {
+			return err
+		}
 	}
 	return nil
 }
