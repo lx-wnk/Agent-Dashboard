@@ -1,0 +1,329 @@
+package pipeline
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+)
+
+// applyTransition executes a stage transition. When a Client is available it
+// wraps all DB writes in a single SQLite transaction to prevent torn state on
+// mid-write crashes or context cancellations.
+func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Task, sr *ent.StageRun, t StageTransition) (result *ent.StageRun, retErr error) {
+	if o.opts.Client != nil {
+		tx, err := o.opts.Client.Tx(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("applyTransition.beginTx: %w", err)
+		}
+		defer func() {
+			if retErr != nil {
+				_ = tx.Rollback()
+			}
+		}()
+		txSR := repo.NewStageRunRepo(tx.Client())
+		txTask := repo.NewTaskRepo(tx.Client())
+		txAudit := repo.NewAuditRepo(tx.Client())
+		result, retErr = o.applyTransitionWrites(ctx, task, sr, t, txSR, txTask, txAudit)
+		if retErr != nil {
+			return nil, retErr
+		}
+		if retErr = tx.Commit(); retErr != nil {
+			return nil, fmt.Errorf("applyTransition.commit: %w", retErr)
+		}
+		return result, nil
+	}
+	// No client available (e.g. in tests with mocked repos) — write without tx.
+	return o.applyTransitionWrites(ctx, task, sr, t, o.opts.StageRunRepo, o.opts.TaskRepo, o.opts.AuditRepo)
+}
+
+func (o *PipelineOrchestrator) applyTransitionWrites(
+	ctx context.Context,
+	task *ent.Task,
+	sr *ent.StageRun,
+	t StageTransition,
+	srRepo repo.StageRunRepo,
+	taskRepo repo.TaskRepo,
+	auditRepo repo.AuditRepo,
+) (*ent.StageRun, error) {
+	now := time.Now()
+	var updatedRunID string
+	var newRunID string
+	var postCommit []func()
+
+	switch tr := t.(type) {
+	case NextTransition:
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+			Status:  strPtr("done"),
+			EndedAt: &now,
+			Output:  tr.Output,
+		}); err != nil {
+			return nil, fmt.Errorf("applyTransition.next.updateRun: %w", err)
+		}
+		taskUpdate := repo.UpdateTaskInput{CurrentStage: &tr.Stage}
+		if tr.MetaClear {
+			taskUpdate.MetadataClear = true
+		} else if tr.MetadataPatch != nil {
+			taskUpdate.Metadata = tr.MetadataPatch
+		}
+		if _, err := taskRepo.Update(ctx, task.ID, taskUpdate); err != nil {
+			return nil, fmt.Errorf("applyTransition.next.updateTask: %w", err)
+		}
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
+			TaskID: task.ID, Actor: "orchestrator", Action: "stage_transition",
+			Details: map[string]any{"from": task.CurrentStage, "to": tr.Stage},
+		})
+		updatedRunID = sr.ID
+
+	case DoneTransition:
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+			Status: strPtr("done"), EndedAt: &now, Output: tr.Output,
+		}); err != nil {
+			return nil, fmt.Errorf("applyTransition.done.updateRun: %w", err)
+		}
+		done := "done"
+		if _, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &done}); err != nil {
+			return nil, fmt.Errorf("applyTransition.done.updateTask: %w", err)
+		}
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{TaskID: task.ID, Actor: "orchestrator", Action: "task_done"})
+		updatedRunID = sr.ID
+		postCommit = append(postCommit, func() {
+			o.handleDependentTasks(ctx, task.ID, "done")
+			o.taskLocks.Delete(task.ID)
+		})
+
+	case FailTransition:
+		output := tr.Output
+		if output == nil {
+			output = map[string]any{}
+		}
+		output["error"] = tr.Reason
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+			Status: strPtr("failed"), EndedAt: &now, Output: output,
+		}); err != nil {
+			return nil, fmt.Errorf("applyTransition.fail.updateRun: %w", err)
+		}
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
+			TaskID: task.ID, Actor: "orchestrator", Action: "stage_failed",
+			Details: map[string]any{"stage": sr.Stage, "iteration": sr.Iteration, "error": tr.Reason},
+		})
+		updatedRunID = sr.ID
+		if o.opts.OnStageFailed != nil {
+			info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: tr.Reason}
+			postCommit = append(postCommit, func() { o.opts.OnStageFailed(task.ID, info) })
+		}
+
+	case WaitUserTransition:
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+			Status:   strPtr("awaiting_user"),
+			Output:   tr.Output,
+			PIDClear: tr.AgentDone, // clear dead PID so the awaiting_user reaper does not immediately re-fail
+		}); err != nil {
+			return nil, fmt.Errorf("applyTransition.waitUser.updateRun: %w", err)
+		}
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
+			TaskID: task.ID, Actor: "orchestrator", Action: "awaiting_user",
+			Details: map[string]any{"reason": tr.Reason},
+		})
+		updatedRunID = sr.ID
+
+	case IterateTransition:
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+			Status: strPtr("done"), EndedAt: &now, Output: tr.Output,
+		}); err != nil {
+			return nil, fmt.Errorf("applyTransition.iterate.updateRun: %w", err)
+		}
+		task2, _ := taskRepo.GetByID(ctx, task.ID)
+		maxIter := 20
+		if task2 != nil {
+			maxIter = task2.MaxIterations
+		}
+		if sr.Iteration+1 >= maxIter {
+			failOutput := tr.Output
+			if failOutput == nil {
+				failOutput = map[string]any{}
+			}
+			failOutput["error"] = fmt.Sprintf("iteration limit reached (%d)", maxIter)
+			if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+				Status: strPtr("failed"), Output: failOutput,
+			}); err != nil {
+				return nil, fmt.Errorf("applyTransition.iterate.limitFail: %w", err)
+			}
+			_ = auditRepo.Append(ctx, repo.AppendAuditInput{
+				TaskID: task.ID, Actor: "orchestrator", Action: "iteration_limit_reached",
+				Details: map[string]any{"maxIter": maxIter, "lastIteration": sr.Iteration},
+			})
+			updatedRunID = sr.ID
+			if o.opts.OnStageFailed != nil {
+				info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: fmt.Sprintf("iteration limit reached (%d)", maxIter)}
+				postCommit = append(postCommit, func() { o.opts.OnStageFailed(task.ID, info) })
+			}
+		} else {
+			newSR, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+				TaskID:      task.ID,
+				Stage:       sr.Stage,
+				Iteration:   sr.Iteration + 1,
+				SessionName: BuildSessionName(task.Slug, sr.Stage, sr.Iteration+1),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("applyTransition.iterate.createRun: %w", err)
+			}
+			updatedRunID = sr.ID
+			newRunID = newSR.ID
+		}
+
+	case OnHoldTransition:
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+			Status: strPtr("on_hold"), Output: tr.Output,
+		}); err != nil {
+			return nil, fmt.Errorf("applyTransition.onHold.updateRun: %w", err)
+		}
+		onHold := "on_hold"
+		if _, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &onHold}); err != nil {
+			return nil, fmt.Errorf("applyTransition.onHold.updateTask: %w", err)
+		}
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
+			TaskID: task.ID, Actor: "orchestrator", Action: "moved_on_hold",
+			Details: map[string]any{"permissionRequestId": tr.PermissionRequestID},
+		})
+		updatedRunID = sr.ID
+
+	case AsyncRunningTransition:
+		output := tr.Output
+		if tr.SessionFile != "" {
+			if output == nil {
+				output = map[string]any{}
+			} else {
+				// shallow-copy to avoid mutating the caller's map
+				cp := make(map[string]any, len(output)+1)
+				for k, v := range output {
+					cp[k] = v
+				}
+				output = cp
+			}
+			output["synthetic_session_file"] = tr.SessionFile
+		}
+		update := repo.UpdateStageRunInput{Status: strPtr("running"), Output: output}
+		if tr.PID != 0 {
+			update.PID = &tr.PID
+		}
+		if tr.SessionID != "" {
+			update.SessionID = &tr.SessionID
+		}
+		if _, err := srRepo.Update(ctx, sr.ID, update); err != nil {
+			return nil, fmt.Errorf("applyTransition.asyncRunning.updateRun: %w", err)
+		}
+		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
+			TaskID: task.ID, Actor: "orchestrator", Action: "agent_spawned",
+			Details: map[string]any{"pid": tr.PID, "stage": sr.Stage},
+		})
+		updatedRunID = sr.ID
+
+	default:
+		panic(fmt.Sprintf("orchestrator.applyTransition: unhandled transition type %T", t))
+	}
+
+	// Post-commit side effects (must run after writes are committed).
+	for _, fn := range postCommit {
+		fn()
+	}
+
+	if o.opts.OnTaskChanged != nil {
+		kind := transitionKindName(t)
+		o.opts.OnTaskChanged(task.ID, kind)
+	}
+
+	targetID := updatedRunID
+	if newRunID != "" {
+		targetID = newRunID
+	}
+	result, err := o.opts.StageRunRepo.GetByID(ctx, targetID)
+	if err != nil {
+		return nil, fmt.Errorf("applyTransition.getResult: %w", err)
+	}
+	return result, nil
+}
+
+func transitionKindName(t StageTransition) string {
+	switch t.(type) {
+	case NextTransition:
+		return "next"
+	case DoneTransition:
+		return "done"
+	case FailTransition:
+		return "fail"
+	case WaitUserTransition:
+		return "wait_user"
+	case IterateTransition:
+		return "iterate"
+	case OnHoldTransition:
+		return "on_hold"
+	case AsyncRunningTransition:
+		return "async_running"
+	default:
+		return "unknown"
+	}
+}
+
+// decideCompletedTransition maps a completed stage_run to its next transition.
+// self_review may loop back to implementation; finalization produces DoneTransition.
+func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, task *ent.Task, run *ent.StageRun, output map[string]any) StageTransition {
+	if run.Stage == "finalization" {
+		return DoneTransition{Output: output}
+	}
+	if run.Stage == "self_review" {
+		passed, _ := output["passed"].(bool)
+		if !passed {
+			feedback := SummarizeReviewFindings(output)
+			prevCycles := 0
+			if task.Metadata != nil {
+				if v, ok := task.Metadata["review_cycles"].(float64); ok {
+					prevCycles = int(v)
+				}
+			}
+			cycles := prevCycles + 1
+			maxCycles := o.getCachedConfigNumber(ctx, maxReviewCyclesKey, defaultMaxReviewCycles)
+			if task.Metadata != nil {
+				if v, ok := task.Metadata["maxReviewCycles"].(float64); ok && int(v) > 0 {
+					maxCycles = int(v)
+				}
+			}
+			if cycles >= maxCycles {
+				return WaitUserTransition{
+					Reason:    fmt.Sprintf("review cycle limit (%d) reached", maxCycles),
+					Output:    output,
+					AgentDone: true,
+				}
+			}
+			meta := map[string]any{}
+			if task.Metadata != nil {
+				for k, v := range task.Metadata {
+					meta[k] = v
+				}
+			}
+			meta["review_feedback"] = feedback
+			meta["review_cycles"] = cycles
+			return NextTransition{Stage: "implementation", Output: output, MetadataPatch: meta}
+		}
+		// Passed — clear stale review feedback
+		if task.Metadata != nil {
+			if _, hasFeedback := task.Metadata["review_feedback"]; hasFeedback {
+				rest := map[string]any{}
+				for k, v := range task.Metadata {
+					if k != "review_feedback" && k != "review_cycles" {
+						rest[k] = v
+					}
+				}
+				if len(rest) == 0 {
+					return NextTransition{Stage: "finalization", Output: output, MetaClear: true}
+				}
+				return NextTransition{Stage: "finalization", Output: output, MetadataPatch: rest}
+			}
+		}
+		return NextTransition{Stage: "finalization", Output: output}
+	}
+	return NextTransition{Stage: NextStage(run.Stage), Output: output}
+}
+
