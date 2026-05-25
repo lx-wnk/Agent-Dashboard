@@ -92,19 +92,6 @@ func sortByStageIndex(tasks []*ent.Task) {
 	}
 }
 
-// hasFreeRunnerSlotFrom checks if there is a free agent runner slot, using the
-// provided busyTaskIDs set derived from the prefetched allRunning slice.
-// F-PERF-007: no database query is issued here.
-func hasFreeRunnerSlotFrom(max int, busyTaskIDs map[string]bool, exceptTaskID string) bool {
-	count := 0
-	for id := range busyTaskIDs {
-		if id != exceptTaskID {
-			count++
-		}
-	}
-	return count < max
-}
-
 // sortPickCandidates is the full multi-key sort used by tests (via export_test.go).
 // Production code uses sortByStageIndex (stage-only sort, after SQL handles the rest).
 func sortPickCandidates(tasks []*ent.Task) {
