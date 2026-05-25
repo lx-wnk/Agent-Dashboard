@@ -19,9 +19,10 @@ import (
 func TestRouter_BypassAuth_LoopbackNoOAuth(t *testing.T) {
 	deps := api.RouterDeps{
 		Config: api.RouterConfig{
-			JWTSecret:  "test-secret-minimum-32-characters-x",
-			IsLoopback: true,
-			BypassAuth: true,
+			JWTSecret:   "test-secret-minimum-32-characters-x",
+			HooksSecret: "test-hooks-secret",
+			IsLoopback:  true,
+			BypassAuth:  true,
 		},
 		AgentBroadcaster: sse.NewBroadcaster(),
 	}
@@ -43,9 +44,10 @@ func TestRouter_BypassAuth_LoopbackNoOAuth(t *testing.T) {
 func TestRouter_RequireAuth_Returns401WhenUnauthenticated(t *testing.T) {
 	deps := api.RouterDeps{
 		Config: api.RouterConfig{
-			JWTSecret:  "test-secret-minimum-32-characters-x",
-			IsLoopback: true,
-			BypassAuth: false,
+			JWTSecret:   "test-secret-minimum-32-characters-x",
+			HooksSecret: "test-hooks-secret",
+			IsLoopback:  true,
+			BypassAuth:  false,
 		},
 		AgentBroadcaster: sse.NewBroadcaster(),
 		// OAuthProvider set to non-nil triggers auth
