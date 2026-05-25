@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import AppButton from './ui/AppButton.vue'
 
 interface MemoryFile {
@@ -14,6 +14,29 @@ const saving = ref(false)
 const saved = ref(false)
 const dirty = ref(false)
 const error = ref<string | null>(null)
+const confirmDiscard = ref(false)
+const pendingPath = ref<string | null>(null)
+let confirmDiscardTimer: ReturnType<typeof setTimeout> | null = null
+
+function tryDiscard(path: string) {
+  if (!confirmDiscard.value) {
+    confirmDiscard.value = true
+    pendingPath.value = path
+    confirmDiscardTimer = setTimeout(() => {
+      confirmDiscard.value = false
+      pendingPath.value = null
+      confirmDiscardTimer = null
+    }, 4000)
+    return
+  }
+  if (confirmDiscardTimer) {
+    clearTimeout(confirmDiscardTimer)
+    confirmDiscardTimer = null
+  }
+  confirmDiscard.value = false
+  pendingPath.value = null
+  void doOpenFile(path)
+}
 
 async function loadFiles() {
   error.value = null
@@ -32,13 +55,11 @@ async function loadFiles() {
   }
 }
 
-async function openFile(path: string) {
-  if (dirty.value && !confirm('Unsaved changes will be lost. Continue?'))
-    return
-
+async function doOpenFile(path: string) {
   error.value = null
   selectedPath.value = path
   dirty.value = false
+  confirmDiscard.value = false
 
   try {
     const res = await fetch(`/api/memory/${encodeURIComponent(path)}`)
@@ -52,6 +73,15 @@ async function openFile(path: string) {
   }
   catch {
     error.value = 'Network error loading file.'
+  }
+}
+
+function openFile(path: string) {
+  if (dirty.value) {
+    tryDiscard(path)
+  }
+  else {
+    void doOpenFile(path)
   }
 }
 
@@ -90,6 +120,10 @@ async function save() {
 }
 
 onMounted(loadFiles)
+
+onUnmounted(() => {
+  if (confirmDiscardTimer) clearTimeout(confirmDiscardTimer)
+})
 </script>
 
 <template>
@@ -114,7 +148,10 @@ onMounted(loadFiles)
           : 'text-fg-soft hover:bg-raised'"
         @click="openFile(f.path)"
       >
-        {{ f.name }}
+        <template v-if="confirmDiscard && pendingPath === f.path">
+          Click again to discard changes
+        </template>
+        <template v-else>{{ f.name }}</template>
       </button>
     </div>
     <div class="flex-1 flex flex-col min-w-0">

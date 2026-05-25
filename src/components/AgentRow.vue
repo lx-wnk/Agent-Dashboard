@@ -63,10 +63,14 @@ const { getIdentity } = useAgentIdentity()
       <button
         v-if="agent.subagents.length > 0"
         type="button"
+        :aria-expanded="expanded ? 'true' : 'false'"
+        :aria-controls="`subagents-${agent.sessionId}`"
+        :aria-label="`${expanded ? 'Collapse' : 'Expand'} ${agent.subagents.length} sub-agent${agent.subagents.length === 1 ? '' : 's'}`"
         class="bg-transparent border-none text-fg-mute cursor-pointer text-[11px] px-1.5 py-0.5 rounded hover:bg-raised hover:text-fg-soft"
         @click.stop="$emit('toggleSubagents')"
       >
-        {{ expanded ? '▼' : '▶' }} {{ agent.subagents.length }}
+        <span aria-hidden="true">{{ expanded ? '▼' : '▶' }}</span>
+        {{ agent.subagents.length }}
       </button>
     </td>
   </tr>

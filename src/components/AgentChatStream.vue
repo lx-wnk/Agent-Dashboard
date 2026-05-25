@@ -268,7 +268,9 @@ defineExpose({ scrollToBottom })
             <div class="border-t border-line py-1">
               <details v-for="(call, j) in entry.calls" :key="j" class="px-2.5">
                 <summary class="py-0.5 text-fg-mute text-[11px] cursor-pointer hover:text-fg-soft">
-                  {{ call.toolName }}<span v-if="call.filePath" class="text-fg-mute ml-1.5 text-[10px]">{{ call.filePath }}</span>
+                  {{ call.toolName }}
+                  <span class="text-fg-mute ml-1.5 text-[10px]">— {{ call.filePath || 'no target' }}</span>
+                  <span class="text-fg-mute ml-1.5 text-[10px]">({{ call.result ? 'with output' : 'no output' }})</span>
                 </summary>
                 <pre v-if="call.result" class="bg-raised rounded p-2 text-[11px] text-fg-mute max-h-[200px] overflow-y-auto mt-1 mb-1 whitespace-pre-wrap break-words">{{ call.result }}</pre>
               </details>
