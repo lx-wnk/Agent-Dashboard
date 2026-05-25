@@ -15,7 +15,7 @@ import (
 type WriteDeps struct {
 	TaskRepo         repo.TaskRepo
 	PermRepo         repo.PermissionRepo
-	AuditRepo        repo.AuditRepo
+	AuditRepo        repo.AuditEventRepo
 	DepRepo          repo.DependencyRepo
 	ProjectRepo      repo.ProjectRepo
 	SpawnerRepo      repo.SpawnerRepo
@@ -507,10 +507,7 @@ func handleGrantPermissions(ctx context.Context, d WriteDeps, taskID string, arg
 		summary["explicit"] = map[string]any{"granted": len(granted)}
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
-	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-		TaskID: taskID, Actor: "system", Action: "permissions_granted",
-		Details: map[string]any{"summary": summary, "source": "mcp_manage_task"},
-	})
+	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "permissions_granted", "task:"+taskID, map[string]any{"summary": summary, "source": "mcp_manage_task"})
 	safeBroadcast(d.Broadcast, taskID)
 	return mcp.OK(map[string]any{"action": "grant_permissions", "summary": summary})
 }
@@ -524,10 +521,7 @@ func handleRevokePermission(ctx context.Context, d WriteDeps, taskID string, arg
 		return nil, mcp.Fail("revoke_permission: " + err.Error())
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
-	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-		TaskID: taskID, Actor: "system", Action: "permission_revoked",
-		Details: map[string]any{"permissionId": permID, "source": "mcp_manage_task"},
-	})
+	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "permission_revoked", "task:"+taskID, map[string]any{"permissionId": permID, "source": "mcp_manage_task"})
 	safeBroadcast(d.Broadcast, taskID)
 	return mcp.OK(map[string]any{"action": "revoke_permission", "removed": permID})
 }
@@ -560,10 +554,7 @@ func handleInheritFromParent(ctx context.Context, d WriteDeps, task *ent.Task, a
 		return nil, mcp.Fail("inherit_from_parent: " + err.Error())
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
-	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-		TaskID: taskID, Actor: "system", Action: "permissions_inherited",
-		Details: map[string]any{"fromParent": *task.ParentTaskID, "granted": len(inherited), "source": "mcp_manage_task"},
-	})
+	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "permissions_inherited", "task:"+taskID, map[string]any{"fromParent": *task.ParentTaskID, "granted": len(inherited), "source": "mcp_manage_task"})
 	safeBroadcast(d.Broadcast, taskID)
 	return mcp.OK(map[string]any{
 		"action": "inherit_from_parent", "from": *task.ParentTaskID, "granted": len(inherited),
@@ -613,10 +604,7 @@ func handleSetMetadata(ctx context.Context, d WriteDeps, task *ent.Task, args ma
 		return nil, mcp.Fail("set_metadata: " + err.Error())
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
-	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-		TaskID: taskID, Actor: "system", Action: "metadata_patched",
-		Details: map[string]any{"keys": mapKeys(patch), "source": "mcp_manage_task"},
-	})
+	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "metadata_patched", "task:"+taskID, map[string]any{"keys": mapKeys(patch), "source": "mcp_manage_task"})
 	safeBroadcast(d.Broadcast, taskID)
 	return mcp.OK(map[string]any{"action": "set_metadata", "task": updated})
 }
@@ -648,9 +636,7 @@ func handleSetPriority(ctx context.Context, d WriteDeps, task *ent.Task, args ma
 		details["silverBullet"] = mcp.OptionalBool(args, "silverBullet")
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
-	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-		TaskID: taskID, Actor: "system", Action: "priority_changed", Details: details,
-	})
+	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "priority_changed", "task:"+taskID, details)
 	safeBroadcast(d.Broadcast, taskID)
 	return mcp.OK(map[string]any{"action": "set_priority", "task": updated})
 }
@@ -682,10 +668,7 @@ func handleSetBudget(ctx context.Context, d WriteDeps, task *ent.Task, args map[
 		return nil, mcp.Fail("set_budget: " + err.Error())
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
-	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-		TaskID: taskID, Actor: "system", Action: "budget_changed",
-		Details: map[string]any{"source": "mcp_manage_task"},
-	})
+	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "budget_changed", "task:"+taskID, map[string]any{"source": "mcp_manage_task"})
 	safeBroadcast(d.Broadcast, taskID)
 	return mcp.OK(map[string]any{"action": "set_budget", "task": updated})
 }
@@ -743,9 +726,7 @@ func handleSetProject(ctx context.Context, d WriteDeps, task *ent.Task, args map
 		return nil, mcp.Fail("set_project: " + err.Error())
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
-	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-		TaskID: taskID, Actor: "system", Action: "project_changed", Details: details,
-	})
+	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "project_changed", "task:"+taskID, details)
 	safeBroadcast(d.Broadcast, taskID)
 	return mcp.OK(map[string]any{"action": "set_project", "task": updated})
 }
@@ -779,9 +760,7 @@ func handleSetSpawner(ctx context.Context, d WriteDeps, task *ent.Task, args map
 		return nil, mcp.Fail("set_spawner: " + err.Error())
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
-	_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-		TaskID: taskID, Actor: "system", Action: "spawner_changed", Details: details,
-	})
+	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "spawner_changed", "task:"+taskID, details)
 	safeBroadcast(d.Broadcast, taskID)
 	return mcp.OK(map[string]any{"action": "set_spawner", "task": updated})
 }

@@ -25,7 +25,7 @@ func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Ta
 		}()
 		txSR := repo.NewStageRunRepo(tx.Client())
 		txTask := repo.NewTaskRepo(tx.Client())
-		txAudit := repo.NewAuditRepo(tx.Client())
+		txAudit := repo.NewAuditEventRepo(tx.Client())
 		txPerm := repo.NewPermissionRepo(tx.Client())
 		// applyTransitionWrites reads the enriched payload in-tx (sees uncommitted
 		// writes) and returns it alongside the stage run. The broadcast fires after
@@ -65,7 +65,7 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 	t StageTransition,
 	srRepo repo.StageRunRepo,
 	taskRepo repo.TaskRepo,
-	auditRepo repo.AuditRepo,
+	auditRepo repo.AuditEventRepo,
 	permRepo repo.PermissionRepo,
 ) (*ent.StageRun, any, error) {
 	now := time.Now()
@@ -91,10 +91,8 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		if _, err := taskRepo.Update(ctx, task.ID, taskUpdate); err != nil {
 			return nil, nil, fmt.Errorf("applyTransition.next.updateTask: %w", err)
 		}
-		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
-			TaskID: task.ID, Actor: "orchestrator", Action: "stage_transition",
-			Details: map[string]any{"from": task.CurrentStage, "to": tr.Stage},
-		})
+		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "stage_transition", "task:"+task.ID,
+			map[string]any{"from": task.CurrentStage, "to": tr.Stage})
 		updatedRunID = sr.ID
 
 	case DoneTransition:
@@ -107,7 +105,7 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		if _, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &done}); err != nil {
 			return nil, nil, fmt.Errorf("applyTransition.done.updateTask: %w", err)
 		}
-		_ = auditRepo.Append(ctx, repo.AppendAuditInput{TaskID: task.ID, Actor: "orchestrator", Action: "task_done"})
+		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "task_done", "task:"+task.ID, nil)
 		updatedRunID = sr.ID
 		postCommit = append(postCommit, func() {
 			o.handleDependentTasks(ctx, task.ID, "done")
@@ -125,10 +123,8 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		}); err != nil {
 			return nil, nil, fmt.Errorf("applyTransition.fail.updateRun: %w", err)
 		}
-		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
-			TaskID: task.ID, Actor: "orchestrator", Action: "stage_failed",
-			Details: map[string]any{"stage": sr.Stage, "iteration": sr.Iteration, "error": tr.Reason},
-		})
+		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "stage_failed", "task:"+task.ID,
+			map[string]any{"stage": sr.Stage, "iteration": sr.Iteration, "error": tr.Reason})
 		updatedRunID = sr.ID
 		if o.opts.OnStageFailed != nil {
 			info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: tr.Reason}
@@ -143,10 +139,8 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		}); err != nil {
 			return nil, nil, fmt.Errorf("applyTransition.waitUser.updateRun: %w", err)
 		}
-		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
-			TaskID: task.ID, Actor: "orchestrator", Action: "awaiting_user",
-			Details: map[string]any{"reason": tr.Reason},
-		})
+		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "awaiting_user", "task:"+task.ID,
+			map[string]any{"reason": tr.Reason})
 		updatedRunID = sr.ID
 
 	case IterateTransition:
@@ -171,10 +165,8 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 			}); err != nil {
 				return nil, nil, fmt.Errorf("applyTransition.iterate.limitFail: %w", err)
 			}
-			_ = auditRepo.Append(ctx, repo.AppendAuditInput{
-				TaskID: task.ID, Actor: "orchestrator", Action: "iteration_limit_reached",
-				Details: map[string]any{"maxIter": maxIter, "lastIteration": sr.Iteration},
-			})
+			_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "iteration_limit_reached", "task:"+task.ID,
+				map[string]any{"maxIter": maxIter, "lastIteration": sr.Iteration})
 			updatedRunID = sr.ID
 			if o.opts.OnStageFailed != nil {
 				info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: fmt.Sprintf("iteration limit reached (%d)", maxIter)}
@@ -204,10 +196,8 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		if _, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &onHold}); err != nil {
 			return nil, nil, fmt.Errorf("applyTransition.onHold.updateTask: %w", err)
 		}
-		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
-			TaskID: task.ID, Actor: "orchestrator", Action: "moved_on_hold",
-			Details: map[string]any{"permissionRequestId": tr.PermissionRequestID},
-		})
+		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "moved_on_hold", "task:"+task.ID,
+			map[string]any{"permissionRequestId": tr.PermissionRequestID})
 		updatedRunID = sr.ID
 
 	case AsyncRunningTransition:
@@ -235,10 +225,8 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		if _, err := srRepo.Update(ctx, sr.ID, update); err != nil {
 			return nil, nil, fmt.Errorf("applyTransition.asyncRunning.updateRun: %w", err)
 		}
-		_ = auditRepo.Append(ctx, repo.AppendAuditInput{
-			TaskID: task.ID, Actor: "orchestrator", Action: "agent_spawned",
-			Details: map[string]any{"pid": tr.PID, "stage": sr.Stage},
-		})
+		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "agent_spawned", "task:"+task.ID,
+			map[string]any{"pid": tr.PID, "stage": sr.Stage})
 		updatedRunID = sr.ID
 
 	default:

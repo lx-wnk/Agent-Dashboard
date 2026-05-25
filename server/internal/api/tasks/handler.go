@@ -42,7 +42,7 @@ type Handler struct {
 	taskRepo          repo.TaskRepo
 	srRepo            repo.StageRunRepo
 	permRepo          repo.PermissionRepo
-	auditRepo         repo.AuditRepo
+	auditRepo         repo.AuditEventRepo
 	auditEventRepo    repo.AuditEventRepo
 	cfgRepo           repo.PipelineConfigRepo
 	depRepo           repo.DependencyRepo
@@ -62,7 +62,7 @@ type Deps struct {
 	TaskRepo          repo.TaskRepo
 	SRRepo            repo.StageRunRepo
 	PermRepo          repo.PermissionRepo
-	AuditRepo         repo.AuditRepo
+	AuditRepo         repo.AuditEventRepo
 	AuditEventRepo    repo.AuditEventRepo
 	CfgRepo           repo.PipelineConfigRepo
 	DepRepo           repo.DependencyRepo
@@ -516,10 +516,7 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 		AdditionalPrompt string `json:"additionalPrompt"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	_ = h.auditRepo.Append(r.Context(), repo.AppendAuditInput{
-		TaskID: id, Actor: "user", Action: "retry_requested",
-		Details: map[string]any{"stage": latest.Stage, "iteration": latest.Iteration},
-	})
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "retry_requested", "task:"+id, map[string]any{"actor": "user", "stage": latest.Stage, "iteration": latest.Iteration})
 	var opts *pipeline.ProgressOpts
 	if body.AdditionalPrompt != "" {
 		opts = &pipeline.ProgressOpts{UserAdditionalPrompt: body.AdditionalPrompt}

@@ -154,7 +154,7 @@ type OrchestratorOptions struct {
 	TaskRepo         repo.TaskRepo
 	StageRunRepo     repo.StageRunRepo
 	PermissionRepo   repo.PermissionRepo
-	AuditRepo        repo.AuditRepo
+	AuditRepo        repo.AuditEventRepo
 	ConfigRepo       repo.PipelineConfigRepo
 	SystemPromptRepo SystemPromptQuerier
 

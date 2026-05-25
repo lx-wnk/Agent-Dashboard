@@ -32,6 +32,8 @@ type AuditEventRepo interface {
 	List(ctx context.Context, f AuditEventFilters) ([]*ent.AuditEvent, error)
 	// ListForTask returns all audit events for the given task, oldest-first.
 	ListForTask(ctx context.Context, taskID string) ([]*ent.AuditEvent, error)
+	// ListAll returns events newest-first with pagination. Convenience wrapper.
+	ListAll(ctx context.Context, limit, offset int) ([]*ent.AuditEvent, error)
 }
 
 // AuditEventFilters controls which events are returned by List.
@@ -90,6 +92,10 @@ func (r *entAuditEventRepo) ListForTask(ctx context.Context, taskID string) ([]*
 		return nil, fmt.Errorf("audit_event.ListForTask: %w", err)
 	}
 	return events, nil
+}
+
+func (r *entAuditEventRepo) ListAll(ctx context.Context, limit, offset int) ([]*ent.AuditEvent, error) {
+	return r.List(ctx, AuditEventFilters{Limit: limit, Offset: offset})
 }
 
 func (r *entAuditEventRepo) List(ctx context.Context, f AuditEventFilters) ([]*ent.AuditEvent, error) {

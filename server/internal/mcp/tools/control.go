@@ -23,7 +23,7 @@ type ControlDeps struct {
 	TaskRepo     repo.TaskRepo
 	SRRepo       repo.StageRunRepo
 	PermRepo     repo.PermissionRepo
-	AuditRepo    repo.AuditRepo
+	AuditRepo    repo.AuditEventRepo
 	Orchestrator ControlOrchestrator // may be nil in tests
 	Broadcast    func(taskID string)
 }
@@ -103,11 +103,7 @@ func registerCancelTask(registry mcp.ToolRegistry, d ControlDeps) {
 			if _, err := d.TaskRepo.Update(ctx, id, repo.UpdateTaskInput{CurrentStage: &cancelled}); err != nil {
 				return nil, mcp.Fail("cancel_task: " + err.Error())
 			}
-			_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-				TaskID: id,
-				Actor:  "user",
-				Action: "cancelled",
-			})
+			_ = d.AuditRepo.RecordTaskAudit(ctx, id, nil, "cancelled", "task:"+id, map[string]any{"actor": "user"})
 			if d.Orchestrator != nil {
 				d.Orchestrator.NotifyTaskTerminated(ctx, id, "cancelled")
 			}
@@ -150,14 +146,10 @@ func registerRetryTask(registry mcp.ToolRegistry, d ControlDeps) {
 				return nil, mcp.Fail("Task has no failed stage run to retry on its current stage")
 			}
 
-			_ = d.AuditRepo.Append(ctx, repo.AppendAuditInput{
-				TaskID: id,
-				Actor:  "user",
-				Action: "retry_requested",
-				Details: map[string]any{
-					"stage":     latest.Stage,
-					"iteration": latest.Iteration,
-				},
+			_ = d.AuditRepo.RecordTaskAudit(ctx, id, nil, "retry_requested", "task:"+id, map[string]any{
+				"actor":     "user",
+				"stage":     latest.Stage,
+				"iteration": latest.Iteration,
 			})
 
 			if d.Orchestrator == nil {

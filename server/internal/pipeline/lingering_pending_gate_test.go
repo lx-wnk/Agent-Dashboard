@@ -44,7 +44,7 @@ func makeOrchFromBundle(t *testing.T, bundle *db.DBBundle) (*pipeline.PipelineOr
 		TaskRepo:       repo.NewTaskRepo(c),
 		StageRunRepo:   repo.NewStageRunRepo(c),
 		PermissionRepo: repo.NewPermissionRepo(c),
-		AuditRepo:      repo.NewAuditRepo(c),
+		AuditRepo:      repo.NewAuditEventRepo(c),
 		ConfigRepo:     repo.NewPipelineConfigRepo(c),
 	})
 	require.NoError(t, err)

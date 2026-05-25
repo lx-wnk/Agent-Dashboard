@@ -19,7 +19,7 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	taskRepo := repo.NewTaskRepo(client)
 	srRepo := repo.NewStageRunRepo(client)
 	permRepo := repo.NewPermissionRepo(client)
-	auditRepo := repo.NewAuditRepo(client)
+	auditRepo := repo.NewAuditEventRepo(client)
 	depRepo := repo.NewDependencyRepo(client)
 	apiKeyRepo := repo.NewApiKeyRepo(client)
 	projectRepo := repo.NewProjectRepo(client)
