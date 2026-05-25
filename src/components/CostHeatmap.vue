@@ -1,30 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { useCostHeatmap } from '../composables/useCostHeatmap'
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`)
 
-const grid = ref<number[][]>(Array.from({ length: 7 }, () => Array.from<number>({ length: 24 }).fill(0)))
-const loading = ref(false)
-const error = ref<string | null>(null)
-
-async function fetchHeatmap() {
-  loading.value = true
-  error.value = null
-  try {
-    const res = await fetch('/api/analytics/heatmap')
-    if (!res.ok)
-      throw new Error(await res.text())
-    const data = await res.json() as { grid: number[][] }
-    grid.value = data.grid
-  }
-  catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Failed to load heatmap'
-  }
-  finally {
-    loading.value = false
-  }
-}
+const { grid, loading, error } = useCostHeatmap()
 
 function maxCost(): number {
   return Math.max(1, ...grid.value.flatMap(row => row))
@@ -33,8 +13,6 @@ function maxCost(): number {
 function cellOpacity(cost: number): number {
   return cost === 0 ? 0 : 0.1 + 0.9 * (cost / maxCost())
 }
-
-onMounted(fetchHeatmap)
 </script>
 
 <template>

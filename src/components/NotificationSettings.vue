@@ -1,12 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import AppButton from './ui/AppButton.vue'
-
-interface NotifPref {
-  eventType: string
-  channels: string[]
-  enabled: boolean
-}
+import { useNotificationConfig } from '../composables/useNotificationConfig'
+import type { NotifPref } from '../composables/useNotificationConfig'
 
 const KNOWN_EVENTS: { type: string; label: string; description: string }[] = [
   { type: 'on_hold', label: 'On Hold', description: 'Task paused — requires user input' },
@@ -20,11 +16,7 @@ const KNOWN_EVENTS: { type: string; label: string; description: string }[] = [
 const CHANNELS = ['webhook', 'email', 'browser', 'system'] as const
 type Channel = typeof CHANNELS[number]
 
-// F015 — use Record instead of Map for reactive correctness
-const prefs = ref<Record<string, NotifPref>>({})
-const config = ref<Record<string, string>>({})
-const loading = ref(true)
-const error = ref<string | null>(null)
+const { prefs, config, loading, error, savePref, saveConfig } = useNotificationConfig()
 
 const savingPref = ref<string | null>(null)
 const savingConfig = ref(false)
@@ -45,36 +37,9 @@ function getPref(eventType: string): NotifPref {
   return prefs.value[eventType] ?? { eventType, channels: [], enabled: false }
 }
 
-onMounted(async () => {
-  try {
-    const [prefRes, cfgRes] = await Promise.all([
-      fetch('/api/notifications/preferences'),
-      fetch('/api/notifications/config'),
-    ])
-    // F047 — preserve which endpoint failed in the error message
-    if (!prefRes.ok || !cfgRes.ok)
-      throw new Error(`Failed to load notification settings (HTTP ${prefRes.ok ? cfgRes.status : prefRes.status})`)
-
-    const prefList: NotifPref[] = await prefRes.json()
-    // F015 — build object from array instead of Map.set loop
-    prefs.value = prefList.reduce<Record<string, NotifPref>>((acc, p) => {
-      acc[p.eventType] = p
-      return acc
-    }, {})
-
-    config.value = await cfgRes.json()
-  }
-  catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to load notifications'
-  }
-  finally {
-    loading.value = false
-  }
-})
-
 async function toggleEnabled(eventType: string) {
   const current = getPref(eventType)
-  await savePref(eventType, { ...current, enabled: !current.enabled })
+  await handleSavePref(eventType, { ...current, enabled: !current.enabled })
 }
 
 async function toggleChannel(eventType: string, channel: Channel) {
@@ -82,23 +47,14 @@ async function toggleChannel(eventType: string, channel: Channel) {
   const channels = current.channels.includes(channel)
     ? current.channels.filter(c => c !== channel)
     : [...current.channels, channel]
-  await savePref(eventType, { ...current, channels })
+  await handleSavePref(eventType, { ...current, channels })
 }
 
-async function savePref(eventType: string, updated: NotifPref) {
+async function handleSavePref(eventType: string, updated: NotifPref) {
   savingPref.value = eventType
   prefSaveOk.value = null
   try {
-    const res = await fetch(`/api/notifications/preferences/${eventType}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channels: updated.channels, enabled: updated.enabled }),
-    })
-    if (!res.ok)
-      throw new Error(`HTTP ${res.status}`)
-    const saved: NotifPref = await res.json()
-    // F015 — object spread assignment instead of Map.set
-    prefs.value = { ...prefs.value, [eventType]: saved }
+    await savePref(eventType, updated)
     prefSaveOk.value = eventType
     // F054 — store timer ID for cleanup
     prefSaveOkTimer = setTimeout(() => {
@@ -113,19 +69,12 @@ async function savePref(eventType: string, updated: NotifPref) {
   }
 }
 
-async function saveConfig() {
+async function handleSaveConfig() {
   savingConfig.value = true
   configSaveOk.value = false
   error.value = null
   try {
-    const res = await fetch('/api/notifications/config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config.value),
-    })
-    if (!res.ok)
-      throw new Error(`HTTP ${res.status}`)
-    config.value = await res.json()
+    await saveConfig(config.value)
     configSaveOk.value = true
     // F054 — store timer ID for cleanup
     configSaveOkTimer = setTimeout(() => { configSaveOk.value = false }, 2000)
@@ -159,7 +108,7 @@ async function saveConfig() {
       {{ !loading ? (error ?? '') : '' }}
     </div>
 
-    <template v-else>
+    <template v-if="!loading">
       <!-- F012 — screen-reader-only live region for pref save confirmation -->
       <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">
         {{ prefSaveOk ? `${prefSaveOk} preference saved` : '' }}
@@ -262,7 +211,7 @@ async function saveConfig() {
           Delivery Configuration
         </h4>
         <!-- F042 — wrap inputs + save button in a form for Enter-key submission + native validation -->
-        <form class="space-y-2" @submit.prevent="saveConfig">
+        <form class="space-y-2" @submit.prevent="handleSaveConfig">
           <div class="flex flex-col gap-1">
             <label class="text-xs text-fg-mute">Webhook URL</label>
             <input

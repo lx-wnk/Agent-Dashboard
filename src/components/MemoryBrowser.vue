@@ -1,19 +1,15 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import AppButton from './ui/AppButton.vue'
+import { useMemory } from '../composables/useMemory'
 
-interface MemoryFile {
-  path: string
-  name: string
-}
+const { files, error, fetchFileContent, saveFileContent } = useMemory()
 
-const files = ref<MemoryFile[]>([])
 const selectedPath = ref<string | null>(null)
 const content = ref('')
 const saving = ref(false)
 const saved = ref(false)
 const dirty = ref(false)
-const error = ref<string | null>(null)
 const confirmDiscard = ref(false)
 const pendingPath = ref<string | null>(null)
 let confirmDiscardTimer: ReturnType<typeof setTimeout> | null = null
@@ -38,42 +34,15 @@ function tryDiscard(path: string) {
   void doOpenFile(path)
 }
 
-async function loadFiles() {
-  error.value = null
-  try {
-    const res = await fetch('/api/memory')
-    if (res.ok) {
-      const data = await res.json() as { files: MemoryFile[] }
-      files.value = data.files
-    }
-    else {
-      error.value = `Failed to load files (${res.status})`
-    }
-  }
-  catch {
-    error.value = 'Network error loading files.'
-  }
-}
-
 async function doOpenFile(path: string) {
   error.value = null
   selectedPath.value = path
   dirty.value = false
   confirmDiscard.value = false
 
-  try {
-    const res = await fetch(`/api/memory/${encodeURIComponent(path)}`)
-    if (res.ok) {
-      const data = await res.json() as { content: string }
-      content.value = data.content
-    }
-    else {
-      error.value = `Failed to load file (${res.status})`
-    }
-  }
-  catch {
-    error.value = 'Network error loading file.'
-  }
+  const result = await fetchFileContent(path)
+  if (result !== null)
+    content.value = result
 }
 
 function openFile(path: string) {
@@ -94,32 +63,16 @@ async function save() {
     return
   saving.value = true
   error.value = null
-  try {
-    const res = await fetch(`/api/memory/${encodeURIComponent(selectedPath.value)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: content.value }),
-    })
-    if (res.ok) {
-      dirty.value = false
-      saved.value = true
-      setTimeout(() => {
-        saved.value = false
-      }, 2000)
-    }
-    else {
-      error.value = `Failed to save file (${res.status})`
-    }
+  const ok = await saveFileContent(selectedPath.value, content.value)
+  if (ok) {
+    dirty.value = false
+    saved.value = true
+    setTimeout(() => {
+      saved.value = false
+    }, 2000)
   }
-  catch {
-    error.value = 'Network error saving file.'
-  }
-  finally {
-    saving.value = false
-  }
+  saving.value = false
 }
-
-onMounted(loadFiles)
 
 onUnmounted(() => {
   if (confirmDiscardTimer) clearTimeout(confirmDiscardTimer)
