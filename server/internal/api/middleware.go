@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -61,18 +62,14 @@ func SlogMiddleware(next http.Handler) http.Handler {
 // and rejects any that come from a different origin than the server itself.
 // This defends against drive-by CSRF in the local loopback trust model.
 //
-// Bearer-token requests (Authorization header present) are exempt: browsers
-// cannot set arbitrary Authorization headers cross-origin without a CORS
-// preflight, so they are CSRF-immune by definition.
+// The middleware runs unconditionally for all mutation methods — there is no
+// exemption for Bearer-token requests. Bearer-only paths (MCP, hooks,
+// channel-reply) are mounted outside this middleware's scope, so they are
+// unaffected.
 func RequireSameOriginForMutations(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		method := r.Method
 		if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
-			next.ServeHTTP(w, r)
-			return
-		}
-		// Bearer-token clients (MCP agents, curl, Claude Code sessions) are exempt.
-		if r.Header.Get("Authorization") != "" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -200,9 +197,9 @@ func (c *IPRateLimiterConfig) applyDefaults() {
 // Apply this to high-cost endpoints such as auth, MCP, and bulk-resolve to
 // prevent SHA-256 amplification attacks and auth-probing DoS.
 //
-// The background cleanup goroutine runs until ctx is cancelled. Callers that do
-// not need explicit cleanup may pass context.Background().
-func NewIPRateLimiter(cfg IPRateLimiterConfig) func(http.Handler) http.Handler {
+// ctx controls the lifetime of the background cleanup goroutine. Pass
+// context.Background() in production or a test-scoped context in tests.
+func NewIPRateLimiter(ctx context.Context, cfg IPRateLimiterConfig) func(http.Handler) http.Handler {
 	cfg.applyDefaults()
 
 	var mu sync.Mutex
@@ -221,18 +218,24 @@ func NewIPRateLimiter(cfg IPRateLimiterConfig) func(http.Handler) http.Handler {
 	}
 
 	// Background cleanup to prevent unbounded growth of the limiter map.
+	// Exits when ctx is cancelled (e.g. on server shutdown or in tests).
 	go func() {
 		ticker := time.NewTicker(cfg.CleanupInterval)
 		defer ticker.Stop()
-		for range ticker.C {
-			cutoff := time.Now().Add(-cfg.StaleAfter)
-			mu.Lock()
-			for ip, entry := range limiters {
-				if entry.lastSeen.Before(cutoff) {
-					delete(limiters, ip)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				cutoff := time.Now().Add(-cfg.StaleAfter)
+				mu.Lock()
+				for ip, entry := range limiters {
+					if entry.lastSeen.Before(cutoff) {
+						delete(limiters, ip)
+					}
 				}
+				mu.Unlock()
 			}
-			mu.Unlock()
 		}
 	}()
 
@@ -244,9 +247,12 @@ func NewIPRateLimiter(cfg IPRateLimiterConfig) func(http.Handler) http.Handler {
 				ip = r.RemoteAddr
 			}
 			lim := getLimiter(ip)
-			if !lim.Allow() {
-				// Report when the next token will be available.
-				retryAfter := int(time.Until(time.Now().Add(lim.Reserve().Delay())).Seconds()) + 1
+			// Single ReserveN call: avoids the double-consume race between Allow()
+			// and Reserve() that would silently burn an extra token on denial.
+			res := lim.ReserveN(time.Now(), 1)
+			if !res.OK() || res.Delay() > 0 {
+				res.Cancel() // refund the reservation
+				retryAfter := int(res.Delay().Seconds()) + 1
 				if retryAfter < 1 {
 					retryAfter = 1
 				}
@@ -257,6 +263,26 @@ func NewIPRateLimiter(cfg IPRateLimiterConfig) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// StripForwardedHeaders removes proxy-injected forwarding headers from every
+// inbound request. Since the dashboard binds exclusively to loopback (127.0.0.1)
+// these headers should never be present, and trusting them would allow an
+// attacker on the local machine to spoof origin metadata understood by other
+// middleware (e.g. RealIP, CORS checks). Stripping them here, as the very first
+// middleware in the chain, ensures no downstream handler ever sees them.
+//
+// Headers stripped: X-Forwarded-Host, X-Forwarded-Proto, Forwarded.
+// X-Forwarded-For and X-Real-IP are intentionally left in place: chi's RealIP
+// middleware uses X-Forwarded-For to set RemoteAddr, and in multi-machine setups
+// (VPN / SSH tunnel) a trusted reverse proxy may legitimately set it.
+func StripForwardedHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Del("X-Forwarded-Host")
+		r.Header.Del("X-Forwarded-Proto")
+		r.Header.Del("Forwarded")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // SecurityHeaders sets security-relevant HTTP response headers.

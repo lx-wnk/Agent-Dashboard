@@ -115,16 +115,17 @@ func NewRouter(deps RouterDeps) http.Handler {
 	r := chi.NewRouter()
 
 	// Build the per-IP rate limiter once; it owns its cleanup goroutine.
-	authRateLimiter := NewIPRateLimiter(deps.Config.AuthRateLimiterConfig)
+	// serverCtx cancels the goroutine on shutdown.
+	authRateLimiter := NewIPRateLimiter(serverCtx, deps.Config.AuthRateLimiterConfig)
 
-	// Global middleware (applied to every request)
+	// Global middleware (applied to every request, including hooks/MCP/channel-reply)
+	// StripForwardedHeaders must be FIRST so no downstream middleware ever sees
+	// attacker-controlled X-Forwarded-Host / X-Forwarded-Proto / Forwarded values.
+	r.Use(StripForwardedHeaders)
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
 	r.Use(SlogMiddleware)
 	r.Use(chimiddleware.Recoverer)
-	// F-SEC-005: reject requests whose Host header is not in the loopback whitelist.
-	// This closes the DNS-rebinding vector when DASHBOARD_AUTH=none is in effect.
-	r.Use(RequireLoopbackHost(deps.Config.LoopbackHostConfig))
 	r.Use(SecurityHeaders)
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +171,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	// Protected routes (JWT required, unless auth bypass is active)
 	r.Group(func(r chi.Router) {
+		// F-SEC-005: reject requests whose Host header is not in the loopback
+		// whitelist. Scoped to the browser-facing protected group; hooks, MCP,
+		// and channel-reply are excluded because they use bearer-token auth and
+		// may be called from non-browser clients on the same machine.
+		r.Use(RequireLoopbackHost(deps.Config.LoopbackHostConfig))
 		// RequireSameOriginForMutations guards against CSRF in both auth modes:
 		// in bypass mode it is the primary CSRF defence; in auth mode it is
 		// defence-in-depth on top of JWT validation.

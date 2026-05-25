@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +14,93 @@ import (
 var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 })
+
+// ----------------------------------------------------------------------------
+// StripForwardedHeaders — 7e.A strip proxy-injected forwarding headers
+// ----------------------------------------------------------------------------
+
+func TestStripForwardedHeaders_RemovesForwardingHeaders(t *testing.T) {
+	// Capture what headers the inner handler sees.
+	var (
+		gotXFH    string
+		gotXFP    string
+		gotFwd    string
+		gotXFF    string // must NOT be stripped
+		gotXRI    string // must NOT be stripped
+	)
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotXFH = r.Header.Get("X-Forwarded-Host")
+		gotXFP = r.Header.Get("X-Forwarded-Proto")
+		gotFwd = r.Header.Get("Forwarded")
+		gotXFF = r.Header.Get("X-Forwarded-For")
+		gotXRI = r.Header.Get("X-Real-IP")
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := api.StripForwardedHeaders(inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("X-Forwarded-Host", "evil.example.com")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("Forwarded", "for=evil.example.com;proto=https")
+	req.Header.Set("X-Forwarded-For", "1.2.3.4")
+	req.Header.Set("X-Real-IP", "1.2.3.4")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if gotXFH != "" {
+		t.Errorf("X-Forwarded-Host should be stripped, got %q", gotXFH)
+	}
+	if gotXFP != "" {
+		t.Errorf("X-Forwarded-Proto should be stripped, got %q", gotXFP)
+	}
+	if gotFwd != "" {
+		t.Errorf("Forwarded should be stripped, got %q", gotFwd)
+	}
+	// X-Forwarded-For and X-Real-IP must NOT be stripped.
+	if gotXFF != "1.2.3.4" {
+		t.Errorf("X-Forwarded-For must be preserved, got %q", gotXFF)
+	}
+	if gotXRI != "1.2.3.4" {
+		t.Errorf("X-Real-IP must be preserved, got %q", gotXRI)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// RequireSameOriginForMutations — 7b.A no Authorization exemption
+// ----------------------------------------------------------------------------
+
+func TestRequireSameOriginForMutations_NoAuthorizationExemption(t *testing.T) {
+	// Even when the Authorization header is set, a cross-origin mutation
+	// (e.g. missing Origin) must be rejected. Bearer-only paths (MCP, hooks)
+	// are mounted outside this middleware; they are unaffected.
+	handler := api.RequireSameOriginForMutations(okHandler)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks", nil)
+	req.Header.Set("Authorization", "Bearer mcp_abc123")
+	// No Origin header → must be denied (fail-closed).
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for POST with Authorization but no Origin, got %d", rec.Code)
+	}
+}
+
+func TestRequireSameOriginForMutations_AllowsSameOriginWithAuth(t *testing.T) {
+	// A POST from the same origin passes even when Authorization is present.
+	handler := api.RequireSameOriginForMutations(okHandler)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks", nil)
+	req.Host = "127.0.0.1:13120"
+	req.Header.Set("Origin", "http://127.0.0.1:13120")
+	req.Header.Set("Authorization", "Bearer mcp_abc123")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for same-origin POST with Authorization, got %d", rec.Code)
+	}
+}
 
 // ----------------------------------------------------------------------------
 // RequireLoopbackHost — F-SEC-005 DNS-rebinding protection
@@ -131,7 +219,7 @@ func TestRequireLoopbackHost_ExtraAllowedHostsDoNotExpandDefault(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestIPRateLimiter_AllowsRequestsUnderLimit(t *testing.T) {
-	mw := api.NewIPRateLimiter(api.IPRateLimiterConfig{Rate: 10, Burst: 20})
+	mw := api.NewIPRateLimiter(context.Background(), api.IPRateLimiterConfig{Rate: 10, Burst: 20})
 	handler := mw(okHandler)
 
 	// 20 requests (burst) must all succeed from the same IP.
@@ -149,7 +237,7 @@ func TestIPRateLimiter_AllowsRequestsUnderLimit(t *testing.T) {
 
 func TestIPRateLimiter_Returns429AfterBurstExhausted(t *testing.T) {
 	// Use a very low rate so we can exhaust the burst without sleeping.
-	mw := api.NewIPRateLimiter(api.IPRateLimiterConfig{Rate: 1, Burst: 3})
+	mw := api.NewIPRateLimiter(context.Background(), api.IPRateLimiterConfig{Rate: 1, Burst: 3})
 	handler := mw(okHandler)
 
 	const remoteAddr = "192.0.2.2:54321"
@@ -177,7 +265,7 @@ func TestIPRateLimiter_Returns429AfterBurstExhausted(t *testing.T) {
 
 func TestIPRateLimiter_DifferentIPsGetSeparateBuckets(t *testing.T) {
 	// Exhaust the bucket for IP A; IP B should still succeed.
-	mw := api.NewIPRateLimiter(api.IPRateLimiterConfig{Rate: 1, Burst: 1})
+	mw := api.NewIPRateLimiter(context.Background(), api.IPRateLimiterConfig{Rate: 1, Burst: 1})
 	handler := mw(okHandler)
 
 	sendN := func(ip string, n int) int {
@@ -204,7 +292,7 @@ func TestIPRateLimiter_DifferentIPsGetSeparateBuckets(t *testing.T) {
 
 func TestIPRateLimiter_DefaultConfigAllowsNormalTraffic(t *testing.T) {
 	// Zero-value config must use safe defaults (10 r/s, burst 20).
-	mw := api.NewIPRateLimiter(api.IPRateLimiterConfig{})
+	mw := api.NewIPRateLimiter(context.Background(), api.IPRateLimiterConfig{})
 	handler := mw(okHandler)
 
 	// A single request from a fresh IP must always succeed.
@@ -219,7 +307,7 @@ func TestIPRateLimiter_DefaultConfigAllowsNormalTraffic(t *testing.T) {
 }
 
 func TestIPRateLimiter_RetryAfterHeaderIsPositive(t *testing.T) {
-	mw := api.NewIPRateLimiter(api.IPRateLimiterConfig{Rate: 1, Burst: 1})
+	mw := api.NewIPRateLimiter(context.Background(), api.IPRateLimiterConfig{Rate: 1, Burst: 1})
 	handler := mw(okHandler)
 
 	addr := "198.51.100.1:8080"
