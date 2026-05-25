@@ -2,7 +2,6 @@ package repo
 
 import (
 	"context"
-	databasesql "database/sql"
 	"fmt"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
-	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 )
 
 type StageRunRepo interface {
@@ -21,8 +19,8 @@ type StageRunRepo interface {
 	GetLatestByTaskAndStage(ctx context.Context, taskID, stage string) (*ent.StageRun, error)
 	GetByTaskStageIteration(ctx context.Context, taskID, stage string, iteration int) (*ent.StageRun, error)
 	ListForTask(ctx context.Context, taskID string) ([]*ent.StageRun, error)
-	// ListStageRunsByTaskIDs returns all stage_runs for the given task IDs in a
-	// single bulk query, grouped by task_id. Eliminates N+1 queries in export routes.
+	// ListStageRunsByTaskIDs returns all stage_runs for the given task IDs
+	// grouped by task_id. Eliminates N+1 queries compared to per-task ListForTask.
 	ListStageRunsByTaskIDs(ctx context.Context, taskIDs []string) (map[string][]*ent.StageRun, error)
 	ListByStatus(ctx context.Context, statuses ...string) ([]*ent.StageRun, error)
 	ListPending(ctx context.Context) ([]*ent.StageRun, error)
@@ -55,22 +53,15 @@ type UpdateStageRunInput struct {
 }
 
 type entStageRunRepo struct {
-	client   *ent.Client
-	bulkRepo rawrepo.StageRunBulkRepo // nil when created without a *sql.DB (e.g. TX context)
+	client *ent.Client
 }
 
-// NewStageRunRepo returns a StageRunRepo backed by client only (no raw-SQL
-// bulk helpers). Use NewStageRunRepoWithDB for the full implementation that
-// includes window-function-based GetLatestForTasks and ListStageRunsByTaskIDs.
+// NewStageRunRepo returns a StageRunRepo backed by the ent client.
+// Bulk window-function queries (GetLatestForTasks, ListStageRunsByTaskIDs)
+// use an ent-based heuristic fallback. Callers that need exact window-function
+// semantics should inject rawrepo.StageRunBulkRepo directly via DI.
 func NewStageRunRepo(client *ent.Client) StageRunRepo {
 	return &entStageRunRepo{client: client}
-}
-
-// NewStageRunRepoWithDB returns a StageRunRepo that also has access to the
-// underlying *sql.DB for window-function bulk queries. Use this in the DI
-// composition root instead of NewStageRunRepo where a DBBundle is available.
-func NewStageRunRepoWithDB(client *ent.Client, db *databasesql.DB) StageRunRepo {
-	return &entStageRunRepo{client: client, bulkRepo: rawrepo.NewStageRunBulkRepo(db)}
 }
 
 func (r *entStageRunRepo) Create(ctx context.Context, in CreateStageRunInput) (*ent.StageRun, error) {
@@ -221,21 +212,11 @@ func (r *entStageRunRepo) SumCompletedCostCents(ctx context.Context, taskID stri
 	return int64(result[0].Sum), nil
 }
 
-// GetLatestForTasks returns the most-recent stage_run per task using a
-// ROW_NUMBER() window function when a *sql.DB is available (production path).
-// Falls back to the ent-based heuristic limit when bulkRepo is nil (transaction
-// context or test without DB injection).
+// GetLatestForTasks returns the most-recent stage_run per task using an
+// ent-based heuristic query.
+// Fallback for transaction contexts where bulkRepo is unavailable; heuristic
+// limit acceptable because transaction-scoped calls are always single-task.
 func (r *entStageRunRepo) GetLatestForTasks(ctx context.Context, taskIDs []string) (map[string]*ent.StageRun, error) {
-	if r.bulkRepo != nil {
-		result, err := r.bulkRepo.LatestPerTask(ctx, taskIDs)
-		if err != nil {
-			return nil, fmt.Errorf("stagerun.GetLatestForTasks: %w", err)
-		}
-		return result, nil
-	}
-	// Fallback: ent-based query used in transaction contexts (txSR) where
-	// bulkRepo is unavailable. The heuristic limit is acceptable there because
-	// transaction-scoped GetLatestForTasks is only called for single-task lookups.
 	limit := len(taskIDs)*20 + 20
 	runs, err := r.client.StageRun.Query().
 		Where(stagerun.TaskIDIn(taskIDs...)).
@@ -255,17 +236,10 @@ func (r *entStageRunRepo) GetLatestForTasks(ctx context.Context, taskIDs []strin
 }
 
 // ListStageRunsByTaskIDs returns all stage_runs for the given task IDs in a
-// single bulk query, grouped by task_id. This eliminates the N+1 pattern in
-// the export route where ListForTask was called once per task.
+// single ent bulk query, grouped by task_id. Callers that need the exact
+// window-function implementation should inject rawrepo.StageRunBulkRepo
+// directly and call AllForTaskIDs.
 func (r *entStageRunRepo) ListStageRunsByTaskIDs(ctx context.Context, taskIDs []string) (map[string][]*ent.StageRun, error) {
-	if r.bulkRepo != nil {
-		result, err := r.bulkRepo.AllForTaskIDs(ctx, taskIDs)
-		if err != nil {
-			return nil, fmt.Errorf("stagerun.ListStageRunsByTaskIDs: %w", err)
-		}
-		return result, nil
-	}
-	// Fallback: ent-based query used when bulkRepo is unavailable.
 	if len(taskIDs) == 0 {
 		return map[string][]*ent.StageRun{}, nil
 	}
