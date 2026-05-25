@@ -8,8 +8,6 @@ Real-time monitoring and control dashboard for locally running Claude Code agent
 [![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Status](https://img.shields.io/badge/status-active-brightgreen)](https://github.com/lx-wnk/Agent-Dashboard)
 
-![Dashboard screenshot](./docs/screenshots/dashboard.png)
-
 ## Use this if…
 
 - You run multiple Claude Code agents in parallel and want a single pane of glass for all of them

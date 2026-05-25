@@ -35,9 +35,9 @@ All persistent data stays on your machine. No data is synced to a cloud service 
 | `spawners`, `presets`, `remotes`, `refine` | User-configured pipeline settings |
 | `cost_history` | Aggregated per-session token and cost data imported from JSONL files |
 
-### Hooks secret (`~/.claude/dashboard-hooks-secret`)
+### Hooks secret
 
-Auto-generated on first start. File permissions are set to `0600` (owner read/write only). Rotate by deleting the file and restarting.
+Set via the `DASHBOARD_HOOKS_SECRET` environment variable. If unset, `/api/hooks/event` accepts any loopback request and a warning is logged on startup.
 
 ### VAPID private key
 
@@ -49,7 +49,7 @@ The VAPID private key used for Web-Push is stored in the SQLite database under a
 
 None of the following integrations are active by default. Data only leaves your machine when you explicitly configure and enable them.
 
-### GitHub OAuth (`DASHBOARD_GITHUB_CLIENT_ID` + `DASHBOARD_GITHUB_CLIENT_SECRET`)
+### GitHub OAuth (`GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET`)
 
 - OAuth flow redirects your browser to `github.com` (US). GitHub's privacy policy applies.
 - Scope requested: `read:user` only.
@@ -104,7 +104,7 @@ The dashboard makes no outbound network connections unless you configure an inte
 If you run this dashboard on a shared machine (e.g. a shared CI runner or team server) and other users can access it, you are acting as a **data controller** under GDPR for any personal data processed on their behalf. You must:
 
 - Inform those users about the data practices described in sections 1–3.
-- Configure GitHub OAuth (`DASHBOARD_GITHUB_CLIENT_ID` / `DASHBOARD_GITHUB_CLIENT_SECRET`) to enforce per-user authentication. Without OAuth, any process with access to `127.0.0.1:13120` has full dashboard access.
+- Configure GitHub OAuth (`GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`) to enforce per-user authentication. Without OAuth, any process with access to `127.0.0.1:13120` has full dashboard access.
 - Ensure appropriate access controls on the SQLite database file.
 
 ### Multi-machine mode
