@@ -150,12 +150,13 @@ async function saveConfig() {
       </p>
     </div>
 
-    <!-- F011 — role="status"/role="alert" for screen reader announcements -->
-    <div v-if="loading" role="status" aria-live="polite" class="text-xs text-slate-400">
-      Loading…
+    <!-- F011 — role="status"/role="alert" rendered unconditionally so announcements
+         fire when content changes (ARIA live regions must exist before content mutates). -->
+    <div role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-400" :class="{ 'sr-only': !loading }">
+      {{ loading ? 'Loading…' : '' }}
     </div>
-    <div v-else-if="error" role="alert" class="text-xs text-red-500">
-      {{ error }}
+    <div role="alert" aria-atomic="true" class="text-xs text-red-500" :class="{ 'sr-only': !error || loading }">
+      {{ !loading ? (error ?? '') : '' }}
     </div>
 
     <template v-else>
@@ -285,9 +286,9 @@ async function saveConfig() {
             <AppButton type="submit" size="sm" :disabled="savingConfig">
               {{ savingConfig ? 'Saving…' : configSaveOk ? 'Saved!' : 'Save Config' }}
             </AppButton>
-            <!-- F012 — aria-live announcement for save confirmation -->
-            <p v-if="configSaveOk" role="status" aria-live="polite" class="text-xs text-green-600 dark:text-green-400">
-              Settings saved.
+            <!-- F012 — aria-live rendered unconditionally for reliable announcement -->
+            <p role="status" aria-live="polite" aria-atomic="true" class="text-xs text-green-600 dark:text-green-400" :class="{ 'sr-only': !configSaveOk }">
+              {{ configSaveOk ? 'Settings saved.' : '' }}
             </p>
           </div>
         </form>
