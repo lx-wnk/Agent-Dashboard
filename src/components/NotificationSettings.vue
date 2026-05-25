@@ -108,7 +108,7 @@ async function handleSaveConfig() {
       {{ !loading ? (error ?? '') : '' }}
     </div>
 
-    <template v-else>
+    <template v-if="!loading">
       <!-- F012 — screen-reader-only live region for pref save confirmation -->
       <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">
         {{ prefSaveOk ? `${prefSaveOk} preference saved` : '' }}
