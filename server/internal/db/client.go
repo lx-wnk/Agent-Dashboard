@@ -70,6 +70,12 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: drop bare-WebFetch grants: %w", err)
 	}
+	// Copy legacy audit_logs rows into audit_events (forensics consolidation).
+	// Idempotent — no-op once rows are migrated. Must run after ent auto-migrate.
+	if err := migrateCopyAuditLogsToAuditEvents(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: copy audit_logs → audit_events: %w", err)
+	}
 	if err := runRawMigrations(sqlDB); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: raw migrations: %w", err)
@@ -177,6 +183,61 @@ func migrateDropBareWebFetchGrants(db *sql.DB) error {
 		); err != nil {
 			return fmt.Errorf("delete bare-WebFetch grants: %w", err)
 		}
+	}
+	return nil
+}
+
+// migrateCopyAuditLogsToAuditEvents copies legacy audit_logs rows into audit_events
+// as part of the audit-table consolidation (issue #102). Idempotent — uses a
+// NOT EXISTS guard keyed on (task_id, action, timestamp) to avoid duplicates on
+// reruns. The actual DROP of audit_logs is handled in runRawMigrations after
+// the AuditLog schema is removed from ent.
+func migrateCopyAuditLogsToAuditEvents(db *sql.DB) error {
+	// audit_logs may not exist (fresh DB after schema removal). Detect first.
+	var hasTable int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='audit_logs'`,
+	).Scan(&hasTable); err != nil {
+		return fmt.Errorf("check audit_logs table: %w", err)
+	}
+	if hasTable == 0 {
+		return nil // legacy table already dropped
+	}
+	var pending int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM audit_logs al
+		WHERE NOT EXISTS (
+			SELECT 1 FROM audit_events ae
+			WHERE ae.task_id = al.task_id
+			  AND ae.action = al.action
+			  AND ae.ts = al.timestamp
+		)
+	`).Scan(&pending); err != nil {
+		return fmt.Errorf("count pending audit_logs: %w", err)
+	}
+	if pending == 0 {
+		return nil
+	}
+	slog.Warn("migration: copying audit_logs into audit_events", "count", pending)
+	if _, err := db.Exec(`
+		INSERT INTO audit_events (id, ts, user_id, action, target, metadata, task_id)
+		SELECT
+			lower(hex(randomblob(16))),
+			al.timestamp,
+			NULL,
+			al.action,
+			'task:' || al.task_id,
+			json_object('actor', al.actor, 'details', al.details),
+			al.task_id
+		FROM audit_logs al
+		WHERE NOT EXISTS (
+			SELECT 1 FROM audit_events ae
+			WHERE ae.task_id = al.task_id
+			  AND ae.action = al.action
+			  AND ae.ts = al.timestamp
+		)
+	`); err != nil {
+		return fmt.Errorf("copy audit_logs: %w", err)
 	}
 	return nil
 }
