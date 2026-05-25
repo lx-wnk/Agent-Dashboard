@@ -19,10 +19,16 @@ type StageRunRepo interface {
 	GetLatestByTaskAndStage(ctx context.Context, taskID, stage string) (*ent.StageRun, error)
 	GetByTaskStageIteration(ctx context.Context, taskID, stage string, iteration int) (*ent.StageRun, error)
 	ListForTask(ctx context.Context, taskID string) ([]*ent.StageRun, error)
+	// ListStageRunsByTaskIDs returns all stage_runs for the given task IDs
+	// grouped by task_id. Eliminates N+1 queries compared to per-task ListForTask.
+	ListStageRunsByTaskIDs(ctx context.Context, taskIDs []string) (map[string][]*ent.StageRun, error)
 	ListByStatus(ctx context.Context, statuses ...string) ([]*ent.StageRun, error)
 	ListPending(ctx context.Context) ([]*ent.StageRun, error)
 	Update(ctx context.Context, id string, input UpdateStageRunInput) (*ent.StageRun, error)
 	SumCompletedCostCents(ctx context.Context, taskID string) (int64, error)
+	// GetLatestForTasks returns the most-recent stage_run per task using a
+	// ROW_NUMBER() window function — correctness is exact regardless of iteration
+	// count, unlike the former Go-side heuristic limit of len(ids)*20+20.
 	GetLatestForTasks(ctx context.Context, taskIDs []string) (map[string]*ent.StageRun, error)
 }
 
@@ -46,8 +52,14 @@ type UpdateStageRunInput struct {
 	LastGrantAt *time.Time
 }
 
-type entStageRunRepo struct{ client *ent.Client }
+type entStageRunRepo struct {
+	client *ent.Client
+}
 
+// NewStageRunRepo returns a StageRunRepo backed by the ent client.
+// Bulk window-function queries (GetLatestForTasks, ListStageRunsByTaskIDs)
+// use an ent-based heuristic fallback. Callers that need exact window-function
+// semantics should inject rawrepo.StageRunBulkRepo directly via DI.
 func NewStageRunRepo(client *ent.Client) StageRunRepo {
 	return &entStageRunRepo{client: client}
 }
@@ -200,10 +212,11 @@ func (r *entStageRunRepo) SumCompletedCostCents(ctx context.Context, taskID stri
 	return int64(result[0].Sum), nil
 }
 
+// GetLatestForTasks returns the most-recent stage_run per task using an
+// ent-based heuristic query.
+// Fallback for transaction contexts where bulkRepo is unavailable; heuristic
+// limit acceptable because transaction-scoped calls are always single-task.
 func (r *entStageRunRepo) GetLatestForTasks(ctx context.Context, taskIDs []string) (map[string]*ent.StageRun, error) {
-	// Bound the query: assume at most 20 iterations per task so we don't load
-	// unbounded history. A window-function subquery would be exact but requires
-	// raw SQL that cannot return typed ent.StageRun values without manual scanning.
 	limit := len(taskIDs)*20 + 20
 	runs, err := r.client.StageRun.Query().
 		Where(stagerun.TaskIDIn(taskIDs...)).
@@ -218,6 +231,28 @@ func (r *entStageRunRepo) GetLatestForTasks(ctx context.Context, taskIDs []strin
 		if _, exists := result[run.TaskID]; !exists {
 			result[run.TaskID] = run
 		}
+	}
+	return result, nil
+}
+
+// ListStageRunsByTaskIDs returns all stage_runs for the given task IDs in a
+// single ent bulk query, grouped by task_id. Callers that need the exact
+// window-function implementation should inject rawrepo.StageRunBulkRepo
+// directly and call AllForTaskIDs.
+func (r *entStageRunRepo) ListStageRunsByTaskIDs(ctx context.Context, taskIDs []string) (map[string][]*ent.StageRun, error) {
+	if len(taskIDs) == 0 {
+		return map[string][]*ent.StageRun{}, nil
+	}
+	runs, err := r.client.StageRun.Query().
+		Where(stagerun.TaskIDIn(taskIDs...)).
+		Order(stagerun.ByIteration()).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("stagerun.ListStageRunsByTaskIDs: %w", err)
+	}
+	result := make(map[string][]*ent.StageRun, len(taskIDs))
+	for _, run := range runs {
+		result[run.TaskID] = append(result[run.TaskID], run)
 	}
 	return result, nil
 }

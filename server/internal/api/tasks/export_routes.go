@@ -19,14 +19,24 @@ func (h *Handler) exportTasks(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("export: list tasks: %w", err)
 	}
 
+	// Collect task IDs and bulk-load all stage_runs in a single query,
+	// eliminating the N+1 pattern that called ListForTask once per task.
+	taskIDs := make([]string, len(tasks))
+	for i, t := range tasks {
+		taskIDs[i] = t.ID
+	}
+	runsByTask, err := h.srRepo.ListStageRunsByTaskIDs(r.Context(), taskIDs)
+	if err != nil {
+		return fmt.Errorf("export: bulk list stage runs: %w", err)
+	}
+
 	format := r.URL.Query().Get("format")
 	if format == "csv" {
 		header := "id,slug,title,currentStage,priority,createdAt,totalCostCents,totalTokens"
 		rows := make([]string, 0, len(tasks))
 		for _, t := range tasks {
-			runs, _ := h.srRepo.ListForTask(r.Context(), t.ID)
 			totalCost, totalTokens := 0, 0
-			for _, sr := range runs {
+			for _, sr := range runsByTask[t.ID] {
 				totalCost += sr.CostCents
 				totalTokens += sr.TokensUsed
 			}
@@ -52,8 +62,7 @@ func (h *Handler) exportTasks(w http.ResponseWriter, r *http.Request) error {
 	}
 	result := make([]taskWithRuns, 0, len(tasks))
 	for _, t := range tasks {
-		runs, _ := h.srRepo.ListForTask(r.Context(), t.ID)
-		result = append(result, taskWithRuns{Task: t, StageRuns: runs})
+		result = append(result, taskWithRuns{Task: t, StageRuns: runsByTask[t.ID]})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="tasks.json"`)
