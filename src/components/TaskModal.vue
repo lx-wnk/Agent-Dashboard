@@ -25,6 +25,7 @@ import {
 } from '../composables/useTasks'
 import { useProjects } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
+import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
 import AuditLogTab from './AuditLogTab.vue'
@@ -499,7 +500,7 @@ const runtime = computed(() => {
               'bg-red-400/20 text-red-400': task.currentStage === 'cancelled',
               'bg-raised text-fg-mute': !['on_hold', 'done', 'cancelled'].includes(task.currentStage ?? ''),
             }"
-          >{{ task.currentStage }}</span>
+          >{{ task.currentStage ? (STAGE_LABELS[task.currentStage] ?? task.currentStage) : '' }}</span>
           <span v-if="isFailedRun(task)" class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400" title="Latest stage run failed">
             RUN FAILED
           </span>

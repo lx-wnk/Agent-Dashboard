@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
+import { STAGE_LABELS } from '../utils/stageLabels'
 import WorktreePill from './WorktreePill.vue'
 
 defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
@@ -21,17 +22,6 @@ const RUN_STATUS_LABELS: Record<StageRunStatus, string> = {
 
 function runStatusLabel(status: StageRunStatus): string {
   return RUN_STATUS_LABELS[status] ?? status
-}
-
-const STAGE_LABELS: Record<PipelineStage, string> = {
-  concept: 'Concept',
-  backlog: 'Backlog',
-  implementation: 'Implementation',
-  self_review: 'Self-Review',
-  finalization: 'Finalization',
-  done: 'Done',
-  on_hold: 'Permission',
-  cancelled: 'Cancelled',
 }
 
 function stageLabel(stage: PipelineStage): string {
