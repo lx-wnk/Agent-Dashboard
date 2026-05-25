@@ -38,10 +38,12 @@ type OrchestratorIface interface {
 
 // Handler handles task REST endpoints.
 type Handler struct {
+	client            *ent.Client
 	taskRepo          repo.TaskRepo
 	srRepo            repo.StageRunRepo
 	permRepo          repo.PermissionRepo
 	auditRepo         repo.AuditRepo
+	auditEventRepo    repo.AuditEventRepo
 	cfgRepo           repo.PipelineConfigRepo
 	depRepo           repo.DependencyRepo
 	projectRepo       repo.ProjectRepo
@@ -54,10 +56,14 @@ type Handler struct {
 
 // Deps groups all constructor dependencies.
 type Deps struct {
+	// Client is the ent client used to open transactions for atomic multi-write operations.
+	// When nil, transactional paths fall back to individual writes (e.g. in tests).
+	Client            *ent.Client
 	TaskRepo          repo.TaskRepo
 	SRRepo            repo.StageRunRepo
 	PermRepo          repo.PermissionRepo
 	AuditRepo         repo.AuditRepo
+	AuditEventRepo    repo.AuditEventRepo
 	CfgRepo           repo.PipelineConfigRepo
 	DepRepo           repo.DependencyRepo
 	ProjectRepo       repo.ProjectRepo
@@ -70,10 +76,12 @@ type Deps struct {
 
 func NewHandler(deps Deps) *Handler {
 	return &Handler{
+		client:            deps.Client,
 		taskRepo:          deps.TaskRepo,
 		srRepo:            deps.SRRepo,
 		permRepo:          deps.PermRepo,
 		auditRepo:         deps.AuditRepo,
+		auditEventRepo:    deps.AuditEventRepo,
 		cfgRepo:           deps.CfgRepo,
 		depRepo:           deps.DepRepo,
 		projectRepo:       deps.ProjectRepo,

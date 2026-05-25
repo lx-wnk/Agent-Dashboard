@@ -60,6 +60,33 @@ var (
 			},
 		},
 	}
+	// AuditEventsColumns holds the columns for the "audit_events" table.
+	AuditEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "ts", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString, Nullable: true},
+		{Name: "action", Type: field.TypeString},
+		{Name: "target", Type: field.TypeString},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
+	}
+	// AuditEventsTable holds the schema information for the "audit_events" table.
+	AuditEventsTable = &schema.Table{
+		Name:       "audit_events",
+		Columns:    AuditEventsColumns,
+		PrimaryKey: []*schema.Column{AuditEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "auditevent_ts",
+				Unique:  false,
+				Columns: []*schema.Column{AuditEventsColumns[1]},
+			},
+			{
+				Name:    "auditevent_user_id_action",
+				Unique:  false,
+				Columns: []*schema.Column{AuditEventsColumns[2], AuditEventsColumns[3]},
+			},
+		},
+	}
 	// AuditLogsColumns holds the columns for the "audit_logs" table.
 	AuditLogsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -529,6 +556,7 @@ var (
 	Tables = []*schema.Table{
 		AgentCostTrendsTable,
 		APIKeysTable,
+		AuditEventsTable,
 		AuditLogsTable,
 		PermissionPresetsTable,
 		PermissionRequestsTable,

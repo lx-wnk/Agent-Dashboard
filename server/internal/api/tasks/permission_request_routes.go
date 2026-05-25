@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
@@ -126,13 +127,82 @@ func (h *Handler) bulkGrantPermissions(w http.ResponseWriter, r *http.Request) e
 		entries = append(entries, e)
 	}
 
-	granted, err := h.permRepo.BulkGrantPermissions(r.Context(), taskID, entries)
-	if err != nil {
-		return fmt.Errorf("bulk_grant: %w", err)
+	// When a client is available, wrap the grant + audit in a single transaction
+	// so a partial failure cannot leave a grant with no forensic trace (or vice-versa).
+	var granted []*ent.TaskPermission
+	if h.client != nil {
+		tx, err := h.client.Tx(r.Context())
+		if err != nil {
+			return fmt.Errorf("bulk_grant: begin tx: %w", err)
+		}
+		txCommitted := false
+		defer func() {
+			if !txCommitted {
+				_ = tx.Rollback()
+			}
+		}()
+
+		txPermRepo := repo.NewPermissionRepo(tx.Client())
+		granted, err = txPermRepo.BulkGrantPermissions(r.Context(), taskID, entries)
+		if err != nil {
+			return fmt.Errorf("bulk_grant: %w", err)
+		}
+		if granted == nil {
+			granted = []*ent.TaskPermission{}
+		}
+
+		var userID *string
+		if payload, ok := auth.PayloadFromContext(r.Context()); ok && payload.Sub != "" {
+			s := payload.Sub
+			userID = &s
+		}
+		tools := make([]string, 0, len(granted))
+		for _, p := range granted {
+			tools = append(tools, p.Tool)
+		}
+		txAuditRepo := repo.NewAuditEventRepo(tx.Client())
+		if err = txAuditRepo.RecordAudit(r.Context(), userID,
+			repo.AuditActionPermissionGrant,
+			taskID,
+			map[string]any{"tools": tools},
+		); err != nil {
+			return fmt.Errorf("bulk_grant: record audit: %w", err)
+		}
+
+		if err = tx.Commit(); err != nil {
+			return fmt.Errorf("bulk_grant: commit: %w", err)
+		}
+		txCommitted = true
+	} else {
+		// No client (e.g. tests with mocked repos) — write without tx.
+		var err error
+		granted, err = h.permRepo.BulkGrantPermissions(r.Context(), taskID, entries)
+		if err != nil {
+			return fmt.Errorf("bulk_grant: %w", err)
+		}
+		if granted == nil {
+			granted = []*ent.TaskPermission{}
+		}
+		if h.auditEventRepo != nil {
+			var userID *string
+			if payload, ok := auth.PayloadFromContext(r.Context()); ok && payload.Sub != "" {
+				s := payload.Sub
+				userID = &s
+			}
+			tools := make([]string, 0, len(granted))
+			for _, p := range granted {
+				tools = append(tools, p.Tool)
+			}
+			if err = h.auditEventRepo.RecordAudit(r.Context(), userID,
+				repo.AuditActionPermissionGrant,
+				taskID,
+				map[string]any{"tools": tools},
+			); err != nil {
+				return fmt.Errorf("bulk_grant: record audit: %w", err)
+			}
+		}
 	}
-	if granted == nil {
-		granted = []*ent.TaskPermission{}
-	}
+
 	h.broadcastEnrichedUpdate(r.Context(), taskID)
 	return jsonReply(w, http.StatusOK, granted)
 }

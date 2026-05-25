@@ -15,10 +15,12 @@ func provideTaskHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator,
 	}
 	taskRepo := repo.NewTaskRepo(client)
 	return tasks.NewHandler(tasks.Deps{
+		Client:            client,
 		TaskRepo:          taskRepo,
 		SRRepo:            repo.NewStageRunRepo(client),
 		PermRepo:          repo.NewPermissionRepo(client),
 		AuditRepo:         repo.NewAuditRepo(client),
+		AuditEventRepo:    repo.NewAuditEventRepo(client),
 		CfgRepo:           repo.NewPipelineConfigRepo(client),
 		DepRepo:           repo.NewDependencyRepo(client),
 		ProjectRepo:       repo.NewProjectRepo(client),

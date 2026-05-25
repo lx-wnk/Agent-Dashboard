@@ -16,6 +16,8 @@ type Tx struct {
 	AgentCostTrend *AgentCostTrendClient
 	// ApiKey is the client for interacting with the ApiKey builders.
 	ApiKey *ApiKeyClient
+	// AuditEvent is the client for interacting with the AuditEvent builders.
+	AuditEvent *AuditEventClient
 	// AuditLog is the client for interacting with the AuditLog builders.
 	AuditLog *AuditLogClient
 	// PermissionPreset is the client for interacting with the PermissionPreset builders.
@@ -179,6 +181,7 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.AgentCostTrend = NewAgentCostTrendClient(tx.config)
 	tx.ApiKey = NewApiKeyClient(tx.config)
+	tx.AuditEvent = NewAuditEventClient(tx.config)
 	tx.AuditLog = NewAuditLogClient(tx.config)
 	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
 	tx.PermissionRequest = NewPermissionRequestClient(tx.config)

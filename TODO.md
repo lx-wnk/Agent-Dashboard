@@ -1,0 +1,2 @@
+TODO: 10d (deferred) — Deprecate AuditLog schema, migrate all consumers to AuditEvent.
+Mapping: AuditLog.actor → AuditEvent.user_id; .action → .action; .details → .metadata; .timestamp → .ts; .task edge → AuditEvent.target as "task:<id>" or new optional task_id field. Migration: copy rows from audit_logs into audit_events, drop audit_logs. Update StageContext.recordAudit. Tracks user pick 10d.B from review-and-fix 2026-05-25.
