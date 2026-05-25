@@ -3,8 +3,3 @@
 package runtime
 
 // The schema-stitching logic is generated in github.com/lx-wnk/agent-dashboard/server/internal/db/ent/runtime.go
-
-const (
-	Version = "v0.14.6"                                         // Version of ent codegen.
-	Sum     = "h1:/f2696BpwuWAEEG6PVGWflg6+Inrpq4pRWuNlWz/Skk=" // Sum of ent codegen.
-)

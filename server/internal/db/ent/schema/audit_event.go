@@ -23,7 +23,7 @@ func (AuditEvent) Fields() []ent.Field {
 		field.String("action").Immutable(),
 		// target identifies the subject of the action (task ID, key ID, etc.).
 		field.String("target").Immutable(),
-		field.JSON("metadata", map[string]any{}).Optional(),
+		field.JSON("metadata", map[string]any{}).Optional().Immutable(),
 	}
 }
 

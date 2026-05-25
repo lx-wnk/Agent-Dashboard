@@ -27,18 +27,6 @@ func (_u *AuditEventUpdate) Where(ps ...predicate.AuditEvent) *AuditEventUpdate 
 	return _u
 }
 
-// SetMetadata sets the "metadata" field.
-func (_u *AuditEventUpdate) SetMetadata(v map[string]interface{}) *AuditEventUpdate {
-	_u.mutation.SetMetadata(v)
-	return _u
-}
-
-// ClearMetadata clears the value of the "metadata" field.
-func (_u *AuditEventUpdate) ClearMetadata() *AuditEventUpdate {
-	_u.mutation.ClearMetadata()
-	return _u
-}
-
 // Mutation returns the AuditEventMutation object of the builder.
 func (_u *AuditEventUpdate) Mutation() *AuditEventMutation {
 	return _u.mutation
@@ -83,9 +71,6 @@ func (_u *AuditEventUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if _u.mutation.UserIDCleared() {
 		_spec.ClearField(auditevent.FieldUserID, field.TypeString)
 	}
-	if value, ok := _u.mutation.Metadata(); ok {
-		_spec.SetField(auditevent.FieldMetadata, field.TypeJSON, value)
-	}
 	if _u.mutation.MetadataCleared() {
 		_spec.ClearField(auditevent.FieldMetadata, field.TypeJSON)
 	}
@@ -107,18 +92,6 @@ type AuditEventUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *AuditEventMutation
-}
-
-// SetMetadata sets the "metadata" field.
-func (_u *AuditEventUpdateOne) SetMetadata(v map[string]interface{}) *AuditEventUpdateOne {
-	_u.mutation.SetMetadata(v)
-	return _u
-}
-
-// ClearMetadata clears the value of the "metadata" field.
-func (_u *AuditEventUpdateOne) ClearMetadata() *AuditEventUpdateOne {
-	_u.mutation.ClearMetadata()
-	return _u
 }
 
 // Mutation returns the AuditEventMutation object of the builder.
@@ -194,9 +167,6 @@ func (_u *AuditEventUpdateOne) sqlSave(ctx context.Context) (_node *AuditEvent, 
 	}
 	if _u.mutation.UserIDCleared() {
 		_spec.ClearField(auditevent.FieldUserID, field.TypeString)
-	}
-	if value, ok := _u.mutation.Metadata(); ok {
-		_spec.SetField(auditevent.FieldMetadata, field.TypeJSON, value)
 	}
 	if _u.mutation.MetadataCleared() {
 		_spec.ClearField(auditevent.FieldMetadata, field.TypeJSON)
