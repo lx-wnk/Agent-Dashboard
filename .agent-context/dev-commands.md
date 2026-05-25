@@ -24,7 +24,7 @@ task vuln          # govulncheck
 ```bash
 pnpm install       # Install frontend deps (root only — not channel/)
 pnpm dev           # Vite dev server on :5173 with HMR (proxies /api → :13120); run alongside task dev
-pnpm build         # Production SPA build → server/frontend/dist/
+pnpm build         # Production SPA build → dist/
 pnpm test          # Vitest unit tests (single run)
 pnpm test:e2e      # Playwright E2E tests
 pnpm typecheck     # vue-tsc type checking

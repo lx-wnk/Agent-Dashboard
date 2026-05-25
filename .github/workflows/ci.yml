@@ -163,17 +163,16 @@ jobs:
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
       - name: Build frontend
-        # Vite emits SPA assets to dist/assets/ before the PWA service-worker
-        # post-build step runs. A SW build failure is unrelated to bundle size,
-        # so we tolerate non-zero exit here and gate the next step on whether
-        # the SPA assets actually exist.
-        run: pnpm build || true
+        run: pnpm build
       - name: Verify build artifacts present
         run: test -d dist/assets || { echo "dist/assets missing — vite build did not emit SPA assets"; exit 1; }
       - name: Check bundle-size budget
         # Thresholds can be tightened/loosened via env without editing the script.
+        # Per-chunk JS budgets: vendor (vue) 200 KB, charts (d3) 400 KB, index 100 KB.
         env:
-          JS_MAX_GZIP_KB: '200'
+          JS_MAX_GZIP_KB: '100'
+          JS_VENDOR_MAX_GZIP_KB: '200'
+          JS_CHARTS_MAX_GZIP_KB: '400'
           CSS_MAX_GZIP_KB: '30'
         run: bash scripts/check-bundle-size.sh dist/assets
 
