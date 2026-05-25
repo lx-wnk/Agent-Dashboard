@@ -23,6 +23,8 @@ const (
 	FieldTarget = "target"
 	// FieldMetadata holds the string denoting the metadata field in the database.
 	FieldMetadata = "metadata"
+	// FieldTaskID holds the string denoting the task_id field in the database.
+	FieldTaskID = "task_id"
 	// Table holds the table name of the auditevent in the database.
 	Table = "audit_events"
 )
@@ -35,6 +37,7 @@ var Columns = []string{
 	FieldAction,
 	FieldTarget,
 	FieldMetadata,
+	FieldTaskID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -78,4 +81,9 @@ func ByAction(opts ...sql.OrderTermOption) OrderOption {
 // ByTarget orders the results by the target field.
 func ByTarget(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTarget, opts...).ToFunc()
+}
+
+// ByTaskID orders the results by the task_id field.
+func ByTaskID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTaskID, opts...).ToFunc()
 }

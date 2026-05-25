@@ -27,7 +27,9 @@ type AuditEvent struct {
 	// Target holds the value of the "target" field.
 	Target string `json:"target,omitempty"`
 	// Metadata holds the value of the "metadata" field.
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	// TaskID holds the value of the "task_id" field.
+	TaskID       *string `json:"task_id,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -38,7 +40,7 @@ func (*AuditEvent) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case auditevent.FieldMetadata:
 			values[i] = new([]byte)
-		case auditevent.FieldID, auditevent.FieldUserID, auditevent.FieldAction, auditevent.FieldTarget:
+		case auditevent.FieldID, auditevent.FieldUserID, auditevent.FieldAction, auditevent.FieldTarget, auditevent.FieldTaskID:
 			values[i] = new(sql.NullString)
 		case auditevent.FieldTs:
 			values[i] = new(sql.NullTime)
@@ -96,6 +98,13 @@ func (_m *AuditEvent) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field metadata: %w", err)
 				}
 			}
+		case auditevent.FieldTaskID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field task_id", values[i])
+			} else if value.Valid {
+				_m.TaskID = new(string)
+				*_m.TaskID = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -148,6 +157,11 @@ func (_m *AuditEvent) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("metadata=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Metadata))
+	builder.WriteString(", ")
+	if v := _m.TaskID; v != nil {
+		builder.WriteString("task_id=")
+		builder.WriteString(*v)
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }

@@ -68,6 +68,7 @@ var (
 		{Name: "action", Type: field.TypeString},
 		{Name: "target", Type: field.TypeString},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
+		{Name: "task_id", Type: field.TypeString, Nullable: true},
 	}
 	// AuditEventsTable holds the schema information for the "audit_events" table.
 	AuditEventsTable = &schema.Table{
@@ -84,6 +85,11 @@ var (
 				Name:    "auditevent_user_id_action",
 				Unique:  false,
 				Columns: []*schema.Column{AuditEventsColumns[2], AuditEventsColumns[3]},
+			},
+			{
+				Name:    "auditevent_task_id",
+				Unique:  false,
+				Columns: []*schema.Column{AuditEventsColumns[6]},
 			},
 		},
 	}
