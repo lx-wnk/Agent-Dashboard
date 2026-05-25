@@ -56,6 +56,14 @@ Vue 3 + TypeScript SPA (unchanged structure from TypeScript-server era).
 - `src/composables/useAgents.ts` — SSE-first real-time updates via `/api/agents/stream` with polling fallback; view mode + search state
 - `src/composables/useAgentPrompt.ts` — send prompts to agents (via channel or spawn/resume)
 - `src/composables/useTheme.ts` — dark/light theme with OS preference + localStorage
+- `src/composables/useNotificationConfig.ts` — fetch/persist notification preferences and channel config via `/api/notifications/*`
+- `src/composables/useMemory.ts` — list, read, and write Claude memory files via `/api/memory`
+- `src/composables/useSessions.ts` — fetch resumable session list via `/api/sessions`
+- `src/composables/useSystemResources.ts` — poll CPU/memory/disk metrics via `/api/system` with visibility-aware interval
+- `src/composables/usePlugins.ts` — fetch installed plugin list via `/api/settings/plugins`
+- `src/composables/useCostHeatmap.ts` — fetch 7×24 cost heatmap grid via `/api/analytics/heatmap`
+- `src/composables/useCostForecast.ts` — fetch cost trend, forecast points, and budget alerts via `/api/analytics/cost-forecast`
+- `src/composables/useRemotes.ts` — CRUD for remote dashboard registrations via `/api/remotes`
 - `src/App.vue` — root: header stats + view toggle + search + agent list/cards/kanban + modal
 - `src/components/AgentRow.vue` / `SubAgentRow.vue` — list view rows
 - `src/components/AgentCard.vue` — card view tile

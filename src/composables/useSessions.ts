@@ -14,29 +14,29 @@ export interface SessionInfo {
   isRunning: boolean
 }
 
-const sessions = ref<SessionInfo[]>([])
-const loading = ref(false)
-const error = ref<string | null>(null)
-
-async function fetchSessions() {
-  loading.value = true
-  error.value = null
-  try {
-    const res = await fetch('/api/sessions')
-    if (res.ok)
-      sessions.value = await res.json()
-    else
-      error.value = `Failed to load sessions (${res.status})`
-  }
-  catch {
-    error.value = 'Network error loading sessions.'
-  }
-  finally {
-    loading.value = false
-  }
-}
-
 export function useSessions() {
+  const sessions = ref<SessionInfo[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  async function fetchSessions() {
+    loading.value = true
+    error.value = null
+    try {
+      const res = await fetch('/api/sessions')
+      if (res.ok)
+        sessions.value = await res.json()
+      else
+        error.value = `Failed to load sessions (${res.status})`
+    }
+    catch {
+      error.value = 'Network error loading sessions.'
+    }
+    finally {
+      loading.value = false
+    }
+  }
+
   return {
     sessions,
     loading,
