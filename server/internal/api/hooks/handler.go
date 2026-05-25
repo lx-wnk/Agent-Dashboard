@@ -55,7 +55,11 @@ type pendingEntry struct {
 // The secret is required on every hook endpoint — missing or wrong bearer
 // tokens are rejected with 401. Config.Load always provides a non-empty
 // secret (auto-generated on first boot when DASHBOARD_HOOKS_SECRET is not set).
+// Panics if secret is empty — callers must always supply a secret.
 func New(secret string, onEvent OnEventFn) *Handler {
+	if secret == "" {
+		panic("hooks.Handler requires a non-empty secret")
+	}
 	return &Handler{
 		secret:  secret,
 		onEvent: onEvent,
@@ -65,8 +69,7 @@ func New(secret string, onEvent OnEventFn) *Handler {
 
 // Event handles POST /api/hooks/event.
 // Validates the bearer secret and acknowledges 204 on success.
-// A missing or incorrect secret always returns 401 — the secret is always
-// set (auto-generated at boot when DASHBOARD_HOOKS_SECRET is not configured).
+// A missing or incorrect secret always returns 401.
 func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 	if !h.requireSecret(w, r) {
 		return
@@ -78,13 +81,8 @@ func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 }
 
 // requireSecret validates the bearer secret on every request.
-// Config.Load always provides a non-empty secret (auto-generated when
-// DASHBOARD_HOOKS_SECRET env is unset), so the empty-secret branch is a
-// defence-in-depth fallback for callers that bypass config loading in tests.
+// h.secret is always non-empty — New panics if an empty secret is supplied.
 func (h *Handler) requireSecret(w http.ResponseWriter, r *http.Request) bool {
-	if h.secret == "" {
-		return true
-	}
 	got := bearerToken(r)
 	if subtle.ConstantTimeCompare([]byte(got), []byte(h.secret)) != 1 {
 		w.Header().Set("Content-Type", "application/json")

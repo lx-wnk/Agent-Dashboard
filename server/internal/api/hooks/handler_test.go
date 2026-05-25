@@ -47,21 +47,15 @@ func TestEvent_WithWrongSecret_Returns401(t *testing.T) {
 	}
 }
 
-// TestEvent_WithNoSecretConfigured_DefenceInDepth verifies that when the handler is
-// constructed with an empty secret (only possible if the caller bypasses config.Load),
-// the event endpoint still passes through — this is a defence-in-depth corner case,
-// not the normal operating mode. In production, config.Load always provides a secret.
-func TestEvent_WithNoSecretConfigured_DefenceInDepth(t *testing.T) {
-	h := newTestHandler("")
-	req := httptest.NewRequest(http.MethodPost, "/api/hooks/event", nil)
-	w := httptest.NewRecorder()
-
-	h.Event(w, req)
-
-	// Empty secret → requireSecret allows through (defence-in-depth fallback).
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Event with empty secret (test bypass): got status %d, want %d", w.Code, http.StatusNoContent)
-	}
+// TestNew_PanicsOnEmptySecret verifies that New panics when given an empty secret,
+// enforcing that every Handler is constructed with a real secret.
+func TestNew_PanicsOnEmptySecret(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("New(\"\", ...) did not panic; expected panic on empty secret")
+		}
+	}()
+	New("", func() {})
 }
 
 func TestEvent_WithMissingBearer_Returns401(t *testing.T) {
@@ -81,19 +75,18 @@ func TestEvent_WithMissingBearer_Returns401(t *testing.T) {
 // PreTool endpoint
 // -------------------------------------------------------------------
 
-func TestPreTool_WithoutSecret_DefenceInDepthAllowsThrough(t *testing.T) {
-	// Empty-secret handler is a test-only bypass — config.Load always provides a secret.
-	// requireSecret allows through when secret is empty (defence-in-depth fallback).
-	h := newTestHandler("")
+func TestPreTool_WithMissingBearer_Returns401(t *testing.T) {
+	h := newTestHandler("test-secret")
 	body := `{"toolName":"Bash","cwd":"/tmp"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/pre-tool", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	// Deliberately no Authorization header.
 	w := httptest.NewRecorder()
 
 	h.PreTool(w, req)
 
-	if w.Code == http.StatusUnauthorized {
-		t.Errorf("PreTool with empty secret (test bypass): got 401, want request allowed through")
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("PreTool with missing bearer: got status %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 
@@ -193,16 +186,16 @@ func TestPreTool_WriteTool_TimeoutReturnsProceeds(t *testing.T) {
 // Pending endpoint
 // -------------------------------------------------------------------
 
-func TestPending_WithoutSecret_DefenceInDepthAllowsThrough(t *testing.T) {
-	// Empty-secret handler is a test-only bypass — config.Load always provides a secret.
-	h := newTestHandler("")
+func TestPending_WithMissingBearer_Returns401(t *testing.T) {
+	h := newTestHandler("test-secret")
 	req := httptest.NewRequest(http.MethodGet, "/api/hooks/pending", nil)
+	// Deliberately no Authorization header.
 	w := httptest.NewRecorder()
 
 	h.Pending(w, req)
 
-	if w.Code == http.StatusUnauthorized {
-		t.Errorf("Pending with empty secret (test bypass): got 401, want request allowed through")
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Pending with missing bearer: got status %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 

@@ -35,6 +35,9 @@ type Config struct {
 	MCPToken       string `koanf:"mcp_token"`
 	WorktreeRoot   string `koanf:"worktree_root"`
 	ForceWorktrees bool   `koanf:"force_worktrees"`
+	// RemotesEnabled allows binding to a non-loopback address. Set via DASHBOARD_REMOTES_ENABLED=true.
+	// Must be explicitly opted in because the dashboard exposes sensitive Claude session data.
+	RemotesEnabled bool `koanf:"remotes_enabled"`
 	// Auth controls authentication mode.
 	// "none" (default) — bypass auth, no login required.
 	// "plugin" — require OAuth via an auth_provider plugin (GitHub, Office365, etc.).
@@ -139,8 +142,7 @@ func Load(cfgFile string) (Config, error) {
 	// sensitive Claude session data; accidental public exposure is a high-impact mistake.
 	loopback := map[string]bool{"127.0.0.1": true, "::1": true, "localhost": true}
 	if !loopback[cfg.Host] {
-		remotesEnabled := strings.EqualFold(os.Getenv("DASHBOARD_REMOTES_ENABLED"), "true")
-		if !remotesEnabled {
+		if !cfg.RemotesEnabled {
 			return Config{}, fmt.Errorf(
 				"config: DASHBOARD_HOST=%q is a non-loopback address and would expose sensitive Claude session data to the network. "+
 					"Set DASHBOARD_REMOTES_ENABLED=true to confirm this is intentional (use a VPN or SSH tunnel), "+

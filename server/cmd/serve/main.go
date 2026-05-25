@@ -37,11 +37,6 @@ func main() {
 				return err
 			}
 
-			if cfg.Host != "127.0.0.1" && cfg.Host != "::1" && cfg.Host != "localhost" {
-				slog.Warn("server binding to non-loopback address — ensure this is intentional",
-					"host", cfg.Host)
-			}
-
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
