@@ -23,6 +23,7 @@ const props = defineProps<{
 
 const sessionMessages = ref<OutputMessage[]>([])
 const isLoadingOutput = ref(false)
+const fetchError = ref(false)
 const outputEl = ref<HTMLElement | null>(null)
 let lastReplyTimestamp: string | null = null
 let fetchingReplies = false
@@ -140,20 +141,19 @@ function scrollToBottom() {
 
 async function fetchOutput(sessionId: string) {
   isLoadingOutput.value = true
+  fetchError.value = false
   try {
     const res = await fetch(`/api/agents/${sessionId}/output`)
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
-    // eslint-disable-next-line no-console
-    console.debug('[AgentChatStream] fetchOutput', sessionId, 'msgs:', data.messages?.length)
+    fetchError.value = false
     sessionMessages.value = data.messages
     await nextTick()
     scrollToBottom()
   }
-  catch (e) {
-    // eslint-disable-next-line no-console
-    console.error('[AgentChatStream] fetchOutput error', sessionId, e)
+  catch {
+    fetchError.value = true
     sessionMessages.value = []
   }
   finally {
@@ -350,6 +350,9 @@ defineExpose({ scrollToBottom })
         </div>
       </template>
     </template>
+    <div v-else-if="fetchError" class="text-red-600 dark:text-red-400 text-sm text-center py-12">
+      Failed to load session output. Reconnect or refresh.
+    </div>
     <div v-else class="text-fg-mute text-center py-12">
       No output available for this session.
     </div>
