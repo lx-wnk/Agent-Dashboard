@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -62,6 +63,12 @@ func Open(path string) (*DBBundle, error) {
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
+	}
+	// migrateDropBareWebFetchGrants must run after ent auto-migrate (which creates
+	// the task_permissions table) and before the server accepts traffic.
+	if err := migrateDropBareWebFetchGrants(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: drop bare-WebFetch grants: %w", err)
 	}
 	if err := runRawMigrations(sqlDB); err != nil {
 		_ = client.Close()
@@ -146,6 +153,29 @@ func runRawMigrations(db *sql.DB) error {
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("raw migration failed: %w\nstatement: %s", err, stmt)
+		}
+	}
+	return nil
+}
+
+// migrateDropBareWebFetchGrants removes task_permissions rows where tool='WebFetch'
+// and pattern IS NULL. Such rows were created before F-SEC-004 enforcement was added
+// (PR #86). They are silently ignored at spawn time — making them visible here via
+// slog.Warn lets operators know how many legacy grants were cleaned up.
+// Idempotent: harmless on a fresh database or after a prior run.
+func migrateDropBareWebFetchGrants(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM task_permissions WHERE tool = 'WebFetch' AND pattern IS NULL`,
+	).Scan(&count); err != nil {
+		return fmt.Errorf("count bare-WebFetch grants: %w", err)
+	}
+	if count > 0 {
+		slog.Warn("migration: removing bare-WebFetch task_permissions grants", "count", count)
+		if _, err := db.Exec(
+			`DELETE FROM task_permissions WHERE tool = 'WebFetch' AND pattern IS NULL`,
+		); err != nil {
+			return fmt.Errorf("delete bare-WebFetch grants: %w", err)
 		}
 	}
 	return nil
