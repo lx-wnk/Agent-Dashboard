@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,9 +80,10 @@ func (p *spawnPolicy) Allow(ctx context.Context, cwd string) error {
 
 	roots, err := p.roots(ctx)
 	if err != nil {
-		// Fail open on provider error so a DB hiccup doesn't block all spawns.
-		// The blacklist above still applies.
-		return nil
+		// Fail closed: the allow-list is the primary control. A DB hiccup must not
+		// silently permit arbitrary cwd values — the blacklist alone is insufficient.
+		slog.Error("spawn policy: roots() failed", "err", err)
+		return ErrCwdNotAllowed
 	}
 	if len(roots) == 0 {
 		// No project roots registered — only the blacklist applies.
@@ -104,16 +106,17 @@ func (p *spawnPolicy) Allow(ctx context.Context, cwd string) error {
 }
 
 // checkBlacklist returns ErrCwdBlacklisted when cwdAbs falls inside one of the
-// sensitive home directories. Fails open when the home directory cannot be
-// determined.
+// sensitive home directories. Fails closed: if the home directory cannot be
+// determined the spawn is denied rather than permitted.
 func checkBlacklist(cwdAbs string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil // cannot determine home; skip blacklist
+		// Cannot determine home dir — deny rather than allow an unknown state.
+		return ErrCwdBlacklisted
 	}
 	homeAbs, err := filepath.Abs(home)
 	if err != nil {
-		return nil
+		return ErrCwdBlacklisted
 	}
 	if real, err := filepath.EvalSymlinks(homeAbs); err == nil {
 		homeAbs = real
@@ -121,6 +124,12 @@ func checkBlacklist(cwdAbs string) error {
 
 	for _, rel := range sensitiveHomeDirs {
 		sensitive := filepath.Join(homeAbs, rel)
+		// Canonicalise the sensitive path so case-insensitive or symlinked filesystems
+		// (e.g. macOS where ~/.SSH resolves to the same inode as ~/.ssh) cannot bypass
+		// the check. Ignore EvalSymlinks errors: the unresolved path is still used.
+		if resolved, err := filepath.EvalSymlinks(sensitive); err == nil {
+			sensitive = resolved
+		}
 		if isUnder(cwdAbs, sensitive) {
 			return ErrCwdBlacklisted
 		}

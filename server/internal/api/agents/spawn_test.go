@@ -1,7 +1,11 @@
 package agents
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
 // containsConsecutive returns true if args contains a followed immediately by b.
@@ -520,6 +525,51 @@ func TestSpawn_CustomAdapter_ChannelArgOverride(t *testing.T) {
 			t.Fatalf("--mcp-config must not appear when channel_arg overrides it, got args %v", captured.Args)
 		}
 	}
+}
+
+// TestSpawnHandler_CwdOutsideAllowlist_Returns403 is an integration test that
+// wires a real SpawnPolicy (with a single fixed allowed root) into a SpawnHandler
+// and verifies that a spawn request whose cwd falls outside the allowed root is
+// rejected with HTTP 403 (8d.A).
+func TestSpawnHandler_CwdOutsideAllowlist_Returns403(t *testing.T) {
+	tmp, err := filepath.EvalSymlinks(os.TempDir())
+	require.NoError(t, err)
+
+	// allowedRoot is the only directory the policy will accept.
+	allowedRoot := filepath.Join(tmp, "allowed-root")
+	require.NoError(t, os.MkdirAll(allowedRoot, 0o755))
+
+	// outsideDir exists on disk but is NOT under allowedRoot.
+	outsideDir := filepath.Join(tmp, "outside-dir")
+	require.NoError(t, os.MkdirAll(outsideDir, 0o755))
+
+	// Point HOME somewhere that has no sensitive dirs, so the blacklist doesn't
+	// interfere with this test's focus on allow-list rejection.
+	homeDir := filepath.Join(tmp, "testhome")
+	require.NoError(t, os.MkdirAll(homeDir, 0o755))
+	t.Setenv("HOME", homeDir)
+
+	policy := services.NewSpawnPolicy(func(_ context.Context) ([]string, error) {
+		return []string{allowedRoot}, nil
+	})
+
+	manager := NewSpawnManager(5, 60000, nil, policy)
+	handler := NewSpawnHandler(manager)
+
+	body, _ := json.Marshal(map[string]any{
+		"prompt":        "do something",
+		"cwd":           outsideDir,
+		"enableChannel": false,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/agents/spawn", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.Spawn(rr, req)
+
+	require.Equal(t, http.StatusForbidden, rr.Code,
+		"expected HTTP 403 when cwd is outside all allowed project roots, got %d — body: %s",
+		rr.Code, rr.Body.String())
 }
 
 func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {

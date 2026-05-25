@@ -202,7 +202,7 @@ func TestSpawnPolicy_EmptyRoots_AllowsNonBlacklistedPath(t *testing.T) {
 	}
 }
 
-func TestSpawnPolicy_RootsProviderError_FailsOpen(t *testing.T) {
+func TestSpawnPolicy_RootsProviderError_FailsClosed(t *testing.T) {
 	tmp := resolvedTmp(t)
 	t.Setenv("HOME", tmp)
 
@@ -211,12 +211,15 @@ func TestSpawnPolicy_RootsProviderError_FailsOpen(t *testing.T) {
 	}
 	policy := NewSpawnPolicy(roots)
 
-	// Non-blacklisted path — should be allowed when provider errors out.
+	// Non-blacklisted path — must be denied when the allow-list provider errors.
+	// The allow-list is the primary control; a DB hiccup must not silently permit
+	// arbitrary cwd values (8b.A: fail-closed on roots() error).
 	cwd := filepath.Join(tmp, "myproject")
 	_ = os.MkdirAll(cwd, 0o755)
 
-	if err := policy.Allow(context.Background(), cwd); err != nil {
-		t.Fatalf("expected fail-open when roots provider errors, got %v", err)
+	err := policy.Allow(context.Background(), cwd)
+	if !errors.Is(err, ErrCwdNotAllowed) {
+		t.Fatalf("expected ErrCwdNotAllowed when roots provider errors, got %v", err)
 	}
 }
 
