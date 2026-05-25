@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
@@ -25,6 +27,35 @@ var (
 	quotaRE = regexp.MustCompile(`(?i)quota exceeded|usage limit|monthly limit`)
 	rateRE  = regexp.MustCompile(`(?i)rate limit|429|too many requests|throttl`)
 	authRE  = regexp.MustCompile(`(?i)invalid api key|authentication|unauthorized|401`)
+)
+
+// SessionCacheTTL is the maximum age of a cached FindSessionForProject result.
+// Set to the SSE broadcast interval (default 3 s) so each tick re-uses the
+// cached parse instead of tail-reading every JSONL file again.
+// The merger package raises this at startup when a non-default interval is configured.
+var SessionCacheTTL = 3 * time.Second
+
+// sessionCacheKey identifies a cached parse result.
+type sessionCacheKey struct {
+	cwd       string
+	configDir string
+}
+
+// sessionCacheEntry holds a cached result keyed by the winning file's identity.
+type sessionCacheEntry struct {
+	// file identity — used to detect changes without re-reading content
+	path  string
+	inode uint64
+	mtime time.Time
+	// cached parse output
+	data *SessionData
+	// wall-clock time when this entry was stored
+	cachedAt time.Time
+}
+
+var (
+	sessionCacheMu sync.Mutex
+	sessionCache   = make(map[sessionCacheKey]*sessionCacheEntry)
 )
 
 // claudeConfigDir returns the Claude config base directory.
@@ -233,27 +264,21 @@ type SessionData struct {
 	LastBtw             *sdk.BtwMessage
 }
 
-// FindSessionForProject locates the most recently active JSONL session for cwd.
-// claudeConfigDir, if non-empty, overrides the default ~/.claude config directory
-// (use the value of CLAUDE_CONFIG_DIR from the process environment).
-func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir string) (*SessionData, error) {
-	baseDir := claudeProjectsDir()
-	if claudeConfigDir != "" {
-		baseDir = filepath.Join(claudeConfigDir, "projects")
-	}
-	encoded := EncodePath(cwd)
-	projectDir := filepath.Join(baseDir, encoded)
+// sessionFileCandidate holds mtime + inode info gathered via os.Stat (cheap).
+type sessionFileCandidate struct {
+	path  string
+	mtime time.Time
+	inode uint64
+}
 
+// statSessionFiles lists JSONL session files in projectDir ordered by mtime desc.
+// Only os.Stat is called — no file content is read.
+func statSessionFiles(projectDir string) ([]sessionFileCandidate, error) {
 	entries, err := os.ReadDir(projectDir)
 	if err != nil {
 		return nil, fmt.Errorf("readdir %s: %w", projectDir, err)
 	}
-
-	type candidate struct {
-		path  string
-		mtime time.Time
-	}
-	var candidates []candidate
+	var out []sessionFileCandidate
 	for _, e := range entries {
 		name := e.Name()
 		if !strings.HasSuffix(name, ".jsonl") {
@@ -267,19 +292,122 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 		if err != nil {
 			continue
 		}
-		candidates = append(candidates, candidate{
+		out = append(out, sessionFileCandidate{
 			path:  filepath.Join(projectDir, name),
 			mtime: info.ModTime(),
+			inode: inodeOf(info),
 		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].mtime.After(out[j].mtime)
+	})
+	return out, nil
+}
+
+// FindSessionForProject locates the most recently active JSONL session for cwd.
+// claudeConfigDir, if non-empty, overrides the default ~/.claude config directory
+// (use the value of CLAUDE_CONFIG_DIR from the process environment).
+//
+// Results are cached per (cwd, configDir) keyed by the winning file's path,
+// inode, and mtime.  A cached result is reused when:
+//   - the same file is still the newest JSONL in the project directory, AND
+//   - its inode and mtime are unchanged (no write happened), AND
+//   - the entry was stored within SessionCacheTTL.
+//
+// This eliminates repeated 32 KB tail-reads per SSE tick on long session histories.
+func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir string) (*SessionData, error) {
+	baseDir := claudeProjectsDir()
+	if claudeConfigDir != "" {
+		baseDir = filepath.Join(claudeConfigDir, "projects")
+	}
+	encoded := EncodePath(cwd)
+	projectDir := filepath.Join(baseDir, encoded)
+
+	candidates, err := statSessionFiles(projectDir)
+	if err != nil {
+		return nil, err
 	}
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no session files in %s", projectDir)
 	}
 
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].mtime.After(candidates[j].mtime)
-	})
+	cacheKey := sessionCacheKey{cwd: cwd, configDir: claudeConfigDir}
+	now := time.Now()
 
+	// Check cache against the top candidate (most recently modified file).
+	top := candidates[0]
+	sessionCacheMu.Lock()
+	entry := sessionCache[cacheKey]
+	sessionCacheMu.Unlock()
+
+	if entry != nil &&
+		now.Sub(entry.cachedAt) < SessionCacheTTL &&
+		entry.path == top.path &&
+		entry.inode == top.inode &&
+		entry.mtime.Equal(top.mtime) {
+		// Cache hit: return a shallow copy so callers can safely mutate fields.
+		// Clone ToolCounts so the caller cannot mutate the cached map.
+		cp := *entry.data
+		cp.ToolCounts = maps.Clone(entry.data.ToolCounts)
+		return &cp, nil
+	}
+
+	// Cache miss — fall back to full scan with content reads.
+	data, chosenPath, err := findSessionByContent(candidates, uptimeSeconds, cwd)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate session ID and meta before caching.
+	data.SessionID = strings.TrimSuffix(filepath.Base(chosenPath), ".jsonl")
+	data.ProjectPath = cwd
+	data.Meta = loadSessionMeta(data.SessionID)
+
+	// Store in cache keyed by the chosen file's identity (the file whose content
+	// was actually parsed).  When the active session file advances (new write →
+	// mtime bump on chosenPath) we get a cache miss on the next tick.
+	// Only fall back to top's pre-fetched stat when chosenPath == top.path to
+	// avoid a redundant syscall.
+	var entryPath string
+	var entryInode uint64
+	var entryMtime time.Time
+	if chosenPath == top.path {
+		entryPath = top.path
+		entryInode = top.inode
+		entryMtime = top.mtime
+	} else {
+		info, statErr := os.Stat(chosenPath)
+		if statErr == nil {
+			entryPath = chosenPath
+			entryInode = inodeOf(info)
+			entryMtime = info.ModTime()
+		} else {
+			// Stat failed — fall back to top so we always have a valid entry.
+			entryPath = top.path
+			entryInode = top.inode
+			entryMtime = top.mtime
+		}
+	}
+	newEntry := &sessionCacheEntry{
+		path:     entryPath,
+		inode:    entryInode,
+		mtime:    entryMtime,
+		data:     data,
+		cachedAt: now,
+	}
+	sessionCacheMu.Lock()
+	sessionCache[cacheKey] = newEntry
+	sessionCacheMu.Unlock()
+
+	cp := *data
+	cp.ToolCounts = maps.Clone(data.ToolCounts)
+	return &cp, nil
+}
+
+// findSessionByContent reads JSONL content for each candidate until it finds a
+// session whose LastActivity is within the process uptime window.
+// Returns the chosen *SessionData and the file path used.
+func findSessionByContent(candidates []sessionFileCandidate, uptimeSeconds int64, cwd string) (*SessionData, string, error) {
 	var bestByContent *SessionData
 	var bestByContentPath string
 	for _, c := range candidates {
@@ -289,26 +417,18 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 		}
 		age := time.Since(data.LastActivity)
 		if age < time.Duration(uptimeSeconds+10)*time.Second {
-			data.SessionID = strings.TrimSuffix(filepath.Base(c.path), ".jsonl")
-			data.ProjectPath = cwd
-			data.Meta = loadSessionMeta(data.SessionID)
-			return data, nil
+			return data, c.path, nil
 		}
-		// Keep the first (most-recently modified) as fallback in case no entry matches.
+		// Keep the first (most-recently modified) as fallback.
 		if bestByContent == nil {
 			bestByContent = data
 			bestByContentPath = c.path
 		}
 	}
-	// Fallback: the process is alive but its session was cleared or very old.
-	// Return the most-recently modified session so the card still shows the agent.
 	if bestByContent != nil {
-		bestByContent.SessionID = strings.TrimSuffix(filepath.Base(bestByContentPath), ".jsonl")
-		bestByContent.ProjectPath = cwd
-		bestByContent.Meta = loadSessionMeta(bestByContent.SessionID)
-		return bestByContent, nil
+		return bestByContent, bestByContentPath, nil
 	}
-	return nil, fmt.Errorf("no active session for %s", cwd)
+	return nil, "", fmt.Errorf("no active session for %s", cwd)
 }
 
 // ParseSessionFile parses a single JSONL session file and returns its SessionData.

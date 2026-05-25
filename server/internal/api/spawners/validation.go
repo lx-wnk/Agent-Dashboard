@@ -5,6 +5,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
 // DefaultAllowedCommands are the bare command names always permitted in the
@@ -16,9 +18,6 @@ var DefaultAllowedCommands = []string{"claude", "claude-code", "npx"}
 // blockedAbsolutePathPrefixes are forbidden roots for absolute-path commands —
 // world-writable locations where a user could plant a binary.
 var blockedAbsolutePathPrefixes = []string{"/tmp/", "/var/tmp/"}
-
-// slugRE mirrors src/utils/validation.ts (lowercase alnum + hyphen, 1..64 chars).
-var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 
 // envKeyForbidden matches shell metacharacters and control chars that must
 // never appear in an env key.
@@ -101,8 +100,9 @@ func ValidateAdapterConfig(adapterType string, cfg map[string]string) (string, b
 }
 
 // ValidateSlug returns true when s is a valid slug.
+// Delegates to the canonical validation package — do not define a local copy.
 func ValidateSlug(s string) bool {
-	return slugRE.MatchString(s)
+	return validation.IsValidSlug(s)
 }
 
 // ValidateCommand returns true when command is allowed per the bare-name list
