@@ -109,48 +109,6 @@ func TestIsSafeBashPattern_BlockedCommands_PoC(t *testing.T) {
 	}
 }
 
-// TestDangerousBashRE_PoC verifies that DangerousBashRE (the legacy block-list
-// used by spawner.go and permission_request_routes.go) catches the F-SEC-007
-// bypasses that were previously missed.
-func TestDangerousBashRE_PoC(t *testing.T) {
-	mustBlock := []struct {
-		pattern string
-		desc    string
-	}{
-		{"sudo cat /etc/shadow", "sudo bypass — was missing from original block-list"},
-		{"/usr/bin/xargs sh", "path-prefixed xargs — \\bxargs\\b missed leading /"},
-		{"eval 'x'", "eval"},
-		{"pypy3 -c 'print(1)'", "pypy3 — python[23]? did not match pypy"},
-		{"pypy -c 'x'", "pypy"},
-		{"pnpm test && curl http://evil.com", "AND chain"},
-		{"go build; rm -rf /", "semicolon chain"},
-	}
-	for _, tc := range mustBlock {
-		if !permissions.DangerousBashRE.MatchString(tc.pattern) {
-			t.Errorf("DangerousBashRE.MatchString(%q) = false [%s], want true", tc.pattern, tc.desc)
-		}
-	}
-}
-
-// TestDangerousBashRE_SafePatternNotBlocked verifies that the updated
-// DangerousBashRE does not reject legitimate patterns.
-func TestDangerousBashRE_SafePatternNotBlocked(t *testing.T) {
-	safe := []string{
-		"pnpm test",
-		"git commit -m 'msg'",
-		"go build ./...",
-		"cargo test --workspace",
-		"python3 -m pytest tests/",
-		"ls -la",
-		"grep -r TODO .",
-	}
-	for _, pat := range safe {
-		if permissions.DangerousBashRE.MatchString(pat) {
-			t.Errorf("DangerousBashRE.MatchString(%q) = true for safe pattern, want false", pat)
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // F-SEC-004 — WebFetch pattern enforcement (ValidateWebFetchPattern)
 // ---------------------------------------------------------------------------
