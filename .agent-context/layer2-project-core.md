@@ -27,6 +27,7 @@
 | Server-only defaults | `server/db/defaults.ts` | `DEFAULT_STAGE_TIMEOUT_SECONDS` |
 | Server-only constants | `server/constants.ts` | `VALID_STAGES`, `MAX_DESCRIPTION_CHARS` (re-exports from `src/utils/` where shared) |
 | Server path/host constants | `server/paths.ts`, `server/constants.ts` | `WHITESPACE_RE`, `LOOPBACK_HOST` |
+| Pipeline stage labels | `src/utils/stageLabels.ts` | `STAGE_LABELS`, `STAGE_DESCRIPTIONS` |
 
 **Server consuming shared `src/` code:** Import via relative path with `.js` extension — e.g. `import { SLUG_RE } from '../src/utils/validation.js'`. `server/constants.ts` re-exports these so server-internal consumers don't need the long path.
 

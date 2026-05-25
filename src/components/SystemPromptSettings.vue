@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import AppButton from './ui/AppButton.vue'
+import { STAGE_LABELS } from '../utils/stageLabels'
 
 interface SystemPrompt {
   id: string
@@ -132,7 +133,7 @@ async function deletePrompt(id: string) {
 function stageLabel(stage: string | null) {
   if (!stage)
     return 'All stages'
-  return stage.replace(/_/g, ' ')
+  return STAGE_LABELS[stage as keyof typeof STAGE_LABELS] ?? stage.replace(/_/g, ' ')
 }
 
 onMounted(fetchPrompts)

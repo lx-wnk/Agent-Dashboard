@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { useTasks } from '../composables/useTasks'
 import { useProjects } from '../composables/useProjects'
 import TaskCard from './TaskCard.vue'
+import { STAGE_LABELS } from '../utils/stageLabels'
 
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
@@ -104,17 +105,17 @@ const COLUMNS: ColumnDef[] = [
     stages: [],
     group: 'needs-you',
   },
-  { id: 'concept', label: 'Concept', stages: ['concept'], group: 'active' },
-  { id: 'backlog', label: 'Backlog', stages: ['backlog'], group: 'active' },
+  { id: 'concept', label: STAGE_LABELS.concept, stages: ['concept'], group: 'active' },
+  { id: 'backlog', label: STAGE_LABELS.backlog, stages: ['backlog'], group: 'active' },
   {
     id: 'implementation',
-    label: 'Implementation',
+    label: STAGE_LABELS.implementation,
     stages: ['implementation', 'self_review'],
     group: 'active',
   },
-  { id: 'finalization', label: 'Completion', stages: ['finalization'], group: 'active' },
-  { id: 'done', label: 'Done', stages: ['done'], group: 'terminal' },
-  { id: 'cancelled', label: 'Cancelled', stages: ['cancelled'], group: 'terminal' },
+  { id: 'finalization', label: STAGE_LABELS.finalization, stages: ['finalization'], group: 'active' },
+  { id: 'done', label: STAGE_LABELS.done, stages: ['done'], group: 'terminal' },
+  { id: 'cancelled', label: STAGE_LABELS.cancelled, stages: ['cancelled'], group: 'terminal' },
 ]
 
 function tasksForColumn(col: ColumnDef): PipelineTask[] {
