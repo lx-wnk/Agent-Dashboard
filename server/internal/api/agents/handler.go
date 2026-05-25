@@ -11,6 +11,10 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
+// Frames received from the broadcaster are fully-formed SSE frames
+// (produced by Broadcaster.Broadcast / BroadcastComment).
+// Handlers must write them raw — no additional "data: " prefix.
+
 // GetAgentsFn is the function signature for retrieving the current agent list.
 // Defined as a named type to allow substitution in tests.
 type GetAgentsFn func(ctx context.Context) ([]sdk.Agent, error)
@@ -69,7 +73,8 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			// data is a fully-formed SSE frame from the broadcaster — write raw.
+			w.Write(data) //nolint:errcheck
 			flusher.Flush()
 		case <-r.Context().Done():
 			return

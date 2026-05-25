@@ -627,7 +627,8 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			// data is a fully-formed SSE frame from the broadcaster — write raw.
+			w.Write(data) //nolint:errcheck
 			flusher.Flush()
 		case <-r.Context().Done():
 			return
