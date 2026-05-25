@@ -30,9 +30,11 @@ func captureNextEvent(t *testing.T, tb *sse.TaskBroadcaster, fn func()) map[stri
 		if !ok {
 			t.Fatal("subscriber channel closed unexpectedly")
 		}
+		// Broadcaster pre-formats SSE frames as "data: <json>\n\n" (see sse.Broadcaster).
+		payload := bytes.TrimSuffix(bytes.TrimPrefix(raw, []byte("data: ")), []byte("\n\n"))
 		var event map[string]any
-		if err := json.Unmarshal(raw, &event); err != nil {
-			t.Fatalf("unmarshal event: %v", err)
+		if err := json.Unmarshal(payload, &event); err != nil {
+			t.Fatalf("unmarshal event: %v\nraw=%q", err, raw)
 		}
 		return event
 	default:
