@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import AppButton from './ui/AppButton.vue'
 
 interface MemoryFile {
@@ -120,6 +120,10 @@ async function save() {
 }
 
 onMounted(loadFiles)
+
+onUnmounted(() => {
+  if (confirmDiscardTimer) clearTimeout(confirmDiscardTimer)
+})
 </script>
 
 <template>

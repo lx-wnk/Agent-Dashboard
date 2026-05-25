@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{
+const props = defineProps<{
   modelValue: string | number
   options: Array<{ value: string | number; label: string }>
   id?: string
@@ -7,7 +7,12 @@ defineProps<{
   disabled?: boolean
 }>()
 
-defineEmits<{ 'update:modelValue': [value: string | number] }>()
+const emit = defineEmits<{ 'update:modelValue': [value: string | number] }>()
+
+function onChange(e: Event) {
+  const raw = (e.target as HTMLSelectElement).value
+  emit('update:modelValue', typeof props.modelValue === 'number' ? Number(raw) : raw)
+}
 </script>
 
 <template>
@@ -17,7 +22,7 @@ defineEmits<{ 'update:modelValue': [value: string | number] }>()
     :aria-label="ariaLabel"
     :disabled="disabled"
     class="bg-card border border-line rounded-md px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50 cursor-pointer"
-    @change="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
+    @change="onChange"
   >
     <option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option>
   </select>
