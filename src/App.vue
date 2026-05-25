@@ -254,10 +254,10 @@ onMounted(fetchQuota)
         <button
           type="button"
           class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
-          :class="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
-          :aria-pressed="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows'"
+          :class="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows' && viewMode !== 'cost-analytics' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
+          :aria-pressed="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows' && viewMode !== 'cost-analytics'"
           title="Agent monitoring dashboard"
-          @click="viewMode = viewMode === 'pipeline' || viewMode === 'config-explorer' || viewMode === 'workflows' ? 'cards' : viewMode"
+          @click="viewMode = viewMode === 'pipeline' || viewMode === 'config-explorer' || viewMode === 'workflows' || viewMode === 'cost-analytics' ? 'cards' : viewMode"
         >
           Dashboard
         </button>
@@ -459,38 +459,41 @@ onMounted(fetchQuota)
     />
 
     <!-- PWA update banner: shown when a new service worker is waiting to activate. -->
-    <!-- F-UIUX-016: role="status" + aria-live so screen readers announce the update without user focus -->
-    <Transition name="toast">
-      <div
-        v-if="needsRefresh"
-        role="status"
-        aria-live="polite"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-900 dark:bg-slate-800 border border-slate-700 text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
-      >
-        <span>A new version is available.</span>
-        <button
-          type="button"
-          class="bg-blue-600 text-white border-none rounded-md px-3 py-1 text-[12px] font-semibold cursor-pointer hover:brightness-110"
-          aria-label="A new version is available, reload to apply"
-          @click="updateSW"
+    <!-- F-UIUX-016: role="status" + aria-live rendered unconditionally so screen readers
+         announce the content when it is inserted (ARIA live regions must exist in the DOM
+         before content changes to be reliably announced). -->
+    <div role="status" aria-live="polite" aria-atomic="true" class="pointer-events-none">
+      <Transition name="toast">
+        <div
+          v-if="needsRefresh"
+          class="pointer-events-auto fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-900 dark:bg-slate-800 border border-slate-700 text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
         >
-          Reload
-        </button>
-      </div>
-    </Transition>
-    <!-- F-UIUX-011: pointer-events enabled so hover pause works; timer resumes on mouseleave -->
-    <Transition name="toast">
-      <div
-        v-if="toastMessage"
-        role="status"
-        aria-live="polite"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-raised border border-line text-fg px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
-        @mouseenter="pauseToast"
-        @mouseleave="resumeToast"
-      >
-        {{ toastMessage }}
-      </div>
-    </Transition>
+          <span>A new version is available.</span>
+          <button
+            type="button"
+            class="bg-blue-600 text-white border-none rounded-md px-3 py-1 text-[12px] font-semibold cursor-pointer hover:brightness-110"
+            aria-label="A new version is available, reload to apply"
+            @click="updateSW"
+          >
+            Reload
+          </button>
+        </div>
+      </Transition>
+    </div>
+    <!-- F-UIUX-011: pointer-events enabled so hover pause works; timer resumes on mouseleave.
+         Live region rendered unconditionally; content cleared to empty string when no toast. -->
+    <div role="status" aria-live="polite" aria-atomic="true" class="pointer-events-none">
+      <Transition name="toast">
+        <div
+          v-if="toastMessage"
+          class="pointer-events-auto fixed bottom-6 left-1/2 -translate-x-1/2 bg-raised border border-line text-fg px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+          @mouseenter="pauseToast"
+          @mouseleave="resumeToast"
+        >
+          {{ toastMessage }}
+        </div>
+      </Transition>
+    </div>
     <SpawnDialog :open="showSpawnDialog" @close="showSpawnDialog = false" />
     <RefinementChat
       :open="showRefinementChat"
