@@ -181,7 +181,19 @@ type OrchestratorOptions struct {
 
 	OnPermissionRequest func(taskID string, req *ent.PermissionRequest)
 	OnStageFailed       func(taskID string, info StageFailedInfo)
-	OnTaskChanged       func(taskID string, transitionKind string)
+	// OnTaskChanged is called after every successful state-machine transition.
+	// payload carries the value returned by BuildTaskPayload (if set), which was
+	// read inside the same DB transaction as the writes, guaranteeing a consistent
+	// view. Callers that invoke OnTaskChanged outside a transaction pass nil;
+	// the closure in di_pipeline.go falls back to a live read in that case.
+	OnTaskChanged func(taskID string, transitionKind string, payload any)
+	// BuildTaskPayload, when non-nil, is called inside applyTransitionWrites (before
+	// tx.Commit) with tx-bound repos so that the returned snapshot reflects the
+	// just-applied writes. The result is forwarded verbatim as the payload argument
+	// to OnTaskChanged after the commit succeeds. Returning nil (e.g. on error)
+	// tells OnTaskChanged to fall back to a live read. The pipeline package does not
+	// interpret the returned value — callers own its type.
+	BuildTaskPayload func(ctx context.Context, taskID string, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) any
 }
 
 // StageFailedInfo carries failure metadata to the OnStageFailed callback.

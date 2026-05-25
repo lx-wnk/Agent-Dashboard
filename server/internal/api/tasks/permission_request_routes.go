@@ -13,7 +13,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
-	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
 // listPermissionRequests returns pending permission requests across all stage_runs for a task.
@@ -72,7 +71,7 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 		if _, err2 := h.srRepo.Update(r.Context(), body.StageRunID, repo.UpdateStageRunInput{Status: &awaitingUser}); err2 != nil {
 			slog.Warn("createPermissionRequest: flip to awaiting_user failed", "stageRunID", body.StageRunID, "err", err2)
 		}
-		h.broadcaster.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: sr.TaskID})
+		h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
 	}
 
 	return jsonReply(w, http.StatusCreated, req)
@@ -277,7 +276,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		if _, err2 := h.srRepo.Update(r.Context(), body.StageRunID, repo.UpdateStageRunInput{Status: &awaitingUser}); err2 != nil {
 			slog.Warn("bulkCreatePermissionRequests: flip to awaiting_user failed", "stageRunID", body.StageRunID, "err", err2)
 		}
-		h.broadcaster.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: sr.TaskID})
+		h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
 	}
 
 	return jsonReply(w, http.StatusOK, results)

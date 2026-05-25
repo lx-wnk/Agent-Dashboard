@@ -197,7 +197,7 @@ func (o *PipelineOrchestrator) drainHTTPResults(ctx context.Context) {
 					slog.Info("orchestrator: HTTP spawn completed — session file recorded",
 						"stageRunID", res.stageRunID, "sessionFile", res.sessionFile)
 					if o.opts.OnTaskChanged != nil {
-						o.opts.OnTaskChanged(res.taskID, "async_running")
+						o.opts.OnTaskChanged(res.taskID, "async_running", nil)
 					}
 				}
 			}
@@ -491,7 +491,7 @@ func (o *PipelineOrchestrator) handleDependentTasks(ctx context.Context, taskID,
 	// Full cascade (cancel, on_hold, start actions) is part of the dependency
 	// sub-feature; implement when TaskDependency repo methods are available.
 	if o.opts.OnTaskChanged != nil {
-		o.opts.OnTaskChanged(taskID, "dependent_check")
+		o.opts.OnTaskChanged(taskID, "dependent_check", nil)
 	}
 }
 
@@ -507,7 +507,7 @@ func (o *PipelineOrchestrator) tryAttachSessionID(ctx context.Context, stageRunI
 		return
 	}
 	if o.opts.OnTaskChanged != nil {
-		o.opts.OnTaskChanged(taskID, "async_running")
+		o.opts.OnTaskChanged(taskID, "async_running", nil)
 	}
 }
 
