@@ -47,18 +47,27 @@ func TestEvent_WithWrongSecret_Returns401(t *testing.T) {
 	}
 }
 
-func TestEvent_WithNoSecretConfigured_IsOpenWithoutAuth(t *testing.T) {
-	// When DASHBOARD_HOOKS_SECRET is empty the event endpoint accepts any request
-	// (server is loopback-only so this is intentional for local use).
-	h := newTestHandler("")
+// TestNew_PanicsOnEmptySecret verifies that New panics when given an empty secret,
+// enforcing that every Handler is constructed with a real secret.
+func TestNew_PanicsOnEmptySecret(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("New(\"\", ...) did not panic; expected panic on empty secret")
+		}
+	}()
+	New("", func() {})
+}
+
+func TestEvent_WithMissingBearer_Returns401(t *testing.T) {
+	h := newTestHandler("mysecret")
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/event", nil)
-	// No Authorization header at all.
+	// Deliberately no Authorization header.
 	w := httptest.NewRecorder()
 
 	h.Event(w, req)
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Event with no secret configured (no auth header): got status %d, want %d", w.Code, http.StatusNoContent)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Event with missing bearer: got status %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 
@@ -66,19 +75,18 @@ func TestEvent_WithNoSecretConfigured_IsOpenWithoutAuth(t *testing.T) {
 // PreTool endpoint
 // -------------------------------------------------------------------
 
-func TestPreTool_WithoutSecret_AllowsThrough(t *testing.T) {
-	// When DASHBOARD_HOOKS_SECRET is not set the server is loopback-only,
-	// so requests are allowed through without a bearer token — matching Event behaviour.
-	h := newTestHandler("")
+func TestPreTool_WithMissingBearer_Returns401(t *testing.T) {
+	h := newTestHandler("test-secret")
 	body := `{"toolName":"Bash","cwd":"/tmp"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/pre-tool", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	// Deliberately no Authorization header.
 	w := httptest.NewRecorder()
 
 	h.PreTool(w, req)
 
-	if w.Code == http.StatusUnauthorized {
-		t.Errorf("PreTool without secret configured: got 401, want request allowed through")
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("PreTool with missing bearer: got status %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 
@@ -178,17 +186,16 @@ func TestPreTool_WriteTool_TimeoutReturnsProceeds(t *testing.T) {
 // Pending endpoint
 // -------------------------------------------------------------------
 
-func TestPending_WithoutSecret_AllowsThrough(t *testing.T) {
-	// When DASHBOARD_HOOKS_SECRET is not set, Pending is accessible from the local UI
-	// without a bearer token — the loopback network binding is the security boundary.
-	h := newTestHandler("")
+func TestPending_WithMissingBearer_Returns401(t *testing.T) {
+	h := newTestHandler("test-secret")
 	req := httptest.NewRequest(http.MethodGet, "/api/hooks/pending", nil)
+	// Deliberately no Authorization header.
 	w := httptest.NewRecorder()
 
 	h.Pending(w, req)
 
-	if w.Code == http.StatusUnauthorized {
-		t.Errorf("Pending without secret configured: got 401, want request allowed through")
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Pending with missing bearer: got status %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 

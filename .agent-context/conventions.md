@@ -18,12 +18,13 @@
 | `DASHBOARD_TASK_ID`              | Injected into spawned stage agents for the channel bridge                                                     |
 | `DASHBOARD_MCP_TOKEN`            | Injected for MCP callback access                                                                              |
 | `DASHBOARD_MCP_URL`              | Injected for MCP callback access                                                                              |
-| `DASHBOARD_HOST`                 | Bind address, default `127.0.0.1`; logs a security warning if non-loopback                                    |
+| `DASHBOARD_HOST`                 | Bind address, default `127.0.0.1`; non-loopback address causes boot failure unless `DASHBOARD_REMOTES_ENABLED=true` |
+| `DASHBOARD_REMOTES_ENABLED`      | `true` or `false`, default `false`; opt-in to binding on a non-loopback address (use a VPN or SSH tunnel — never expose to an untrusted network) |
 | `DASHBOARD_SSE_INTERVAL_MS`      | Agent SSE broadcast interval ms, default `3000`                                                               |
 | `DASHBOARD_SPAWN_RATE_LIMIT`     | Max user-initiated spawns per window, default `5`; must be positive integer                                   |
 | `DASHBOARD_SPAWN_RATE_WINDOW_MS` | Spawn rate-limit window ms, default `60000`; must be positive integer                                         |
 | `DASHBOARD_ALLOW_GIT_PUSH`       | `true` or `false`, default `false`; when `true`, removes the global `git push` filter from spawned-agent allow-lists. Per-task override: `metadata.allowGitPush=true`. |
-| `DASHBOARD_HOOKS_SECRET`         | Shared bearer token for `/api/hooks/event`; recommended when hooks script runs outside localhost |
+| `DASHBOARD_HOOKS_SECRET`         | Shared bearer token for all `/api/hooks/*` endpoints; always required — if unset, `config.Load` auto-generates and persists a secret to `~/.claude/dashboard-hooks-secret`. Set explicitly via env var or config file to keep the secret stable across restarts. |
 | `DASHBOARD_HOOKS_DEBOUNCE_MS`    | Debounce window before SSE rescan after a hook event, default `100`ms |
 | `DASHBOARD_ALLOW_GIT_PULL`       | `true` or `false`, default `false`; enables `POST /api/tasks/:id/git-action` with `action:'pull'` (git pull --ff-only on task worktree) |
 | `DASHBOARD_CLAUDE_CONFIG_DIRS`   | Comma-separated list of Claude config directories to search for session JSONL files, e.g. `~/.claude-personal,~/.claude-work`. Searched before auto-detection. Useful when the dashboard process is not started with `CLAUDE_CONFIG_DIR` set, or on shared machines with multiple profiles. |
