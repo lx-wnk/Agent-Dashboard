@@ -60,8 +60,6 @@ const (
 	EdgeStageRuns = "stage_runs"
 	// EdgePermissions holds the string denoting the permissions edge name in mutations.
 	EdgePermissions = "permissions"
-	// EdgeAuditLogs holds the string denoting the audit_logs edge name in mutations.
-	EdgeAuditLogs = "audit_logs"
 	// EdgeDependencies holds the string denoting the dependencies edge name in mutations.
 	EdgeDependencies = "dependencies"
 	// EdgeDependents holds the string denoting the dependents edge name in mutations.
@@ -82,13 +80,6 @@ const (
 	PermissionsInverseTable = "task_permissions"
 	// PermissionsColumn is the table column denoting the permissions relation/edge.
 	PermissionsColumn = "task_id"
-	// AuditLogsTable is the table that holds the audit_logs relation/edge.
-	AuditLogsTable = "audit_logs"
-	// AuditLogsInverseTable is the table name for the AuditLog entity.
-	// It exists in this package in order to avoid circular dependency with the "auditlog" package.
-	AuditLogsInverseTable = "audit_logs"
-	// AuditLogsColumn is the table column denoting the audit_logs relation/edge.
-	AuditLogsColumn = "task_id"
 	// DependenciesTable is the table that holds the dependencies relation/edge.
 	DependenciesTable = "task_dependencies"
 	// DependenciesInverseTable is the table name for the TaskDependency entity.
@@ -300,20 +291,6 @@ func ByPermissions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByAuditLogsCount orders the results by audit_logs count.
-func ByAuditLogsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newAuditLogsStep(), opts...)
-	}
-}
-
-// ByAuditLogs orders the results by audit_logs terms.
-func ByAuditLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newAuditLogsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
 // ByDependenciesCount orders the results by dependencies count.
 func ByDependenciesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -353,13 +330,6 @@ func newPermissionsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(PermissionsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, PermissionsTable, PermissionsColumn),
-	)
-}
-func newAuditLogsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(AuditLogsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, AuditLogsTable, AuditLogsColumn),
 	)
 }
 func newDependenciesStep() *sqlgraph.Step {

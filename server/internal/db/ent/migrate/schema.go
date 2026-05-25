@@ -93,41 +93,6 @@ var (
 			},
 		},
 	}
-	// AuditLogsColumns holds the columns for the "audit_logs" table.
-	AuditLogsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeString},
-		{Name: "actor", Type: field.TypeString},
-		{Name: "action", Type: field.TypeString},
-		{Name: "details", Type: field.TypeJSON, Nullable: true},
-		{Name: "timestamp", Type: field.TypeTime},
-		{Name: "task_id", Type: field.TypeString},
-	}
-	// AuditLogsTable holds the schema information for the "audit_logs" table.
-	AuditLogsTable = &schema.Table{
-		Name:       "audit_logs",
-		Columns:    AuditLogsColumns,
-		PrimaryKey: []*schema.Column{AuditLogsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "audit_logs_tasks_audit_logs",
-				Columns:    []*schema.Column{AuditLogsColumns[5]},
-				RefColumns: []*schema.Column{TasksColumns[0]},
-				OnDelete:   schema.Cascade,
-			},
-		},
-		Indexes: []*schema.Index{
-			{
-				Name:    "auditlog_task_id",
-				Unique:  false,
-				Columns: []*schema.Column{AuditLogsColumns[5]},
-			},
-			{
-				Name:    "auditlog_timestamp",
-				Unique:  false,
-				Columns: []*schema.Column{AuditLogsColumns[4]},
-			},
-		},
-	}
 	// PermissionPresetsColumns holds the columns for the "permission_presets" table.
 	PermissionPresetsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -563,7 +528,6 @@ var (
 		AgentCostTrendsTable,
 		APIKeysTable,
 		AuditEventsTable,
-		AuditLogsTable,
 		PermissionPresetsTable,
 		PermissionRequestsTable,
 		PipelineConfigsTable,
@@ -582,7 +546,6 @@ var (
 )
 
 func init() {
-	AuditLogsTable.ForeignKeys[0].RefTable = TasksTable
 	PermissionRequestsTable.ForeignKeys[0].RefTable = StageRunsTable
 	ProjectFoldersTable.ForeignKeys[0].RefTable = ProjectsTable
 	StageRunsTable.ForeignKeys[0].RefTable = TasksTable

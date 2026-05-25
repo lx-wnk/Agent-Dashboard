@@ -44,7 +44,6 @@ func (Task) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("stage_runs", StageRun.Type).Annotations(cascade),
 		edge.To("permissions", TaskPermission.Type).Annotations(cascade),
-		edge.To("audit_logs", AuditLog.Type).Annotations(cascade),
 		edge.To("dependencies", TaskDependency.Type).Annotations(cascade),
 		edge.To("dependents", TaskDependency.Type).Annotations(cascade),
 	}

@@ -154,6 +154,11 @@ func runRawMigrations(db *sql.DB) error {
 		// This index was created by the original ent schema; drop it idempotently
 		// so existing databases are migrated without a table rebuild.
 		`DROP INDEX IF EXISTS api_keys_name_key`,
+
+		// audit_logs table is superseded by audit_events (issue #102). The copy
+		// migration runs before this statement; dropping here ensures no further
+		// writes can land in the legacy table.
+		`DROP TABLE IF EXISTS audit_logs`,
 	}
 
 	for _, stmt := range stmts {
