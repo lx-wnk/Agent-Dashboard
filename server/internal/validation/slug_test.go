@@ -15,6 +15,9 @@ func TestIsValidSlug(t *testing.T) {
 		"x",
 		// exactly 64 chars
 		"a234567890123456789012345678901234567890123456789012345678901234",
+		// TS canonical allows trailing hyphens and consecutive hyphens
+		"trailing-hyphen-",
+		"double--hyphen",
 	}
 	for _, s := range valid {
 		if !validation.IsValidSlug(s) {
@@ -25,13 +28,11 @@ func TestIsValidSlug(t *testing.T) {
 	invalid := []string{
 		"",
 		"-leading-hyphen",
-		"trailing-hyphen-",
 		"Has-Uppercase",
 		"has space",
 		"has_underscore",
 		// 65 chars (one too long)
 		"a2345678901234567890123456789012345678901234567890123456789012345",
-		"double--hyphen",
 	}
 	for _, s := range invalid {
 		if validation.IsValidSlug(s) {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -345,7 +346,9 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 		entry.inode == top.inode &&
 		entry.mtime.Equal(top.mtime) {
 		// Cache hit: return a shallow copy so callers can safely mutate fields.
+		// Clone ToolCounts so the caller cannot mutate the cached map.
 		cp := *entry.data
+		cp.ToolCounts = maps.Clone(entry.data.ToolCounts)
 		return &cp, nil
 	}
 
@@ -360,14 +363,35 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 	data.ProjectPath = cwd
 	data.Meta = loadSessionMeta(data.SessionID)
 
-	// Store in cache keyed by the winning file's identity.
-	// We always cache against the top (newest-mtime) candidate so that when
-	// the active session file advances (new write → mtime bump) we get a cache
-	// miss on the next tick rather than returning stale data.
+	// Store in cache keyed by the chosen file's identity (the file whose content
+	// was actually parsed).  When the active session file advances (new write →
+	// mtime bump on chosenPath) we get a cache miss on the next tick.
+	// Only fall back to top's pre-fetched stat when chosenPath == top.path to
+	// avoid a redundant syscall.
+	var entryPath string
+	var entryInode uint64
+	var entryMtime time.Time
+	if chosenPath == top.path {
+		entryPath = top.path
+		entryInode = top.inode
+		entryMtime = top.mtime
+	} else {
+		info, statErr := os.Stat(chosenPath)
+		if statErr == nil {
+			entryPath = chosenPath
+			entryInode = inodeOf(info)
+			entryMtime = info.ModTime()
+		} else {
+			// Stat failed — fall back to top so we always have a valid entry.
+			entryPath = top.path
+			entryInode = top.inode
+			entryMtime = top.mtime
+		}
+	}
 	newEntry := &sessionCacheEntry{
-		path:     top.path,
-		inode:    top.inode,
-		mtime:    top.mtime,
+		path:     entryPath,
+		inode:    entryInode,
+		mtime:    entryMtime,
 		data:     data,
 		cachedAt: now,
 	}
@@ -376,6 +400,7 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 	sessionCacheMu.Unlock()
 
 	cp := *data
+	cp.ToolCounts = maps.Clone(data.ToolCounts)
 	return &cp, nil
 }
 
