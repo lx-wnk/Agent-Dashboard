@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -109,17 +108,12 @@ func (h *Handler) bulkGrantPermissions(w http.ResponseWriter, r *http.Request) e
 		if p.Tool == "" {
 			return apierr.NewAppError(http.StatusBadRequest, "each permission entry requires a tool")
 		}
-		if !permissions.IsAllowedTool(p.Tool) {
-			return apierr.NewAppError(http.StatusBadRequest, "unknown tool: "+p.Tool)
+		pattern := ""
+		if p.Pattern != nil {
+			pattern = *p.Pattern
 		}
-		if p.Tool == "Bash" {
-			if p.Pattern == nil || *p.Pattern == "" {
-				return apierr.NewAppError(http.StatusBadRequest, "Bash permission requires a non-empty pattern")
-			}
-			normalized := strings.Join(strings.Fields(*p.Pattern), " ")
-			if permissions.DangerousBashRE.MatchString(normalized) {
-				return apierr.NewAppError(http.StatusBadRequest, "dangerous Bash pattern rejected")
-			}
+		if err := permissions.ValidateGrantEntry(p.Tool, pattern); err != nil {
+			return apierr.NewAppError(http.StatusBadRequest, err.Error())
 		}
 		e := repo.GrantEntry{Tool: p.Tool, Pattern: p.Pattern}
 		if p.ExpiresAt != nil {

@@ -76,10 +76,18 @@ func BuildAllowList(perms []*ent.TaskPermission, enableChannel, allowGitPush boo
 				continue // blanket Bash allow is forbidden
 			}
 			normalized := strings.Join(strings.Fields(*p.Pattern), " ")
-			if permissions.DangerousBashRE.MatchString(normalized) {
-				continue // dangerous shell pattern
+			if ok, _ := permissions.IsSafeBashPattern(normalized); !ok {
+				continue // unsafe shell pattern — skip silently at spawn time
 			}
 			allow = append(allow, fmt.Sprintf("Bash(%s)", normalized))
+			continue
+		}
+		if p.Tool == "WebFetch" {
+			// Bare WebFetch grants (no pattern) are rejected — require a domain pattern.
+			if p.Pattern == nil || strings.TrimSpace(*p.Pattern) == "" {
+				continue
+			}
+			allow = append(allow, fmt.Sprintf("WebFetch(%s)", strings.TrimSpace(*p.Pattern)))
 			continue
 		}
 		if p.Pattern != nil && *p.Pattern != "" {

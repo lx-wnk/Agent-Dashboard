@@ -51,11 +51,6 @@ func RegisterWriteTools(registry mcp.ToolRegistry, d WriteDeps) {
 	registerRemoveDependency(registry, d)
 }
 
-// validateTool checks whether a tool name is in the pipeline allow-list.
-func validateTool(tool string) bool {
-	return permissions.IsAllowedTool(tool)
-}
-
 // applyTemplate bulk-grants all entries for a named template. Returns the number granted.
 func applyTemplate(ctx context.Context, permRepo repo.PermissionRepo, taskID, templateName string) (int, error) {
 	entries, ok := permissionTemplates[templateName]
@@ -112,8 +107,12 @@ func parsePermissionsArg(args map[string]any) ([]permissionInput, error) {
 func permInputsToGrantEntries(perms []permissionInput) ([]repo.GrantEntry, error) {
 	entries := make([]repo.GrantEntry, 0, len(perms))
 	for _, p := range perms {
-		if !validateTool(p.Tool) {
-			return nil, mcp.Fail("tool not in allow-list: " + p.Tool)
+		pattern := ""
+		if p.Pattern != nil {
+			pattern = *p.Pattern
+		}
+		if err := permissions.ValidateGrantEntry(p.Tool, pattern); err != nil {
+			return nil, mcp.Fail(err.Error())
 		}
 		entry := repo.GrantEntry{Tool: p.Tool}
 		if p.Pattern != nil && *p.Pattern != "" {

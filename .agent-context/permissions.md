@@ -45,10 +45,12 @@ If you (a spawned agent) hit a tool that is denied, do NOT write prose asking th
     { "tool": "Bash", "pattern": "pnpm test*", "reason": "run vitest" },
     { "tool": "Bash", "pattern": "pnpm lint*", "reason": "lint" },
     { "tool": "Bash", "pattern": "pnpm typecheck*", "reason": "typecheck" },
-    { "tool": "WebFetch", "reason": "fetch library docs" }
+    { "tool": "WebFetch", "pattern": "docs.example.com", "reason": "fetch library docs" }
   ]
 }
 ```
+
+> **Note (post-tightening):** WebFetch now requires a non-empty domain pattern. Bare WebFetch grants (no `pattern`) are rejected at grant time and purged from the DB on startup.
 
 The dashboard auto-resolves any entries already pre-granted (silent, no UI prompt). Only uncovered entries surface as ON HOLD; the user grants them as one batch decision.
 
