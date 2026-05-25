@@ -51,19 +51,49 @@ func provideOrchestrator(
 		WorktreeRoot:     cfg.WorktreeRoot,
 		ForceWorktrees:   cfg.ForceWorktrees,
 		ResolveSpawner:   resolveFn,
-		OnTaskChanged: func(taskID string, _ string) {
-			// Broadcast stage_run_updated with the enriched task so the client can
-			// apply the update directly without a round-trip refetch (F-PERF-013).
-			ctx := context.Background()
+		// BuildTaskPayload is called inside applyTransitionWrites, bound to the
+		// active transaction, so the returned snapshot reflects the just-applied
+		// writes before tx.Commit(). The result is forwarded to OnTaskChanged
+		// after the commit succeeds.
+		BuildTaskPayload: func(ctx context.Context, taskID string, txSRRepo repo.StageRunRepo, txPermRepo repo.PermissionRepo) any {
 			t, err := taskRepo.GetByID(ctx, taskID)
 			if err != nil {
-				slog.Warn("OnTaskChanged: task lookup failed", "taskID", taskID, "err", err)
-				return
+				slog.Warn("BuildTaskPayload: task lookup failed", "taskID", taskID, "err", err)
+				return nil
 			}
-			enriched, err := tasks.EnrichTask(ctx, t, srRepo, permRepo)
+			enriched, err := tasks.EnrichTask(ctx, t, txSRRepo, txPermRepo)
 			if err != nil {
-				slog.Warn("OnTaskChanged: enrich failed", "taskID", taskID, "err", err)
-				return
+				slog.Warn("BuildTaskPayload: enrich failed", "taskID", taskID, "err", err)
+				return nil
+			}
+			return enriched
+		},
+		OnTaskChanged: func(taskID string, _ string, payload any) {
+			// Broadcast stage_run_updated with the enriched task so the client can
+			// apply the update directly without a round-trip refetch (F-PERF-013).
+			//
+			// payload is a pre-built *tasks.EnrichedTask read inside the transaction
+			// (consistent, post-write state). When nil — e.g. for out-of-tx callers
+			// like tryAttachSessionID — fall back to a live read.
+			var enriched *tasks.EnrichedTask
+			if payload != nil {
+				if e, ok := payload.(*tasks.EnrichedTask); ok {
+					enriched = e
+				}
+			}
+			if enriched == nil {
+				ctx := context.Background()
+				t, err := taskRepo.GetByID(ctx, taskID)
+				if err != nil {
+					slog.Warn("OnTaskChanged: task lookup failed", "taskID", taskID, "err", err)
+					return
+				}
+				var ferr error
+				enriched, ferr = tasks.EnrichTask(ctx, t, srRepo, permRepo)
+				if ferr != nil {
+					slog.Warn("OnTaskChanged: enrich failed", "taskID", taskID, "err", ferr)
+					return
+				}
 			}
 			tb.Broadcast(sse.TaskEvent{
 				Type:    "stage_run_updated",
