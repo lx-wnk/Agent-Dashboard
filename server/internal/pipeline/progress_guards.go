@@ -26,10 +26,10 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 	}
 
 	// Global runner-slot cap — agent-driven stages only.
-	// F-PERF-007: hasFreeRunnerSlot is called with ctx only here (before the
-	// pickNextTasksForFreeSlots path, which uses its prefetched set directly).
-	// This path (ProgressTask called from routes/MCP) still does one ListByStatus
-	// query because it has no prefetched running set at this call site.
+	// hasFreeRunnerSlot issues its own DB query because it is also called
+	// from route handlers, not just from the tick loop. The optimized
+	// hasFreeRunnerSlotFrom variant in runner_picker.go reuses pre-fetched
+	// data inside pickNextTasksForFreeSlots only.
 	if handler.RequiresAgent() && !o.hasFreeRunnerSlot(ctx, task.ID) {
 		return nil, nil
 	}

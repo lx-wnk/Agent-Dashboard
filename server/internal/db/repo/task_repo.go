@@ -220,11 +220,12 @@ func (r *entTaskRepo) ListForUser(ctx context.Context, userID string, isAdmin bo
 // ListPickable returns tasks eligible for the runner picker, sorted by SQL for
 // the criteria that map cleanly to ORDER BY:
 //   - silver_bullet DESC   (true first — binary column, trivially sortable)
+//   - priority DESC        (high > medium > low, alphabetic sort matches rank order)
 //   - created_at ASC       (FIFO within same tier)
 //
-// Priority and stage-index ordering cannot be expressed as simple SQL ORDER BY
-// (both require custom rank maps) and are applied by sortPickCandidates /
-// sortByStageIndex in runner_picker.go after the query returns.
+// Stage-index ordering cannot be expressed as a simple SQL ORDER BY (requires a
+// custom enum rank map) and is applied by sortByStageIndex in runner_picker.go
+// after the query returns.
 // F-PERF-010: removed the incorrect ascending BySilverBullet() SQL order and
 // added the correct DESC direction; created_at ASC is explicit for clarity.
 func (r *entTaskRepo) ListPickable(ctx context.Context) ([]*ent.Task, error) {
@@ -234,6 +235,7 @@ func (r *entTaskRepo) ListPickable(ctx context.Context) ([]*ent.Task, error) {
 		).
 		Order(
 			task.BySilverBullet(sql.OrderDesc()),
+			task.ByPriority(sql.OrderDesc()),
 			task.ByCreatedAt(sql.OrderAsc()),
 		).
 		All(ctx)

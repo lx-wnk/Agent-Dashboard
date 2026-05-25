@@ -49,7 +49,8 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 		}
 		ready = append(ready, t)
 	}
-	// SQL already sorts by: silver_bullet DESC, priority DESC, created_at ASC.
+	// SQL already sorts by: silver_bullet DESC, priority DESC, created_at ASC
+	// (see ListPickable in task_repo.go).
 	// Remaining Go-only sort: stage index DESC (custom enum order).
 	sortByStageIndex(ready)
 	picks := ready
