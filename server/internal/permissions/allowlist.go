@@ -176,7 +176,7 @@ func ValidateGrantEntry(tool, pattern string) error {
 	if tool == "Bash" {
 		normalized := strings.Join(strings.Fields(pattern), " ")
 		if normalized == "" {
-			return errors.New("Bash permission requires a non-empty pattern")
+			return errors.New("bash permission requires a non-empty pattern")
 		}
 		if ok, reason := IsSafeBashPattern(normalized); !ok {
 			return fmt.Errorf("unsafe Bash pattern: %s", reason)
