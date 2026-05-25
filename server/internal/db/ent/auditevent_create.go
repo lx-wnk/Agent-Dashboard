@@ -66,6 +66,20 @@ func (_c *AuditEventCreate) SetMetadata(v map[string]interface{}) *AuditEventCre
 	return _c
 }
 
+// SetTaskID sets the "task_id" field.
+func (_c *AuditEventCreate) SetTaskID(v string) *AuditEventCreate {
+	_c.mutation.SetTaskID(v)
+	return _c
+}
+
+// SetNillableTaskID sets the "task_id" field if the given value is not nil.
+func (_c *AuditEventCreate) SetNillableTaskID(v *string) *AuditEventCreate {
+	if v != nil {
+		_c.SetTaskID(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *AuditEventCreate) SetID(v string) *AuditEventCreate {
 	_c.mutation.SetID(v)
@@ -178,6 +192,10 @@ func (_c *AuditEventCreate) createSpec() (*AuditEvent, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Metadata(); ok {
 		_spec.SetField(auditevent.FieldMetadata, field.TypeJSON, value)
 		_node.Metadata = value
+	}
+	if value, ok := _c.mutation.TaskID(); ok {
+		_spec.SetField(auditevent.FieldTaskID, field.TypeString, value)
+		_node.TaskID = &value
 	}
 	return _node, _spec
 }

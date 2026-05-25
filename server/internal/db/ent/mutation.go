@@ -1416,6 +1416,7 @@ type AuditEventMutation struct {
 	action        *string
 	target        *string
 	metadata      *map[string]interface{}
+	task_id       *string
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*AuditEvent, error)
@@ -1732,6 +1733,55 @@ func (m *AuditEventMutation) ResetMetadata() {
 	delete(m.clearedFields, auditevent.FieldMetadata)
 }
 
+// SetTaskID sets the "task_id" field.
+func (m *AuditEventMutation) SetTaskID(s string) {
+	m.task_id = &s
+}
+
+// TaskID returns the value of the "task_id" field in the mutation.
+func (m *AuditEventMutation) TaskID() (r string, exists bool) {
+	v := m.task_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTaskID returns the old "task_id" field's value of the AuditEvent entity.
+// If the AuditEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuditEventMutation) OldTaskID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTaskID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTaskID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTaskID: %w", err)
+	}
+	return oldValue.TaskID, nil
+}
+
+// ClearTaskID clears the value of the "task_id" field.
+func (m *AuditEventMutation) ClearTaskID() {
+	m.task_id = nil
+	m.clearedFields[auditevent.FieldTaskID] = struct{}{}
+}
+
+// TaskIDCleared returns if the "task_id" field was cleared in this mutation.
+func (m *AuditEventMutation) TaskIDCleared() bool {
+	_, ok := m.clearedFields[auditevent.FieldTaskID]
+	return ok
+}
+
+// ResetTaskID resets all changes to the "task_id" field.
+func (m *AuditEventMutation) ResetTaskID() {
+	m.task_id = nil
+	delete(m.clearedFields, auditevent.FieldTaskID)
+}
+
 // Where appends a list predicates to the AuditEventMutation builder.
 func (m *AuditEventMutation) Where(ps ...predicate.AuditEvent) {
 	m.predicates = append(m.predicates, ps...)
@@ -1766,7 +1816,7 @@ func (m *AuditEventMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AuditEventMutation) Fields() []string {
-	fields := make([]string, 0, 5)
+	fields := make([]string, 0, 6)
 	if m.ts != nil {
 		fields = append(fields, auditevent.FieldTs)
 	}
@@ -1781,6 +1831,9 @@ func (m *AuditEventMutation) Fields() []string {
 	}
 	if m.metadata != nil {
 		fields = append(fields, auditevent.FieldMetadata)
+	}
+	if m.task_id != nil {
+		fields = append(fields, auditevent.FieldTaskID)
 	}
 	return fields
 }
@@ -1800,6 +1853,8 @@ func (m *AuditEventMutation) Field(name string) (ent.Value, bool) {
 		return m.Target()
 	case auditevent.FieldMetadata:
 		return m.Metadata()
+	case auditevent.FieldTaskID:
+		return m.TaskID()
 	}
 	return nil, false
 }
@@ -1819,6 +1874,8 @@ func (m *AuditEventMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldTarget(ctx)
 	case auditevent.FieldMetadata:
 		return m.OldMetadata(ctx)
+	case auditevent.FieldTaskID:
+		return m.OldTaskID(ctx)
 	}
 	return nil, fmt.Errorf("unknown AuditEvent field %s", name)
 }
@@ -1863,6 +1920,13 @@ func (m *AuditEventMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetMetadata(v)
 		return nil
+	case auditevent.FieldTaskID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTaskID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown AuditEvent field %s", name)
 }
@@ -1899,6 +1963,9 @@ func (m *AuditEventMutation) ClearedFields() []string {
 	if m.FieldCleared(auditevent.FieldMetadata) {
 		fields = append(fields, auditevent.FieldMetadata)
 	}
+	if m.FieldCleared(auditevent.FieldTaskID) {
+		fields = append(fields, auditevent.FieldTaskID)
+	}
 	return fields
 }
 
@@ -1918,6 +1985,9 @@ func (m *AuditEventMutation) ClearField(name string) error {
 		return nil
 	case auditevent.FieldMetadata:
 		m.ClearMetadata()
+		return nil
+	case auditevent.FieldTaskID:
+		m.ClearTaskID()
 		return nil
 	}
 	return fmt.Errorf("unknown AuditEvent nullable field %s", name)
@@ -1941,6 +2011,9 @@ func (m *AuditEventMutation) ResetField(name string) error {
 		return nil
 	case auditevent.FieldMetadata:
 		m.ResetMetadata()
+		return nil
+	case auditevent.FieldTaskID:
+		m.ResetTaskID()
 		return nil
 	}
 	return fmt.Errorf("unknown AuditEvent field %s", name)
