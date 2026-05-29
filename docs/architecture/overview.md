@@ -1,0 +1,91 @@
+# Architecture Overview
+
+A real-time monitoring and control dashboard for locally running Claude Code agents. The backend scans running processes and reads Claude Code's JSONL session logs; the frontend renders them live over Server-Sent Events.
+
+## Stack
+
+- **Backend:** Go 1.26 — chi router, [ent](https://entgo.io/) ORM, `modernc.org/sqlite` (pure-Go, no cgo), cobra CLI. Dependency injection is hand-written in `server/cmd/serve/di.go`.
+- **Frontend:** Vue 3 + TypeScript SPA — Vite, Tailwind CSS, pnpm.
+- **Workspace:** a Go workspace (`go.work`) with two modules — `./sdk` and `./server`. Build is driven by [Task](https://taskfile.dev) (`Taskfile.yml`); hot-reload by [air](https://github.com/air-verse/air).
+
+## High-level flow
+
+```
++------------------------+      +---------------------------+      +-------------------+
+|  Browser (Vue 3 SPA)   |      |  Go Backend (:13120)      |      | Claude Code Agents|
++------------------------+      +---------------------------+      +-------------------+
+| List / Cards / Kanban  | <--- | GET  /api/agents/stream   | ---> | ps / lsof         |
+| Agent Modal (chat)     |      |      (SSE + polling fb)   |      | ~/.claude/        |
+| Prompt Input           | ---> | POST /agents/:id/message  |      | JSONL logs        |
+| Spawn Dialog           | ---> | POST /agents/spawn        |      |                   |
++------------------------+      +---------------------------+      +-------------------+
+                                            |
+                                            v
+                                +---------------------------+
+                                |   dashboard-channel SDK   |
+                                |  (Go MCP stdio binary)    |
+                                +---------------------------+
+```
+
+## Backend packages (`server/internal/`)
+
+| Package | Responsibility |
+|---|---|
+| `server/cmd/serve/` | cobra CLI entrypoint, hand-written DI wiring |
+| `api/` | chi router, HTTP handlers grouped by domain |
+| `pipeline/` | state machine, orchestrator, stage handlers, completion detector, agent spawner |
+| `db/` | ent ORM schemas + repositories |
+| `mcp/` | stateless StreamableHTTP MCP server (19 tools, 4 scopes) |
+| `auth/` | JWT helpers + GitHub OAuth |
+| `scanner/` | ps/lsof process scanner |
+| `parser/` | JSONL session parser |
+| `merger/` | agent data merger + cost estimation (`MODEL_PRICING`) |
+| `sse/` | SSE broadcaster |
+| `channel/` | channel discovery + proxy to per-agent MCP stdio server |
+| `refine/` | refinement chat repo + spawner |
+| `history/` | cost-history importer service |
+| `webpush/` | Web Push VAPID service |
+
+## SDK (`sdk/`)
+
+A separate Go module that compiles the `dashboard-channel` MCP stdio binary. This binary is injected into every spawned pipeline stage agent to provide the two-way permission gate and the channel reply bridge. The SDK also defines the canonical data model (`Agent`, `TokenUsage`, `SessionMeta`, `SubAgent`, `TaskInfo`) shared by both the server and the channel binary.
+
+## Data flow
+
+1. **Process scanning** — `ps aux` + `lsof` (macOS) or `/proc/<pid>/cwd` (Linux) find running `claude` processes and their working directories.
+2. **Session matching** — PIDs are matched to JSONL session files in `~/.claude/projects/{encoded_path}/`.
+3. **Log parsing** — tail-reads the last 32 KB of each session file for tokens, tools, tasks, and model info; a full read happens when the agent modal opens.
+4. **Cost estimation** — the `MODEL_PRICING` table in `server/internal/merger/` calculates API-equivalent costs.
+5. **Status classification** — active (< 30 s), waiting (< 5 min), idle (> 5 min) since last activity.
+6. **Real-time updates** — the browser subscribes to `/api/agents/stream` (SSE) with a polling fallback.
+
+## Task pipeline
+
+A multi-stage agentic workflow. Tasks progress through:
+
+```
+concept → backlog → implementation → self_review → finalization → done
+```
+
+Terminal states also include `on_hold` and `cancelled`. The `concept` and `backlog` stages are agent-less; `implementation`, `self_review`, and `finalization` each spawn a detached `claude` CLI process in an isolated git worktree.
+
+Key characteristics:
+
+- LLM output is validated against a per-stage JSON schema; one automatic retry with feedback injection before escalating to the user.
+- Up to 3 tasks run in parallel (configurable via `maxParallelOrchestrators` in the pipeline DB config).
+- Permission requests from stage agents are gated through the dashboard channel; a bulk-resolve UI lets the user grant or deny every pending request in one click.
+- Notifications (email, webhook, browser, system) are dispatched on hold/failure events.
+
+See the ADRs for rationale:
+
+- [ADR-0001 — SQLite for the task pipeline](adr/0001-sqlite-for-task-pipeline.md)
+- [ADR-0002 — Runner-slot priority model](adr/0002-runner-slot-priority-model.md)
+- [ADR-0003 — Pluggable spawners](adr/0003-pluggable-spawners.md)
+
+## Key conventions
+
+- **Path alias:** `@/*` maps to `./src/*`.
+- **Dual persistence:** agent monitoring is filesystem-derived (no database); the task pipeline uses SQLite at `~/.claude/dashboard-tasks.db` (override via `DASHBOARD_DB_PATH`). See [ADR-0001](adr/0001-sqlite-for-task-pipeline.md).
+- **Cost estimation** uses API-equivalent pricing — not actual billing for Pro/Max plan users.
+- **Agent status thresholds:** active < 30 s, waiting < 5 min, idle > 5 min.
+- **Subagent discovery:** `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`.
