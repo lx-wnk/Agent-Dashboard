@@ -17,10 +17,37 @@ tasks:
     desc: Start Vite dev server with HMR on :5173
     cmd: pnpm dev
 
+  setup:
+    desc: Install the dev toolchain (air, golangci-lint, tygo, govulncheck) + frontend deps
+    cmds:
+      - go install github.com/air-verse/air@latest
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+      - go install github.com/gzuidhof/tygo@latest
+      - go install golang.org/x/vuln/cmd/govulncheck@latest
+      - pnpm install
+      - echo "✓ setup complete — run 'task doctor' to verify, then 'task dev'"
+
+  doctor:
+    desc: Check that all required tools are installed and on PATH
+    cmd: ./scripts/doctor.sh
+
+  build:frontend:
+    desc: Build the Vue SPA into the Go embed dir (server/frontend/dist)
+    cmd: pnpm build
+
   build:
-    desc: Build server binary
+    desc: Build server binary (embeds whatever is currently in server/frontend/dist)
     dir: server
-    cmd: go build -o ../bin/agent-dashboard ./cmd/serve/...
+    cmd: go build -ldflags "-X main.version={{.VERSION}}" -o ../bin/agent-dashboard ./cmd/serve/...
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+
+  build:all:
+    desc: Build frontend then embed it into a self-contained server binary
+    cmds:
+      - task: build:frontend
+      - task: build
 
   build:cli:
     desc: Build dashboard CLI binary

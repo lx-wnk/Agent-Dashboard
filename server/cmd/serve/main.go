@@ -16,6 +16,10 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 )
 
+// version is the dashboard version. It defaults to "dev" for local builds and is
+// overridden at release time via -ldflags "-X main.version=<tag>" (see .goreleaser.yml).
+var version = "dev"
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -24,8 +28,9 @@ func main() {
 	var cfgFile string
 
 	root := &cobra.Command{
-		Use:   "agent-dashboard",
-		Short: "Claude Code agent monitoring dashboard",
+		Use:     "agent-dashboard",
+		Short:   "Claude Code agent monitoring dashboard",
+		Version: version,
 	}
 
 	serve := &cobra.Command{
