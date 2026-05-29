@@ -64,6 +64,13 @@ export default defineConfig(({ mode }) => ({
     }),
   ],
   build: {
+    // Emit directly into the Go embed directory. server/frontend/embed.go does
+    // `//go:embed dist` relative to server/frontend/, so the compiled SPA MUST land
+    // in server/frontend/dist for `task build` to bake the real frontend into the
+    // binary. Vite's default (repo-root ./dist) is NOT embedded — building there
+    // ships the committed placeholder index.html instead of the real app.
+    outDir: 'server/frontend/dist',
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         manualChunks: {

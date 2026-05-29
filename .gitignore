@@ -34,6 +34,9 @@ package-lock.json
 # Local settings contain tokens — never commit
 .claude/settings.local.json
 
+# Scheduled-task runtime lock — local only
+.claude/scheduled_tasks.lock
+
 # local docs
 /docs/local
 
@@ -45,9 +48,11 @@ package-lock.json
 **/coverage.out
 
 # Vue SPA build output — the placeholder dist/index.html is committed so go:embed
-# compiles without requiring a pnpm build first. Real build artifacts (assets/, etc.)
-# are ignored via the directory-level rule below so they don't bloat the repo.
-server/frontend/dist/assets/
+# compiles without requiring a pnpm build first. Everything else under dist/ is a
+# real `vite build` artifact (assets/, icons, manifest, service worker, etc.) and
+# is ignored so build output never bloats or dirties the repo.
+server/frontend/dist/*
+!server/frontend/dist/index.html
 server/coverage.out
 
 # Playwright per-run output
