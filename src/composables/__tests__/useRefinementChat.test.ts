@@ -106,3 +106,24 @@ describe('useRefinementChat.loadHistory', () => {
     expect(chat.messages.value).toHaveLength(2)
   })
 })
+
+it('parses a streamed __phase_done marker into completedPhases + approvalReady, hidden from content', async () => {
+  const frames = 'data: Looks ready.\n\ndata: __phase_done: approval\n\n'
+  const chunks = [new TextEncoder().encode(frames)]
+  let i = 0
+  const reader = {
+    read: async () => i < chunks.length
+      ? { done: false, value: chunks[i++] }
+      : { done: true, value: undefined },
+  }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, body: { getReader: () => reader } }))
+
+  const chat = useRefinementChat(() => 'task-1')
+  await chat.sendMessage('is it ready?')
+
+  expect(chat.approvalReady.value).toBe(true)
+  expect(chat.completedPhases.value.has('approval')).toBe(true)
+  const assistant = chat.messages.value.at(-1)
+  expect(assistant?.content).not.toContain('__phase_done')
+  expect(assistant?.content).toContain('Looks ready.')
+})

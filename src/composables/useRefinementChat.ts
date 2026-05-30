@@ -13,6 +13,9 @@ export interface ChatMessage {
   images?: ImageAttachment[]
 }
 
+export const PHASE_ORDER = ['analysis', 'spec', 'implementation_plan', 'approval'] as const
+const PHASE_DONE_LINE_RE = /__phase_done:\s*(\w+)/
+
 const PHASE_LABELS: Record<string, string> = {
   analysis: 'Analysis',
   spec: 'Spec',
@@ -111,6 +114,21 @@ export function useRefinementChat(taskId: () => string | null) {
           if (!dataLine)
             continue
           const raw = dataLine.slice(5).trimStart()
+
+          // Phase marker: record progress, never show it in the message.
+          const phaseMatch = raw.match(PHASE_DONE_LINE_RE)
+          if (phaseMatch && PHASE_LABELS[phaseMatch[1]]) {
+            const phase = phaseMatch[1]
+            completedPhases.value.add(phase)
+            messages.value[assistantIdx].phase = phase
+            if (phase === 'approval')
+              approvalReady.value = true
+            // Strip the marker from the raw line; if nothing else remains, skip.
+            const remainder = raw.replace(PHASE_DONE_LINE_RE, '').trim()
+            if (remainder === '')
+              continue
+          }
+
           // The backend forwards `claude -p` output line-by-line as `data: <line>`.
           // Default claude output is plain text, not JSON — so fall back to treating
           // the raw line as the assistant text when it does not parse as a JSON frame.
@@ -132,8 +150,12 @@ export function useRefinementChat(taskId: () => string | null) {
               approvalReady.value = true
           }
           else if (data.text) {
-            assistantContent += data.text
-            messages.value[assistantIdx].content = assistantContent
+            // Guard: never let a marker leak into displayed content.
+            const text = String(data.text).replace(PHASE_DONE_LINE_RE, '')
+            if (text) {
+              assistantContent += text
+              messages.value[assistantIdx].content = assistantContent
+            }
           }
         }
       }
@@ -180,6 +202,7 @@ export function useRefinementChat(taskId: () => string | null) {
     isStreaming,
     error,
     approvalReady,
+    completedPhases,
     loadHistory,
     sendMessage,
     confirm,
