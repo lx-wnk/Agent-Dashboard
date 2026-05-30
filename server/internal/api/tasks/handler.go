@@ -28,6 +28,12 @@ func jsonReply(w http.ResponseWriter, status int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
+// RefineStatusReader exposes refinement run status to task enrichment without
+// a compile-time dependency on the refine runner. Implemented by *refine.Runner.
+type RefineStatusReader interface {
+	State(taskID string) (status, errMsg string)
+}
+
 // OrchestratorIface is the subset of PipelineOrchestrator consumed by the handler.
 type OrchestratorIface interface {
 	ProgressTask(ctx context.Context, taskID string, opts *pipeline.ProgressOpts) (*ent.StageRun, error)
@@ -52,6 +58,7 @@ type Handler struct {
 	orchestrator      OrchestratorIface
 	broadcaster       *sse.TaskBroadcaster
 	worktreeMgr       WorktreeStatusProvider
+	refineReader      RefineStatusReader
 }
 
 // Deps groups all constructor dependencies.
@@ -72,6 +79,7 @@ type Deps struct {
 	Orchestrator      OrchestratorIface
 	Broadcaster       *sse.TaskBroadcaster
 	WorktreeMgr       WorktreeStatusProvider
+	RefineReader      RefineStatusReader
 }
 
 func NewHandler(deps Deps) *Handler {
@@ -90,6 +98,7 @@ func NewHandler(deps Deps) *Handler {
 		orchestrator:      deps.Orchestrator,
 		broadcaster:       deps.Broadcaster,
 		worktreeMgr:       deps.WorktreeMgr,
+		refineReader:      deps.RefineReader,
 	}
 }
 
@@ -168,6 +177,23 @@ func (h *Handler) broadcastEnrichedUpdate(ctx context.Context, taskID string) {
 	h.broadcastEnrichedEvent(ctx, "task_updated", taskID)
 }
 
+// BroadcastTaskUpdate is the runner's onRunChange callback target.
+func (h *Handler) BroadcastTaskUpdate(taskID string) {
+	h.broadcastEnrichedUpdate(context.Background(), taskID)
+}
+
+// applyRefineStatus fills RefineStatus/RefineError from the injected reader.
+func (h *Handler) applyRefineStatus(e *EnrichedTask, taskID string) {
+	if h.refineReader == nil || e == nil {
+		return
+	}
+	status, errMsg := h.refineReader.State(taskID)
+	e.RefineStatus = &status
+	if errMsg != "" {
+		e.RefineError = &errMsg
+	}
+}
+
 // broadcastEnrichedEvent fetches and enriches the task, then broadcasts it with the given event type.
 // Marshalling or DB errors are silently dropped — the 60-second polling fallback will catch any missed update.
 func (h *Handler) broadcastEnrichedEvent(ctx context.Context, eventType string, taskID string) {
@@ -179,6 +205,7 @@ func (h *Handler) broadcastEnrichedEvent(ctx context.Context, eventType string, 
 	if err != nil {
 		return
 	}
+	h.applyRefineStatus(enriched, taskID)
 	h.broadcaster.Broadcast(sse.TaskEvent{Type: eventType, TaskID: taskID, Payload: enriched})
 }
 
@@ -202,6 +229,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("tasks.list.enrich: %w", err)
 	}
+	for _, e := range enriched {
+		h.applyRefineStatus(e, e.ID)
+	}
 	return jsonReply(w, http.StatusOK, enriched)
 }
 
@@ -218,6 +248,7 @@ func (h *Handler) getOne(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("tasks.getOne.enrich: %w", err)
 	}
+	h.applyRefineStatus(enriched, id)
 	return jsonReply(w, http.StatusOK, enriched)
 }
 

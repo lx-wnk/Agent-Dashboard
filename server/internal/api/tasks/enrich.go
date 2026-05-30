@@ -39,6 +39,8 @@ type EnrichedTask struct {
 	// Computed fields — not stored in DB.
 	NeedsUser                   bool    `json:"needsUser"`
 	LatestStageRunStatus        *string `json:"latestStageRunStatus"`
+	RefineStatus                *string `json:"refineStatus,omitempty"`
+	RefineError                 *string `json:"refineError,omitempty"`
 	CurrentIteration            int     `json:"currentIteration"`
 	ActiveSessionID             *string `json:"activeSessionId"`
 	ActivePID                   *int    `json:"activePid"`
