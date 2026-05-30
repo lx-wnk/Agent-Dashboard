@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import type { ActiveView } from '../../composables/useViewState'
 import { computed } from 'vue'
 import { useSidebar } from '../../composables/useSidebar'
 import { useViewState } from '../../composables/useViewState'
-import type { ActiveView } from '../../composables/useViewState'
 import { NAV_GROUPS, NAV_ITEMS } from '../../utils/navConfig'
 import NavItem from './NavItem.vue'
 import SidebarFooter from './SidebarFooter.vue'
@@ -16,9 +16,9 @@ const props = defineProps<{
   theme: 'dark' | 'light'
 }>()
 const emit = defineEmits<{
-  'open-sessions': []
-  'open-settings': []
-  'toggle-theme': []
+  openSessions: []
+  openSettings: []
+  toggleTheme: []
 }>()
 
 const { expanded, pinned, togglePinned, setHovering } = useSidebar()
@@ -86,9 +86,9 @@ function badgeFor(view: ActiveView): number | null {
       :total-tokens-label="totalTokensLabel"
       :quota-pct="quotaPct"
       :theme="theme"
-      @open-sessions="emit('open-sessions')"
-      @open-settings="emit('open-settings')"
-      @toggle-theme="emit('toggle-theme')"
+      @open-sessions="emit('openSessions')"
+      @open-settings="emit('openSettings')"
+      @toggle-theme="emit('toggleTheme')"
     />
   </nav>
 </template>

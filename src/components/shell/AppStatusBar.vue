@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import type { SystemInfo } from '../../composables/useSystemResources'
 import { computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useSystemResources } from '../../composables/useSystemResources'
-import type { SystemInfo } from '../../composables/useSystemResources'
 
 defineProps<{ costDelta: number | null }>()
 
@@ -17,7 +17,8 @@ function barColor(pct: number): string {
 }
 
 function formatDelta(d: number | null): string {
-  if (d === null) return '—'
+  if (d === null)
+    return '—'
   const sign = d < 0 ? '-' : d > 0 ? '+' : ''
   return `${sign}$${Math.abs(d).toFixed(2)}`
 }

@@ -7,9 +7,9 @@ defineProps<{
   theme: 'dark' | 'light'
 }>()
 defineEmits<{
-  'open-sessions': []
-  'open-settings': []
-  'toggle-theme': []
+  openSessions: []
+  openSettings: []
+  toggleTheme: []
 }>()
 </script>
 
@@ -44,7 +44,7 @@ defineEmits<{
         class="flex items-center gap-2 rounded-lg px-2 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         :class="expanded ? 'flex-1' : 'w-full justify-center'"
         :title="!expanded ? 'Sessions' : undefined"
-        @click="$emit('open-sessions')"
+        @click="$emit('openSessions')"
       >
         <span aria-hidden="true">🕘</span><span v-if="expanded">Sessions</span><span v-else class="sr-only">Sessions</span>
       </button>
@@ -53,7 +53,7 @@ defineEmits<{
         data-testid="footer-settings"
         class="rounded-lg px-2 min-h-[36px] min-w-[36px] text-[14px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         aria-label="Settings"
-        @click="$emit('open-settings')"
+        @click="$emit('openSettings')"
       >
         <span aria-hidden="true">⚙</span>
       </button>
@@ -62,7 +62,7 @@ defineEmits<{
         data-testid="footer-theme"
         class="rounded-lg px-2 min-h-[36px] min-w-[36px] text-[14px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
-        @click="$emit('toggle-theme')"
+        @click="$emit('toggleTheme')"
       >
         <span aria-hidden="true">{{ theme === 'dark' ? '☀' : '🌙' }}</span>
       </button>

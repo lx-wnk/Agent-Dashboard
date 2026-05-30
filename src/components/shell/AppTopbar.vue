@@ -2,8 +2,8 @@
 import type { ActiveView } from '../../composables/useViewState'
 import { computed } from 'vue'
 import { viewTitle } from '../../utils/navConfig'
-import LivePulse from './LivePulse.vue'
 import OfflineBadge from '../OfflineBadge.vue'
+import LivePulse from './LivePulse.vue'
 
 const props = defineProps<{
   activeView: ActiveView
@@ -19,7 +19,9 @@ const searchPlaceholder = computed(() =>
 
 <template>
   <header class="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-line bg-card">
-    <h1 class="text-[15px] font-semibold text-fg">{{ title }}</h1>
+    <h1 class="text-[15px] font-semibold text-fg">
+      {{ title }}
+    </h1>
     <input
       :value="searchQuery"
       type="text"
