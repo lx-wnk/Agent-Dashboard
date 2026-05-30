@@ -4,26 +4,30 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
-import BacklogForm from './components/BacklogForm.vue'
-import EmptyAgentState from './components/EmptyAgentState.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
-import AppModal from './components/ui/AppModal.vue'
-import CostTrend from './components/CostTrend.vue'
+import BacklogForm from './components/BacklogForm.vue'
 import EditGateModal from './components/EditGateModal.vue'
+import EmptyAgentState from './components/EmptyAgentState.vue'
 import LoginPage from './components/LoginPage.vue'
 import RefinementChat from './components/RefinementChat.vue'
-import ResourceBar from './components/ResourceBar.vue'
 import SessionList from './components/SessionList.vue'
-import SystemMetricsPanel from './components/SystemMetricsPanel.vue'
+import AppShell from './components/shell/AppShell.vue'
+import AppSidebar from './components/shell/AppSidebar.vue'
+import AppStatusBar from './components/shell/AppStatusBar.vue'
+import AppTopbar from './components/shell/AppTopbar.vue'
+import DashboardToolbar from './components/shell/DashboardToolbar.vue'
+import SkeletonCard from './components/shell/SkeletonCard.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
-import OfflineBadge from './components/OfflineBadge.vue'
+import AppModal from './components/ui/AppModal.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { usePWA } from './composables/usePWA'
+import { useSidebar } from './composables/useSidebar'
 import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { useUser } from './composables/useUser'
+import { useViewState } from './composables/useViewState'
 import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
@@ -40,13 +44,23 @@ const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
-// UX-08: Shift+D toggles dark/light mode globally
+const { activeView, dashboardLayout } = useViewState()
+const { handleShortcut: handleSidebarShortcut } = useSidebar()
+
+// F-UIUX-011: 5 s default duration; hover pause/resume keeps toast visible while pointer rests on it
+const TOAST_DURATION_MS = 5000
+const toastMessage = ref<string | null>(null)
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+let toastPaused = false
+
+// UX-08: Shift+D toggles dark/light mode globally; Cmd/Ctrl+B toggles sidebar pin
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
     const tag = (e.target as HTMLElement)?.tagName
     if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !(e.target as HTMLElement).isContentEditable)
       toggleTheme()
   }
+  handleSidebarShortcut(e)
 }
 
 onMounted(() => {
@@ -59,7 +73,8 @@ onUnmounted(() => {
   if (toastTimer)
     clearTimeout(toastTimer)
 })
-const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, viewMode, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
+
+const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 
 // Start data streams only after auth is confirmed — avoids 401 flood while login page is shown
@@ -69,12 +84,37 @@ watch(loaded, (isLoaded) => {
     startTasks()
   }
 }, { immediate: true })
+
+// Move focus to main content on view change for keyboard/screen-reader users
+watch(activeView, () => {
+  nextTick(() => document.getElementById('main-content')?.focus())
+})
+
+const live = computed(() => !error.value)
+
+const costDelta = computed(() => {
+  const pts = costTrend.value
+  if (pts.length < 2)
+    return null
+  return pts[pts.length - 1].cost - pts[Math.max(0, pts.length - 61)].cost
+})
+
+const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
+const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
+const totalCostLabel = computed(() => formatCost(totalCost.value))
+const totalTokensLabel = computed(() => formatTokens(totalTokens.value))
+
 const showSpawnDialog = ref(false)
 const activeConceptTask = ref<PipelineTask | null>(null)
 const showRefinementChat = ref(false)
 const showBacklogForm = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
+const homeDir = ref('')
+
+fetch('/api/config').then(r => r.json()).then((d) => {
+  homeDir.value = d.homedir
+}).catch(() => {})
 
 function openNewTask() {
   activeConceptTask.value = null
@@ -89,28 +129,6 @@ function onBacklogTaskCreated(task: PipelineTask) {
   showBacklogForm.value = false
   selectTask(task)
 }
-const scriptPath = ref('')
-const homeDir = ref('')
-const copied = ref(false)
-
-fetch('/api/config').then(r => r.json()).then((d) => {
-  scriptPath.value = d.scriptPath
-  homeDir.value = d.homedir
-}).catch(() => {})
-
-function copyScript() {
-  navigator.clipboard.writeText(scriptPath.value)
-  copied.value = true
-  setTimeout(() => {
-    copied.value = false
-  }, 2000)
-}
-
-// F-UIUX-011: 5 s default duration; hover pause/resume keeps toast visible while pointer rests on it
-const TOAST_DURATION_MS = 5000
-const toastMessage = ref<string | null>(null)
-let toastTimer: ReturnType<typeof setTimeout> | null = null
-let toastPaused = false
 
 function startToastTimer() {
   if (toastTimer)
@@ -158,9 +176,6 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
   })
 }
 
-const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
-const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
-
 interface QuotaInfo {
   periodStart: string | null
   periodEnd: string | null
@@ -176,22 +191,6 @@ const quotaPct = computed(() => {
   return Math.min(100, Math.round(quota.value.tokensUsed / quota.value.limit * 100))
 })
 
-const quotaSeverity = computed(() =>
-  quotaPct.value >= 90 ? 'critical' : quotaPct.value >= 75 ? 'warning' : 'normal',
-)
-
-const quotaPeriodEndLabel = computed(() => {
-  if (!quota.value?.periodEnd)
-    return 'Monthly quota'
-  const end = new Date(quota.value.periodEnd)
-  const now = new Date()
-  const diffMs = end.getTime() - now.getTime()
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-  if (diffDays <= 0)
-    return 'Resets soon'
-  return `Resets in ${diffDays} day${diffDays === 1 ? '' : 's'}`
-})
-
 async function fetchQuota() {
   const res = await fetch('/api/quota')
   if (res.ok)
@@ -203,251 +202,103 @@ onMounted(fetchQuota)
 
 <template>
   <LoginPage v-if="loaded && showLogin" />
-  <div v-else-if="loaded" class="h-screen flex flex-col bg-app text-fg font-sans">
-    <!-- UX-33: Skip-to-content link for keyboard users -->
-    <a
-      href="#main-content"
-      class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded focus:text-sm focus:font-semibold"
-    >Skip to main content</a>
-    <header class="shrink-0 flex flex-wrap items-center gap-3 gap-y-2 px-6 py-4 border-b border-line bg-card">
-      <h1 class="text-[18px] font-semibold text-fg">
-        Claude Agent Overview
-      </h1>
-      <span class="text-xs text-fg-mute bg-raised px-2.5 py-0.5 rounded-full">
-        <template v-if="viewMode !== 'pipeline'">{{ filteredAgents.length }} agent{{ filteredAgents.length !== 1 ? 's' : '' }}</template>
-        <template v-else>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</template>
-      </span>
-      <span v-if="totalCost > 0" class="text-xs text-green-600 dark:text-green-400 bg-raised px-2.5 py-0.5 rounded-full font-mono">{{ formatCost(totalCost) }}</span>
-      <span v-if="totalTokens > 0" class="text-xs text-green-600 dark:text-green-400 bg-raised px-2.5 py-0.5 rounded-full font-mono">{{ formatTokens(totalTokens) }} tokens</span>
-      <div v-if="quota && quota.limit" class="flex items-center gap-1.5" :title="`${quota.tokensUsed.toLocaleString()} / ${quota.limit.toLocaleString()} tokens — ${quotaPeriodEndLabel}`">
-        <span class="text-[10px] text-slate-400">Quota</span>
-        <div
-          class="w-20 h-1.5 bg-raised rounded-full overflow-hidden"
-          role="progressbar"
-          :aria-valuenow="quotaPct"
-          aria-valuemin="0"
-          aria-valuemax="100"
-          :aria-label="`Quota ${quotaSeverity}: ${quotaPct}% used — ${quotaPeriodEndLabel}`"
+  <div v-else-if="loaded">
+    <AppShell>
+      <template #sidebar>
+        <AppSidebar
+          :agent-count="filteredAgents.length"
+          :task-count="tasks.length"
+          :total-cost-label="totalCostLabel"
+          :total-tokens-label="totalTokensLabel"
+          :quota-pct="quotaPct"
+          :theme="theme"
+          @open-sessions="showSessions = true"
+          @open-settings="showSettings = true"
+          @toggle-theme="toggleTheme"
+        />
+      </template>
+
+      <template #topbar>
+        <AppTopbar
+          :active-view="activeView"
+          :search-query="searchQuery"
+          :live="live"
+          @update:search-query="searchQuery = $event"
         >
-          <div
-            class="h-full rounded-full transition-all"
-            :class="{
-              'bg-red-500': quotaPct >= 90,
-              'bg-yellow-500': quotaPct >= 75 && quotaPct < 90,
-              'bg-green-500': quotaPct < 75,
-            }"
-            :style="{ width: `${quotaPct}%` }"
-          />
+          <template #cta>
+            <button
+              v-if="activeView === 'pipeline'"
+              type="button"
+              class="bg-accent text-white rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              @click="openNewTask"
+            >
+              + New Task
+            </button>
+            <button
+              v-if="activeView === 'pipeline'"
+              type="button"
+              class="bg-raised text-fg border border-line rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              data-testid="open-backlog-form"
+              @click="openBacklogForm"
+            >
+              + Backlog
+            </button>
+            <button
+              v-else-if="activeView === 'dashboard'"
+              type="button"
+              class="bg-accent text-white rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              @click="showSpawnDialog = true"
+            >
+              + New Agent
+            </button>
+          </template>
+        </AppTopbar>
+      </template>
+
+      <div class="p-5">
+        <DashboardToolbar
+          v-if="activeView === 'dashboard'"
+          :layout="dashboardLayout"
+          :hide-non-claude="hideNonClaude"
+          @update:layout="dashboardLayout = $event"
+          @update:hide-non-claude="hideNonClaude = $event"
+        />
+
+        <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          <SkeletonCard v-for="n in 6" :key="n" />
         </div>
-        <span class="text-[10px] text-slate-400">{{ quotaPct }}%</span>
+        <p v-else-if="error" class="text-center py-12 text-red-600 dark:text-red-400">
+          Error: {{ error }}
+        </p>
+
+        <template v-else-if="activeView === 'dashboard'">
+          <template v-if="dashboardLayout === 'list'">
+            <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
+            <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />
+          </template>
+          <template v-else>
+            <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
+            <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
+          </template>
+        </template>
+
+        <PipelineBoard
+          v-else-if="activeView === 'pipeline'"
+          @select="selectTask"
+          @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
+        />
+        <CostAnalyticsView v-else-if="activeView === 'cost'" />
+        <ConfigExplorer v-else-if="activeView === 'config'" />
+        <WorkflowsView
+          v-else-if="activeView === 'workflows'"
+          @navigate="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"
+        />
       </div>
-      <!-- F-UIUX-017: descriptive aria-label so screen readers announce the field's purpose -->
-      <input
-        v-model="searchQuery"
-        type="text"
-        :aria-label="viewMode === 'pipeline' ? 'Search tasks' : 'Search agents and tasks'"
-        :placeholder="viewMode === 'pipeline' ? 'Search tasks...' : 'Search agents...'"
-        class="ml-auto bg-raised border border-line rounded-md px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[200px] focus:outline-none focus:border-blue-500 focus:w-[260px] transition-[width] duration-200"
-      >
-      <!-- F-UIUX-018: role="group" + aria-pressed make the toggle semantics audible to screen readers -->
-      <div role="group" aria-label="View mode" class="flex bg-raised rounded-md overflow-hidden">
-        <button
-          type="button"
-          class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
-          :class="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows' && viewMode !== 'cost-analytics' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
-          :aria-pressed="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows' && viewMode !== 'cost-analytics'"
-          title="Agent monitoring dashboard"
-          @click="viewMode = viewMode === 'pipeline' || viewMode === 'config-explorer' || viewMode === 'workflows' || viewMode === 'cost-analytics' ? 'cards' : viewMode"
-        >
-          Dashboard
-        </button>
-        <button
-          type="button"
-          class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
-          :class="viewMode === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
-          :aria-pressed="viewMode === 'pipeline'"
-          title="Task pipeline kanban"
-          @click="viewMode = 'pipeline'"
-        >
-          Kanban
-        </button>
-        <button
-          type="button"
-          class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
-          :class="viewMode === 'config-explorer' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
-          :aria-pressed="viewMode === 'config-explorer'"
-          title="Browse installed skills, slash commands, and memory files"
-          @click="viewMode = 'config-explorer'"
-        >
-          Config
-        </button>
-        <button
-          type="button"
-          class="px-3 py-2 min-h-[44px] text-[13px] font-sans border-none cursor-pointer transition-all"
-          :class="viewMode === 'workflows' ? 'bg-blue-600 text-white' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
-          :aria-pressed="viewMode === 'workflows'"
-          title="D3 workflow visualizations"
-          @click="viewMode = 'workflows'"
-        >
-          Workflows
-        </button>
-      </div>
-      <button
-        type="button"
-        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
-        @click="showSessions = true"
-      >
-        Sessions
-      </button>
-      <button
-        v-if="viewMode === 'pipeline'"
-        type="button"
-        class="bg-green-600 text-white border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
-        @click="openNewTask"
-      >
-        + New Task
-      </button>
-      <button
-        v-if="viewMode === 'pipeline'"
-        type="button"
-        class="bg-raised text-fg border border-line rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
-        data-testid="open-backlog-form"
-        @click="openBacklogForm"
-      >
-        + Backlog
-      </button>
-      <button
-        v-else-if="viewMode !== 'workflows' && viewMode !== 'config-explorer'"
-        type="button"
-        class="bg-green-600 text-white border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:brightness-110"
-        @click="showSpawnDialog = true"
-      >
-        + New Agent
-      </button>
-      <OfflineBadge />
-      <!-- F-UIUX-005: visible theme-toggle button (previously keyboard-only via Shift+D) -->
-      <button
-        type="button"
-        class="bg-raised text-fg-mute border-none rounded-md min-w-[44px] min-h-[44px] px-2.5 py-2 text-base cursor-pointer leading-none hover:text-fg-soft hover:brightness-110"
-        aria-label="Toggle dark mode (Shift+D)"
-        :aria-pressed="theme === 'dark'"
-        :title="theme === 'dark' ? 'Switch to light mode (Shift+D)' : 'Switch to dark mode (Shift+D)'"
-        @click="toggleTheme"
-      >
-        <span aria-hidden="true">{{ theme === 'dark' ? '☀' : '🌙' }}</span>
-      </button>
-      <!-- F-UIUX-004: aria-label + aria-hidden glyph -->
-      <button
-        type="button"
-        class="bg-raised text-fg-mute border-none rounded-md min-w-[44px] min-h-[44px] px-2.5 py-2 text-base cursor-pointer leading-none hover:text-fg-soft hover:brightness-110"
-        aria-label="Settings"
-        title="Settings"
-        @click="showSettings = true"
-      >
-        <span aria-hidden="true">⚙</span>
-      </button>
-      <button
-        v-if="canInstall"
-        type="button"
-        class="bg-raised text-fg-mute border-none rounded-md px-3.5 py-2 min-h-[44px] text-[13px] font-semibold cursor-pointer font-sans whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200 hover:brightness-110"
-        title="Install Agent Dashboard as a PWA"
-        @click="promptInstall"
-      >
-        Install app
-      </button>
-    </header>
 
-    <div class="shrink-0"><ResourceBar /></div>
-    <div class="shrink-0"><SystemMetricsPanel /></div>
-    <div class="shrink-0"><CostTrend :trend="costTrend" /></div>
-
-    <div v-if="scriptPath" class="shrink-0 flex items-center gap-2 px-6 py-1.5 bg-card border-b border-line text-xs">
-      <span class="text-fg-mute whitespace-nowrap">Channel script:</span>
-      <code
-        class="font-mono text-[11px] text-fg-mute bg-app px-2 py-0.5 rounded cursor-pointer select-all transition-colors hover:text-green-600 dark:hover:text-green-400 focus-visible:outline-2 focus-visible:outline-blue-500"
-        tabindex="0"
-        role="button"
-        :title="copied ? 'Copied!' : 'Click to copy'"
-        @click="copyScript"
-        @keydown.enter="copyScript"
-        @keydown.space.prevent="copyScript"
-      >{{ scriptPath }}</code>
-      <span v-if="copied" class="text-green-600 dark:text-green-400 text-[11px]">Copied!</span>
-    </div>
-
-    <div
-      v-show="viewMode !== 'pipeline' && viewMode !== 'config-explorer' && viewMode !== 'workflows'"
-      class="shrink-0 flex items-center gap-1 px-6 py-2 border-b border-line bg-card"
-    >
-      <button
-        type="button"
-        class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
-        :class="viewMode === 'cards' ? 'bg-raised text-fg-soft' : 'bg-transparent text-fg-mute hover:text-slate-500 dark:hover:text-slate-400'"
-        title="Card view"
-        @click="viewMode = 'cards'"
-      >
-        ⊞ Cards
-      </button>
-      <button
-        type="button"
-        class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
-        :class="viewMode === 'list' ? 'bg-raised text-fg-soft' : 'bg-transparent text-fg-mute hover:text-slate-500 dark:hover:text-slate-400'"
-        title="List view"
-        @click="viewMode = 'list'"
-      >
-        ≡ List
-      </button>
-      <button
-        type="button"
-        class="border-none px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
-        :class="viewMode === 'cost-analytics' ? 'bg-raised text-fg-soft' : 'bg-transparent text-fg-mute hover:text-slate-500 dark:hover:text-slate-400'"
-        title="Cost analytics — aggregated spend by model, day, week"
-        @click="viewMode = 'cost-analytics'"
-      >
-        ◷ Cost Analytics
-      </button>
-      <button
-        type="button"
-        class="ml-2 border border-line px-2.5 py-1 text-xs cursor-pointer rounded-md font-sans transition-all"
-        :class="hideNonClaude ? 'bg-blue-600 text-white border-blue-600' : 'bg-transparent text-fg-mute hover:text-fg-soft'"
-        :title="hideNonClaude ? 'Showing only Claude agents — click to show all' : 'Hide Codex/Gemini agents'"
-        :aria-pressed="hideNonClaude"
-        @click="hideNonClaude = !hideNonClaude"
-      >
-        Claude only
-      </button>
-    </div>
-    <!-- F-UIUX-023: tabindex="-1" lets the skip-link focus this element programmatically -->
-    <main id="main-content" tabindex="-1" class="p-6 flex-1 min-h-0 overflow-y-auto">
-      <p v-if="isLoading" class="text-center py-12 text-fg-mute">
-        Loading agents...
-      </p>
-      <p v-else-if="error" class="text-center py-12 text-red-600 dark:text-red-400">
-        Error: {{ error }}
-      </p>
-      <template v-else-if="viewMode === 'list'">
-        <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
-        <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />
+      <template #statusbar>
+        <AppStatusBar :cost-delta="costDelta" />
       </template>
-      <PipelineBoard
-        v-else-if="viewMode === 'pipeline'"
-        @select="selectTask"
-        @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
-      />
-      <ConfigExplorer v-else-if="viewMode === 'config-explorer'" />
-      <CostAnalyticsView v-else-if="viewMode === 'cost-analytics'" />
-      <WorkflowsView
-        v-else-if="viewMode === 'workflows'"
-        @navigate="(sessionId) => {
-          const a = agents.find(x => x.sessionId === sessionId)
-          if (a) selectAgent(a)
-        }"
-      />
-      <template v-else>
-        <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
-        <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
-      </template>
-    </main>
+    </AppShell>
 
     <AgentModal :agent="selectedAgent" @close="selectAgent(null)" @navigate="(taskId: string) => navigateTo({ taskId })" />
     <TaskModal
@@ -527,6 +378,18 @@ onMounted(fetchQuota)
       @navigate-task="task => selectTask(task)"
       @navigate-agent="agent => selectAgent(agent)"
     />
+
+    <!-- PWA install prompt -->
+    <div v-if="canInstall" class="fixed bottom-20 right-6 z-[1900]">
+      <button
+        type="button"
+        class="bg-raised text-fg-mute border border-line rounded-md px-3.5 py-2 text-[13px] font-semibold cursor-pointer hover:brightness-110 shadow-md"
+        title="Install Agent Dashboard as a PWA"
+        @click="promptInstall"
+      >
+        Install app
+      </button>
+    </div>
   </div>
   <div v-else class="min-h-screen bg-app" />
 </template>
