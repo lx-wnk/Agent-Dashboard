@@ -2,6 +2,7 @@ package refine
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -105,4 +106,56 @@ func TestRunner_Start_PersistsAssistantTurnAndMarksDone(t *testing.T) {
 	if turns.assistantCount() != 1 {
 		t.Errorf("assistant turns persisted: got %d, want 1", turns.assistantCount())
 	}
+}
+
+func TestRunner_Start_ErrorLineMarksFailed(t *testing.T) {
+	turns := &fakeTurns{}
+	spawn := func(_ context.Context, _ SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
+		ch := make(chan string, 1)
+		ch <- "[ERROR] claude exited: boom"
+		close(ch)
+		return ch, nil
+	}
+	r := NewRunner(turns, spawn)
+	out, _ := r.Start("t", SpawnConfig{}, nil)
+	for range out { //nolint:revive
+	}
+	waitFor(t, func() bool { s, _ := r.State("t"); return s == StatusFailed }, "failed")
+	if turns.assistantCount() != 0 {
+		t.Errorf("error run must not persist an assistant turn, got %d", turns.assistantCount())
+	}
+	_, errMsg := r.State("t")
+	if errMsg == "" {
+		t.Error("failed run should record an error message")
+	}
+}
+
+func TestRunner_Start_SpawnErrorMarksFailed(t *testing.T) {
+	r := NewRunner(&fakeTurns{}, func(context.Context, SpawnConfig, *ent.Spawner) (<-chan string, error) {
+		return nil, errors.New("spawn boom")
+	})
+	if _, err := r.Start("t", SpawnConfig{}, nil); err == nil {
+		t.Fatal("Start should return the spawn error")
+	}
+	s, _ := r.State("t")
+	if s != StatusFailed {
+		t.Errorf("status after spawn error: got %q, want failed", s)
+	}
+}
+
+func TestRunner_Start_RejectsConcurrentRun(t *testing.T) {
+	release := make(chan struct{})
+	spawn := func(_ context.Context, _ SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
+		ch := make(chan string)
+		go func() { <-release; close(ch) }()
+		return ch, nil
+	}
+	r := NewRunner(&fakeTurns{}, spawn)
+	if _, err := r.Start("t", SpawnConfig{}, nil); err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+	if _, err := r.Start("t", SpawnConfig{}, nil); !errors.Is(err, ErrAlreadyRunning) {
+		t.Errorf("second Start: got %v, want ErrAlreadyRunning", err)
+	}
+	close(release)
 }
