@@ -342,6 +342,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("tasks.create: %w", err)
 	}
 	enriched, _ := EnrichTask(r.Context(), task, h.srRepo, h.permRepo)
+	h.applyRefineStatus(enriched, task.ID)
 	h.broadcaster.Broadcast(sse.TaskEvent{Type: "task_created", TaskID: task.ID, Payload: enriched})
 
 	// Non-blocking cwd_not_in_project warning when project is set and cwd does
@@ -461,6 +462,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	if cwdInPatch || projectInPatch {
 		if updated.ProjectID != nil && h.cwdNotInProjectWarning(r.Context(), *updated.ProjectID, updated.Cwd) {
 			enriched, _ := EnrichTask(r.Context(), updated, h.srRepo, h.permRepo)
+			h.applyRefineStatus(enriched, enriched.ID)
 			return jsonReply(w, http.StatusOK, map[string]any{
 				"task":    enriched,
 				"warning": "cwd_not_in_project",
