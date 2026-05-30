@@ -130,6 +130,33 @@ func TestRunner_Start_ErrorLineMarksFailed(t *testing.T) {
 	}
 }
 
+func TestRunner_Start_EmptyOutputMarksFailed(t *testing.T) {
+	turns := &fakeTurns{}
+	spawn := func(_ context.Context, _ SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
+		ch := make(chan string)
+		close(ch)
+		return ch, nil
+	}
+	r := NewRunner(turns, spawn)
+	out, err := r.Start("t-empty", SpawnConfig{}, nil)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	for range out { //nolint:revive
+	}
+	waitFor(t, func() bool { s, _ := r.State("t-empty"); return s == StatusFailed }, "failed on empty output")
+	s, errMsg := r.State("t-empty")
+	if s != StatusFailed {
+		t.Errorf("status: got %q, want failed", s)
+	}
+	if errMsg == "" {
+		t.Error("empty-output run should record a non-empty error message")
+	}
+	if turns.assistantCount() != 0 {
+		t.Errorf("empty-output run must not persist an assistant turn, got %d", turns.assistantCount())
+	}
+}
+
 func TestRunner_Start_SpawnErrorMarksFailed(t *testing.T) {
 	r := NewRunner(&fakeTurns{}, func(context.Context, SpawnConfig, *ent.Spawner) (<-chan string, error) {
 		return nil, errors.New("spawn boom")
