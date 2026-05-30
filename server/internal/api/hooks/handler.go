@@ -162,10 +162,11 @@ func (h *Handler) PreTool(w http.ResponseWriter, r *http.Request) {
 
 // Respond handles POST /api/hooks/respond.
 // Sends the approve/reject decision to the waiting pre-tool handler.
+//
+// Browser-facing: authenticated by the session-auth middleware group in
+// router.go (or bypass mode), NOT the hooks bearer secret — the edit-gate UI
+// carries the session cookie, not DASHBOARD_HOOKS_SECRET.
 func (h *Handler) Respond(w http.ResponseWriter, r *http.Request) {
-	if !h.requireSecret(w, r) {
-		return
-	}
 	var body struct {
 		ID       string `json:"id"`
 		Decision string `json:"decision"` // "accept" | "reject"
@@ -205,10 +206,10 @@ func (h *Handler) Respond(w http.ResponseWriter, r *http.Request) {
 
 // Pending handles GET /api/hooks/pending.
 // Returns all pending edit gate decisions, optionally filtered by sessionId.
+//
+// Browser-facing: authenticated by the session-auth middleware group in
+// router.go (or bypass mode), NOT the hooks bearer secret — see Respond.
 func (h *Handler) Pending(w http.ResponseWriter, r *http.Request) {
-	if !h.requireSecret(w, r) {
-		return
-	}
 	sessionID := r.URL.Query().Get("sessionId")
 
 	h.mu.Lock()

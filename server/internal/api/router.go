@@ -139,7 +139,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Public routes (no auth)
 	r.Get("/api/system/health", system.HealthHandler)
 
-	// Hooks endpoint: protected by shared secret only (no JWT), exempt from session auth.
+	// Hook-script ingress: bearer-secret auth, no JWT. These are posted by the
+	// local Claude Code hook scripts (which carry DASHBOARD_HOOKS_SECRET), not by
+	// the browser, so they are mounted outside the session-auth group.
 	debounceMs := deps.Config.HooksDebounceMs
 	if debounceMs <= 0 {
 		debounceMs = 100
@@ -147,8 +149,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	hooksHandler := hooks.New(deps.Config.HooksSecret, newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs))
 	r.Post("/api/hooks/event", hooksHandler.Event)
 	r.Post("/api/hooks/pre-tool", hooksHandler.PreTool)
-	r.Post("/api/hooks/respond", hooksHandler.Respond)
-	r.Get("/api/hooks/pending", hooksHandler.Pending)
+	// NOTE: /api/hooks/respond and /api/hooks/pending are browser-facing (the edit
+	// gate UI reads pending edits and posts the user's decision). They carry the
+	// session cookie, not the hooks secret, so they are registered inside the
+	// protected JWT group below — NOT here.
 
 	// Auth routes (public — OAuth dance must be unauthenticated)
 	// F-SEC-010: per-IP rate limit prevents auth-probing and SHA-256 amplification DoS.
@@ -312,6 +316,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/config/skills", apiconfig.Skills)
 		r.Get("/api/config/commands", apiconfig.Commands)
 		r.Get("/api/config/memory", apiconfig.Memory)
+
+		// Edit-gate UI endpoints — browser-facing, session-authenticated (or bypass).
+		// Unlike /api/hooks/event and /api/hooks/pre-tool (hook-script ingress, secret
+		// auth), these are called by EditGateModal.vue with the session cookie.
+		r.Get("/api/hooks/pending", hooksHandler.Pending)
+		r.Post("/api/hooks/respond", hooksHandler.Respond)
 
 		// Mount route_extension plugins (if any).
 		if deps.PluginRegistry != nil {

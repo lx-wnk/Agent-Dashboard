@@ -298,8 +298,8 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("Content-Type", "application/json")
 		return json.NewEncoder(w).Encode(map[string]any{
 			"user": map[string]any{
-				"id":      "local",
-				"login":   "local",
+				"id":      serverauth.BypassUserID,
+				"login":   serverauth.BypassUserID,
 				"isAdmin": true,
 			},
 			"isAdmin":     true,

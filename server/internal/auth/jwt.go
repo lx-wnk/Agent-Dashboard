@@ -29,6 +29,21 @@ type JWTPayload struct {
 	Aud            string `json:"aud,omitempty"` // Audience
 }
 
+// BypassUserID is the canonical Sub/Login for the implicit local admin used
+// when DASHBOARD_AUTH=none (bypass mode). Handlers that fall back on a missing
+// JWT payload MUST use this identity so per-user data (remotes, cost history,
+// search scoping) is keyed consistently across restarts and matches /api/me.
+const BypassUserID = "local"
+
+// BypassPayload returns the canonical implicit-local-admin payload for bypass
+// mode. A missing payload from PayloadFromContext can only occur in bypass mode
+// — RequireAuth rejects unauthenticated requests with 401 before any handler
+// runs when auth is enabled — so handlers may safely substitute this identity
+// instead of returning 403/401.
+func BypassPayload() JWTPayload {
+	return JWTPayload{Sub: BypassUserID, Login: BypassUserID, IsAdmin: true}
+}
+
 // adminPrivilegeTTL is the maximum age of the AdminGrantedAt claim before an
 // admin-gated endpoint must force re-login. This bounds the stale-privilege
 // window to 1 hour even when the JWT itself is still valid.

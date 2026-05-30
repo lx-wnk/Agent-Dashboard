@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
@@ -68,12 +67,9 @@ type TurnResponse struct {
 
 // GET /api/refine/{taskId}/turns
 func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
-	_, ok := auth.PayloadFromContext(r.Context())
-	if !ok {
-		jsonError(w, "forbidden", http.StatusForbidden)
-		return
-	}
-
+	// Auth is enforced by RequireAuth middleware on the protected group; in
+	// DASHBOARD_AUTH=none (bypass) mode no JWT payload is set, so the handler
+	// must not re-gate on PayloadFromContext.
 	taskID := chi.URLParam(r, "taskId")
 	turns, err := h.deps.Turns.ListForTask(r.Context(), taskID, 0)
 	if err != nil {
@@ -98,12 +94,7 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/refine/{taskId}/turn — submit a user message and stream the assistant response via SSE.
 func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
-	_, ok := auth.PayloadFromContext(r.Context())
-	if !ok {
-		jsonError(w, "forbidden", http.StatusForbidden)
-		return
-	}
-
+	// Auth enforced by RequireAuth middleware (skipped in bypass mode) — see listTurns.
 	taskID := chi.URLParam(r, "taskId")
 
 	var body struct {
@@ -240,12 +231,7 @@ done:
 
 // POST /api/refine/{taskId}/confirm — mark refinement as confirmed and advance to backlog.
 func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
-	_, ok := auth.PayloadFromContext(r.Context())
-	if !ok {
-		jsonError(w, "forbidden", http.StatusForbidden)
-		return
-	}
-
+	// Auth enforced by RequireAuth middleware (skipped in bypass mode) — see listTurns.
 	taskID := chi.URLParam(r, "taskId")
 
 	phase := "confirmed"

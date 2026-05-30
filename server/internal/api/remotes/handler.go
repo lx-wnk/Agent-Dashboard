@@ -135,7 +135,8 @@ func (h *Handler) Mount(r chi.Router) {
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	payload, ok := auth.PayloadFromContext(r.Context())
 	if !ok {
-		return apierr.ErrForbidden
+		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
+		payload = auth.BypassPayload()
 	}
 	regs, err := h.repo.ListForUser(r.Context(), payload.Sub)
 	if err != nil {
@@ -182,7 +183,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 
 	payload, ok := auth.PayloadFromContext(r.Context())
 	if !ok {
-		return apierr.ErrForbidden
+		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
+		payload = auth.BypassPayload()
 	}
 	existing, err := h.repo.ListForUser(r.Context(), payload.Sub)
 	if err != nil {
@@ -223,7 +225,8 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
 	payload, ok := auth.PayloadFromContext(r.Context())
 	if !ok {
-		return apierr.ErrForbidden
+		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
+		payload = auth.BypassPayload()
 	}
 	found, err := h.repo.Delete(r.Context(), id, payload.Sub)
 	if err != nil {

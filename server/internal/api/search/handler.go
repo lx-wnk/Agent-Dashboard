@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
-	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
@@ -78,7 +77,8 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) error {
 
 	payload, ok := auth.PayloadFromContext(r.Context())
 	if !ok {
-		return apierr.ErrForbidden
+		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
+		payload = auth.BypassPayload()
 	}
 
 	// Trim and validate query.
