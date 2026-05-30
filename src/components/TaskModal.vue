@@ -4,6 +4,8 @@ import type { StageCostRow } from './StageCostWaterfall.vue'
 import type { SlashCommand } from './TaskSlashCommandMenu.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
+import { useProjects } from '../composables/useProjects'
+import { useSpawners } from '../composables/useSpawners'
 import {
   addTaskDependency,
   analyzeTask,
@@ -23,14 +25,13 @@ import {
   resumeStageTask,
   retryTask,
 } from '../composables/useTasks'
-import { useProjects } from '../composables/useProjects'
-import { useSpawners } from '../composables/useSpawners'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
 import AuditLogTab from './AuditLogTab.vue'
 import DependencyGraph from './DependencyGraph.vue'
 import GitStatusPanel from './GitStatusPanel.vue'
+import RefineStatusPanel from './RefineStatusPanel.vue'
 import StageCostWaterfall from './StageCostWaterfall.vue'
 import StageOutputView from './StageOutputView.vue'
 import TaskSlashCommandMenu from './TaskSlashCommandMenu.vue'
@@ -494,6 +495,30 @@ const runtime = computed(() => {
     return `${m}m ${s}s`
   return `${s}s`
 })
+
+// Refinement status panel — last assistant output for concept-stage tasks
+const lastRefineOutput = ref('')
+
+async function loadLastRefineOutput(taskId: string) {
+  try {
+    const res = await fetch(`/api/refine/${taskId}/turns`)
+    if (!res.ok)
+      return
+    const turns = await res.json() as Array<{ role: string, content: string }>
+    const lastAssistant = [...turns].reverse().find(t => t.role === 'assistant')
+    lastRefineOutput.value = lastAssistant?.content ?? ''
+  }
+  catch { /* leave empty */ }
+}
+
+watch(
+  () => [props.task?.id, props.task?.currentStage, props.task?.refineStatus] as const,
+  ([id, stage]) => {
+    if (id && stage === 'concept')
+      loadLastRefineOutput(id)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -662,18 +687,25 @@ const runtime = computed(() => {
           </div>
 
           <!-- Concept-stage refinement banner -->
-          <div
-            v-if="task.currentStage === 'concept'"
-            class="flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md px-3.5 py-3 mb-2"
-          >
-            <div class="flex flex-col gap-0.5">
-              <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">This ticket is waiting for refinement</span>
-              <span class="text-[11px] text-blue-600/80 dark:text-blue-400/80">Continue the conversation with the refinement assistant</span>
+          <template v-if="task.currentStage === 'concept'">
+            <RefineStatusPanel
+              :status="task.refineStatus ?? 'idle'"
+              :error="task.refineError ?? null"
+              :last-output="lastRefineOutput"
+              class="mb-2"
+            />
+            <div
+              class="flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md px-3.5 py-3 mb-2"
+            >
+              <div class="flex flex-col gap-0.5">
+                <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">This ticket is waiting for refinement</span>
+                <span class="text-[11px] text-blue-600/80 dark:text-blue-400/80">Continue the conversation with the refinement assistant</span>
+              </div>
+              <AppButton variant="primary" size="sm" @click="emit('openChat', task)">
+                Continue Chat →
+              </AppButton>
             </div>
-            <AppButton variant="primary" size="sm" @click="emit('openChat', task)">
-              Continue Chat →
-            </AppButton>
-          </div>
+          </template>
 
           <!-- 1. Info grid -->
           <dl class="grid grid-cols-[auto_1fr] gap-y-1.5 gap-x-4 text-[13px] mb-2">
@@ -775,7 +807,7 @@ const runtime = computed(() => {
                   <span
                     v-if="currentProject"
                     class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-px rounded border border-transparent flex-shrink-0"
-                    :style="currentProject.color ? { backgroundColor: currentProject.color + '22', color: currentProject.color, borderColor: currentProject.color + '55' } : {}"
+                    :style="currentProject.color ? { backgroundColor: `${currentProject.color}22`, color: currentProject.color, borderColor: `${currentProject.color}55` } : {}"
                     :class="!currentProject.color ? 'bg-raised text-fg-mute border-line' : ''"
                   >
                     <span aria-hidden="true">◫</span>{{ currentProject.name }}
