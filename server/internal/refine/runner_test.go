@@ -3,6 +3,7 @@ package refine
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -167,6 +168,40 @@ func TestRunner_Start_SpawnErrorMarksFailed(t *testing.T) {
 	s, _ := r.State("t")
 	if s != StatusFailed {
 		t.Errorf("status after spawn error: got %q, want failed", s)
+	}
+}
+
+func TestRunner_Start_PersistsPhaseAndStripsMarker(t *testing.T) {
+	turns := &fakeTurns{}
+	spawn := func(_ context.Context, _ SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
+		ch := make(chan string, 2)
+		ch <- "Here is the spec."
+		ch <- "__phase_done: spec"
+		close(ch)
+		return ch, nil
+	}
+	r := NewRunner(turns, spawn)
+	out, _ := r.Start("task-1", SpawnConfig{}, nil)
+	for range out { //nolint:revive
+	}
+	waitFor(t, func() bool { s, _ := r.State("task-1"); return s == StatusDone }, "done")
+
+	turns.mu.Lock()
+	defer turns.mu.Unlock()
+	var asst *repo.CreateTurnInput
+	for i := range turns.created {
+		if turns.created[i].Role == "assistant" {
+			asst = &turns.created[i]
+		}
+	}
+	if asst == nil {
+		t.Fatal("no assistant turn persisted")
+	}
+	if asst.Phase == nil || *asst.Phase != "spec" {
+		t.Errorf("persisted phase: got %v, want spec", asst.Phase)
+	}
+	if strings.Contains(asst.Content, "__phase_done") {
+		t.Errorf("persisted content still contains marker: %q", asst.Content)
 	}
 }
 

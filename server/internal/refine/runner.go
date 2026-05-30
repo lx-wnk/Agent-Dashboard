@@ -125,11 +125,17 @@ func (r *Runner) Start(taskID string, cfg SpawnConfig, sp *ent.Spawner) (<-chan 
 		case strings.HasPrefix(resp, "[ERROR]"):
 			r.setState(taskID, StatusFailed, resp)
 		default:
-			_, _ = r.turns.Create(context.Background(), repo.CreateTurnInput{
+			cleaned, phases := ExtractPhases(resp)
+			in := repo.CreateTurnInput{
 				TaskID:  taskID,
 				Role:    "assistant",
-				Content: resp,
-			})
+				Content: cleaned,
+			}
+			if len(phases) > 0 {
+				last := phases[len(phases)-1]
+				in.Phase = &last
+			}
+			_, _ = r.turns.Create(context.Background(), in)
 			r.setState(taskID, StatusDone, "")
 		}
 	}()
