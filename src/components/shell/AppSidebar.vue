@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useSidebar } from '../../composables/useSidebar'
 import { useViewState } from '../../composables/useViewState'
+import type { ActiveView } from '../../composables/useViewState'
 import { NAV_GROUPS, NAV_ITEMS } from '../../utils/navConfig'
 import NavItem from './NavItem.vue'
 import SidebarFooter from './SidebarFooter.vue'
@@ -26,7 +27,7 @@ const { activeView } = useViewState()
 const grouped = computed(() =>
   NAV_GROUPS.map(group => ({ group, items: NAV_ITEMS.filter(i => i.group === group) })))
 
-function badgeFor(view: string): number | null {
+function badgeFor(view: ActiveView): number | null {
   if (view === 'dashboard')
     return props.agentCount
   if (view === 'pipeline')

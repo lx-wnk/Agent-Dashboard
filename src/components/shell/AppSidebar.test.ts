@@ -64,4 +64,11 @@ describe('appSidebar', () => {
     const w = mount(AppSidebar, { props })
     expect(w.text()).toContain('12')
   })
+
+  it('shows task count badge on Pipeline', async () => {
+    const { AppSidebar, useSidebar } = await load()
+    useSidebar().togglePinned()
+    const w = mount(AppSidebar, { props })
+    expect(w.text()).toContain('5')
+  })
 })
