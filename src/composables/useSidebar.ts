@@ -23,6 +23,10 @@ function setHovering(v: boolean) {
 
 function handleShortcut(e: KeyboardEvent) {
   if (e.key === 'b' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+    const target = e.target as HTMLElement | null
+    const tag = target?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable)
+      return
     e.preventDefault()
     togglePinned()
   }

@@ -65,4 +65,16 @@ describe('useSidebar', () => {
     s.handleShortcut(new KeyboardEvent('keydown', { key: 'b' }))
     expect(s.pinned.value).toBe(false)
   })
+
+  it('ignores ctrl+b when focus is in an input', async () => {
+    const { useSidebar } = await freshModule()
+    const s = useSidebar()
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    const e = new KeyboardEvent('keydown', { key: 'b', ctrlKey: true })
+    Object.defineProperty(e, 'target', { value: input })
+    s.handleShortcut(e)
+    expect(s.pinned.value).toBe(false)
+    input.remove()
+  })
 })
