@@ -16,7 +16,7 @@ export interface ChatMessage {
 export const PHASE_ORDER = ['analysis', 'spec', 'implementation_plan', 'approval'] as const
 const PHASE_DONE_LINE_RE = /__phase_done:\s*(\w+)/
 
-const PHASE_LABELS: Record<string, string> = {
+export const PHASE_LABELS: Record<string, string> = {
   analysis: 'Analysis',
   spec: 'Spec',
   implementation_plan: 'Implementation Plan',

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { PHASE_ORDER } from '../composables/useRefinementChat'
+import { PHASE_LABELS, PHASE_ORDER } from '../composables/useRefinementChat'
 
 const props = defineProps<{
   status: 'idle' | 'running' | 'done' | 'failed' | null
@@ -8,13 +8,6 @@ const props = defineProps<{
   lastOutput: string
   completedPhases?: string[]
 }>()
-
-const PHASE_LABELS: Record<string, string> = {
-  analysis: 'Analysis',
-  spec: 'Spec',
-  implementation_plan: 'Implementation Plan',
-  approval: 'Approval',
-}
 
 const expanded = ref(false)
 const show = computed(() => props.status === 'running' || props.status === 'done' || props.status === 'failed')
