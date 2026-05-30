@@ -1,5 +1,5 @@
 import type { PipelineTask } from '../types'
-import { onUnmounted, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
 export interface ImageAttachment {
   dataUrl: string
@@ -26,21 +26,17 @@ export function useRefinementChat(taskId: () => string | null) {
   const isStreaming = ref(false)
   const error = ref<string | null>(null)
   const approvalReady = ref(false)
-  const pollingTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
-  function stopPolling() {
-    if (pollingTimer.value !== null) {
-      clearTimeout(pollingTimer.value)
-      pollingTimer.value = null
-    }
+  // GET /api/refine/{taskId}/turns returns a bare array of turns. Refinement
+  // streams inline over the POST /turn SSE response (see sendMessage), so there
+  // is no async job to poll for — history is a one-shot fetch.
+  interface TurnResponse {
+    role: string
+    content: string
+    phase: string | null
   }
 
-  interface TurnsResponse {
-    turns: Array<{ role: string, content: string, phase: string | null }>
-    isProcessing: boolean
-  }
-
-  function applyTurnsToMessages(turns: TurnsResponse['turns']) {
+  function applyTurnsToMessages(turns: TurnResponse[]) {
     messages.value = turns.map(t => ({
       role: t.role as 'user' | 'assistant',
       content: t.content,
@@ -52,35 +48,6 @@ export function useRefinementChat(taskId: () => string | null) {
     }
     if (completedPhases.value.has('approval'))
       approvalReady.value = true
-  }
-
-  function startPolling(id: string) {
-    if (pollingTimer.value !== null)
-      return
-
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/refine/${id}/turns`)
-        if (!res.ok) {
-          pollingTimer.value = setTimeout(poll, 3000)
-          return
-        }
-        const data = await res.json() as TurnsResponse
-        if (data.isProcessing) {
-          pollingTimer.value = setTimeout(poll, 3000)
-          return
-        }
-        // Done — replace messages with completed turns and stop polling
-        isStreaming.value = false
-        applyTurnsToMessages(data.turns)
-        stopPolling()
-      }
-      catch {
-        pollingTimer.value = setTimeout(poll, 3000)
-      }
-    }
-
-    pollingTimer.value = setTimeout(poll, 3000)
   }
 
   async function loadHistory() {
@@ -96,14 +63,8 @@ export function useRefinementChat(taskId: () => string | null) {
         error.value = 'Failed to load history'
         return
       }
-      const data = await res.json() as TurnsResponse
-      applyTurnsToMessages(data.turns)
-
-      if (data.isProcessing && !isStreaming.value) {
-        isStreaming.value = true
-        messages.value.push({ role: 'assistant', content: '' })
-        startPolling(id)
-      }
+      const data = await res.json() as TurnResponse[]
+      applyTurnsToMessages(data)
     }
     catch {
       error.value = 'Failed to load history'
@@ -152,12 +113,18 @@ export function useRefinementChat(taskId: () => string | null) {
           const dataLine = lines.find(l => l.startsWith('data:'))
           if (!dataLine)
             continue
+          const raw = dataLine.slice(5).trimStart()
+          // The backend forwards `claude -p` output line-by-line as `data: <line>`.
+          // Default claude output is plain text, not JSON — so fall back to treating
+          // the raw line as the assistant text when it does not parse as a JSON frame.
           let data: any
           try {
-            data = JSON.parse(dataLine.slice(5).trimStart())
+            data = JSON.parse(raw)
+            if (typeof data !== 'object' || data === null)
+              data = { text: raw }
           }
           catch {
-            continue
+            data = { text: raw }
           }
           const event = eventLine ? eventLine.slice(7) : 'message'
 
@@ -205,16 +172,11 @@ export function useRefinementChat(taskId: () => string | null) {
   }
 
   watch(taskId, () => {
-    stopPolling()
     messages.value = []
     completedPhases.value = new Set()
     isStreaming.value = false
     approvalReady.value = false
     error.value = null
-  })
-
-  onUnmounted(() => {
-    stopPolling()
   })
 
   return {
