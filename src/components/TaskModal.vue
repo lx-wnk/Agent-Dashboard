@@ -498,15 +498,17 @@ const runtime = computed(() => {
 
 // Refinement status panel — last assistant output for concept-stage tasks
 const lastRefineOutput = ref('')
+const completedRefinePhases = ref<string[]>([])
 
 async function loadLastRefineOutput(taskId: string) {
   try {
     const res = await fetch(`/api/refine/${taskId}/turns`)
     if (!res.ok)
       return
-    const turns = await res.json() as Array<{ role: string, content: string }>
+    const turns = await res.json() as Array<{ role: string, content: string, phase?: string | null }>
     const lastAssistant = [...turns].reverse().find(t => t.role === 'assistant')
     lastRefineOutput.value = lastAssistant?.content ?? ''
+    completedRefinePhases.value = turns.flatMap(t => (t.phase ? [t.phase] : []))
   }
   catch { /* leave empty */ }
 }
@@ -692,6 +694,7 @@ watch(
               :status="task.refineStatus ?? 'idle'"
               :error="task.refineError ?? null"
               :last-output="lastRefineOutput"
+              :completed-phases="completedRefinePhases"
               class="mb-2"
             />
             <div
