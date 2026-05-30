@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ImageAttachment } from '../composables/useRefinementChat'
 import type { PipelineTask } from '../types'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
 import { createTask } from '../composables/useTasks'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
@@ -33,10 +33,37 @@ watch(() => props.task, (t) => {
 })
 
 const inputText = ref('')
+const cwd = ref('')
+const cwdError = ref<string | null>(null)
+const projectPaths = ref<{ label: string, path: string }[]>([])
 const chatEl = ref<HTMLElement | null>(null)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const pendingImages = ref<ImageAttachment[]>([])
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/projects')
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    const data = await res.json() as Array<{ name: string, slug: string, folders?: Array<{ path: string, label?: string }> }>
+    const entries: { label: string, path: string }[] = []
+    for (const project of data) {
+      if (!project.folders?.length)
+        continue
+      for (const folder of project.folders) {
+        const label = folder.label
+          ? `${project.name} — ${folder.label}`
+          : project.name
+        entries.push({ label, path: folder.path })
+      }
+    }
+    projectPaths.value = entries
+  }
+  catch {
+    // leave projectPaths empty — free-text input still works
+  }
+})
 
 function autoResize() {
   const el = textareaEl.value
@@ -153,6 +180,13 @@ async function handleSend() {
   const msg = inputText.value.trim()
   if (!msg || isStreaming.value)
     return
+  if (currentTask.value === null) {
+    if (!cwd.value.trim()) {
+      cwdError.value = 'Please choose a working directory first'
+      return
+    }
+    cwdError.value = null
+  }
   const images = pendingImages.value.length > 0 ? [...pendingImages.value] : undefined
   inputText.value = ''
   pendingImages.value = []
@@ -161,7 +195,7 @@ async function handleSend() {
     const newTask = await createTask({
       slug: `concept-${Date.now()}`,
       title: 'New Task',
-      cwd: '/',
+      cwd: cwd.value.trim(),
       stage: 'concept',
     })
     currentTask.value = newTask
@@ -224,6 +258,39 @@ function isPhaseMarker(idx: number): string | null {
               Describe your idea — I'll guide you through analysis, spec, and implementation plan.
             </p>
           </div>
+          <!-- Working directory selector -->
+          <div class="flex flex-col gap-1 w-full max-w-[480px]">
+            <label
+              for="refine-cwd-input"
+              class="text-xs font-medium text-fg-mute text-left"
+            >
+              Working directory
+            </label>
+            <input
+              id="refine-cwd-input"
+              v-model="cwd"
+              list="refine-cwd-list"
+              type="text"
+              placeholder="/path/to/your/project"
+              class="w-full px-3 py-2 rounded-xl border border-line bg-raised text-fg placeholder:text-fg-faint text-[13px] font-mono focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
+              :class="{ 'border-red-400 dark:border-red-500': cwdError }"
+              data-testid="cwd-input"
+              @input="cwdError = null"
+            >
+            <datalist id="refine-cwd-list">
+              <option
+                v-for="entry in projectPaths"
+                :key="entry.path"
+                :value="entry.path"
+              >
+                {{ entry.label }}
+              </option>
+            </datalist>
+            <p v-if="cwdError" class="text-xs text-red-500 m-0 text-left">
+              {{ cwdError }}
+            </p>
+          </div>
+
           <div class="flex flex-wrap gap-2 justify-center max-w-[480px]">
             <button
               v-for="chip in EXAMPLE_CHIPS"
