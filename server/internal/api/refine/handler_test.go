@@ -119,6 +119,7 @@ func makeRouter(turns *fakeTurnRepo, tasks *fakeTaskRepo, spawner func(context.C
 		Turns:   turns,
 		Tasks:   tasks,
 		Spawner: spawner,
+		Runner:  refine.NewRunner(turns, spawner),
 	})
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))
@@ -188,6 +189,19 @@ func TestListTurns_ReturnsTurns(t *testing.T) {
 	}
 }
 
+// waitFor polls cond() until it returns true or the 2s deadline expires.
+func waitFor(t *testing.T, cond func() bool, msg string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for: %s", msg)
+}
+
 // F025: verify SSE framing and turn persistence, not just status 200.
 func TestSubmitTurn_StreamsResponse(t *testing.T) {
 	spawner := func(_ context.Context, _ refine.SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
@@ -219,15 +233,15 @@ func TestSubmitTurn_StreamsResponse(t *testing.T) {
 		t.Errorf("SSE body missing 'data: Hello' frame: %s", sseBody)
 	}
 	// F025: verify assistant turn was persisted after streaming.
-	var assistantStored bool
-	for _, turn := range turns.turns {
-		if turn.TaskID == "task-1" && strings.Contains(turn.Content, "Hello") {
-			assistantStored = true
+	// Persistence is async (runner goroutine) — poll with a short deadline.
+	waitFor(t, func() bool {
+		for _, turn := range turns.turns {
+			if turn.TaskID == "task-1" && strings.Contains(turn.Content, "Hello") {
+				return true
+			}
 		}
-	}
-	if !assistantStored {
-		t.Error("want assistant turn to be persisted after streaming")
-	}
+		return false
+	}, "assistant turn persisted")
 }
 
 func TestSubmitTurn_RequiresMessage(t *testing.T) {
@@ -316,5 +330,24 @@ func TestConfirm_StoresSentinel(t *testing.T) {
 	}
 	if !found {
 		t.Error("want confirmed sentinel turn to be stored")
+	}
+}
+
+func TestStatus_ReturnsIdleForUnknownTask(t *testing.T) {
+	turns := &fakeTurnRepo{}
+	tasks := newFakeTaskRepo()
+	router := makeRouter(turns, tasks, noopSpawner)
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/refine/task-1/status", nil))
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", rr.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body["status"] != "idle" {
+		t.Errorf("status field: got %v, want idle", body["status"])
 	}
 }
