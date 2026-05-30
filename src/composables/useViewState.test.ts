@@ -58,4 +58,10 @@ describe('useViewState', () => {
     useViewState().dashboardLayout.value = 'list'
     expect(localStorage.getItem('agent-dashboard-layout')).toBe('list')
   })
+
+  it('ignores an unknown stored activeView and falls back to dashboard', async () => {
+    localStorage.setItem('agent-active-view', 'kanban')
+    const { useViewState } = await freshModule()
+    expect(useViewState().activeView.value).toBe('dashboard')
+  })
 })
