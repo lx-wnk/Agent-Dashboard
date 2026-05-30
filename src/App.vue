@@ -15,6 +15,7 @@ import AppShell from './components/shell/AppShell.vue'
 import AppSidebar from './components/shell/AppSidebar.vue'
 import AppStatusBar from './components/shell/AppStatusBar.vue'
 import AppTopbar from './components/shell/AppTopbar.vue'
+import ChannelScriptCallout from './components/shell/ChannelScriptCallout.vue'
 import DashboardToolbar from './components/shell/DashboardToolbar.vue'
 import SkeletonCard from './components/shell/SkeletonCard.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
@@ -280,6 +281,7 @@ onMounted(fetchQuota)
             <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
             <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
           </template>
+          <ChannelScriptCallout />
         </template>
 
         <PipelineBoard
