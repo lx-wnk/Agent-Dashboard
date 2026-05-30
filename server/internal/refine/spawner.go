@@ -38,6 +38,15 @@ Task: {{.TaskTitle}}
 {{- if .TaskDescription}}
 Description: {{.TaskDescription}}
 {{- end}}
+
+Guide the task through these phases in order: analysis, spec, implementation_plan, approval.
+When you have completed a phase, output a line on its own containing exactly:
+__phase_done: <phase>
+using one of these keys: analysis, spec, implementation_plan, approval.
+When the task is clarified enough for the user to confirm, output:
+__phase_done: approval
+Emit each marker at most once, only when that phase is genuinely complete. Do not
+explain the markers to the user.
 </system>
 {{range .History}}
 <{{.Role}}>{{.Content}}</{{.Role}}>
