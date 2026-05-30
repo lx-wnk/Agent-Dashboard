@@ -51,13 +51,15 @@
   --app: #0b0e14;
   --card: #12151c;
   --raised: #1c212b;
-  --line: #1c212b;
+  --line: #232a37;
   --line-strong: #2a313e;
+  /* Text hierarchy — all tiers ≥4.5:1 on the deeper dark surfaces */
   --fg: var(--color-slate-100);
-  --fg-soft: var(--color-slate-300);
-  --fg-mute: var(--color-slate-400);
-  --fg-faint: var(--color-slate-500);
+  --fg-soft: var(--color-slate-200);
+  --fg-mute: var(--color-slate-300);
+  --fg-faint: var(--color-slate-400);
   --accent: var(--color-indigo-400);
+  --accent-soft: rgba(129, 140, 248, 0.14);
   --accent-soft: color-mix(in oklch, var(--color-indigo-400) 14%, transparent);
 }
 
