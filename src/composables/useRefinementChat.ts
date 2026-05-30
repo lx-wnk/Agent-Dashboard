@@ -54,9 +54,6 @@ export function useRefinementChat(taskId: () => string | null) {
     const id = taskId()
     if (!id)
       return
-    // If an SSE stream is active in this tab, don't overwrite live state
-    if (isStreaming.value)
-      return
     try {
       const res = await fetch(`/api/refine/${id}/turns`)
       if (!res.ok) {
@@ -172,7 +169,6 @@ export function useRefinementChat(taskId: () => string | null) {
   }
 
   watch(taskId, () => {
-    messages.value = []
     completedPhases.value = new Set()
     isStreaming.value = false
     approvalReady.value = false

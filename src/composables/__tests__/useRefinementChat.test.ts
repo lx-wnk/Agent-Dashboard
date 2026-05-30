@@ -94,4 +94,15 @@ describe('useRefinementChat.loadHistory', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(chat.error.value).toBeNull()
   })
+
+  it('reloads turns when the chat is reopened for the same task', async () => {
+    mockFetchOnce([{ role: 'user', content: 'hi', phase: null }])
+    const chat = useRefinementChat(() => 'task-1')
+    await chat.loadHistory()
+    expect(chat.messages.value).toHaveLength(1)
+    chat.messages.value = []
+    mockFetchOnce([{ role: 'user', content: 'hi', phase: null }, { role: 'assistant', content: 'yo', phase: null }])
+    await chat.loadHistory()
+    expect(chat.messages.value).toHaveLength(2)
+  })
 })

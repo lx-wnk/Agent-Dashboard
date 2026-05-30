@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ImageAttachment } from '../composables/useRefinementChat'
 import type { PipelineTask } from '../types'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
 import { createTask } from '../composables/useTasks'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
@@ -135,16 +135,14 @@ function removeImage(idx: number) {
   pendingImages.value.splice(idx, 1)
 }
 
-watch(() => props.open, async (val) => {
-  if (val && currentTask.value) {
-    await loadHistory()
-  }
-})
-
-onMounted(() => {
-  if (props.open && currentTask.value)
-    loadHistory()
-})
+watch(
+  [() => props.open, () => currentTask.value?.id],
+  ([open, id]) => {
+    if (open && id)
+      loadHistory()
+  },
+  { immediate: true },
+)
 
 watch(messages, async () => {
   await nextTick()
