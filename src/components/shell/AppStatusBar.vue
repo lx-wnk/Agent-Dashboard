@@ -15,6 +15,12 @@ const systemInfo = computed<SystemInfo | null>(() => resources.info.value)
 function barColor(pct: number): string {
   return pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-yellow-500' : 'bg-green-500'
 }
+
+function formatDelta(d: number | null): string {
+  if (d === null) return '—'
+  const sign = d < 0 ? '-' : d > 0 ? '+' : ''
+  return `${sign}$${Math.abs(d).toFixed(2)}`
+}
 </script>
 
 <template>
@@ -40,7 +46,7 @@ function barColor(pct: number): string {
       </div>
     </div>
     <div v-if="openSegment === 'cost'" data-testid="panel-cost" class="px-4 py-3 border-b border-line text-[12px] text-fg-mute font-mono">
-      Cost delta (3 min): {{ costDelta === null ? '—' : `${costDelta > 0 ? '+' : ''}$${costDelta.toFixed(2)}` }}
+      Cost delta (3 min): {{ formatDelta(costDelta) }}
     </div>
 
     <div class="flex items-center gap-3 px-3 h-7 text-[11px] font-mono text-fg-mute">
@@ -68,7 +74,7 @@ function barColor(pct: number): string {
         aria-label="Toggle cost trend detail"
         @click="toggleSegment('cost')"
       >
-        COST 3m <span :class="(costDelta ?? 0) > 0 ? 'text-green-500' : 'text-fg-faint'">{{ costDelta === null ? '—' : `${costDelta > 0 ? '+' : ''}$${costDelta.toFixed(2)}` }}</span>
+        COST 3m <span :class="(costDelta ?? 0) > 0 ? 'text-green-500' : 'text-fg-faint'">{{ formatDelta(costDelta) }}</span>
       </button>
       <button
         type="button"

@@ -56,4 +56,20 @@ describe('appStatusBar', () => {
     await w.get('[data-testid="statusbar-collapse"]').trigger('click')
     expect(w.find('[data-testid="statusbar-tab"]').exists()).toBe(true)
   })
+
+  it('expands the cost segment on click', async () => {
+    const StatusBar = await load()
+    const w = mount(StatusBar, { props: { costDelta: 0.42 } })
+    const seg = w.get('[data-testid="seg-cost"]')
+    expect(seg.attributes('aria-expanded')).toBe('false')
+    await seg.trigger('click')
+    expect(seg.attributes('aria-expanded')).toBe('true')
+    expect(w.find('[data-testid="panel-cost"]').exists()).toBe(true)
+  })
+
+  it('renders an em-dash when costDelta is null', async () => {
+    const StatusBar = await load()
+    const w = mount(StatusBar, { props: { costDelta: null } })
+    expect(w.text()).toContain('—')
+  })
 })
