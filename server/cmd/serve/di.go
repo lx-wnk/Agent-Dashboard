@@ -78,6 +78,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	broadcaster := sse.NewBroadcaster()
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
+	spawnerBroadcaster := sse.NewSpawnerBroadcaster(sse.NewBroadcaster())
+	projectBroadcaster := sse.NewProjectBroadcaster(sse.NewBroadcaster())
 
 	// Load plugins from configured plugin_dir. ctx is the server-lifetime context
 	// (cancelled on SIGTERM/SIGINT). Load derives a 30-second startup timeout internally.
@@ -253,6 +255,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		ProjectRepo:           projectRepo,
 		ProjectFolderRepo:     projectFolderRepo,
 		SpawnerRepo:           spawnerRepo,
+		SpawnerBroadcaster:    spawnerBroadcaster,
+		ProjectBroadcaster:    projectBroadcaster,
 		TaskProjectOps:        newTaskProjectOps(entClient),
 		TaskHandler:           taskHandler,
 		WebPushHandler:        webPushHandler,
