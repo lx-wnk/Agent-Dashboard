@@ -85,6 +85,9 @@ type RouterDeps struct {
 	ProjectRepo       repo.ProjectRepo
 	ProjectFolderRepo repo.ProjectFolderRepo
 	SpawnerRepo       repo.SpawnerRepo
+	// SpawnerBroadcaster fans out spawner CRUD events to SSE subscribers.
+	// May be nil; Stream is only mounted in DI where a broadcaster is always provided.
+	SpawnerBroadcaster *sse.SpawnerBroadcaster
 	// TaskProjectOps lets the projects handler check for active tasks and
 	// clear project_id on done/cancelled tasks during DELETE /api/projects/{id}.
 	// May be nil; when nil the project handler skips the active-task check.
@@ -233,9 +236,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.SpawnerRepo != nil {
 			r.Group(func(r chi.Router) {
 				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
-				spawnersHandler := spawners.NewHandler(deps.SpawnerRepo)
+				spawnersHandler := spawners.NewHandler(deps.SpawnerRepo, deps.SpawnerBroadcaster)
 				spawnersHandler.Mount(r)
 			})
+			// Read-only live stream — JWT-protected but not admin-gated.
+			streamHandler := spawners.NewHandler(deps.SpawnerRepo, deps.SpawnerBroadcaster)
+			r.Get("/api/spawners/stream", streamHandler.Stream)
 		}
 
 		if deps.WebPushHandler != nil {

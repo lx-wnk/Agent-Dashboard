@@ -11,16 +11,52 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
 // Handler exposes admin-only CRUD endpoints for spawners.
 type Handler struct {
-	repo repo.SpawnerRepo
+	repo        repo.SpawnerRepo
+	broadcaster *sse.SpawnerBroadcaster
 }
 
-// NewHandler returns a Handler backed by the given repo.
-func NewHandler(r repo.SpawnerRepo) *Handler {
-	return &Handler{repo: r}
+// NewHandler returns a Handler backed by the given repo. broadcaster may be nil
+// (e.g. in tests); emit becomes a no-op then.
+func NewHandler(r repo.SpawnerRepo, broadcaster *sse.SpawnerBroadcaster) *Handler {
+	return &Handler{repo: r, broadcaster: broadcaster}
+}
+
+// emit broadcasts a typed spawner event. No-op when broadcaster is nil.
+func (h *Handler) emit(eventType, id string, payload any) {
+	if h.broadcaster == nil {
+		return
+	}
+	h.broadcaster.Broadcast(sse.SpawnerEvent{Type: eventType, SpawnerID: id, Payload: payload})
+}
+
+// Stream serves GET /api/spawners/stream — live spawner CRUD events.
+func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	sse.WriteHeaders(w)
+	flusher.Flush()
+	sub := h.broadcaster.Subscribe()
+	defer h.broadcaster.Unsubscribe(sub)
+	for {
+		select {
+		case data, ok := <-sub:
+			if !ok {
+				return
+			}
+			w.Write(data) //nolint:errcheck
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // Mount registers all spawner routes on r. Caller must wrap r with
@@ -155,7 +191,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
-	apierr.WriteJSON(w, http.StatusCreated, toSpawnerView(s))
+	v := toSpawnerView(s)
+	h.emit("spawner_created", s.ID, v)
+	apierr.WriteJSON(w, http.StatusCreated, v)
 	return nil
 }
 
@@ -261,7 +299,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
-	apierr.WriteJSON(w, http.StatusOK, toSpawnerView(s))
+	v := toSpawnerView(s)
+	h.emit("spawner_updated", s.ID, v)
+	apierr.WriteJSON(w, http.StatusOK, v)
 	return nil
 }
 
@@ -281,6 +321,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
+	h.emit("spawner_deleted", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
