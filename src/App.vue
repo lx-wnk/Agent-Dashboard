@@ -118,17 +118,18 @@ fetch('/api/config').then(r => r.json()).then((d) => {
 }).catch(() => {})
 
 function openNewTask() {
-  activeConceptTask.value = null
-  showRefinementChat.value = true
-}
-
-function openBacklogForm() {
   showBacklogForm.value = true
 }
 
 function onBacklogTaskCreated(task: PipelineTask) {
   showBacklogForm.value = false
   selectTask(task)
+}
+
+function onCreateTaskAndRefine(task: PipelineTask) {
+  showBacklogForm.value = false
+  activeConceptTask.value = task
+  showRefinementChat.value = true
 }
 
 function startToastTimer() {
@@ -234,15 +235,6 @@ onMounted(fetchQuota)
               @click="openNewTask"
             >
               + New Task
-            </button>
-            <button
-              v-if="activeView === 'pipeline'"
-              type="button"
-              class="bg-raised text-fg border border-line rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-              data-testid="open-backlog-form"
-              @click="openBacklogForm"
-            >
-              + Backlog
             </button>
             <button
               v-else-if="activeView === 'dashboard'"
@@ -359,7 +351,7 @@ onMounted(fetchQuota)
       <div class="bg-app border border-line rounded-lg p-5 w-full max-w-xl">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-base font-semibold text-fg">
-            New Backlog Task
+            New Task
           </h2>
           <button
             type="button"
@@ -370,7 +362,7 @@ onMounted(fetchQuota)
             ✕
           </button>
         </div>
-        <BacklogForm @created="onBacklogTaskCreated" />
+        <BacklogForm @created="onBacklogTaskCreated" @created-and-refine="onCreateTaskAndRefine" />
       </div>
     </AppModal>
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
