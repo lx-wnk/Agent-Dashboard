@@ -65,11 +65,6 @@ const {
   phaseLabel,
 } = useRefinementChat(() => currentTask.value?.id ?? null)
 
-// Id of a task we just created locally. Its first stream is driven by
-// handleSend → sendMessage, so the open/id watcher must NOT also fire
-// loadHistory for it (that would wipe the just-sent message).
-const justCreatedId = ref<string | null>(null)
-
 // Live working indicator: show the dots whenever a run is streaming but the
 // last bubble is not yet assistant content — covers both the initial send and
 // a reconnect to a detached run (where only the user turn is loaded).
@@ -168,13 +163,8 @@ watch(
   ([open, id]) => {
     if (!open || !id)
       return
-    // Freshly-created task: handleSend already drives its stream — don't clobber.
-    if (id === justCreatedId.value) {
-      justCreatedId.value = null
-      return
-    }
-    // Switched/(re)opened an existing task: drop any prior stream, load its
-    // history, then reflect a detached run that may still be in flight.
+    // (Re)opened/switched task: drop any prior stream, load its history,
+    // then reflect a detached run that may still be in flight.
     stop()
     loadHistory()
     void syncStatus()
