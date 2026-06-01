@@ -36,9 +36,13 @@ var (
 var SessionCacheTTL = 3 * time.Second
 
 // sessionCacheKey identifies a cached parse result.
+// pid is part of the key so two processes sharing one project directory get
+// independent cache entries (and independent session resolution) rather than
+// colliding on a single cwd-keyed entry.
 type sessionCacheKey struct {
 	cwd       string
 	configDir string
+	pid       int
 }
 
 // sessionCacheEntry holds a cached result keyed by the winning file's identity.
@@ -316,6 +320,20 @@ func statSessionFiles(projectDir string) ([]sessionFileCandidate, error) {
 //
 // This eliminates repeated 32 KB tail-reads per SSE tick on long session histories.
 func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir string) (*SessionData, error) {
+	return findSessionForProjectFiltered(cwd, 0, uptimeSeconds, claudeConfigDir, nil, "")
+}
+
+// findSessionForProjectFiltered is the cache-backed core of session resolution.
+//
+//   - pid is folded into the cache key so concurrent processes in the same
+//     project directory never share a cache entry.
+//   - forcedID, when non-empty, pins resolution to exactly that session file
+//     (used when an authoritative pid→session mapping or a --resume arg is
+//     known); the file is located across all config dirs if absent from cwd's
+//     own project directory.
+//   - claimed, when non-nil, excludes session IDs already bound to other
+//     processes so two same-folder agents never collapse onto one session.
+func findSessionForProjectFiltered(cwd string, pid int, uptimeSeconds int64, claudeConfigDir string, claimed map[string]bool, forcedID string) (*SessionData, error) {
 	baseDir := claudeProjectsDir()
 	if claudeConfigDir != "" {
 		baseDir = filepath.Join(claudeConfigDir, "projects")
@@ -323,15 +341,27 @@ func FindSessionForProject(cwd string, uptimeSeconds int64, claudeConfigDir stri
 	encoded := EncodePath(cwd)
 	projectDir := filepath.Join(baseDir, encoded)
 
-	candidates, err := statSessionFiles(projectDir)
-	if err != nil {
-		return nil, err
-	}
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no session files in %s", projectDir)
+	candidates, _ := statSessionFiles(projectDir)
+
+	if forcedID != "" {
+		candidates = filterToID(candidates, forcedID)
+		if len(candidates) == 0 {
+			// The pinned session file is not under cwd's encoded directory
+			// (e.g. a resumed session, or the process changed directories).
+			// Search every candidate config dir for it.
+			if c, ok := locateSessionFile(forcedID, candidateConfigDirs(claudeConfigDir)); ok {
+				candidates = []sessionFileCandidate{c}
+			}
+		}
+	} else if len(claimed) > 0 {
+		candidates = filterOutClaimed(candidates, claimed)
 	}
 
-	cacheKey := sessionCacheKey{cwd: cwd, configDir: claudeConfigDir}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no session files for %s (pid %d, forcedID %q)", projectDir, pid, forcedID)
+	}
+
+	cacheKey := sessionCacheKey{cwd: cwd, configDir: claudeConfigDir, pid: pid}
 	now := time.Now()
 
 	// Check cache against the top candidate (most recently modified file).

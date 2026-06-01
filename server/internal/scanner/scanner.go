@@ -166,7 +166,10 @@ func getCWDsMac(ctx context.Context, pids []int) map[int]string {
 
 // ScanProcesses returns all running Claude Code processes with their CWDs.
 func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
-	out, err := exec.CommandContext(ctx, "ps", "-eo", "pid,etime,comm").Output()
+	// Use `args` (full command line) rather than `comm` so flags like
+	// `--resume <sessionId>` survive — the merger needs them to bind a process
+	// to its exact session. DetectProviderFromCommand strips back to argv[0].
+	out, err := exec.CommandContext(ctx, "ps", "-eo", "pid,etime,args").Output()
 	if err != nil {
 		return nil, fmt.Errorf("ps: %w", err)
 	}

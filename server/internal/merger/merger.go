@@ -4,6 +4,7 @@ package merger
 import (
 	"context"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -82,50 +83,43 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 	// avoiding a mutex and producing deterministic ordering (same as processes).
 	agents := make([]sdk.Agent, len(processes))
 
-	g, _ := errgroup.WithContext(ctx)
+	// Group process indices by project directory (encoded cwd + config dir).
+	// Resolution must be sequential WITHIN a group so the shared `claimed` set
+	// keeps every same-folder agent on a distinct session — the core fix for
+	// "all sessions in one folder show the same content". Groups are independent
+	// (different directories cannot share a session file), so they run in
+	// parallel to preserve throughput on the per-session tail-reads.
+	type groupKey struct{ encoded, configDir string }
+	groups := make(map[groupKey][]int)
 	for i, proc := range processes {
-		i, proc := i, proc
+		k := groupKey{parser.EncodePath(proc.CWD), proc.ClaudeConfigDir}
+		groups[k] = append(groups[k], i)
+	}
+
+	g, _ := errgroup.WithContext(ctx)
+	for _, idxs := range groups {
+		idxs := idxs
 		g.Go(func() error {
-			session, err := parser.FindSessionForProject(proc.CWD, proc.Uptime, proc.ClaudeConfigDir)
-			if err != nil {
-				return nil // skip processes with no matching session; zero value left at agents[i]
-			}
-
-			provider := proc.Provider
-			if provider == "" {
-				provider = sdk.ProviderClaude
-			}
-			c := EstimateCostForProvider(provider, session.TokenUsage, session.Model)
-
-			agents[i] = sdk.Agent{
-				PID:                       proc.PID,
-				SessionID:                 session.SessionID,
-				Provider:                  provider,
-				ProjectPath:               proc.CWD,
-				ProjectName:               filepath.Base(proc.CWD),
-				CWD:                       proc.CWD,
-				Entrypoint:                session.Entrypoint,
-				Status:                    CalculateStatus(session.LastActivity),
-				Uptime:                    proc.Uptime,
-				LastActivity:              session.LastActivity.Format(time.RFC3339),
-				CurrentAction:             strPtr(session.CurrentAction),
-				LastTools:                 append(make([]string, 0), session.LastTools...),
-				Tasks:                     append(make([]sdk.TaskInfo, 0), session.Tasks...),
-				Subagents:                 []sdk.SubAgent{},
-				TokenUsage:                session.TokenUsage,
-				CostEstimate:              c.Total,
-				CacheCreationCostEstimate: c.CacheCreate,
-				CacheReadCostEstimate:     c.CacheRead,
-				CostUnknown:               c.Unknown,
-				Model:                     strPtr(session.Model),
-				ConversationTurns:         session.ConversationTurns,
-				ToolCounts:                session.ToolCounts,
-				Meta:                      session.Meta,
-				ConvergenceAlert:          session.ConvergenceAlert,
-				ConvergenceToolName:       strPtr(session.ConvergenceToolName),
-				ErrorState:                errorStatePtr(session.ErrorState),
-				LastOutput:                strPtr(session.LastOutput),
-				LastBtw:                   session.LastBtw,
+			// Resolve youngest process first so a freshly-started agent claims
+			// the freshest session in the fallback path; deterministic ordering
+			// keeps the UI stable across ticks.
+			sort.SliceStable(idxs, func(a, b int) bool {
+				return processes[idxs[a]].Uptime < processes[idxs[b]].Uptime
+			})
+			claimed := make(map[string]bool)
+			for _, i := range idxs {
+				proc := processes[i]
+				session, err := parser.ResolveSessionForProcess(parser.SessionRequest{
+					CWD:             proc.CWD,
+					PID:             proc.PID,
+					Command:         proc.Command,
+					UptimeSeconds:   proc.Uptime,
+					ClaudeConfigDir: proc.ClaudeConfigDir,
+				}, claimed)
+				if err != nil {
+					continue // no matching session; zero value left at agents[i]
+				}
+				agents[i] = buildAgent(proc, session)
 			}
 			return nil
 		})
@@ -141,4 +135,45 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 		}
 	}
 	return result, nil
+}
+
+// buildAgent assembles an sdk.Agent from a scanned process and its resolved
+// session data.
+func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData) sdk.Agent {
+	provider := proc.Provider
+	if provider == "" {
+		provider = sdk.ProviderClaude
+	}
+	c := EstimateCostForProvider(provider, session.TokenUsage, session.Model)
+
+	return sdk.Agent{
+		PID:                       proc.PID,
+		SessionID:                 session.SessionID,
+		Provider:                  provider,
+		ProjectPath:               proc.CWD,
+		ProjectName:               filepath.Base(proc.CWD),
+		CWD:                       proc.CWD,
+		Entrypoint:                session.Entrypoint,
+		Status:                    CalculateStatus(session.LastActivity),
+		Uptime:                    proc.Uptime,
+		LastActivity:              session.LastActivity.Format(time.RFC3339),
+		CurrentAction:             strPtr(session.CurrentAction),
+		LastTools:                 append(make([]string, 0), session.LastTools...),
+		Tasks:                     append(make([]sdk.TaskInfo, 0), session.Tasks...),
+		Subagents:                 []sdk.SubAgent{},
+		TokenUsage:                session.TokenUsage,
+		CostEstimate:              c.Total,
+		CacheCreationCostEstimate: c.CacheCreate,
+		CacheReadCostEstimate:     c.CacheRead,
+		CostUnknown:               c.Unknown,
+		Model:                     strPtr(session.Model),
+		ConversationTurns:         session.ConversationTurns,
+		ToolCounts:                session.ToolCounts,
+		Meta:                      session.Meta,
+		ConvergenceAlert:          session.ConvergenceAlert,
+		ConvergenceToolName:       strPtr(session.ConvergenceToolName),
+		ErrorState:                errorStatePtr(session.ErrorState),
+		LastOutput:                strPtr(session.LastOutput),
+		LastBtw:                   session.LastBtw,
+	}
 }
