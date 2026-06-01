@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 )
@@ -21,41 +22,89 @@ func ResolvedProjectDir(cwd string) (string, error) {
 	return filepath.Join(parser.ClaudeProjectsDir(), parser.EncodePath(resolved)), nil
 }
 
+// resolvedProjectDirs returns the project dir for cwd under EVERY known agent
+// config dir — the server's CLAUDE_CONFIG_DIR, the ~/.claude default, and any
+// on-disk custom dir (~/.claude-work, ~/.claude-personal, …). A spawner may set
+// a custom CLAUDE_CONFIG_DIR for its agents (e.g. the "claude-work" spawner), so
+// an agent's session JSONL can land under any of these. Searching only the
+// server's own dir silently misses every custom-config-dir spawner — the agent
+// runs fine but the orchestrator never finds its session and fails the stage.
+func resolvedProjectDirs(cwd string) []string {
+	resolved, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		resolved = cwd
+	}
+	enc := parser.EncodePath(resolved)
+	cfgDirs := parser.AllClaudeConfigDirs()
+	dirs := make([]string, 0, len(cfgDirs))
+	for _, cfg := range cfgDirs {
+		dirs = append(dirs, filepath.Join(cfg, "projects", enc))
+	}
+	return dirs
+}
+
+// findSessionFilePath locates <sessionID>.jsonl across all candidate project
+// dirs and returns the first match, or "" if none exists.
+func findSessionFilePath(cwd, sessionID string) string {
+	for _, d := range resolvedProjectDirs(cwd) {
+		p := filepath.Join(d, sessionID+".jsonl")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// findCutoffToleranceMs is how far before the recorded start a session file may
+// be modified and still count as "this run's" session — absorbs the small skew
+// between when the stage_run row is stamped and when claude first writes its
+// session JSONL, plus clock granularity.
+const findCutoffToleranceMs = 5_000
+
+// FindNewestSessionID returns the newest session JSONL under cwd's project dir.
+// When afterISO is non-empty it excludes sessions last modified before that
+// cutoff (minus a small tolerance) — without this, a re-iterated stage whose
+// freshly-spawned agent dies before writing its own session would resurrect the
+// PRIOR iteration's session and mis-validate stale output. afterISO is parsed in
+// the local zone because callers format it with a literal "Z" over local clock
+// values (StartedAt.Format("2006-01-02T15:04:05Z")), not as a real UTC offset.
 func FindNewestSessionID(cwd, afterISO string) (string, error) {
-	projectDir, err := ResolvedProjectDir(cwd)
-	if err != nil {
-		return "", fmt.Errorf("FindNewestSessionID.resolveDir: %w", err)
-	}
-	entries, err := os.ReadDir(projectDir)
-	if err != nil {
-		return "", nil
-	}
-	type candidate struct {
-		sessionID string
-		mtime     int64
-	}
-	var candidates []candidate
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
-			continue
+	hasCutoff := false
+	var cutoffMs int64
+	if afterISO != "" {
+		if t, perr := time.ParseInLocation("2006-01-02T15:04:05Z", afterISO, time.Local); perr == nil {
+			cutoffMs = t.UnixMilli() - findCutoffToleranceMs
+			hasCutoff = true
 		}
-		info, err := e.Info()
+	}
+	bestID := ""
+	var bestMtime int64
+	found := false
+	for _, projectDir := range resolvedProjectDirs(cwd) {
+		entries, err := os.ReadDir(projectDir)
 		if err != nil {
-			continue
+			continue // dir may not exist under every config dir — that's fine
 		}
-		sessionID := strings.TrimSuffix(e.Name(), ".jsonl")
-		candidates = append(candidates, candidate{sessionID: sessionID, mtime: info.ModTime().UnixMilli()})
-	}
-	if len(candidates) == 0 {
-		return "", nil
-	}
-	best := candidates[0]
-	for _, c := range candidates[1:] {
-		if c.mtime > best.mtime {
-			best = c
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			mtime := info.ModTime().UnixMilli()
+			if hasCutoff && mtime < cutoffMs {
+				continue // session predates this run — belongs to a prior iteration
+			}
+			if !found || mtime > bestMtime {
+				found = true
+				bestMtime = mtime
+				bestID = strings.TrimSuffix(e.Name(), ".jsonl")
+			}
 		}
 	}
-	return best.sessionID, nil
+	return bestID, nil
 }
 
 type StageOutputRead struct {
@@ -118,11 +167,10 @@ func lastAssistantText(entries []JsonlEntry) string {
 }
 
 func ReadLastStageJsonOutput(cwd, sessionID string) (StageOutputRead, error) {
-	projectDir, err := ResolvedProjectDir(cwd)
-	if err != nil {
-		return StageOutputRead{}, fmt.Errorf("ReadLastStageJsonOutput.resolveDir: %w", err)
+	filePath := findSessionFilePath(cwd, sessionID)
+	if filePath == "" {
+		return StageOutputRead{}, nil
 	}
-	filePath := filepath.Join(projectDir, sessionID+".jsonl")
 	raw, err := parser.TailRead(filePath)
 	if err != nil {
 		return StageOutputRead{}, nil
@@ -160,11 +208,10 @@ type SessionTokenSummary struct {
 }
 
 func ReadSessionTokenSummary(cwd, sessionID string) (SessionTokenSummary, error) {
-	projectDir, err := ResolvedProjectDir(cwd)
-	if err != nil {
-		return SessionTokenSummary{}, fmt.Errorf("ReadSessionTokenSummary.resolveDir: %w", err)
+	filePath := findSessionFilePath(cwd, sessionID)
+	if filePath == "" {
+		return SessionTokenSummary{}, nil
 	}
-	filePath := filepath.Join(projectDir, sessionID+".jsonl")
 	raw, err := parser.TailRead(filePath)
 	if err != nil {
 		return SessionTokenSummary{}, nil

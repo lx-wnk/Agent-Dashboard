@@ -105,7 +105,15 @@ func BuildSpawnArgs(opts SpawnAgentOptions) []string {
 		args = append(args, "--resume", opts.ResumeSessionID)
 	}
 	args = append(args, "-p", opts.Prompt)
-	args = append(args, "--permission-mode", "default")
+	// Only force --permission-mode default when the spawner has not declared its
+	// own permission posture. A spawner that passes --dangerously-skip-permissions
+	// or its own --permission-mode (e.g. "auto"/"acceptEdits") would otherwise get
+	// a SECOND, conflicting --permission-mode default appended — claude then errors
+	// on the duplicate flag (or default silently wins), putting the agent back into
+	// a gated mode with an (often empty) allow-list where every Edit/Write/Bash fails.
+	if !spawnerControlsPermissionMode(opts.Spawner) {
+		args = append(args, "--permission-mode", "default")
+	}
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
@@ -125,6 +133,33 @@ func BuildSpawnArgs(opts SpawnAgentOptions) []string {
 		}
 	}
 	return args
+}
+
+// skipPermissionFlags are the claude CLI flags that bypass all permission
+// checks. Both spellings are accepted by the CLI.
+var skipPermissionFlags = map[string]struct{}{
+	"--dangerously-skip-permissions":       {},
+	"--allow-dangerously-skip-permissions": {},
+}
+
+// spawnerControlsPermissionMode reports whether the resolved spawner already
+// declares its own permission posture — either a --dangerously-skip-permissions
+// flag (either spelling) or an explicit --permission-mode. When true, the
+// dashboard must not append its default --permission-mode, to avoid a duplicate
+// / conflicting flag.
+func spawnerControlsPermissionMode(sp *ent.Spawner) bool {
+	if sp == nil {
+		return false
+	}
+	for _, a := range sp.Args {
+		if _, ok := skipPermissionFlags[a]; ok {
+			return true
+		}
+		if a == "--permission-mode" || strings.HasPrefix(a, "--permission-mode=") {
+			return true
+		}
+	}
+	return false
 }
 
 func containsArg(args []string, flag string) bool {
@@ -201,6 +236,23 @@ var allowedEnvKeys = map[string]struct{}{
 	"NODE_PATH":       {},
 }
 
+// expandLeadingTilde replaces a leading `~` (bare or `~/`) with the user's home
+// directory, mirroring shell tilde expansion. Other values pass through
+// unchanged. Used for spawner-declared env values, which exec does not expand.
+func expandLeadingTilde(v string) string {
+	if v != "~" && !strings.HasPrefix(v, "~/") {
+		return v
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return v
+	}
+	if v == "~" {
+		return home
+	}
+	return filepath.Join(home, v[2:])
+}
+
 func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	// Stage 1: spawner-declared env (lowest precedence). Each entry is
 	// subject to the global deny list before reaching the merged map.
@@ -210,7 +262,11 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 			if _, denied := deniedEnvKeys[k]; denied {
 				continue
 			}
-			merged[k] = v
+			// Spawner env is user-authored config, not a shell expansion, so a
+			// leading `~` is taken literally by exec — `CLAUDE_CONFIG_DIR=~/x`
+			// would make claude create a bogus `./~/x` dir under the cwd. Expand
+			// it the way a shell would before forwarding.
+			merged[k] = expandLeadingTilde(v)
 		}
 	}
 
