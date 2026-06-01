@@ -343,7 +343,6 @@ onMounted(fetchQuota)
     <RefinementChat
       :open="showRefinementChat"
       :task="activeConceptTask"
-      @task-created="activeConceptTask = $event"
       @close="showRefinementChat = false; activeConceptTask = null"
       @confirmed="showRefinementChat = false; activeConceptTask = null"
     />

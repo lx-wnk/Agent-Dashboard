@@ -1,19 +1,13 @@
 <script setup lang="ts">
 import type { ImageAttachment } from '../composables/useRefinementChat'
-import type { PipelineTask, Project } from '../types'
+import type { PipelineTask } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { fetchProjectFolders } from '../composables/useProjectFolders'
-import { useProjects } from '../composables/useProjects'
 import { useRefinementChat } from '../composables/useRefinementChat'
-import { useSpawnDialog } from '../composables/useSpawnDialog'
-import { useSpawners } from '../composables/useSpawners'
-import { createTask } from '../composables/useTasks'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
-import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 
 const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
 
-const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask], taskCreated: [task: PipelineTask] }>()
+const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
 
 const PHASE_DONE_RE = /__phase_done:\s*\w+/g
 const REFINED_TITLE_RE = /^\*{0,2}[Rr]efined\s+[Tt]itle[^\n]*\n?/gm
@@ -43,58 +37,10 @@ watch(() => props.task, (t) => {
 })
 
 const inputText = ref('')
-const cwdError = ref<string | null>(null)
 const chatEl = ref<HTMLElement | null>(null)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const pendingImages = ref<ImageAttachment[]>([])
-
-// ── Project picker (mirrors SpawnDialog) ──────
-// Reuse the canonical project→folder→cwd hydration flow instead of a
-// free-text path input. `dlg.cwd` is the derived working directory that
-// feeds createTask below.
-const { projects } = useProjects()
-const { spawners } = useSpawners()
-
-const dlg = useSpawnDialog({
-  fetchFolders: fetchProjectFolders,
-  lookupSpawner: id => spawners.value.find(s => s.id === id),
-})
-
-const projectChoice = ref<string>('')
-const showQuickCreate = ref(false)
-
-const sortedProjects = computed(() =>
-  projects.value.slice().sort((a, b) => a.name.localeCompare(b.name)),
-)
-const folderPickerVisible = computed(() => dlg.folders.value.length > 1)
-
-watch(projectChoice, async (v) => {
-  if (v === '__create__') {
-    showQuickCreate.value = true
-    return
-  }
-  showQuickCreate.value = false
-  if (!v) {
-    dlg.clearProject()
-    return
-  }
-  const proj = projects.value.find(p => p.id === v)
-  if (proj) {
-    await dlg.selectProject(proj)
-    cwdError.value = null
-  }
-})
-
-function onProjectCreated(p: Project): void {
-  showQuickCreate.value = false
-  projectChoice.value = p.id
-}
-
-function onQuickCreateCancel(): void {
-  showQuickCreate.value = false
-  projectChoice.value = ''
-}
 
 function autoResize() {
   const el = textareaEl.value
@@ -245,32 +191,12 @@ watch(messages, async () => {
 
 async function handleSend() {
   const msg = inputText.value.trim()
-  if (!msg || isStreaming.value)
+  if (!msg || isStreaming.value || !currentTask.value)
     return
-  if (currentTask.value === null) {
-    if (!dlg.cwd.value.trim()) {
-      cwdError.value = 'Please choose a working directory first'
-      return
-    }
-    cwdError.value = null
-  }
   const images = pendingImages.value.length > 0 ? [...pendingImages.value] : undefined
   inputText.value = ''
   pendingImages.value = []
   await nextTick(autoResize)
-  if (currentTask.value === null) {
-    const newTask = await createTask({
-      slug: `concept-${Date.now()}`,
-      title: 'New Task',
-      cwd: dlg.cwd.value.trim(),
-      stage: 'concept',
-    })
-    // Mark the id BEFORE the reactive switch so the open/id watcher skips its
-    // loadHistory for this task — sendMessage below is the source of truth.
-    justCreatedId.value = newTask.id
-    currentTask.value = newTask
-    emit('taskCreated', newTask)
-  }
   await sendMessage(msg, images)
 }
 
@@ -328,80 +254,6 @@ function isPhaseMarker(idx: number): string | null {
               Describe your idea — I'll guide you through analysis, spec, and implementation plan.
             </p>
           </div>
-          <!-- Project picker → derives working directory -->
-          <div class="flex flex-col gap-2 w-full max-w-[480px]">
-            <div class="flex flex-col gap-1">
-              <label
-                for="refine-project-select"
-                class="text-xs font-medium text-fg-mute text-left"
-              >
-                Project
-              </label>
-              <select
-                id="refine-project-select"
-                v-model="projectChoice"
-                data-testid="cwd-project-select"
-                class="w-full px-3 py-2 rounded-xl border border-line bg-raised text-fg text-[13px] focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
-                :class="{ 'border-red-400 dark:border-red-500': cwdError }"
-              >
-                <option value="" disabled>
-                  Choose a project…
-                </option>
-                <option
-                  v-for="p in sortedProjects"
-                  :key="p.id"
-                  :value="p.id"
-                  :disabled="p.folderCount === 0"
-                >
-                  {{ p.name }}{{ p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : '' }}
-                </option>
-                <option value="__create__">
-                  + Create new project…
-                </option>
-              </select>
-            </div>
-
-            <QuickCreateProjectPanel
-              v-if="showQuickCreate"
-              :spawners="spawners"
-              @created="onProjectCreated"
-              @cancel="onQuickCreateCancel"
-            />
-
-            <!-- Folder picker — only when the project has more than one -->
-            <div v-if="folderPickerVisible" class="flex flex-col gap-1">
-              <label
-                for="refine-folder-select"
-                class="text-xs font-medium text-fg-mute text-left"
-              >
-                Folder
-              </label>
-              <select
-                id="refine-folder-select"
-                :value="dlg.selectedFolderId.value ?? ''"
-                data-testid="cwd-folder-select"
-                class="w-full px-3 py-2 rounded-xl border border-line bg-raised text-fg text-[13px] focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
-                @change="dlg.selectFolder(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="f in dlg.folders.value" :key="f.id" :value="f.id">
-                  {{ f.label || f.path }}{{ f.isDefault ? ' (default)' : '' }}
-                </option>
-              </select>
-            </div>
-
-            <!-- Derived working directory (read-only) -->
-            <p
-              v-if="dlg.cwd.value"
-              data-testid="cwd-derived"
-              class="text-[11px] font-mono text-fg-faint text-left m-0 break-all"
-            >
-              ↳ {{ dlg.cwd.value }}
-            </p>
-            <p v-if="cwdError" class="text-xs text-red-500 m-0 text-left">
-              {{ cwdError }}
-            </p>
-          </div>
-
           <div class="flex flex-wrap gap-2 justify-center max-w-[480px]">
             <button
               v-for="chip in EXAMPLE_CHIPS"
