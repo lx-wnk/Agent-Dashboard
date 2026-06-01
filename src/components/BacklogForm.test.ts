@@ -57,6 +57,15 @@ describe('BacklogForm single-screen', () => {
     expect(cwd.value).toBe('/repos/web')
   })
 
+  it('does not overwrite a user-typed cwd when a project is later selected', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="details-cwd"]').setValue('/my/custom/path')
+    await wrapper.get('[data-testid="backlog-project-select"]').setValue('p1')
+    await flushPromises()
+    const cwd = wrapper.get('[data-testid="details-cwd"]').element as HTMLInputElement
+    expect(cwd.value).toBe('/my/custom/path')
+  })
+
   it('disables both submit buttons until title, slug, and cwd are filled', async () => {
     const wrapper = mount(BacklogForm)
     expect(wrapper.get('[data-testid="details-submit"]').attributes('disabled')).toBeDefined()

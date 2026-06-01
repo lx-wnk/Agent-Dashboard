@@ -58,7 +58,7 @@ watch(projectChoice, async (v) => {
     const suggestions = await suggestFolders(v)
     folderSuggestions.value = suggestions
     const def = suggestions.find(f => f.isDefault) ?? suggestions[0]
-    if (def)
+    if (def && !cwd.value.trim())
       cwd.value = def.path
   }
   catch {
