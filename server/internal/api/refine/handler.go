@@ -235,6 +235,32 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 	// Auth enforced by RequireAuth middleware (skipped in bypass mode) — see listTurns.
 	taskID := chi.URLParam(r, "taskId")
 
+	// Bridge the finalized concept from the refinement turns onto the task BEFORE
+	// advancing. Without this the concept lived only in refinement_turns and the
+	// implementation stage (which reads spec/plan/toolRequests from task.Metadata)
+	// saw an empty {} block. Routing fields (title, branch) land on task columns;
+	// setting SourceBranch also triggers the orchestrator's auto-worktree.
+	backlog := "backlog"
+	update := repo.UpdateTaskInput{CurrentStage: &backlog}
+	if h.deps.Turns != nil {
+		if turns, err := h.deps.Turns.ListForTask(r.Context(), taskID, 0); err == nil {
+			if concept, ok := refine.ExtractConcept(turns); ok {
+				if meta := concept.Metadata(); len(meta) > 0 {
+					update.Metadata = meta
+				}
+				if concept.RefinedTitle != "" {
+					update.Title = &concept.RefinedTitle
+				}
+				if concept.SourceBranch != "" {
+					update.SourceBranch = &concept.SourceBranch
+				}
+				if concept.TargetBranch != "" {
+					update.TargetBranch = &concept.TargetBranch
+				}
+			}
+		}
+	}
+
 	phase := "confirmed"
 	if _, err := h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
 		TaskID:  taskID,
@@ -258,9 +284,8 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	backlog := "backlog"
 	if h.deps.Tasks != nil {
-		_, _ = h.deps.Tasks.Update(r.Context(), taskID, repo.UpdateTaskInput{CurrentStage: &backlog})
+		_, _ = h.deps.Tasks.Update(r.Context(), taskID, update)
 	}
 	if h.deps.Advance != nil {
 		_ = h.deps.Advance(r.Context(), taskID)

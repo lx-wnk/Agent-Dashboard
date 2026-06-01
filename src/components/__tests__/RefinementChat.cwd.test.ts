@@ -30,6 +30,9 @@ vi.mock('../../composables/useRefinementChat', () => ({
     isStreaming: ref(false),
     error: ref(null),
     approvalReady: ref(false),
+    runStatus: ref(null),
+    syncStatus: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn(),
     loadHistory: loadHistoryMock,
     sendMessage: sendMessageMock,
     confirm: confirmMock,
@@ -41,27 +44,53 @@ vi.mock('../../utils/markdown', () => ({
   renderMarkdown: (text: string) => text,
 }))
 
-// ── Global fetch stub ──────────────────────────────────────────────────────
-// The component fetches /api/projects on mount. Return a project with one folder
-// so the datalist gets populated.
+// ── Sample data ─────────────────────────────────────────────────────────────
+// `useProjects()` fetches /api/projects on mount; folders are embedded so the
+// picker derives cwd without a second round-trip. `useSpawners()` fetches
+// /api/spawners. Both open SSE on mount → EventSource is stubbed below.
+
+const singleFolderProject = {
+  id: 'p1',
+  slug: 'my-project',
+  name: 'My Project',
+  folderCount: 1,
+  folders: [
+    { id: 'f1', projectId: 'p1', path: '/home/user/project', isDefault: true, createdAt: '' },
+  ],
+  createdAt: '',
+  updatedAt: '',
+}
+
+const multiFolderProject = {
+  id: 'p2',
+  slug: 'multi',
+  name: 'Multi Project',
+  folderCount: 2,
+  folders: [
+    { id: 'f2a', projectId: 'p2', path: '/repos/alpha', isDefault: true, createdAt: '' },
+    { id: 'f2b', projectId: 'p2', path: '/repos/beta', isDefault: false, createdAt: '' },
+  ],
+  createdAt: '',
+  updatedAt: '',
+}
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => [
-      {
-        id: 'p1',
-        slug: 'my-project',
-        name: 'My Project',
-        folders: [
-          { id: 'f1', projectId: 'p1', path: '/home/user/project', isDefault: true, createdAt: '' },
-        ],
-        createdAt: '',
-        updatedAt: '',
-      },
-    ],
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url === '/api/projects')
+      return Promise.resolve({ ok: true, status: 200, json: async () => [singleFolderProject, multiFolderProject] })
+    if (url === '/api/spawners')
+      return Promise.resolve({ ok: true, status: 200, json: async () => [] })
+    return Promise.resolve({ ok: true, status: 200, json: async () => [] })
   }))
+  vi.stubGlobal('EventSource', class {
+    static CONNECTING = 0
+    static OPEN = 1
+    static CLOSED = 2
+    onmessage: ((e: MessageEvent) => void) | null = null
+    onerror: ((e: Event) => void) | null = null
+    readyState = 0
+    close() {}
+  })
 })
 
 afterEach(() => {
@@ -74,56 +103,65 @@ afterEach(() => {
 function mountChat() {
   return mount(RefinementChat, {
     props: { open: true, task: null },
-    global: { stubs: {} },
+    attachTo: document.body,
   })
+}
+
+function setSelectValue(el: HTMLSelectElement, value: string) {
+  el.value = value
+  el.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
-describe('refinementChat — working-directory selector', () => {
-  it('renders the cwd input in the empty state', async () => {
+describe('refinementChat — project picker', () => {
+  it('renders the project select in the empty state', async () => {
     const wrapper = mountChat()
     await flushPromises()
-    const input = wrapper.find('[data-testid="cwd-input"]')
-    expect(input.exists()).toBe(true)
+    const select = wrapper.find('[data-testid="cwd-project-select"]')
+    expect(select.exists()).toBe(true)
+    wrapper.unmount()
   })
 
-  it('populates the datalist options from the projects API', async () => {
+  it('populates the project options from the projects API', async () => {
     const wrapper = mountChat()
     await flushPromises()
-    const options = wrapper.findAll('#refine-cwd-list option')
-    expect(options.length).toBeGreaterThan(0)
-    expect(options[0].attributes('value')).toBe('/home/user/project')
+    // placeholder + 2 projects + create-new
+    const options = wrapper.findAll('[data-testid="cwd-project-select"] option')
+    const labels = options.map(o => o.text())
+    expect(labels.some(l => l.includes('My Project'))).toBe(true)
+    expect(labels.some(l => l.includes('Multi Project'))).toBe(true)
+    wrapper.unmount()
   })
 
-  it('shows an error and does NOT call createTask when cwd is empty', async () => {
+  it('shows an error and does NOT call createTask when no project is chosen', async () => {
     const wrapper = mountChat()
     await flushPromises()
 
-    // Leave cwd blank — type a message and click send
     const textarea = wrapper.find('textarea')
     await textarea.setValue('build something cool')
     await wrapper.find('button[class*="bg-blue"]').trigger('click')
     await flushPromises()
 
     expect(createTaskMock).not.toHaveBeenCalled()
-    // Error message visible
     expect(wrapper.text()).toContain('Please choose a working directory first')
+    wrapper.unmount()
   })
 
-  it('calls createTask with the chosen cwd (not "/")', async () => {
+  it('derives cwd from the chosen project and passes it to createTask', async () => {
     const wrapper = mountChat()
     await flushPromises()
 
-    // Set working directory
-    const cwdInput = wrapper.find('[data-testid="cwd-input"]')
-    await cwdInput.setValue('/home/user/project')
+    const select = wrapper.find('[data-testid="cwd-project-select"]').element as HTMLSelectElement
+    setSelectValue(select, 'p1')
+    await flushPromises()
+    await flushPromises()
 
-    // Type a message
+    // derived cwd shown read-only
+    expect(wrapper.find('[data-testid="cwd-derived"]').text()).toContain('/home/user/project')
+
     const textarea = wrapper.find('textarea')
     await textarea.setValue('implement feature X')
-
-    // Click send (→ button)
     await wrapper.find('button[class*="bg-blue"]').trigger('click')
     await flushPromises()
 
@@ -131,48 +169,49 @@ describe('refinementChat — working-directory selector', () => {
     expect(createTaskMock).toHaveBeenCalledWith(
       expect.objectContaining({ cwd: '/home/user/project' }),
     )
-    // Explicitly confirm the hardcoded slash is gone
     expect(createTaskMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ cwd: '/' }),
     )
+    wrapper.unmount()
   })
 
-  it('also passes cwd when a suggestion chip is clicked then sent', async () => {
+  it('shows a folder picker for multi-folder projects and updates cwd on folder change', async () => {
     const wrapper = mountChat()
     await flushPromises()
 
-    // Set cwd
-    await wrapper.find('[data-testid="cwd-input"]').setValue('/repos/myapp')
-
-    // Use a suggestion chip to populate the textarea
-    const chips = wrapper.findAll('button.rounded-full')
-    expect(chips.length).toBeGreaterThan(0)
-    await chips[0].trigger('click')
-
-    // Send
-    await wrapper.find('button[class*="bg-blue"]').trigger('click')
+    const projectSelect = wrapper.find('[data-testid="cwd-project-select"]').element as HTMLSelectElement
+    setSelectValue(projectSelect, 'p2')
+    await flushPromises()
     await flushPromises()
 
-    expect(createTaskMock).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: '/repos/myapp' }),
-    )
+    // default folder (isDefault) wins initially
+    expect(wrapper.find('[data-testid="cwd-derived"]').text()).toContain('/repos/alpha')
+
+    const folderSelect = wrapper.find('[data-testid="cwd-folder-select"]')
+    expect(folderSelect.exists()).toBe(true)
+    setSelectValue(folderSelect.element as HTMLSelectElement, 'f2b')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="cwd-derived"]').text()).toContain('/repos/beta')
+    wrapper.unmount()
   })
 
-  it('clears the cwd error when the user starts typing in the cwd field', async () => {
+  it('clears the cwd error once a project is chosen', async () => {
     const wrapper = mountChat()
     await flushPromises()
 
-    // Trigger error first
+    // trigger error first
     await wrapper.find('textarea').setValue('hello')
     await wrapper.find('button[class*="bg-blue"]').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Please choose a working directory first')
 
-    // Start editing the cwd input
-    const cwdInput = wrapper.find('[data-testid="cwd-input"]')
-    await cwdInput.trigger('input')
+    const select = wrapper.find('[data-testid="cwd-project-select"]').element as HTMLSelectElement
+    setSelectValue(select, 'p1')
+    await flushPromises()
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('Please choose a working directory first')
+    wrapper.unmount()
   })
 })

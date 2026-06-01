@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import type { ImageAttachment } from '../composables/useRefinementChat'
-import type { PipelineTask } from '../types'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import type { PipelineTask, Project } from '../types'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { fetchProjectFolders } from '../composables/useProjectFolders'
+import { useProjects } from '../composables/useProjects'
 import { useRefinementChat } from '../composables/useRefinementChat'
+import { useSpawnDialog } from '../composables/useSpawnDialog'
+import { useSpawners } from '../composables/useSpawners'
 import { createTask } from '../composables/useTasks'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
+import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 
 const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
 
@@ -13,11 +18,16 @@ const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask], taskCreat
 const PHASE_DONE_RE = /__phase_done:\s*\w+/g
 const REFINED_TITLE_RE = /^\*{0,2}[Rr]efined\s+[Tt]itle[^\n]*\n?/gm
 const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/
+// The agent emits the finalized concept as a fenced json block at approval. It is
+// machine data (parsed for the title + persisted onto the task on confirm), so
+// hide it from the chat bubble rather than rendering a raw JSON dump.
+const JSON_BLOCK_STRIP_RE = /```json\n[\s\S]*?```/g
 
 function cleanContent(text: string): string {
   return text
     .replace(PHASE_DONE_RE, '')
     .replace(REFINED_TITLE_RE, '')
+    .replace(JSON_BLOCK_STRIP_RE, '')
     .trimEnd()
 }
 
@@ -33,37 +43,58 @@ watch(() => props.task, (t) => {
 })
 
 const inputText = ref('')
-const cwd = ref('')
 const cwdError = ref<string | null>(null)
-const projectPaths = ref<{ label: string, path: string }[]>([])
 const chatEl = ref<HTMLElement | null>(null)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const pendingImages = ref<ImageAttachment[]>([])
 
-onMounted(async () => {
-  try {
-    const res = await fetch('/api/projects')
-    if (!res.ok)
-      throw new Error(`HTTP ${res.status}`)
-    const data = await res.json() as Array<{ name: string, slug: string, folders?: Array<{ path: string, label?: string }> }>
-    const entries: { label: string, path: string }[] = []
-    for (const project of data) {
-      if (!project.folders?.length)
-        continue
-      for (const folder of project.folders) {
-        const label = folder.label
-          ? `${project.name} — ${folder.label}`
-          : project.name
-        entries.push({ label, path: folder.path })
-      }
-    }
-    projectPaths.value = entries
+// ── Project picker (mirrors SpawnDialog) ──────
+// Reuse the canonical project→folder→cwd hydration flow instead of a
+// free-text path input. `dlg.cwd` is the derived working directory that
+// feeds createTask below.
+const { projects } = useProjects()
+const { spawners } = useSpawners()
+
+const dlg = useSpawnDialog({
+  fetchFolders: fetchProjectFolders,
+  lookupSpawner: id => spawners.value.find(s => s.id === id),
+})
+
+const projectChoice = ref<string>('')
+const showQuickCreate = ref(false)
+
+const sortedProjects = computed(() =>
+  projects.value.slice().sort((a, b) => a.name.localeCompare(b.name)),
+)
+const folderPickerVisible = computed(() => dlg.folders.value.length > 1)
+
+watch(projectChoice, async (v) => {
+  if (v === '__create__') {
+    showQuickCreate.value = true
+    return
   }
-  catch {
-    // leave projectPaths empty — free-text input still works
+  showQuickCreate.value = false
+  if (!v) {
+    dlg.clearProject()
+    return
+  }
+  const proj = projects.value.find(p => p.id === v)
+  if (proj) {
+    await dlg.selectProject(proj)
+    cwdError.value = null
   }
 })
+
+function onProjectCreated(p: Project): void {
+  showQuickCreate.value = false
+  projectChoice.value = p.id
+}
+
+function onQuickCreateCancel(): void {
+  showQuickCreate.value = false
+  projectChoice.value = ''
+}
 
 function autoResize() {
   const el = textareaEl.value
@@ -80,11 +111,28 @@ const {
   isStreaming,
   error,
   approvalReady,
+  syncStatus,
+  stop,
   loadHistory,
   sendMessage,
   confirm,
   phaseLabel,
 } = useRefinementChat(() => currentTask.value?.id ?? null)
+
+// Id of a task we just created locally. Its first stream is driven by
+// handleSend → sendMessage, so the open/id watcher must NOT also fire
+// loadHistory for it (that would wipe the just-sent message).
+const justCreatedId = ref<string | null>(null)
+
+// Live working indicator: show the dots whenever a run is streaming but the
+// last bubble is not yet assistant content — covers both the initial send and
+// a reconnect to a detached run (where only the user turn is loaded).
+const showWorkingDots = computed(() => {
+  if (!isStreaming.value)
+    return false
+  const last = messages.value.at(-1)
+  return !last || last.role === 'user' || !last.content
+})
 
 const EXAMPLE_CHIPS = [
   'Implement a new feature',
@@ -162,14 +210,33 @@ function removeImage(idx: number) {
   pendingImages.value.splice(idx, 1)
 }
 
+// Abort the client stream + stop status polling whenever the modal closes.
+// The detached server run keeps going and persists; reopening re-syncs below.
+watch(() => props.open, (open) => {
+  if (!open)
+    stop()
+})
+
 watch(
   [() => props.open, () => currentTask.value?.id],
   ([open, id]) => {
-    if (open && id)
-      loadHistory()
+    if (!open || !id)
+      return
+    // Freshly-created task: handleSend already drives its stream — don't clobber.
+    if (id === justCreatedId.value) {
+      justCreatedId.value = null
+      return
+    }
+    // Switched/(re)opened an existing task: drop any prior stream, load its
+    // history, then reflect a detached run that may still be in flight.
+    stop()
+    loadHistory()
+    void syncStatus()
   },
   { immediate: true },
 )
+
+onUnmounted(stop)
 
 watch(messages, async () => {
   await nextTick()
@@ -181,7 +248,7 @@ async function handleSend() {
   if (!msg || isStreaming.value)
     return
   if (currentTask.value === null) {
-    if (!cwd.value.trim()) {
+    if (!dlg.cwd.value.trim()) {
       cwdError.value = 'Please choose a working directory first'
       return
     }
@@ -195,9 +262,12 @@ async function handleSend() {
     const newTask = await createTask({
       slug: `concept-${Date.now()}`,
       title: 'New Task',
-      cwd: cwd.value.trim(),
+      cwd: dlg.cwd.value.trim(),
       stage: 'concept',
     })
+    // Mark the id BEFORE the reactive switch so the open/id watcher skips its
+    // loadHistory for this task — sendMessage below is the source of truth.
+    justCreatedId.value = newTask.id
     currentTask.value = newTask
     emit('taskCreated', newTask)
   }
@@ -258,34 +328,75 @@ function isPhaseMarker(idx: number): string | null {
               Describe your idea — I'll guide you through analysis, spec, and implementation plan.
             </p>
           </div>
-          <!-- Working directory selector -->
-          <div class="flex flex-col gap-1 w-full max-w-[480px]">
-            <label
-              for="refine-cwd-input"
-              class="text-xs font-medium text-fg-mute text-left"
-            >
-              Working directory
-            </label>
-            <input
-              id="refine-cwd-input"
-              v-model="cwd"
-              list="refine-cwd-list"
-              type="text"
-              placeholder="/path/to/your/project"
-              class="w-full px-3 py-2 rounded-xl border border-line bg-raised text-fg placeholder:text-fg-faint text-[13px] font-mono focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
-              :class="{ 'border-red-400 dark:border-red-500': cwdError }"
-              data-testid="cwd-input"
-              @input="cwdError = null"
-            >
-            <datalist id="refine-cwd-list">
-              <option
-                v-for="entry in projectPaths"
-                :key="entry.path"
-                :value="entry.path"
+          <!-- Project picker → derives working directory -->
+          <div class="flex flex-col gap-2 w-full max-w-[480px]">
+            <div class="flex flex-col gap-1">
+              <label
+                for="refine-project-select"
+                class="text-xs font-medium text-fg-mute text-left"
               >
-                {{ entry.label }}
-              </option>
-            </datalist>
+                Project
+              </label>
+              <select
+                id="refine-project-select"
+                v-model="projectChoice"
+                data-testid="cwd-project-select"
+                class="w-full px-3 py-2 rounded-xl border border-line bg-raised text-fg text-[13px] focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
+                :class="{ 'border-red-400 dark:border-red-500': cwdError }"
+              >
+                <option value="" disabled>
+                  Choose a project…
+                </option>
+                <option
+                  v-for="p in sortedProjects"
+                  :key="p.id"
+                  :value="p.id"
+                  :disabled="p.folderCount === 0"
+                >
+                  {{ p.name }}{{ p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : '' }}
+                </option>
+                <option value="__create__">
+                  + Create new project…
+                </option>
+              </select>
+            </div>
+
+            <QuickCreateProjectPanel
+              v-if="showQuickCreate"
+              :spawners="spawners"
+              @created="onProjectCreated"
+              @cancel="onQuickCreateCancel"
+            />
+
+            <!-- Folder picker — only when the project has more than one -->
+            <div v-if="folderPickerVisible" class="flex flex-col gap-1">
+              <label
+                for="refine-folder-select"
+                class="text-xs font-medium text-fg-mute text-left"
+              >
+                Folder
+              </label>
+              <select
+                id="refine-folder-select"
+                :value="dlg.selectedFolderId.value ?? ''"
+                data-testid="cwd-folder-select"
+                class="w-full px-3 py-2 rounded-xl border border-line bg-raised text-fg text-[13px] focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
+                @change="dlg.selectFolder(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="f in dlg.folders.value" :key="f.id" :value="f.id">
+                  {{ f.label || f.path }}{{ f.isDefault ? ' (default)' : '' }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Derived working directory (read-only) -->
+            <p
+              v-if="dlg.cwd.value"
+              data-testid="cwd-derived"
+              class="text-[11px] font-mono text-fg-faint text-left m-0 break-all"
+            >
+              ↳ {{ dlg.cwd.value }}
+            </p>
             <p v-if="cwdError" class="text-xs text-red-500 m-0 text-left">
               {{ cwdError }}
             </p>
@@ -331,9 +442,9 @@ function isPhaseMarker(idx: number): string | null {
           />
         </template>
 
-        <!-- Streaming indicator -->
+        <!-- Streaming / reconnected-run indicator -->
         <div
-          v-if="isStreaming && !messages.at(-1)?.content"
+          v-if="showWorkingDots"
           class="self-start min-w-[52px] px-3 py-2 rounded-xl rounded-bl-sm bg-raised border border-line text-fg-faint"
         >
           <span class="dot-pulse"><span /><span /><span /></span>
@@ -345,10 +456,12 @@ function isPhaseMarker(idx: number): string | null {
         {{ error }}
       </div>
 
-      <!-- Confirm bar -->
+      <!-- Confirm bar — stays available while you keep refining; the input below
+           remains usable so you can still adjust open decisions. -->
       <div v-if="approvalReady" class="px-5 py-3 border-t border-line shrink-0">
         <button
-          class="w-full py-3 px-4 rounded-xl bg-green-500 text-black font-bold text-[0.95rem] tracking-tight border-none cursor-pointer transition-all hover:opacity-90 hover:-translate-y-px"
+          class="w-full py-3 px-4 rounded-xl bg-green-500 text-black font-bold text-[0.95rem] tracking-tight border-none cursor-pointer transition-all hover:enabled:opacity-90 hover:enabled:-translate-y-px disabled:opacity-40 disabled:cursor-default"
+          :disabled="isStreaming"
           @click="handleConfirm"
         >
           Create Task →
@@ -377,7 +490,7 @@ function isPhaseMarker(idx: number): string | null {
         <button
           class="w-9 h-9 rounded-xl shrink-0 bg-raised border border-line text-slate-400 text-lg cursor-pointer flex items-center justify-center transition-colors hover:enabled:border-blue-400 hover:enabled:text-blue-400 disabled:opacity-35 disabled:cursor-default"
           title="Attach image"
-          :disabled="isStreaming || approvalReady"
+          :disabled="isStreaming"
           @click="fileInputEl?.click()"
         >
           ⊕
@@ -396,7 +509,7 @@ function isPhaseMarker(idx: number): string | null {
           class="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-fg placeholder:text-fg-faint text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
           placeholder="Message..."
           rows="1"
-          :disabled="isStreaming || approvalReady"
+          :disabled="isStreaming"
           @keydown.enter.exact.prevent="handleSend"
           @paste="handlePaste"
         />
@@ -411,7 +524,7 @@ function isPhaseMarker(idx: number): string | null {
         </button>
         <button
           class="w-10 h-10 rounded-xl bg-blue-500 text-white border-none cursor-pointer text-base flex items-center justify-center transition-all hover:enabled:opacity-85 hover:enabled:-translate-y-px disabled:opacity-35 disabled:cursor-default shrink-0"
-          :disabled="isStreaming || (!inputText.trim() && !pendingImages.length) || approvalReady"
+          :disabled="isStreaming || (!inputText.trim() && !pendingImages.length)"
           @click="handleSend"
         >
           →
