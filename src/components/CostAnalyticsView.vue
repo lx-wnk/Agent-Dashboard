@@ -1,10 +1,61 @@
 <script setup lang="ts">
 import * as d3 from 'd3'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
 import { formatCost } from '../utils/format'
 
-const { summary, isLoading, error, start } = useCostAnalytics()
+const { summary, isLoading, error, start, refresh } = useCostAnalytics()
+
+// --- Historical data rescan ---
+const importStatus = ref('')
+const isImporting = ref(false)
+let importEs: EventSource | null = null
+
+onUnmounted(() => {
+  importEs?.close()
+})
+
+async function startRescan() {
+  if (isImporting.value)
+    return
+  isImporting.value = true
+  importStatus.value = 'Starting…'
+  const res = await fetch('/api/history/import', { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    const errMsg = (body as { error?: string }).error ?? res.statusText
+    if (res.status === 409) {
+      // Already running — still attach to the stream for live progress
+      importStatus.value = `${errMsg} — watching progress…`
+    }
+    else {
+      importStatus.value = `Error: ${errMsg}`
+      isImporting.value = false
+      return
+    }
+  }
+  else {
+    importStatus.value = 'Scanning…'
+  }
+  importEs = new EventSource('/api/history/import/status')
+  importEs.onmessage = (ev) => {
+    const p = JSON.parse(ev.data) as { total: number, processed: number, imported: number, errors: number, done: boolean }
+    importStatus.value = `Scanning… ${p.processed}/${p.total}`
+    if (p.done) {
+      importStatus.value = `Imported ${p.imported} sessions`
+      importEs?.close()
+      importEs = null
+      isImporting.value = false
+      void refresh()
+    }
+  }
+  importEs.onerror = () => {
+    importStatus.value = 'Connection lost — scan may still be running'
+    importEs?.close()
+    importEs = null
+    isImporting.value = false
+  }
+}
 
 const stackedRef = ref<SVGSVGElement | null>(null)
 const trendRef = ref<SVGSVGElement | null>(null)
@@ -219,6 +270,15 @@ watch(summary, () => {
       <div class="text-xs text-fg-mute flex items-center gap-3">
         <span v-if="summary.totalUsd > 0">Total: <strong class="text-fg">{{ formatCost(summary.totalUsd) }}</strong></span>
         <span v-if="updatedAtLabel">Updated {{ updatedAtLabel }}</span>
+        <button
+          v-if="hasData"
+          type="button"
+          :disabled="isImporting"
+          class="text-xs px-2.5 py-1 rounded bg-raised border border-line text-fg-mute hover:text-fg hover:bg-raised/70 disabled:opacity-50 transition-colors"
+          @click="startRescan"
+        >
+          {{ isImporting ? 'Scanning…' : 'Rescan now' }}
+        </button>
       </div>
     </header>
 
@@ -228,8 +288,24 @@ watch(summary, () => {
     <p v-else-if="error" class="text-sm text-red-600 dark:text-red-400">
       {{ error }}
     </p>
-    <p v-else-if="!hasData" class="text-sm text-fg-mute">
-      No cost data yet. Once stage agents finish runs, per-day and per-week aggregates will appear here.
+    <div v-else-if="!hasData" class="flex flex-col gap-2">
+      <p class="text-sm text-fg-mute">
+        No cost data yet. Costs are imported automatically from your Claude sessions — the first scan may take a moment. You can also trigger a scan now.
+      </p>
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          :disabled="isImporting"
+          class="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          @click="startRescan"
+        >
+          {{ isImporting ? 'Scanning…' : 'Rescan now' }}
+        </button>
+        <span v-if="importStatus" class="text-xs text-fg-mute">{{ importStatus }}</span>
+      </div>
+    </div>
+    <p v-if="importStatus && hasData" class="text-xs text-fg-mute">
+      {{ importStatus }}
     </p>
 
     <section v-if="summary.byModel.length > 0" class="bg-card border border-line rounded-md p-4">
