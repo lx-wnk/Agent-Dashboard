@@ -17,7 +17,7 @@ Real-time monitoring dashboard for locally running Claude Code agents. Go 1.26 b
 
 ```bash
 git clone https://github.com/lx-wnk/Agent-Dashboard.git
-cd agent-dashboard
+cd Agent-Dashboard
 pnpm install        # frontend dependencies only
 ```
 
@@ -41,7 +41,7 @@ Starts the Go backend via `air` (hot-reload on `.go` file changes) and serves th
 | `task build` | Compile production binary → `bin/agent-dashboard` |
 | `task test` | Run all tests with race detector |
 | `task lint` | Run golangci-lint |
-| `task generate` | Run wire + ent code generation |
+| `task generate` | Run ent schema + tygo TS code generation |
 | `task fmt` | Format with gofmt |
 
 ### Frontend (Vue)
@@ -56,7 +56,7 @@ Starts the Go backend via `air` (hot-reload on `.go` file changes) and serves th
 ## Architecture
 
 ```
-server/cmd/serve/main.go          Go entrypoint (cobra CLI + Wire DI)
+server/cmd/serve/main.go          Go entrypoint (cobra CLI + hand-written DI)
 server/internal/api/router.go     Chi router and route registration
 server/internal/pipeline/         Task pipeline state machine
 server/internal/db/ent/schema/    Ent ORM schemas

@@ -174,7 +174,7 @@ jobs:
           JS_VENDOR_MAX_GZIP_KB: '200'
           JS_CHARTS_MAX_GZIP_KB: '400'
           CSS_MAX_GZIP_KB: '30'
-        run: bash scripts/check-bundle-size.sh dist/assets
+        run: bash scripts/check-bundle-size.sh server/frontend/dist/assets
 
   pr-checks:
     name: PR Validation

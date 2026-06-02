@@ -1,0 +1,87 @@
+# GoReleaser config — https://goreleaser.com
+# Build with: goreleaser release --clean  (or `goreleaser build --snapshot --clean` to test locally)
+#
+# The `before` hooks build the Vue SPA into server/frontend/dist BEFORE the Go build,
+# so go:embed (server/frontend/embed.go) bakes the real frontend into each binary.
+version: 2
+
+project_name: agent-dashboard
+
+before:
+  hooks:
+    - pnpm install --frozen-lockfile
+    - pnpm build
+
+builds:
+  - id: agent-dashboard
+    dir: server
+    main: ./cmd/serve
+    binary: agent-dashboard
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    files:
+      - LICENSE
+      - README.md
+      - PRIVACY.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "^refactor:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: lx-wnk
+    name: Agent-Dashboard
+  draft: false
+  prerelease: auto
+  footer: |
+    ## Install
+
+    **One-liner (macOS / Linux):**
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/lx-wnk/Agent-Dashboard/main/install.sh | sh
+    ```
+
+    Or download the archive for your platform below, extract it, and move `agent-dashboard` onto your `PATH`.
+
+    > Agent Dashboard reads your local Claude Code sessions — it binds to `127.0.0.1` only. See the [security model](https://github.com/lx-wnk/Agent-Dashboard/blob/main/docs/guides/security.md).
