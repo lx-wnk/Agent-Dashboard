@@ -27,7 +27,7 @@ var (
 		Indexes: []*schema.Index{
 			{
 				Name:    "agentcosttrend_session_id",
-				Unique:  false,
+				Unique:  true,
 				Columns: []*schema.Column{AgentCostTrendsColumns[1]},
 			},
 			{

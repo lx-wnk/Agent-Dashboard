@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
@@ -20,6 +22,7 @@ type StageRunCreate struct {
 	config
 	mutation *StageRunMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetTaskID sets the "task_id" field.
@@ -334,6 +337,7 @@ func (_c *StageRunCreate) createSpec() (*StageRun, *sqlgraph.CreateSpec) {
 		_node = &StageRun{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(stagerun.Table, sqlgraph.NewFieldSpec(stagerun.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -426,11 +430,608 @@ func (_c *StageRunCreate) createSpec() (*StageRun, *sqlgraph.CreateSpec) {
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.StageRun.Create().
+//		SetTaskID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.StageRunUpsert) {
+//			SetTaskID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *StageRunCreate) OnConflict(opts ...sql.ConflictOption) *StageRunUpsertOne {
+	_c.conflict = opts
+	return &StageRunUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.StageRun.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *StageRunCreate) OnConflictColumns(columns ...string) *StageRunUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &StageRunUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// StageRunUpsertOne is the builder for "upsert"-ing
+	//  one StageRun node.
+	StageRunUpsertOne struct {
+		create *StageRunCreate
+	}
+
+	// StageRunUpsert is the "OnConflict" setter.
+	StageRunUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetStage sets the "stage" field.
+func (u *StageRunUpsert) SetStage(v string) *StageRunUpsert {
+	u.Set(stagerun.FieldStage, v)
+	return u
+}
+
+// UpdateStage sets the "stage" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateStage() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldStage)
+	return u
+}
+
+// SetSessionID sets the "session_id" field.
+func (u *StageRunUpsert) SetSessionID(v string) *StageRunUpsert {
+	u.Set(stagerun.FieldSessionID, v)
+	return u
+}
+
+// UpdateSessionID sets the "session_id" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateSessionID() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldSessionID)
+	return u
+}
+
+// ClearSessionID clears the value of the "session_id" field.
+func (u *StageRunUpsert) ClearSessionID() *StageRunUpsert {
+	u.SetNull(stagerun.FieldSessionID)
+	return u
+}
+
+// SetSessionName sets the "session_name" field.
+func (u *StageRunUpsert) SetSessionName(v string) *StageRunUpsert {
+	u.Set(stagerun.FieldSessionName, v)
+	return u
+}
+
+// UpdateSessionName sets the "session_name" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateSessionName() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldSessionName)
+	return u
+}
+
+// ClearSessionName clears the value of the "session_name" field.
+func (u *StageRunUpsert) ClearSessionName() *StageRunUpsert {
+	u.SetNull(stagerun.FieldSessionName)
+	return u
+}
+
+// SetPid sets the "pid" field.
+func (u *StageRunUpsert) SetPid(v int) *StageRunUpsert {
+	u.Set(stagerun.FieldPid, v)
+	return u
+}
+
+// UpdatePid sets the "pid" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdatePid() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldPid)
+	return u
+}
+
+// AddPid adds v to the "pid" field.
+func (u *StageRunUpsert) AddPid(v int) *StageRunUpsert {
+	u.Add(stagerun.FieldPid, v)
+	return u
+}
+
+// ClearPid clears the value of the "pid" field.
+func (u *StageRunUpsert) ClearPid() *StageRunUpsert {
+	u.SetNull(stagerun.FieldPid)
+	return u
+}
+
+// SetStatus sets the "status" field.
+func (u *StageRunUpsert) SetStatus(v string) *StageRunUpsert {
+	u.Set(stagerun.FieldStatus, v)
+	return u
+}
+
+// UpdateStatus sets the "status" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateStatus() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldStatus)
+	return u
+}
+
+// SetIteration sets the "iteration" field.
+func (u *StageRunUpsert) SetIteration(v int) *StageRunUpsert {
+	u.Set(stagerun.FieldIteration, v)
+	return u
+}
+
+// UpdateIteration sets the "iteration" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateIteration() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldIteration)
+	return u
+}
+
+// AddIteration adds v to the "iteration" field.
+func (u *StageRunUpsert) AddIteration(v int) *StageRunUpsert {
+	u.Add(stagerun.FieldIteration, v)
+	return u
+}
+
+// SetOutput sets the "output" field.
+func (u *StageRunUpsert) SetOutput(v map[string]interface{}) *StageRunUpsert {
+	u.Set(stagerun.FieldOutput, v)
+	return u
+}
+
+// UpdateOutput sets the "output" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateOutput() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldOutput)
+	return u
+}
+
+// ClearOutput clears the value of the "output" field.
+func (u *StageRunUpsert) ClearOutput() *StageRunUpsert {
+	u.SetNull(stagerun.FieldOutput)
+	return u
+}
+
+// SetTokensUsed sets the "tokens_used" field.
+func (u *StageRunUpsert) SetTokensUsed(v int) *StageRunUpsert {
+	u.Set(stagerun.FieldTokensUsed, v)
+	return u
+}
+
+// UpdateTokensUsed sets the "tokens_used" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateTokensUsed() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldTokensUsed)
+	return u
+}
+
+// AddTokensUsed adds v to the "tokens_used" field.
+func (u *StageRunUpsert) AddTokensUsed(v int) *StageRunUpsert {
+	u.Add(stagerun.FieldTokensUsed, v)
+	return u
+}
+
+// SetCostCents sets the "cost_cents" field.
+func (u *StageRunUpsert) SetCostCents(v int) *StageRunUpsert {
+	u.Set(stagerun.FieldCostCents, v)
+	return u
+}
+
+// UpdateCostCents sets the "cost_cents" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateCostCents() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldCostCents)
+	return u
+}
+
+// AddCostCents adds v to the "cost_cents" field.
+func (u *StageRunUpsert) AddCostCents(v int) *StageRunUpsert {
+	u.Add(stagerun.FieldCostCents, v)
+	return u
+}
+
+// SetStartedAt sets the "started_at" field.
+func (u *StageRunUpsert) SetStartedAt(v time.Time) *StageRunUpsert {
+	u.Set(stagerun.FieldStartedAt, v)
+	return u
+}
+
+// UpdateStartedAt sets the "started_at" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateStartedAt() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldStartedAt)
+	return u
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (u *StageRunUpsert) ClearStartedAt() *StageRunUpsert {
+	u.SetNull(stagerun.FieldStartedAt)
+	return u
+}
+
+// SetEndedAt sets the "ended_at" field.
+func (u *StageRunUpsert) SetEndedAt(v time.Time) *StageRunUpsert {
+	u.Set(stagerun.FieldEndedAt, v)
+	return u
+}
+
+// UpdateEndedAt sets the "ended_at" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateEndedAt() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldEndedAt)
+	return u
+}
+
+// ClearEndedAt clears the value of the "ended_at" field.
+func (u *StageRunUpsert) ClearEndedAt() *StageRunUpsert {
+	u.SetNull(stagerun.FieldEndedAt)
+	return u
+}
+
+// SetLastGrantAt sets the "last_grant_at" field.
+func (u *StageRunUpsert) SetLastGrantAt(v time.Time) *StageRunUpsert {
+	u.Set(stagerun.FieldLastGrantAt, v)
+	return u
+}
+
+// UpdateLastGrantAt sets the "last_grant_at" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateLastGrantAt() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldLastGrantAt)
+	return u
+}
+
+// ClearLastGrantAt clears the value of the "last_grant_at" field.
+func (u *StageRunUpsert) ClearLastGrantAt() *StageRunUpsert {
+	u.SetNull(stagerun.FieldLastGrantAt)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.StageRun.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(stagerun.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *StageRunUpsertOne) UpdateNewValues() *StageRunUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(stagerun.FieldID)
+		}
+		if _, exists := u.create.mutation.TaskID(); exists {
+			s.SetIgnore(stagerun.FieldTaskID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(stagerun.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.StageRun.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *StageRunUpsertOne) Ignore() *StageRunUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *StageRunUpsertOne) DoNothing() *StageRunUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the StageRunCreate.OnConflict
+// documentation for more info.
+func (u *StageRunUpsertOne) Update(set func(*StageRunUpsert)) *StageRunUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&StageRunUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetStage sets the "stage" field.
+func (u *StageRunUpsertOne) SetStage(v string) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetStage(v)
+	})
+}
+
+// UpdateStage sets the "stage" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateStage() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateStage()
+	})
+}
+
+// SetSessionID sets the "session_id" field.
+func (u *StageRunUpsertOne) SetSessionID(v string) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetSessionID(v)
+	})
+}
+
+// UpdateSessionID sets the "session_id" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateSessionID() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateSessionID()
+	})
+}
+
+// ClearSessionID clears the value of the "session_id" field.
+func (u *StageRunUpsertOne) ClearSessionID() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearSessionID()
+	})
+}
+
+// SetSessionName sets the "session_name" field.
+func (u *StageRunUpsertOne) SetSessionName(v string) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetSessionName(v)
+	})
+}
+
+// UpdateSessionName sets the "session_name" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateSessionName() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateSessionName()
+	})
+}
+
+// ClearSessionName clears the value of the "session_name" field.
+func (u *StageRunUpsertOne) ClearSessionName() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearSessionName()
+	})
+}
+
+// SetPid sets the "pid" field.
+func (u *StageRunUpsertOne) SetPid(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetPid(v)
+	})
+}
+
+// AddPid adds v to the "pid" field.
+func (u *StageRunUpsertOne) AddPid(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddPid(v)
+	})
+}
+
+// UpdatePid sets the "pid" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdatePid() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdatePid()
+	})
+}
+
+// ClearPid clears the value of the "pid" field.
+func (u *StageRunUpsertOne) ClearPid() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearPid()
+	})
+}
+
+// SetStatus sets the "status" field.
+func (u *StageRunUpsertOne) SetStatus(v string) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetStatus(v)
+	})
+}
+
+// UpdateStatus sets the "status" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateStatus() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateStatus()
+	})
+}
+
+// SetIteration sets the "iteration" field.
+func (u *StageRunUpsertOne) SetIteration(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetIteration(v)
+	})
+}
+
+// AddIteration adds v to the "iteration" field.
+func (u *StageRunUpsertOne) AddIteration(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddIteration(v)
+	})
+}
+
+// UpdateIteration sets the "iteration" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateIteration() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateIteration()
+	})
+}
+
+// SetOutput sets the "output" field.
+func (u *StageRunUpsertOne) SetOutput(v map[string]interface{}) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetOutput(v)
+	})
+}
+
+// UpdateOutput sets the "output" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateOutput() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateOutput()
+	})
+}
+
+// ClearOutput clears the value of the "output" field.
+func (u *StageRunUpsertOne) ClearOutput() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearOutput()
+	})
+}
+
+// SetTokensUsed sets the "tokens_used" field.
+func (u *StageRunUpsertOne) SetTokensUsed(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetTokensUsed(v)
+	})
+}
+
+// AddTokensUsed adds v to the "tokens_used" field.
+func (u *StageRunUpsertOne) AddTokensUsed(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddTokensUsed(v)
+	})
+}
+
+// UpdateTokensUsed sets the "tokens_used" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateTokensUsed() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateTokensUsed()
+	})
+}
+
+// SetCostCents sets the "cost_cents" field.
+func (u *StageRunUpsertOne) SetCostCents(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetCostCents(v)
+	})
+}
+
+// AddCostCents adds v to the "cost_cents" field.
+func (u *StageRunUpsertOne) AddCostCents(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddCostCents(v)
+	})
+}
+
+// UpdateCostCents sets the "cost_cents" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateCostCents() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateCostCents()
+	})
+}
+
+// SetStartedAt sets the "started_at" field.
+func (u *StageRunUpsertOne) SetStartedAt(v time.Time) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetStartedAt(v)
+	})
+}
+
+// UpdateStartedAt sets the "started_at" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateStartedAt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateStartedAt()
+	})
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (u *StageRunUpsertOne) ClearStartedAt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearStartedAt()
+	})
+}
+
+// SetEndedAt sets the "ended_at" field.
+func (u *StageRunUpsertOne) SetEndedAt(v time.Time) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetEndedAt(v)
+	})
+}
+
+// UpdateEndedAt sets the "ended_at" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateEndedAt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateEndedAt()
+	})
+}
+
+// ClearEndedAt clears the value of the "ended_at" field.
+func (u *StageRunUpsertOne) ClearEndedAt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearEndedAt()
+	})
+}
+
+// SetLastGrantAt sets the "last_grant_at" field.
+func (u *StageRunUpsertOne) SetLastGrantAt(v time.Time) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetLastGrantAt(v)
+	})
+}
+
+// UpdateLastGrantAt sets the "last_grant_at" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateLastGrantAt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateLastGrantAt()
+	})
+}
+
+// ClearLastGrantAt clears the value of the "last_grant_at" field.
+func (u *StageRunUpsertOne) ClearLastGrantAt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearLastGrantAt()
+	})
+}
+
+// Exec executes the query.
+func (u *StageRunUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for StageRunCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *StageRunUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *StageRunUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: StageRunUpsertOne.ID is not supported by MySQL driver. Use StageRunUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *StageRunUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // StageRunCreateBulk is the builder for creating many StageRun entities in bulk.
 type StageRunCreateBulk struct {
 	config
 	err      error
 	builders []*StageRunCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the StageRun entities in the database.
@@ -460,6 +1061,7 @@ func (_c *StageRunCreateBulk) Save(ctx context.Context) ([]*StageRun, error) {
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -506,6 +1108,371 @@ func (_c *StageRunCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *StageRunCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.StageRun.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.StageRunUpsert) {
+//			SetTaskID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *StageRunCreateBulk) OnConflict(opts ...sql.ConflictOption) *StageRunUpsertBulk {
+	_c.conflict = opts
+	return &StageRunUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.StageRun.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *StageRunCreateBulk) OnConflictColumns(columns ...string) *StageRunUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &StageRunUpsertBulk{
+		create: _c,
+	}
+}
+
+// StageRunUpsertBulk is the builder for "upsert"-ing
+// a bulk of StageRun nodes.
+type StageRunUpsertBulk struct {
+	create *StageRunCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.StageRun.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(stagerun.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *StageRunUpsertBulk) UpdateNewValues() *StageRunUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(stagerun.FieldID)
+			}
+			if _, exists := b.mutation.TaskID(); exists {
+				s.SetIgnore(stagerun.FieldTaskID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(stagerun.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.StageRun.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *StageRunUpsertBulk) Ignore() *StageRunUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *StageRunUpsertBulk) DoNothing() *StageRunUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the StageRunCreateBulk.OnConflict
+// documentation for more info.
+func (u *StageRunUpsertBulk) Update(set func(*StageRunUpsert)) *StageRunUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&StageRunUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetStage sets the "stage" field.
+func (u *StageRunUpsertBulk) SetStage(v string) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetStage(v)
+	})
+}
+
+// UpdateStage sets the "stage" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateStage() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateStage()
+	})
+}
+
+// SetSessionID sets the "session_id" field.
+func (u *StageRunUpsertBulk) SetSessionID(v string) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetSessionID(v)
+	})
+}
+
+// UpdateSessionID sets the "session_id" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateSessionID() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateSessionID()
+	})
+}
+
+// ClearSessionID clears the value of the "session_id" field.
+func (u *StageRunUpsertBulk) ClearSessionID() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearSessionID()
+	})
+}
+
+// SetSessionName sets the "session_name" field.
+func (u *StageRunUpsertBulk) SetSessionName(v string) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetSessionName(v)
+	})
+}
+
+// UpdateSessionName sets the "session_name" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateSessionName() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateSessionName()
+	})
+}
+
+// ClearSessionName clears the value of the "session_name" field.
+func (u *StageRunUpsertBulk) ClearSessionName() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearSessionName()
+	})
+}
+
+// SetPid sets the "pid" field.
+func (u *StageRunUpsertBulk) SetPid(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetPid(v)
+	})
+}
+
+// AddPid adds v to the "pid" field.
+func (u *StageRunUpsertBulk) AddPid(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddPid(v)
+	})
+}
+
+// UpdatePid sets the "pid" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdatePid() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdatePid()
+	})
+}
+
+// ClearPid clears the value of the "pid" field.
+func (u *StageRunUpsertBulk) ClearPid() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearPid()
+	})
+}
+
+// SetStatus sets the "status" field.
+func (u *StageRunUpsertBulk) SetStatus(v string) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetStatus(v)
+	})
+}
+
+// UpdateStatus sets the "status" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateStatus() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateStatus()
+	})
+}
+
+// SetIteration sets the "iteration" field.
+func (u *StageRunUpsertBulk) SetIteration(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetIteration(v)
+	})
+}
+
+// AddIteration adds v to the "iteration" field.
+func (u *StageRunUpsertBulk) AddIteration(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddIteration(v)
+	})
+}
+
+// UpdateIteration sets the "iteration" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateIteration() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateIteration()
+	})
+}
+
+// SetOutput sets the "output" field.
+func (u *StageRunUpsertBulk) SetOutput(v map[string]interface{}) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetOutput(v)
+	})
+}
+
+// UpdateOutput sets the "output" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateOutput() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateOutput()
+	})
+}
+
+// ClearOutput clears the value of the "output" field.
+func (u *StageRunUpsertBulk) ClearOutput() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearOutput()
+	})
+}
+
+// SetTokensUsed sets the "tokens_used" field.
+func (u *StageRunUpsertBulk) SetTokensUsed(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetTokensUsed(v)
+	})
+}
+
+// AddTokensUsed adds v to the "tokens_used" field.
+func (u *StageRunUpsertBulk) AddTokensUsed(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddTokensUsed(v)
+	})
+}
+
+// UpdateTokensUsed sets the "tokens_used" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateTokensUsed() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateTokensUsed()
+	})
+}
+
+// SetCostCents sets the "cost_cents" field.
+func (u *StageRunUpsertBulk) SetCostCents(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetCostCents(v)
+	})
+}
+
+// AddCostCents adds v to the "cost_cents" field.
+func (u *StageRunUpsertBulk) AddCostCents(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddCostCents(v)
+	})
+}
+
+// UpdateCostCents sets the "cost_cents" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateCostCents() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateCostCents()
+	})
+}
+
+// SetStartedAt sets the "started_at" field.
+func (u *StageRunUpsertBulk) SetStartedAt(v time.Time) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetStartedAt(v)
+	})
+}
+
+// UpdateStartedAt sets the "started_at" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateStartedAt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateStartedAt()
+	})
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (u *StageRunUpsertBulk) ClearStartedAt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearStartedAt()
+	})
+}
+
+// SetEndedAt sets the "ended_at" field.
+func (u *StageRunUpsertBulk) SetEndedAt(v time.Time) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetEndedAt(v)
+	})
+}
+
+// UpdateEndedAt sets the "ended_at" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateEndedAt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateEndedAt()
+	})
+}
+
+// ClearEndedAt clears the value of the "ended_at" field.
+func (u *StageRunUpsertBulk) ClearEndedAt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearEndedAt()
+	})
+}
+
+// SetLastGrantAt sets the "last_grant_at" field.
+func (u *StageRunUpsertBulk) SetLastGrantAt(v time.Time) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetLastGrantAt(v)
+	})
+}
+
+// UpdateLastGrantAt sets the "last_grant_at" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateLastGrantAt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateLastGrantAt()
+	})
+}
+
+// ClearLastGrantAt clears the value of the "last_grant_at" field.
+func (u *StageRunUpsertBulk) ClearLastGrantAt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearLastGrantAt()
+	})
+}
+
+// Exec executes the query.
+func (u *StageRunUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the StageRunCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for StageRunCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *StageRunUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
@@ -18,6 +20,7 @@ type AgentCostTrendCreate struct {
 	config
 	mutation *AgentCostTrendMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetSessionID sets the "session_id" field.
@@ -162,6 +165,7 @@ func (_c *AgentCostTrendCreate) createSpec() (*AgentCostTrend, *sqlgraph.CreateS
 		_node = &AgentCostTrend{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(agentcosttrend.Table, sqlgraph.NewFieldSpec(agentcosttrend.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -193,11 +197,342 @@ func (_c *AgentCostTrendCreate) createSpec() (*AgentCostTrend, *sqlgraph.CreateS
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.AgentCostTrend.Create().
+//		SetSessionID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.AgentCostTrendUpsert) {
+//			SetSessionID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *AgentCostTrendCreate) OnConflict(opts ...sql.ConflictOption) *AgentCostTrendUpsertOne {
+	_c.conflict = opts
+	return &AgentCostTrendUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.AgentCostTrend.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *AgentCostTrendCreate) OnConflictColumns(columns ...string) *AgentCostTrendUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &AgentCostTrendUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// AgentCostTrendUpsertOne is the builder for "upsert"-ing
+	//  one AgentCostTrend node.
+	AgentCostTrendUpsertOne struct {
+		create *AgentCostTrendCreate
+	}
+
+	// AgentCostTrendUpsert is the "OnConflict" setter.
+	AgentCostTrendUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetSessionID sets the "session_id" field.
+func (u *AgentCostTrendUpsert) SetSessionID(v string) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldSessionID, v)
+	return u
+}
+
+// UpdateSessionID sets the "session_id" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateSessionID() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldSessionID)
+	return u
+}
+
+// SetModel sets the "model" field.
+func (u *AgentCostTrendUpsert) SetModel(v string) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldModel, v)
+	return u
+}
+
+// UpdateModel sets the "model" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateModel() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldModel)
+	return u
+}
+
+// SetInputTokens sets the "input_tokens" field.
+func (u *AgentCostTrendUpsert) SetInputTokens(v int) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldInputTokens, v)
+	return u
+}
+
+// UpdateInputTokens sets the "input_tokens" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateInputTokens() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldInputTokens)
+	return u
+}
+
+// AddInputTokens adds v to the "input_tokens" field.
+func (u *AgentCostTrendUpsert) AddInputTokens(v int) *AgentCostTrendUpsert {
+	u.Add(agentcosttrend.FieldInputTokens, v)
+	return u
+}
+
+// SetOutputTokens sets the "output_tokens" field.
+func (u *AgentCostTrendUpsert) SetOutputTokens(v int) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldOutputTokens, v)
+	return u
+}
+
+// UpdateOutputTokens sets the "output_tokens" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateOutputTokens() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldOutputTokens)
+	return u
+}
+
+// AddOutputTokens adds v to the "output_tokens" field.
+func (u *AgentCostTrendUpsert) AddOutputTokens(v int) *AgentCostTrendUpsert {
+	u.Add(agentcosttrend.FieldOutputTokens, v)
+	return u
+}
+
+// SetCostUsd sets the "cost_usd" field.
+func (u *AgentCostTrendUpsert) SetCostUsd(v float64) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldCostUsd, v)
+	return u
+}
+
+// UpdateCostUsd sets the "cost_usd" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateCostUsd() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldCostUsd)
+	return u
+}
+
+// AddCostUsd adds v to the "cost_usd" field.
+func (u *AgentCostTrendUpsert) AddCostUsd(v float64) *AgentCostTrendUpsert {
+	u.Add(agentcosttrend.FieldCostUsd, v)
+	return u
+}
+
+// SetRecordedAt sets the "recorded_at" field.
+func (u *AgentCostTrendUpsert) SetRecordedAt(v time.Time) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldRecordedAt, v)
+	return u
+}
+
+// UpdateRecordedAt sets the "recorded_at" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateRecordedAt() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldRecordedAt)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.AgentCostTrend.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(agentcosttrend.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *AgentCostTrendUpsertOne) UpdateNewValues() *AgentCostTrendUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(agentcosttrend.FieldID)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.AgentCostTrend.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *AgentCostTrendUpsertOne) Ignore() *AgentCostTrendUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *AgentCostTrendUpsertOne) DoNothing() *AgentCostTrendUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the AgentCostTrendCreate.OnConflict
+// documentation for more info.
+func (u *AgentCostTrendUpsertOne) Update(set func(*AgentCostTrendUpsert)) *AgentCostTrendUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&AgentCostTrendUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetSessionID sets the "session_id" field.
+func (u *AgentCostTrendUpsertOne) SetSessionID(v string) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetSessionID(v)
+	})
+}
+
+// UpdateSessionID sets the "session_id" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateSessionID() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateSessionID()
+	})
+}
+
+// SetModel sets the "model" field.
+func (u *AgentCostTrendUpsertOne) SetModel(v string) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetModel(v)
+	})
+}
+
+// UpdateModel sets the "model" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateModel() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateModel()
+	})
+}
+
+// SetInputTokens sets the "input_tokens" field.
+func (u *AgentCostTrendUpsertOne) SetInputTokens(v int) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetInputTokens(v)
+	})
+}
+
+// AddInputTokens adds v to the "input_tokens" field.
+func (u *AgentCostTrendUpsertOne) AddInputTokens(v int) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.AddInputTokens(v)
+	})
+}
+
+// UpdateInputTokens sets the "input_tokens" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateInputTokens() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateInputTokens()
+	})
+}
+
+// SetOutputTokens sets the "output_tokens" field.
+func (u *AgentCostTrendUpsertOne) SetOutputTokens(v int) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetOutputTokens(v)
+	})
+}
+
+// AddOutputTokens adds v to the "output_tokens" field.
+func (u *AgentCostTrendUpsertOne) AddOutputTokens(v int) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.AddOutputTokens(v)
+	})
+}
+
+// UpdateOutputTokens sets the "output_tokens" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateOutputTokens() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateOutputTokens()
+	})
+}
+
+// SetCostUsd sets the "cost_usd" field.
+func (u *AgentCostTrendUpsertOne) SetCostUsd(v float64) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetCostUsd(v)
+	})
+}
+
+// AddCostUsd adds v to the "cost_usd" field.
+func (u *AgentCostTrendUpsertOne) AddCostUsd(v float64) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.AddCostUsd(v)
+	})
+}
+
+// UpdateCostUsd sets the "cost_usd" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateCostUsd() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateCostUsd()
+	})
+}
+
+// SetRecordedAt sets the "recorded_at" field.
+func (u *AgentCostTrendUpsertOne) SetRecordedAt(v time.Time) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetRecordedAt(v)
+	})
+}
+
+// UpdateRecordedAt sets the "recorded_at" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateRecordedAt() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateRecordedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *AgentCostTrendUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for AgentCostTrendCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *AgentCostTrendUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *AgentCostTrendUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: AgentCostTrendUpsertOne.ID is not supported by MySQL driver. Use AgentCostTrendUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *AgentCostTrendUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // AgentCostTrendCreateBulk is the builder for creating many AgentCostTrend entities in bulk.
 type AgentCostTrendCreateBulk struct {
 	config
 	err      error
 	builders []*AgentCostTrendCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the AgentCostTrend entities in the database.
@@ -227,6 +562,7 @@ func (_c *AgentCostTrendCreateBulk) Save(ctx context.Context) ([]*AgentCostTrend
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -273,6 +609,225 @@ func (_c *AgentCostTrendCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *AgentCostTrendCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.AgentCostTrend.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.AgentCostTrendUpsert) {
+//			SetSessionID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *AgentCostTrendCreateBulk) OnConflict(opts ...sql.ConflictOption) *AgentCostTrendUpsertBulk {
+	_c.conflict = opts
+	return &AgentCostTrendUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.AgentCostTrend.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *AgentCostTrendCreateBulk) OnConflictColumns(columns ...string) *AgentCostTrendUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &AgentCostTrendUpsertBulk{
+		create: _c,
+	}
+}
+
+// AgentCostTrendUpsertBulk is the builder for "upsert"-ing
+// a bulk of AgentCostTrend nodes.
+type AgentCostTrendUpsertBulk struct {
+	create *AgentCostTrendCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.AgentCostTrend.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(agentcosttrend.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *AgentCostTrendUpsertBulk) UpdateNewValues() *AgentCostTrendUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(agentcosttrend.FieldID)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.AgentCostTrend.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *AgentCostTrendUpsertBulk) Ignore() *AgentCostTrendUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *AgentCostTrendUpsertBulk) DoNothing() *AgentCostTrendUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the AgentCostTrendCreateBulk.OnConflict
+// documentation for more info.
+func (u *AgentCostTrendUpsertBulk) Update(set func(*AgentCostTrendUpsert)) *AgentCostTrendUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&AgentCostTrendUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetSessionID sets the "session_id" field.
+func (u *AgentCostTrendUpsertBulk) SetSessionID(v string) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetSessionID(v)
+	})
+}
+
+// UpdateSessionID sets the "session_id" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateSessionID() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateSessionID()
+	})
+}
+
+// SetModel sets the "model" field.
+func (u *AgentCostTrendUpsertBulk) SetModel(v string) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetModel(v)
+	})
+}
+
+// UpdateModel sets the "model" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateModel() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateModel()
+	})
+}
+
+// SetInputTokens sets the "input_tokens" field.
+func (u *AgentCostTrendUpsertBulk) SetInputTokens(v int) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetInputTokens(v)
+	})
+}
+
+// AddInputTokens adds v to the "input_tokens" field.
+func (u *AgentCostTrendUpsertBulk) AddInputTokens(v int) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.AddInputTokens(v)
+	})
+}
+
+// UpdateInputTokens sets the "input_tokens" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateInputTokens() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateInputTokens()
+	})
+}
+
+// SetOutputTokens sets the "output_tokens" field.
+func (u *AgentCostTrendUpsertBulk) SetOutputTokens(v int) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetOutputTokens(v)
+	})
+}
+
+// AddOutputTokens adds v to the "output_tokens" field.
+func (u *AgentCostTrendUpsertBulk) AddOutputTokens(v int) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.AddOutputTokens(v)
+	})
+}
+
+// UpdateOutputTokens sets the "output_tokens" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateOutputTokens() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateOutputTokens()
+	})
+}
+
+// SetCostUsd sets the "cost_usd" field.
+func (u *AgentCostTrendUpsertBulk) SetCostUsd(v float64) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetCostUsd(v)
+	})
+}
+
+// AddCostUsd adds v to the "cost_usd" field.
+func (u *AgentCostTrendUpsertBulk) AddCostUsd(v float64) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.AddCostUsd(v)
+	})
+}
+
+// UpdateCostUsd sets the "cost_usd" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateCostUsd() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateCostUsd()
+	})
+}
+
+// SetRecordedAt sets the "recorded_at" field.
+func (u *AgentCostTrendUpsertBulk) SetRecordedAt(v time.Time) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetRecordedAt(v)
+	})
+}
+
+// UpdateRecordedAt sets the "recorded_at" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateRecordedAt() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateRecordedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *AgentCostTrendUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the AgentCostTrendCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for AgentCostTrendCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *AgentCostTrendUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

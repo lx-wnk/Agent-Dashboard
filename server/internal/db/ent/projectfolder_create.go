@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
@@ -19,6 +21,7 @@ type ProjectFolderCreate struct {
 	config
 	mutation *ProjectFolderMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetPath sets the "path" field.
@@ -181,6 +184,7 @@ func (_c *ProjectFolderCreate) createSpec() (*ProjectFolder, *sqlgraph.CreateSpe
 		_node = &ProjectFolder{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(projectfolder.Table, sqlgraph.NewFieldSpec(projectfolder.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -221,11 +225,241 @@ func (_c *ProjectFolderCreate) createSpec() (*ProjectFolder, *sqlgraph.CreateSpe
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.ProjectFolder.Create().
+//		SetPath(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.ProjectFolderUpsert) {
+//			SetPath(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *ProjectFolderCreate) OnConflict(opts ...sql.ConflictOption) *ProjectFolderUpsertOne {
+	_c.conflict = opts
+	return &ProjectFolderUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.ProjectFolder.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *ProjectFolderCreate) OnConflictColumns(columns ...string) *ProjectFolderUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &ProjectFolderUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// ProjectFolderUpsertOne is the builder for "upsert"-ing
+	//  one ProjectFolder node.
+	ProjectFolderUpsertOne struct {
+		create *ProjectFolderCreate
+	}
+
+	// ProjectFolderUpsert is the "OnConflict" setter.
+	ProjectFolderUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetPath sets the "path" field.
+func (u *ProjectFolderUpsert) SetPath(v string) *ProjectFolderUpsert {
+	u.Set(projectfolder.FieldPath, v)
+	return u
+}
+
+// UpdatePath sets the "path" field to the value that was provided on create.
+func (u *ProjectFolderUpsert) UpdatePath() *ProjectFolderUpsert {
+	u.SetExcluded(projectfolder.FieldPath)
+	return u
+}
+
+// SetLabel sets the "label" field.
+func (u *ProjectFolderUpsert) SetLabel(v string) *ProjectFolderUpsert {
+	u.Set(projectfolder.FieldLabel, v)
+	return u
+}
+
+// UpdateLabel sets the "label" field to the value that was provided on create.
+func (u *ProjectFolderUpsert) UpdateLabel() *ProjectFolderUpsert {
+	u.SetExcluded(projectfolder.FieldLabel)
+	return u
+}
+
+// ClearLabel clears the value of the "label" field.
+func (u *ProjectFolderUpsert) ClearLabel() *ProjectFolderUpsert {
+	u.SetNull(projectfolder.FieldLabel)
+	return u
+}
+
+// SetIsDefault sets the "is_default" field.
+func (u *ProjectFolderUpsert) SetIsDefault(v bool) *ProjectFolderUpsert {
+	u.Set(projectfolder.FieldIsDefault, v)
+	return u
+}
+
+// UpdateIsDefault sets the "is_default" field to the value that was provided on create.
+func (u *ProjectFolderUpsert) UpdateIsDefault() *ProjectFolderUpsert {
+	u.SetExcluded(projectfolder.FieldIsDefault)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.ProjectFolder.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(projectfolder.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *ProjectFolderUpsertOne) UpdateNewValues() *ProjectFolderUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(projectfolder.FieldID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(projectfolder.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.ProjectFolder.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *ProjectFolderUpsertOne) Ignore() *ProjectFolderUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *ProjectFolderUpsertOne) DoNothing() *ProjectFolderUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the ProjectFolderCreate.OnConflict
+// documentation for more info.
+func (u *ProjectFolderUpsertOne) Update(set func(*ProjectFolderUpsert)) *ProjectFolderUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&ProjectFolderUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetPath sets the "path" field.
+func (u *ProjectFolderUpsertOne) SetPath(v string) *ProjectFolderUpsertOne {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.SetPath(v)
+	})
+}
+
+// UpdatePath sets the "path" field to the value that was provided on create.
+func (u *ProjectFolderUpsertOne) UpdatePath() *ProjectFolderUpsertOne {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.UpdatePath()
+	})
+}
+
+// SetLabel sets the "label" field.
+func (u *ProjectFolderUpsertOne) SetLabel(v string) *ProjectFolderUpsertOne {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.SetLabel(v)
+	})
+}
+
+// UpdateLabel sets the "label" field to the value that was provided on create.
+func (u *ProjectFolderUpsertOne) UpdateLabel() *ProjectFolderUpsertOne {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.UpdateLabel()
+	})
+}
+
+// ClearLabel clears the value of the "label" field.
+func (u *ProjectFolderUpsertOne) ClearLabel() *ProjectFolderUpsertOne {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.ClearLabel()
+	})
+}
+
+// SetIsDefault sets the "is_default" field.
+func (u *ProjectFolderUpsertOne) SetIsDefault(v bool) *ProjectFolderUpsertOne {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.SetIsDefault(v)
+	})
+}
+
+// UpdateIsDefault sets the "is_default" field to the value that was provided on create.
+func (u *ProjectFolderUpsertOne) UpdateIsDefault() *ProjectFolderUpsertOne {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.UpdateIsDefault()
+	})
+}
+
+// Exec executes the query.
+func (u *ProjectFolderUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for ProjectFolderCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *ProjectFolderUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *ProjectFolderUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: ProjectFolderUpsertOne.ID is not supported by MySQL driver. Use ProjectFolderUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *ProjectFolderUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // ProjectFolderCreateBulk is the builder for creating many ProjectFolder entities in bulk.
 type ProjectFolderCreateBulk struct {
 	config
 	err      error
 	builders []*ProjectFolderCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the ProjectFolder entities in the database.
@@ -255,6 +489,7 @@ func (_c *ProjectFolderCreateBulk) Save(ctx context.Context) ([]*ProjectFolder, 
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -301,6 +536,172 @@ func (_c *ProjectFolderCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *ProjectFolderCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.ProjectFolder.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.ProjectFolderUpsert) {
+//			SetPath(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *ProjectFolderCreateBulk) OnConflict(opts ...sql.ConflictOption) *ProjectFolderUpsertBulk {
+	_c.conflict = opts
+	return &ProjectFolderUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.ProjectFolder.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *ProjectFolderCreateBulk) OnConflictColumns(columns ...string) *ProjectFolderUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &ProjectFolderUpsertBulk{
+		create: _c,
+	}
+}
+
+// ProjectFolderUpsertBulk is the builder for "upsert"-ing
+// a bulk of ProjectFolder nodes.
+type ProjectFolderUpsertBulk struct {
+	create *ProjectFolderCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.ProjectFolder.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(projectfolder.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *ProjectFolderUpsertBulk) UpdateNewValues() *ProjectFolderUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(projectfolder.FieldID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(projectfolder.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.ProjectFolder.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *ProjectFolderUpsertBulk) Ignore() *ProjectFolderUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *ProjectFolderUpsertBulk) DoNothing() *ProjectFolderUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the ProjectFolderCreateBulk.OnConflict
+// documentation for more info.
+func (u *ProjectFolderUpsertBulk) Update(set func(*ProjectFolderUpsert)) *ProjectFolderUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&ProjectFolderUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetPath sets the "path" field.
+func (u *ProjectFolderUpsertBulk) SetPath(v string) *ProjectFolderUpsertBulk {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.SetPath(v)
+	})
+}
+
+// UpdatePath sets the "path" field to the value that was provided on create.
+func (u *ProjectFolderUpsertBulk) UpdatePath() *ProjectFolderUpsertBulk {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.UpdatePath()
+	})
+}
+
+// SetLabel sets the "label" field.
+func (u *ProjectFolderUpsertBulk) SetLabel(v string) *ProjectFolderUpsertBulk {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.SetLabel(v)
+	})
+}
+
+// UpdateLabel sets the "label" field to the value that was provided on create.
+func (u *ProjectFolderUpsertBulk) UpdateLabel() *ProjectFolderUpsertBulk {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.UpdateLabel()
+	})
+}
+
+// ClearLabel clears the value of the "label" field.
+func (u *ProjectFolderUpsertBulk) ClearLabel() *ProjectFolderUpsertBulk {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.ClearLabel()
+	})
+}
+
+// SetIsDefault sets the "is_default" field.
+func (u *ProjectFolderUpsertBulk) SetIsDefault(v bool) *ProjectFolderUpsertBulk {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.SetIsDefault(v)
+	})
+}
+
+// UpdateIsDefault sets the "is_default" field to the value that was provided on create.
+func (u *ProjectFolderUpsertBulk) UpdateIsDefault() *ProjectFolderUpsertBulk {
+	return u.Update(func(s *ProjectFolderUpsert) {
+		s.UpdateIsDefault()
+	})
+}
+
+// Exec executes the query.
+func (u *ProjectFolderUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the ProjectFolderCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for ProjectFolderCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *ProjectFolderUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

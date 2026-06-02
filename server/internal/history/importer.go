@@ -31,7 +31,7 @@ type ImportProgress struct {
 	Done      bool `json:"done"`
 }
 
-// Importer scans CLAUDE_PROJECTS_DIR, extracts per-session cost data, and bulk-inserts
+// Importer scans CLAUDE_PROJECTS_DIR, extracts per-session cost data, and upserts
 // into the agent_cost_trend table. Only one concurrent run is permitted per instance.
 type Importer struct {
 	costRepo  repo.AgentCostTrendRepo
@@ -133,10 +133,10 @@ func (imp *Importer) runImport(ctx context.Context, onProgress func(ImportProgre
 		reportProgress(false)
 	}
 
-	// Bulk-insert all collected rows.
+	// Upsert all collected rows — idempotent per session_id.
 	if len(rows) > 0 {
-		if err := imp.costRepo.BulkInsert(ctx, rows); err != nil {
-			slog.Warn("history.import: bulk insert failed", "err", err)
+		if err := imp.costRepo.Upsert(ctx, rows); err != nil {
+			slog.Warn("history.import: upsert failed", "err", err)
 			// Whole batch failed — reflect that in error count.
 			progress.Errors += len(rows)
 			progress.Imported = 0

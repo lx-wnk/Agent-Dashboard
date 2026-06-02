@@ -46,7 +46,7 @@ func newTestRouter(imp *histsvc.Importer) http.Handler {
 // noopRepo succeeds immediately without doing anything.
 type noopRepo struct{}
 
-func (n *noopRepo) BulkInsert(_ context.Context, _ []repo.AgentCostRow) error { return nil }
+func (n *noopRepo) Upsert(_ context.Context, _ []repo.AgentCostRow) error { return nil }
 func (n *noopRepo) ListByTimeRange(_ context.Context, _, _ time.Time) ([]*ent.AgentCostTrend, error) {
 	return nil, nil
 }

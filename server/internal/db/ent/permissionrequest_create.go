@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
@@ -19,6 +21,7 @@ type PermissionRequestCreate struct {
 	config
 	mutation *PermissionRequestMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetStageRunID sets the "stage_run_id" field.
@@ -200,6 +203,7 @@ func (_c *PermissionRequestCreate) createSpec() (*PermissionRequest, *sqlgraph.C
 		_node = &PermissionRequest{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(permissionrequest.Table, sqlgraph.NewFieldSpec(permissionrequest.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -248,11 +252,358 @@ func (_c *PermissionRequestCreate) createSpec() (*PermissionRequest, *sqlgraph.C
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.PermissionRequest.Create().
+//		SetStageRunID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.PermissionRequestUpsert) {
+//			SetStageRunID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *PermissionRequestCreate) OnConflict(opts ...sql.ConflictOption) *PermissionRequestUpsertOne {
+	_c.conflict = opts
+	return &PermissionRequestUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.PermissionRequest.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *PermissionRequestCreate) OnConflictColumns(columns ...string) *PermissionRequestUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &PermissionRequestUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// PermissionRequestUpsertOne is the builder for "upsert"-ing
+	//  one PermissionRequest node.
+	PermissionRequestUpsertOne struct {
+		create *PermissionRequestCreate
+	}
+
+	// PermissionRequestUpsert is the "OnConflict" setter.
+	PermissionRequestUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetTool sets the "tool" field.
+func (u *PermissionRequestUpsert) SetTool(v string) *PermissionRequestUpsert {
+	u.Set(permissionrequest.FieldTool, v)
+	return u
+}
+
+// UpdateTool sets the "tool" field to the value that was provided on create.
+func (u *PermissionRequestUpsert) UpdateTool() *PermissionRequestUpsert {
+	u.SetExcluded(permissionrequest.FieldTool)
+	return u
+}
+
+// SetPattern sets the "pattern" field.
+func (u *PermissionRequestUpsert) SetPattern(v string) *PermissionRequestUpsert {
+	u.Set(permissionrequest.FieldPattern, v)
+	return u
+}
+
+// UpdatePattern sets the "pattern" field to the value that was provided on create.
+func (u *PermissionRequestUpsert) UpdatePattern() *PermissionRequestUpsert {
+	u.SetExcluded(permissionrequest.FieldPattern)
+	return u
+}
+
+// ClearPattern clears the value of the "pattern" field.
+func (u *PermissionRequestUpsert) ClearPattern() *PermissionRequestUpsert {
+	u.SetNull(permissionrequest.FieldPattern)
+	return u
+}
+
+// SetReason sets the "reason" field.
+func (u *PermissionRequestUpsert) SetReason(v string) *PermissionRequestUpsert {
+	u.Set(permissionrequest.FieldReason, v)
+	return u
+}
+
+// UpdateReason sets the "reason" field to the value that was provided on create.
+func (u *PermissionRequestUpsert) UpdateReason() *PermissionRequestUpsert {
+	u.SetExcluded(permissionrequest.FieldReason)
+	return u
+}
+
+// ClearReason clears the value of the "reason" field.
+func (u *PermissionRequestUpsert) ClearReason() *PermissionRequestUpsert {
+	u.SetNull(permissionrequest.FieldReason)
+	return u
+}
+
+// SetOutcome sets the "outcome" field.
+func (u *PermissionRequestUpsert) SetOutcome(v string) *PermissionRequestUpsert {
+	u.Set(permissionrequest.FieldOutcome, v)
+	return u
+}
+
+// UpdateOutcome sets the "outcome" field to the value that was provided on create.
+func (u *PermissionRequestUpsert) UpdateOutcome() *PermissionRequestUpsert {
+	u.SetExcluded(permissionrequest.FieldOutcome)
+	return u
+}
+
+// ClearOutcome clears the value of the "outcome" field.
+func (u *PermissionRequestUpsert) ClearOutcome() *PermissionRequestUpsert {
+	u.SetNull(permissionrequest.FieldOutcome)
+	return u
+}
+
+// SetRequestedAt sets the "requested_at" field.
+func (u *PermissionRequestUpsert) SetRequestedAt(v time.Time) *PermissionRequestUpsert {
+	u.Set(permissionrequest.FieldRequestedAt, v)
+	return u
+}
+
+// UpdateRequestedAt sets the "requested_at" field to the value that was provided on create.
+func (u *PermissionRequestUpsert) UpdateRequestedAt() *PermissionRequestUpsert {
+	u.SetExcluded(permissionrequest.FieldRequestedAt)
+	return u
+}
+
+// SetResolvedAt sets the "resolved_at" field.
+func (u *PermissionRequestUpsert) SetResolvedAt(v time.Time) *PermissionRequestUpsert {
+	u.Set(permissionrequest.FieldResolvedAt, v)
+	return u
+}
+
+// UpdateResolvedAt sets the "resolved_at" field to the value that was provided on create.
+func (u *PermissionRequestUpsert) UpdateResolvedAt() *PermissionRequestUpsert {
+	u.SetExcluded(permissionrequest.FieldResolvedAt)
+	return u
+}
+
+// ClearResolvedAt clears the value of the "resolved_at" field.
+func (u *PermissionRequestUpsert) ClearResolvedAt() *PermissionRequestUpsert {
+	u.SetNull(permissionrequest.FieldResolvedAt)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.PermissionRequest.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(permissionrequest.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *PermissionRequestUpsertOne) UpdateNewValues() *PermissionRequestUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(permissionrequest.FieldID)
+		}
+		if _, exists := u.create.mutation.StageRunID(); exists {
+			s.SetIgnore(permissionrequest.FieldStageRunID)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.PermissionRequest.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *PermissionRequestUpsertOne) Ignore() *PermissionRequestUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *PermissionRequestUpsertOne) DoNothing() *PermissionRequestUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the PermissionRequestCreate.OnConflict
+// documentation for more info.
+func (u *PermissionRequestUpsertOne) Update(set func(*PermissionRequestUpsert)) *PermissionRequestUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&PermissionRequestUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetTool sets the "tool" field.
+func (u *PermissionRequestUpsertOne) SetTool(v string) *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetTool(v)
+	})
+}
+
+// UpdateTool sets the "tool" field to the value that was provided on create.
+func (u *PermissionRequestUpsertOne) UpdateTool() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateTool()
+	})
+}
+
+// SetPattern sets the "pattern" field.
+func (u *PermissionRequestUpsertOne) SetPattern(v string) *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetPattern(v)
+	})
+}
+
+// UpdatePattern sets the "pattern" field to the value that was provided on create.
+func (u *PermissionRequestUpsertOne) UpdatePattern() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdatePattern()
+	})
+}
+
+// ClearPattern clears the value of the "pattern" field.
+func (u *PermissionRequestUpsertOne) ClearPattern() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.ClearPattern()
+	})
+}
+
+// SetReason sets the "reason" field.
+func (u *PermissionRequestUpsertOne) SetReason(v string) *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetReason(v)
+	})
+}
+
+// UpdateReason sets the "reason" field to the value that was provided on create.
+func (u *PermissionRequestUpsertOne) UpdateReason() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateReason()
+	})
+}
+
+// ClearReason clears the value of the "reason" field.
+func (u *PermissionRequestUpsertOne) ClearReason() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.ClearReason()
+	})
+}
+
+// SetOutcome sets the "outcome" field.
+func (u *PermissionRequestUpsertOne) SetOutcome(v string) *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetOutcome(v)
+	})
+}
+
+// UpdateOutcome sets the "outcome" field to the value that was provided on create.
+func (u *PermissionRequestUpsertOne) UpdateOutcome() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateOutcome()
+	})
+}
+
+// ClearOutcome clears the value of the "outcome" field.
+func (u *PermissionRequestUpsertOne) ClearOutcome() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.ClearOutcome()
+	})
+}
+
+// SetRequestedAt sets the "requested_at" field.
+func (u *PermissionRequestUpsertOne) SetRequestedAt(v time.Time) *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetRequestedAt(v)
+	})
+}
+
+// UpdateRequestedAt sets the "requested_at" field to the value that was provided on create.
+func (u *PermissionRequestUpsertOne) UpdateRequestedAt() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateRequestedAt()
+	})
+}
+
+// SetResolvedAt sets the "resolved_at" field.
+func (u *PermissionRequestUpsertOne) SetResolvedAt(v time.Time) *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetResolvedAt(v)
+	})
+}
+
+// UpdateResolvedAt sets the "resolved_at" field to the value that was provided on create.
+func (u *PermissionRequestUpsertOne) UpdateResolvedAt() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateResolvedAt()
+	})
+}
+
+// ClearResolvedAt clears the value of the "resolved_at" field.
+func (u *PermissionRequestUpsertOne) ClearResolvedAt() *PermissionRequestUpsertOne {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.ClearResolvedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *PermissionRequestUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for PermissionRequestCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *PermissionRequestUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *PermissionRequestUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: PermissionRequestUpsertOne.ID is not supported by MySQL driver. Use PermissionRequestUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *PermissionRequestUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // PermissionRequestCreateBulk is the builder for creating many PermissionRequest entities in bulk.
 type PermissionRequestCreateBulk struct {
 	config
 	err      error
 	builders []*PermissionRequestCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the PermissionRequest entities in the database.
@@ -282,6 +633,7 @@ func (_c *PermissionRequestCreateBulk) Save(ctx context.Context) ([]*PermissionR
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -328,6 +680,235 @@ func (_c *PermissionRequestCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *PermissionRequestCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.PermissionRequest.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.PermissionRequestUpsert) {
+//			SetStageRunID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *PermissionRequestCreateBulk) OnConflict(opts ...sql.ConflictOption) *PermissionRequestUpsertBulk {
+	_c.conflict = opts
+	return &PermissionRequestUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.PermissionRequest.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *PermissionRequestCreateBulk) OnConflictColumns(columns ...string) *PermissionRequestUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &PermissionRequestUpsertBulk{
+		create: _c,
+	}
+}
+
+// PermissionRequestUpsertBulk is the builder for "upsert"-ing
+// a bulk of PermissionRequest nodes.
+type PermissionRequestUpsertBulk struct {
+	create *PermissionRequestCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.PermissionRequest.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(permissionrequest.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *PermissionRequestUpsertBulk) UpdateNewValues() *PermissionRequestUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(permissionrequest.FieldID)
+			}
+			if _, exists := b.mutation.StageRunID(); exists {
+				s.SetIgnore(permissionrequest.FieldStageRunID)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.PermissionRequest.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *PermissionRequestUpsertBulk) Ignore() *PermissionRequestUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *PermissionRequestUpsertBulk) DoNothing() *PermissionRequestUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the PermissionRequestCreateBulk.OnConflict
+// documentation for more info.
+func (u *PermissionRequestUpsertBulk) Update(set func(*PermissionRequestUpsert)) *PermissionRequestUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&PermissionRequestUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetTool sets the "tool" field.
+func (u *PermissionRequestUpsertBulk) SetTool(v string) *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetTool(v)
+	})
+}
+
+// UpdateTool sets the "tool" field to the value that was provided on create.
+func (u *PermissionRequestUpsertBulk) UpdateTool() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateTool()
+	})
+}
+
+// SetPattern sets the "pattern" field.
+func (u *PermissionRequestUpsertBulk) SetPattern(v string) *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetPattern(v)
+	})
+}
+
+// UpdatePattern sets the "pattern" field to the value that was provided on create.
+func (u *PermissionRequestUpsertBulk) UpdatePattern() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdatePattern()
+	})
+}
+
+// ClearPattern clears the value of the "pattern" field.
+func (u *PermissionRequestUpsertBulk) ClearPattern() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.ClearPattern()
+	})
+}
+
+// SetReason sets the "reason" field.
+func (u *PermissionRequestUpsertBulk) SetReason(v string) *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetReason(v)
+	})
+}
+
+// UpdateReason sets the "reason" field to the value that was provided on create.
+func (u *PermissionRequestUpsertBulk) UpdateReason() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateReason()
+	})
+}
+
+// ClearReason clears the value of the "reason" field.
+func (u *PermissionRequestUpsertBulk) ClearReason() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.ClearReason()
+	})
+}
+
+// SetOutcome sets the "outcome" field.
+func (u *PermissionRequestUpsertBulk) SetOutcome(v string) *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetOutcome(v)
+	})
+}
+
+// UpdateOutcome sets the "outcome" field to the value that was provided on create.
+func (u *PermissionRequestUpsertBulk) UpdateOutcome() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateOutcome()
+	})
+}
+
+// ClearOutcome clears the value of the "outcome" field.
+func (u *PermissionRequestUpsertBulk) ClearOutcome() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.ClearOutcome()
+	})
+}
+
+// SetRequestedAt sets the "requested_at" field.
+func (u *PermissionRequestUpsertBulk) SetRequestedAt(v time.Time) *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetRequestedAt(v)
+	})
+}
+
+// UpdateRequestedAt sets the "requested_at" field to the value that was provided on create.
+func (u *PermissionRequestUpsertBulk) UpdateRequestedAt() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateRequestedAt()
+	})
+}
+
+// SetResolvedAt sets the "resolved_at" field.
+func (u *PermissionRequestUpsertBulk) SetResolvedAt(v time.Time) *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.SetResolvedAt(v)
+	})
+}
+
+// UpdateResolvedAt sets the "resolved_at" field to the value that was provided on create.
+func (u *PermissionRequestUpsertBulk) UpdateResolvedAt() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.UpdateResolvedAt()
+	})
+}
+
+// ClearResolvedAt clears the value of the "resolved_at" field.
+func (u *PermissionRequestUpsertBulk) ClearResolvedAt() *PermissionRequestUpsertBulk {
+	return u.Update(func(s *PermissionRequestUpsert) {
+		s.ClearResolvedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *PermissionRequestUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the PermissionRequestCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for PermissionRequestCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *PermissionRequestUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

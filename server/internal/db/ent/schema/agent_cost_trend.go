@@ -19,13 +19,14 @@ func (AgentCostTrend) Fields() []ent.Field {
 		field.Int("input_tokens"),
 		field.Int("output_tokens"),
 		field.Float("cost_usd"),
-		field.Time("recorded_at").Default(time.Now).Immutable(),
+		// recorded_at is NOT Immutable so upserts can refresh it to the latest session activity time.
+		field.Time("recorded_at").Default(time.Now),
 	}
 }
 
 func (AgentCostTrend) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("session_id"),
+		index.Fields("session_id").Unique(),
 		index.Fields("recorded_at"),
 	}
 }

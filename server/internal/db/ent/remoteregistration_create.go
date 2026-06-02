@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
@@ -18,6 +20,7 @@ type RemoteRegistrationCreate struct {
 	config
 	mutation *RemoteRegistrationMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetUserID sets the "user_id" field.
@@ -163,6 +166,7 @@ func (_c *RemoteRegistrationCreate) createSpec() (*RemoteRegistration, *sqlgraph
 		_node = &RemoteRegistration{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(remoteregistration.Table, sqlgraph.NewFieldSpec(remoteregistration.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -190,11 +194,280 @@ func (_c *RemoteRegistrationCreate) createSpec() (*RemoteRegistration, *sqlgraph
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.RemoteRegistration.Create().
+//		SetUserID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.RemoteRegistrationUpsert) {
+//			SetUserID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *RemoteRegistrationCreate) OnConflict(opts ...sql.ConflictOption) *RemoteRegistrationUpsertOne {
+	_c.conflict = opts
+	return &RemoteRegistrationUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.RemoteRegistration.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *RemoteRegistrationCreate) OnConflictColumns(columns ...string) *RemoteRegistrationUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &RemoteRegistrationUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// RemoteRegistrationUpsertOne is the builder for "upsert"-ing
+	//  one RemoteRegistration node.
+	RemoteRegistrationUpsertOne struct {
+		create *RemoteRegistrationCreate
+	}
+
+	// RemoteRegistrationUpsert is the "OnConflict" setter.
+	RemoteRegistrationUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetUserID sets the "user_id" field.
+func (u *RemoteRegistrationUpsert) SetUserID(v string) *RemoteRegistrationUpsert {
+	u.Set(remoteregistration.FieldUserID, v)
+	return u
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsert) UpdateUserID() *RemoteRegistrationUpsert {
+	u.SetExcluded(remoteregistration.FieldUserID)
+	return u
+}
+
+// SetURL sets the "url" field.
+func (u *RemoteRegistrationUpsert) SetURL(v string) *RemoteRegistrationUpsert {
+	u.Set(remoteregistration.FieldURL, v)
+	return u
+}
+
+// UpdateURL sets the "url" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsert) UpdateURL() *RemoteRegistrationUpsert {
+	u.SetExcluded(remoteregistration.FieldURL)
+	return u
+}
+
+// SetName sets the "name" field.
+func (u *RemoteRegistrationUpsert) SetName(v string) *RemoteRegistrationUpsert {
+	u.Set(remoteregistration.FieldName, v)
+	return u
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsert) UpdateName() *RemoteRegistrationUpsert {
+	u.SetExcluded(remoteregistration.FieldName)
+	return u
+}
+
+// ClearName clears the value of the "name" field.
+func (u *RemoteRegistrationUpsert) ClearName() *RemoteRegistrationUpsert {
+	u.SetNull(remoteregistration.FieldName)
+	return u
+}
+
+// SetBearerKey sets the "bearer_key" field.
+func (u *RemoteRegistrationUpsert) SetBearerKey(v string) *RemoteRegistrationUpsert {
+	u.Set(remoteregistration.FieldBearerKey, v)
+	return u
+}
+
+// UpdateBearerKey sets the "bearer_key" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsert) UpdateBearerKey() *RemoteRegistrationUpsert {
+	u.SetExcluded(remoteregistration.FieldBearerKey)
+	return u
+}
+
+// ClearBearerKey clears the value of the "bearer_key" field.
+func (u *RemoteRegistrationUpsert) ClearBearerKey() *RemoteRegistrationUpsert {
+	u.SetNull(remoteregistration.FieldBearerKey)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.RemoteRegistration.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(remoteregistration.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *RemoteRegistrationUpsertOne) UpdateNewValues() *RemoteRegistrationUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(remoteregistration.FieldID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(remoteregistration.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.RemoteRegistration.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *RemoteRegistrationUpsertOne) Ignore() *RemoteRegistrationUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *RemoteRegistrationUpsertOne) DoNothing() *RemoteRegistrationUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the RemoteRegistrationCreate.OnConflict
+// documentation for more info.
+func (u *RemoteRegistrationUpsertOne) Update(set func(*RemoteRegistrationUpsert)) *RemoteRegistrationUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&RemoteRegistrationUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetUserID sets the "user_id" field.
+func (u *RemoteRegistrationUpsertOne) SetUserID(v string) *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.SetUserID(v)
+	})
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsertOne) UpdateUserID() *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.UpdateUserID()
+	})
+}
+
+// SetURL sets the "url" field.
+func (u *RemoteRegistrationUpsertOne) SetURL(v string) *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.SetURL(v)
+	})
+}
+
+// UpdateURL sets the "url" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsertOne) UpdateURL() *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.UpdateURL()
+	})
+}
+
+// SetName sets the "name" field.
+func (u *RemoteRegistrationUpsertOne) SetName(v string) *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.SetName(v)
+	})
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsertOne) UpdateName() *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.UpdateName()
+	})
+}
+
+// ClearName clears the value of the "name" field.
+func (u *RemoteRegistrationUpsertOne) ClearName() *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.ClearName()
+	})
+}
+
+// SetBearerKey sets the "bearer_key" field.
+func (u *RemoteRegistrationUpsertOne) SetBearerKey(v string) *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.SetBearerKey(v)
+	})
+}
+
+// UpdateBearerKey sets the "bearer_key" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsertOne) UpdateBearerKey() *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.UpdateBearerKey()
+	})
+}
+
+// ClearBearerKey clears the value of the "bearer_key" field.
+func (u *RemoteRegistrationUpsertOne) ClearBearerKey() *RemoteRegistrationUpsertOne {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.ClearBearerKey()
+	})
+}
+
+// Exec executes the query.
+func (u *RemoteRegistrationUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for RemoteRegistrationCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *RemoteRegistrationUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *RemoteRegistrationUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: RemoteRegistrationUpsertOne.ID is not supported by MySQL driver. Use RemoteRegistrationUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *RemoteRegistrationUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // RemoteRegistrationCreateBulk is the builder for creating many RemoteRegistration entities in bulk.
 type RemoteRegistrationCreateBulk struct {
 	config
 	err      error
 	builders []*RemoteRegistrationCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the RemoteRegistration entities in the database.
@@ -224,6 +497,7 @@ func (_c *RemoteRegistrationCreateBulk) Save(ctx context.Context) ([]*RemoteRegi
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -270,6 +544,193 @@ func (_c *RemoteRegistrationCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *RemoteRegistrationCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.RemoteRegistration.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.RemoteRegistrationUpsert) {
+//			SetUserID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *RemoteRegistrationCreateBulk) OnConflict(opts ...sql.ConflictOption) *RemoteRegistrationUpsertBulk {
+	_c.conflict = opts
+	return &RemoteRegistrationUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.RemoteRegistration.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *RemoteRegistrationCreateBulk) OnConflictColumns(columns ...string) *RemoteRegistrationUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &RemoteRegistrationUpsertBulk{
+		create: _c,
+	}
+}
+
+// RemoteRegistrationUpsertBulk is the builder for "upsert"-ing
+// a bulk of RemoteRegistration nodes.
+type RemoteRegistrationUpsertBulk struct {
+	create *RemoteRegistrationCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.RemoteRegistration.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(remoteregistration.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *RemoteRegistrationUpsertBulk) UpdateNewValues() *RemoteRegistrationUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(remoteregistration.FieldID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(remoteregistration.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.RemoteRegistration.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *RemoteRegistrationUpsertBulk) Ignore() *RemoteRegistrationUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *RemoteRegistrationUpsertBulk) DoNothing() *RemoteRegistrationUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the RemoteRegistrationCreateBulk.OnConflict
+// documentation for more info.
+func (u *RemoteRegistrationUpsertBulk) Update(set func(*RemoteRegistrationUpsert)) *RemoteRegistrationUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&RemoteRegistrationUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetUserID sets the "user_id" field.
+func (u *RemoteRegistrationUpsertBulk) SetUserID(v string) *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.SetUserID(v)
+	})
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsertBulk) UpdateUserID() *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.UpdateUserID()
+	})
+}
+
+// SetURL sets the "url" field.
+func (u *RemoteRegistrationUpsertBulk) SetURL(v string) *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.SetURL(v)
+	})
+}
+
+// UpdateURL sets the "url" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsertBulk) UpdateURL() *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.UpdateURL()
+	})
+}
+
+// SetName sets the "name" field.
+func (u *RemoteRegistrationUpsertBulk) SetName(v string) *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.SetName(v)
+	})
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsertBulk) UpdateName() *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.UpdateName()
+	})
+}
+
+// ClearName clears the value of the "name" field.
+func (u *RemoteRegistrationUpsertBulk) ClearName() *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.ClearName()
+	})
+}
+
+// SetBearerKey sets the "bearer_key" field.
+func (u *RemoteRegistrationUpsertBulk) SetBearerKey(v string) *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.SetBearerKey(v)
+	})
+}
+
+// UpdateBearerKey sets the "bearer_key" field to the value that was provided on create.
+func (u *RemoteRegistrationUpsertBulk) UpdateBearerKey() *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.UpdateBearerKey()
+	})
+}
+
+// ClearBearerKey clears the value of the "bearer_key" field.
+func (u *RemoteRegistrationUpsertBulk) ClearBearerKey() *RemoteRegistrationUpsertBulk {
+	return u.Update(func(s *RemoteRegistrationUpsert) {
+		s.ClearBearerKey()
+	})
+}
+
+// Exec executes the query.
+func (u *RemoteRegistrationUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the RemoteRegistrationCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for RemoteRegistrationCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *RemoteRegistrationUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

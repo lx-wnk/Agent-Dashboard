@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -118,6 +119,20 @@ func (_u *AgentCostTrendUpdate) AddCostUsd(v float64) *AgentCostTrendUpdate {
 	return _u
 }
 
+// SetRecordedAt sets the "recorded_at" field.
+func (_u *AgentCostTrendUpdate) SetRecordedAt(v time.Time) *AgentCostTrendUpdate {
+	_u.mutation.SetRecordedAt(v)
+	return _u
+}
+
+// SetNillableRecordedAt sets the "recorded_at" field if the given value is not nil.
+func (_u *AgentCostTrendUpdate) SetNillableRecordedAt(v *time.Time) *AgentCostTrendUpdate {
+	if v != nil {
+		_u.SetRecordedAt(*v)
+	}
+	return _u
+}
+
 // Mutation returns the AgentCostTrendMutation object of the builder.
 func (_u *AgentCostTrendUpdate) Mutation() *AgentCostTrendMutation {
 	return _u.mutation
@@ -182,6 +197,9 @@ func (_u *AgentCostTrendUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.AddedCostUsd(); ok {
 		_spec.AddField(agentcosttrend.FieldCostUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RecordedAt(); ok {
+		_spec.SetField(agentcosttrend.FieldRecordedAt, field.TypeTime, value)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -294,6 +312,20 @@ func (_u *AgentCostTrendUpdateOne) AddCostUsd(v float64) *AgentCostTrendUpdateOn
 	return _u
 }
 
+// SetRecordedAt sets the "recorded_at" field.
+func (_u *AgentCostTrendUpdateOne) SetRecordedAt(v time.Time) *AgentCostTrendUpdateOne {
+	_u.mutation.SetRecordedAt(v)
+	return _u
+}
+
+// SetNillableRecordedAt sets the "recorded_at" field if the given value is not nil.
+func (_u *AgentCostTrendUpdateOne) SetNillableRecordedAt(v *time.Time) *AgentCostTrendUpdateOne {
+	if v != nil {
+		_u.SetRecordedAt(*v)
+	}
+	return _u
+}
+
 // Mutation returns the AgentCostTrendMutation object of the builder.
 func (_u *AgentCostTrendUpdateOne) Mutation() *AgentCostTrendMutation {
 	return _u.mutation
@@ -388,6 +420,9 @@ func (_u *AgentCostTrendUpdateOne) sqlSave(ctx context.Context) (_node *AgentCos
 	}
 	if value, ok := _u.mutation.AddedCostUsd(); ok {
 		_spec.AddField(agentcosttrend.FieldCostUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RecordedAt(); ok {
+		_spec.SetField(agentcosttrend.FieldRecordedAt, field.TypeTime, value)
 	}
 	_node = &AgentCostTrend{config: _u.config}
 	_spec.Assign = _node.assignValues

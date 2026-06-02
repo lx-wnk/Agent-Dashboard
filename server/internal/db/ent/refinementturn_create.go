@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
@@ -18,6 +20,7 @@ type RefinementTurnCreate struct {
 	config
 	mutation *RefinementTurnMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetTaskID sets the "task_id" field.
@@ -163,6 +166,7 @@ func (_c *RefinementTurnCreate) createSpec() (*RefinementTurn, *sqlgraph.CreateS
 		_node = &RefinementTurn{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(refinementturn.Table, sqlgraph.NewFieldSpec(refinementturn.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -190,11 +194,267 @@ func (_c *RefinementTurnCreate) createSpec() (*RefinementTurn, *sqlgraph.CreateS
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.RefinementTurn.Create().
+//		SetTaskID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.RefinementTurnUpsert) {
+//			SetTaskID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *RefinementTurnCreate) OnConflict(opts ...sql.ConflictOption) *RefinementTurnUpsertOne {
+	_c.conflict = opts
+	return &RefinementTurnUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.RefinementTurn.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *RefinementTurnCreate) OnConflictColumns(columns ...string) *RefinementTurnUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &RefinementTurnUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// RefinementTurnUpsertOne is the builder for "upsert"-ing
+	//  one RefinementTurn node.
+	RefinementTurnUpsertOne struct {
+		create *RefinementTurnCreate
+	}
+
+	// RefinementTurnUpsert is the "OnConflict" setter.
+	RefinementTurnUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetTaskID sets the "task_id" field.
+func (u *RefinementTurnUpsert) SetTaskID(v string) *RefinementTurnUpsert {
+	u.Set(refinementturn.FieldTaskID, v)
+	return u
+}
+
+// UpdateTaskID sets the "task_id" field to the value that was provided on create.
+func (u *RefinementTurnUpsert) UpdateTaskID() *RefinementTurnUpsert {
+	u.SetExcluded(refinementturn.FieldTaskID)
+	return u
+}
+
+// SetRole sets the "role" field.
+func (u *RefinementTurnUpsert) SetRole(v refinementturn.Role) *RefinementTurnUpsert {
+	u.Set(refinementturn.FieldRole, v)
+	return u
+}
+
+// UpdateRole sets the "role" field to the value that was provided on create.
+func (u *RefinementTurnUpsert) UpdateRole() *RefinementTurnUpsert {
+	u.SetExcluded(refinementturn.FieldRole)
+	return u
+}
+
+// SetContent sets the "content" field.
+func (u *RefinementTurnUpsert) SetContent(v string) *RefinementTurnUpsert {
+	u.Set(refinementturn.FieldContent, v)
+	return u
+}
+
+// UpdateContent sets the "content" field to the value that was provided on create.
+func (u *RefinementTurnUpsert) UpdateContent() *RefinementTurnUpsert {
+	u.SetExcluded(refinementturn.FieldContent)
+	return u
+}
+
+// SetPhase sets the "phase" field.
+func (u *RefinementTurnUpsert) SetPhase(v string) *RefinementTurnUpsert {
+	u.Set(refinementturn.FieldPhase, v)
+	return u
+}
+
+// UpdatePhase sets the "phase" field to the value that was provided on create.
+func (u *RefinementTurnUpsert) UpdatePhase() *RefinementTurnUpsert {
+	u.SetExcluded(refinementturn.FieldPhase)
+	return u
+}
+
+// ClearPhase clears the value of the "phase" field.
+func (u *RefinementTurnUpsert) ClearPhase() *RefinementTurnUpsert {
+	u.SetNull(refinementturn.FieldPhase)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.RefinementTurn.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(refinementturn.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *RefinementTurnUpsertOne) UpdateNewValues() *RefinementTurnUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(refinementturn.FieldID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(refinementturn.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.RefinementTurn.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *RefinementTurnUpsertOne) Ignore() *RefinementTurnUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *RefinementTurnUpsertOne) DoNothing() *RefinementTurnUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the RefinementTurnCreate.OnConflict
+// documentation for more info.
+func (u *RefinementTurnUpsertOne) Update(set func(*RefinementTurnUpsert)) *RefinementTurnUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&RefinementTurnUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetTaskID sets the "task_id" field.
+func (u *RefinementTurnUpsertOne) SetTaskID(v string) *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetTaskID(v)
+	})
+}
+
+// UpdateTaskID sets the "task_id" field to the value that was provided on create.
+func (u *RefinementTurnUpsertOne) UpdateTaskID() *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdateTaskID()
+	})
+}
+
+// SetRole sets the "role" field.
+func (u *RefinementTurnUpsertOne) SetRole(v refinementturn.Role) *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetRole(v)
+	})
+}
+
+// UpdateRole sets the "role" field to the value that was provided on create.
+func (u *RefinementTurnUpsertOne) UpdateRole() *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdateRole()
+	})
+}
+
+// SetContent sets the "content" field.
+func (u *RefinementTurnUpsertOne) SetContent(v string) *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetContent(v)
+	})
+}
+
+// UpdateContent sets the "content" field to the value that was provided on create.
+func (u *RefinementTurnUpsertOne) UpdateContent() *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdateContent()
+	})
+}
+
+// SetPhase sets the "phase" field.
+func (u *RefinementTurnUpsertOne) SetPhase(v string) *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetPhase(v)
+	})
+}
+
+// UpdatePhase sets the "phase" field to the value that was provided on create.
+func (u *RefinementTurnUpsertOne) UpdatePhase() *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdatePhase()
+	})
+}
+
+// ClearPhase clears the value of the "phase" field.
+func (u *RefinementTurnUpsertOne) ClearPhase() *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.ClearPhase()
+	})
+}
+
+// Exec executes the query.
+func (u *RefinementTurnUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for RefinementTurnCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *RefinementTurnUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *RefinementTurnUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: RefinementTurnUpsertOne.ID is not supported by MySQL driver. Use RefinementTurnUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *RefinementTurnUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // RefinementTurnCreateBulk is the builder for creating many RefinementTurn entities in bulk.
 type RefinementTurnCreateBulk struct {
 	config
 	err      error
 	builders []*RefinementTurnCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the RefinementTurn entities in the database.
@@ -224,6 +484,7 @@ func (_c *RefinementTurnCreateBulk) Save(ctx context.Context) ([]*RefinementTurn
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -270,6 +531,186 @@ func (_c *RefinementTurnCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *RefinementTurnCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.RefinementTurn.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.RefinementTurnUpsert) {
+//			SetTaskID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *RefinementTurnCreateBulk) OnConflict(opts ...sql.ConflictOption) *RefinementTurnUpsertBulk {
+	_c.conflict = opts
+	return &RefinementTurnUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.RefinementTurn.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *RefinementTurnCreateBulk) OnConflictColumns(columns ...string) *RefinementTurnUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &RefinementTurnUpsertBulk{
+		create: _c,
+	}
+}
+
+// RefinementTurnUpsertBulk is the builder for "upsert"-ing
+// a bulk of RefinementTurn nodes.
+type RefinementTurnUpsertBulk struct {
+	create *RefinementTurnCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.RefinementTurn.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(refinementturn.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *RefinementTurnUpsertBulk) UpdateNewValues() *RefinementTurnUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(refinementturn.FieldID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(refinementturn.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.RefinementTurn.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *RefinementTurnUpsertBulk) Ignore() *RefinementTurnUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *RefinementTurnUpsertBulk) DoNothing() *RefinementTurnUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the RefinementTurnCreateBulk.OnConflict
+// documentation for more info.
+func (u *RefinementTurnUpsertBulk) Update(set func(*RefinementTurnUpsert)) *RefinementTurnUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&RefinementTurnUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetTaskID sets the "task_id" field.
+func (u *RefinementTurnUpsertBulk) SetTaskID(v string) *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetTaskID(v)
+	})
+}
+
+// UpdateTaskID sets the "task_id" field to the value that was provided on create.
+func (u *RefinementTurnUpsertBulk) UpdateTaskID() *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdateTaskID()
+	})
+}
+
+// SetRole sets the "role" field.
+func (u *RefinementTurnUpsertBulk) SetRole(v refinementturn.Role) *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetRole(v)
+	})
+}
+
+// UpdateRole sets the "role" field to the value that was provided on create.
+func (u *RefinementTurnUpsertBulk) UpdateRole() *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdateRole()
+	})
+}
+
+// SetContent sets the "content" field.
+func (u *RefinementTurnUpsertBulk) SetContent(v string) *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetContent(v)
+	})
+}
+
+// UpdateContent sets the "content" field to the value that was provided on create.
+func (u *RefinementTurnUpsertBulk) UpdateContent() *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdateContent()
+	})
+}
+
+// SetPhase sets the "phase" field.
+func (u *RefinementTurnUpsertBulk) SetPhase(v string) *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetPhase(v)
+	})
+}
+
+// UpdatePhase sets the "phase" field to the value that was provided on create.
+func (u *RefinementTurnUpsertBulk) UpdatePhase() *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdatePhase()
+	})
+}
+
+// ClearPhase clears the value of the "phase" field.
+func (u *RefinementTurnUpsertBulk) ClearPhase() *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.ClearPhase()
+	})
+}
+
+// Exec executes the query.
+func (u *RefinementTurnUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the RefinementTurnCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for RefinementTurnCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *RefinementTurnUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

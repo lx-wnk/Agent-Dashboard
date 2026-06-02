@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
@@ -19,6 +21,7 @@ type TaskPermissionCreate struct {
 	config
 	mutation *TaskPermissionMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetTaskID sets the "task_id" field.
@@ -242,6 +245,7 @@ func (_c *TaskPermissionCreate) createSpec() (*TaskPermission, *sqlgraph.CreateS
 		_node = &TaskPermission{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(taskpermission.Table, sqlgraph.NewFieldSpec(taskpermission.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -298,11 +302,410 @@ func (_c *TaskPermissionCreate) createSpec() (*TaskPermission, *sqlgraph.CreateS
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.TaskPermission.Create().
+//		SetTaskID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.TaskPermissionUpsert) {
+//			SetTaskID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *TaskPermissionCreate) OnConflict(opts ...sql.ConflictOption) *TaskPermissionUpsertOne {
+	_c.conflict = opts
+	return &TaskPermissionUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.TaskPermission.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *TaskPermissionCreate) OnConflictColumns(columns ...string) *TaskPermissionUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &TaskPermissionUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// TaskPermissionUpsertOne is the builder for "upsert"-ing
+	//  one TaskPermission node.
+	TaskPermissionUpsertOne struct {
+		create *TaskPermissionCreate
+	}
+
+	// TaskPermissionUpsert is the "OnConflict" setter.
+	TaskPermissionUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetTool sets the "tool" field.
+func (u *TaskPermissionUpsert) SetTool(v string) *TaskPermissionUpsert {
+	u.Set(taskpermission.FieldTool, v)
+	return u
+}
+
+// UpdateTool sets the "tool" field to the value that was provided on create.
+func (u *TaskPermissionUpsert) UpdateTool() *TaskPermissionUpsert {
+	u.SetExcluded(taskpermission.FieldTool)
+	return u
+}
+
+// SetPattern sets the "pattern" field.
+func (u *TaskPermissionUpsert) SetPattern(v string) *TaskPermissionUpsert {
+	u.Set(taskpermission.FieldPattern, v)
+	return u
+}
+
+// UpdatePattern sets the "pattern" field to the value that was provided on create.
+func (u *TaskPermissionUpsert) UpdatePattern() *TaskPermissionUpsert {
+	u.SetExcluded(taskpermission.FieldPattern)
+	return u
+}
+
+// ClearPattern clears the value of the "pattern" field.
+func (u *TaskPermissionUpsert) ClearPattern() *TaskPermissionUpsert {
+	u.SetNull(taskpermission.FieldPattern)
+	return u
+}
+
+// SetGranted sets the "granted" field.
+func (u *TaskPermissionUpsert) SetGranted(v bool) *TaskPermissionUpsert {
+	u.Set(taskpermission.FieldGranted, v)
+	return u
+}
+
+// UpdateGranted sets the "granted" field to the value that was provided on create.
+func (u *TaskPermissionUpsert) UpdateGranted() *TaskPermissionUpsert {
+	u.SetExcluded(taskpermission.FieldGranted)
+	return u
+}
+
+// SetPreApproved sets the "pre_approved" field.
+func (u *TaskPermissionUpsert) SetPreApproved(v bool) *TaskPermissionUpsert {
+	u.Set(taskpermission.FieldPreApproved, v)
+	return u
+}
+
+// UpdatePreApproved sets the "pre_approved" field to the value that was provided on create.
+func (u *TaskPermissionUpsert) UpdatePreApproved() *TaskPermissionUpsert {
+	u.SetExcluded(taskpermission.FieldPreApproved)
+	return u
+}
+
+// SetDecidedBy sets the "decided_by" field.
+func (u *TaskPermissionUpsert) SetDecidedBy(v string) *TaskPermissionUpsert {
+	u.Set(taskpermission.FieldDecidedBy, v)
+	return u
+}
+
+// UpdateDecidedBy sets the "decided_by" field to the value that was provided on create.
+func (u *TaskPermissionUpsert) UpdateDecidedBy() *TaskPermissionUpsert {
+	u.SetExcluded(taskpermission.FieldDecidedBy)
+	return u
+}
+
+// ClearDecidedBy clears the value of the "decided_by" field.
+func (u *TaskPermissionUpsert) ClearDecidedBy() *TaskPermissionUpsert {
+	u.SetNull(taskpermission.FieldDecidedBy)
+	return u
+}
+
+// SetRequestedAt sets the "requested_at" field.
+func (u *TaskPermissionUpsert) SetRequestedAt(v time.Time) *TaskPermissionUpsert {
+	u.Set(taskpermission.FieldRequestedAt, v)
+	return u
+}
+
+// UpdateRequestedAt sets the "requested_at" field to the value that was provided on create.
+func (u *TaskPermissionUpsert) UpdateRequestedAt() *TaskPermissionUpsert {
+	u.SetExcluded(taskpermission.FieldRequestedAt)
+	return u
+}
+
+// SetDecidedAt sets the "decided_at" field.
+func (u *TaskPermissionUpsert) SetDecidedAt(v time.Time) *TaskPermissionUpsert {
+	u.Set(taskpermission.FieldDecidedAt, v)
+	return u
+}
+
+// UpdateDecidedAt sets the "decided_at" field to the value that was provided on create.
+func (u *TaskPermissionUpsert) UpdateDecidedAt() *TaskPermissionUpsert {
+	u.SetExcluded(taskpermission.FieldDecidedAt)
+	return u
+}
+
+// ClearDecidedAt clears the value of the "decided_at" field.
+func (u *TaskPermissionUpsert) ClearDecidedAt() *TaskPermissionUpsert {
+	u.SetNull(taskpermission.FieldDecidedAt)
+	return u
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (u *TaskPermissionUpsert) SetExpiresAt(v time.Time) *TaskPermissionUpsert {
+	u.Set(taskpermission.FieldExpiresAt, v)
+	return u
+}
+
+// UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
+func (u *TaskPermissionUpsert) UpdateExpiresAt() *TaskPermissionUpsert {
+	u.SetExcluded(taskpermission.FieldExpiresAt)
+	return u
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (u *TaskPermissionUpsert) ClearExpiresAt() *TaskPermissionUpsert {
+	u.SetNull(taskpermission.FieldExpiresAt)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.TaskPermission.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(taskpermission.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *TaskPermissionUpsertOne) UpdateNewValues() *TaskPermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(taskpermission.FieldID)
+		}
+		if _, exists := u.create.mutation.TaskID(); exists {
+			s.SetIgnore(taskpermission.FieldTaskID)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.TaskPermission.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *TaskPermissionUpsertOne) Ignore() *TaskPermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *TaskPermissionUpsertOne) DoNothing() *TaskPermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the TaskPermissionCreate.OnConflict
+// documentation for more info.
+func (u *TaskPermissionUpsertOne) Update(set func(*TaskPermissionUpsert)) *TaskPermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&TaskPermissionUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetTool sets the "tool" field.
+func (u *TaskPermissionUpsertOne) SetTool(v string) *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetTool(v)
+	})
+}
+
+// UpdateTool sets the "tool" field to the value that was provided on create.
+func (u *TaskPermissionUpsertOne) UpdateTool() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateTool()
+	})
+}
+
+// SetPattern sets the "pattern" field.
+func (u *TaskPermissionUpsertOne) SetPattern(v string) *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetPattern(v)
+	})
+}
+
+// UpdatePattern sets the "pattern" field to the value that was provided on create.
+func (u *TaskPermissionUpsertOne) UpdatePattern() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdatePattern()
+	})
+}
+
+// ClearPattern clears the value of the "pattern" field.
+func (u *TaskPermissionUpsertOne) ClearPattern() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.ClearPattern()
+	})
+}
+
+// SetGranted sets the "granted" field.
+func (u *TaskPermissionUpsertOne) SetGranted(v bool) *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetGranted(v)
+	})
+}
+
+// UpdateGranted sets the "granted" field to the value that was provided on create.
+func (u *TaskPermissionUpsertOne) UpdateGranted() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateGranted()
+	})
+}
+
+// SetPreApproved sets the "pre_approved" field.
+func (u *TaskPermissionUpsertOne) SetPreApproved(v bool) *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetPreApproved(v)
+	})
+}
+
+// UpdatePreApproved sets the "pre_approved" field to the value that was provided on create.
+func (u *TaskPermissionUpsertOne) UpdatePreApproved() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdatePreApproved()
+	})
+}
+
+// SetDecidedBy sets the "decided_by" field.
+func (u *TaskPermissionUpsertOne) SetDecidedBy(v string) *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetDecidedBy(v)
+	})
+}
+
+// UpdateDecidedBy sets the "decided_by" field to the value that was provided on create.
+func (u *TaskPermissionUpsertOne) UpdateDecidedBy() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateDecidedBy()
+	})
+}
+
+// ClearDecidedBy clears the value of the "decided_by" field.
+func (u *TaskPermissionUpsertOne) ClearDecidedBy() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.ClearDecidedBy()
+	})
+}
+
+// SetRequestedAt sets the "requested_at" field.
+func (u *TaskPermissionUpsertOne) SetRequestedAt(v time.Time) *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetRequestedAt(v)
+	})
+}
+
+// UpdateRequestedAt sets the "requested_at" field to the value that was provided on create.
+func (u *TaskPermissionUpsertOne) UpdateRequestedAt() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateRequestedAt()
+	})
+}
+
+// SetDecidedAt sets the "decided_at" field.
+func (u *TaskPermissionUpsertOne) SetDecidedAt(v time.Time) *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetDecidedAt(v)
+	})
+}
+
+// UpdateDecidedAt sets the "decided_at" field to the value that was provided on create.
+func (u *TaskPermissionUpsertOne) UpdateDecidedAt() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateDecidedAt()
+	})
+}
+
+// ClearDecidedAt clears the value of the "decided_at" field.
+func (u *TaskPermissionUpsertOne) ClearDecidedAt() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.ClearDecidedAt()
+	})
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (u *TaskPermissionUpsertOne) SetExpiresAt(v time.Time) *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetExpiresAt(v)
+	})
+}
+
+// UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
+func (u *TaskPermissionUpsertOne) UpdateExpiresAt() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateExpiresAt()
+	})
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (u *TaskPermissionUpsertOne) ClearExpiresAt() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.ClearExpiresAt()
+	})
+}
+
+// Exec executes the query.
+func (u *TaskPermissionUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for TaskPermissionCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *TaskPermissionUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *TaskPermissionUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: TaskPermissionUpsertOne.ID is not supported by MySQL driver. Use TaskPermissionUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *TaskPermissionUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // TaskPermissionCreateBulk is the builder for creating many TaskPermission entities in bulk.
 type TaskPermissionCreateBulk struct {
 	config
 	err      error
 	builders []*TaskPermissionCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the TaskPermission entities in the database.
@@ -332,6 +735,7 @@ func (_c *TaskPermissionCreateBulk) Save(ctx context.Context) ([]*TaskPermission
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -378,6 +782,263 @@ func (_c *TaskPermissionCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *TaskPermissionCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.TaskPermission.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.TaskPermissionUpsert) {
+//			SetTaskID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *TaskPermissionCreateBulk) OnConflict(opts ...sql.ConflictOption) *TaskPermissionUpsertBulk {
+	_c.conflict = opts
+	return &TaskPermissionUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.TaskPermission.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *TaskPermissionCreateBulk) OnConflictColumns(columns ...string) *TaskPermissionUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &TaskPermissionUpsertBulk{
+		create: _c,
+	}
+}
+
+// TaskPermissionUpsertBulk is the builder for "upsert"-ing
+// a bulk of TaskPermission nodes.
+type TaskPermissionUpsertBulk struct {
+	create *TaskPermissionCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.TaskPermission.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(taskpermission.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *TaskPermissionUpsertBulk) UpdateNewValues() *TaskPermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(taskpermission.FieldID)
+			}
+			if _, exists := b.mutation.TaskID(); exists {
+				s.SetIgnore(taskpermission.FieldTaskID)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.TaskPermission.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *TaskPermissionUpsertBulk) Ignore() *TaskPermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *TaskPermissionUpsertBulk) DoNothing() *TaskPermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the TaskPermissionCreateBulk.OnConflict
+// documentation for more info.
+func (u *TaskPermissionUpsertBulk) Update(set func(*TaskPermissionUpsert)) *TaskPermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&TaskPermissionUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetTool sets the "tool" field.
+func (u *TaskPermissionUpsertBulk) SetTool(v string) *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetTool(v)
+	})
+}
+
+// UpdateTool sets the "tool" field to the value that was provided on create.
+func (u *TaskPermissionUpsertBulk) UpdateTool() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateTool()
+	})
+}
+
+// SetPattern sets the "pattern" field.
+func (u *TaskPermissionUpsertBulk) SetPattern(v string) *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetPattern(v)
+	})
+}
+
+// UpdatePattern sets the "pattern" field to the value that was provided on create.
+func (u *TaskPermissionUpsertBulk) UpdatePattern() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdatePattern()
+	})
+}
+
+// ClearPattern clears the value of the "pattern" field.
+func (u *TaskPermissionUpsertBulk) ClearPattern() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.ClearPattern()
+	})
+}
+
+// SetGranted sets the "granted" field.
+func (u *TaskPermissionUpsertBulk) SetGranted(v bool) *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetGranted(v)
+	})
+}
+
+// UpdateGranted sets the "granted" field to the value that was provided on create.
+func (u *TaskPermissionUpsertBulk) UpdateGranted() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateGranted()
+	})
+}
+
+// SetPreApproved sets the "pre_approved" field.
+func (u *TaskPermissionUpsertBulk) SetPreApproved(v bool) *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetPreApproved(v)
+	})
+}
+
+// UpdatePreApproved sets the "pre_approved" field to the value that was provided on create.
+func (u *TaskPermissionUpsertBulk) UpdatePreApproved() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdatePreApproved()
+	})
+}
+
+// SetDecidedBy sets the "decided_by" field.
+func (u *TaskPermissionUpsertBulk) SetDecidedBy(v string) *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetDecidedBy(v)
+	})
+}
+
+// UpdateDecidedBy sets the "decided_by" field to the value that was provided on create.
+func (u *TaskPermissionUpsertBulk) UpdateDecidedBy() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateDecidedBy()
+	})
+}
+
+// ClearDecidedBy clears the value of the "decided_by" field.
+func (u *TaskPermissionUpsertBulk) ClearDecidedBy() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.ClearDecidedBy()
+	})
+}
+
+// SetRequestedAt sets the "requested_at" field.
+func (u *TaskPermissionUpsertBulk) SetRequestedAt(v time.Time) *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetRequestedAt(v)
+	})
+}
+
+// UpdateRequestedAt sets the "requested_at" field to the value that was provided on create.
+func (u *TaskPermissionUpsertBulk) UpdateRequestedAt() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateRequestedAt()
+	})
+}
+
+// SetDecidedAt sets the "decided_at" field.
+func (u *TaskPermissionUpsertBulk) SetDecidedAt(v time.Time) *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetDecidedAt(v)
+	})
+}
+
+// UpdateDecidedAt sets the "decided_at" field to the value that was provided on create.
+func (u *TaskPermissionUpsertBulk) UpdateDecidedAt() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateDecidedAt()
+	})
+}
+
+// ClearDecidedAt clears the value of the "decided_at" field.
+func (u *TaskPermissionUpsertBulk) ClearDecidedAt() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.ClearDecidedAt()
+	})
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (u *TaskPermissionUpsertBulk) SetExpiresAt(v time.Time) *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetExpiresAt(v)
+	})
+}
+
+// UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
+func (u *TaskPermissionUpsertBulk) UpdateExpiresAt() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateExpiresAt()
+	})
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (u *TaskPermissionUpsertBulk) ClearExpiresAt() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.ClearExpiresAt()
+	})
+}
+
+// Exec executes the query.
+func (u *TaskPermissionUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the TaskPermissionCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for TaskPermissionCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *TaskPermissionUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
