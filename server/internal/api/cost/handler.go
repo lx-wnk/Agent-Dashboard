@@ -13,11 +13,13 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 )
 
+// defaultRangeDays is the look-back window used when the request omits `from`.
+const defaultRangeDays = 30
+
 // Handler serves the /api/cost/* endpoints.
 //
 // All routes are read-only and execute SQL aggregations against the
-// agent_cost_trends table. No new schema or dependencies are introduced —
-// the `model` column already exists on agent_cost_trends.
+// agent_cost_trends table.
 type Handler struct {
 	db *sql.DB
 }
@@ -37,24 +39,34 @@ func (h *Handler) Mount(r chi.Router) {
 
 // ─── response types ───────────────────────────────────────────────────────────
 
-// modelBreakdown is the total spend per model across the full retention
-// window of agent_cost_trends.
+// modelBreakdown is the per-model spend + token totals over the requested range.
 type modelBreakdown struct {
-	Model    string  `json:"model"`
-	CostUSD  float64 `json:"costUsd"`
-	Sessions int     `json:"sessions"`
+	Model        string  `json:"model"`
+	CostUSD      float64 `json:"costUsd"`
+	InputTokens  int64   `json:"inputTokens"`
+	OutputTokens int64   `json:"outputTokens"`
+	Sessions     int     `json:"sessions"`
 }
 
-// dayPoint is a per-day, per-model cost slice. Day is ISO-8601 (YYYY-MM-DD,
-// UTC). Stacked-bar charts read this directly.
+// projectBreakdown is the per-project spend + token totals over the requested
+// range. ProjectPath is the stable grouping key; ProjectName is the display label.
+type projectBreakdown struct {
+	ProjectPath  string  `json:"projectPath"`
+	ProjectName  string  `json:"projectName"`
+	CostUSD      float64 `json:"costUsd"`
+	InputTokens  int64   `json:"inputTokens"`
+	OutputTokens int64   `json:"outputTokens"`
+	Sessions     int     `json:"sessions"`
+}
+
+// dayPoint is a per-day, per-model cost slice. Day is ISO-8601 (YYYY-MM-DD, UTC).
 type dayPoint struct {
 	Day     string  `json:"day"`
 	Model   string  `json:"model"`
 	CostUSD float64 `json:"costUsd"`
 }
 
-// weekPoint is a per-ISO-week total cost (all models combined). Used by the
-// rolling weekly trend line.
+// weekPoint is a per-ISO-week total cost (all models combined).
 type weekPoint struct {
 	Week    string  `json:"week"` // YYYY-WW (ISO week)
 	CostUSD float64 `json:"costUsd"`
@@ -62,69 +74,120 @@ type weekPoint struct {
 
 // summaryResponse is the full /api/cost/summary payload.
 type summaryResponse struct {
-	ByModel   []modelBreakdown `json:"byModel"`
-	ByDay     []dayPoint       `json:"byDay"`
-	ByWeek    []weekPoint      `json:"byWeek"`
-	TotalUSD  float64          `json:"totalUsd"`
-	UpdatedAt int64            `json:"updatedAt"` // unix ms
+	ByModel           []modelBreakdown   `json:"byModel"`
+	ByProject         []projectBreakdown `json:"byProject"`
+	ByDay             []dayPoint         `json:"byDay"`
+	ByWeek            []weekPoint        `json:"byWeek"`
+	TotalUSD          float64            `json:"totalUsd"`
+	TotalInputTokens  int64              `json:"totalInputTokens"`
+	TotalOutputTokens int64              `json:"totalOutputTokens"`
+	From              string             `json:"from"` // YYYY-MM-DD echo of the applied range
+	To                string             `json:"to"`   // YYYY-MM-DD echo of the applied range
+	UpdatedAt         int64              `json:"updatedAt"`
 }
 
-// ─── GET /api/cost/summary ────────────────────────────────────────────────────
+// ─── GET /api/cost/summary?from=YYYY-MM-DD&to=YYYY-MM-DD ────────────────────────
 
 func (h *Handler) getSummary(w http.ResponseWriter, r *http.Request) {
+	now := time.Now().UTC()
+	from, to := parseRange(r, now)
+
 	if h.db == nil {
-		apierr.WriteJSON(w, http.StatusOK, emptySummary())
+		apierr.WriteJSON(w, http.StatusOK, emptySummary(from, to))
 		return
 	}
 
 	ctx := r.Context()
-	now := time.Now().UTC()
-	dayFrom := now.AddDate(0, 0, -30)
-	weekFrom := now.AddDate(0, 0, -84) // 12 weeks
+	fromStr, toStr := dateStr(from), dateStr(to)
 
-	byModel, err := h.queryByModel(ctx)
+	byModel, err := h.queryByModel(ctx, fromStr, toStr)
 	if err != nil {
 		apierr.JSONError(w, http.StatusInternalServerError, fmt.Sprintf("cost.byModel: %v", err))
 		return
 	}
-	byDay, err := h.queryByDay(ctx, dayFrom)
+	byProject, err := h.queryByProject(ctx, fromStr, toStr)
+	if err != nil {
+		apierr.JSONError(w, http.StatusInternalServerError, fmt.Sprintf("cost.byProject: %v", err))
+		return
+	}
+	byDay, err := h.queryByDay(ctx, fromStr, toStr)
 	if err != nil {
 		apierr.JSONError(w, http.StatusInternalServerError, fmt.Sprintf("cost.byDay: %v", err))
 		return
 	}
-	byWeek, err := h.queryByWeek(ctx, weekFrom)
+	byWeek, err := h.queryByWeek(ctx, fromStr, toStr)
 	if err != nil {
 		apierr.JSONError(w, http.StatusInternalServerError, fmt.Sprintf("cost.byWeek: %v", err))
 		return
 	}
 
-	var total float64
+	var totalUSD float64
+	var totalIn, totalOut int64
 	for _, m := range byModel {
-		total += m.CostUSD
+		totalUSD += m.CostUSD
+		totalIn += m.InputTokens
+		totalOut += m.OutputTokens
 	}
 
 	apierr.WriteJSON(w, http.StatusOK, summaryResponse{
-		ByModel:   byModel,
-		ByDay:     byDay,
-		ByWeek:    byWeek,
-		TotalUSD:  total,
-		UpdatedAt: now.UnixMilli(),
+		ByModel:           byModel,
+		ByProject:         byProject,
+		ByDay:             byDay,
+		ByWeek:            byWeek,
+		TotalUSD:          totalUSD,
+		TotalInputTokens:  totalIn,
+		TotalOutputTokens: totalOut,
+		From:              fromStr,
+		To:                toStr,
+		UpdatedAt:         now.UnixMilli(),
 	})
+}
+
+// parseRange reads the from/to query params (YYYY-MM-DD). Missing `from` defaults
+// to defaultRangeDays ago; missing `to` defaults to today. An unparseable value
+// falls back to its default. `to` is inclusive of the whole day.
+func parseRange(r *http.Request, now time.Time) (from, to time.Time) {
+	from = now.AddDate(0, 0, -defaultRangeDays)
+	to = now
+	if v := r.URL.Query().Get("from"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			from = t
+		}
+	}
+	if v := r.URL.Query().Get("to"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			to = t
+		}
+	}
+	return from, to
 }
 
 // ─── queries ──────────────────────────────────────────────────────────────────
 
-func (h *Handler) queryByModel(ctx context.Context) ([]modelBreakdown, error) {
-	const q = `
+// recordedAtRangeClause bounds recorded_at to [from, to] as a date-only window.
+//
+// The ent client persists time.Time via Go's default String() format
+// ("2026-05-23 10:28:54.704002 +0000 UTC"); legacy rows may use RFC3339. Both
+// share a lexicographically sortable "YYYY-MM-DD" prefix, so we compare the
+// first 10 characters and avoid strftime() (which returns NULL for the Go form).
+const recordedAtRangeClause = `substr(recorded_at, 1, 10) >= ? AND substr(recorded_at, 1, 10) <= ?`
+
+func dateStr(t time.Time) string { return t.UTC().Format("2006-01-02") }
+
+func (h *Handler) queryByModel(ctx context.Context, from, to string) ([]modelBreakdown, error) {
+	q := `
 SELECT
     COALESCE(NULLIF(model, ''), 'unknown') AS model,
     SUM(cost_usd)                          AS total_cost,
+    SUM(input_tokens)                      AS in_tokens,
+    SUM(output_tokens)                     AS out_tokens,
     COUNT(DISTINCT session_id)             AS sessions
 FROM agent_cost_trends
+WHERE ` + recordedAtRangeClause + `
 GROUP BY model
 ORDER BY total_cost DESC
 `
-	rows, err := h.db.QueryContext(ctx, q)
+	rows, err := h.db.QueryContext(ctx, q, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +196,7 @@ ORDER BY total_cost DESC
 	result := make([]modelBreakdown, 0)
 	for rows.Next() {
 		var m modelBreakdown
-		if err := rows.Scan(&m.Model, &m.CostUSD, &m.Sessions); err != nil {
+		if err := rows.Scan(&m.Model, &m.CostUSD, &m.InputTokens, &m.OutputTokens, &m.Sessions); err != nil {
 			return nil, err
 		}
 		result = append(result, m)
@@ -141,39 +204,54 @@ ORDER BY total_cost DESC
 	return result, rows.Err()
 }
 
-// recordedAtSinceClause / recordedAtThreshold encode the cross-format threshold
-// for `recorded_at >= ?`.
-//
-// The ent client persists time.Time via Go's default String() format
-// (e.g. "2026-05-23 10:28:54.704002 +0000 UTC"). Historic importer rows may
-// also use RFC3339 ("2026-05-23T10:28:54Z"). Both formats start with a
-// lexicographically sortable "YYYY-MM-DD..." prefix, so we compare the first
-// 10 characters as a date-only window. This is robust against either format
-// and avoids strftime() entirely on the column (strftime returns NULL for the
-// Go-default String form).
-//
-// The 10-char window slightly over-includes the boundary day, which is
-// acceptable for a 30-day / 12-week rolling aggregation.
-const recordedAtSinceClause = `substr(recorded_at, 1, 10) >= ?`
+func (h *Handler) queryByProject(ctx context.Context, from, to string) ([]projectBreakdown, error) {
+	// Group by the stable project_path key; pick the most recent non-empty
+	// project_name for display (MAX is a cheap deterministic choice).
+	q := `
+SELECT
+    COALESCE(NULLIF(project_path, ''), 'unknown') AS project_path,
+    COALESCE(NULLIF(MAX(project_name), ''), '')   AS project_name,
+    SUM(cost_usd)                                 AS total_cost,
+    SUM(input_tokens)                             AS in_tokens,
+    SUM(output_tokens)                            AS out_tokens,
+    COUNT(DISTINCT session_id)                    AS sessions
+FROM agent_cost_trends
+WHERE ` + recordedAtRangeClause + `
+GROUP BY project_path
+ORDER BY total_cost DESC
+`
+	rows, err := h.db.QueryContext(ctx, q, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-func recordedAtThreshold(since time.Time) string {
-	return since.UTC().Format("2006-01-02")
+	result := make([]projectBreakdown, 0)
+	for rows.Next() {
+		var p projectBreakdown
+		if err := rows.Scan(&p.ProjectPath, &p.ProjectName, &p.CostUSD, &p.InputTokens, &p.OutputTokens, &p.Sessions); err != nil {
+			return nil, err
+		}
+		if p.ProjectName == "" {
+			p.ProjectName = p.ProjectPath
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
 }
 
-func (h *Handler) queryByDay(ctx context.Context, since time.Time) ([]dayPoint, error) {
-	// substr(recorded_at, 1, 10) yields the YYYY-MM-DD prefix from either the
-	// Go default String() format or RFC3339 — see recordedAtSinceClause.
+func (h *Handler) queryByDay(ctx context.Context, from, to string) ([]dayPoint, error) {
 	q := `
 SELECT
     substr(recorded_at, 1, 10)             AS day,
     COALESCE(NULLIF(model, ''), 'unknown') AS model,
     SUM(cost_usd)                          AS total_cost
 FROM agent_cost_trends
-WHERE ` + recordedAtSinceClause + `
+WHERE ` + recordedAtRangeClause + `
 GROUP BY day, model
 ORDER BY day ASC, total_cost DESC
 `
-	rows, err := h.db.QueryContext(ctx, q, recordedAtThreshold(since))
+	rows, err := h.db.QueryContext(ctx, q, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -192,19 +270,18 @@ ORDER BY day ASC, total_cost DESC
 
 // queryByWeek aggregates per-ISO-week totals. SQLite can't reliably parse the
 // ent-stored time format with strftime, so we read per-day totals and bucket
-// them in Go using time.Time.ISOWeek(). 12 weeks × ~7 days = 84 rows max, so
-// the in-memory bucketing has negligible cost.
-func (h *Handler) queryByWeek(ctx context.Context, since time.Time) ([]weekPoint, error) {
+// them in Go using time.Time.ISOWeek().
+func (h *Handler) queryByWeek(ctx context.Context, from, to string) ([]weekPoint, error) {
 	q := `
 SELECT
     substr(recorded_at, 1, 10) AS day,
     SUM(cost_usd)              AS total_cost
 FROM agent_cost_trends
-WHERE ` + recordedAtSinceClause + `
+WHERE ` + recordedAtRangeClause + `
 GROUP BY day
 ORDER BY day ASC
 `
-	rows, err := h.db.QueryContext(ctx, q, recordedAtThreshold(since))
+	rows, err := h.db.QueryContext(ctx, q, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -242,12 +319,14 @@ ORDER BY day ASC
 
 // emptySummary returns a zero-value summary used when the DB is unavailable
 // on a fresh install. The frontend handles empty slices gracefully.
-func emptySummary() summaryResponse {
+func emptySummary(from, to time.Time) summaryResponse {
 	return summaryResponse{
 		ByModel:   []modelBreakdown{},
+		ByProject: []projectBreakdown{},
 		ByDay:     []dayPoint{},
 		ByWeek:    []weekPoint{},
-		TotalUSD:  0,
+		From:      dateStr(from),
+		To:        dateStr(to),
 		UpdatedAt: time.Now().UnixMilli(),
 	}
 }
