@@ -50,8 +50,8 @@ func (h *Handler) Mount(r chi.Router) {
 func (h *Handler) startImport(w http.ResponseWriter, r *http.Request) {
 	payload, ok := auth.PayloadFromContext(r.Context())
 	if !ok {
-		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
-		return
+		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
+		payload = auth.BypassPayload()
 	}
 	userID := payload.Sub
 
@@ -117,8 +117,8 @@ func (h *Handler) startImport(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) streamStatus(w http.ResponseWriter, r *http.Request) {
 	payload, ok := auth.PayloadFromContext(r.Context())
 	if !ok {
-		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
-		return
+		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
+		payload = auth.BypassPayload()
 	}
 	userID := payload.Sub
 

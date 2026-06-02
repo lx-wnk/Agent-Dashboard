@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
-	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
@@ -32,9 +31,6 @@ func (h *Handler) Mount(r chi.Router) {
 
 // POST /api/settings/webpush/vapid — generate VAPID keys (idempotent).
 func (h *Handler) generateVAPID(w http.ResponseWriter, r *http.Request) error {
-	if _, ok := auth.PayloadFromContext(r.Context()); !ok {
-		return apierr.ErrForbidden
-	}
 
 	var body struct {
 		Subject string `json:"subject"`
@@ -58,9 +54,6 @@ func (h *Handler) generateVAPID(w http.ResponseWriter, r *http.Request) error {
 
 // GET /api/settings/webpush/vapid — return public VAPID key.
 func (h *Handler) getVAPID(w http.ResponseWriter, r *http.Request) error {
-	if _, ok := auth.PayloadFromContext(r.Context()); !ok {
-		return apierr.ErrForbidden
-	}
 
 	pubKey, found, err := h.svc.GetPublicKey(r.Context())
 	if err != nil {
@@ -76,9 +69,6 @@ func (h *Handler) getVAPID(w http.ResponseWriter, r *http.Request) error {
 
 // POST /api/settings/webpush/subscribe — register a browser push subscription.
 func (h *Handler) subscribe(w http.ResponseWriter, r *http.Request) error {
-	if _, ok := auth.PayloadFromContext(r.Context()); !ok {
-		return apierr.ErrForbidden
-	}
 
 	var body struct {
 		Endpoint string `json:"endpoint"`

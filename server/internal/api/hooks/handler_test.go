@@ -186,16 +186,21 @@ func TestPreTool_WriteTool_TimeoutReturnsProceeds(t *testing.T) {
 // Pending endpoint
 // -------------------------------------------------------------------
 
-func TestPending_WithMissingBearer_Returns401(t *testing.T) {
+// Pending is browser-facing: it carries the session cookie and is authenticated
+// by the session-auth middleware group in router.go, NOT the hooks bearer secret.
+// The handler therefore does not gate on the secret — a request without the
+// Authorization header still succeeds (the middleware would have rejected an
+// unauthenticated browser request before the handler ran).
+func TestPending_WithoutBearer_StillSucceeds(t *testing.T) {
 	h := newTestHandler("test-secret")
 	req := httptest.NewRequest(http.MethodGet, "/api/hooks/pending", nil)
-	// Deliberately no Authorization header.
+	// Deliberately no Authorization header — auth is enforced by the router group.
 	w := httptest.NewRecorder()
 
 	h.Pending(w, req)
 
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("Pending with missing bearer: got status %d, want %d", w.Code, http.StatusUnauthorized)
+	if w.Code != http.StatusOK {
+		t.Errorf("Pending without bearer: got status %d, want %d", w.Code, http.StatusOK)
 	}
 }
 
