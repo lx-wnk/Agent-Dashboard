@@ -13,24 +13,15 @@ const svgRef = ref<SVGSVGElement | null>(null)
 
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
 
-// Holds the active force simulation so render() can stop the previous one
-// before starting a fresh tick loop, and so onUnmounted can halt any in-
-// flight alpha decay when the component is torn down.
-let activeSim: d3.Simulation<DAGNodeFlat, DAGLinkFlat> | null = null
-
 interface DAGNodeFlat {
   id: string
   type: string
   label: string
   ts: string
-  x?: number
-  y?: number
-  fx?: number | null
-  fy?: number | null
 }
 interface DAGLinkFlat {
-  source: string | DAGNodeFlat
-  target: string | DAGNodeFlat
+  source: string
+  target: string
   kind: string
 }
 
@@ -40,73 +31,199 @@ const NODE_COLORS: Record<string, string> = {
   user: '#f59e0b',
 }
 
+// Lane Y centres for each node type.
+const LANE_Y: Record<string, number> = {
+  user: 70,
+  assistant: 160,
+  tool: 260,
+}
+const LANE_FALLBACK_Y = 160
+
+const SVG_HEIGHT = 340
+const NODE_RADIUS = 7
+// Horizontal padding left (for lane labels) and right.
+const PAD_LEFT = 80
+const PAD_RIGHT = 24
+// Minimum px between nodes on X.
+const NODE_SPACING = 26
+
+function laneY(type: string): number {
+  return LANE_Y[type] ?? LANE_FALLBACK_Y
+}
+
 function render() {
-  if (!svgRef.value || !props.data)
+  if (!svgRef.value || !props.data) {
     return
-  // Halt any prior simulation before drawing — d3 otherwise keeps the
-  // alpha timer alive and accumulates tick handlers each time props.data
-  // changes.
-  activeSim?.stop()
-  activeSim = null
+  }
+
   const svg = d3.select(svgRef.value)
   svg.selectAll('*').remove()
-  if (props.data.nodes.length === 0)
-    return
-
-  const width = svgRef.value.clientWidth || 720
-  const height = 480
-  svg.attr('viewBox', `0 0 ${width} ${height}`)
 
   const nodes: DAGNodeFlat[] = props.data.nodes.map(n => ({ ...n }))
   const links: DAGLinkFlat[] = props.data.links.map(l => ({ ...l }))
 
-  const sim = d3.forceSimulation<DAGNodeFlat>(nodes)
-    .force('link', d3.forceLink<DAGNodeFlat, DAGLinkFlat>(links).id(d => d.id).distance(70))
-    .force('charge', d3.forceManyBody<DAGNodeFlat>().strength(-220))
-    .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide<DAGNodeFlat>(18))
-  activeSim = sim
+  if (nodes.length === 0) {
+    return
+  }
 
-  const linkSel = svg.append('g')
-    .selectAll('line')
-    .data(links)
-    .join('line')
-    .attr('stroke', d => d.kind === 'result' ? '#22c55e' : '#94a3b8')
-    .attr('stroke-dasharray', d => d.kind === 'result' ? '4 2' : null)
-    .attr('stroke-width', 1.2)
+  const containerWidth = svgRef.value.parentElement?.clientWidth ?? 720
+  const svgWidth = Math.max(containerWidth, nodes.length * NODE_SPACING + PAD_LEFT + PAD_RIGHT)
 
-  const nodeSel = svg.append('g')
-    .selectAll('circle')
-    .data(nodes)
-    .join('circle')
-    .attr('r', 9)
-    .attr('fill', d => NODE_COLORS[d.type] ?? '#64748b')
-    .attr('stroke', '#0f172a')
-    .attr('stroke-width', 1)
-    .append('title')
-    .text(d => `${d.label} (${d.type})\n${d.ts}`)
+  svg
+    .attr('width', svgWidth)
+    .attr('height', SVG_HEIGHT)
+    .attr('viewBox', `0 0 ${svgWidth} ${SVG_HEIGHT}`)
 
-  sim.on('tick', () => {
-    linkSel
-      .attr('x1', d => (d.source as DAGNodeFlat).x ?? 0)
-      .attr('y1', d => (d.source as DAGNodeFlat).y ?? 0)
-      .attr('x2', d => (d.target as DAGNodeFlat).x ?? 0)
-      .attr('y2', d => (d.target as DAGNodeFlat).y ?? 0)
-    svg.selectAll<SVGCircleElement, DAGNodeFlat>('circle')
-      .attr('cx', d => d.x ?? 0)
-      .attr('cy', d => d.y ?? 0)
+  // Build position map: nodeId → {x, y}
+  const drawWidth = svgWidth - PAD_LEFT - PAD_RIGHT
+  const xScale = d3.scaleLinear()
+    .domain([0, Math.max(nodes.length - 1, 1)])
+    .range([PAD_LEFT, PAD_LEFT + drawWidth])
+
+  const posMap = new Map<string, { x: number, y: number }>()
+  nodes.forEach((node, i) => {
+    posMap.set(node.id, { x: xScale(i), y: laneY(node.type) })
   })
-  // Keep reference to avoid unused-var lint.
-  void nodeSel
+
+  // ── Lane guide lines + labels ───────────────────────────────────────────
+  const laneEntries: Array<{ key: string, label: string }> = [
+    { key: 'user', label: 'user' },
+    { key: 'assistant', label: 'assistant' },
+    { key: 'tool', label: 'tool' },
+  ]
+
+  const lanesG = svg.append('g').attr('class', 'lanes')
+  for (const lane of laneEntries) {
+    const y = LANE_Y[lane.key]
+    lanesG.append('line')
+      .attr('x1', PAD_LEFT - 8)
+      .attr('y1', y)
+      .attr('x2', svgWidth - PAD_RIGHT)
+      .attr('y2', y)
+      .attr('stroke', '#334155')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '2 4')
+      .attr('opacity', 0.5)
+
+    lanesG.append('text')
+      .attr('x', 4)
+      .attr('y', y + 4)
+      .attr('fill', '#94a3b8')
+      .attr('font-size', 11)
+      .attr('font-family', 'sans-serif')
+      .text(lane.label)
+  }
+
+  // ── Edges ───────────────────────────────────────────────────────────────
+  const edgesG = svg.append('g').attr('class', 'edges')
+  for (const link of links) {
+    const src = posMap.get(link.source)
+    const tgt = posMap.get(link.target)
+    if (!src || !tgt) {
+      continue
+    }
+    edgesG.append('line')
+      .attr('x1', src.x)
+      .attr('y1', src.y)
+      .attr('x2', tgt.x)
+      .attr('y2', tgt.y)
+      .attr('stroke', link.kind === 'result' ? '#22c55e' : '#94a3b8')
+      .attr('stroke-dasharray', link.kind === 'result' ? '4 2' : null)
+      .attr('stroke-width', 1.2)
+      .attr('opacity', 0.7)
+  }
+
+  // ── Nodes ───────────────────────────────────────────────────────────────
+  const nodesG = svg.append('g').attr('class', 'nodes')
+  for (const node of nodes) {
+    const pos = posMap.get(node.id)
+    if (!pos) {
+      continue
+    }
+    const circle = nodesG.append('circle')
+      .attr('cx', pos.x)
+      .attr('cy', pos.y)
+      .attr('r', NODE_RADIUS)
+      .attr('fill', NODE_COLORS[node.type] ?? '#64748b')
+      .attr('stroke', '#0f172a')
+      .attr('stroke-width', 1)
+
+    circle.append('title')
+      .text(`${node.label} (${node.type})\n${node.ts}`)
+  }
+
+  // ── Tool node labels (rotated, below tool lane) ─────────────────────────
+  const toolLabelY = LANE_Y.tool + NODE_RADIUS + 6
+  const labelsG = svg.append('g').attr('class', 'tool-labels')
+  for (const node of nodes) {
+    if (node.type !== 'tool') {
+      continue
+    }
+    const pos = posMap.get(node.id)
+    if (!pos) {
+      continue
+    }
+    const truncated = node.label.length > 12 ? `${node.label.slice(0, 12)}…` : node.label
+    labelsG.append('text')
+      .attr('transform', `translate(${pos.x},${toolLabelY}) rotate(-40)`)
+      .attr('fill', '#94a3b8')
+      .attr('font-size', 9)
+      .attr('font-family', 'sans-serif')
+      .attr('text-anchor', 'end')
+      .text(truncated)
+  }
+
+  // ── Legend ───────────────────────────────────────────────────────────────
+  const legendItems: Array<{ color: string, label: string, dashed?: boolean, isLine?: boolean }> = [
+    { color: NODE_COLORS.user, label: 'user' },
+    { color: NODE_COLORS.assistant, label: 'assistant' },
+    { color: NODE_COLORS.tool, label: 'tool' },
+    { color: '#22c55e', label: 'result edge', dashed: true, isLine: true },
+  ]
+
+  const legendG = svg.append('g').attr('class', 'legend')
+  const legendStartX = svgWidth - PAD_RIGHT - 130
+  const legendStartY = 10
+  const rowH = 16
+
+  legendItems.forEach((item, i) => {
+    const gy = legendStartY + i * rowH
+    if (item.isLine) {
+      legendG.append('line')
+        .attr('x1', legendStartX)
+        .attr('y1', gy + 5)
+        .attr('x2', legendStartX + 14)
+        .attr('y2', gy + 5)
+        .attr('stroke', item.color)
+        .attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', item.dashed ? '4 2' : null)
+    }
+    else {
+      legendG.append('circle')
+        .attr('cx', legendStartX + 7)
+        .attr('cy', gy + 5)
+        .attr('r', 5)
+        .attr('fill', item.color)
+    }
+    legendG.append('text')
+      .attr('x', legendStartX + 20)
+      .attr('y', gy + 9)
+      .attr('fill', '#94a3b8')
+      .attr('font-size', 10)
+      .attr('font-family', 'sans-serif')
+      .text(item.label)
+  })
 }
 
-watch(() => props.data, render, { immediate: true })
+// flush: 'post' so render runs AFTER the DOM patch — the <svg v-else> only
+// mounts once data is non-empty, so a pre-flush watcher would see a null
+// svgRef on first data arrival and bail, leaving the chart blank.
+watch(() => props.data, render, { immediate: true, flush: 'post' })
 
 onUnmounted(() => {
-  activeSim?.stop()
-  activeSim = null
-  if (svgRef.value)
+  if (svgRef.value) {
     d3.select(svgRef.value).selectAll('*').remove()
+  }
 })
 </script>
 
@@ -121,6 +238,8 @@ onUnmounted(() => {
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">
       Pick a session to view its DAG.
     </div>
-    <svg v-else ref="svgRef" class="w-full" style="min-height: 480px;" aria-label="Session DAG" role="img" />
+    <div v-else style="overflow-x: auto;">
+      <svg ref="svgRef" :style="{ minHeight: '340px' }" aria-label="Session DAG" role="img" />
+    </div>
   </div>
 </template>
