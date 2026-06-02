@@ -62,10 +62,11 @@ type SpawnStatus struct {
 
 // SpawnManager rate-limits and tracks user-initiated Claude agent spawns.
 type SpawnManager struct {
-	rateLimitMax    int
-	rateLimitWindow time.Duration
-	spawnerRepo     repo.SpawnerRepo
-	spawnPolicy     services.SpawnPolicy
+	rateLimitMax      int
+	rateLimitWindow   time.Duration
+	spawnerRepo       repo.SpawnerRepo
+	spawnPolicy       services.SpawnPolicy
+	projectFolderRepo repo.ProjectFolderRepo // may be nil
 
 	mu           sync.Mutex
 	userAttempts map[string][]time.Time // per-user sliding window keyed by JWT sub (or "__global__" in bypass mode)
@@ -93,6 +94,13 @@ func NewSpawnManager(maxSpawns int, windowMs int, spawnerRepo repo.SpawnerRepo, 
 		userAttempts:    make(map[string][]time.Time),
 		spawnStore:      make(map[int]*SpawnStatus),
 	}
+}
+
+// SetProjectFolderRepo wires in a ProjectFolderRepo so that Spawn can inject
+// --add-dir flags for multi-folder projects. Call once after NewSpawnManager
+// before any spawns; safe to call with nil (disables --add-dir injection).
+func (m *SpawnManager) SetProjectFolderRepo(r repo.ProjectFolderRepo) {
+	m.projectFolderRepo = r
 }
 
 // IsSpawnAllowed reports whether a new spawn is allowed for the given user (sub).
@@ -150,6 +158,15 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	resumeSessionID, _ := body["resumeSessionId"].(string)
 	if resumeSessionID != "" && !uuidRE.MatchString(resumeSessionID) {
 		return 0, fmt.Errorf("invalid sessionId format")
+	}
+
+	permissionMode, _ := body["permissionMode"].(string)
+	if permissionMode == "" {
+		permissionMode = "default"
+	} else {
+		if _, ok := allowedPermissionModes[permissionMode]; !ok {
+			return 0, fmt.Errorf("invalid permissionMode")
+		}
 	}
 
 	// Resolve spawner if provided.
@@ -217,6 +234,28 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	}
 	if systemPrompt != "" {
 		canonicalArgs = append(canonicalArgs, "--system-prompt", systemPrompt)
+	}
+	// Only append --permission-mode when the resolved spawner has not declared
+	// its own permission posture. A spawner that already passes --permission-mode
+	// or --dangerously-skip-permissions would otherwise get a second, conflicting
+	// flag which causes claude to error.
+	if !spawnerArgsControlPermissionMode(spawnerArgs) {
+		canonicalArgs = append(canonicalArgs, "--permission-mode", permissionMode)
+	}
+
+	// Inject --add-dir for additional project folders (multi-folder projects).
+	// Only applies to native claude and custom adapters; ollama/openai are already
+	// blocked above, so this guard is defence-in-depth for any future adapter types.
+	if projectID != "" && m.projectFolderRepo != nil &&
+		(spawnerRow == nil || spawnerRow.AdapterType == "" || spawnerRow.AdapterType == "claude" || spawnerRow.AdapterType == "custom") {
+		folders, err := m.projectFolderRepo.ListByProject(context.Background(), projectID)
+		if err != nil {
+			slog.Warn("spawn: ListByProject failed; skipping --add-dir injection", "projectId", projectID, "err", err)
+		} else {
+			for _, dir := range services.AdditionalDirsForProject(folders, cwd) {
+				canonicalArgs = append(canonicalArgs, "--add-dir", dir)
+			}
+		}
 	}
 
 	// Order: spawner args first, canonical args last so user-supplied flags win.
@@ -541,9 +580,20 @@ func mergeEnv(s *ent.Spawner) []string {
 	return out
 }
 
+// allowedPermissionModes is the exhaustive set of values the caller may pass
+// as body["permissionMode"]. Any other non-empty value is rejected.
+var allowedPermissionModes = map[string]struct{}{
+	"default":            {},
+	"acceptEdits":        {},
+	"plan":               {},
+	"bypassPermissions":  {},
+}
+
 // reservedSpawnerFlags are CLI flags the dashboard sets itself; spawner-row
 // args must not re-declare them. The list mirrors the canonical args built
 // in Spawn(): --resume, -p, --model, --system-prompt, --mcp-config.
+// --permission-mode is intentionally NOT listed here: spawners may legitimately
+// set their own permission posture (handled by spawnerArgsControlPermissionMode).
 var reservedSpawnerFlags = map[string]struct{}{
 	"--resume":        {},
 	"-p":              {},
@@ -565,4 +615,21 @@ func firstReservedFlag(args []string) string {
 		}
 	}
 	return ""
+}
+
+// spawnerArgsControlPermissionMode reports whether the provided spawner args
+// already declare a permission posture — either an explicit --permission-mode
+// (or --permission-mode=value) or one of the two dangerously-skip spellings.
+// When true, Spawn must not append its own --permission-mode to avoid a
+// duplicate / conflicting flag that would cause claude to error.
+func spawnerArgsControlPermissionMode(args []string) bool {
+	for _, a := range args {
+		if a == "--permission-mode" || strings.HasPrefix(a, "--permission-mode=") {
+			return true
+		}
+		if a == "--dangerously-skip-permissions" || a == "--allow-dangerously-skip-permissions" {
+			return true
+		}
+	}
+	return false
 }

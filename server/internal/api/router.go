@@ -314,6 +314,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			spawnPolicy = services.NewSpawnPolicy(nil)
 		}
 		spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs, deps.SpawnerRepo, spawnPolicy)
+		spawnMgr.SetProjectFolderRepo(deps.ProjectFolderRepo)
 		go spawnMgr.StartPruner(serverCtx)
 		spawnHandler := agents.NewSpawnHandler(spawnMgr)
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)

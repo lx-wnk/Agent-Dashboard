@@ -5,7 +5,6 @@ import { fetchProjectFolders } from '../composables/useProjectFolders'
 import { useProjects } from '../composables/useProjects'
 import { useSpawnDialog } from '../composables/useSpawnDialog'
 import { useSpawners } from '../composables/useSpawners'
-import { AVAILABLE_MODELS } from '../utils/models'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
@@ -30,9 +29,8 @@ const projectChoice = ref<string>('')
 const showQuickCreate = ref(false)
 const prompt = ref('')
 const systemPrompt = ref('')
-const enableChannel = ref(true)
-const skipPermissions = ref(false)
-const skipPermissionsConfirmed = ref(false)
+const permissionMode = ref<'default' | 'acceptEdits' | 'bypassPermissions'>('default')
+const bypassConfirmed = ref(false)
 const isSpawning = ref(false)
 const errorMsg = ref('')
 const spawnStatusMsg = ref('')
@@ -53,9 +51,8 @@ function stopStatusPoll() {
 function resetForm() {
   prompt.value = ''
   systemPrompt.value = ''
-  enableChannel.value = true
-  skipPermissions.value = false
-  skipPermissionsConfirmed.value = false
+  permissionMode.value = 'default'
+  bypassConfirmed.value = false
   isSpawning.value = false
   errorMsg.value = ''
   spawnStatusMsg.value = ''
@@ -86,6 +83,10 @@ watch(projectChoice, async (v) => {
   const proj = projects.value.find(p => p.id === v)
   if (proj)
     await dlg.selectProject(proj)
+})
+
+watch(permissionMode, () => {
+  bypassConfirmed.value = false
 })
 
 function onProjectCreated(p: Project) {
@@ -136,8 +137,9 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
 async function handleSpawn() {
   if (isSpawning.value || !prompt.value.trim() || !dlg.cwd.value.trim())
     return
-  if (skipPermissions.value && !skipPermissionsConfirmed.value) {
-    skipPermissionsConfirmed.value = true
+
+  if (permissionMode.value === 'bypassPermissions' && !bypassConfirmed.value) {
+    bypassConfirmed.value = true
     return
   }
 
@@ -148,11 +150,9 @@ async function handleSpawn() {
   const body: Record<string, unknown> = {
     prompt: prompt.value.trim(),
     cwd: dlg.cwd.value.trim(),
-    enableChannel: enableChannel.value,
-    skipPermissions: skipPermissions.value,
+    enableChannel: true,
+    permissionMode: permissionMode.value,
   }
-  if (dlg.model.value)
-    body.model = dlg.model.value
   if (systemPrompt.value.trim())
     body.systemPrompt = systemPrompt.value.trim()
   if (dlg.spawnerId.value)
@@ -242,9 +242,6 @@ onUnmounted(() => {
         <div class="mb-4">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-project">Project</label>
           <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
-            <option value="">
-              — None (manual) —
-            </option>
             <option
               v-for="p in sortedProjects"
               :key="p.id"
@@ -281,24 +278,18 @@ onUnmounted(() => {
         </div>
 
         <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-cwd">Working Directory</label>
-          <AppInput
-            id="spawn-cwd"
-            v-model="dlg.cwd.value"
-            required
-            placeholder="/path/to/project"
-            data-testid="spawn-cwd-wrap"
-          />
-        </div>
-
-        <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-model">Model</label>
-          <select id="spawn-model" v-model="dlg.model.value" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-spawner">Spawner</label>
+          <select
+            id="spawn-spawner"
+            v-model="dlg.spawnerId.value"
+            data-testid="spawn-spawner"
+            class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
+          >
             <option value="">
-              Auto
+              {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
             </option>
-            <option v-for="m in AVAILABLE_MODELS" :key="m" :value="m">
-              {{ m }}
+            <option v-for="s in spawners" :key="s.id" :value="s.id">
+              {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
             </option>
           </select>
         </div>
@@ -314,30 +305,35 @@ onUnmounted(() => {
           />
         </div>
 
-        <div class="flex items-center gap-2 mb-4">
-          <input
-            id="spawn-channel"
-            v-model="enableChannel"
-            type="checkbox"
+        <div class="mb-4">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-permission-mode">Permissions</label>
+          <select
+            id="spawn-permission-mode"
+            v-model="permissionMode"
+            data-testid="spawn-permission-mode"
+            class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
           >
-          <label for="spawn-channel">Enable dashboard control channel</label>
+            <option value="default">
+              Ask for permission (default)
+            </option>
+            <option value="acceptEdits">
+              Auto-accept edits
+            </option>
+            <option value="bypassPermissions">
+              Bypass all permissions (dangerous)
+            </option>
+          </select>
         </div>
 
-        <div class="flex items-center gap-2 mb-4">
-          <input
-            id="spawn-yolo"
-            v-model="skipPermissions"
-            type="checkbox"
-            @change="skipPermissionsConfirmed = false"
-          >
-          <label for="spawn-yolo">Skip permission prompts <span class="text-[10px] text-fg-mute font-mono">(--dangerously-skip-permissions)</span></label>
-        </div>
-
-        <div v-if="skipPermissions" class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded p-2 px-3 text-xs leading-relaxed text-yellow-600 dark:text-yellow-400 mb-3">
+        <div
+          v-if="permissionMode === 'bypassPermissions'"
+          data-testid="bypass-warning"
+          class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded p-2 px-3 text-xs leading-relaxed text-yellow-600 dark:text-yellow-400 mb-3"
+        >
           The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
         </div>
 
-        <div v-if="skipPermissionsConfirmed" class="text-xs text-red-600 dark:text-red-400 font-semibold mb-2">
+        <div v-if="bypassConfirmed" data-testid="bypass-confirm-msg" class="text-xs text-red-600 dark:text-red-400 font-semibold mb-2">
           Click "Spawn Agent" again to confirm.
         </div>
 

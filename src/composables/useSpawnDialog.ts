@@ -18,7 +18,6 @@ export function useSpawnDialog(deps: UseSpawnDialogDeps) {
   const folders = shallowRef<ProjectFolder[]>([])
   const selectedFolderId = ref<string | null>(null)
   const cwd = ref('')
-  const model = ref('')
   const spawnerId = ref<string | null>(null)
 
   async function selectProject(p: Project): Promise<void> {
@@ -33,11 +32,9 @@ export function useSpawnDialog(deps: UseSpawnDialogDeps) {
     if (p.defaultSpawnerId) {
       const sp = deps.lookupSpawner(p.defaultSpawnerId)
       spawnerId.value = sp?.id ?? null
-      model.value = sp?.modelOverride ?? ''
     }
     else {
       spawnerId.value = null
-      model.value = ''
     }
   }
 
@@ -54,7 +51,6 @@ export function useSpawnDialog(deps: UseSpawnDialogDeps) {
     folders.value = []
     selectedFolderId.value = null
     cwd.value = ''
-    model.value = ''
     spawnerId.value = null
   }
 
@@ -63,7 +59,6 @@ export function useSpawnDialog(deps: UseSpawnDialogDeps) {
     folders,
     selectedFolderId,
     cwd,
-    model,
     spawnerId,
     selectProject,
     selectFolder,

@@ -40,7 +40,7 @@ describe('useSpawnDialog', () => {
     vi.restoreAllMocks()
   })
 
-  it('selecting a project with one folder hydrates cwd and model', async () => {
+  it('selecting a project with one folder hydrates cwd and spawnerId', async () => {
     const fetchFolders = vi.fn().mockResolvedValue(singleFolder)
     const lookupSpawner = vi.fn().mockReturnValue(sampleSpawner)
 
@@ -48,7 +48,6 @@ describe('useSpawnDialog', () => {
     await d.selectProject(sampleProject)
 
     expect(d.cwd.value).toBe('/home/u/alpha')
-    expect(d.model.value).toBe('claude-opus-4-7')
     expect(d.spawnerId.value).toBe('spwn_a')
     expect(d.folders.value).toEqual(singleFolder)
     expect(d.selectedFolderId.value).toBe('fld_a')
@@ -76,7 +75,7 @@ describe('useSpawnDialog', () => {
     expect(d.cwd.value).toBe('/home/u/alpha-experimental')
   })
 
-  it('clearing project resets cwd, model, spawnerId', async () => {
+  it('clearing project resets cwd and spawnerId', async () => {
     const fetchFolders = vi.fn().mockResolvedValue(singleFolder)
     const lookupSpawner = vi.fn().mockReturnValue(sampleSpawner)
 
@@ -85,23 +84,21 @@ describe('useSpawnDialog', () => {
     d.clearProject()
 
     expect(d.cwd.value).toBe('')
-    expect(d.model.value).toBe('')
     expect(d.spawnerId.value).toBeNull()
     expect(d.folders.value).toEqual([])
   })
 
-  it('project without defaultSpawnerId leaves model and spawnerId empty', async () => {
+  it('project without defaultSpawnerId leaves spawnerId empty', async () => {
     const fetchFolders = vi.fn().mockResolvedValue(singleFolder)
     const lookupSpawner = vi.fn().mockReturnValue(undefined)
 
     const d = useSpawnDialog({ fetchFolders, lookupSpawner })
     await d.selectProject({ ...sampleProject, defaultSpawnerId: null })
 
-    expect(d.model.value).toBe('')
     expect(d.spawnerId.value).toBeNull()
   })
 
-  it('project with spawner but no modelOverride keeps model empty (Auto)', async () => {
+  it('project with spawner still sets spawnerId regardless of modelOverride', async () => {
     const fetchFolders = vi.fn().mockResolvedValue(singleFolder)
     const noOverride: Spawner = { ...sampleSpawner, modelOverride: undefined }
     const lookupSpawner = vi.fn().mockReturnValue(noOverride)
@@ -109,7 +106,6 @@ describe('useSpawnDialog', () => {
     const d = useSpawnDialog({ fetchFolders, lookupSpawner })
     await d.selectProject(sampleProject)
 
-    expect(d.model.value).toBe('')
     expect(d.spawnerId.value).toBe('spwn_a')
   })
 })
