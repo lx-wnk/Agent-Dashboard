@@ -20,8 +20,9 @@ import (
 // ---- stub repo ----
 
 type stubCostRepo struct {
-	mu   sync.Mutex
-	rows []repo.AgentCostRow
+	mu     sync.Mutex
+	rows   []repo.AgentCostRow
+	mtimes map[string]int64 // returned by ListSourceMtimes; nil → empty
 }
 
 func (r *stubCostRepo) Upsert(_ context.Context, rows []repo.AgentCostRow) error {
@@ -33,6 +34,13 @@ func (r *stubCostRepo) Upsert(_ context.Context, rows []repo.AgentCostRow) error
 
 func (r *stubCostRepo) ListByTimeRange(_ context.Context, _, _ time.Time) ([]*ent.AgentCostTrend, error) {
 	return nil, nil
+}
+
+func (r *stubCostRepo) ListSourceMtimes(_ context.Context) (map[string]int64, error) {
+	if r.mtimes == nil {
+		return map[string]int64{}, nil
+	}
+	return r.mtimes, nil
 }
 
 func (r *stubCostRepo) all() []repo.AgentCostRow {
@@ -64,7 +72,7 @@ func TestParseTokensFromRaw_ValidJSONLWithUsage(t *testing.T) {
 	ts := "2024-01-15T10:30:00.000Z"
 	line := buildJSONLLine(100, 50, "claude-opus-4", ts)
 
-	usage, model, lastActivity, err := parseTokensFromRaw(line)
+	usage, model, lastActivity, _, err := parseTokensFromRaw(line)
 	require.NoError(t, err)
 
 	assert.Equal(t, 100, usage.InputTokens)
@@ -83,7 +91,7 @@ func TestParseTokensFromRaw_MultipleEntriesAccumulatesTokens(t *testing.T) {
 	line2 := buildJSONLLine(200, 80, "claude-sonnet-4-5", ts2)
 	raw := line1 + "\n" + line2
 
-	usage, model, lastActivity, err := parseTokensFromRaw(raw)
+	usage, model, lastActivity, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err)
 
 	assert.Equal(t, 300, usage.InputTokens, "input tokens should be summed")
@@ -99,7 +107,7 @@ func TestParseTokensFromRaw_MissingUsageField(t *testing.T) {
 	// Assistant message without "usage" field — should not panic and return zero tokens.
 	raw := `{"type":"message","timestamp":"2024-01-15T10:00:00.000Z","message":{"role":"assistant","model":"claude-sonnet-4-5"}}`
 
-	usage, _, _, err := parseTokensFromRaw(raw)
+	usage, _, _, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err)
 	assert.Equal(t, 0, usage.InputTokens)
 	assert.Equal(t, 0, usage.OutputTokens)
@@ -109,7 +117,7 @@ func TestParseTokensFromRaw_NonAssistantRoleSkipped(t *testing.T) {
 	// User messages should be ignored.
 	raw := `{"type":"message","timestamp":"2024-01-15T10:00:00.000Z","message":{"role":"user","usage":{"input_tokens":999,"output_tokens":999}}}`
 
-	usage, _, _, err := parseTokensFromRaw(raw)
+	usage, _, _, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err)
 	assert.Equal(t, 0, usage.InputTokens)
 	assert.Equal(t, 0, usage.OutputTokens)
@@ -120,7 +128,7 @@ func TestParseTokensFromRaw_NonMessageTypeSkipped(t *testing.T) {
 	// even when they carry an assistant role + usage block.
 	raw := `{"type":"tool_result","timestamp":"2024-01-15T10:00:00.000Z","message":{"role":"assistant","usage":{"input_tokens":999,"output_tokens":999}}}`
 
-	usage, _, _, err := parseTokensFromRaw(raw)
+	usage, _, _, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err)
 	assert.Equal(t, 0, usage.InputTokens)
 	assert.Equal(t, 0, usage.OutputTokens)
@@ -133,7 +141,7 @@ func TestParseTokensFromRaw_NonMessageTypeSkipped(t *testing.T) {
 func TestParseTokensFromRaw_AssistantType(t *testing.T) {
 	raw := `{"type":"assistant","timestamp":"2024-01-15T10:00:00.000Z","message":{"role":"assistant","model":"claude-opus-4-7","usage":{"input_tokens":120,"output_tokens":45}}}`
 
-	usage, model, _, err := parseTokensFromRaw(raw)
+	usage, model, _, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err)
 	assert.Equal(t, 120, usage.InputTokens)
 	assert.Equal(t, 45, usage.OutputTokens)
@@ -146,14 +154,14 @@ func TestParseTokensFromRaw_MalformedJSONLineSkipped(t *testing.T) {
 	validLine := buildJSONLLine(42, 21, "claude-opus-4", ts)
 	raw := "THIS IS NOT JSON\n" + validLine
 
-	usage, _, _, err := parseTokensFromRaw(raw)
+	usage, _, _, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err, "malformed JSON should be skipped, not cause an error")
 	assert.Equal(t, 42, usage.InputTokens)
 	assert.Equal(t, 21, usage.OutputTokens)
 }
 
 func TestParseTokensFromRaw_EmptyInput(t *testing.T) {
-	usage, model, _, err := parseTokensFromRaw("")
+	usage, model, _, _, err := parseTokensFromRaw("")
 	require.NoError(t, err)
 	assert.Equal(t, 0, usage.InputTokens)
 	assert.Equal(t, 0, usage.OutputTokens)
@@ -163,7 +171,7 @@ func TestParseTokensFromRaw_EmptyInput(t *testing.T) {
 
 func TestParseTokensFromRaw_AllBlankLines(t *testing.T) {
 	raw := strings.Repeat("\n", 10)
-	usage, _, _, err := parseTokensFromRaw(raw)
+	usage, _, _, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err)
 	assert.Equal(t, 0, usage.InputTokens)
 	assert.Equal(t, 0, usage.OutputTokens)
@@ -176,7 +184,7 @@ func TestParseTokensFromRaw_ModelUpdatedToLatestEntry(t *testing.T) {
 	line2 := buildJSONLLine(10, 5, "claude-opus-4", ts2)
 	raw := line1 + "\n" + line2
 
-	_, model, _, err := parseTokensFromRaw(raw)
+	_, model, _, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err)
 	// The last assistant entry's model wins.
 	assert.Equal(t, "claude-opus-4", model)
@@ -184,7 +192,7 @@ func TestParseTokensFromRaw_ModelUpdatedToLatestEntry(t *testing.T) {
 
 func TestParseTokensFromRaw_AllMalformedLines(t *testing.T) {
 	raw := "not json\nalso not json\n{broken"
-	usage, _, _, err := parseTokensFromRaw(raw)
+	usage, _, _, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err)
 	assert.Equal(t, 0, usage.InputTokens)
 	assert.Equal(t, 0, usage.OutputTokens)
@@ -450,4 +458,112 @@ func TestDedupRowsBySession(t *testing.T) {
 			assert.Equal(t, 2.0, r.CostUSD, "order-independent: A keeps the newer row")
 		}
 	}
+}
+
+// ---- v2 extractCostRow behaviour tests ----
+
+func writeSession(t *testing.T, dir, sessionID, content string) string {
+	t.Helper()
+	p := filepath.Join(dir, sessionID+".jsonl")
+	require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+	return p
+}
+
+// TestExtractCostRow_RecordedAtFromTimestamp is the regression guard for the
+// "everything lands on the last two days" bug: recorded_at must reflect the
+// session's real (old) timestamp, not a now-24h fallback.
+func TestExtractCostRow_RecordedAtFromTimestamp(t *testing.T) {
+	dir := t.TempDir()
+	ts := "2025-03-04T08:15:00.000Z"
+	p := writeSession(t, dir, "session-old", buildJSONLLine(100, 50, "claude-opus-4", ts)+"\n")
+
+	imp := NewImporter(&stubCostRepo{})
+	row, err := imp.extractCostRow(t.Context(), p)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+
+	want, _ := time.Parse(time.RFC3339Nano, ts)
+	assert.True(t, row.RecordedAt.Equal(want), "recorded_at should equal the parsed timestamp %v, got %v", want, row.RecordedAt)
+	assert.WithinDuration(t, want, row.RecordedAt, time.Second)
+}
+
+// TestExtractCostRow_RecordedAtFallsBackToMtime: when no timestamp parses, the
+// row's recorded_at falls back to the file's mtime (not now-24h).
+func TestExtractCostRow_RecordedAtFallsBackToMtime(t *testing.T) {
+	dir := t.TempDir()
+	// Assistant turn with usage but NO timestamp field.
+	line := `{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4","usage":{"input_tokens":10,"output_tokens":5}}}`
+	p := writeSession(t, dir, "session-nots", line+"\n")
+
+	info, err := os.Stat(p)
+	require.NoError(t, err)
+
+	imp := NewImporter(&stubCostRepo{})
+	row, err := imp.extractCostRow(t.Context(), p)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	assert.WithinDuration(t, info.ModTime(), row.RecordedAt, 2*time.Second)
+}
+
+// TestExtractCostRow_FullFileReadBeyondTail proves the importer reads the whole
+// file, not just the trailing 32KB: the only token-bearing turn sits at the
+// START, followed by >32KB of filler. A tail-only read would miss it.
+func TestExtractCostRow_FullFileReadBeyondTail(t *testing.T) {
+	dir := t.TempDir()
+	head := buildJSONLLine(777, 111, "claude-opus-4", "2025-01-01T00:00:00.000Z") + "\n"
+	// >32KB of non-assistant filler lines after the head.
+	filler := strings.Repeat(`{"type":"attachment","message":{"role":"user"}}`+"\n", 1200)
+	p := writeSession(t, dir, "session-big", head+filler)
+	require.Greater(t, len(head+filler), 40*1024, "filler must exceed the 32KB tail window")
+
+	imp := NewImporter(&stubCostRepo{})
+	row, err := imp.extractCostRow(t.Context(), p)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	assert.Equal(t, 777, row.InputTokens, "head turn beyond the tail window must still be counted")
+	assert.Equal(t, 111, row.OutputTokens)
+}
+
+// TestExtractCostRow_ProjectFallbackBasename: with no resolver, project_name is
+// the basename of the session's cwd.
+func TestExtractCostRow_ProjectFallbackBasename(t *testing.T) {
+	dir := t.TempDir()
+	line := `{"type":"assistant","timestamp":"2025-02-02T02:02:02.000Z","cwd":"/Users/x/code/my-app","message":{"role":"assistant","model":"claude-opus-4","usage":{"input_tokens":3,"output_tokens":2}}}`
+	p := writeSession(t, dir, "session-proj", line+"\n")
+
+	imp := NewImporter(&stubCostRepo{}) // nil resolver → basename fallback
+	row, err := imp.extractCostRow(t.Context(), p)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	assert.Equal(t, "/Users/x/code/my-app", row.Cwd)
+	assert.Equal(t, "/Users/x/code/my-app", row.ProjectPath)
+	assert.Equal(t, "my-app", row.ProjectName)
+}
+
+// TestImporter_SkipsUnchangedFiles: a file whose stored mtime equals its current
+// mtime is skipped (not re-parsed / not re-upserted).
+func TestImporter_SkipsUnchangedFiles(t *testing.T) {
+	dir := t.TempDir()
+	p := writeSession(t, dir, "session-skip", makeJSONLContent(10, 5))
+	info, err := os.Stat(p)
+	require.NoError(t, err)
+
+	repoStub := &stubCostRepo{mtimes: map[string]int64{"session-skip": info.ModTime().UnixNano()}}
+	imp := NewImporter(repoStub).WithCollectFn(func(string) ([]string, error) { return []string{p}, nil })
+	t.Setenv("DASHBOARD_CLAUDE_CONFIG_DIRS", "/fake/acct")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/fake/nonexistent")
+
+	done := make(chan struct{})
+	require.NoError(t, imp.Run(t.Context(), func(p ImportProgress) {
+		if p.Done {
+			select {
+			case <-done:
+			default:
+				close(done)
+			}
+		}
+	}))
+	<-done
+	require.Eventually(t, func() bool { return len(repoStub.all()) == 0 }, time.Second, 10*time.Millisecond,
+		"unchanged file must be skipped — no rows upserted")
 }

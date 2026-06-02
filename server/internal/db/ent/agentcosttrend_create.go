@@ -67,6 +67,62 @@ func (_c *AgentCostTrendCreate) SetNillableRecordedAt(v *time.Time) *AgentCostTr
 	return _c
 }
 
+// SetCwd sets the "cwd" field.
+func (_c *AgentCostTrendCreate) SetCwd(v string) *AgentCostTrendCreate {
+	_c.mutation.SetCwd(v)
+	return _c
+}
+
+// SetNillableCwd sets the "cwd" field if the given value is not nil.
+func (_c *AgentCostTrendCreate) SetNillableCwd(v *string) *AgentCostTrendCreate {
+	if v != nil {
+		_c.SetCwd(*v)
+	}
+	return _c
+}
+
+// SetProjectPath sets the "project_path" field.
+func (_c *AgentCostTrendCreate) SetProjectPath(v string) *AgentCostTrendCreate {
+	_c.mutation.SetProjectPath(v)
+	return _c
+}
+
+// SetNillableProjectPath sets the "project_path" field if the given value is not nil.
+func (_c *AgentCostTrendCreate) SetNillableProjectPath(v *string) *AgentCostTrendCreate {
+	if v != nil {
+		_c.SetProjectPath(*v)
+	}
+	return _c
+}
+
+// SetProjectName sets the "project_name" field.
+func (_c *AgentCostTrendCreate) SetProjectName(v string) *AgentCostTrendCreate {
+	_c.mutation.SetProjectName(v)
+	return _c
+}
+
+// SetNillableProjectName sets the "project_name" field if the given value is not nil.
+func (_c *AgentCostTrendCreate) SetNillableProjectName(v *string) *AgentCostTrendCreate {
+	if v != nil {
+		_c.SetProjectName(*v)
+	}
+	return _c
+}
+
+// SetSourceMtime sets the "source_mtime" field.
+func (_c *AgentCostTrendCreate) SetSourceMtime(v int64) *AgentCostTrendCreate {
+	_c.mutation.SetSourceMtime(v)
+	return _c
+}
+
+// SetNillableSourceMtime sets the "source_mtime" field if the given value is not nil.
+func (_c *AgentCostTrendCreate) SetNillableSourceMtime(v *int64) *AgentCostTrendCreate {
+	if v != nil {
+		_c.SetSourceMtime(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *AgentCostTrendCreate) SetID(v string) *AgentCostTrendCreate {
 	_c.mutation.SetID(v)
@@ -111,6 +167,22 @@ func (_c *AgentCostTrendCreate) defaults() {
 	if _, ok := _c.mutation.RecordedAt(); !ok {
 		v := agentcosttrend.DefaultRecordedAt()
 		_c.mutation.SetRecordedAt(v)
+	}
+	if _, ok := _c.mutation.Cwd(); !ok {
+		v := agentcosttrend.DefaultCwd
+		_c.mutation.SetCwd(v)
+	}
+	if _, ok := _c.mutation.ProjectPath(); !ok {
+		v := agentcosttrend.DefaultProjectPath
+		_c.mutation.SetProjectPath(v)
+	}
+	if _, ok := _c.mutation.ProjectName(); !ok {
+		v := agentcosttrend.DefaultProjectName
+		_c.mutation.SetProjectName(v)
+	}
+	if _, ok := _c.mutation.SourceMtime(); !ok {
+		v := agentcosttrend.DefaultSourceMtime
+		_c.mutation.SetSourceMtime(v)
 	}
 }
 
@@ -193,6 +265,22 @@ func (_c *AgentCostTrendCreate) createSpec() (*AgentCostTrend, *sqlgraph.CreateS
 	if value, ok := _c.mutation.RecordedAt(); ok {
 		_spec.SetField(agentcosttrend.FieldRecordedAt, field.TypeTime, value)
 		_node.RecordedAt = value
+	}
+	if value, ok := _c.mutation.Cwd(); ok {
+		_spec.SetField(agentcosttrend.FieldCwd, field.TypeString, value)
+		_node.Cwd = value
+	}
+	if value, ok := _c.mutation.ProjectPath(); ok {
+		_spec.SetField(agentcosttrend.FieldProjectPath, field.TypeString, value)
+		_node.ProjectPath = value
+	}
+	if value, ok := _c.mutation.ProjectName(); ok {
+		_spec.SetField(agentcosttrend.FieldProjectName, field.TypeString, value)
+		_node.ProjectName = value
+	}
+	if value, ok := _c.mutation.SourceMtime(); ok {
+		_spec.SetField(agentcosttrend.FieldSourceMtime, field.TypeInt64, value)
+		_node.SourceMtime = value
 	}
 	return _node, _spec
 }
@@ -333,6 +421,84 @@ func (u *AgentCostTrendUpsert) SetRecordedAt(v time.Time) *AgentCostTrendUpsert 
 // UpdateRecordedAt sets the "recorded_at" field to the value that was provided on create.
 func (u *AgentCostTrendUpsert) UpdateRecordedAt() *AgentCostTrendUpsert {
 	u.SetExcluded(agentcosttrend.FieldRecordedAt)
+	return u
+}
+
+// SetCwd sets the "cwd" field.
+func (u *AgentCostTrendUpsert) SetCwd(v string) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldCwd, v)
+	return u
+}
+
+// UpdateCwd sets the "cwd" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateCwd() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldCwd)
+	return u
+}
+
+// ClearCwd clears the value of the "cwd" field.
+func (u *AgentCostTrendUpsert) ClearCwd() *AgentCostTrendUpsert {
+	u.SetNull(agentcosttrend.FieldCwd)
+	return u
+}
+
+// SetProjectPath sets the "project_path" field.
+func (u *AgentCostTrendUpsert) SetProjectPath(v string) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldProjectPath, v)
+	return u
+}
+
+// UpdateProjectPath sets the "project_path" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateProjectPath() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldProjectPath)
+	return u
+}
+
+// ClearProjectPath clears the value of the "project_path" field.
+func (u *AgentCostTrendUpsert) ClearProjectPath() *AgentCostTrendUpsert {
+	u.SetNull(agentcosttrend.FieldProjectPath)
+	return u
+}
+
+// SetProjectName sets the "project_name" field.
+func (u *AgentCostTrendUpsert) SetProjectName(v string) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldProjectName, v)
+	return u
+}
+
+// UpdateProjectName sets the "project_name" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateProjectName() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldProjectName)
+	return u
+}
+
+// ClearProjectName clears the value of the "project_name" field.
+func (u *AgentCostTrendUpsert) ClearProjectName() *AgentCostTrendUpsert {
+	u.SetNull(agentcosttrend.FieldProjectName)
+	return u
+}
+
+// SetSourceMtime sets the "source_mtime" field.
+func (u *AgentCostTrendUpsert) SetSourceMtime(v int64) *AgentCostTrendUpsert {
+	u.Set(agentcosttrend.FieldSourceMtime, v)
+	return u
+}
+
+// UpdateSourceMtime sets the "source_mtime" field to the value that was provided on create.
+func (u *AgentCostTrendUpsert) UpdateSourceMtime() *AgentCostTrendUpsert {
+	u.SetExcluded(agentcosttrend.FieldSourceMtime)
+	return u
+}
+
+// AddSourceMtime adds v to the "source_mtime" field.
+func (u *AgentCostTrendUpsert) AddSourceMtime(v int64) *AgentCostTrendUpsert {
+	u.Add(agentcosttrend.FieldSourceMtime, v)
+	return u
+}
+
+// ClearSourceMtime clears the value of the "source_mtime" field.
+func (u *AgentCostTrendUpsert) ClearSourceMtime() *AgentCostTrendUpsert {
+	u.SetNull(agentcosttrend.FieldSourceMtime)
 	return u
 }
 
@@ -486,6 +652,97 @@ func (u *AgentCostTrendUpsertOne) SetRecordedAt(v time.Time) *AgentCostTrendUpse
 func (u *AgentCostTrendUpsertOne) UpdateRecordedAt() *AgentCostTrendUpsertOne {
 	return u.Update(func(s *AgentCostTrendUpsert) {
 		s.UpdateRecordedAt()
+	})
+}
+
+// SetCwd sets the "cwd" field.
+func (u *AgentCostTrendUpsertOne) SetCwd(v string) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetCwd(v)
+	})
+}
+
+// UpdateCwd sets the "cwd" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateCwd() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateCwd()
+	})
+}
+
+// ClearCwd clears the value of the "cwd" field.
+func (u *AgentCostTrendUpsertOne) ClearCwd() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.ClearCwd()
+	})
+}
+
+// SetProjectPath sets the "project_path" field.
+func (u *AgentCostTrendUpsertOne) SetProjectPath(v string) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetProjectPath(v)
+	})
+}
+
+// UpdateProjectPath sets the "project_path" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateProjectPath() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateProjectPath()
+	})
+}
+
+// ClearProjectPath clears the value of the "project_path" field.
+func (u *AgentCostTrendUpsertOne) ClearProjectPath() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.ClearProjectPath()
+	})
+}
+
+// SetProjectName sets the "project_name" field.
+func (u *AgentCostTrendUpsertOne) SetProjectName(v string) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetProjectName(v)
+	})
+}
+
+// UpdateProjectName sets the "project_name" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateProjectName() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateProjectName()
+	})
+}
+
+// ClearProjectName clears the value of the "project_name" field.
+func (u *AgentCostTrendUpsertOne) ClearProjectName() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.ClearProjectName()
+	})
+}
+
+// SetSourceMtime sets the "source_mtime" field.
+func (u *AgentCostTrendUpsertOne) SetSourceMtime(v int64) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetSourceMtime(v)
+	})
+}
+
+// AddSourceMtime adds v to the "source_mtime" field.
+func (u *AgentCostTrendUpsertOne) AddSourceMtime(v int64) *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.AddSourceMtime(v)
+	})
+}
+
+// UpdateSourceMtime sets the "source_mtime" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertOne) UpdateSourceMtime() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateSourceMtime()
+	})
+}
+
+// ClearSourceMtime clears the value of the "source_mtime" field.
+func (u *AgentCostTrendUpsertOne) ClearSourceMtime() *AgentCostTrendUpsertOne {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.ClearSourceMtime()
 	})
 }
 
@@ -806,6 +1063,97 @@ func (u *AgentCostTrendUpsertBulk) SetRecordedAt(v time.Time) *AgentCostTrendUps
 func (u *AgentCostTrendUpsertBulk) UpdateRecordedAt() *AgentCostTrendUpsertBulk {
 	return u.Update(func(s *AgentCostTrendUpsert) {
 		s.UpdateRecordedAt()
+	})
+}
+
+// SetCwd sets the "cwd" field.
+func (u *AgentCostTrendUpsertBulk) SetCwd(v string) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetCwd(v)
+	})
+}
+
+// UpdateCwd sets the "cwd" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateCwd() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateCwd()
+	})
+}
+
+// ClearCwd clears the value of the "cwd" field.
+func (u *AgentCostTrendUpsertBulk) ClearCwd() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.ClearCwd()
+	})
+}
+
+// SetProjectPath sets the "project_path" field.
+func (u *AgentCostTrendUpsertBulk) SetProjectPath(v string) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetProjectPath(v)
+	})
+}
+
+// UpdateProjectPath sets the "project_path" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateProjectPath() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateProjectPath()
+	})
+}
+
+// ClearProjectPath clears the value of the "project_path" field.
+func (u *AgentCostTrendUpsertBulk) ClearProjectPath() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.ClearProjectPath()
+	})
+}
+
+// SetProjectName sets the "project_name" field.
+func (u *AgentCostTrendUpsertBulk) SetProjectName(v string) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetProjectName(v)
+	})
+}
+
+// UpdateProjectName sets the "project_name" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateProjectName() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateProjectName()
+	})
+}
+
+// ClearProjectName clears the value of the "project_name" field.
+func (u *AgentCostTrendUpsertBulk) ClearProjectName() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.ClearProjectName()
+	})
+}
+
+// SetSourceMtime sets the "source_mtime" field.
+func (u *AgentCostTrendUpsertBulk) SetSourceMtime(v int64) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.SetSourceMtime(v)
+	})
+}
+
+// AddSourceMtime adds v to the "source_mtime" field.
+func (u *AgentCostTrendUpsertBulk) AddSourceMtime(v int64) *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.AddSourceMtime(v)
+	})
+}
+
+// UpdateSourceMtime sets the "source_mtime" field to the value that was provided on create.
+func (u *AgentCostTrendUpsertBulk) UpdateSourceMtime() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.UpdateSourceMtime()
+	})
+}
+
+// ClearSourceMtime clears the value of the "source_mtime" field.
+func (u *AgentCostTrendUpsertBulk) ClearSourceMtime() *AgentCostTrendUpsertBulk {
+	return u.Update(func(s *AgentCostTrendUpsert) {
+		s.ClearSourceMtime()
 	})
 }
 

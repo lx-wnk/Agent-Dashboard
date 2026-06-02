@@ -181,7 +181,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	var historyHandler *apihistory.Handler
 	if entClient != nil {
 		costRepo := repo.NewAgentCostTrendRepo(entClient)
-		histImporter = histsvc.NewImporter(costRepo)
+		costProjectResolver := services.NewCostProjectResolver(projectFolderRepo)
+		histImporter = histsvc.NewImporter(costRepo).WithProjectResolver(costProjectResolver)
 		historyHandler = apihistory.NewHandler(histImporter)
 	}
 

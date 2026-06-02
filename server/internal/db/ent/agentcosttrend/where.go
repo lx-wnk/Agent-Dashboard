@@ -94,6 +94,26 @@ func RecordedAt(v time.Time) predicate.AgentCostTrend {
 	return predicate.AgentCostTrend(sql.FieldEQ(FieldRecordedAt, v))
 }
 
+// Cwd applies equality check predicate on the "cwd" field. It's identical to CwdEQ.
+func Cwd(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEQ(FieldCwd, v))
+}
+
+// ProjectPath applies equality check predicate on the "project_path" field. It's identical to ProjectPathEQ.
+func ProjectPath(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEQ(FieldProjectPath, v))
+}
+
+// ProjectName applies equality check predicate on the "project_name" field. It's identical to ProjectNameEQ.
+func ProjectName(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEQ(FieldProjectName, v))
+}
+
+// SourceMtime applies equality check predicate on the "source_mtime" field. It's identical to SourceMtimeEQ.
+func SourceMtime(v int64) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEQ(FieldSourceMtime, v))
+}
+
 // SessionIDEQ applies the EQ predicate on the "session_id" field.
 func SessionIDEQ(v string) predicate.AgentCostTrend {
 	return predicate.AgentCostTrend(sql.FieldEQ(FieldSessionID, v))
@@ -382,6 +402,281 @@ func RecordedAtLT(v time.Time) predicate.AgentCostTrend {
 // RecordedAtLTE applies the LTE predicate on the "recorded_at" field.
 func RecordedAtLTE(v time.Time) predicate.AgentCostTrend {
 	return predicate.AgentCostTrend(sql.FieldLTE(FieldRecordedAt, v))
+}
+
+// CwdEQ applies the EQ predicate on the "cwd" field.
+func CwdEQ(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEQ(FieldCwd, v))
+}
+
+// CwdNEQ applies the NEQ predicate on the "cwd" field.
+func CwdNEQ(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNEQ(FieldCwd, v))
+}
+
+// CwdIn applies the In predicate on the "cwd" field.
+func CwdIn(vs ...string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldIn(FieldCwd, vs...))
+}
+
+// CwdNotIn applies the NotIn predicate on the "cwd" field.
+func CwdNotIn(vs ...string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNotIn(FieldCwd, vs...))
+}
+
+// CwdGT applies the GT predicate on the "cwd" field.
+func CwdGT(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldGT(FieldCwd, v))
+}
+
+// CwdGTE applies the GTE predicate on the "cwd" field.
+func CwdGTE(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldGTE(FieldCwd, v))
+}
+
+// CwdLT applies the LT predicate on the "cwd" field.
+func CwdLT(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldLT(FieldCwd, v))
+}
+
+// CwdLTE applies the LTE predicate on the "cwd" field.
+func CwdLTE(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldLTE(FieldCwd, v))
+}
+
+// CwdContains applies the Contains predicate on the "cwd" field.
+func CwdContains(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldContains(FieldCwd, v))
+}
+
+// CwdHasPrefix applies the HasPrefix predicate on the "cwd" field.
+func CwdHasPrefix(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldHasPrefix(FieldCwd, v))
+}
+
+// CwdHasSuffix applies the HasSuffix predicate on the "cwd" field.
+func CwdHasSuffix(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldHasSuffix(FieldCwd, v))
+}
+
+// CwdIsNil applies the IsNil predicate on the "cwd" field.
+func CwdIsNil() predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldIsNull(FieldCwd))
+}
+
+// CwdNotNil applies the NotNil predicate on the "cwd" field.
+func CwdNotNil() predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNotNull(FieldCwd))
+}
+
+// CwdEqualFold applies the EqualFold predicate on the "cwd" field.
+func CwdEqualFold(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEqualFold(FieldCwd, v))
+}
+
+// CwdContainsFold applies the ContainsFold predicate on the "cwd" field.
+func CwdContainsFold(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldContainsFold(FieldCwd, v))
+}
+
+// ProjectPathEQ applies the EQ predicate on the "project_path" field.
+func ProjectPathEQ(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEQ(FieldProjectPath, v))
+}
+
+// ProjectPathNEQ applies the NEQ predicate on the "project_path" field.
+func ProjectPathNEQ(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNEQ(FieldProjectPath, v))
+}
+
+// ProjectPathIn applies the In predicate on the "project_path" field.
+func ProjectPathIn(vs ...string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldIn(FieldProjectPath, vs...))
+}
+
+// ProjectPathNotIn applies the NotIn predicate on the "project_path" field.
+func ProjectPathNotIn(vs ...string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNotIn(FieldProjectPath, vs...))
+}
+
+// ProjectPathGT applies the GT predicate on the "project_path" field.
+func ProjectPathGT(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldGT(FieldProjectPath, v))
+}
+
+// ProjectPathGTE applies the GTE predicate on the "project_path" field.
+func ProjectPathGTE(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldGTE(FieldProjectPath, v))
+}
+
+// ProjectPathLT applies the LT predicate on the "project_path" field.
+func ProjectPathLT(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldLT(FieldProjectPath, v))
+}
+
+// ProjectPathLTE applies the LTE predicate on the "project_path" field.
+func ProjectPathLTE(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldLTE(FieldProjectPath, v))
+}
+
+// ProjectPathContains applies the Contains predicate on the "project_path" field.
+func ProjectPathContains(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldContains(FieldProjectPath, v))
+}
+
+// ProjectPathHasPrefix applies the HasPrefix predicate on the "project_path" field.
+func ProjectPathHasPrefix(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldHasPrefix(FieldProjectPath, v))
+}
+
+// ProjectPathHasSuffix applies the HasSuffix predicate on the "project_path" field.
+func ProjectPathHasSuffix(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldHasSuffix(FieldProjectPath, v))
+}
+
+// ProjectPathIsNil applies the IsNil predicate on the "project_path" field.
+func ProjectPathIsNil() predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldIsNull(FieldProjectPath))
+}
+
+// ProjectPathNotNil applies the NotNil predicate on the "project_path" field.
+func ProjectPathNotNil() predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNotNull(FieldProjectPath))
+}
+
+// ProjectPathEqualFold applies the EqualFold predicate on the "project_path" field.
+func ProjectPathEqualFold(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEqualFold(FieldProjectPath, v))
+}
+
+// ProjectPathContainsFold applies the ContainsFold predicate on the "project_path" field.
+func ProjectPathContainsFold(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldContainsFold(FieldProjectPath, v))
+}
+
+// ProjectNameEQ applies the EQ predicate on the "project_name" field.
+func ProjectNameEQ(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEQ(FieldProjectName, v))
+}
+
+// ProjectNameNEQ applies the NEQ predicate on the "project_name" field.
+func ProjectNameNEQ(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNEQ(FieldProjectName, v))
+}
+
+// ProjectNameIn applies the In predicate on the "project_name" field.
+func ProjectNameIn(vs ...string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldIn(FieldProjectName, vs...))
+}
+
+// ProjectNameNotIn applies the NotIn predicate on the "project_name" field.
+func ProjectNameNotIn(vs ...string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNotIn(FieldProjectName, vs...))
+}
+
+// ProjectNameGT applies the GT predicate on the "project_name" field.
+func ProjectNameGT(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldGT(FieldProjectName, v))
+}
+
+// ProjectNameGTE applies the GTE predicate on the "project_name" field.
+func ProjectNameGTE(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldGTE(FieldProjectName, v))
+}
+
+// ProjectNameLT applies the LT predicate on the "project_name" field.
+func ProjectNameLT(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldLT(FieldProjectName, v))
+}
+
+// ProjectNameLTE applies the LTE predicate on the "project_name" field.
+func ProjectNameLTE(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldLTE(FieldProjectName, v))
+}
+
+// ProjectNameContains applies the Contains predicate on the "project_name" field.
+func ProjectNameContains(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldContains(FieldProjectName, v))
+}
+
+// ProjectNameHasPrefix applies the HasPrefix predicate on the "project_name" field.
+func ProjectNameHasPrefix(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldHasPrefix(FieldProjectName, v))
+}
+
+// ProjectNameHasSuffix applies the HasSuffix predicate on the "project_name" field.
+func ProjectNameHasSuffix(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldHasSuffix(FieldProjectName, v))
+}
+
+// ProjectNameIsNil applies the IsNil predicate on the "project_name" field.
+func ProjectNameIsNil() predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldIsNull(FieldProjectName))
+}
+
+// ProjectNameNotNil applies the NotNil predicate on the "project_name" field.
+func ProjectNameNotNil() predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNotNull(FieldProjectName))
+}
+
+// ProjectNameEqualFold applies the EqualFold predicate on the "project_name" field.
+func ProjectNameEqualFold(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEqualFold(FieldProjectName, v))
+}
+
+// ProjectNameContainsFold applies the ContainsFold predicate on the "project_name" field.
+func ProjectNameContainsFold(v string) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldContainsFold(FieldProjectName, v))
+}
+
+// SourceMtimeEQ applies the EQ predicate on the "source_mtime" field.
+func SourceMtimeEQ(v int64) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldEQ(FieldSourceMtime, v))
+}
+
+// SourceMtimeNEQ applies the NEQ predicate on the "source_mtime" field.
+func SourceMtimeNEQ(v int64) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNEQ(FieldSourceMtime, v))
+}
+
+// SourceMtimeIn applies the In predicate on the "source_mtime" field.
+func SourceMtimeIn(vs ...int64) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldIn(FieldSourceMtime, vs...))
+}
+
+// SourceMtimeNotIn applies the NotIn predicate on the "source_mtime" field.
+func SourceMtimeNotIn(vs ...int64) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNotIn(FieldSourceMtime, vs...))
+}
+
+// SourceMtimeGT applies the GT predicate on the "source_mtime" field.
+func SourceMtimeGT(v int64) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldGT(FieldSourceMtime, v))
+}
+
+// SourceMtimeGTE applies the GTE predicate on the "source_mtime" field.
+func SourceMtimeGTE(v int64) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldGTE(FieldSourceMtime, v))
+}
+
+// SourceMtimeLT applies the LT predicate on the "source_mtime" field.
+func SourceMtimeLT(v int64) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldLT(FieldSourceMtime, v))
+}
+
+// SourceMtimeLTE applies the LTE predicate on the "source_mtime" field.
+func SourceMtimeLTE(v int64) predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldLTE(FieldSourceMtime, v))
+}
+
+// SourceMtimeIsNil applies the IsNil predicate on the "source_mtime" field.
+func SourceMtimeIsNil() predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldIsNull(FieldSourceMtime))
+}
+
+// SourceMtimeNotNil applies the NotNil predicate on the "source_mtime" field.
+func SourceMtimeNotNil() predicate.AgentCostTrend {
+	return predicate.AgentCostTrend(sql.FieldNotNull(FieldSourceMtime))
 }
 
 // And groups predicates with the AND operator between them.

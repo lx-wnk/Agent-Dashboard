@@ -74,6 +74,11 @@ type AgentCostTrendMutation struct {
 	cost_usd         *float64
 	addcost_usd      *float64
 	recorded_at      *time.Time
+	cwd              *string
+	project_path     *string
+	project_name     *string
+	source_mtime     *int64
+	addsource_mtime  *int64
 	clearedFields    map[string]struct{}
 	done             bool
 	oldValue         func(context.Context) (*AgentCostTrend, error)
@@ -460,6 +465,223 @@ func (m *AgentCostTrendMutation) ResetRecordedAt() {
 	m.recorded_at = nil
 }
 
+// SetCwd sets the "cwd" field.
+func (m *AgentCostTrendMutation) SetCwd(s string) {
+	m.cwd = &s
+}
+
+// Cwd returns the value of the "cwd" field in the mutation.
+func (m *AgentCostTrendMutation) Cwd() (r string, exists bool) {
+	v := m.cwd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCwd returns the old "cwd" field's value of the AgentCostTrend entity.
+// If the AgentCostTrend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentCostTrendMutation) OldCwd(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCwd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCwd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCwd: %w", err)
+	}
+	return oldValue.Cwd, nil
+}
+
+// ClearCwd clears the value of the "cwd" field.
+func (m *AgentCostTrendMutation) ClearCwd() {
+	m.cwd = nil
+	m.clearedFields[agentcosttrend.FieldCwd] = struct{}{}
+}
+
+// CwdCleared returns if the "cwd" field was cleared in this mutation.
+func (m *AgentCostTrendMutation) CwdCleared() bool {
+	_, ok := m.clearedFields[agentcosttrend.FieldCwd]
+	return ok
+}
+
+// ResetCwd resets all changes to the "cwd" field.
+func (m *AgentCostTrendMutation) ResetCwd() {
+	m.cwd = nil
+	delete(m.clearedFields, agentcosttrend.FieldCwd)
+}
+
+// SetProjectPath sets the "project_path" field.
+func (m *AgentCostTrendMutation) SetProjectPath(s string) {
+	m.project_path = &s
+}
+
+// ProjectPath returns the value of the "project_path" field in the mutation.
+func (m *AgentCostTrendMutation) ProjectPath() (r string, exists bool) {
+	v := m.project_path
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectPath returns the old "project_path" field's value of the AgentCostTrend entity.
+// If the AgentCostTrend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentCostTrendMutation) OldProjectPath(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectPath is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectPath requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectPath: %w", err)
+	}
+	return oldValue.ProjectPath, nil
+}
+
+// ClearProjectPath clears the value of the "project_path" field.
+func (m *AgentCostTrendMutation) ClearProjectPath() {
+	m.project_path = nil
+	m.clearedFields[agentcosttrend.FieldProjectPath] = struct{}{}
+}
+
+// ProjectPathCleared returns if the "project_path" field was cleared in this mutation.
+func (m *AgentCostTrendMutation) ProjectPathCleared() bool {
+	_, ok := m.clearedFields[agentcosttrend.FieldProjectPath]
+	return ok
+}
+
+// ResetProjectPath resets all changes to the "project_path" field.
+func (m *AgentCostTrendMutation) ResetProjectPath() {
+	m.project_path = nil
+	delete(m.clearedFields, agentcosttrend.FieldProjectPath)
+}
+
+// SetProjectName sets the "project_name" field.
+func (m *AgentCostTrendMutation) SetProjectName(s string) {
+	m.project_name = &s
+}
+
+// ProjectName returns the value of the "project_name" field in the mutation.
+func (m *AgentCostTrendMutation) ProjectName() (r string, exists bool) {
+	v := m.project_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectName returns the old "project_name" field's value of the AgentCostTrend entity.
+// If the AgentCostTrend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentCostTrendMutation) OldProjectName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectName: %w", err)
+	}
+	return oldValue.ProjectName, nil
+}
+
+// ClearProjectName clears the value of the "project_name" field.
+func (m *AgentCostTrendMutation) ClearProjectName() {
+	m.project_name = nil
+	m.clearedFields[agentcosttrend.FieldProjectName] = struct{}{}
+}
+
+// ProjectNameCleared returns if the "project_name" field was cleared in this mutation.
+func (m *AgentCostTrendMutation) ProjectNameCleared() bool {
+	_, ok := m.clearedFields[agentcosttrend.FieldProjectName]
+	return ok
+}
+
+// ResetProjectName resets all changes to the "project_name" field.
+func (m *AgentCostTrendMutation) ResetProjectName() {
+	m.project_name = nil
+	delete(m.clearedFields, agentcosttrend.FieldProjectName)
+}
+
+// SetSourceMtime sets the "source_mtime" field.
+func (m *AgentCostTrendMutation) SetSourceMtime(i int64) {
+	m.source_mtime = &i
+	m.addsource_mtime = nil
+}
+
+// SourceMtime returns the value of the "source_mtime" field in the mutation.
+func (m *AgentCostTrendMutation) SourceMtime() (r int64, exists bool) {
+	v := m.source_mtime
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceMtime returns the old "source_mtime" field's value of the AgentCostTrend entity.
+// If the AgentCostTrend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentCostTrendMutation) OldSourceMtime(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceMtime is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceMtime requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceMtime: %w", err)
+	}
+	return oldValue.SourceMtime, nil
+}
+
+// AddSourceMtime adds i to the "source_mtime" field.
+func (m *AgentCostTrendMutation) AddSourceMtime(i int64) {
+	if m.addsource_mtime != nil {
+		*m.addsource_mtime += i
+	} else {
+		m.addsource_mtime = &i
+	}
+}
+
+// AddedSourceMtime returns the value that was added to the "source_mtime" field in this mutation.
+func (m *AgentCostTrendMutation) AddedSourceMtime() (r int64, exists bool) {
+	v := m.addsource_mtime
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearSourceMtime clears the value of the "source_mtime" field.
+func (m *AgentCostTrendMutation) ClearSourceMtime() {
+	m.source_mtime = nil
+	m.addsource_mtime = nil
+	m.clearedFields[agentcosttrend.FieldSourceMtime] = struct{}{}
+}
+
+// SourceMtimeCleared returns if the "source_mtime" field was cleared in this mutation.
+func (m *AgentCostTrendMutation) SourceMtimeCleared() bool {
+	_, ok := m.clearedFields[agentcosttrend.FieldSourceMtime]
+	return ok
+}
+
+// ResetSourceMtime resets all changes to the "source_mtime" field.
+func (m *AgentCostTrendMutation) ResetSourceMtime() {
+	m.source_mtime = nil
+	m.addsource_mtime = nil
+	delete(m.clearedFields, agentcosttrend.FieldSourceMtime)
+}
+
 // Where appends a list predicates to the AgentCostTrendMutation builder.
 func (m *AgentCostTrendMutation) Where(ps ...predicate.AgentCostTrend) {
 	m.predicates = append(m.predicates, ps...)
@@ -494,7 +716,7 @@ func (m *AgentCostTrendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AgentCostTrendMutation) Fields() []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 10)
 	if m.session_id != nil {
 		fields = append(fields, agentcosttrend.FieldSessionID)
 	}
@@ -512,6 +734,18 @@ func (m *AgentCostTrendMutation) Fields() []string {
 	}
 	if m.recorded_at != nil {
 		fields = append(fields, agentcosttrend.FieldRecordedAt)
+	}
+	if m.cwd != nil {
+		fields = append(fields, agentcosttrend.FieldCwd)
+	}
+	if m.project_path != nil {
+		fields = append(fields, agentcosttrend.FieldProjectPath)
+	}
+	if m.project_name != nil {
+		fields = append(fields, agentcosttrend.FieldProjectName)
+	}
+	if m.source_mtime != nil {
+		fields = append(fields, agentcosttrend.FieldSourceMtime)
 	}
 	return fields
 }
@@ -533,6 +767,14 @@ func (m *AgentCostTrendMutation) Field(name string) (ent.Value, bool) {
 		return m.CostUsd()
 	case agentcosttrend.FieldRecordedAt:
 		return m.RecordedAt()
+	case agentcosttrend.FieldCwd:
+		return m.Cwd()
+	case agentcosttrend.FieldProjectPath:
+		return m.ProjectPath()
+	case agentcosttrend.FieldProjectName:
+		return m.ProjectName()
+	case agentcosttrend.FieldSourceMtime:
+		return m.SourceMtime()
 	}
 	return nil, false
 }
@@ -554,6 +796,14 @@ func (m *AgentCostTrendMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldCostUsd(ctx)
 	case agentcosttrend.FieldRecordedAt:
 		return m.OldRecordedAt(ctx)
+	case agentcosttrend.FieldCwd:
+		return m.OldCwd(ctx)
+	case agentcosttrend.FieldProjectPath:
+		return m.OldProjectPath(ctx)
+	case agentcosttrend.FieldProjectName:
+		return m.OldProjectName(ctx)
+	case agentcosttrend.FieldSourceMtime:
+		return m.OldSourceMtime(ctx)
 	}
 	return nil, fmt.Errorf("unknown AgentCostTrend field %s", name)
 }
@@ -605,6 +855,34 @@ func (m *AgentCostTrendMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRecordedAt(v)
 		return nil
+	case agentcosttrend.FieldCwd:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCwd(v)
+		return nil
+	case agentcosttrend.FieldProjectPath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectPath(v)
+		return nil
+	case agentcosttrend.FieldProjectName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectName(v)
+		return nil
+	case agentcosttrend.FieldSourceMtime:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceMtime(v)
+		return nil
 	}
 	return fmt.Errorf("unknown AgentCostTrend field %s", name)
 }
@@ -622,6 +900,9 @@ func (m *AgentCostTrendMutation) AddedFields() []string {
 	if m.addcost_usd != nil {
 		fields = append(fields, agentcosttrend.FieldCostUsd)
 	}
+	if m.addsource_mtime != nil {
+		fields = append(fields, agentcosttrend.FieldSourceMtime)
+	}
 	return fields
 }
 
@@ -636,6 +917,8 @@ func (m *AgentCostTrendMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedOutputTokens()
 	case agentcosttrend.FieldCostUsd:
 		return m.AddedCostUsd()
+	case agentcosttrend.FieldSourceMtime:
+		return m.AddedSourceMtime()
 	}
 	return nil, false
 }
@@ -666,6 +949,13 @@ func (m *AgentCostTrendMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddCostUsd(v)
 		return nil
+	case agentcosttrend.FieldSourceMtime:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSourceMtime(v)
+		return nil
 	}
 	return fmt.Errorf("unknown AgentCostTrend numeric field %s", name)
 }
@@ -673,7 +963,20 @@ func (m *AgentCostTrendMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *AgentCostTrendMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(agentcosttrend.FieldCwd) {
+		fields = append(fields, agentcosttrend.FieldCwd)
+	}
+	if m.FieldCleared(agentcosttrend.FieldProjectPath) {
+		fields = append(fields, agentcosttrend.FieldProjectPath)
+	}
+	if m.FieldCleared(agentcosttrend.FieldProjectName) {
+		fields = append(fields, agentcosttrend.FieldProjectName)
+	}
+	if m.FieldCleared(agentcosttrend.FieldSourceMtime) {
+		fields = append(fields, agentcosttrend.FieldSourceMtime)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -686,6 +989,20 @@ func (m *AgentCostTrendMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *AgentCostTrendMutation) ClearField(name string) error {
+	switch name {
+	case agentcosttrend.FieldCwd:
+		m.ClearCwd()
+		return nil
+	case agentcosttrend.FieldProjectPath:
+		m.ClearProjectPath()
+		return nil
+	case agentcosttrend.FieldProjectName:
+		m.ClearProjectName()
+		return nil
+	case agentcosttrend.FieldSourceMtime:
+		m.ClearSourceMtime()
+		return nil
+	}
 	return fmt.Errorf("unknown AgentCostTrend nullable field %s", name)
 }
 
@@ -710,6 +1027,18 @@ func (m *AgentCostTrendMutation) ResetField(name string) error {
 		return nil
 	case agentcosttrend.FieldRecordedAt:
 		m.ResetRecordedAt()
+		return nil
+	case agentcosttrend.FieldCwd:
+		m.ResetCwd()
+		return nil
+	case agentcosttrend.FieldProjectPath:
+		m.ResetProjectPath()
+		return nil
+	case agentcosttrend.FieldProjectName:
+		m.ResetProjectName()
+		return nil
+	case agentcosttrend.FieldSourceMtime:
+		m.ResetSourceMtime()
 		return nil
 	}
 	return fmt.Errorf("unknown AgentCostTrend field %s", name)

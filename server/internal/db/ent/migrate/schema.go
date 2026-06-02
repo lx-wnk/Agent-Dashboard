@@ -18,6 +18,10 @@ var (
 		{Name: "output_tokens", Type: field.TypeInt},
 		{Name: "cost_usd", Type: field.TypeFloat64},
 		{Name: "recorded_at", Type: field.TypeTime},
+		{Name: "cwd", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "project_path", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "project_name", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "source_mtime", Type: field.TypeInt64, Nullable: true, Default: 0},
 	}
 	// AgentCostTrendsTable holds the schema information for the "agent_cost_trends" table.
 	AgentCostTrendsTable = &schema.Table{
@@ -34,6 +38,11 @@ var (
 				Name:    "agentcosttrend_recorded_at",
 				Unique:  false,
 				Columns: []*schema.Column{AgentCostTrendsColumns[6]},
+			},
+			{
+				Name:    "agentcosttrend_project_path",
+				Unique:  false,
+				Columns: []*schema.Column{AgentCostTrendsColumns[8]},
 			},
 		},
 	}

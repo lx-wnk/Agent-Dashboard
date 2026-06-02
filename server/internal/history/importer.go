@@ -17,6 +17,12 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 )
 
+// ProjectResolver maps a session cwd to a stable grouping key and display name.
+// Implementations must be safe for concurrent use.
+type ProjectResolver interface {
+	Resolve(ctx context.Context, cwd string) (path string, name string)
+}
+
 const (
 	maxFileSizeBytes   = 100 * 1024 * 1024 // 100 MB
 	progressDebounceMs = 100
@@ -36,6 +42,7 @@ type ImportProgress struct {
 type Importer struct {
 	costRepo  repo.AgentCostTrendRepo
 	collectFn func(string) ([]string, error) // injectable for tests; nil → collectJSONLFiles
+	resolver  ProjectResolver                // optional; nil → fallback basename
 	mu        sync.Mutex
 	running   bool
 }
@@ -48,7 +55,13 @@ func NewImporter(costRepo repo.AgentCostTrendRepo) *Importer {
 // WithCollectFn returns a shallow copy of imp with fn as the file-collection function.
 // For use in tests only — overrides the default collectJSONLFiles scan.
 func (imp *Importer) WithCollectFn(fn func(string) ([]string, error)) *Importer {
-	return &Importer{costRepo: imp.costRepo, collectFn: fn}
+	return &Importer{costRepo: imp.costRepo, collectFn: fn, resolver: imp.resolver}
+}
+
+// WithProjectResolver returns a shallow copy of imp with r as the project resolver.
+// When r is nil, the importer uses a basename fallback (path = cwd, name = filepath.Base(cwd)).
+func (imp *Importer) WithProjectResolver(r ProjectResolver) *Importer {
+	return &Importer{costRepo: imp.costRepo, collectFn: imp.collectFn, resolver: r}
 }
 
 // Run starts the import in a background goroutine. Returns immediately.
@@ -179,6 +192,13 @@ func (imp *Importer) runImport(ctx context.Context, onProgress func(ImportProgre
 		}
 	}
 
+	// Load stored source mtimes once; used to skip files whose content has not changed.
+	storedMtimes, mtimeErr := imp.costRepo.ListSourceMtimes(ctx)
+	if mtimeErr != nil {
+		slog.Warn("history.import: could not load source mtimes — all files will be (re-)parsed", "err", mtimeErr)
+		storedMtimes = map[string]int64{}
+	}
+
 	var rows []repo.AgentCostRow
 
 	for _, filePath := range files {
@@ -186,7 +206,19 @@ func (imp *Importer) runImport(ctx context.Context, onProgress func(ImportProgre
 			break
 		}
 
-		row, err := extractCostRow(filePath)
+		// Skip-unchanged: if the stored mtime matches the file's current mtime, we can
+		// safely skip parsing — the content has not changed since the last import.
+		sessionID := sessionIDFromPath(filePath)
+		if stored, ok := storedMtimes[sessionID]; ok && stored != 0 {
+			info, statErr := os.Stat(filePath)
+			if statErr == nil && info.ModTime().UnixNano() == stored {
+				progress.Processed++
+				reportProgress(false)
+				continue
+			}
+		}
+
+		row, err := imp.extractCostRow(ctx, filePath)
 		if err != nil {
 			slog.Debug("history.import: skip file", "path", filePath, "err", err)
 			progress.Errors++
@@ -284,21 +316,45 @@ func collectJSONLFiles(projectsDir string) ([]string, error) {
 	return files, nil
 }
 
-// extractCostRow tail-reads filePath, parses JSONL, and returns an AgentCostRow.
+// extractCostRow reads filePath, parses JSONL, and returns an AgentCostRow.
 // Returns (nil, nil) when the file has no usable token data.
-func extractCostRow(filePath string) (*repo.AgentCostRow, error) {
-	raw, err := parser.TailRead(filePath)
+func (imp *Importer) extractCostRow(ctx context.Context, filePath string) (*repo.AgentCostRow, error) {
+	// Full-file read (respecting the 100 MB cap).
+	info, err := os.Stat(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("tailread: %w", err)
+		return nil, fmt.Errorf("stat: %w", err)
 	}
+	if info.Size() > maxFileSizeBytes {
+		return nil, fmt.Errorf("file too large (%d bytes)", info.Size())
+	}
+	rawBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("readfile: %w", err)
+	}
+	sourceMtime := info.ModTime().UnixNano()
 
 	sessionID := sessionIDFromPath(filePath)
-	usage, model, lastActivity, err := parseTokensFromRaw(raw)
+	usage, model, lastActivity, cwd, err := parseTokensFromRaw(string(rawBytes))
 	if err != nil {
 		return nil, err
 	}
 	if usage.InputTokens == 0 && usage.OutputTokens == 0 {
 		return nil, nil // no usable data
+	}
+
+	// Recorded-at fallback: use file mtime when no timestamp was parsed.
+	recordedAt := lastActivity
+	if recordedAt.IsZero() {
+		recordedAt = info.ModTime()
+	}
+
+	// Resolve project grouping.
+	projectPath, projectName := cwd, filepath.Base(cwd)
+	if cwd == "" {
+		projectName = ""
+	}
+	if imp.resolver != nil && cwd != "" {
+		projectPath, projectName = imp.resolver.Resolve(ctx, cwd)
 	}
 
 	cost := parser.EstimateCost(usage, model)
@@ -308,7 +364,11 @@ func extractCostRow(filePath string) (*repo.AgentCostRow, error) {
 		InputTokens:  usage.InputTokens,
 		OutputTokens: usage.OutputTokens,
 		CostUSD:      cost,
-		RecordedAt:   lastActivity,
+		RecordedAt:   recordedAt,
+		Cwd:          cwd,
+		ProjectPath:  projectPath,
+		ProjectName:  projectName,
+		SourceMtime:  sourceMtime,
 	}, nil
 }
 
@@ -322,7 +382,9 @@ func sessionIDFromPath(path string) string {
 type jsonlEntry struct {
 	Type      string `json:"type"`
 	Timestamp string `json:"timestamp"`
-	Message   struct {
+	// cwd is a top-level field present on every line in modern Claude Code logs.
+	Cwd     string `json:"cwd"`
+	Message struct {
 		Role  string `json:"role"`
 		Model string `json:"model"`
 		Usage *struct {
@@ -334,12 +396,14 @@ type jsonlEntry struct {
 	} `json:"message"`
 }
 
-// parseTokensFromRaw extracts cumulative token usage, model, and last activity from raw JSONL.
-func parseTokensFromRaw(raw string) (sdk.TokenUsage, string, time.Time, error) {
+// parseTokensFromRaw extracts cumulative token usage, model, last activity, and cwd from raw JSONL.
+// lastActivity is zero when no timestamp could be parsed; the caller falls back to file mtime in that case.
+func parseTokensFromRaw(raw string) (sdk.TokenUsage, string, time.Time, string, error) {
 	var (
 		total        sdk.TokenUsage
 		model        = "claude-sonnet-4-6"
-		lastActivity = time.Now().Add(-24 * time.Hour)
+		lastActivity time.Time // zero → no timestamp parsed
+		cwd          string
 	)
 
 	for _, line := range strings.Split(raw, "\n") {
@@ -350,6 +414,10 @@ func parseTokensFromRaw(raw string) (sdk.TokenUsage, string, time.Time, error) {
 		var e jsonlEntry
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			continue
+		}
+		// Capture cwd from any line — it is stable within a session; last non-empty wins.
+		if e.Cwd != "" {
+			cwd = e.Cwd
 		}
 		// Token usage lives on assistant turns. Claude Code writes these with a
 		// top-level type of "assistant"; older logs used "message". Accept both
@@ -372,11 +440,11 @@ func parseTokensFromRaw(raw string) (sdk.TokenUsage, string, time.Time, error) {
 			total.CacheReadTokens += e.Message.Usage.CacheReadTokens
 		}
 		if ts, err := time.Parse(time.RFC3339Nano, e.Timestamp); err == nil {
-			if ts.After(lastActivity) {
+			if lastActivity.IsZero() || ts.After(lastActivity) {
 				lastActivity = ts
 			}
 		}
 	}
 
-	return total, model, lastActivity, nil
+	return total, model, lastActivity, cwd, nil
 }

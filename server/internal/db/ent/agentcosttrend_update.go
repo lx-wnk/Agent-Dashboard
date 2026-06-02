@@ -133,6 +133,93 @@ func (_u *AgentCostTrendUpdate) SetNillableRecordedAt(v *time.Time) *AgentCostTr
 	return _u
 }
 
+// SetCwd sets the "cwd" field.
+func (_u *AgentCostTrendUpdate) SetCwd(v string) *AgentCostTrendUpdate {
+	_u.mutation.SetCwd(v)
+	return _u
+}
+
+// SetNillableCwd sets the "cwd" field if the given value is not nil.
+func (_u *AgentCostTrendUpdate) SetNillableCwd(v *string) *AgentCostTrendUpdate {
+	if v != nil {
+		_u.SetCwd(*v)
+	}
+	return _u
+}
+
+// ClearCwd clears the value of the "cwd" field.
+func (_u *AgentCostTrendUpdate) ClearCwd() *AgentCostTrendUpdate {
+	_u.mutation.ClearCwd()
+	return _u
+}
+
+// SetProjectPath sets the "project_path" field.
+func (_u *AgentCostTrendUpdate) SetProjectPath(v string) *AgentCostTrendUpdate {
+	_u.mutation.SetProjectPath(v)
+	return _u
+}
+
+// SetNillableProjectPath sets the "project_path" field if the given value is not nil.
+func (_u *AgentCostTrendUpdate) SetNillableProjectPath(v *string) *AgentCostTrendUpdate {
+	if v != nil {
+		_u.SetProjectPath(*v)
+	}
+	return _u
+}
+
+// ClearProjectPath clears the value of the "project_path" field.
+func (_u *AgentCostTrendUpdate) ClearProjectPath() *AgentCostTrendUpdate {
+	_u.mutation.ClearProjectPath()
+	return _u
+}
+
+// SetProjectName sets the "project_name" field.
+func (_u *AgentCostTrendUpdate) SetProjectName(v string) *AgentCostTrendUpdate {
+	_u.mutation.SetProjectName(v)
+	return _u
+}
+
+// SetNillableProjectName sets the "project_name" field if the given value is not nil.
+func (_u *AgentCostTrendUpdate) SetNillableProjectName(v *string) *AgentCostTrendUpdate {
+	if v != nil {
+		_u.SetProjectName(*v)
+	}
+	return _u
+}
+
+// ClearProjectName clears the value of the "project_name" field.
+func (_u *AgentCostTrendUpdate) ClearProjectName() *AgentCostTrendUpdate {
+	_u.mutation.ClearProjectName()
+	return _u
+}
+
+// SetSourceMtime sets the "source_mtime" field.
+func (_u *AgentCostTrendUpdate) SetSourceMtime(v int64) *AgentCostTrendUpdate {
+	_u.mutation.ResetSourceMtime()
+	_u.mutation.SetSourceMtime(v)
+	return _u
+}
+
+// SetNillableSourceMtime sets the "source_mtime" field if the given value is not nil.
+func (_u *AgentCostTrendUpdate) SetNillableSourceMtime(v *int64) *AgentCostTrendUpdate {
+	if v != nil {
+		_u.SetSourceMtime(*v)
+	}
+	return _u
+}
+
+// AddSourceMtime adds value to the "source_mtime" field.
+func (_u *AgentCostTrendUpdate) AddSourceMtime(v int64) *AgentCostTrendUpdate {
+	_u.mutation.AddSourceMtime(v)
+	return _u
+}
+
+// ClearSourceMtime clears the value of the "source_mtime" field.
+func (_u *AgentCostTrendUpdate) ClearSourceMtime() *AgentCostTrendUpdate {
+	_u.mutation.ClearSourceMtime()
+	return _u
+}
+
 // Mutation returns the AgentCostTrendMutation object of the builder.
 func (_u *AgentCostTrendUpdate) Mutation() *AgentCostTrendMutation {
 	return _u.mutation
@@ -200,6 +287,33 @@ func (_u *AgentCostTrendUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.RecordedAt(); ok {
 		_spec.SetField(agentcosttrend.FieldRecordedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.Cwd(); ok {
+		_spec.SetField(agentcosttrend.FieldCwd, field.TypeString, value)
+	}
+	if _u.mutation.CwdCleared() {
+		_spec.ClearField(agentcosttrend.FieldCwd, field.TypeString)
+	}
+	if value, ok := _u.mutation.ProjectPath(); ok {
+		_spec.SetField(agentcosttrend.FieldProjectPath, field.TypeString, value)
+	}
+	if _u.mutation.ProjectPathCleared() {
+		_spec.ClearField(agentcosttrend.FieldProjectPath, field.TypeString)
+	}
+	if value, ok := _u.mutation.ProjectName(); ok {
+		_spec.SetField(agentcosttrend.FieldProjectName, field.TypeString, value)
+	}
+	if _u.mutation.ProjectNameCleared() {
+		_spec.ClearField(agentcosttrend.FieldProjectName, field.TypeString)
+	}
+	if value, ok := _u.mutation.SourceMtime(); ok {
+		_spec.SetField(agentcosttrend.FieldSourceMtime, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSourceMtime(); ok {
+		_spec.AddField(agentcosttrend.FieldSourceMtime, field.TypeInt64, value)
+	}
+	if _u.mutation.SourceMtimeCleared() {
+		_spec.ClearField(agentcosttrend.FieldSourceMtime, field.TypeInt64)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -326,6 +440,93 @@ func (_u *AgentCostTrendUpdateOne) SetNillableRecordedAt(v *time.Time) *AgentCos
 	return _u
 }
 
+// SetCwd sets the "cwd" field.
+func (_u *AgentCostTrendUpdateOne) SetCwd(v string) *AgentCostTrendUpdateOne {
+	_u.mutation.SetCwd(v)
+	return _u
+}
+
+// SetNillableCwd sets the "cwd" field if the given value is not nil.
+func (_u *AgentCostTrendUpdateOne) SetNillableCwd(v *string) *AgentCostTrendUpdateOne {
+	if v != nil {
+		_u.SetCwd(*v)
+	}
+	return _u
+}
+
+// ClearCwd clears the value of the "cwd" field.
+func (_u *AgentCostTrendUpdateOne) ClearCwd() *AgentCostTrendUpdateOne {
+	_u.mutation.ClearCwd()
+	return _u
+}
+
+// SetProjectPath sets the "project_path" field.
+func (_u *AgentCostTrendUpdateOne) SetProjectPath(v string) *AgentCostTrendUpdateOne {
+	_u.mutation.SetProjectPath(v)
+	return _u
+}
+
+// SetNillableProjectPath sets the "project_path" field if the given value is not nil.
+func (_u *AgentCostTrendUpdateOne) SetNillableProjectPath(v *string) *AgentCostTrendUpdateOne {
+	if v != nil {
+		_u.SetProjectPath(*v)
+	}
+	return _u
+}
+
+// ClearProjectPath clears the value of the "project_path" field.
+func (_u *AgentCostTrendUpdateOne) ClearProjectPath() *AgentCostTrendUpdateOne {
+	_u.mutation.ClearProjectPath()
+	return _u
+}
+
+// SetProjectName sets the "project_name" field.
+func (_u *AgentCostTrendUpdateOne) SetProjectName(v string) *AgentCostTrendUpdateOne {
+	_u.mutation.SetProjectName(v)
+	return _u
+}
+
+// SetNillableProjectName sets the "project_name" field if the given value is not nil.
+func (_u *AgentCostTrendUpdateOne) SetNillableProjectName(v *string) *AgentCostTrendUpdateOne {
+	if v != nil {
+		_u.SetProjectName(*v)
+	}
+	return _u
+}
+
+// ClearProjectName clears the value of the "project_name" field.
+func (_u *AgentCostTrendUpdateOne) ClearProjectName() *AgentCostTrendUpdateOne {
+	_u.mutation.ClearProjectName()
+	return _u
+}
+
+// SetSourceMtime sets the "source_mtime" field.
+func (_u *AgentCostTrendUpdateOne) SetSourceMtime(v int64) *AgentCostTrendUpdateOne {
+	_u.mutation.ResetSourceMtime()
+	_u.mutation.SetSourceMtime(v)
+	return _u
+}
+
+// SetNillableSourceMtime sets the "source_mtime" field if the given value is not nil.
+func (_u *AgentCostTrendUpdateOne) SetNillableSourceMtime(v *int64) *AgentCostTrendUpdateOne {
+	if v != nil {
+		_u.SetSourceMtime(*v)
+	}
+	return _u
+}
+
+// AddSourceMtime adds value to the "source_mtime" field.
+func (_u *AgentCostTrendUpdateOne) AddSourceMtime(v int64) *AgentCostTrendUpdateOne {
+	_u.mutation.AddSourceMtime(v)
+	return _u
+}
+
+// ClearSourceMtime clears the value of the "source_mtime" field.
+func (_u *AgentCostTrendUpdateOne) ClearSourceMtime() *AgentCostTrendUpdateOne {
+	_u.mutation.ClearSourceMtime()
+	return _u
+}
+
 // Mutation returns the AgentCostTrendMutation object of the builder.
 func (_u *AgentCostTrendUpdateOne) Mutation() *AgentCostTrendMutation {
 	return _u.mutation
@@ -423,6 +624,33 @@ func (_u *AgentCostTrendUpdateOne) sqlSave(ctx context.Context) (_node *AgentCos
 	}
 	if value, ok := _u.mutation.RecordedAt(); ok {
 		_spec.SetField(agentcosttrend.FieldRecordedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.Cwd(); ok {
+		_spec.SetField(agentcosttrend.FieldCwd, field.TypeString, value)
+	}
+	if _u.mutation.CwdCleared() {
+		_spec.ClearField(agentcosttrend.FieldCwd, field.TypeString)
+	}
+	if value, ok := _u.mutation.ProjectPath(); ok {
+		_spec.SetField(agentcosttrend.FieldProjectPath, field.TypeString, value)
+	}
+	if _u.mutation.ProjectPathCleared() {
+		_spec.ClearField(agentcosttrend.FieldProjectPath, field.TypeString)
+	}
+	if value, ok := _u.mutation.ProjectName(); ok {
+		_spec.SetField(agentcosttrend.FieldProjectName, field.TypeString, value)
+	}
+	if _u.mutation.ProjectNameCleared() {
+		_spec.ClearField(agentcosttrend.FieldProjectName, field.TypeString)
+	}
+	if value, ok := _u.mutation.SourceMtime(); ok {
+		_spec.SetField(agentcosttrend.FieldSourceMtime, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSourceMtime(); ok {
+		_spec.AddField(agentcosttrend.FieldSourceMtime, field.TypeInt64, value)
+	}
+	if _u.mutation.SourceMtimeCleared() {
+		_spec.ClearField(agentcosttrend.FieldSourceMtime, field.TypeInt64)
 	}
 	_node = &AgentCostTrend{config: _u.config}
 	_spec.Assign = _node.assignValues

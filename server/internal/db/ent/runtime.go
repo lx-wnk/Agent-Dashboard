@@ -33,6 +33,22 @@ func init() {
 	agentcosttrendDescRecordedAt := agentcosttrendFields[6].Descriptor()
 	// agentcosttrend.DefaultRecordedAt holds the default value on creation for the recorded_at field.
 	agentcosttrend.DefaultRecordedAt = agentcosttrendDescRecordedAt.Default.(func() time.Time)
+	// agentcosttrendDescCwd is the schema descriptor for cwd field.
+	agentcosttrendDescCwd := agentcosttrendFields[7].Descriptor()
+	// agentcosttrend.DefaultCwd holds the default value on creation for the cwd field.
+	agentcosttrend.DefaultCwd = agentcosttrendDescCwd.Default.(string)
+	// agentcosttrendDescProjectPath is the schema descriptor for project_path field.
+	agentcosttrendDescProjectPath := agentcosttrendFields[8].Descriptor()
+	// agentcosttrend.DefaultProjectPath holds the default value on creation for the project_path field.
+	agentcosttrend.DefaultProjectPath = agentcosttrendDescProjectPath.Default.(string)
+	// agentcosttrendDescProjectName is the schema descriptor for project_name field.
+	agentcosttrendDescProjectName := agentcosttrendFields[9].Descriptor()
+	// agentcosttrend.DefaultProjectName holds the default value on creation for the project_name field.
+	agentcosttrend.DefaultProjectName = agentcosttrendDescProjectName.Default.(string)
+	// agentcosttrendDescSourceMtime is the schema descriptor for source_mtime field.
+	agentcosttrendDescSourceMtime := agentcosttrendFields[10].Descriptor()
+	// agentcosttrend.DefaultSourceMtime holds the default value on creation for the source_mtime field.
+	agentcosttrend.DefaultSourceMtime = agentcosttrendDescSourceMtime.Default.(int64)
 	apikeyFields := schema.ApiKey{}.Fields()
 	_ = apikeyFields
 	// apikeyDescScopes is the schema descriptor for scopes field.
