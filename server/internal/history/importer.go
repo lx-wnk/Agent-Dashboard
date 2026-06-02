@@ -351,7 +351,15 @@ func parseTokensFromRaw(raw string) (sdk.TokenUsage, string, time.Time, error) {
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			continue
 		}
-		if e.Type != "message" || e.Message.Role != "assistant" {
+		// Token usage lives on assistant turns. Claude Code writes these with a
+		// top-level type of "assistant"; older logs used "message". Accept both
+		// shapes (but not tool_result/attachment/etc.) and require the assistant
+		// role. Filtering on type=="message" alone silently dropped every modern
+		// session and left the cost table empty.
+		if e.Type != "assistant" && e.Type != "message" {
+			continue
+		}
+		if e.Message.Role != "assistant" {
 			continue
 		}
 		if e.Message.Model != "" {

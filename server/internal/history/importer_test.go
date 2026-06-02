@@ -116,13 +116,28 @@ func TestParseTokensFromRaw_NonAssistantRoleSkipped(t *testing.T) {
 }
 
 func TestParseTokensFromRaw_NonMessageTypeSkipped(t *testing.T) {
-	// Only entries with type=="message" count.
+	// Non-turn entries (tool_result, attachment, …) must not contribute usage,
+	// even when they carry an assistant role + usage block.
 	raw := `{"type":"tool_result","timestamp":"2024-01-15T10:00:00.000Z","message":{"role":"assistant","usage":{"input_tokens":999,"output_tokens":999}}}`
 
 	usage, _, _, err := parseTokensFromRaw(raw)
 	require.NoError(t, err)
 	assert.Equal(t, 0, usage.InputTokens)
 	assert.Equal(t, 0, usage.OutputTokens)
+}
+
+// TestParseTokensFromRaw_AssistantType is the regression guard for the bug that
+// left the cost table empty: real Claude Code logs write assistant turns with a
+// top-level type of "assistant" (not "message"), and those entries carry the
+// token usage. They must be counted.
+func TestParseTokensFromRaw_AssistantType(t *testing.T) {
+	raw := `{"type":"assistant","timestamp":"2024-01-15T10:00:00.000Z","message":{"role":"assistant","model":"claude-opus-4-7","usage":{"input_tokens":120,"output_tokens":45}}}`
+
+	usage, model, _, err := parseTokensFromRaw(raw)
+	require.NoError(t, err)
+	assert.Equal(t, 120, usage.InputTokens)
+	assert.Equal(t, 45, usage.OutputTokens)
+	assert.Equal(t, "claude-opus-4-7", model)
 }
 
 func TestParseTokensFromRaw_MalformedJSONLineSkipped(t *testing.T) {
