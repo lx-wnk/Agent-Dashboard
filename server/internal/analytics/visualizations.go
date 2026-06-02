@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 )
 
 // maxCoOccurrenceTools caps the matrix dimension returned by
@@ -28,20 +31,34 @@ func BuildSankey(ctx context.Context, opts ScanOpts, dirs []string) (sdk.SankeyD
 	if err != nil {
 		return sdk.SankeyData{}, err
 	}
-	linkCounts := make(map[string]int)
-	nodeNames := make(map[string]bool)
+	transitions := make(map[[2]string]int)
 	totalCalls := 0
 	for _, calls := range byID {
 		totalCalls += len(calls)
 		for i := 1; i < len(calls); i++ {
 			prev := calls[i-1].Name
 			curr := calls[i].Name
-			nodeNames[prev] = true
-			nodeNames[curr] = true
-			linkCounts[prev+"\x00"+curr]++
+			if prev == curr {
+				// A tool immediately following itself is not an inter-tool
+				// transition, and d3-sankey rejects self-loops outright.
+				continue
+			}
+			transitions[[2]string{prev, curr}]++
 		}
 	}
 
+	// d3-sankey can only lay out a DAG; raw tool transitions are cyclic
+	// (Read⇄Edit ping-pong, longer loops). acyclicSankeyLinks collapses
+	// bidirectional pairs to net flow and breaks any remaining cycles.
+	links := acyclicSankeyLinks(transitions)
+
+	// Nodes are derived from the surviving links so a tool whose only edges
+	// were dropped (or that only self-looped) does not appear as an island.
+	nodeNames := make(map[string]bool, len(links)*2)
+	for _, l := range links {
+		nodeNames[l.Source] = true
+		nodeNames[l.Target] = true
+	}
 	names := make([]string, 0, len(nodeNames))
 	for n := range nodeNames {
 		names = append(names, n)
@@ -52,22 +69,6 @@ func BuildSankey(ctx context.Context, opts ScanOpts, dirs []string) (sdk.SankeyD
 		nodes = append(nodes, sdk.SankeyNode{ID: n, Name: n})
 	}
 
-	links := make([]sdk.SankeyLink, 0, len(linkCounts))
-	for key, count := range linkCounts {
-		idx := strings.IndexByte(key, 0)
-		links = append(links, sdk.SankeyLink{
-			Source: key[:idx],
-			Target: key[idx+1:],
-			Value:  count,
-		})
-	}
-	sort.Slice(links, func(i, j int) bool {
-		if links[i].Source != links[j].Source {
-			return links[i].Source < links[j].Source
-		}
-		return links[i].Target < links[j].Target
-	})
-
 	return sdk.SankeyData{
 		Nodes: nodes,
 		Links: links,
@@ -76,6 +77,101 @@ func BuildSankey(ctx context.Context, opts ScanOpts, dirs []string) (sdk.SankeyD
 			CallCount:    totalCalls,
 		},
 	}, nil
+}
+
+// acyclicSankeyLinks turns raw directed transition counts into a sorted,
+// acyclic link set suitable for d3-sankey. Self-loops must already be
+// excluded by the caller. Two steps:
+//  1. each bidirectional pair A⇄B is collapsed into one net-flow edge in
+//     the direction of the larger count (equal counts net to zero → no edge);
+//  2. any remaining directed cycle (e.g. A→B→C→A) is broken by greedily
+//     dropping back-edges until the graph is acyclic.
+func acyclicSankeyLinks(counts map[[2]string]int) []sdk.SankeyLink {
+	seen := make(map[[2]string]bool, len(counts))
+	links := make([]sdk.SankeyLink, 0, len(counts))
+	for key, fwd := range counts {
+		rev := [2]string{key[1], key[0]}
+		if seen[key] || seen[rev] {
+			continue
+		}
+		seen[key] = true
+		seen[rev] = true
+		switch back := counts[rev]; {
+		case fwd > back:
+			links = append(links, sdk.SankeyLink{Source: key[0], Target: key[1], Value: fwd - back})
+		case back > fwd:
+			links = append(links, sdk.SankeyLink{Source: key[1], Target: key[0], Value: back - fwd})
+		}
+	}
+	// Sort before cycle-breaking so back-edge removal is reproducible.
+	sort.Slice(links, func(i, j int) bool {
+		if links[i].Source != links[j].Source {
+			return links[i].Source < links[j].Source
+		}
+		return links[i].Target < links[j].Target
+	})
+	for {
+		idx := firstBackEdgeIndex(links)
+		if idx < 0 {
+			break
+		}
+		links = append(links[:idx], links[idx+1:]...)
+	}
+	return links
+}
+
+// firstBackEdgeIndex returns the slice index of the first link that closes
+// a directed cycle, or -1 if the graph is already acyclic. The DFS visits
+// nodes and out-edges in sorted order so "first" — and therefore which
+// edge acyclicSankeyLinks drops — is deterministic across runs.
+func firstBackEdgeIndex(links []sdk.SankeyLink) int {
+	type out struct {
+		tgt string
+		idx int
+	}
+	adj := make(map[string][]out)
+	nodeSet := make(map[string]struct{})
+	for i, l := range links {
+		adj[l.Source] = append(adj[l.Source], out{l.Target, i})
+		nodeSet[l.Source] = struct{}{}
+		nodeSet[l.Target] = struct{}{}
+	}
+	nodes := make([]string, 0, len(nodeSet))
+	for n := range nodeSet {
+		nodes = append(nodes, n)
+	}
+	sort.Strings(nodes)
+
+	const (
+		white = 0
+		gray  = 1
+		black = 2
+	)
+	color := make(map[string]int, len(nodes))
+	found := -1
+	var dfs func(n string) bool
+	dfs = func(n string) bool {
+		color[n] = gray
+		for _, e := range adj[n] {
+			switch color[e.tgt] {
+			case gray:
+				found = e.idx
+				return true
+			case white:
+				if dfs(e.tgt) {
+					return true
+				}
+			}
+		}
+		color[n] = black
+		return false
+	}
+	for _, n := range nodes {
+		if color[n] == white && dfs(n) {
+			return found
+		}
+	}
+	return -1
 }
 
 // BuildDAG walks one session JSONL end-to-end and emits chronological
@@ -287,9 +383,33 @@ func BuildCoOccurrence(ctx context.Context, opts ScanOpts, dirs []string) (sdk.C
 		}
 	}
 
+	// Compute lift matrix: Lift[i][j] = (c_ij × N) / (c_i × c_j).
+	// Diagonal is set to 0 (self-lift is meaningless).
+	// Guards: if c_i == 0 || c_j == 0 || N == 0 → lift = 0.
+	N := len(byID)
+	lift := make([][]float64, n)
+	for i := range lift {
+		lift[i] = make([]float64, n)
+	}
+	for i := 0; i < n; i++ {
+		ci := matrix[i][i]
+		for j := i + 1; j < n; j++ {
+			cj := matrix[j][j]
+			cij := matrix[i][j]
+			var v float64
+			if ci > 0 && cj > 0 && N > 0 {
+				v = float64(cij*N) / float64(ci*cj)
+			}
+			lift[i][j] = v
+			lift[j][i] = v
+		}
+		// Diagonal stays 0 (already zero-initialized).
+	}
+
 	return sdk.CoOccurrenceData{
 		Tools:  tools,
 		Matrix: matrix,
+		Lift:   lift,
 		Meta: sdk.CoOccurrenceMeta{
 			SessionCount: len(byID),
 			Truncated:    truncated,
@@ -306,6 +426,17 @@ func BuildSpawnTree(ctx context.Context, opts ScanOpts, dirs []string) (sdk.Spaw
 	files := DiscoverSessions(opts, dirs)
 	if err := ctx.Err(); err != nil {
 		return sdk.SpawnTreeData{}, err
+	}
+
+	// Best-effort enrichment: fetch session metadata once. Errors are logged
+	// but never propagate — enrichment is additive and must not break the tree.
+	sessionIndex := make(map[string]parser.SessionInfo)
+	if sessions, err := parser.GetSessions(ctx); err != nil {
+		slog.Warn("analytics: spawn-tree enrichment skipped", "err", err)
+	} else {
+		for _, si := range sessions {
+			sessionIndex[si.SessionID] = si
+		}
 	}
 
 	type rec struct {
@@ -388,18 +519,55 @@ func BuildSpawnTree(ctx context.Context, opts ScanOpts, dirs []string) (sdk.Spaw
 	sort.Strings(ids)
 	for _, id := range ids {
 		r := recs[id]
-		nodes = append(nodes, sdk.SpawnTreeNode{
+		node := sdk.SpawnTreeNode{
 			ID:        id,
 			Label:     shortLabel(id),
 			Depth:     depth[id],
 			ToolCount: r.toolCount,
-			CostCents: 0, // Cost integration is a follow-up (see ADR-0001 / cost_history).
-		})
+		}
+		if info, ok := sessionIndex[id]; ok {
+			node.Project = info.ProjectName
+			node.Model = derefOr(info.Model, "")
+			node.FirstPrompt = derefOr(info.FirstPrompt, "")
+			node.CostCents = int(math.Round(info.CostEstimate * 100))
+			node.Label = spawnTreeLabel(node.FirstPrompt, info.ProjectName, id)
+		}
+		nodes = append(nodes, node)
 		if r.parent != "" {
 			links = append(links, sdk.SpawnTreeLink{Source: r.parent, Target: id})
 		}
 	}
 	return sdk.SpawnTreeData{Roots: roots, Nodes: nodes, Links: links}, nil
+}
+
+// spawnTreeLabel returns the best human-readable label for a spawn-tree node.
+// Priority: firstPrompt (truncated to 60 runes) > projectName > shortLabel(id).
+func spawnTreeLabel(firstPrompt, projectName, id string) string {
+	if firstPrompt != "" {
+		return truncateRunes(firstPrompt, 60)
+	}
+	if projectName != "" {
+		return projectName
+	}
+	return shortLabel(id)
+}
+
+// truncateRunes returns s truncated to maxRunes runes. If s is longer, an
+// ellipsis ("…") is appended after truncation.
+func truncateRunes(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "…"
+}
+
+// derefOr dereferences a *string pointer; returns fallback if the pointer is nil.
+func derefOr(p *string, fallback string) string {
+	if p == nil {
+		return fallback
+	}
+	return *p
 }
 
 // shortLabel renders an 8-char prefix of a UUID so the spawn tree shows

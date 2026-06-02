@@ -131,11 +131,14 @@ type DAGData struct {
 // from the root via BFS. ToolCount and CostCents reflect the session,
 // not the cumulative subtree.
 type SpawnTreeNode struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	Depth     int    `json:"depth"`
-	ToolCount int    `json:"toolCount"`
-	CostCents int    `json:"costCents"`
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Depth       int    `json:"depth"`
+	ToolCount   int    `json:"toolCount"`
+	CostCents   int    `json:"costCents"`
+	Project     string `json:"project"`
+	Model       string `json:"model"`
+	FirstPrompt string `json:"firstPrompt"`
 }
 
 // SpawnTreeLink is a parent→child spawn relationship.
@@ -161,9 +164,13 @@ type CoOccurrenceMeta struct {
 // GET /api/visualizations/co-occurrence. Matrix is square with side equal
 // to len(Tools); Matrix[i][j] = sessions containing both Tools[i] and
 // Tools[j] (diagonal = sessions containing the tool at all).
+// Lift is the same-dimension normalized lift score: Lift[i][j] =
+// (Matrix[i][j] × N) / (Matrix[i][i] × Matrix[j][j]), where N is the
+// total session count. Diagonal is 0 (self-lift is meaningless).
 type CoOccurrenceData struct {
 	Tools  []string         `json:"tools"`
 	Matrix [][]int          `json:"matrix"`
+	Lift   [][]float64      `json:"lift"`
 	Meta   CoOccurrenceMeta `json:"meta"`
 }
 
@@ -222,5 +229,5 @@ type Agent struct {
 	LastBtw                   *BtwMessage    `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
-	CostUnknown               bool           `json:"costUnknown,omitempty"`
+	CostUnknown bool `json:"costUnknown,omitempty"`
 }

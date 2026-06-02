@@ -24,10 +24,13 @@ export function useSessions() {
     error.value = null
     try {
       const res = await fetch('/api/sessions')
-      if (res.ok)
-        sessions.value = await res.json()
-      else
+      if (res.ok) {
+        const data = await res.json()
+        sessions.value = Array.isArray(data) ? data : []
+      }
+      else {
         error.value = `Failed to load sessions (${res.status})`
+      }
     }
     catch {
       error.value = 'Network error loading sessions.'

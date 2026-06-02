@@ -2,10 +2,14 @@ package analytics
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/sdk"
 )
 
 func TestBuildSankey_LinearFixture(t *testing.T) {
@@ -147,6 +151,66 @@ func TestBuildCoOccurrence_TwoSessions(t *testing.T) {
 			t.Errorf("diagonal[%s] = %d, want %d", name, got.Matrix[idx[name]][idx[name]], want)
 		}
 	}
+
+	// ---- Lift matrix assertions ----
+	// N = 2 sessions. Lift[i][j] = (c_ij * N) / (c_i * c_j).
+	if len(got.Lift) != 4 {
+		t.Fatalf("len(Lift) = %d, want 4", len(got.Lift))
+	}
+	for i := range got.Lift {
+		if len(got.Lift[i]) != 4 {
+			t.Fatalf("len(Lift[%d]) = %d, want 4", i, len(got.Lift[i]))
+		}
+	}
+
+	// Diagonal must be 0 for all tools.
+	for _, name := range got.Tools {
+		i := idx[name]
+		if got.Lift[i][i] != 0 {
+			t.Errorf("Lift diagonal[%s] = %v, want 0", name, got.Lift[i][i])
+		}
+	}
+
+	// Lift must be symmetric.
+	for i := range got.Tools {
+		for j := range got.Tools {
+			if got.Lift[i][j] != got.Lift[j][i] {
+				t.Errorf("Lift not symmetric at [%d][%d]=%v vs [%d][%d]=%v",
+					i, j, got.Lift[i][j], j, i, got.Lift[j][i])
+			}
+		}
+	}
+
+	// Verify formula on specific pairs computed by hand (N=2):
+	// Session 1: Read, Edit, Bash.  Session 2: Read, Grep, Bash.
+	// c_Read=2, c_Edit=1, c_Bash=2, c_Grep=1.
+	type liftCase struct {
+		a, b string
+		cij  int
+	}
+	liftCases := []liftCase{
+		// Read+Bash: both in 2 sessions → lift=(2*2)/(2*2)=1.0
+		{"Read", "Bash", 2},
+		// Read+Edit: co-occur in 1 session → lift=(1*2)/(2*1)=1.0
+		{"Read", "Edit", 1},
+		// Read+Grep: co-occur in 1 session → lift=(1*2)/(2*1)=1.0
+		{"Read", "Grep", 1},
+		// Edit+Grep: never co-occur → lift=0
+		{"Edit", "Grep", 0},
+	}
+	N := 2
+	for _, tc := range liftCases {
+		i, j := idx[tc.a], idx[tc.b]
+		ci := got.Matrix[i][i]
+		cj := got.Matrix[j][j]
+		var wantLift float64
+		if ci > 0 && cj > 0 && N > 0 {
+			wantLift = float64(tc.cij*N) / float64(ci*cj)
+		}
+		if got.Lift[i][j] != wantLift {
+			t.Errorf("Lift[%s][%s] = %v, want %v", tc.a, tc.b, got.Lift[i][j], wantLift)
+		}
+	}
 }
 
 func TestBuildSpawnTree_ParentChildFromSubagentDir(t *testing.T) {
@@ -216,5 +280,194 @@ func TestBuildSpawnTree_ParentChildFromSubagentDir(t *testing.T) {
 	}
 	if depthByID[child1] != 1 || depthByID[child2] != 1 {
 		t.Errorf("child depths = %d/%d, want 1/1", depthByID[child1], depthByID[child2])
+	}
+}
+
+// ---- Pure-function tests for spawn-tree enrichment helpers ----
+
+func TestSpawnTreeLabel_FirstPromptPreferred(t *testing.T) {
+	got := spawnTreeLabel("Fix the login bug", "myproject", "abcd1234-0000-0000-0000-000000000000")
+	if got != "Fix the login bug" {
+		t.Errorf("got %q, want firstPrompt", got)
+	}
+}
+
+func TestSpawnTreeLabel_ProjectFallback(t *testing.T) {
+	got := spawnTreeLabel("", "myproject", "abcd1234-0000-0000-0000-000000000000")
+	if got != "myproject" {
+		t.Errorf("got %q, want projectName", got)
+	}
+}
+
+func TestSpawnTreeLabel_ShortLabelFallback(t *testing.T) {
+	got := spawnTreeLabel("", "", "abcd1234-0000-0000-0000-000000000000")
+	if got != "abcd1234" {
+		t.Errorf("got %q, want shortLabel", got)
+	}
+}
+
+func TestTruncateRunes_ShortPassthrough(t *testing.T) {
+	s := "hello"
+	if got := truncateRunes(s, 60); got != s {
+		t.Errorf("got %q, want %q", got, s)
+	}
+}
+
+func TestTruncateRunes_TruncatesWithEllipsis(t *testing.T) {
+	// 61 'a' runes should be truncated to 60 + "…"
+	long := strings.Repeat("a", 61)
+	got := truncateRunes(long, 60)
+	runes := []rune(got)
+	// Last rune must be '…'
+	if runes[len(runes)-1] != '…' {
+		t.Errorf("no ellipsis: %q", got)
+	}
+	// Content must be exactly 60 'a' runes + ellipsis = 61 runes total
+	if len(runes) != 61 {
+		t.Errorf("rune count = %d, want 61", len(runes))
+	}
+}
+
+func TestTruncateRunes_MultibyteRunes(t *testing.T) {
+	// "日本語" has 3 runes; truncating to 2 should give "日本…"
+	got := truncateRunes("日本語テスト", 2)
+	want := "日本…"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestDerefOr_Nil(t *testing.T) {
+	if got := derefOr(nil, "default"); got != "default" {
+		t.Errorf("got %q, want \"default\"", got)
+	}
+}
+
+func TestDerefOr_NonNil(t *testing.T) {
+	s := "value"
+	if got := derefOr(&s, "default"); got != "value" {
+		t.Errorf("got %q, want \"value\"", got)
+	}
+}
+
+func TestCostCentsConversion(t *testing.T) {
+	// $1.50 → 150 cents
+	costUSD := 1.50
+	got := int(math.Round(costUSD * 100))
+	if got != 150 {
+		t.Errorf("got %d, want 150", got)
+	}
+	// $0.0 → 0 cents
+	got = int(math.Round(0.0 * 100))
+	if got != 0 {
+		t.Errorf("got %d, want 0", got)
+	}
+	// $0.01 → 1 cent
+	got = int(math.Round(0.01 * 100))
+	if got != 1 {
+		t.Errorf("got %d, want 1", got)
+	}
+}
+
+// hasCycleLinks reports whether the directed graph formed by the given
+// links contains a cycle (including self-loops). Used to assert that
+// acyclicSankeyLinks always emits a DAG — the invariant d3-sankey needs.
+func hasCycleLinks(links []struct{ src, tgt string }) bool {
+	adj := map[string][]string{}
+	for _, l := range links {
+		adj[l.src] = append(adj[l.src], l.tgt)
+	}
+	const (
+		white = 0
+		gray  = 1
+		black = 2
+	)
+	color := map[string]int{}
+	var dfs func(n string) bool
+	dfs = func(n string) bool {
+		color[n] = gray
+		for _, m := range adj[n] {
+			switch color[m] {
+			case gray:
+				return true
+			case white:
+				if dfs(m) {
+					return true
+				}
+			}
+		}
+		color[n] = black
+		return false
+	}
+	for n := range adj {
+		if color[n] == white && dfs(n) {
+			return true
+		}
+	}
+	return false
+}
+
+func toSrcTgt(links []sdk.SankeyLink) []struct{ src, tgt string } {
+	out := make([]struct{ src, tgt string }, len(links))
+	for i, l := range links {
+		out[i] = struct{ src, tgt string }{l.Source, l.Target}
+	}
+	return out
+}
+
+func TestAcyclicSankeyLinks_NetFlowCollapsesBidirectional(t *testing.T) {
+	// Read→Edit happened 5×, Edit→Read 2× → net 3 in the Read→Edit direction.
+	counts := map[[2]string]int{
+		{"Read", "Edit"}: 5,
+		{"Edit", "Read"}: 2,
+	}
+	links := acyclicSankeyLinks(counts)
+	if len(links) != 1 {
+		t.Fatalf("len(links) = %d, want 1 (net edge)", len(links))
+	}
+	if links[0].Source != "Read" || links[0].Target != "Edit" || links[0].Value != 3 {
+		t.Errorf("got %+v, want Read→Edit value 3", links[0])
+	}
+}
+
+func TestAcyclicSankeyLinks_EqualBidirectionalDropped(t *testing.T) {
+	// Perfectly balanced ping-pong nets to zero → no edge.
+	counts := map[[2]string]int{
+		{"Read", "Edit"}: 4,
+		{"Edit", "Read"}: 4,
+	}
+	if links := acyclicSankeyLinks(counts); len(links) != 0 {
+		t.Errorf("len(links) = %d, want 0 (net zero)", len(links))
+	}
+}
+
+func TestAcyclicSankeyLinks_BreaksLongerCycle(t *testing.T) {
+	// A→B→C→A is a 3-cycle with no bidirectional pairs; net-flow alone
+	// leaves it intact, so the back-edge pass must drop exactly one edge.
+	counts := map[[2]string]int{
+		{"A", "B"}: 1,
+		{"B", "C"}: 1,
+		{"C", "A"}: 1,
+	}
+	links := acyclicSankeyLinks(counts)
+	if hasCycleLinks(toSrcTgt(links)) {
+		t.Fatalf("result still cyclic: %+v", links)
+	}
+	if len(links) != 2 {
+		t.Errorf("len(links) = %d, want 2 (one back-edge removed)", len(links))
+	}
+}
+
+func TestAcyclicSankeyLinks_LinearPreserved(t *testing.T) {
+	counts := map[[2]string]int{
+		{"Read", "Edit"}: 3,
+		{"Edit", "Bash"}: 2,
+	}
+	links := acyclicSankeyLinks(counts)
+	if hasCycleLinks(toSrcTgt(links)) {
+		t.Fatalf("linear chain reported cyclic: %+v", links)
+	}
+	if len(links) != 2 {
+		t.Errorf("len(links) = %d, want 2", len(links))
 	}
 }

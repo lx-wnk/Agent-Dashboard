@@ -2,10 +2,64 @@ package parser
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+// TestBuildSessionInfo_CapturesCwdWithoutModel guards the decouple fix:
+// cwd is written on every JSONL line, model only on assistant turns. A
+// session that never surfaces a model in the head window must still pick
+// up its real project path from cwd (not fall back to the encoded dir).
+func TestBuildSessionInfo_CapturesCwdWithoutModel(t *testing.T) {
+	dir := t.TempDir()
+	sessID := "11111111-1111-1111-1111-111111111111"
+	path := filepath.Join(dir, sessID+".jsonl")
+	line := `{"type":"user","cwd":"/Users/me/projects/myproject","message":{"role":"user","content":"hi"}}` + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(line), 0o644))
+
+	info := buildSessionInfo(jsonlFileEntry{
+		sessionID:         sessID,
+		filePath:          path,
+		projectDirEncoded: "-Users-me-projects-myproject",
+		mtime:             time.Unix(0, 0),
+	}, nil)
+
+	require.Equal(t, "/Users/me/projects/myproject", info.ProjectPath)
+	require.Equal(t, "myproject", info.ProjectName)
+}
+
+// TestBuildSessionInfo_RecoversModelFromTail guards the tail fallback: when
+// the first assistant turn (carrying the model) sits past the 8KB head
+// window, the model is recovered from the tail so cost + color still work.
+func TestBuildSessionInfo_RecoversModelFromTail(t *testing.T) {
+	dir := t.TempDir()
+	sessID := "22222222-2222-2222-2222-222222222222"
+	path := filepath.Join(dir, sessID+".jsonl")
+
+	var b strings.Builder
+	// Small leading line so cwd is found in the head window.
+	b.WriteString(`{"type":"user","cwd":"/Users/me/projects/deepmodel","message":{"role":"user","content":"hi"}}` + "\n")
+	// Padding line pushes the assistant/model line past the 8KB head read.
+	b.WriteString(`{"type":"x","pad":"` + strings.Repeat("x", 9000) + `"}` + "\n")
+	b.WriteString(`{"type":"assistant","cwd":"/Users/me/projects/deepmodel","message":{"role":"assistant","model":"claude-opus-4-8","content":[]}}` + "\n")
+	require.NoError(t, os.WriteFile(path, []byte(b.String()), 0o644))
+
+	info := buildSessionInfo(jsonlFileEntry{
+		sessionID:         sessID,
+		filePath:          path,
+		projectDirEncoded: "-enc",
+		mtime:             time.Unix(0, 0),
+	}, nil)
+
+	require.NotNil(t, info.Model, "model should be recovered from tail")
+	require.Equal(t, "claude-opus-4-8", *info.Model)
+	require.Equal(t, "deepmodel", info.ProjectName, "cwd captured from head despite deep model")
+}
 
 // buildAssistantLine constructs a minimal JSONL line with an assistant role.
 func buildAssistantLine(t *testing.T, blocks []map[string]any) string {

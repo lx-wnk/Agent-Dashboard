@@ -11,16 +11,34 @@ const props = defineProps<{
 }>()
 
 const svgRef = ref<SVGSVGElement | null>(null)
+// Surfaces a d3-sankey layout failure (e.g. "circular link" if a cyclic
+// graph ever reaches the layout) as a visible message instead of an
+// uncaught promise rejection bubbling out of the watcher callback.
+const renderError = ref<string | null>(null)
 
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
 
 function render() {
+  renderError.value = null
   if (!svgRef.value || !props.data)
     return
   const svg = d3.select(svgRef.value)
   svg.selectAll('*').remove()
 
   if (props.data.nodes.length === 0)
+    return
+
+  try {
+    drawSankey(svg)
+  }
+  catch (err) {
+    svg.selectAll('*').remove()
+    renderError.value = `Could not lay out sankey: ${(err as Error).message}`
+  }
+}
+
+function drawSankey(svg: d3.Selection<SVGSVGElement, unknown, null, undefined>) {
+  if (!svgRef.value || !props.data)
     return
 
   const width = svgRef.value.clientWidth || 720
@@ -77,7 +95,10 @@ function render() {
     .text(d => d.name)
 }
 
-watch(() => props.data, render, { immediate: true })
+// flush: 'post' so render runs AFTER the DOM patch — the <svg v-else> only
+// mounts once data is non-empty, so a pre-flush watcher would see a null
+// svgRef on first data arrival and bail, leaving the chart blank.
+watch(() => props.data, render, { immediate: true, flush: 'post' })
 
 onUnmounted(() => {
   if (svgRef.value)
@@ -96,6 +117,14 @@ onUnmounted(() => {
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">
       No tool calls found in this window.
     </div>
-    <svg v-else ref="svgRef" class="w-full" style="min-height: 480px;" aria-label="Tool-call sankey diagram" role="img" />
+    <!-- The <svg> stays mounted in this branch (not gated behind renderError)
+         so svgRef survives a recoverable layout error — otherwise re-rendering
+         after the data changes would hit the same null-ref mount race. -->
+    <template v-else>
+      <div v-if="renderError" class="text-sm text-red-500 dark:text-red-400 p-4">
+        {{ renderError }}
+      </div>
+      <svg ref="svgRef" class="w-full" style="min-height: 480px;" aria-label="Tool-call sankey diagram" role="img" />
+    </template>
   </div>
 </template>

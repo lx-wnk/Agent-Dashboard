@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import type { SpawnTreeData, SpawnTreeNode } from '../../sdk.generated'
-import * as d3 from 'd3'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import type { SpawnTreeData } from '../../sdk.generated'
+import { computed, ref } from 'vue'
 
 const props = defineProps<{
   data: SpawnTreeData | null
@@ -11,112 +10,178 @@ const props = defineProps<{
 
 const emit = defineEmits<{ navigate: [sessionId: string] }>()
 
-const svgRef = ref<SVGSVGElement | null>(null)
-
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
 
-interface TreeDatum {
+// Ordinal color palette keyed by model name.
+const MODEL_COLORS = [
+  '#3b82f6', // blue-500
+  '#10b981', // emerald-500
+  '#f59e0b', // amber-500
+  '#8b5cf6', // violet-500
+  '#ef4444', // red-500
+  '#06b6d4', // cyan-500
+  '#f97316', // orange-500
+  '#84cc16', // lime-500
+  '#ec4899', // pink-500
+  '#6366f1', // indigo-500
+]
+
+interface SessionRow {
   id: string
   label: string
   toolCount: number
-  children?: TreeDatum[]
+  costCents: number
+  model: string
+  subagentCount: number
 }
 
-// buildHierarchy converts the flat node + link payload into a nested
-// tree rooted at `props.data.roots[0]`. Multiple roots are stitched into
-// a single synthetic root so d3.tree can lay everything out at once.
-function buildHierarchy(): TreeDatum | null {
+interface ProjectGroup {
+  project: string
+  sessions: SessionRow[]
+}
+
+const modelColorCache = new Map<string, string>()
+let modelColorIndex = 0
+
+function colorForModel(model: string): string {
+  if (!model)
+    return '#64748b'
+  if (modelColorCache.has(model))
+    return modelColorCache.get(model)!
+  const color = MODEL_COLORS[modelColorIndex % MODEL_COLORS.length]
+  modelColorIndex++
+  modelColorCache.set(model, color)
+  return color
+}
+
+function formatCost(costCents: number): string {
+  return `$${(costCents / 100).toFixed(2)}`
+}
+
+const groups = computed<ProjectGroup[]>(() => {
+  modelColorCache.clear()
+  modelColorIndex = 0
+
   if (!props.data || props.data.nodes.length === 0)
-    return null
-  const childrenByParent = new Map<string, string[]>()
-  for (const l of props.data.links) {
-    if (!childrenByParent.has(l.source))
-      childrenByParent.set(l.source, [])
-    childrenByParent.get(l.source)!.push(l.target)
+    return []
+
+  const { roots, nodes, links } = props.data
+
+  // Build children map: parent id → child ids.
+  const childrenOf = new Map<string, string[]>()
+  for (const link of links) {
+    if (!childrenOf.has(link.source))
+      childrenOf.set(link.source, [])
+    childrenOf.get(link.source)!.push(link.target)
   }
-  const byID = new Map<string, SpawnTreeNode>(props.data.nodes.map(n => [n.id, n]))
-  function walk(id: string): TreeDatum {
-    const n = byID.get(id)!
-    const kids = childrenByParent.get(id) ?? []
-    return {
-      id,
-      label: n.label,
-      toolCount: n.toolCount,
-      children: kids.length > 0 ? kids.map(walk) : undefined,
+
+  // Count total descendants (subagents) via BFS for each root.
+  function countDescendants(id: string): number {
+    let count = 0
+    const queue = [...(childrenOf.get(id) ?? [])]
+    while (queue.length > 0) {
+      const next = queue.shift()!
+      count++
+      const kids = childrenOf.get(next)
+      if (kids) {
+        queue.push(...kids)
+      }
+    }
+    return count
+  }
+
+  const byId = new Map(nodes.map(n => [n.id, n]))
+  const rootSet = new Set(roots)
+
+  // Build per-project groups from root sessions only.
+  const projectMap = new Map<string, SessionRow[]>()
+  for (const rootId of roots) {
+    const node = byId.get(rootId)
+    if (!node)
+      continue
+
+    const projectKey = node.project?.trim() || '(unknown)'
+
+    // If the label equals the project name (unhelpful), fall back to id prefix.
+    const rawLabel = node.label?.trim()
+    const displayLabel = rawLabel && rawLabel !== node.project
+      ? rawLabel
+      : rootId.slice(0, 8)
+
+    const row: SessionRow = {
+      id: rootId,
+      label: displayLabel,
+      toolCount: node.toolCount,
+      costCents: node.costCents,
+      model: node.model ?? '',
+      subagentCount: countDescendants(rootId),
+    }
+
+    if (!projectMap.has(projectKey))
+      projectMap.set(projectKey, [])
+    projectMap.get(projectKey)!.push(row)
+  }
+
+  // Also include any root nodes that appear in nodes but not in roots array,
+  // in case backends differ — skip non-root nodes (subagents).
+  // (No additional handling needed; we only show root sessions by design.)
+  void rootSet // used above implicitly through the roots array
+
+  // Sort sessions within each project by toolCount desc.
+  for (const sessions of projectMap.values()) {
+    sessions.sort((a, b) => b.toolCount - a.toolCount)
+  }
+
+  // Sort groups by project name, "(unknown)" last.
+  const sorted = [...projectMap.entries()]
+    .sort(([a], [b]) => {
+      if (a === '(unknown)')
+        return 1
+      if (b === '(unknown)')
+        return -1
+      return a.localeCompare(b)
+    })
+    .map(([project, sessions]) => ({ project, sessions }))
+
+  // Pre-register colors in a deterministic order so they're stable across re-renders.
+  for (const { sessions } of sorted) {
+    for (const s of sessions) {
+      colorForModel(s.model)
     }
   }
-  if (props.data.roots.length === 1)
-    return walk(props.data.roots[0])
-  return {
-    id: '__synth_root__',
-    label: 'all roots',
-    toolCount: 0,
-    children: props.data.roots.map(walk),
+
+  return sorted
+})
+
+// Tracks which project groups are expanded (by project name).
+// Empty by default → all groups start collapsed.
+const expanded = ref(new Set<string>())
+
+function toggleProject(project: string) {
+  const next = new Set(expanded.value)
+  if (next.has(project)) {
+    next.delete(project)
+  }
+  else {
+    next.add(project)
+  }
+  expanded.value = next
+}
+
+function isExpanded(project: string): boolean {
+  return expanded.value.has(project)
+}
+
+function onSessionClick(id: string) {
+  emit('navigate', id)
+}
+
+function onSessionKeydown(event: KeyboardEvent, id: string) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    emit('navigate', id)
   }
 }
-
-function render() {
-  if (!svgRef.value || !props.data)
-    return
-  const svg = d3.select(svgRef.value)
-  svg.selectAll('*').remove()
-  const tree = buildHierarchy()
-  if (!tree)
-    return
-
-  const width = svgRef.value.clientWidth || 720
-  const height = 480
-  svg.attr('viewBox', `0 0 ${width} ${height}`)
-
-  const root = d3.hierarchy<TreeDatum>(tree)
-  const layout = d3.tree<TreeDatum>().size([width - 80, height - 80])
-  layout(root)
-
-  const g = svg.append('g').attr('transform', 'translate(40,40)')
-
-  g.append('g')
-    .attr('fill', 'none')
-    .attr('stroke', '#94a3b8')
-    .attr('stroke-width', 1.2)
-    .selectAll('path')
-    .data(root.links())
-    .join('path')
-    .attr('d', d3.linkVertical<d3.HierarchyPointLink<TreeDatum>, d3.HierarchyPointNode<TreeDatum>>()
-      .x(d => d.x ?? 0)
-      .y(d => d.y ?? 0) as any)
-
-  const node = g.append('g')
-    .selectAll<SVGGElement, d3.HierarchyPointNode<TreeDatum>>('g')
-    .data(root.descendants())
-    .join('g')
-    .attr('cursor', 'pointer')
-    .attr('transform', d => `translate(${d.x},${d.y})`)
-    .on('click', (_e, d) => {
-      if (d.data.id !== '__synth_root__')
-        emit('navigate', d.data.id)
-    })
-
-  node.append('circle')
-    .attr('r', d => Math.max(4, Math.min(18, 4 + Math.sqrt(d.data.toolCount))))
-    .attr('fill', d => d.data.id === '__synth_root__' ? 'transparent' : '#6366f1')
-    .attr('stroke', '#0f172a')
-
-  node.append('text')
-    .attr('dy', '-1em')
-    .attr('text-anchor', 'middle')
-    .attr('font-size', '10px')
-    .attr('fill', 'currentColor')
-    .text(d => d.data.label)
-    .append('title')
-    .text(d => `${d.data.id}\ntoolCount=${d.data.toolCount}`)
-}
-
-watch(() => props.data, render, { immediate: true })
-
-onUnmounted(() => {
-  if (svgRef.value)
-    d3.select(svgRef.value).selectAll('*').remove()
-})
 </script>
 
 <template>
@@ -130,6 +195,61 @@ onUnmounted(() => {
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">
       No sessions found in this window.
     </div>
-    <svg v-else ref="svgRef" class="w-full" style="min-height: 480px;" aria-label="Sub-agent spawn tree" role="img" />
+    <div v-else class="py-2">
+      <div
+        v-for="group in groups"
+        :key="group.project"
+        class="mb-1"
+      >
+        <!-- Project header row -->
+        <button
+          type="button"
+          class="w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-raised rounded transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+          :aria-expanded="isExpanded(group.project)"
+          @click="toggleProject(group.project)"
+        >
+          <span class="text-fg-mute text-[11px] leading-none select-none">
+            {{ isExpanded(group.project) ? '▾' : '▸' }}
+          </span>
+          <span class="text-xs font-semibold text-fg">{{ group.project }}</span>
+          <span class="text-[11px] text-fg-mute ml-1">
+            {{ group.sessions.length }} session{{ group.sessions.length === 1 ? '' : 's' }}
+          </span>
+        </button>
+
+        <!-- Session rows (visible when expanded) -->
+        <div v-if="isExpanded(group.project)">
+          <button
+            v-for="session in group.sessions"
+            :key="session.id"
+            type="button"
+            class="w-full flex items-start gap-2 pl-6 pr-3 py-1.5 text-left hover:bg-raised rounded transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px] cursor-pointer"
+            @click="onSessionClick(session.id)"
+            @keydown="onSessionKeydown($event, session.id)"
+          >
+            <!-- Model color dot -->
+            <span
+              class="mt-[3px] flex-none w-2 h-2 rounded-full"
+              :style="{ backgroundColor: colorForModel(session.model) }"
+              :title="session.model || 'unknown model'"
+              aria-hidden="true"
+            />
+
+            <div class="min-w-0 flex-1">
+              <!-- Label -->
+              <div class="text-xs text-fg truncate leading-snug">
+                {{ session.label }}
+              </div>
+              <!-- Metadata line -->
+              <div class="flex items-center gap-2 mt-0.5 text-[11px] text-fg-mute flex-wrap">
+                <span v-if="session.toolCount > 0">{{ session.toolCount }} tools</span>
+                <span v-if="session.subagentCount > 0">+{{ session.subagentCount }} sub</span>
+                <span v-if="session.costCents > 0">{{ formatCost(session.costCents) }}</span>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
