@@ -2,9 +2,9 @@
 import * as d3 from 'd3'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
-import { formatCost } from '../utils/format'
+import { formatCost, formatTokens } from '../utils/format'
 
-const { summary, isLoading, error, start, refresh } = useCostAnalytics()
+const { summary, isLoading, error, from, to, setRange, start, refresh } = useCostAnalytics()
 
 // --- Historical data rescan ---
 const importStatus = ref('')
@@ -78,6 +78,59 @@ const updatedAtLabel = computed(() => {
     return ''
   return new Date(summary.value.updatedAt).toLocaleString()
 })
+
+const totalTokens = computed(() => {
+  const s = summary.value
+  return (s.totalInputTokens ?? 0) + (s.totalOutputTokens ?? 0)
+})
+
+// --- Time-range presets ---
+type Preset = '7d' | '30d' | '90d' | 'all'
+
+const activePreset = ref<Preset | null>('30d')
+
+function toDateStr(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+function todayStr(): string {
+  return toDateStr(new Date())
+}
+
+function daysAgoStr(n: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return toDateStr(d)
+}
+
+function applyPreset(preset: Preset) {
+  activePreset.value = preset
+  const today = todayStr()
+  if (preset === '7d') {
+    setRange(daysAgoStr(7), today)
+  }
+  else if (preset === '30d') {
+    setRange(daysAgoStr(30), today)
+  }
+  else if (preset === '90d') {
+    setRange(daysAgoStr(90), today)
+  }
+  else {
+    // 'all'
+    setRange('2000-01-01', today)
+  }
+}
+
+// Custom date range fields (separate from reactive from/to in composable)
+const customFrom = ref('')
+const customTo = ref('')
+
+function applyCustomRange() {
+  if (!customFrom.value || !customTo.value)
+    return
+  activePreset.value = null
+  setRange(customFrom.value, customTo.value)
+}
 
 /**
  * Reshape the flat byDay rows into one row per day with one column per model
@@ -280,7 +333,10 @@ watch(summary, () => {
         Cost Analytics
       </h2>
       <div class="text-xs text-fg-mute flex items-center gap-3">
-        <span v-if="summary.totalUsd > 0">Total: <strong class="text-fg">{{ formatCost(summary.totalUsd) }}</strong></span>
+        <span v-if="summary.totalUsd > 0">
+          Total: <strong class="text-fg">{{ formatCost(summary.totalUsd) }}</strong>
+          <span v-if="totalTokens > 0" class="ml-1">({{ formatTokens(totalTokens) }} tokens)</span>
+        </span>
         <span v-if="updatedAtLabel">Updated {{ updatedAtLabel }}</span>
         <button
           v-if="hasData"
@@ -293,6 +349,48 @@ watch(summary, () => {
         </button>
       </div>
     </header>
+
+    <!-- Time-range controls -->
+    <div class="flex flex-wrap items-center gap-2 text-xs">
+      <span class="text-fg-mute mr-1">Range:</span>
+      <button
+        v-for="preset in (['7d', '30d', '90d', 'all'] as const)"
+        :key="preset"
+        type="button"
+        :class="[
+          'px-2.5 py-1 rounded border transition-colors',
+          activePreset === preset
+            ? 'bg-blue-600 border-blue-600 text-white'
+            : 'bg-raised border-line text-fg-mute hover:text-fg hover:bg-raised/70',
+        ]"
+        @click="applyPreset(preset)"
+      >
+        {{ preset === 'all' ? 'All' : preset }}
+      </button>
+      <span class="text-fg-mute mx-1">or</span>
+      <input
+        v-model="customFrom"
+        type="date"
+        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+        aria-label="From date"
+      >
+      <span class="text-fg-mute">–</span>
+      <input
+        v-model="customTo"
+        type="date"
+        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+        aria-label="To date"
+      >
+      <button
+        type="button"
+        :disabled="!customFrom || !customTo"
+        class="px-2.5 py-1 rounded border border-line bg-raised text-fg-mute hover:text-fg hover:bg-raised/70 disabled:opacity-40 transition-colors"
+        @click="applyCustomRange"
+      >
+        Apply
+      </button>
+      <span v-if="from && to" class="text-fg-mute ml-1">{{ from }} – {{ to }}</span>
+    </div>
 
     <p v-if="isLoading && !hasData" class="text-sm text-fg-mute">
       Loading cost summary…
@@ -334,21 +432,46 @@ watch(summary, () => {
           <span class="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
             {{ formatCost(m.costUsd) }}
           </span>
+          <span v-if="(m.inputTokens ?? 0) + (m.outputTokens ?? 0) > 0" class="text-fg-mute whitespace-nowrap">
+            {{ formatTokens((m.inputTokens ?? 0) + (m.outputTokens ?? 0)) }}
+          </span>
           <span class="text-fg-mute whitespace-nowrap">{{ m.sessions }} sess.</span>
+        </li>
+      </ul>
+    </section>
+
+    <section v-if="summary.byProject && summary.byProject.length > 0" class="bg-card border border-line rounded-md p-4">
+      <h3 class="text-sm font-semibold mb-3 text-fg-soft">
+        Spend by Project
+      </h3>
+      <ul class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+        <li
+          v-for="p in summary.byProject"
+          :key="p.projectPath"
+          class="flex items-center justify-between gap-2 px-3 py-2 bg-raised rounded-md"
+        >
+          <span class="font-mono truncate text-fg" :title="p.projectPath">{{ p.projectName }}</span>
+          <span class="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
+            {{ formatCost(p.costUsd) }}
+          </span>
+          <span v-if="(p.inputTokens ?? 0) + (p.outputTokens ?? 0) > 0" class="text-fg-mute whitespace-nowrap">
+            {{ formatTokens((p.inputTokens ?? 0) + (p.outputTokens ?? 0)) }}
+          </span>
+          <span class="text-fg-mute whitespace-nowrap">{{ p.sessions }} sess.</span>
         </li>
       </ul>
     </section>
 
     <section v-show="summary.byDay.length > 0" class="bg-card border border-line rounded-md p-4">
       <h3 class="text-sm font-semibold mb-2 text-fg-soft">
-        Cost per Day (last 30 days, stacked by model)
+        Cost per Day (stacked by model)
       </h3>
       <svg ref="stackedRef" class="w-full text-fg" style="min-height: 220px;" />
     </section>
 
     <section v-show="summary.byWeek.length > 0" class="bg-card border border-line rounded-md p-4">
       <h3 class="text-sm font-semibold mb-2 text-fg-soft">
-        Weekly Trend (last 12 weeks)
+        Weekly Trend
       </h3>
       <svg ref="trendRef" class="w-full text-fg" style="min-height: 200px;" />
     </section>
