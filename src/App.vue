@@ -342,20 +342,20 @@ onMounted(fetchQuota)
       @confirmed="showRefinementChat = false; activeConceptTask = null"
     />
     <AppModal :open="showBacklogForm" @close="showBacklogForm = false">
-      <div class="bg-app border border-line rounded-lg p-5 w-full max-w-xl">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-fg">
-            New Task
-          </h2>
-          <button
-            type="button"
-            class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg"
-            data-testid="close-backlog-form"
-            @click="showBacklogForm = false"
-          >
-            ✕
-          </button>
-        </div>
+      <header class="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
+        <h2 class="text-base font-semibold text-fg">
+          New Task
+        </h2>
+        <button
+          type="button"
+          class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg"
+          data-testid="close-backlog-form"
+          @click="showBacklogForm = false"
+        >
+          ✕
+        </button>
+      </header>
+      <div class="flex-1 min-h-0 overflow-y-auto p-5">
         <BacklogForm @created-and-refine="onCreateTaskAndRefine" />
       </div>
     </AppModal>

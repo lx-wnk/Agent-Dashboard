@@ -2,6 +2,7 @@
 import { createTwoFilesPatch } from 'diff'
 import { computed, onUnmounted, ref } from 'vue'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
+import AppModal from './ui/AppModal.vue'
 
 interface PendingEdit {
   id: string
@@ -74,53 +75,49 @@ useVisibilityPolling(pollPending, 3000)
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="current"
-      class="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60"
-    >
-      <div class="bg-card rounded-xl border border-line shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
-        <header class="px-5 py-3.5 border-b border-line flex items-center justify-between flex-shrink-0">
-          <div>
-            <h2 class="text-sm font-semibold text-fg">
-              Edit Gate — {{ current.toolName }}
-            </h2>
-            <p class="text-xs text-slate-500 font-mono mt-0.5">
-              {{ current.filePath }}
-            </p>
-          </div>
-        </header>
-        <div class="flex-1 overflow-y-auto bg-slate-950 text-xs font-mono p-4">
-          <div
-            v-for="(line, idx) in diffLines(current)"
-            :key="idx"
-            class="leading-5 whitespace-pre"
-            :class="{
-              'text-green-400 bg-green-900/20': line.type === 'add',
-              'text-red-400 bg-red-900/20': line.type === 'remove',
-              'text-slate-400': line.type === 'context',
-            }"
-          >
-            {{ line.text }}
-          </div>
-        </div>
-        <footer class="px-5 py-3 border-t border-line flex justify-end gap-2 flex-shrink-0">
-          <button
-            type="button"
-            class="px-4 py-1.5 text-sm rounded border border-line-strong text-fg-soft hover:bg-raised"
-            @click="respond('reject')"
-          >
-            Reject
-          </button>
-          <button
-            type="button"
-            class="px-4 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-            @click="respond('accept')"
-          >
-            Accept
-          </button>
-        </footer>
+  <!-- No @close binding — this is a non-dismissable permission gate.
+       AppModal will emit 'close' on Escape/backdrop, but with no handler
+       bound it is simply ignored, keeping the gate open. -->
+  <AppModal :open="!!current" :z-index="1100">
+    <header class="shrink-0 px-5 py-3.5 border-b border-line flex items-center justify-between">
+      <div>
+        <h2 class="text-sm font-semibold text-fg">
+          Edit Gate — {{ current?.toolName }}
+        </h2>
+        <p class="text-xs text-slate-500 font-mono mt-0.5">
+          {{ current?.filePath }}
+        </p>
+      </div>
+    </header>
+    <div class="flex-1 min-h-0 overflow-y-auto bg-slate-950 text-xs font-mono p-4">
+      <div
+        v-for="(line, idx) in current ? diffLines(current) : []"
+        :key="idx"
+        class="leading-5 whitespace-pre"
+        :class="{
+          'text-green-400 bg-green-900/20': line.type === 'add',
+          'text-red-400 bg-red-900/20': line.type === 'remove',
+          'text-slate-400': line.type === 'context',
+        }"
+      >
+        {{ line.text }}
       </div>
     </div>
-  </Teleport>
+    <footer class="shrink-0 px-5 py-3 border-t border-line flex justify-end gap-2">
+      <button
+        type="button"
+        class="px-4 py-1.5 text-sm rounded border border-line-strong text-fg-soft hover:bg-raised"
+        @click="respond('reject')"
+      >
+        Reject
+      </button>
+      <button
+        type="button"
+        class="px-4 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+        @click="respond('accept')"
+      >
+        Accept
+      </button>
+    </footer>
+  </AppModal>
 </template>

@@ -171,7 +171,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <AppModal :open="open" :z-index="2000" @close="closeDialog">
+  <AppModal :open="open" :z-index="2000" size="auto" @close="closeDialog">
     <div
       ref="dialogRef"
       role="dialog"

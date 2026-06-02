@@ -525,7 +525,7 @@ watch(
 
 <template>
   <AppModal :open="!!task" :z-index="1000" @close="emit('close')">
-    <div v-if="task" class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-[860px] max-h-[90vh] flex flex-col overflow-hidden">
+    <template v-if="task">
       <header class="flex items-center justify-between px-5 py-4 border-b border-line">
         <div class="flex items-center gap-2.5 flex-wrap">
           <span
@@ -593,7 +593,7 @@ watch(
         </button>
       </nav>
 
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 min-h-0 overflow-y-auto">
         <!-- Overview tab -->
         <section v-if="activeTab === 'overview'" class="flex-1 overflow-y-auto p-5 flex flex-col gap-4 min-h-0">
           <!-- Lingering-pending gate banner: orchestrator refuses to spawn
@@ -1260,6 +1260,6 @@ watch(
           </AppButton>
         </div>
       </footer>
-    </div>
+    </template>
   </AppModal>
 </template>

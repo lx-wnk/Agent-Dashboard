@@ -215,149 +215,147 @@ onUnmounted(() => {
 
 <template>
   <AppModal :open="open" @close="emit('close')">
-    <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-xl">
-      <header class="flex justify-between items-center px-5 py-4 border-b border-line">
-        <h2 class="text-lg font-semibold text-fg">
-          New Agent
-        </h2>
-        <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="emit('close')">
-          &times;
-        </button>
-      </header>
+    <header class="shrink-0 flex justify-between items-center px-5 py-4 border-b border-line">
+      <h2 class="text-lg font-semibold text-fg">
+        New Agent
+      </h2>
+      <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="emit('close')">
+        &times;
+      </button>
+    </header>
 
-      <form class="p-5" @submit.prevent>
-        <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-prompt">Prompt</label>
-          <AppInput
-            id="spawn-prompt"
-            v-model="prompt"
-            type="textarea"
-            :rows="4"
-            required
-            placeholder="What should the agent do?"
-            data-testid="spawn-prompt-wrap"
-          />
-        </div>
-
-        <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-project">Project</label>
-          <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
-            <option
-              v-for="p in sortedProjects"
-              :key="p.id"
-              :value="p.id"
-              :disabled="p.folderCount === 0"
-            >
-              {{ p.name }}{{ p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : '' }}
-            </option>
-            <option value="__create__">
-              + Create new project…
-            </option>
-          </select>
-        </div>
-
-        <QuickCreateProjectPanel
-          v-if="showQuickCreate"
-          :spawners="spawners"
-          @created="onProjectCreated"
-          @cancel="onQuickCreateCancel"
+    <form class="flex-1 min-h-0 overflow-y-auto p-5" @submit.prevent>
+      <div class="mb-4">
+        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-prompt">Prompt</label>
+        <AppInput
+          id="spawn-prompt"
+          v-model="prompt"
+          type="textarea"
+          :rows="4"
+          required
+          placeholder="What should the agent do?"
+          data-testid="spawn-prompt-wrap"
         />
+      </div>
 
-        <div v-if="folderPickerVisible" class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-folder">Folder</label>
-          <select
-            id="spawn-folder"
-            :value="dlg.selectedFolderId.value ?? ''"
-            class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2"
-            @change="dlg.selectFolder(($event.target as HTMLSelectElement).value)"
+      <div class="mb-4">
+        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-project">Project</label>
+        <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
+          <option
+            v-for="p in sortedProjects"
+            :key="p.id"
+            :value="p.id"
+            :disabled="p.folderCount === 0"
           >
-            <option v-for="f in dlg.folders.value" :key="f.id" :value="f.id">
-              {{ f.label || f.path }}{{ f.isDefault ? ' (default)' : '' }}
-            </option>
-          </select>
-        </div>
+            {{ p.name }}{{ p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : '' }}
+          </option>
+          <option value="__create__">
+            + Create new project…
+          </option>
+        </select>
+      </div>
 
-        <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-spawner">Spawner</label>
-          <select
-            id="spawn-spawner"
-            v-model="dlg.spawnerId.value"
-            data-testid="spawn-spawner"
-            class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
-          >
-            <option value="">
-              {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
-            </option>
-            <option v-for="s in spawners" :key="s.id" :value="s.id">
-              {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
-            </option>
-          </select>
-        </div>
+      <QuickCreateProjectPanel
+        v-if="showQuickCreate"
+        :spawners="spawners"
+        @created="onProjectCreated"
+        @cancel="onQuickCreateCancel"
+      />
 
-        <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-system">System Prompt</label>
-          <AppInput
-            id="spawn-system"
-            v-model="systemPrompt"
-            type="textarea"
-            :rows="2"
-            placeholder="Custom system instructions (optional)"
-          />
-        </div>
-
-        <div class="mb-4">
-          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-permission-mode">Permissions</label>
-          <select
-            id="spawn-permission-mode"
-            v-model="permissionMode"
-            data-testid="spawn-permission-mode"
-            class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
-          >
-            <option value="default">
-              Ask for permission (default)
-            </option>
-            <option value="acceptEdits">
-              Auto-accept edits
-            </option>
-            <option value="bypassPermissions">
-              Bypass all permissions (dangerous)
-            </option>
-          </select>
-        </div>
-
-        <div
-          v-if="permissionMode === 'bypassPermissions'"
-          data-testid="bypass-warning"
-          class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded p-2 px-3 text-xs leading-relaxed text-yellow-600 dark:text-yellow-400 mb-3"
+      <div v-if="folderPickerVisible" class="mb-4">
+        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-folder">Folder</label>
+        <select
+          id="spawn-folder"
+          :value="dlg.selectedFolderId.value ?? ''"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2"
+          @change="dlg.selectFolder(($event.target as HTMLSelectElement).value)"
         >
-          The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
-        </div>
+          <option v-for="f in dlg.folders.value" :key="f.id" :value="f.id">
+            {{ f.label || f.path }}{{ f.isDefault ? ' (default)' : '' }}
+          </option>
+        </select>
+      </div>
 
-        <div v-if="bypassConfirmed" data-testid="bypass-confirm-msg" class="text-xs text-red-600 dark:text-red-400 font-semibold mb-2">
-          Click "Spawn Agent" again to confirm.
-        </div>
-
-        <p v-if="spawnStatusMsg" class="text-xs text-green-600 dark:text-green-400 mt-1 leading-snug">
-          {{ spawnStatusMsg }}
-        </p>
-        <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mt-1 leading-snug whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto">
-          {{ errorMsg }}
-        </p>
-      </form>
-
-      <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
-        <AppButton variant="secondary" @click="emit('close')">
-          Cancel
-        </AppButton>
-        <AppButton
-          data-testid="spawn-btn"
-          variant="primary"
-          :disabled="isSpawning || !prompt.trim() || !dlg.cwd.value.trim()"
-          @click="handleSpawn"
+      <div class="mb-4">
+        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-spawner">Spawner</label>
+        <select
+          id="spawn-spawner"
+          v-model="dlg.spawnerId.value"
+          data-testid="spawn-spawner"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
         >
-          {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
-        </AppButton>
-      </footer>
-    </div>
+          <option value="">
+            {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
+          </option>
+          <option v-for="s in spawners" :key="s.id" :value="s.id">
+            {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
+          </option>
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-system">System Prompt</label>
+        <AppInput
+          id="spawn-system"
+          v-model="systemPrompt"
+          type="textarea"
+          :rows="2"
+          placeholder="Custom system instructions (optional)"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-permission-mode">Permissions</label>
+        <select
+          id="spawn-permission-mode"
+          v-model="permissionMode"
+          data-testid="spawn-permission-mode"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
+        >
+          <option value="default">
+            Ask for permission (default)
+          </option>
+          <option value="acceptEdits">
+            Auto-accept edits
+          </option>
+          <option value="bypassPermissions">
+            Bypass all permissions (dangerous)
+          </option>
+        </select>
+      </div>
+
+      <div
+        v-if="permissionMode === 'bypassPermissions'"
+        data-testid="bypass-warning"
+        class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded p-2 px-3 text-xs leading-relaxed text-yellow-600 dark:text-yellow-400 mb-3"
+      >
+        The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
+      </div>
+
+      <div v-if="bypassConfirmed" data-testid="bypass-confirm-msg" class="text-xs text-red-600 dark:text-red-400 font-semibold mb-2">
+        Click "Spawn Agent" again to confirm.
+      </div>
+
+      <p v-if="spawnStatusMsg" class="text-xs text-green-600 dark:text-green-400 mt-1 leading-snug">
+        {{ spawnStatusMsg }}
+      </p>
+      <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mt-1 leading-snug whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto">
+        {{ errorMsg }}
+      </p>
+    </form>
+
+    <footer class="shrink-0 flex justify-end gap-2 px-5 py-3 border-t border-line">
+      <AppButton variant="secondary" @click="emit('close')">
+        Cancel
+      </AppButton>
+      <AppButton
+        data-testid="spawn-btn"
+        variant="primary"
+        :disabled="isSpawning || !prompt.trim() || !dlg.cwd.value.trim()"
+        @click="handleSpawn"
+      >
+        {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
+      </AppButton>
+    </footer>
   </AppModal>
 </template>
