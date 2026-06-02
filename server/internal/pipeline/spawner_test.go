@@ -114,6 +114,74 @@ func TestBuildSpawnArgs_OmitsDefaultWhenSpawnerSetsPermissionMode(t *testing.T) 
 		"dashboard must not append --permission-mode default when the spawner sets its own mode")
 }
 
+func TestBuildSpawnArgs_AdditionalDirs(t *testing.T) {
+	t.Run("no additional dirs produces no --add-dir flags", func(t *testing.T) {
+		opts := pipeline.SpawnAgentOptions{
+			Task:     &ent.Task{},
+			StageRun: &ent.StageRun{},
+			Prompt:   "p",
+		}
+		args := pipeline.BuildSpawnArgs(opts)
+		for _, a := range args {
+			require.NotEqual(t, "--add-dir", a)
+		}
+	})
+
+	t.Run("each additional dir gets its own --add-dir flag", func(t *testing.T) {
+		opts := pipeline.SpawnAgentOptions{
+			Task:           &ent.Task{},
+			StageRun:       &ent.StageRun{},
+			Prompt:         "p",
+			AdditionalDirs: []string{"/extra1", "/extra2"},
+		}
+		args := pipeline.BuildSpawnArgs(opts)
+
+		var addDirValues []string
+		for i, a := range args {
+			if a == "--add-dir" && i+1 < len(args) {
+				addDirValues = append(addDirValues, args[i+1])
+			}
+		}
+		require.Equal(t, []string{"/extra1", "/extra2"}, addDirValues)
+	})
+
+	t.Run("empty string entries in AdditionalDirs are skipped", func(t *testing.T) {
+		opts := pipeline.SpawnAgentOptions{
+			Task:           &ent.Task{},
+			StageRun:       &ent.StageRun{},
+			Prompt:         "p",
+			AdditionalDirs: []string{"", "/extra", ""},
+		}
+		args := pipeline.BuildSpawnArgs(opts)
+
+		var addDirValues []string
+		for i, a := range args {
+			if a == "--add-dir" && i+1 < len(args) {
+				addDirValues = append(addDirValues, args[i+1])
+			}
+		}
+		require.Equal(t, []string{"/extra"}, addDirValues)
+	})
+
+	t.Run("--add-dir appears once per dir with correct values", func(t *testing.T) {
+		opts := pipeline.SpawnAgentOptions{
+			Task:           &ent.Task{},
+			StageRun:       &ent.StageRun{},
+			Prompt:         "p",
+			AdditionalDirs: []string{"/a", "/b", "/c"},
+		}
+		args := pipeline.BuildSpawnArgs(opts)
+
+		count := 0
+		for _, a := range args {
+			if a == "--add-dir" {
+				count++
+			}
+		}
+		require.Equal(t, 3, count)
+	})
+}
+
 func TestBuildSpawnEnv_ExpandsTildeInSpawnerEnv(t *testing.T) {
 	t.Setenv("HOME", "/tmp/fakehome")
 	opts := pipeline.SpawnAgentOptions{

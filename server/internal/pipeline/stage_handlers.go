@@ -131,6 +131,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		MCPToken:        ctx.MCPToken,
 		MCPUrl:          ctx.MCPUrl,
 		Spawner:         resolved,
+		AdditionalDirs:  ctx.AdditionalDirs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agentStageHandler.Execute(%s): %w", h.stage, err)

@@ -120,6 +120,11 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		userAdditionalPrompt = opts.UserAdditionalPrompt
 	}
 
+	var additionalDirs []string
+	if o.opts.ResolveAdditionalDirs != nil {
+		additionalDirs = o.opts.ResolveAdditionalDirs(ctx, task)
+	}
+
 	stageCtx := &StageContext{
 		Ctx:                  ctx,
 		Task:                 task,
@@ -132,6 +137,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		UserAdditionalPrompt: userAdditionalPrompt,
 		MCPToken:             o.opts.MCPToken,
 		MCPUrl:               o.opts.MCPUrl,
+		AdditionalDirs:       additionalDirs,
 		SystemPromptRepo:     o.opts.SystemPromptRepo,
 		ResolveSpawner:       o.opts.ResolveSpawner,
 		DispatchHTTPSpawn: func(stageRunID, taskID string, spawn func() (string, error)) {
