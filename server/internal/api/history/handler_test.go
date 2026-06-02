@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,6 +51,9 @@ func (n *noopRepo) Upsert(_ context.Context, _ []repo.AgentCostRow) error { retu
 func (n *noopRepo) ListByTimeRange(_ context.Context, _, _ time.Time) ([]*ent.AgentCostTrend, error) {
 	return nil, nil
 }
+func (n *noopRepo) ListSourceMtimes(_ context.Context) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
 
 // TestHandler_Import_AlreadyRunning verifies that a second POST returns 409.
 func TestHandler_Import_AlreadyRunning(t *testing.T) {
@@ -57,10 +61,11 @@ func TestHandler_Import_AlreadyRunning(t *testing.T) {
 	unblock := make(chan struct{})
 
 	// blockingCollect signals started then blocks until unblock is closed.
-	// This replaces a blockingRepo approach: BulkInsert is only called when rows exist,
-	// but the projects dir may be empty in CI, so we block at the scan step instead.
+	// The multi-dir importer calls collect once per configured dir, so the
+	// started-signal is guarded by sync.Once to avoid a double close.
+	var startedOnce sync.Once
 	blockingCollect := func(_ string) ([]string, error) {
-		close(started)
+		startedOnce.Do(func() { close(started) })
 		<-unblock
 		return nil, nil
 	}
@@ -94,10 +99,13 @@ func TestHandler_Import_AlreadyRunning(t *testing.T) {
 
 // TestHandler_SSE_ReceivesProgress verifies that an SSE client receives Done progress.
 func TestHandler_SSE_ReceivesProgress(t *testing.T) {
-	imp := histsvc.NewImporter(&noopRepo{})
+	// Inject an empty collector so the import completes instantly and the test is
+	// independent of the developer machine's real ~/.claude session count (a real
+	// full-file scan of hundreds of sessions would blow the 2s deadline below).
+	imp := histsvc.NewImporter(&noopRepo{}).WithCollectFn(func(string) ([]string, error) { return nil, nil })
 	router := newTestRouter(imp)
 
-	// Trigger an import (runs against an empty projects dir — completes immediately).
+	// Trigger an import (no files to scan — completes immediately).
 	postReq := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/history/import", nil))
 	postW := httptest.NewRecorder()
 	router.ServeHTTP(postW, postReq)
@@ -151,8 +159,9 @@ func TestHandler_SSE_ReceivesProgress(t *testing.T) {
 func TestHandler_Import_NotWedgedByBackgroundScan(t *testing.T) {
 	started := make(chan struct{})
 	unblock := make(chan struct{})
+	var startedOnce sync.Once
 	blockingCollect := func(_ string) ([]string, error) {
-		close(started)
+		startedOnce.Do(func() { close(started) })
 		<-unblock
 		return nil, nil
 	}
