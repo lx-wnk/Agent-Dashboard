@@ -12,7 +12,6 @@ import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 
 const emit = defineEmits<{
-  created: [task: PipelineTask]
   createdAndRefine: [task: PipelineTask]
 }>()
 
@@ -41,7 +40,12 @@ const sortedProjects = computed(() =>
 )
 
 const canSubmit = computed(() =>
-  !!title.value.trim() && !!slug.value.trim() && !!cwd.value.trim() && !isSubmitting.value,
+  !!title.value.trim()
+  && !!slug.value.trim()
+  && !!cwd.value.trim()
+  && !!projectChoice.value
+  && projectChoice.value !== '__create__'
+  && !isSubmitting.value,
 )
 
 watch(projectChoice, async (v) => {
@@ -78,10 +82,6 @@ function onSlugInput(e: Event): void {
   slug.value = (e.target as HTMLInputElement).value
 }
 
-function onCwdInput(e: Event): void {
-  cwd.value = (e.target as HTMLInputElement).value
-}
-
 function onProjectCreated(p: Project): void {
   showCreate.value = false
   void refetch?.()
@@ -99,14 +99,18 @@ async function buildTask(): Promise<PipelineTask | null> {
   const t = title.value.trim()
   const s = slug.value.trim()
   const c = cwd.value.trim()
-  if (!t || !s || !c) {
-    errorMsg.value = 'Title, slug, and working directory are required.'
+  if (!t || !s) {
+    errorMsg.value = 'Title and slug are required, and a project must be selected.'
+    return null
+  }
+  if (!c) {
+    errorMsg.value = 'Selected project has no folder configured.'
     return null
   }
   isSubmitting.value = true
   errorMsg.value = ''
   try {
-    const projectId = projectChoice.value && projectChoice.value !== '__create__' ? projectChoice.value : ''
+    const projectId = projectChoice.value
     return await createTask({
       slug: s,
       title: t,
@@ -114,7 +118,7 @@ async function buildTask(): Promise<PipelineTask | null> {
       cwd: c,
       priority: priority.value,
       template: selectedTemplate.value ?? undefined,
-      ...(projectId ? { projectId } : {}),
+      projectId,
       ...(selectedSpawnerId.value ? { spawnerId: selectedSpawnerId.value } : {}),
     })
   }
@@ -127,12 +131,6 @@ async function buildTask(): Promise<PipelineTask | null> {
   }
 }
 
-async function onCreate(): Promise<void> {
-  const task = await buildTask()
-  if (task)
-    emit('created', task)
-}
-
 async function onCreateAndRefine(): Promise<void> {
   const task = await buildTask()
   if (task)
@@ -141,7 +139,7 @@ async function onCreateAndRefine(): Promise<void> {
 </script>
 
 <template>
-  <form data-testid="backlog-form" class="space-y-4" @submit.prevent="onCreate">
+  <form data-testid="backlog-form" class="space-y-4" @submit.prevent="onCreateAndRefine">
     <div class="flex flex-col gap-1">
       <label for="backlog-project" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Project</label>
       <select
@@ -150,9 +148,6 @@ async function onCreateAndRefine(): Promise<void> {
         data-testid="backlog-project-select"
         :class="fieldClass"
       >
-        <option value="">
-          No project
-        </option>
         <option
           v-for="p in sortedProjects"
           :key="p.id"
@@ -198,24 +193,6 @@ async function onCreateAndRefine(): Promise<void> {
       >
     </div>
 
-    <div class="flex flex-col gap-1">
-      <label for="details-cwd" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Working Directory</label>
-      <input
-        id="details-cwd"
-        data-testid="details-cwd"
-        :value="cwd"
-        list="details-cwd-list"
-        placeholder="/path/to/project"
-        :class="fieldClass"
-        @input="onCwdInput"
-      >
-      <datalist id="details-cwd-list">
-        <option v-for="folder in folderSuggestions" :key="folder.id" :value="folder.path">
-          {{ folder.label || folder.path }}
-        </option>
-      </datalist>
-    </div>
-
     <AppInput v-model="description" type="textarea" :rows="3" label="Description" placeholder="Additional context (optional)" />
 
     <div class="flex flex-col gap-1">
@@ -251,22 +228,14 @@ async function onCreateAndRefine(): Promise<void> {
       {{ errorMsg }}
     </p>
 
-    <div class="flex justify-end gap-2">
+    <div class="flex justify-end">
       <AppButton
-        variant="secondary"
+        variant="primary"
         :disabled="!canSubmit"
         data-testid="details-submit-refine"
         @click="onCreateAndRefine"
       >
         {{ isSubmitting ? 'Creating…' : 'Create & Refine' }}
-      </AppButton>
-      <AppButton
-        variant="primary"
-        :disabled="!canSubmit"
-        data-testid="details-submit"
-        @click="onCreate"
-      >
-        {{ isSubmitting ? 'Creating…' : 'Create' }}
       </AppButton>
     </div>
   </form>

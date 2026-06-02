@@ -121,11 +121,6 @@ function openNewTask() {
   showBacklogForm.value = true
 }
 
-function onBacklogTaskCreated(task: PipelineTask) {
-  showBacklogForm.value = false
-  selectTask(task)
-}
-
 function onCreateTaskAndRefine(task: PipelineTask) {
   showBacklogForm.value = false
   activeConceptTask.value = task
@@ -361,7 +356,7 @@ onMounted(fetchQuota)
             ✕
           </button>
         </div>
-        <BacklogForm @created="onBacklogTaskCreated" @created-and-refine="onCreateTaskAndRefine" />
+        <BacklogForm @created-and-refine="onCreateTaskAndRefine" />
       </div>
     </AppModal>
     <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
