@@ -229,6 +229,15 @@ function isFailedRun(task: { latestStageRunStatus?: string | null } | null | und
   return task?.latestStageRunStatus === 'failed'
 }
 
+// A stage_run parked at awaiting_user with NO pending permission requests is a
+// schema-validation escalation (agent gave up after two malformed outputs and
+// the orchestrator cleared its PID for the user to act on). It is not a
+// permission gate, so the grant panel never renders — without an explicit
+// Resume affordance the user is stuck with only Cancel. Treat it as resumable.
+const isResumableAwaitingUser = computed(() =>
+  props.task?.latestStageRunStatus === 'awaiting_user' && pendingRequests.value.length === 0,
+)
+
 const isOnHoldStage = computed(() => props.task?.currentStage === 'on_hold')
 
 const analysisInfo = ref<{ pid: number, cwd: string } | null>(null)
@@ -1149,7 +1158,7 @@ const runtime = computed(() => {
           Analysis agent spawned · PID <code>{{ analysisInfo.pid }}</code> · look for it in the agents list.
         </p>
         <!-- Optional instruction for Resume/Retry -->
-        <div v-if="isFailedRun(task)" class="mb-2">
+        <div v-if="isFailedRun(task) || isResumableAwaitingUser" class="mb-2">
           <div class="relative">
             <TaskSlashCommandMenu
               ref="slashMenuRef"
@@ -1168,13 +1177,15 @@ const runtime = computed(() => {
         </div>
         <div class="flex gap-2 justify-end">
           <AppButton
-            v-if="isFailedRun(task) && latestStageRun?.sessionId"
+            v-if="(isFailedRun(task) && latestStageRun?.sessionId) || isResumableAwaitingUser"
             variant="secondary"
             :disabled="isActing"
-            title="Continue the agent's last session from where it stopped"
+            :title="isResumableAwaitingUser
+              ? 'Re-run this stage — the agent stopped without a passing result'
+              : 'Continue the agent\'s last session from where it stopped'"
             @click="handleAction(() => resumeStageTask(task!.id, additionalPrompt || undefined))"
           >
-            Resume Session
+            {{ isResumableAwaitingUser && !latestStageRun?.sessionId ? 'Resume Stage' : 'Resume Session' }}
           </AppButton>
           <AppButton
             v-if="isFailedRun(task)"
@@ -1186,7 +1197,7 @@ const runtime = computed(() => {
             Retry Stage
           </AppButton>
           <AppButton
-            v-if="isFailedRun(task)"
+            v-if="isFailedRun(task) || isResumableAwaitingUser"
             variant="secondary"
             :disabled="isActing"
             title="Spawn a standalone Claude session with the failure context attached"

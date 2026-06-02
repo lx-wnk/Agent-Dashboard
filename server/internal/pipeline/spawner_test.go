@@ -75,6 +75,61 @@ func TestBuildSpawnArgs_WithResume(t *testing.T) {
 	require.Contains(t, args, "abc123")
 }
 
+func TestBuildSpawnArgs_DefaultPermissionModeWithoutSkip(t *testing.T) {
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{},
+		StageRun: &ent.StageRun{},
+		Prompt:   "p",
+	}
+	args := pipeline.BuildSpawnArgs(opts)
+	require.Contains(t, args, "--permission-mode")
+	require.Contains(t, args, "default")
+}
+
+func TestBuildSpawnArgs_OmitsPermissionModeForSkipSpawner(t *testing.T) {
+	for _, flag := range []string{"--dangerously-skip-permissions", "--allow-dangerously-skip-permissions"} {
+		opts := pipeline.SpawnAgentOptions{
+			Task:     &ent.Task{},
+			StageRun: &ent.StageRun{},
+			Prompt:   "p",
+			Spawner:  &ent.Spawner{Command: "claude", Args: []string{flag}},
+		}
+		args := pipeline.BuildSpawnArgs(opts)
+		require.NotContains(t, args, "--permission-mode",
+			"skip-permissions spawner (%s) must not get a forced --permission-mode, which overrides the skip", flag)
+	}
+}
+
+func TestBuildSpawnArgs_OmitsDefaultWhenSpawnerSetsPermissionMode(t *testing.T) {
+	// Spawner declares its own --permission-mode auto → dashboard must NOT append
+	// a second --permission-mode default (claude errors on the duplicate flag).
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{},
+		StageRun: &ent.StageRun{},
+		Prompt:   "p",
+		Spawner:  &ent.Spawner{Command: "claude", Args: []string{"--permission-mode", "auto"}},
+	}
+	args := pipeline.BuildSpawnArgs(opts)
+	require.NotContains(t, args, "default",
+		"dashboard must not append --permission-mode default when the spawner sets its own mode")
+}
+
+func TestBuildSpawnEnv_ExpandsTildeInSpawnerEnv(t *testing.T) {
+	t.Setenv("HOME", "/tmp/fakehome")
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{},
+		StageRun: &ent.StageRun{},
+		Prompt:   "p",
+		Spawner: &ent.Spawner{
+			Command: "claude",
+			Env:     map[string]string{"CLAUDE_CONFIG_DIR": "~/.claude-work"},
+		},
+	}
+	env := pipeline.BuildSpawnEnv(opts)
+	require.Contains(t, env, "CLAUDE_CONFIG_DIR=/tmp/fakehome/.claude-work")
+	require.NotContains(t, env, "CLAUDE_CONFIG_DIR=~/.claude-work")
+}
+
 func TestBuildSpawnEnv_DenyListExcludesSecrets(t *testing.T) {
 	t.Setenv("DASHBOARD_JWT_SECRET", "super-secret-value")
 	t.Setenv("DASHBOARD_HOOKS_SECRET", "hook-secret-value")
