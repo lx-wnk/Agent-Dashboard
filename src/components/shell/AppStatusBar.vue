@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useSystemResources } from '../../composables/useSystemResources'
 
-defineProps<{ costDelta: number | null }>()
+defineProps<{ costDelta: number | null, todayCostLabel: string }>()
 
 const { collapsed, openSegment, toggleSegment, toggleCollapsed } = useStatusBar()
 const resources = useSystemResources()
@@ -46,8 +46,9 @@ function formatDelta(d: number | null): string {
         <div>LOAD {{ systemInfo.loadAvg.map(l => l.toFixed(2)).join(' ') }}</div>
       </div>
     </div>
-    <div v-if="openSegment === 'cost'" data-testid="panel-cost" class="px-4 py-3 border-b border-line text-[12px] text-fg-mute font-mono">
-      Cost delta (3 min): {{ formatDelta(costDelta) }}
+    <div v-if="openSegment === 'cost'" data-testid="panel-cost" class="px-4 py-3 border-b border-line text-[12px] text-fg-mute font-mono flex flex-col gap-1">
+      <span>Today's spend: {{ todayCostLabel }}</span>
+      <span>Burn rate (last 5 min): {{ formatDelta(costDelta) }}</span>
     </div>
 
     <div class="flex items-center gap-3 px-3 h-7 text-[11px] font-mono text-fg-mute">
@@ -75,7 +76,9 @@ function formatDelta(d: number | null): string {
         aria-label="Toggle cost trend detail"
         @click="toggleSegment('cost')"
       >
-        COST 3m <span :class="(costDelta ?? 0) > 0 ? 'text-green-500' : 'text-fg-faint'">{{ formatDelta(costDelta) }}</span>
+        TODAY <span class="text-fg">{{ todayCostLabel }}</span>
+        <span class="text-fg-faint">·</span>
+        5m <span :class="(costDelta ?? 0) > 0 ? 'text-green-500' : 'text-fg-faint'">{{ formatDelta(costDelta) }}</span>
       </button>
       <button
         type="button"

@@ -3,6 +3,7 @@ defineProps<{
   expanded: boolean
   totalCostLabel: string
   totalTokensLabel: string
+  todayCostLabel: string
   quotaPct: number
   theme: 'dark' | 'light'
 }>()
@@ -33,8 +34,13 @@ defineEmits<{
           :style="{ width: `${quotaPct}%` }"
         />
       </div>
-      <div class="mt-2 text-[11px] font-mono text-fg-mute flex gap-2">
-        <span>{{ totalCostLabel }}</span><span>·</span><span>{{ totalTokensLabel }} tok</span>
+      <div class="mt-2 text-[11px] font-mono text-fg-mute flex flex-col gap-0.5">
+        <div class="flex gap-2">
+          <span class="text-fg-faint">running</span><span>{{ totalCostLabel }}</span><span>·</span><span>{{ totalTokensLabel }} tok</span>
+        </div>
+        <div class="flex gap-2">
+          <span class="text-fg-faint">today</span><span>{{ todayCostLabel }}</span>
+        </div>
       </div>
     </div>
     <div class="flex items-center" :class="expanded ? 'gap-1' : 'flex-col gap-1'">

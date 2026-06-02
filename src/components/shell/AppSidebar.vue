@@ -12,6 +12,7 @@ const props = defineProps<{
   taskCount: number
   totalCostLabel: string
   totalTokensLabel: string
+  todayCostLabel: string
   quotaPct: number
   theme: 'dark' | 'light'
 }>()
@@ -84,6 +85,7 @@ function badgeFor(view: ActiveView): number | null {
       :expanded="expanded"
       :total-cost-label="totalCostLabel"
       :total-tokens-label="totalTokensLabel"
+      :today-cost-label="todayCostLabel"
       :quota-pct="quotaPct"
       :theme="theme"
       @open-sessions="emit('openSessions')"

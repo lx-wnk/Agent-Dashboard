@@ -5,6 +5,7 @@ import SidebarFooter from './SidebarFooter.vue'
 const base = {
   expanded: true,
   totalCostLabel: '$2.34',
+  todayCostLabel: '$5.00',
   totalTokensLabel: '1.2M',
   quotaPct: 73,
   theme: 'dark' as const,

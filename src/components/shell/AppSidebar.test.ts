@@ -25,6 +25,7 @@ const props = {
   agentCount: 12,
   taskCount: 5,
   totalCostLabel: '$2.34',
+  todayCostLabel: '$5.00',
   totalTokensLabel: '1.2M',
   quotaPct: 73,
   theme: 'dark' as const,
