@@ -202,6 +202,13 @@ func (imp *Importer) runImport(ctx context.Context, onProgress func(ImportProgre
 		reportProgress(false)
 	}
 
+	// Collapse rows that resolved to the same session_id (e.g. the same session
+	// present under more than one configured config dir) keeping the latest
+	// recorded_at. Mirrors the dedup migration's keep-latest rule and makes the
+	// upsert result independent of directory scan order.
+	rows = dedupRowsBySession(rows)
+	progress.Imported = len(rows)
+
 	// Upsert all collected rows — idempotent per session_id.
 	if len(rows) > 0 {
 		if err := imp.costRepo.Upsert(ctx, rows); err != nil {
@@ -214,6 +221,30 @@ func (imp *Importer) runImport(ctx context.Context, onProgress func(ImportProgre
 
 	progress.Done = true
 	reportProgress(true)
+}
+
+// dedupRowsBySession returns one row per session_id, keeping the row with the
+// latest recorded_at (later occurrence wins on an exact tie). Input order is
+// otherwise preserved for the surviving rows. This guarantees a deterministic
+// upsert when the same session appears under more than one configured config
+// dir, instead of relying on os.ReadDir ordering.
+func dedupRowsBySession(rows []repo.AgentCostRow) []repo.AgentCostRow {
+	if len(rows) < 2 {
+		return rows
+	}
+	idx := make(map[string]int, len(rows))
+	out := make([]repo.AgentCostRow, 0, len(rows))
+	for _, row := range rows {
+		if i, ok := idx[row.SessionID]; ok {
+			if !row.RecordedAt.Before(out[i].RecordedAt) {
+				out[i] = row // newer (or equal) wins
+			}
+			continue
+		}
+		idx[row.SessionID] = len(out)
+		out = append(out, row)
+	}
+	return out
 }
 
 // collectJSONLFiles returns all *.jsonl paths one level deep inside projectsDir.

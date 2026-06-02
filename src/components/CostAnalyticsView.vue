@@ -39,7 +39,19 @@ async function startRescan() {
   }
   importEs = new EventSource('/api/history/import/status')
   importEs.onmessage = (ev) => {
-    const p = JSON.parse(ev.data) as { total: number, processed: number, imported: number, errors: number, done: boolean }
+    let p: { total: number, processed: number, imported: number, errors: number, done: boolean }
+    try {
+      p = JSON.parse(ev.data)
+    }
+    catch {
+      // Malformed frame — treat like a stream error so the button doesn't
+      // stay stuck disabled with the EventSource left open.
+      importStatus.value = 'Connection lost — scan may still be running'
+      importEs?.close()
+      importEs = null
+      isImporting.value = false
+      return
+    }
     importStatus.value = `Scanning… ${p.processed}/${p.total}`
     if (p.done) {
       importStatus.value = `Imported ${p.imported} sessions`

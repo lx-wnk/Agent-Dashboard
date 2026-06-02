@@ -401,3 +401,38 @@ func TestImporter_MultiDir_RealFS(t *testing.T) {
 	assert.True(t, sessionIDs["session-111"])
 	assert.True(t, sessionIDs["session-222"])
 }
+
+// TestDedupRowsBySession verifies the same session_id collapses to one row
+// keeping the latest recorded_at, regardless of input order — so a session
+// present under more than one config dir upserts deterministically.
+func TestDedupRowsBySession(t *testing.T) {
+	older := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	newer := time.Date(2026, 1, 2, 10, 0, 0, 0, time.UTC)
+
+	rows := []repo.AgentCostRow{
+		{SessionID: "A", Model: "m1", CostUSD: 1.0, RecordedAt: older},
+		{SessionID: "B", Model: "m2", CostUSD: 5.0, RecordedAt: newer},
+		{SessionID: "A", Model: "m1", CostUSD: 2.0, RecordedAt: newer}, // newer wins for A
+	}
+
+	out := dedupRowsBySession(rows)
+	require.Len(t, out, 2)
+
+	byID := map[string]repo.AgentCostRow{}
+	for _, r := range out {
+		byID[r.SessionID] = r
+	}
+	assert.Equal(t, 2.0, byID["A"].CostUSD, "latest recorded_at must win for session A")
+	assert.Equal(t, newer, byID["A"].RecordedAt)
+	assert.Equal(t, 5.0, byID["B"].CostUSD)
+
+	// Reversed input must yield the same surviving values (determinism).
+	reversed := []repo.AgentCostRow{rows[2], rows[1], rows[0]}
+	out2 := dedupRowsBySession(reversed)
+	require.Len(t, out2, 2)
+	for _, r := range out2 {
+		if r.SessionID == "A" {
+			assert.Equal(t, 2.0, r.CostUSD, "order-independent: A keeps the newer row")
+		}
+	}
+}

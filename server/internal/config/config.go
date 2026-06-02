@@ -32,10 +32,10 @@ type Config struct {
 	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
-	CostScanIntervalMs int    `koanf:"cost_scan_interval_ms"`
-	MCPToken           string `koanf:"mcp_token"`
-	WorktreeRoot   string `koanf:"worktree_root"`
-	ForceWorktrees bool   `koanf:"force_worktrees"`
+	CostScanIntervalMs     int    `koanf:"cost_scan_interval_ms"`
+	MCPToken               string `koanf:"mcp_token"`
+	WorktreeRoot           string `koanf:"worktree_root"`
+	ForceWorktrees         bool   `koanf:"force_worktrees"`
 	// RemotesEnabled allows binding to a non-loopback address. Set via DASHBOARD_REMOTES_ENABLED=true.
 	// Must be explicitly opted in because the dashboard exposes sensitive Claude session data.
 	RemotesEnabled bool `koanf:"remotes_enabled"`

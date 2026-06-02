@@ -99,7 +99,14 @@ func (h *Handler) startImport(w http.ResponseWriter, r *http.Request) {
 	// not aborted when the HTTP response returns. context.Background() was used
 	// previously and would ignore server-shutdown signals.
 	if err := h.importer.Run(context.WithoutCancel(r.Context()), onProgress); err != nil {
-		// Run returns an error only when already running globally (single-instance guard).
+		// Run returns an error only when already running globally (single-instance
+		// guard) — e.g. a scheduled background scan currently holds the lock. Drop
+		// the per-user record we optimistically created above; otherwise it stays
+		// {Done:false} forever and permanently blocks this user's later imports at
+		// the per-user check above (the scheduled scan never touches this map).
+		h.mu.Lock()
+		delete(h.currentJobs, userID)
+		h.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

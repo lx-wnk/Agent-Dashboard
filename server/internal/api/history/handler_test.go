@@ -141,3 +141,43 @@ func TestHandler_SSE_ReceivesProgress(t *testing.T) {
 	}
 	assert.True(t, lastProgress.Done, "expected last SSE event to have Done=true")
 }
+
+// TestHandler_Import_NotWedgedByBackgroundScan is a regression test: a scheduled
+// background scan holds the importer's global single-instance guard WITHOUT going
+// through the handler (so it never touches the per-user currentJobs map). A manual
+// POST during that window must 409, and — critically — must NOT leave a stale
+// {Done:false} per-user record that permanently blocks later manual imports. After
+// the background scan finishes, a fresh manual POST must succeed.
+func TestHandler_Import_NotWedgedByBackgroundScan(t *testing.T) {
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+	blockingCollect := func(_ string) ([]string, error) {
+		close(started)
+		<-unblock
+		return nil, nil
+	}
+
+	imp := histsvc.NewImporter(&noopRepo{}).WithCollectFn(blockingCollect)
+	router := newTestRouter(imp)
+
+	// Simulate the scheduled background scan: call Run directly (bypasses the
+	// handler / currentJobs map), holding the global guard via blockingCollect.
+	require.NoError(t, imp.Run(context.Background(), func(histsvc.ImportProgress) {}))
+	<-started
+
+	// Manual POST while the background scan holds the guard → 409.
+	req1 := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/history/import", nil))
+	w1 := httptest.NewRecorder()
+	router.ServeHTTP(w1, req1)
+	require.Equal(t, http.StatusConflict, w1.Code)
+
+	// Let the background scan finish and release the guard.
+	close(unblock)
+	require.Eventually(t, func() bool {
+		req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/history/import", nil))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		// Drain whatever goroutine this kicked off against the empty projects dir.
+		return w.Code == http.StatusOK
+	}, 2*time.Second, 20*time.Millisecond, "manual import must recover after the background scan, not stay wedged at 409")
+}
