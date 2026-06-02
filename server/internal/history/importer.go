@@ -78,6 +78,59 @@ func (imp *Importer) Run(ctx context.Context, onProgress func(ImportProgress)) e
 	return nil
 }
 
+// RunScheduled runs one scan immediately (boot scan), then periodically rescans on
+// every ticker tick until ctx is cancelled. If interval <= 0 only the boot scan
+// runs and RunScheduled returns immediately after it completes.
+//
+// Each scan is SILENT — a no-op onProgress is passed to Run. The existing
+// single-instance guard in Run means that a scheduled tick arriving while a
+// previous scan is still in progress is skipped rather than stacked.
+func (imp *Importer) RunScheduled(ctx context.Context, interval time.Duration) {
+	noop := func(ImportProgress) {}
+
+	slog.Info("history.scheduler: starting cost-history scanner", "interval", interval)
+
+	// Boot scan — always run once before starting the loop.
+	if err := imp.Run(ctx, noop); err != nil {
+		slog.Debug("history.scheduler: boot scan skipped", "reason", err)
+	}
+
+	if interval <= 0 {
+		// Boot-only mode: wait for the goroutine Run launched to finish so
+		// callers can treat RunScheduled as synchronous in this mode.
+		// We spin-poll the running flag rather than exposing a Done channel,
+		// since the goroutine is short-lived in tests.
+		for {
+			imp.mu.Lock()
+			still := imp.running
+			imp.mu.Unlock()
+			if !still {
+				return
+			}
+			// Yield briefly to avoid a hot spin.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Millisecond):
+			}
+		}
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := imp.Run(ctx, noop); err != nil {
+				slog.Debug("history.scheduler: tick skipped", "reason", err)
+			}
+		}
+	}
+}
+
 // runImport performs the full scan + insert and reports progress via onProgress.
 func (imp *Importer) runImport(ctx context.Context, onProgress func(ImportProgress)) {
 	collect := imp.collectFn
