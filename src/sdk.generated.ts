@@ -144,6 +144,9 @@ export interface SpawnTreeNode {
   depth: number /* int */;
   toolCount: number /* int */;
   costCents: number /* int */;
+  project: string;
+  model: string;
+  firstPrompt: string;
 }
 /**
  * SpawnTreeLink is a parent→child spawn relationship.
@@ -172,10 +175,14 @@ export interface CoOccurrenceMeta {
  * GET /api/visualizations/co-occurrence. Matrix is square with side equal
  * to len(Tools); Matrix[i][j] = sessions containing both Tools[i] and
  * Tools[j] (diagonal = sessions containing the tool at all).
+ * Lift is the same-dimension normalized lift score: Lift[i][j] =
+ * (Matrix[i][j] × N) / (Matrix[i][i] × Matrix[j][j]), where N is the
+ * total session count. Diagonal is 0 (self-lift is meaningless).
  */
 export interface CoOccurrenceData {
   tools: string[];
   matrix: number /* int */[][];
+  lift: number /* float64 */[][];
   meta: CoOccurrenceMeta;
 }
 /**

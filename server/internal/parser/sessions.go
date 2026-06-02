@@ -132,13 +132,20 @@ func buildSessionInfo(entry jsonlFileEntry, runningEncoded map[string]bool) Sess
 	var projectPath string
 	var lastResponse *string
 
-	// Head-read for model + cwd; tail-read for last assistant response
+	// Head-read for model + cwd; tail-read for last assistant response.
+	// cwd is written on every JSONL entry, but the first `model` only
+	// appears on the first assistant turn — which can sit past the 8KB
+	// head window on sessions that open with large attachments/prompts.
+	// So capture cwd independently of model (do NOT gate cwd on model),
+	// otherwise a deep-model session falls back to the encoded dir path
+	// and loses its real project name + cost.
 	if headRaw, err := headRead(entry.filePath); err == nil {
-		if m, cwd := extractHeadInfoRaw(headRaw); m != "" {
+		m, cwd := extractHeadInfoRaw(headRaw)
+		if m != "" {
 			model = &m
-			if cwd != "" {
-				projectPath = cwd
-			}
+		}
+		if cwd != "" {
+			projectPath = cwd
 		}
 	}
 	if projectPath == "" {
@@ -149,6 +156,14 @@ func buildSessionInfo(entry jsonlFileEntry, runningEncoded map[string]bool) Sess
 		if resp := extractLastAssistantText(tailRaw); resp != "" {
 			scrubbed := scrubSecrets(resp)
 			lastResponse = &scrubbed
+		}
+		// The model is stable within a session; if the head window missed
+		// it (assistant turn beyond 8KB), recover it from the tail so cost
+		// estimation and model-based grouping still work.
+		if model == nil {
+			if m, _ := extractHeadInfoRaw(tailRaw); m != "" {
+				model = &m
+			}
 		}
 	}
 
