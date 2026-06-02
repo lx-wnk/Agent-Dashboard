@@ -62,6 +62,45 @@ func TestHandler_Sankey_BadTimestampReturns400(t *testing.T) {
 	}
 }
 
+func TestParseTimestamp_AcceptsLayouts(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     string
+		wantErr bool
+	}{
+		{"rfc3339", "2026-05-01T00:00:00Z", false},
+		{"datetime-local", "2026-05-01T14:30", false},      // HTML datetime-local default (no seconds, no tz)
+		{"datetime-local-seconds", "2026-05-01T14:30:05", false},
+		{"date-only", "2026-05-01", false},
+		{"garbage", "not-a-timestamp", true},
+		{"empty", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseTimestamp(tc.raw)
+			if tc.wantErr && err == nil {
+				t.Fatalf("parseTimestamp(%q): expected error", tc.raw)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("parseTimestamp(%q): unexpected error %v", tc.raw, err)
+			}
+		})
+	}
+}
+
+func TestHandler_Sankey_DatetimeLocalAccepted(t *testing.T) {
+	withFakeClaudeDir(t)
+	h := NewHandler()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/visualizations/sankey?from=2026-05-01T14:30&to=2026-05-08T14:30", nil)
+	if err := h.Sankey(rr, req); err != nil {
+		t.Fatalf("Sankey with datetime-local bounds: %v", err)
+	}
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+}
+
 func TestHandler_Sankey_EmptyConfigReturns200WithEmptyData(t *testing.T) {
 	withFakeClaudeDir(t)
 	h := NewHandler()

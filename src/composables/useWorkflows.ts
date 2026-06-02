@@ -41,14 +41,43 @@ const ENDPOINTS: Record<WorkflowTab, Endpoint> = {
   coOccurrence: { tab: 'coOccurrence', path: '/api/visualizations/co-occurrence', requiresSession: false },
 }
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+
+// Formats a Date as the value an <input type="datetime-local"> expects:
+// local wall-clock `YYYY-MM-DDTHH:mm`, no timezone, no seconds.
+function toDatetimeLocal(d: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    + `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// Default filter window: the last 7 days, pre-filled into the From/To
+// inputs so the view shows recent activity on first load instead of an
+// empty (and easily-misconfigured) range.
+export function defaultWorkflowsFilters(): WorkflowsFilters {
+  const to = new Date()
+  const from = new Date(to.getTime() - SEVEN_DAYS_MS)
+  return { from: toDatetimeLocal(from), to: toDatetimeLocal(to) }
+}
+
+// Normalizes a From/To filter value into an RFC3339 string the Go backend
+// parses unambiguously. datetime-local values carry no timezone, so we
+// resolve them against the browser's local zone via Date and emit UTC.
+// Already-ISO values round-trip; unparseable input is passed through so
+// the server still surfaces a clear 400.
+function toQueryTimestamp(value: string): string {
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? value : d.toISOString()
+}
+
 function buildURL(endpoint: Endpoint, filters: WorkflowsFilters): string {
   const params = new URLSearchParams()
   if (filters.sessionId)
     params.set('session', filters.sessionId)
   if (filters.from)
-    params.set('from', filters.from)
+    params.set('from', toQueryTimestamp(filters.from))
   if (filters.to)
-    params.set('to', filters.to)
+    params.set('to', toQueryTimestamp(filters.to))
   const qs = params.toString()
   return qs ? `${endpoint.path}?${qs}` : endpoint.path
 }

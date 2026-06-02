@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
-import { useWorkflows, type WorkflowsFilters } from './useWorkflows'
+import { defaultWorkflowsFilters, useWorkflows, type WorkflowsFilters } from './useWorkflows'
 
 interface JsonInit {
   body?: unknown
@@ -73,6 +73,31 @@ describe('useWorkflows', () => {
     await flush()
     // The first request's signal must be aborted, the second still pending or done.
     expect(seenSignals[0]?.aborted).toBe(true)
+  })
+
+  it('converts datetime-local bounds to ISO/UTC in the query string', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      jsonResponse({ body: { nodes: [], links: [], meta: { sessionCount: 0, callCount: 0 } } }),
+    )
+    // datetime-local emits local wall-clock with no timezone.
+    const filters = ref<WorkflowsFilters>({ from: '2026-05-01T14:30', to: '2026-05-08T14:30' })
+    useWorkflows(filters)
+    await flush()
+    const url = String(fetchSpy.mock.calls[0][0])
+    // The raw datetime-local value must not reach the server verbatim.
+    expect(url).not.toContain('2026-05-01T14%3A30&')
+    // It must be serialized as a full ISO timestamp (ends in Z after encoding).
+    const parsed = new URL(url, 'http://localhost')
+    expect(parsed.searchParams.get('from')).toBe(new Date('2026-05-01T14:30').toISOString())
+    expect(parsed.searchParams.get('to')).toBe(new Date('2026-05-08T14:30').toISOString())
+  })
+
+  it('defaultWorkflowsFilters spans the last 7 days in datetime-local format', () => {
+    const f = defaultWorkflowsFilters()
+    expect(f.from).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
+    expect(f.to).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
+    const span = new Date(f.to!).getTime() - new Date(f.from!).getTime()
+    expect(span).toBe(7 * 24 * 60 * 60 * 1000)
   })
 
   it('surfaces server error messages', async () => {

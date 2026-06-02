@@ -56,6 +56,32 @@ func withTimeout(next apierr.HandlerFunc) apierr.HandlerFunc {
 	}
 }
 
+// acceptedTimeLayouts lists every timestamp format the `from`/`to` query
+// params accept, tried in order. RFC3339 covers programmatic/MCP callers;
+// the naked layouts cover the browser's <input type="datetime-local">,
+// which emits local wall-clock with no timezone and (usually) no seconds.
+// Naked layouts are parsed as UTC — the SPA pre-converts to RFC3339 via
+// toISOString() so the timezone stays correct for UI traffic; these are
+// the defensive fallback for raw API clients.
+var acceptedTimeLayouts = []string{
+	time.RFC3339,
+	"2006-01-02T15:04:05",
+	"2006-01-02T15:04",
+	"2006-01-02",
+}
+
+// parseTimestamp parses a `from`/`to` query value against every accepted
+// layout. Returns an error if none match (empty string is treated as a
+// non-match — callers guard against empty before calling).
+func parseTimestamp(raw string) (time.Time, error) {
+	for _, layout := range acceptedTimeLayouts {
+		if ts, err := time.Parse(layout, raw); err == nil {
+			return ts, nil
+		}
+	}
+	return time.Time{}, errors.New("unrecognized timestamp format")
+}
+
 // parseOpts converts the shared `session`/`from`/`to` query string into a
 // ScanOpts. Returns a 400 AppError if the time bounds are malformed.
 func parseOpts(r *http.Request, allowMultiSession bool) (analytics.ScanOpts, error) {
@@ -78,14 +104,14 @@ func parseOpts(r *http.Request, allowMultiSession bool) (analytics.ScanOpts, err
 	}
 
 	if raw := strings.TrimSpace(q.Get("from")); raw != "" {
-		ts, err := time.Parse(time.RFC3339, raw)
+		ts, err := parseTimestamp(raw)
 		if err != nil {
 			return opts, apierr.NewAppError(http.StatusBadRequest, "invalid `from` timestamp")
 		}
 		opts.From = ts
 	}
 	if raw := strings.TrimSpace(q.Get("to")); raw != "" {
-		ts, err := time.Parse(time.RFC3339, raw)
+		ts, err := parseTimestamp(raw)
 		if err != nil {
 			return opts, apierr.NewAppError(http.StatusBadRequest, "invalid `to` timestamp")
 		}
