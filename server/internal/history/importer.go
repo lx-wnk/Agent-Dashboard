@@ -80,18 +80,34 @@ func (imp *Importer) Run(ctx context.Context, onProgress func(ImportProgress)) e
 
 // runImport performs the full scan + insert and reports progress via onProgress.
 func (imp *Importer) runImport(ctx context.Context, onProgress func(ImportProgress)) {
-	projectsDir := parser.ClaudeProjectsDir()
-
 	collect := imp.collectFn
 	if collect == nil {
 		collect = collectJSONLFiles
 	}
-	// Collect all JSONL files one level deep: projects/{encoded_path}/*.jsonl
-	files, err := collect(projectsDir)
-	if err != nil {
-		slog.Warn("history.import: failed to collect jsonl files", "err", err)
-		onProgress(ImportProgress{Done: true})
-		return
+
+	// Collect JSONL files from every configured provider/account directory.
+	// Errors on individual dirs are logged and skipped — one missing provider
+	// must not prevent scanning the remaining dirs.
+	seen := make(map[string]struct{})
+	var files []string
+
+	configDirs := parser.AllAgentConfigDirs()
+	for _, entry := range configDirs {
+		projectsDir := filepath.Join(entry.Path, "projects")
+		dirFiles, err := collect(projectsDir)
+		if err != nil {
+			slog.Warn("history.import: failed to collect jsonl files",
+				"provider", entry.Provider, "dir", projectsDir, "err", err)
+			continue
+		}
+		for _, f := range dirFiles {
+			clean := filepath.Clean(f)
+			if _, dup := seen[clean]; dup {
+				continue
+			}
+			seen[clean] = struct{}{}
+			files = append(files, f)
+		}
 	}
 
 	progress := ImportProgress{Total: len(files)}

@@ -1,13 +1,45 @@
 package history
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
+
+// ---- stub repo ----
+
+type stubCostRepo struct {
+	mu   sync.Mutex
+	rows []repo.AgentCostRow
+}
+
+func (r *stubCostRepo) Upsert(_ context.Context, rows []repo.AgentCostRow) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rows = append(r.rows, rows...)
+	return nil
+}
+
+func (r *stubCostRepo) ListByTimeRange(_ context.Context, _, _ time.Time) ([]*ent.AgentCostTrend, error) {
+	return nil, nil
+}
+
+func (r *stubCostRepo) all() []repo.AgentCostRow {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]repo.AgentCostRow(nil), r.rows...)
+}
 
 // buildJSONLLine returns a minimal JSONL assistant message entry with the given token counts.
 func buildJSONLLine(inputTokens, outputTokens int, model, timestamp string) string {
@@ -141,4 +173,231 @@ func TestParseTokensFromRaw_AllMalformedLines(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, usage.InputTokens)
 	assert.Equal(t, 0, usage.OutputTokens)
+}
+
+// ---- multi-dir importer tests ----
+
+// makeJSONLContent returns a minimal JSONL session log with one assistant message.
+func makeJSONLContent(inputTokens, outputTokens int) string {
+	return buildJSONLLine(inputTokens, outputTokens, "claude-sonnet-4-6", "2024-06-01T10:00:00.000Z") + "\n"
+}
+
+// TestImporter_MultiDir_CollectFnSeam uses WithCollectFn to inject a fake
+// collector keyed on projects-dir path.  This is a pure unit test — no disk I/O
+// is performed.  It proves that files from two distinct provider/account dirs are
+// accumulated in progress.Total.
+func TestImporter_MultiDir_CollectFnSeam(t *testing.T) {
+	// Two synthetic dirs — the collect stub maps each to one fake path.
+	dir1 := "/fake/account1/projects"
+	dir2 := "/fake/account2/projects"
+	path1 := filepath.Join(dir1, "enc1", "session-aaa.jsonl")
+	path2 := filepath.Join(dir2, "enc2", "session-bbb.jsonl")
+
+	fakePaths := map[string][]string{
+		dir1: {path1},
+		dir2: {path2},
+	}
+	collectStub := func(projectsDir string) ([]string, error) {
+		if paths, ok := fakePaths[projectsDir]; ok {
+			return paths, nil
+		}
+		return nil, nil
+	}
+
+	costRepo := &stubCostRepo{}
+	imp := NewImporter(costRepo).WithCollectFn(collectStub)
+
+	// Point DASHBOARD_CLAUDE_CONFIG_DIRS at our synthetic dirs (which don't
+	// actually exist on disk; AllAgentConfigDirs won't read them, but the
+	// collect stub handles lookups).  We also need Codex/Gemini dirs to be
+	// absent so they don't pollute the count.
+	t.Setenv("DASHBOARD_CLAUDE_CONFIG_DIRS", "/fake/account1,/fake/account2")
+	// Suppress the real ~/.claude from contributing (CLAUDE_CONFIG_DIR empty is fine
+	// because DASHBOARD_CLAUDE_CONFIG_DIRS takes full priority when set).
+	t.Setenv("CLAUDE_CONFIG_DIR", "/fake/nonexistent")
+
+	var progressSnapshots []ImportProgress
+	var mu sync.Mutex
+	onProgress := func(p ImportProgress) {
+		mu.Lock()
+		defer mu.Unlock()
+		progressSnapshots = append(progressSnapshots, p)
+	}
+
+	err := imp.Run(t.Context(), onProgress)
+	require.NoError(t, err)
+
+	// Wait for the background goroutine to finish.
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		if len(progressSnapshots) == 0 {
+			return false
+		}
+		return progressSnapshots[len(progressSnapshots)-1].Done
+	}, 5*time.Second, 10*time.Millisecond, "import never completed")
+
+	mu.Lock()
+	final := progressSnapshots[len(progressSnapshots)-1]
+	mu.Unlock()
+
+	assert.Equal(t, 2, final.Total, "total should cover files from both dirs")
+	assert.Equal(t, 2, final.Processed, "both files should be processed")
+	assert.True(t, final.Done)
+}
+
+// TestImporter_MultiDir_Deduplication proves that the same path appearing
+// under two configured dirs (e.g. a symlink scenario) is processed only once.
+func TestImporter_MultiDir_Deduplication(t *testing.T) {
+	sharedPath := "/fake/shared/projects/enc/session-dup.jsonl"
+	collectStub := func(_ string) ([]string, error) {
+		return []string{sharedPath}, nil
+	}
+
+	t.Setenv("DASHBOARD_CLAUDE_CONFIG_DIRS", "/fake/acc1,/fake/acc2")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/fake/nonexistent")
+
+	costRepo := &stubCostRepo{}
+	imp := NewImporter(costRepo).WithCollectFn(collectStub)
+
+	var last ImportProgress
+	var mu sync.Mutex
+	err := imp.Run(t.Context(), func(p ImportProgress) {
+		mu.Lock()
+		defer mu.Unlock()
+		last = p
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return last.Done
+	}, 5*time.Second, 10*time.Millisecond)
+
+	mu.Lock()
+	total := last.Total
+	processed := last.Processed
+	mu.Unlock()
+
+	assert.Equal(t, 1, total, "duplicate path should be counted once")
+	assert.Equal(t, 1, processed, "duplicate path should be processed once")
+}
+
+// TestImporter_MultiDir_OneErrorSkipped proves that a collect error on one dir
+// does not abort the entire import — the other dir's files are still processed.
+func TestImporter_MultiDir_OneErrorSkipped(t *testing.T) {
+	goodPath := "/fake/good/projects/enc/session-ok.jsonl"
+	callCount := 0
+	collectStub := func(projectsDir string) ([]string, error) {
+		callCount++
+		if strings.Contains(projectsDir, "bad") {
+			return nil, fmt.Errorf("simulated read error")
+		}
+		return []string{goodPath}, nil
+	}
+
+	t.Setenv("DASHBOARD_CLAUDE_CONFIG_DIRS", "/fake/bad,/fake/good")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/fake/nonexistent")
+
+	costRepo := &stubCostRepo{}
+	imp := NewImporter(costRepo).WithCollectFn(collectStub)
+
+	var last ImportProgress
+	var mu sync.Mutex
+	err := imp.Run(t.Context(), func(p ImportProgress) {
+		mu.Lock()
+		defer mu.Unlock()
+		last = p
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return last.Done
+	}, 5*time.Second, 10*time.Millisecond)
+
+	mu.Lock()
+	total := last.Total
+	processed := last.Processed
+	mu.Unlock()
+
+	assert.Equal(t, 1, total, "only the good dir's file should be counted")
+	assert.Equal(t, 1, processed)
+}
+
+// TestImporter_MultiDir_RealFS uses real temp directories and the real
+// collectJSONLFiles function to verify end-to-end file discovery and parsing.
+// The collect fn is restricted to only the two temp dirs so the test is
+// hermetic (it does not pick up the developer's actual ~/.claude sessions).
+func TestImporter_MultiDir_RealFS(t *testing.T) {
+	// Build two Claude config dirs, each with a projects sub-tree.
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+
+	projects1 := filepath.Join(dir1, "projects")
+	projects2 := filepath.Join(dir2, "projects")
+
+	enc1 := filepath.Join(projects1, "-repo-alpha")
+	enc2 := filepath.Join(projects2, "-repo-beta")
+	require.NoError(t, os.MkdirAll(enc1, 0o755))
+	require.NoError(t, os.MkdirAll(enc2, 0o755))
+
+	file1 := filepath.Join(enc1, "session-111.jsonl")
+	file2 := filepath.Join(enc2, "session-222.jsonl")
+	require.NoError(t, os.WriteFile(file1, []byte(makeJSONLContent(100, 50)), 0o644))
+	require.NoError(t, os.WriteFile(file2, []byte(makeJSONLContent(200, 80)), 0o644))
+
+	// Use DASHBOARD_CLAUDE_CONFIG_DIRS so AllAgentConfigDirs returns our dirs first.
+	// Restrict collection to only these two project dirs via a wrapped collectFn so
+	// the test stays hermetic regardless of what is on the developer's machine.
+	t.Setenv("DASHBOARD_CLAUDE_CONFIG_DIRS", dir1+","+dir2)
+	allowedProjects := map[string]struct{}{
+		filepath.Clean(projects1): {},
+		filepath.Clean(projects2): {},
+	}
+	collectRestricted := func(projectsDir string) ([]string, error) {
+		if _, ok := allowedProjects[filepath.Clean(projectsDir)]; !ok {
+			return nil, nil // suppress real ~/.claude dirs
+		}
+		return collectJSONLFiles(projectsDir)
+	}
+
+	costRepo := &stubCostRepo{}
+	imp := NewImporter(costRepo).WithCollectFn(collectRestricted)
+
+	var last ImportProgress
+	var mu sync.Mutex
+	err := imp.Run(t.Context(), func(p ImportProgress) {
+		mu.Lock()
+		defer mu.Unlock()
+		last = p
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return last.Done
+	}, 5*time.Second, 10*time.Millisecond)
+
+	mu.Lock()
+	final := last
+	mu.Unlock()
+
+	assert.Equal(t, 2, final.Total, "both dirs should contribute files")
+	assert.Equal(t, 2, final.Processed)
+	assert.Equal(t, 2, final.Imported, "both valid files should be imported")
+	assert.Equal(t, 0, final.Errors)
+
+	// Confirm both sessions are in the upserted rows.
+	rows := costRepo.all()
+	assert.Len(t, rows, 2)
+	sessionIDs := make(map[string]bool, 2)
+	for _, r := range rows {
+		sessionIDs[r.SessionID] = true
+	}
+	assert.True(t, sessionIDs["session-111"])
+	assert.True(t, sessionIDs["session-222"])
 }
