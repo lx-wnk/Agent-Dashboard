@@ -583,10 +583,12 @@ func mergeEnv(s *ent.Spawner) []string {
 // allowedPermissionModes is the exhaustive set of values the caller may pass
 // as body["permissionMode"]. Any other non-empty value is rejected.
 var allowedPermissionModes = map[string]struct{}{
-	"default":            {},
-	"acceptEdits":        {},
-	"plan":               {},
-	"bypassPermissions":  {},
+	"default":           {},
+	"acceptEdits":       {},
+	"plan":              {},
+	"auto":              {},
+	"bypassPermissions": {},
+	"dontAsk":           {},
 }
 
 // reservedSpawnerFlags are CLI flags the dashboard sets itself; spawner-row

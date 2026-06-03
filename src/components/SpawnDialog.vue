@@ -29,7 +29,8 @@ const projectChoice = ref<string>('')
 const showQuickCreate = ref(false)
 const prompt = ref('')
 const systemPrompt = ref('')
-const permissionMode = ref<'default' | 'acceptEdits' | 'bypassPermissions'>('default')
+type PermissionMode = 'default' | 'plan' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'dontAsk'
+const permissionMode = ref<PermissionMode>('default')
 const bypassConfirmed = ref(false)
 const isSpawning = ref(false)
 const errorMsg = ref('')
@@ -40,6 +41,11 @@ let statusPollTimer: ReturnType<typeof setTimeout> | null = null
 let autoCloseTimer: ReturnType<typeof setTimeout> | null = null
 
 const folderPickerVisible = computed(() => dlg.folders.value.length > 1)
+
+// Modes that skip every confirmation prompt are gated behind a click-again
+// confirmation. 'auto' and 'plan' are not dangerous and need no gate.
+const dangerousMode = computed(() =>
+  permissionMode.value === 'bypassPermissions' || permissionMode.value === 'dontAsk')
 
 function stopStatusPoll() {
   if (statusPollTimer) {
@@ -138,7 +144,7 @@ async function handleSpawn() {
   if (isSpawning.value || !prompt.value.trim() || !dlg.cwd.value.trim())
     return
 
-  if (permissionMode.value === 'bypassPermissions' && !bypassConfirmed.value) {
+  if (dangerousMode.value && !bypassConfirmed.value) {
     bypassConfirmed.value = true
     return
   }
@@ -315,17 +321,26 @@ onUnmounted(() => {
           <option value="default">
             Ask for permission (default)
           </option>
+          <option value="plan">
+            Plan mode (read-only)
+          </option>
           <option value="acceptEdits">
             Auto-accept edits
           </option>
+          <option value="auto">
+            Auto (smart approvals)
+          </option>
           <option value="bypassPermissions">
             Bypass all permissions (dangerous)
+          </option>
+          <option value="dontAsk">
+            Never ask (dangerous)
           </option>
         </select>
       </div>
 
       <div
-        v-if="permissionMode === 'bypassPermissions'"
+        v-if="dangerousMode"
         data-testid="bypass-warning"
         class="bg-yellow-50/50 dark:bg-yellow-950/20 border border-yellow-300/60 dark:border-yellow-700/40 rounded p-2 px-3 text-xs leading-relaxed text-yellow-600 dark:text-yellow-400 mb-3"
       >

@@ -181,7 +181,7 @@ describe('spawnDialog', () => {
     wrapper.unmount()
   })
 
-  it('permission-mode select is present with three options', async () => {
+  it('permission-mode select offers all claude CLI modes', async () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
@@ -189,10 +189,26 @@ describe('spawnDialog', () => {
     expect(permSelect).not.toBeNull()
 
     const values = Array.from(permSelect.options).map(o => o.value)
-    expect(values).toContain('default')
-    expect(values).toContain('acceptEdits')
-    expect(values).toContain('bypassPermissions')
+    for (const mode of ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions', 'dontAsk'])
+      expect(values).toContain(mode)
     expect(permSelect.value).toBe('default')
+
+    wrapper.unmount()
+  })
+
+  it('dontAsk also shows the dangerous-mode warning banner', async () => {
+    const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
+    await flushPromises()
+
+    const permSelect = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLSelectElement
+    setSelectValue(permSelect, 'dontAsk')
+    await flushPromises()
+    expect(document.querySelector('[data-testid="bypass-warning"]')).not.toBeNull()
+
+    // A non-dangerous mode (auto) must NOT show the warning.
+    setSelectValue(permSelect, 'auto')
+    await flushPromises()
+    expect(document.querySelector('[data-testid="bypass-warning"]')).toBeNull()
 
     wrapper.unmount()
   })
