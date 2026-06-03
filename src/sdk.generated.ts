@@ -215,6 +215,13 @@ export interface Agent {
   projectPath: string;
   projectName: string;
   cwd: string;
+  /**
+   * ClaudeConfigDir is the value of CLAUDE_CONFIG_DIR detected in the running
+   * session's process env (empty when the session uses the default ~/.claude).
+   * Lets the dashboard resolve which config root a session's slash commands /
+   * skills / plugins are loaded from when enumerating per-session scope.
+   */
+  claudeConfigDir?: string;
   entrypoint: Entrypoint;
   status: AgentStatus;
   uptime: number /* int64 */;

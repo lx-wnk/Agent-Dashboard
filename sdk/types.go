@@ -200,6 +200,11 @@ type Agent struct {
 	ProjectPath               string         `json:"projectPath"`
 	ProjectName               string         `json:"projectName"`
 	CWD                       string         `json:"cwd"`
+	// ClaudeConfigDir is the value of CLAUDE_CONFIG_DIR detected in the running
+	// session's process env (empty when the session uses the default ~/.claude).
+	// Lets the dashboard resolve which config root a session's slash commands /
+	// skills / plugins are loaded from when enumerating per-session scope.
+	ClaudeConfigDir           string         `json:"claudeConfigDir,omitempty"`
 	Entrypoint                Entrypoint     `json:"entrypoint"`
 	Status                    AgentStatus    `json:"status"`
 	Uptime                    int64          `json:"uptime"`

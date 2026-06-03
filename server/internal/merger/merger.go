@@ -172,6 +172,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData) sdk.Agent
 		ProjectPath:               proc.CWD,
 		ProjectName:               filepath.Base(proc.CWD),
 		CWD:                       proc.CWD,
+		ClaudeConfigDir:           proc.ClaudeConfigDir,
 		Entrypoint:                session.Entrypoint,
 		Status:                    CalculateStatus(session.LastActivity),
 		ChannelAvailable:          channelDiscoveryExists(proc.PID),
