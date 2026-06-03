@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { dispatchSlashCommand, parseSlashCommand } from './useSlashCommands'
+import { dispatchSlashCommand, fetchDynamicCommands, parseSlashCommand } from './useSlashCommands'
 
 describe('parseSlashCommand', () => {
   it('returns null for non-slash input', () => {
@@ -122,6 +122,42 @@ describe('dispatchSlashCommand', () => {
       '/api/permission-requests/req-1/resolve',
       expect.objectContaining({ method: 'POST' }),
     )
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('fetchDynamicCommands', () => {
+  it('sends sessionId and parses the commands envelope', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        commands: [{ name: '/ship', description: 'Ship it', source: 'user' }],
+        engineVersion: '2.1.161',
+        builtinsMayBeStale: false,
+      }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const cmds = await fetchDynamicCommands({ sessionId: 'sess-A' })
+    expect(mockFetch).toHaveBeenCalledWith('/api/slash-commands?sessionId=sess-A')
+    expect(cmds).toEqual([{ name: '/ship', description: 'Ship it' }])
+    vi.unstubAllGlobals()
+  })
+
+  it('passes spawnerId and cwd as query params', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ commands: [] }) })
+    vi.stubGlobal('fetch', mockFetch)
+
+    await fetchDynamicCommands({ spawnerId: 'sp-1', cwd: '/repo' })
+    const url = mockFetch.mock.calls[0][0] as string
+    expect(url).toContain('spawnerId=sp-1')
+    expect(url).toContain(`cwd=${encodeURIComponent('/repo')}`)
+    vi.unstubAllGlobals()
+  })
+
+  it('returns [] on non-ok response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+    expect(await fetchDynamicCommands({ sessionId: 'sess-err' })).toEqual([])
     vi.unstubAllGlobals()
   })
 })

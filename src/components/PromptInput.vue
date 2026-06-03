@@ -31,9 +31,11 @@ const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
 const selectedIndex = ref(0)
 const dynamicCommands = ref<SlashCommandDef[]>([])
 
-watch(() => props.agent?.cwd, async (cwd) => {
-  if (cwd)
-    dynamicCommands.value = await fetchDynamicCommands(cwd)
+// Prefer sessionId so suggestions reflect the running session's actual
+// CLAUDE_CONFIG_DIR (spawner-dependent); fall back to cwd for project-local commands.
+watch(() => [props.agent?.sessionId, props.agent?.cwd] as const, async ([sessionId, cwd]) => {
+  if (sessionId || cwd)
+    dynamicCommands.value = await fetchDynamicCommands({ sessionId: sessionId || undefined, cwd: cwd || undefined })
 }, { immediate: true })
 
 const slashSuggestions = computed(() => {

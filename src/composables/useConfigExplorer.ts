@@ -20,13 +20,25 @@ export interface MemoryEntry {
   mtime: number
 }
 
+interface SkillsResponse { skills: SkillEntry[], scopeSource?: string, scopeLabel?: string }
+interface CommandsResponse { commands: CommandEntry[], engineVersion?: string, builtinsMayBeStale?: boolean, scopeSource?: string, scopeLabel?: string }
+interface MemoryResponse { memory: MemoryEntry[], scopeSource?: string, scopeLabel?: string }
+
 const skills = shallowRef<SkillEntry[]>([])
 const commands = shallowRef<CommandEntry[]>([])
 const memory = shallowRef<MemoryEntry[]>([])
+const engineVersion = ref<string | null>(null)
+const builtinsMayBeStale = ref(false)
+const scopeLabel = ref<string | null>(null)
 const isLoading = ref(false)
 const error = ref<string | null>(null)
-let loaded = false
-let inflight: Promise<void> | null = null
+
+// The scope (spawner id) the current data was loaded for. undefined = default.
+let loadedSpawnerId: string | undefined
+let hasLoaded = false
+// Monotonic token so a slow in-flight load for an old scope can't overwrite a
+// newer one (last-requested-wins).
+let loadToken = 0
 
 async function fetchJSON<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -35,53 +47,67 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return await res.json() as T
 }
 
-async function loadAll(): Promise<void> {
-  if (loaded)
-    return
-  if (inflight) {
-    await inflight
-    return
-  }
+function withSpawner(path: string, spawnerId?: string): string {
+  return spawnerId ? `${path}?spawnerId=${encodeURIComponent(spawnerId)}` : path
+}
+
+async function loadAll(spawnerId?: string): Promise<void> {
+  const token = ++loadToken
   isLoading.value = true
   error.value = null
-  inflight = (async () => {
-    try {
-      const [s, c, m] = await Promise.all([
-        fetchJSON<SkillEntry[]>('/api/config/skills'),
-        fetchJSON<CommandEntry[]>('/api/config/commands'),
-        fetchJSON<MemoryEntry[]>('/api/config/memory'),
-      ])
-      skills.value = s ?? []
-      commands.value = c ?? []
-      memory.value = m ?? []
-      loaded = true
-    }
-    catch (err) {
+  try {
+    const [s, c, m] = await Promise.all([
+      fetchJSON<SkillsResponse>(withSpawner('/api/config/skills', spawnerId)),
+      fetchJSON<CommandsResponse>(withSpawner('/api/config/commands', spawnerId)),
+      fetchJSON<MemoryResponse>(withSpawner('/api/config/memory', spawnerId)),
+    ])
+    if (token !== loadToken)
+      return // a newer load superseded this one
+    skills.value = s.skills ?? []
+    commands.value = c.commands ?? []
+    memory.value = m.memory ?? []
+    engineVersion.value = c.engineVersion ?? null
+    builtinsMayBeStale.value = !!c.builtinsMayBeStale
+    scopeLabel.value = c.scopeLabel ?? s.scopeLabel ?? null
+    loadedSpawnerId = spawnerId
+    hasLoaded = true
+  }
+  catch (err) {
+    if (token === loadToken)
       error.value = (err as Error).message
-    }
-    finally {
+  }
+  finally {
+    if (token === loadToken)
       isLoading.value = false
-      inflight = null
-    }
-  })()
-  await inflight
+  }
 }
 
 export function useConfigExplorer() {
-  if (!loaded && !inflight)
-    void loadAll()
+  // Initial load for the default scope if nothing has been fetched yet.
+  if (!hasLoaded && !isLoading.value)
+    void loadAll(undefined)
+
+  // setSpawner switches the enumeration scope; no-op if already on it.
+  function setSpawner(spawnerId?: string): void {
+    if (hasLoaded && spawnerId === loadedSpawnerId)
+      return
+    void loadAll(spawnerId)
+  }
 
   async function refresh(): Promise<void> {
-    loaded = false
-    await loadAll()
+    await loadAll(loadedSpawnerId)
   }
 
   return {
     skills,
     commands,
     memory,
+    engineVersion,
+    builtinsMayBeStale,
+    scopeLabel,
     isLoading,
     error,
     refresh,
+    setSpawner,
   }
 }
