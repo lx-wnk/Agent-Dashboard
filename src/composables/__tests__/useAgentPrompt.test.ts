@@ -24,7 +24,7 @@ describe('useAgentPrompt routing', () => {
     promptInput.value = 'hello'
     await handleSend()
     expect(fetch).toHaveBeenCalledWith(
-      '/api/agents/s1/message',
+      '/api/agents/123/message',
       expect.objectContaining({ method: 'POST' }),
     )
   })
