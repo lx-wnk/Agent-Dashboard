@@ -83,7 +83,10 @@ export function useAgentPrompt(
     promptInput.value = ''
 
     try {
-      if (agent.channelAvailable && agent.status !== 'idle') {
+      // channelAvailable is only true for a live, dashboard-channel-equipped
+      // process, so an "idle" status (no activity > 5min) is irrelevant — the
+      // process is still alive and polling the channel. Inject directly.
+      if (agent.channelAvailable) {
         const res = await fetch(`/api/agents/${agent.sessionId}/message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -113,7 +116,7 @@ export function useAgentPrompt(
     }
     catch (err) {
       if (isNetworkFailure(err)) {
-        const useChannel = !!(agent.channelAvailable && agent.status !== 'idle')
+        const useChannel = !!agent.channelAvailable
         try {
           await addPending({
             agentPid: agent.pid,

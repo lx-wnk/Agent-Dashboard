@@ -1,27 +1,32 @@
 #!/usr/bin/env bash
-# Wrapper: starts claude with the dashboard-channel MCP server loaded.
+# Wrapper: starts claude with the dashboard-channel MCP server loaded, so the
+# dashboard can inject prompts into THIS running session (the bridge writes a
+# discovery file the dashboard detects → ChannelAvailable=true). It uses the
+# exact same bridge the task pipeline injects: the Go binary's `channel` subcommand.
+#
 # All arguments are passed through to claude.
 #
 # Usage:
 #   claude-with-channel --resume "my-session"
 #   claude-with-channel -p "do something" --model claude-sonnet-4-6
-#   claude-with-channel   # interactive session with channel
-#   claude-with-channel --yolo -p "quick fix"  # skip permission prompts
+#   claude-with-channel              # interactive session with channel
 #
 # Options:
-#   --yolo   Add --dangerously-skip-permissions (no tool approval prompts)
+#   --yolo                            # Add --dangerously-skip-permissions
+#
+# Env:
+#   AGENT_DASHBOARD_BIN               # override the agent-dashboard binary path
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CHANNEL_TSX="$SCRIPT_DIR/channel/node_modules/.bin/tsx"
-CHANNEL_SCRIPT="$SCRIPT_DIR/channel/dashboard-channel.ts"
+BIN="${AGENT_DASHBOARD_BIN:-$SCRIPT_DIR/bin/agent-dashboard}"
 
-if [ ! -f "$CHANNEL_TSX" ]; then
-  echo "Error: tsx not found. Run 'pnpm install' in the project root first." >&2
+if [ ! -x "$BIN" ]; then
+  echo "Error: agent-dashboard binary not found at '$BIN'. Run 'task build' first, or set AGENT_DASHBOARD_BIN." >&2
   exit 1
 fi
 
 MCP_CONFIG=$(cat <<EOF
-{"mcpServers":{"dashboard-channel":{"command":"$CHANNEL_TSX","args":["$CHANNEL_SCRIPT"]}}}
+{"mcpServers":{"dashboard-channel":{"command":"$BIN","args":["channel"]}}}
 EOF
 )
 

@@ -3,13 +3,16 @@ package merger
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 )
@@ -30,6 +33,22 @@ func CalculateStatus(lastActivity time.Time) sdk.AgentStatus {
 	default:
 		return sdk.AgentStatusIdle
 	}
+}
+
+// channelDiscoveryExists reports whether the dashboard-channel bridge has written
+// a discovery file for the given process PID — i.e. the agent carries the
+// dashboard-channel MCP and can be messaged live via SendMessageToChannel.
+// The file is named by the agent's (parent) PID under ~/.claude/dashboard-channel/.
+// Since buildAgent only runs for processes the scanner found alive, a present
+// discovery file for that PID means a live, channel-reachable agent.
+func channelDiscoveryExists(pid int) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid)+".json")
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // strPtr returns nil if s is empty, otherwise a pointer to s.
@@ -155,6 +174,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData) sdk.Agent
 		CWD:                       proc.CWD,
 		Entrypoint:                session.Entrypoint,
 		Status:                    CalculateStatus(session.LastActivity),
+		ChannelAvailable:          channelDiscoveryExists(proc.PID),
 		Uptime:                    proc.Uptime,
 		LastActivity:              session.LastActivity.Format(time.RFC3339),
 		CurrentAction:             strPtr(session.CurrentAction),
