@@ -43,6 +43,7 @@ var builtinCommands = []SlashCommand{
 	{Name: "/agents", Description: "Manage agents", Source: "builtin"},
 	{Name: "/bug", Description: "Report a bug", Source: "builtin"},
 	{Name: "/clear", Description: "Clear conversation history", Source: "builtin"},
+	{Name: "/code-review", Description: "Review the current diff", Source: "builtin"},
 	{Name: "/compact", Description: "Compact context window", Source: "builtin"},
 	{Name: "/config", Description: "Open settings", Source: "builtin"},
 	{Name: "/cost", Description: "Show token cost of the session", Source: "builtin"},
@@ -59,8 +60,12 @@ var builtinCommands = []SlashCommand{
 	{Name: "/release-notes", Description: "Show release notes", Source: "builtin"},
 	{Name: "/resume", Description: "Resume a previous conversation", Source: "builtin"},
 	{Name: "/review", Description: "Review a pull request", Source: "builtin"},
+	{Name: "/run", Description: "Launch and drive the project's app", Source: "builtin"},
+	{Name: "/security-review", Description: "Security review of pending changes on the current branch", Source: "builtin"},
+	{Name: "/simplify", Description: "Simplify the changed code", Source: "builtin"},
 	{Name: "/status", Description: "Show session status", Source: "builtin"},
 	{Name: "/terminal-setup", Description: "Configure terminal key bindings", Source: "builtin"},
+	{Name: "/verify", Description: "Verify a change does what it should", Source: "builtin"},
 	{Name: "/vim", Description: "Toggle vim keybindings", Source: "builtin"},
 }
 
@@ -111,7 +116,7 @@ func (s Scope) commandDetails(withBody bool) []CommandDetail {
 
 	collect := func(dir, source string) {
 		for _, file := range listCommandFiles(dir) {
-			if d, ok := readCommand(file, source, "", withBody); ok {
+			if d, ok := readCommand(file, source, withBody); ok {
 				out = append(out, d)
 			}
 		}
@@ -125,13 +130,14 @@ func (s Scope) commandDetails(withBody bool) []CommandDetail {
 		collect(filepath.Join(s.ProjectCwd, ".claude", "commands"), "project")
 	}
 
-	// Plugin commands: <ConfigDir>/plugins/cache/<marketplace>/<plugin>/**/commands/*.md
-	// Namespaced as /<plugin>:<name>, matching Claude's invocation syntax.
+	// Plugin commands: <ConfigDir>/plugins/cache/<marketplace>/<plugin>/**/commands/*.md.
+	// Claude's slash menu shows these BARE (/<name>, not /<plugin>:<name>), so we
+	// keep the name bare and record the plugin only in Source. The plugin level is
+	// two deep under the cache (see pluginDirs).
 	for _, pluginDir := range pluginDirs(filepath.Join(s.ConfigDir, "plugins", "cache")) {
-		plugin := filepath.Base(pluginDir)
-		source := "plugin:" + plugin
+		source := "plugin:" + filepath.Base(pluginDir)
 		for _, file := range findCommandFiles(pluginDir) {
-			if d, ok := readCommand(file, source, plugin, withBody); ok {
+			if d, ok := readCommand(file, source, withBody); ok {
 				out = append(out, d)
 			}
 		}
@@ -178,17 +184,17 @@ func (s Scope) Skills() []SkillEntry {
 		out = append(out, skillsInDir(filepath.Join(s.ProjectCwd, ".claude", "skills"), "project")...)
 	}
 
-	// Plugin skills: <ConfigDir>/plugins/cache/<marketplace>/<plugin>/**/SKILL.md
-	// Namespaced as <plugin>:<skill>, matching Claude's skill identifiers.
+	// Plugin skills: <ConfigDir>/plugins/cache/<marketplace>/<plugin>/**/SKILL.md.
+	// Claude's slash menu shows skills BARE (/<name>), so the name stays bare and
+	// the plugin is recorded only in Source. Plugin level is two deep (pluginDirs).
 	for _, pluginDir := range pluginDirs(filepath.Join(s.ConfigDir, "plugins", "cache")) {
-		plugin := filepath.Base(pluginDir)
-		source := "plugin:" + plugin
+		source := "plugin:" + filepath.Base(pluginDir)
 		for _, file := range findSkillFiles(pluginDir) {
 			name, desc := parseSkillFrontmatter(file)
 			if name == "" {
 				continue
 			}
-			out = append(out, SkillEntry{Name: plugin + ":" + name, Description: desc, Source: source})
+			out = append(out, SkillEntry{Name: name, Description: desc, Source: source})
 		}
 	}
 
@@ -390,21 +396,16 @@ func findCommandFiles(root string) []string {
 }
 
 // readCommand builds a CommandDetail for a slash-command markdown file. Name is
-// the filename without .md, prefixed "/" and — for plugin commands — namespaced
-// as /<namespace>:<base> to match Claude's invocation syntax (namespace is "" for
-// user/project commands). Description comes from optional YAML frontmatter, and
-// (when withBody) body is the file content capped at maxCommandBodyBytes. ok is
-// false only when the path has no usable name.
-func readCommand(path, source, namespace string, withBody bool) (CommandDetail, bool) {
+// the filename without .md, prefixed "/" (bare, matching Claude's slash menu;
+// the originating plugin is recorded in Source, not the name). Description comes
+// from optional YAML frontmatter, and (when withBody) body is the file content
+// capped at maxCommandBodyBytes. ok is false only when the path has no usable name.
+func readCommand(path, source string, withBody bool) (CommandDetail, bool) {
 	base := strings.TrimSuffix(filepath.Base(path), ".md")
 	if base == "" {
 		return CommandDetail{}, false
 	}
-	name := "/" + base
-	if namespace != "" {
-		name = "/" + namespace + ":" + base
-	}
-	d := CommandDetail{Name: name, Source: source}
+	d := CommandDetail{Name: "/" + base, Source: source}
 
 	if withBody {
 		body, desc := readCommandBody(path)

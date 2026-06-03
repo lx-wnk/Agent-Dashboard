@@ -45,9 +45,18 @@ const slashSuggestions = computed(() => {
   if (val.includes(' '))
     return []
   const query = val.toLowerCase()
+  const term = query.slice(1) // drop leading '/'
+  // Match like Claude's slash menu: prefix OR substring on the command name
+  // (so "/review" surfaces /branch-review, /security-review, …). Prefix hits
+  // rank first.
+  const matches = (name: string) => {
+    const n = name.toLowerCase()
+    return n.startsWith(query) || n.slice(1).includes(term)
+  }
+  const rank = (name: string) => (name.toLowerCase().startsWith(query) ? 0 : 1)
 
   const dashboardCmds = SLASH_COMMAND_DEFS
-    .filter(c => c.name.startsWith(query))
+    .filter(c => matches(c.name))
     .map(c => ({
       ...c,
       disabled: !!c.requiresTask && !props.agent?.pipelineTaskId,
@@ -55,10 +64,10 @@ const slashSuggestions = computed(() => {
 
   const seen = new Set(dashboardCmds.map(c => c.name))
   const sessionCmds = dynamicCommands.value
-    .filter(c => c.name.startsWith(query) && !seen.has(c.name))
+    .filter(c => matches(c.name) && !seen.has(c.name))
     .map(c => ({ ...c, disabled: false }))
 
-  return [...dashboardCmds, ...sessionCmds]
+  return [...dashboardCmds, ...sessionCmds].sort((a, b) => rank(a.name) - rank(b.name))
 })
 
 const showSuggestions = computed(() => slashSuggestions.value.length > 0)

@@ -44,8 +44,8 @@ func TestCommands_AllLayers(t *testing.T) {
 	// layered sources
 	require.Equal(t, "user", byName["/deploy"])
 	require.Equal(t, "project", byName["/lint"])
-	// plugin command is namespaced /<plugin>:<name> with source plugin:<plugin>
-	require.Equal(t, "plugin:acme-plugin", byName["/acme-plugin:scan"])
+	// plugin command name stays bare; the plugin is recorded in Source
+	require.Equal(t, "plugin:acme-plugin", byName["/scan"])
 
 	// descriptions parsed from frontmatter
 	for _, c := range got {
@@ -62,8 +62,8 @@ func TestCommands_DedupPrecedence(t *testing.T) {
 	cfg := t.TempDir()
 	cwd := t.TempDir()
 
-	// same bare command name at user + project layers (these collide); the
-	// plugin one is namespaced so it stays distinct.
+	// same bare /build at user, project, and plugin layers — names are bare so
+	// all three collide and dedup to the highest-precedence layer (project).
 	writeFile(t, filepath.Join(cfg, "commands", "build.md"), "---\ndescription: user build\n---")
 	writeFile(t, filepath.Join(cwd, ".claude", "commands", "build.md"), "---\ndescription: project build\n---")
 	writeFile(t, filepath.Join(cfg, "plugins", "cache", "market", "p", "commands", "build.md"), "---\ndescription: plugin build\n---")
@@ -85,11 +85,9 @@ func TestCommands_DedupPrecedence(t *testing.T) {
 		}
 	}
 
-	require.Equal(t, 1, count["/build"], "bare /build must be deduped across user+project")
-	require.Equal(t, "project", build.Source, "project layer shadows user")
+	require.Equal(t, 1, count["/build"], "bare /build must be deduped across all layers")
+	require.Equal(t, "project", build.Source, "project layer shadows user and plugin")
 	require.Equal(t, "project build", build.Description)
-	// the plugin build is namespaced and therefore NOT deduped away
-	require.Equal(t, "plugin:p", names(got)["/p:build"])
 
 	require.Equal(t, 1, count["/help"], "help must be deduped")
 	require.Equal(t, "builtin", help.Source, "builtin can never be overridden")
@@ -113,8 +111,8 @@ func TestSkills_AllLayers(t *testing.T) {
 	}
 	require.Equal(t, "user", src["alpha"])
 	require.Equal(t, "project", src["beta"])
-	// plugin skill is namespaced <plugin>:<name>
-	require.Equal(t, "plugin:myplug", src["myplug:gamma"])
+	// plugin skill name stays bare; the plugin is recorded in Source
+	require.Equal(t, "plugin:myplug", src["gamma"])
 }
 
 func TestSlashCommands_IncludesSkillsAsCommands(t *testing.T) {
@@ -131,7 +129,7 @@ func TestSlashCommands_IncludesSkillsAsCommands(t *testing.T) {
 	require.Equal(t, "builtin", byName["/help"], "builtins still present")
 	require.Equal(t, "project", byName["/ship"], "command files present")
 	require.Equal(t, "user", byName["/vue"], "user skill exposed as /vue")
-	require.Equal(t, "plugin:superpowers", byName["/superpowers:brainstorming"], "plugin skill exposed namespaced")
+	require.Equal(t, "plugin:superpowers", byName["/brainstorming"], "plugin skill exposed bare with plugin source")
 
 	// Commands() (config tab) must NOT include skills
 	require.NotContains(t, names(scope.Commands()), "/vue")
