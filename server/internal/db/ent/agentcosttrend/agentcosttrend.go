@@ -25,6 +25,14 @@ const (
 	FieldCostUsd = "cost_usd"
 	// FieldRecordedAt holds the string denoting the recorded_at field in the database.
 	FieldRecordedAt = "recorded_at"
+	// FieldCwd holds the string denoting the cwd field in the database.
+	FieldCwd = "cwd"
+	// FieldProjectPath holds the string denoting the project_path field in the database.
+	FieldProjectPath = "project_path"
+	// FieldProjectName holds the string denoting the project_name field in the database.
+	FieldProjectName = "project_name"
+	// FieldSourceMtime holds the string denoting the source_mtime field in the database.
+	FieldSourceMtime = "source_mtime"
 	// Table holds the table name of the agentcosttrend in the database.
 	Table = "agent_cost_trends"
 )
@@ -38,6 +46,10 @@ var Columns = []string{
 	FieldOutputTokens,
 	FieldCostUsd,
 	FieldRecordedAt,
+	FieldCwd,
+	FieldProjectPath,
+	FieldProjectName,
+	FieldSourceMtime,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -53,6 +65,14 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultRecordedAt holds the default value on creation for the "recorded_at" field.
 	DefaultRecordedAt func() time.Time
+	// DefaultCwd holds the default value on creation for the "cwd" field.
+	DefaultCwd string
+	// DefaultProjectPath holds the default value on creation for the "project_path" field.
+	DefaultProjectPath string
+	// DefaultProjectName holds the default value on creation for the "project_name" field.
+	DefaultProjectName string
+	// DefaultSourceMtime holds the default value on creation for the "source_mtime" field.
+	DefaultSourceMtime int64
 )
 
 // OrderOption defines the ordering options for the AgentCostTrend queries.
@@ -91,4 +111,24 @@ func ByCostUsd(opts ...sql.OrderTermOption) OrderOption {
 // ByRecordedAt orders the results by the recorded_at field.
 func ByRecordedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRecordedAt, opts...).ToFunc()
+}
+
+// ByCwd orders the results by the cwd field.
+func ByCwd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCwd, opts...).ToFunc()
+}
+
+// ByProjectPath orders the results by the project_path field.
+func ByProjectPath(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProjectPath, opts...).ToFunc()
+}
+
+// ByProjectName orders the results by the project_name field.
+func ByProjectName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProjectName, opts...).ToFunc()
+}
+
+// BySourceMtime orders the results by the source_mtime field.
+func BySourceMtime(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceMtime, opts...).ToFunc()
 }

@@ -32,9 +32,10 @@ type Config struct {
 	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
-	MCPToken       string `koanf:"mcp_token"`
-	WorktreeRoot   string `koanf:"worktree_root"`
-	ForceWorktrees bool   `koanf:"force_worktrees"`
+	CostScanIntervalMs     int    `koanf:"cost_scan_interval_ms"`
+	MCPToken               string `koanf:"mcp_token"`
+	WorktreeRoot           string `koanf:"worktree_root"`
+	ForceWorktrees         bool   `koanf:"force_worktrees"`
 	// RemotesEnabled allows binding to a non-loopback address. Set via DASHBOARD_REMOTES_ENABLED=true.
 	// Must be explicitly opted in because the dashboard exposes sensitive Claude session data.
 	RemotesEnabled bool `koanf:"remotes_enabled"`
@@ -59,6 +60,7 @@ func Defaults() Config {
 		DBPath:                 home + "/.claude/dashboard-tasks.db",
 		WorktreeRoot:           home + "/dashboard-worktrees",
 		SSEIntervalMs:          3000,
+		CostScanIntervalMs:     300000,
 		ShutdownTimeoutSeconds: 10,
 		HooksDebounceMs:        100,
 		SpawnRateLimit:         5,
@@ -79,6 +81,7 @@ func Load(cfgFile string) (Config, error) {
 		"port":                     cfg.Port,
 		"db_path":                  cfg.DBPath,
 		"sse_interval_ms":          cfg.SSEIntervalMs,
+		"cost_scan_interval_ms":    cfg.CostScanIntervalMs,
 		"shutdown_timeout_seconds": cfg.ShutdownTimeoutSeconds,
 		"hooks_debounce_ms":        cfg.HooksDebounceMs,
 		"spawn_rate_limit":         cfg.SpawnRateLimit,

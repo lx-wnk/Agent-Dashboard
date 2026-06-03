@@ -26,6 +26,7 @@ import { useInstallPrompt } from './composables/useInstallPrompt'
 import { usePWA } from './composables/usePWA'
 import { useSidebar } from './composables/useSidebar'
 import { useTasks } from './composables/useTasks'
+import { useTodayCost } from './composables/useTodayCost'
 import { useTheme } from './composables/useTheme'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
@@ -77,12 +78,16 @@ onUnmounted(() => {
 
 const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
+// Today's persisted spend — reuses the shared cost-summary logic so the footer
+// and Cost view agree. Distinct from totalCost (cost of agents running now).
+const { todayUsd, start: startTodayCost } = useTodayCost()
 
 // Start data streams only after auth is confirmed — avoids 401 flood while login page is shown
 watch(loaded, (isLoaded) => {
   if (isLoaded && !showLogin.value) {
     startAgents()
     startTasks()
+    startTodayCost()
   }
 }, { immediate: true })
 
@@ -93,17 +98,29 @@ watch(activeView, () => {
 
 const live = computed(() => !error.value)
 
+// Live burn-rate over the last 5 minutes, computed time-based from the
+// client-side cost-trend ring buffer (see useAgents). Falls back to null until
+// there are at least two samples spanning a measurable interval.
+const BURN_WINDOW_MS = 5 * 60 * 1000
 const costDelta = computed(() => {
   const pts = costTrend.value
   if (pts.length < 2)
     return null
-  return pts[pts.length - 1].cost - pts[Math.max(0, pts.length - 61)].cost
+  const last = pts[pts.length - 1]
+  const cutoff = last.t - BURN_WINDOW_MS
+  // Earliest sample at or after the cutoff is the window baseline.
+  const baseline = pts.find(p => p.t >= cutoff) ?? pts[0]
+  if (baseline.t === last.t)
+    return null
+  return last.cost - baseline.cost
 })
 
 const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
 const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
 const totalCostLabel = computed(() => formatCost(totalCost.value))
 const totalTokensLabel = computed(() => formatTokens(totalTokens.value))
+
+const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatCost(todayUsd.value)))
 
 const showSpawnDialog = ref(false)
 const activeConceptTask = ref<PipelineTask | null>(null)
@@ -207,6 +224,7 @@ onMounted(fetchQuota)
           :task-count="tasks.length"
           :total-cost-label="totalCostLabel"
           :total-tokens-label="totalTokensLabel"
+          :today-cost-label="todayCostLabel"
           :quota-pct="quotaPct"
           :theme="theme"
           @open-sessions="showSessions = true"
@@ -285,7 +303,7 @@ onMounted(fetchQuota)
       </div>
 
       <template #statusbar>
-        <AppStatusBar :cost-delta="costDelta" />
+        <AppStatusBar :cost-delta="costDelta" :today-cost-label="todayCostLabel" />
       </template>
     </AppShell>
 

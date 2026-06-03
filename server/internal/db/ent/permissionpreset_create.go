@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
@@ -17,6 +19,7 @@ type PermissionPresetCreate struct {
 	config
 	mutation *PermissionPresetMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetUserID sets the "user_id" field.
@@ -136,6 +139,7 @@ func (_c *PermissionPresetCreate) createSpec() (*PermissionPreset, *sqlgraph.Cre
 		_node = &PermissionPreset{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(permissionpreset.Table, sqlgraph.NewFieldSpec(permissionpreset.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -159,11 +163,277 @@ func (_c *PermissionPresetCreate) createSpec() (*PermissionPreset, *sqlgraph.Cre
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.PermissionPreset.Create().
+//		SetUserID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.PermissionPresetUpsert) {
+//			SetUserID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *PermissionPresetCreate) OnConflict(opts ...sql.ConflictOption) *PermissionPresetUpsertOne {
+	_c.conflict = opts
+	return &PermissionPresetUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.PermissionPreset.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *PermissionPresetCreate) OnConflictColumns(columns ...string) *PermissionPresetUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &PermissionPresetUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// PermissionPresetUpsertOne is the builder for "upsert"-ing
+	//  one PermissionPreset node.
+	PermissionPresetUpsertOne struct {
+		create *PermissionPresetCreate
+	}
+
+	// PermissionPresetUpsert is the "OnConflict" setter.
+	PermissionPresetUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetUserID sets the "user_id" field.
+func (u *PermissionPresetUpsert) SetUserID(v string) *PermissionPresetUpsert {
+	u.Set(permissionpreset.FieldUserID, v)
+	return u
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *PermissionPresetUpsert) UpdateUserID() *PermissionPresetUpsert {
+	u.SetExcluded(permissionpreset.FieldUserID)
+	return u
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (u *PermissionPresetUpsert) ClearUserID() *PermissionPresetUpsert {
+	u.SetNull(permissionpreset.FieldUserID)
+	return u
+}
+
+// SetProjectCwd sets the "project_cwd" field.
+func (u *PermissionPresetUpsert) SetProjectCwd(v string) *PermissionPresetUpsert {
+	u.Set(permissionpreset.FieldProjectCwd, v)
+	return u
+}
+
+// UpdateProjectCwd sets the "project_cwd" field to the value that was provided on create.
+func (u *PermissionPresetUpsert) UpdateProjectCwd() *PermissionPresetUpsert {
+	u.SetExcluded(permissionpreset.FieldProjectCwd)
+	return u
+}
+
+// SetTool sets the "tool" field.
+func (u *PermissionPresetUpsert) SetTool(v string) *PermissionPresetUpsert {
+	u.Set(permissionpreset.FieldTool, v)
+	return u
+}
+
+// UpdateTool sets the "tool" field to the value that was provided on create.
+func (u *PermissionPresetUpsert) UpdateTool() *PermissionPresetUpsert {
+	u.SetExcluded(permissionpreset.FieldTool)
+	return u
+}
+
+// SetPattern sets the "pattern" field.
+func (u *PermissionPresetUpsert) SetPattern(v string) *PermissionPresetUpsert {
+	u.Set(permissionpreset.FieldPattern, v)
+	return u
+}
+
+// UpdatePattern sets the "pattern" field to the value that was provided on create.
+func (u *PermissionPresetUpsert) UpdatePattern() *PermissionPresetUpsert {
+	u.SetExcluded(permissionpreset.FieldPattern)
+	return u
+}
+
+// ClearPattern clears the value of the "pattern" field.
+func (u *PermissionPresetUpsert) ClearPattern() *PermissionPresetUpsert {
+	u.SetNull(permissionpreset.FieldPattern)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.PermissionPreset.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(permissionpreset.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *PermissionPresetUpsertOne) UpdateNewValues() *PermissionPresetUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(permissionpreset.FieldID)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.PermissionPreset.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *PermissionPresetUpsertOne) Ignore() *PermissionPresetUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *PermissionPresetUpsertOne) DoNothing() *PermissionPresetUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the PermissionPresetCreate.OnConflict
+// documentation for more info.
+func (u *PermissionPresetUpsertOne) Update(set func(*PermissionPresetUpsert)) *PermissionPresetUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&PermissionPresetUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetUserID sets the "user_id" field.
+func (u *PermissionPresetUpsertOne) SetUserID(v string) *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.SetUserID(v)
+	})
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *PermissionPresetUpsertOne) UpdateUserID() *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.UpdateUserID()
+	})
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (u *PermissionPresetUpsertOne) ClearUserID() *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.ClearUserID()
+	})
+}
+
+// SetProjectCwd sets the "project_cwd" field.
+func (u *PermissionPresetUpsertOne) SetProjectCwd(v string) *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.SetProjectCwd(v)
+	})
+}
+
+// UpdateProjectCwd sets the "project_cwd" field to the value that was provided on create.
+func (u *PermissionPresetUpsertOne) UpdateProjectCwd() *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.UpdateProjectCwd()
+	})
+}
+
+// SetTool sets the "tool" field.
+func (u *PermissionPresetUpsertOne) SetTool(v string) *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.SetTool(v)
+	})
+}
+
+// UpdateTool sets the "tool" field to the value that was provided on create.
+func (u *PermissionPresetUpsertOne) UpdateTool() *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.UpdateTool()
+	})
+}
+
+// SetPattern sets the "pattern" field.
+func (u *PermissionPresetUpsertOne) SetPattern(v string) *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.SetPattern(v)
+	})
+}
+
+// UpdatePattern sets the "pattern" field to the value that was provided on create.
+func (u *PermissionPresetUpsertOne) UpdatePattern() *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.UpdatePattern()
+	})
+}
+
+// ClearPattern clears the value of the "pattern" field.
+func (u *PermissionPresetUpsertOne) ClearPattern() *PermissionPresetUpsertOne {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.ClearPattern()
+	})
+}
+
+// Exec executes the query.
+func (u *PermissionPresetUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for PermissionPresetCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *PermissionPresetUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *PermissionPresetUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: PermissionPresetUpsertOne.ID is not supported by MySQL driver. Use PermissionPresetUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *PermissionPresetUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // PermissionPresetCreateBulk is the builder for creating many PermissionPreset entities in bulk.
 type PermissionPresetCreateBulk struct {
 	config
 	err      error
 	builders []*PermissionPresetCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the PermissionPreset entities in the database.
@@ -192,6 +462,7 @@ func (_c *PermissionPresetCreateBulk) Save(ctx context.Context) ([]*PermissionPr
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -238,6 +509,190 @@ func (_c *PermissionPresetCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *PermissionPresetCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.PermissionPreset.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.PermissionPresetUpsert) {
+//			SetUserID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *PermissionPresetCreateBulk) OnConflict(opts ...sql.ConflictOption) *PermissionPresetUpsertBulk {
+	_c.conflict = opts
+	return &PermissionPresetUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.PermissionPreset.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *PermissionPresetCreateBulk) OnConflictColumns(columns ...string) *PermissionPresetUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &PermissionPresetUpsertBulk{
+		create: _c,
+	}
+}
+
+// PermissionPresetUpsertBulk is the builder for "upsert"-ing
+// a bulk of PermissionPreset nodes.
+type PermissionPresetUpsertBulk struct {
+	create *PermissionPresetCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.PermissionPreset.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(permissionpreset.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *PermissionPresetUpsertBulk) UpdateNewValues() *PermissionPresetUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(permissionpreset.FieldID)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.PermissionPreset.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *PermissionPresetUpsertBulk) Ignore() *PermissionPresetUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *PermissionPresetUpsertBulk) DoNothing() *PermissionPresetUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the PermissionPresetCreateBulk.OnConflict
+// documentation for more info.
+func (u *PermissionPresetUpsertBulk) Update(set func(*PermissionPresetUpsert)) *PermissionPresetUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&PermissionPresetUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetUserID sets the "user_id" field.
+func (u *PermissionPresetUpsertBulk) SetUserID(v string) *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.SetUserID(v)
+	})
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *PermissionPresetUpsertBulk) UpdateUserID() *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.UpdateUserID()
+	})
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (u *PermissionPresetUpsertBulk) ClearUserID() *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.ClearUserID()
+	})
+}
+
+// SetProjectCwd sets the "project_cwd" field.
+func (u *PermissionPresetUpsertBulk) SetProjectCwd(v string) *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.SetProjectCwd(v)
+	})
+}
+
+// UpdateProjectCwd sets the "project_cwd" field to the value that was provided on create.
+func (u *PermissionPresetUpsertBulk) UpdateProjectCwd() *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.UpdateProjectCwd()
+	})
+}
+
+// SetTool sets the "tool" field.
+func (u *PermissionPresetUpsertBulk) SetTool(v string) *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.SetTool(v)
+	})
+}
+
+// UpdateTool sets the "tool" field to the value that was provided on create.
+func (u *PermissionPresetUpsertBulk) UpdateTool() *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.UpdateTool()
+	})
+}
+
+// SetPattern sets the "pattern" field.
+func (u *PermissionPresetUpsertBulk) SetPattern(v string) *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.SetPattern(v)
+	})
+}
+
+// UpdatePattern sets the "pattern" field to the value that was provided on create.
+func (u *PermissionPresetUpsertBulk) UpdatePattern() *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.UpdatePattern()
+	})
+}
+
+// ClearPattern clears the value of the "pattern" field.
+func (u *PermissionPresetUpsertBulk) ClearPattern() *PermissionPresetUpsertBulk {
+	return u.Update(func(s *PermissionPresetUpsert) {
+		s.ClearPattern()
+	})
+}
+
+// Exec executes the query.
+func (u *PermissionPresetUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the PermissionPresetCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for PermissionPresetCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *PermissionPresetUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

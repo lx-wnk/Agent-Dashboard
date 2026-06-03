@@ -28,7 +28,15 @@ type AgentCostTrend struct {
 	// CostUsd holds the value of the "cost_usd" field.
 	CostUsd float64 `json:"cost_usd,omitempty"`
 	// RecordedAt holds the value of the "recorded_at" field.
-	RecordedAt   time.Time `json:"recorded_at,omitempty"`
+	RecordedAt time.Time `json:"recorded_at,omitempty"`
+	// Cwd holds the value of the "cwd" field.
+	Cwd string `json:"cwd,omitempty"`
+	// ProjectPath holds the value of the "project_path" field.
+	ProjectPath string `json:"project_path,omitempty"`
+	// ProjectName holds the value of the "project_name" field.
+	ProjectName string `json:"project_name,omitempty"`
+	// SourceMtime holds the value of the "source_mtime" field.
+	SourceMtime  int64 `json:"source_mtime,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -39,9 +47,9 @@ func (*AgentCostTrend) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case agentcosttrend.FieldCostUsd:
 			values[i] = new(sql.NullFloat64)
-		case agentcosttrend.FieldInputTokens, agentcosttrend.FieldOutputTokens:
+		case agentcosttrend.FieldInputTokens, agentcosttrend.FieldOutputTokens, agentcosttrend.FieldSourceMtime:
 			values[i] = new(sql.NullInt64)
-		case agentcosttrend.FieldID, agentcosttrend.FieldSessionID, agentcosttrend.FieldModel:
+		case agentcosttrend.FieldID, agentcosttrend.FieldSessionID, agentcosttrend.FieldModel, agentcosttrend.FieldCwd, agentcosttrend.FieldProjectPath, agentcosttrend.FieldProjectName:
 			values[i] = new(sql.NullString)
 		case agentcosttrend.FieldRecordedAt:
 			values[i] = new(sql.NullTime)
@@ -102,6 +110,30 @@ func (_m *AgentCostTrend) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.RecordedAt = value.Time
 			}
+		case agentcosttrend.FieldCwd:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field cwd", values[i])
+			} else if value.Valid {
+				_m.Cwd = value.String
+			}
+		case agentcosttrend.FieldProjectPath:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field project_path", values[i])
+			} else if value.Valid {
+				_m.ProjectPath = value.String
+			}
+		case agentcosttrend.FieldProjectName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field project_name", values[i])
+			} else if value.Valid {
+				_m.ProjectName = value.String
+			}
+		case agentcosttrend.FieldSourceMtime:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field source_mtime", values[i])
+			} else if value.Valid {
+				_m.SourceMtime = value.Int64
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -155,6 +187,18 @@ func (_m *AgentCostTrend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("recorded_at=")
 	builder.WriteString(_m.RecordedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("cwd=")
+	builder.WriteString(_m.Cwd)
+	builder.WriteString(", ")
+	builder.WriteString("project_path=")
+	builder.WriteString(_m.ProjectPath)
+	builder.WriteString(", ")
+	builder.WriteString("project_name=")
+	builder.WriteString(_m.ProjectName)
+	builder.WriteString(", ")
+	builder.WriteString("source_mtime=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SourceMtime))
 	builder.WriteByte(')')
 	return builder.String()
 }

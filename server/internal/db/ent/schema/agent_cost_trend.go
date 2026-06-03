@@ -19,13 +19,23 @@ func (AgentCostTrend) Fields() []ent.Field {
 		field.Int("input_tokens"),
 		field.Int("output_tokens"),
 		field.Float("cost_usd"),
-		field.Time("recorded_at").Default(time.Now).Immutable(),
+		// recorded_at is NOT Immutable so upserts can refresh it to the latest session activity time.
+		field.Time("recorded_at").Default(time.Now),
+		// cwd is the raw working directory captured from the JSONL session log.
+		field.String("cwd").Optional().Default(""),
+		// project_path is the resolved grouping key (dashboard folder path, git repo root, or cwd).
+		field.String("project_path").Optional().Default(""),
+		// project_name is the human-readable display label for the project group.
+		field.String("project_name").Optional().Default(""),
+		// source_mtime is the file modification time in unix nanoseconds; used to skip unchanged files on rescans.
+		field.Int64("source_mtime").Optional().Default(0),
 	}
 }
 
 func (AgentCostTrend) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("session_id"),
+		index.Fields("session_id").Unique(),
 		index.Fields("recorded_at"),
+		index.Fields("project_path"),
 	}
 }

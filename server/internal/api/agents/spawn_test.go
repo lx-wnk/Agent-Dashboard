@@ -594,6 +594,16 @@ func (f *fakeProjectFolderRepo) ListByProject(_ context.Context, projectID strin
 	}
 	return f.byProject[projectID], nil
 }
+func (f *fakeProjectFolderRepo) ListAll(_ context.Context) ([]*ent.ProjectFolder, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	var all []*ent.ProjectFolder
+	for _, folders := range f.byProject {
+		all = append(all, folders...)
+	}
+	return all, nil
+}
 func (f *fakeProjectFolderRepo) Update(_ context.Context, _ string, _, _ *string, _ bool, _ *bool) (*ent.ProjectFolder, error) {
 	panic("fakeProjectFolderRepo.Update not implemented")
 }

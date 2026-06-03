@@ -17,6 +17,8 @@ type ProjectFolderRepo interface {
 	Create(ctx context.Context, projectID, path string, label *string, isDefault bool) (*ent.ProjectFolder, error)
 	GetByID(ctx context.Context, id string) (*ent.ProjectFolder, error)
 	ListByProject(ctx context.Context, projectID string) ([]*ent.ProjectFolder, error)
+	// ListAll returns every folder across all projects, with the owning project eagerly loaded.
+	ListAll(ctx context.Context) ([]*ent.ProjectFolder, error)
 	Update(ctx context.Context, id string, path, label *string, clearLabel bool, isDefault *bool) (*ent.ProjectFolder, error)
 	Delete(ctx context.Context, id string) error
 	Suggest(ctx context.Context, projectID string) ([]*ent.ProjectFolder, error)
@@ -83,6 +85,19 @@ func (r *entProjectFolderRepo) ListByProject(ctx context.Context, projectID stri
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("projectfolder.ListByProject: %w", err)
+	}
+	return folders, nil
+}
+
+// ListAll returns every project folder across all projects with the owning
+// project edge eagerly loaded. Used by the cost project resolver to map session
+// cwds to project grouping keys without an N+1 query.
+func (r *entProjectFolderRepo) ListAll(ctx context.Context) ([]*ent.ProjectFolder, error) {
+	folders, err := r.client.ProjectFolder.Query().
+		WithProject().
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("projectfolder.ListAll: %w", err)
 	}
 	return folders, nil
 }

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
@@ -21,6 +23,7 @@ type TaskCreate struct {
 	config
 	mutation *TaskMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetSlug sets the "slug" field.
@@ -489,6 +492,7 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 		_node = &Task{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(task.Table, sqlgraph.NewFieldSpec(task.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -644,11 +648,865 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Task.Create().
+//		SetSlug(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.TaskUpsert) {
+//			SetSlug(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *TaskCreate) OnConflict(opts ...sql.ConflictOption) *TaskUpsertOne {
+	_c.conflict = opts
+	return &TaskUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.Task.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *TaskCreate) OnConflictColumns(columns ...string) *TaskUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &TaskUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// TaskUpsertOne is the builder for "upsert"-ing
+	//  one Task node.
+	TaskUpsertOne struct {
+		create *TaskCreate
+	}
+
+	// TaskUpsert is the "OnConflict" setter.
+	TaskUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetSlug sets the "slug" field.
+func (u *TaskUpsert) SetSlug(v string) *TaskUpsert {
+	u.Set(task.FieldSlug, v)
+	return u
+}
+
+// UpdateSlug sets the "slug" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateSlug() *TaskUpsert {
+	u.SetExcluded(task.FieldSlug)
+	return u
+}
+
+// SetTitle sets the "title" field.
+func (u *TaskUpsert) SetTitle(v string) *TaskUpsert {
+	u.Set(task.FieldTitle, v)
+	return u
+}
+
+// UpdateTitle sets the "title" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateTitle() *TaskUpsert {
+	u.SetExcluded(task.FieldTitle)
+	return u
+}
+
+// SetDescription sets the "description" field.
+func (u *TaskUpsert) SetDescription(v string) *TaskUpsert {
+	u.Set(task.FieldDescription, v)
+	return u
+}
+
+// UpdateDescription sets the "description" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateDescription() *TaskUpsert {
+	u.SetExcluded(task.FieldDescription)
+	return u
+}
+
+// ClearDescription clears the value of the "description" field.
+func (u *TaskUpsert) ClearDescription() *TaskUpsert {
+	u.SetNull(task.FieldDescription)
+	return u
+}
+
+// SetCwd sets the "cwd" field.
+func (u *TaskUpsert) SetCwd(v string) *TaskUpsert {
+	u.Set(task.FieldCwd, v)
+	return u
+}
+
+// UpdateCwd sets the "cwd" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateCwd() *TaskUpsert {
+	u.SetExcluded(task.FieldCwd)
+	return u
+}
+
+// SetWorktreePath sets the "worktree_path" field.
+func (u *TaskUpsert) SetWorktreePath(v string) *TaskUpsert {
+	u.Set(task.FieldWorktreePath, v)
+	return u
+}
+
+// UpdateWorktreePath sets the "worktree_path" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateWorktreePath() *TaskUpsert {
+	u.SetExcluded(task.FieldWorktreePath)
+	return u
+}
+
+// ClearWorktreePath clears the value of the "worktree_path" field.
+func (u *TaskUpsert) ClearWorktreePath() *TaskUpsert {
+	u.SetNull(task.FieldWorktreePath)
+	return u
+}
+
+// SetSourceBranch sets the "source_branch" field.
+func (u *TaskUpsert) SetSourceBranch(v string) *TaskUpsert {
+	u.Set(task.FieldSourceBranch, v)
+	return u
+}
+
+// UpdateSourceBranch sets the "source_branch" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateSourceBranch() *TaskUpsert {
+	u.SetExcluded(task.FieldSourceBranch)
+	return u
+}
+
+// ClearSourceBranch clears the value of the "source_branch" field.
+func (u *TaskUpsert) ClearSourceBranch() *TaskUpsert {
+	u.SetNull(task.FieldSourceBranch)
+	return u
+}
+
+// SetTargetBranch sets the "target_branch" field.
+func (u *TaskUpsert) SetTargetBranch(v string) *TaskUpsert {
+	u.Set(task.FieldTargetBranch, v)
+	return u
+}
+
+// UpdateTargetBranch sets the "target_branch" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateTargetBranch() *TaskUpsert {
+	u.SetExcluded(task.FieldTargetBranch)
+	return u
+}
+
+// ClearTargetBranch clears the value of the "target_branch" field.
+func (u *TaskUpsert) ClearTargetBranch() *TaskUpsert {
+	u.SetNull(task.FieldTargetBranch)
+	return u
+}
+
+// SetCurrentStage sets the "current_stage" field.
+func (u *TaskUpsert) SetCurrentStage(v string) *TaskUpsert {
+	u.Set(task.FieldCurrentStage, v)
+	return u
+}
+
+// UpdateCurrentStage sets the "current_stage" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateCurrentStage() *TaskUpsert {
+	u.SetExcluded(task.FieldCurrentStage)
+	return u
+}
+
+// SetPriority sets the "priority" field.
+func (u *TaskUpsert) SetPriority(v string) *TaskUpsert {
+	u.Set(task.FieldPriority, v)
+	return u
+}
+
+// UpdatePriority sets the "priority" field to the value that was provided on create.
+func (u *TaskUpsert) UpdatePriority() *TaskUpsert {
+	u.SetExcluded(task.FieldPriority)
+	return u
+}
+
+// SetUserID sets the "user_id" field.
+func (u *TaskUpsert) SetUserID(v string) *TaskUpsert {
+	u.Set(task.FieldUserID, v)
+	return u
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateUserID() *TaskUpsert {
+	u.SetExcluded(task.FieldUserID)
+	return u
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (u *TaskUpsert) ClearUserID() *TaskUpsert {
+	u.SetNull(task.FieldUserID)
+	return u
+}
+
+// SetParentTaskID sets the "parent_task_id" field.
+func (u *TaskUpsert) SetParentTaskID(v string) *TaskUpsert {
+	u.Set(task.FieldParentTaskID, v)
+	return u
+}
+
+// UpdateParentTaskID sets the "parent_task_id" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateParentTaskID() *TaskUpsert {
+	u.SetExcluded(task.FieldParentTaskID)
+	return u
+}
+
+// ClearParentTaskID clears the value of the "parent_task_id" field.
+func (u *TaskUpsert) ClearParentTaskID() *TaskUpsert {
+	u.SetNull(task.FieldParentTaskID)
+	return u
+}
+
+// SetMaxIterations sets the "max_iterations" field.
+func (u *TaskUpsert) SetMaxIterations(v int) *TaskUpsert {
+	u.Set(task.FieldMaxIterations, v)
+	return u
+}
+
+// UpdateMaxIterations sets the "max_iterations" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateMaxIterations() *TaskUpsert {
+	u.SetExcluded(task.FieldMaxIterations)
+	return u
+}
+
+// AddMaxIterations adds v to the "max_iterations" field.
+func (u *TaskUpsert) AddMaxIterations(v int) *TaskUpsert {
+	u.Add(task.FieldMaxIterations, v)
+	return u
+}
+
+// SetTokenBudget sets the "token_budget" field.
+func (u *TaskUpsert) SetTokenBudget(v int) *TaskUpsert {
+	u.Set(task.FieldTokenBudget, v)
+	return u
+}
+
+// UpdateTokenBudget sets the "token_budget" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateTokenBudget() *TaskUpsert {
+	u.SetExcluded(task.FieldTokenBudget)
+	return u
+}
+
+// AddTokenBudget adds v to the "token_budget" field.
+func (u *TaskUpsert) AddTokenBudget(v int) *TaskUpsert {
+	u.Add(task.FieldTokenBudget, v)
+	return u
+}
+
+// ClearTokenBudget clears the value of the "token_budget" field.
+func (u *TaskUpsert) ClearTokenBudget() *TaskUpsert {
+	u.SetNull(task.FieldTokenBudget)
+	return u
+}
+
+// SetCostBudgetCents sets the "cost_budget_cents" field.
+func (u *TaskUpsert) SetCostBudgetCents(v int) *TaskUpsert {
+	u.Set(task.FieldCostBudgetCents, v)
+	return u
+}
+
+// UpdateCostBudgetCents sets the "cost_budget_cents" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateCostBudgetCents() *TaskUpsert {
+	u.SetExcluded(task.FieldCostBudgetCents)
+	return u
+}
+
+// AddCostBudgetCents adds v to the "cost_budget_cents" field.
+func (u *TaskUpsert) AddCostBudgetCents(v int) *TaskUpsert {
+	u.Add(task.FieldCostBudgetCents, v)
+	return u
+}
+
+// ClearCostBudgetCents clears the value of the "cost_budget_cents" field.
+func (u *TaskUpsert) ClearCostBudgetCents() *TaskUpsert {
+	u.SetNull(task.FieldCostBudgetCents)
+	return u
+}
+
+// SetStageTimeoutSeconds sets the "stage_timeout_seconds" field.
+func (u *TaskUpsert) SetStageTimeoutSeconds(v int) *TaskUpsert {
+	u.Set(task.FieldStageTimeoutSeconds, v)
+	return u
+}
+
+// UpdateStageTimeoutSeconds sets the "stage_timeout_seconds" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateStageTimeoutSeconds() *TaskUpsert {
+	u.SetExcluded(task.FieldStageTimeoutSeconds)
+	return u
+}
+
+// AddStageTimeoutSeconds adds v to the "stage_timeout_seconds" field.
+func (u *TaskUpsert) AddStageTimeoutSeconds(v int) *TaskUpsert {
+	u.Add(task.FieldStageTimeoutSeconds, v)
+	return u
+}
+
+// SetSilverBullet sets the "silver_bullet" field.
+func (u *TaskUpsert) SetSilverBullet(v bool) *TaskUpsert {
+	u.Set(task.FieldSilverBullet, v)
+	return u
+}
+
+// UpdateSilverBullet sets the "silver_bullet" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateSilverBullet() *TaskUpsert {
+	u.SetExcluded(task.FieldSilverBullet)
+	return u
+}
+
+// SetMetadata sets the "metadata" field.
+func (u *TaskUpsert) SetMetadata(v map[string]interface{}) *TaskUpsert {
+	u.Set(task.FieldMetadata, v)
+	return u
+}
+
+// UpdateMetadata sets the "metadata" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateMetadata() *TaskUpsert {
+	u.SetExcluded(task.FieldMetadata)
+	return u
+}
+
+// ClearMetadata clears the value of the "metadata" field.
+func (u *TaskUpsert) ClearMetadata() *TaskUpsert {
+	u.SetNull(task.FieldMetadata)
+	return u
+}
+
+// SetProjectID sets the "project_id" field.
+func (u *TaskUpsert) SetProjectID(v string) *TaskUpsert {
+	u.Set(task.FieldProjectID, v)
+	return u
+}
+
+// UpdateProjectID sets the "project_id" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateProjectID() *TaskUpsert {
+	u.SetExcluded(task.FieldProjectID)
+	return u
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (u *TaskUpsert) ClearProjectID() *TaskUpsert {
+	u.SetNull(task.FieldProjectID)
+	return u
+}
+
+// SetSpawnerID sets the "spawner_id" field.
+func (u *TaskUpsert) SetSpawnerID(v string) *TaskUpsert {
+	u.Set(task.FieldSpawnerID, v)
+	return u
+}
+
+// UpdateSpawnerID sets the "spawner_id" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateSpawnerID() *TaskUpsert {
+	u.SetExcluded(task.FieldSpawnerID)
+	return u
+}
+
+// ClearSpawnerID clears the value of the "spawner_id" field.
+func (u *TaskUpsert) ClearSpawnerID() *TaskUpsert {
+	u.SetNull(task.FieldSpawnerID)
+	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *TaskUpsert) SetUpdatedAt(v time.Time) *TaskUpsert {
+	u.Set(task.FieldUpdatedAt, v)
+	return u
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateUpdatedAt() *TaskUpsert {
+	u.SetExcluded(task.FieldUpdatedAt)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.Task.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(task.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *TaskUpsertOne) UpdateNewValues() *TaskUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(task.FieldID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(task.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.Task.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *TaskUpsertOne) Ignore() *TaskUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *TaskUpsertOne) DoNothing() *TaskUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the TaskCreate.OnConflict
+// documentation for more info.
+func (u *TaskUpsertOne) Update(set func(*TaskUpsert)) *TaskUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&TaskUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetSlug sets the "slug" field.
+func (u *TaskUpsertOne) SetSlug(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetSlug(v)
+	})
+}
+
+// UpdateSlug sets the "slug" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateSlug() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateSlug()
+	})
+}
+
+// SetTitle sets the "title" field.
+func (u *TaskUpsertOne) SetTitle(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetTitle(v)
+	})
+}
+
+// UpdateTitle sets the "title" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateTitle() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateTitle()
+	})
+}
+
+// SetDescription sets the "description" field.
+func (u *TaskUpsertOne) SetDescription(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetDescription(v)
+	})
+}
+
+// UpdateDescription sets the "description" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateDescription() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateDescription()
+	})
+}
+
+// ClearDescription clears the value of the "description" field.
+func (u *TaskUpsertOne) ClearDescription() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearDescription()
+	})
+}
+
+// SetCwd sets the "cwd" field.
+func (u *TaskUpsertOne) SetCwd(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetCwd(v)
+	})
+}
+
+// UpdateCwd sets the "cwd" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateCwd() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateCwd()
+	})
+}
+
+// SetWorktreePath sets the "worktree_path" field.
+func (u *TaskUpsertOne) SetWorktreePath(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetWorktreePath(v)
+	})
+}
+
+// UpdateWorktreePath sets the "worktree_path" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateWorktreePath() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateWorktreePath()
+	})
+}
+
+// ClearWorktreePath clears the value of the "worktree_path" field.
+func (u *TaskUpsertOne) ClearWorktreePath() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearWorktreePath()
+	})
+}
+
+// SetSourceBranch sets the "source_branch" field.
+func (u *TaskUpsertOne) SetSourceBranch(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetSourceBranch(v)
+	})
+}
+
+// UpdateSourceBranch sets the "source_branch" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateSourceBranch() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateSourceBranch()
+	})
+}
+
+// ClearSourceBranch clears the value of the "source_branch" field.
+func (u *TaskUpsertOne) ClearSourceBranch() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearSourceBranch()
+	})
+}
+
+// SetTargetBranch sets the "target_branch" field.
+func (u *TaskUpsertOne) SetTargetBranch(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetTargetBranch(v)
+	})
+}
+
+// UpdateTargetBranch sets the "target_branch" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateTargetBranch() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateTargetBranch()
+	})
+}
+
+// ClearTargetBranch clears the value of the "target_branch" field.
+func (u *TaskUpsertOne) ClearTargetBranch() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearTargetBranch()
+	})
+}
+
+// SetCurrentStage sets the "current_stage" field.
+func (u *TaskUpsertOne) SetCurrentStage(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetCurrentStage(v)
+	})
+}
+
+// UpdateCurrentStage sets the "current_stage" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateCurrentStage() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateCurrentStage()
+	})
+}
+
+// SetPriority sets the "priority" field.
+func (u *TaskUpsertOne) SetPriority(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetPriority(v)
+	})
+}
+
+// UpdatePriority sets the "priority" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdatePriority() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdatePriority()
+	})
+}
+
+// SetUserID sets the "user_id" field.
+func (u *TaskUpsertOne) SetUserID(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetUserID(v)
+	})
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateUserID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateUserID()
+	})
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (u *TaskUpsertOne) ClearUserID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearUserID()
+	})
+}
+
+// SetParentTaskID sets the "parent_task_id" field.
+func (u *TaskUpsertOne) SetParentTaskID(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetParentTaskID(v)
+	})
+}
+
+// UpdateParentTaskID sets the "parent_task_id" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateParentTaskID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateParentTaskID()
+	})
+}
+
+// ClearParentTaskID clears the value of the "parent_task_id" field.
+func (u *TaskUpsertOne) ClearParentTaskID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearParentTaskID()
+	})
+}
+
+// SetMaxIterations sets the "max_iterations" field.
+func (u *TaskUpsertOne) SetMaxIterations(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetMaxIterations(v)
+	})
+}
+
+// AddMaxIterations adds v to the "max_iterations" field.
+func (u *TaskUpsertOne) AddMaxIterations(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddMaxIterations(v)
+	})
+}
+
+// UpdateMaxIterations sets the "max_iterations" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateMaxIterations() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateMaxIterations()
+	})
+}
+
+// SetTokenBudget sets the "token_budget" field.
+func (u *TaskUpsertOne) SetTokenBudget(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetTokenBudget(v)
+	})
+}
+
+// AddTokenBudget adds v to the "token_budget" field.
+func (u *TaskUpsertOne) AddTokenBudget(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddTokenBudget(v)
+	})
+}
+
+// UpdateTokenBudget sets the "token_budget" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateTokenBudget() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateTokenBudget()
+	})
+}
+
+// ClearTokenBudget clears the value of the "token_budget" field.
+func (u *TaskUpsertOne) ClearTokenBudget() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearTokenBudget()
+	})
+}
+
+// SetCostBudgetCents sets the "cost_budget_cents" field.
+func (u *TaskUpsertOne) SetCostBudgetCents(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetCostBudgetCents(v)
+	})
+}
+
+// AddCostBudgetCents adds v to the "cost_budget_cents" field.
+func (u *TaskUpsertOne) AddCostBudgetCents(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddCostBudgetCents(v)
+	})
+}
+
+// UpdateCostBudgetCents sets the "cost_budget_cents" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateCostBudgetCents() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateCostBudgetCents()
+	})
+}
+
+// ClearCostBudgetCents clears the value of the "cost_budget_cents" field.
+func (u *TaskUpsertOne) ClearCostBudgetCents() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearCostBudgetCents()
+	})
+}
+
+// SetStageTimeoutSeconds sets the "stage_timeout_seconds" field.
+func (u *TaskUpsertOne) SetStageTimeoutSeconds(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetStageTimeoutSeconds(v)
+	})
+}
+
+// AddStageTimeoutSeconds adds v to the "stage_timeout_seconds" field.
+func (u *TaskUpsertOne) AddStageTimeoutSeconds(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddStageTimeoutSeconds(v)
+	})
+}
+
+// UpdateStageTimeoutSeconds sets the "stage_timeout_seconds" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateStageTimeoutSeconds() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateStageTimeoutSeconds()
+	})
+}
+
+// SetSilverBullet sets the "silver_bullet" field.
+func (u *TaskUpsertOne) SetSilverBullet(v bool) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetSilverBullet(v)
+	})
+}
+
+// UpdateSilverBullet sets the "silver_bullet" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateSilverBullet() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateSilverBullet()
+	})
+}
+
+// SetMetadata sets the "metadata" field.
+func (u *TaskUpsertOne) SetMetadata(v map[string]interface{}) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetMetadata(v)
+	})
+}
+
+// UpdateMetadata sets the "metadata" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateMetadata() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateMetadata()
+	})
+}
+
+// ClearMetadata clears the value of the "metadata" field.
+func (u *TaskUpsertOne) ClearMetadata() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearMetadata()
+	})
+}
+
+// SetProjectID sets the "project_id" field.
+func (u *TaskUpsertOne) SetProjectID(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetProjectID(v)
+	})
+}
+
+// UpdateProjectID sets the "project_id" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateProjectID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateProjectID()
+	})
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (u *TaskUpsertOne) ClearProjectID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearProjectID()
+	})
+}
+
+// SetSpawnerID sets the "spawner_id" field.
+func (u *TaskUpsertOne) SetSpawnerID(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetSpawnerID(v)
+	})
+}
+
+// UpdateSpawnerID sets the "spawner_id" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateSpawnerID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateSpawnerID()
+	})
+}
+
+// ClearSpawnerID clears the value of the "spawner_id" field.
+func (u *TaskUpsertOne) ClearSpawnerID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearSpawnerID()
+	})
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *TaskUpsertOne) SetUpdatedAt(v time.Time) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateUpdatedAt() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *TaskUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for TaskCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *TaskUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *TaskUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: TaskUpsertOne.ID is not supported by MySQL driver. Use TaskUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *TaskUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // TaskCreateBulk is the builder for creating many Task entities in bulk.
 type TaskCreateBulk struct {
 	config
 	err      error
 	builders []*TaskCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the Task entities in the database.
@@ -678,6 +1536,7 @@ func (_c *TaskCreateBulk) Save(ctx context.Context) ([]*Task, error) {
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -724,6 +1583,508 @@ func (_c *TaskCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *TaskCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Task.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.TaskUpsert) {
+//			SetSlug(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *TaskCreateBulk) OnConflict(opts ...sql.ConflictOption) *TaskUpsertBulk {
+	_c.conflict = opts
+	return &TaskUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.Task.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *TaskCreateBulk) OnConflictColumns(columns ...string) *TaskUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &TaskUpsertBulk{
+		create: _c,
+	}
+}
+
+// TaskUpsertBulk is the builder for "upsert"-ing
+// a bulk of Task nodes.
+type TaskUpsertBulk struct {
+	create *TaskCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.Task.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(task.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *TaskUpsertBulk) UpdateNewValues() *TaskUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(task.FieldID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(task.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.Task.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *TaskUpsertBulk) Ignore() *TaskUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *TaskUpsertBulk) DoNothing() *TaskUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the TaskCreateBulk.OnConflict
+// documentation for more info.
+func (u *TaskUpsertBulk) Update(set func(*TaskUpsert)) *TaskUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&TaskUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetSlug sets the "slug" field.
+func (u *TaskUpsertBulk) SetSlug(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetSlug(v)
+	})
+}
+
+// UpdateSlug sets the "slug" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateSlug() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateSlug()
+	})
+}
+
+// SetTitle sets the "title" field.
+func (u *TaskUpsertBulk) SetTitle(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetTitle(v)
+	})
+}
+
+// UpdateTitle sets the "title" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateTitle() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateTitle()
+	})
+}
+
+// SetDescription sets the "description" field.
+func (u *TaskUpsertBulk) SetDescription(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetDescription(v)
+	})
+}
+
+// UpdateDescription sets the "description" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateDescription() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateDescription()
+	})
+}
+
+// ClearDescription clears the value of the "description" field.
+func (u *TaskUpsertBulk) ClearDescription() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearDescription()
+	})
+}
+
+// SetCwd sets the "cwd" field.
+func (u *TaskUpsertBulk) SetCwd(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetCwd(v)
+	})
+}
+
+// UpdateCwd sets the "cwd" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateCwd() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateCwd()
+	})
+}
+
+// SetWorktreePath sets the "worktree_path" field.
+func (u *TaskUpsertBulk) SetWorktreePath(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetWorktreePath(v)
+	})
+}
+
+// UpdateWorktreePath sets the "worktree_path" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateWorktreePath() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateWorktreePath()
+	})
+}
+
+// ClearWorktreePath clears the value of the "worktree_path" field.
+func (u *TaskUpsertBulk) ClearWorktreePath() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearWorktreePath()
+	})
+}
+
+// SetSourceBranch sets the "source_branch" field.
+func (u *TaskUpsertBulk) SetSourceBranch(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetSourceBranch(v)
+	})
+}
+
+// UpdateSourceBranch sets the "source_branch" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateSourceBranch() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateSourceBranch()
+	})
+}
+
+// ClearSourceBranch clears the value of the "source_branch" field.
+func (u *TaskUpsertBulk) ClearSourceBranch() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearSourceBranch()
+	})
+}
+
+// SetTargetBranch sets the "target_branch" field.
+func (u *TaskUpsertBulk) SetTargetBranch(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetTargetBranch(v)
+	})
+}
+
+// UpdateTargetBranch sets the "target_branch" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateTargetBranch() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateTargetBranch()
+	})
+}
+
+// ClearTargetBranch clears the value of the "target_branch" field.
+func (u *TaskUpsertBulk) ClearTargetBranch() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearTargetBranch()
+	})
+}
+
+// SetCurrentStage sets the "current_stage" field.
+func (u *TaskUpsertBulk) SetCurrentStage(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetCurrentStage(v)
+	})
+}
+
+// UpdateCurrentStage sets the "current_stage" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateCurrentStage() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateCurrentStage()
+	})
+}
+
+// SetPriority sets the "priority" field.
+func (u *TaskUpsertBulk) SetPriority(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetPriority(v)
+	})
+}
+
+// UpdatePriority sets the "priority" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdatePriority() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdatePriority()
+	})
+}
+
+// SetUserID sets the "user_id" field.
+func (u *TaskUpsertBulk) SetUserID(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetUserID(v)
+	})
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateUserID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateUserID()
+	})
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (u *TaskUpsertBulk) ClearUserID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearUserID()
+	})
+}
+
+// SetParentTaskID sets the "parent_task_id" field.
+func (u *TaskUpsertBulk) SetParentTaskID(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetParentTaskID(v)
+	})
+}
+
+// UpdateParentTaskID sets the "parent_task_id" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateParentTaskID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateParentTaskID()
+	})
+}
+
+// ClearParentTaskID clears the value of the "parent_task_id" field.
+func (u *TaskUpsertBulk) ClearParentTaskID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearParentTaskID()
+	})
+}
+
+// SetMaxIterations sets the "max_iterations" field.
+func (u *TaskUpsertBulk) SetMaxIterations(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetMaxIterations(v)
+	})
+}
+
+// AddMaxIterations adds v to the "max_iterations" field.
+func (u *TaskUpsertBulk) AddMaxIterations(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddMaxIterations(v)
+	})
+}
+
+// UpdateMaxIterations sets the "max_iterations" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateMaxIterations() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateMaxIterations()
+	})
+}
+
+// SetTokenBudget sets the "token_budget" field.
+func (u *TaskUpsertBulk) SetTokenBudget(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetTokenBudget(v)
+	})
+}
+
+// AddTokenBudget adds v to the "token_budget" field.
+func (u *TaskUpsertBulk) AddTokenBudget(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddTokenBudget(v)
+	})
+}
+
+// UpdateTokenBudget sets the "token_budget" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateTokenBudget() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateTokenBudget()
+	})
+}
+
+// ClearTokenBudget clears the value of the "token_budget" field.
+func (u *TaskUpsertBulk) ClearTokenBudget() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearTokenBudget()
+	})
+}
+
+// SetCostBudgetCents sets the "cost_budget_cents" field.
+func (u *TaskUpsertBulk) SetCostBudgetCents(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetCostBudgetCents(v)
+	})
+}
+
+// AddCostBudgetCents adds v to the "cost_budget_cents" field.
+func (u *TaskUpsertBulk) AddCostBudgetCents(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddCostBudgetCents(v)
+	})
+}
+
+// UpdateCostBudgetCents sets the "cost_budget_cents" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateCostBudgetCents() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateCostBudgetCents()
+	})
+}
+
+// ClearCostBudgetCents clears the value of the "cost_budget_cents" field.
+func (u *TaskUpsertBulk) ClearCostBudgetCents() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearCostBudgetCents()
+	})
+}
+
+// SetStageTimeoutSeconds sets the "stage_timeout_seconds" field.
+func (u *TaskUpsertBulk) SetStageTimeoutSeconds(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetStageTimeoutSeconds(v)
+	})
+}
+
+// AddStageTimeoutSeconds adds v to the "stage_timeout_seconds" field.
+func (u *TaskUpsertBulk) AddStageTimeoutSeconds(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddStageTimeoutSeconds(v)
+	})
+}
+
+// UpdateStageTimeoutSeconds sets the "stage_timeout_seconds" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateStageTimeoutSeconds() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateStageTimeoutSeconds()
+	})
+}
+
+// SetSilverBullet sets the "silver_bullet" field.
+func (u *TaskUpsertBulk) SetSilverBullet(v bool) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetSilverBullet(v)
+	})
+}
+
+// UpdateSilverBullet sets the "silver_bullet" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateSilverBullet() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateSilverBullet()
+	})
+}
+
+// SetMetadata sets the "metadata" field.
+func (u *TaskUpsertBulk) SetMetadata(v map[string]interface{}) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetMetadata(v)
+	})
+}
+
+// UpdateMetadata sets the "metadata" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateMetadata() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateMetadata()
+	})
+}
+
+// ClearMetadata clears the value of the "metadata" field.
+func (u *TaskUpsertBulk) ClearMetadata() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearMetadata()
+	})
+}
+
+// SetProjectID sets the "project_id" field.
+func (u *TaskUpsertBulk) SetProjectID(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetProjectID(v)
+	})
+}
+
+// UpdateProjectID sets the "project_id" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateProjectID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateProjectID()
+	})
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (u *TaskUpsertBulk) ClearProjectID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearProjectID()
+	})
+}
+
+// SetSpawnerID sets the "spawner_id" field.
+func (u *TaskUpsertBulk) SetSpawnerID(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetSpawnerID(v)
+	})
+}
+
+// UpdateSpawnerID sets the "spawner_id" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateSpawnerID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateSpawnerID()
+	})
+}
+
+// ClearSpawnerID clears the value of the "spawner_id" field.
+func (u *TaskUpsertBulk) ClearSpawnerID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearSpawnerID()
+	})
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *TaskUpsertBulk) SetUpdatedAt(v time.Time) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateUpdatedAt() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *TaskUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the TaskCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for TaskCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *TaskUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

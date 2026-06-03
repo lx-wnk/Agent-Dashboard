@@ -1,5 +1,6 @@
 import type { Agent } from '../types'
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { totalTokenCount } from '../utils/format'
 import { SSE_RETRY_DELAY_MS } from '../utils/sse'
 import { drainPendingMessages } from './usePendingMessages'
 
@@ -8,6 +9,10 @@ export interface TrendPoint {
   cost: number
   tokens: number
 }
+
+// How long the client-side cost-trend ring buffer retains samples. The status
+// bar's burn-rate reads a 5-minute window from it, so we keep a little extra.
+const TREND_RETENTION_MS = 10 * 60 * 1000
 
 const agents = shallowRef<Agent[]>([])
 const costTrend = ref<TrendPoint[]>([])
@@ -30,10 +35,24 @@ let subscriberCount = 0
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let visibilityListenerAttached = false
 
-function handleAgentData(data: Agent[], trend?: TrendPoint[]) {
+function handleAgentData(data: Agent[], _trend?: TrendPoint[]) {
   agents.value = data
-  if (trend)
-    costTrend.value = trend
+
+  // Build the cost trend client-side: the backend streams an empty trend, but
+  // every frame carries the running agents, so we sample total cost/tokens here.
+  // A time-based ring buffer (TREND_RETENTION_MS) lets consumers compute a delta
+  // over any window regardless of how sparsely frames arrive (frames are
+  // de-duplicated server-side, so cost is flat between them anyway).
+  const now = Date.now()
+  let cost = 0
+  let tokens = 0
+  for (const a of data) {
+    cost += a.costEstimate
+    tokens += totalTokenCount(a.tokenUsage)
+  }
+  const cutoff = now - TREND_RETENTION_MS
+  costTrend.value = [...costTrend.value.filter(p => p.t >= cutoff), { t: now, cost, tokens }]
+
   error.value = null
   isLoading.value = false
 

@@ -5,6 +5,17 @@ const POLL_INTERVAL_MS = 60_000
 export interface ModelBreakdown {
   model: string
   costUsd: number
+  inputTokens: number
+  outputTokens: number
+  sessions: number
+}
+
+export interface ProjectBreakdown {
+  projectPath: string
+  projectName: string
+  costUsd: number
+  inputTokens: number
+  outputTokens: number
   sessions: number
 }
 
@@ -21,20 +32,34 @@ export interface WeekPoint {
 
 export interface CostSummary {
   byModel: ModelBreakdown[]
+  byProject: ProjectBreakdown[]
   byDay: DayPoint[]
   byWeek: WeekPoint[]
   totalUsd: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  from: string
+  to: string
   updatedAt: number
 }
 
 function emptySummary(): CostSummary {
   return {
     byModel: [],
+    byProject: [],
     byDay: [],
     byWeek: [],
     totalUsd: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    from: '',
+    to: '',
     updatedAt: 0,
   }
+}
+
+function toDateString(d: Date): string {
+  return d.toISOString().slice(0, 10)
 }
 
 /**
@@ -46,6 +71,8 @@ export function useCostAnalytics() {
   const summary = shallowRef<CostSummary>(emptySummary())
   const isLoading = ref(true)
   const error = ref<string | null>(null)
+  const from = ref<string>('')
+  const to = ref<string>('')
 
   let intervalId: ReturnType<typeof setInterval> | null = null
   let aborter: AbortController | null = null
@@ -57,7 +84,14 @@ export function useCostAnalytics() {
     aborter?.abort()
     aborter = new AbortController()
     try {
-      const res = await fetch('/api/cost/summary', { signal: aborter.signal })
+      const params = new URLSearchParams()
+      if (from.value)
+        params.set('from', from.value)
+      if (to.value)
+        params.set('to', to.value)
+      const qs = params.toString()
+      const url = qs ? `/api/cost/summary?${qs}` : '/api/cost/summary'
+      const res = await fetch(url, { signal: aborter.signal })
       if (!res.ok)
         throw new Error(`HTTP ${res.status}`)
       const data = await res.json() as CostSummary
@@ -74,10 +108,24 @@ export function useCostAnalytics() {
     }
   }
 
+  function setRange(newFrom: string, newTo: string) {
+    from.value = newFrom
+    to.value = newTo
+    void fetchOnce()
+  }
+
   function start() {
     if (intervalId !== null)
       return
     active = true
+    // Default range: last 30 days, computed lazily inside start() to avoid module-load date issues
+    if (!from.value && !to.value) {
+      const now = new Date()
+      const past = new Date(now)
+      past.setDate(past.getDate() - 30)
+      to.value = toDateString(now)
+      from.value = toDateString(past)
+    }
     void fetchOnce()
     intervalId = setInterval(fetchOnce, POLL_INTERVAL_MS)
   }
@@ -98,6 +146,9 @@ export function useCostAnalytics() {
     summary,
     isLoading,
     error,
+    from,
+    to,
+    setRange,
     refresh: fetchOnce,
     start,
     stop,

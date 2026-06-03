@@ -28,8 +28,8 @@ func seedTrends(t *testing.T, costRepo repo.AgentCostTrendRepo) {
 		{SessionID: uuid.NewString(), Model: "claude-sonnet-4", InputTokens: 800, OutputTokens: 150, CostUSD: 0.30, RecordedAt: now.AddDate(0, 0, -1)},
 		{SessionID: uuid.NewString(), Model: "", InputTokens: 100, OutputTokens: 50, CostUSD: 0.05, RecordedAt: now.AddDate(0, 0, -10)},
 	}
-	if err := costRepo.BulkInsert(t.Context(), rows); err != nil {
-		t.Fatalf("BulkInsert: %v", err)
+	if err := costRepo.Upsert(t.Context(), rows); err != nil {
+		t.Fatalf("Upsert: %v", err)
 	}
 }
 

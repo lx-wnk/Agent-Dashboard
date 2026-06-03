@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
@@ -18,6 +20,7 @@ type SystemPromptCreate struct {
 	config
 	mutation *SystemPromptMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetScope sets the "scope" field.
@@ -217,6 +220,7 @@ func (_c *SystemPromptCreate) createSpec() (*SystemPrompt, *sqlgraph.CreateSpec)
 		_node = &SystemPrompt{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(systemprompt.Table, sqlgraph.NewFieldSpec(systemprompt.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -252,11 +256,345 @@ func (_c *SystemPromptCreate) createSpec() (*SystemPrompt, *sqlgraph.CreateSpec)
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.SystemPrompt.Create().
+//		SetScope(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.SystemPromptUpsert) {
+//			SetScope(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *SystemPromptCreate) OnConflict(opts ...sql.ConflictOption) *SystemPromptUpsertOne {
+	_c.conflict = opts
+	return &SystemPromptUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.SystemPrompt.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *SystemPromptCreate) OnConflictColumns(columns ...string) *SystemPromptUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &SystemPromptUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// SystemPromptUpsertOne is the builder for "upsert"-ing
+	//  one SystemPrompt node.
+	SystemPromptUpsertOne struct {
+		create *SystemPromptCreate
+	}
+
+	// SystemPromptUpsert is the "OnConflict" setter.
+	SystemPromptUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetScope sets the "scope" field.
+func (u *SystemPromptUpsert) SetScope(v string) *SystemPromptUpsert {
+	u.Set(systemprompt.FieldScope, v)
+	return u
+}
+
+// UpdateScope sets the "scope" field to the value that was provided on create.
+func (u *SystemPromptUpsert) UpdateScope() *SystemPromptUpsert {
+	u.SetExcluded(systemprompt.FieldScope)
+	return u
+}
+
+// SetStage sets the "stage" field.
+func (u *SystemPromptUpsert) SetStage(v string) *SystemPromptUpsert {
+	u.Set(systemprompt.FieldStage, v)
+	return u
+}
+
+// UpdateStage sets the "stage" field to the value that was provided on create.
+func (u *SystemPromptUpsert) UpdateStage() *SystemPromptUpsert {
+	u.SetExcluded(systemprompt.FieldStage)
+	return u
+}
+
+// ClearStage clears the value of the "stage" field.
+func (u *SystemPromptUpsert) ClearStage() *SystemPromptUpsert {
+	u.SetNull(systemprompt.FieldStage)
+	return u
+}
+
+// SetContent sets the "content" field.
+func (u *SystemPromptUpsert) SetContent(v string) *SystemPromptUpsert {
+	u.Set(systemprompt.FieldContent, v)
+	return u
+}
+
+// UpdateContent sets the "content" field to the value that was provided on create.
+func (u *SystemPromptUpsert) UpdateContent() *SystemPromptUpsert {
+	u.SetExcluded(systemprompt.FieldContent)
+	return u
+}
+
+// SetPriority sets the "priority" field.
+func (u *SystemPromptUpsert) SetPriority(v int) *SystemPromptUpsert {
+	u.Set(systemprompt.FieldPriority, v)
+	return u
+}
+
+// UpdatePriority sets the "priority" field to the value that was provided on create.
+func (u *SystemPromptUpsert) UpdatePriority() *SystemPromptUpsert {
+	u.SetExcluded(systemprompt.FieldPriority)
+	return u
+}
+
+// AddPriority adds v to the "priority" field.
+func (u *SystemPromptUpsert) AddPriority(v int) *SystemPromptUpsert {
+	u.Add(systemprompt.FieldPriority, v)
+	return u
+}
+
+// SetCreatedBy sets the "created_by" field.
+func (u *SystemPromptUpsert) SetCreatedBy(v string) *SystemPromptUpsert {
+	u.Set(systemprompt.FieldCreatedBy, v)
+	return u
+}
+
+// UpdateCreatedBy sets the "created_by" field to the value that was provided on create.
+func (u *SystemPromptUpsert) UpdateCreatedBy() *SystemPromptUpsert {
+	u.SetExcluded(systemprompt.FieldCreatedBy)
+	return u
+}
+
+// ClearCreatedBy clears the value of the "created_by" field.
+func (u *SystemPromptUpsert) ClearCreatedBy() *SystemPromptUpsert {
+	u.SetNull(systemprompt.FieldCreatedBy)
+	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *SystemPromptUpsert) SetUpdatedAt(v time.Time) *SystemPromptUpsert {
+	u.Set(systemprompt.FieldUpdatedAt, v)
+	return u
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *SystemPromptUpsert) UpdateUpdatedAt() *SystemPromptUpsert {
+	u.SetExcluded(systemprompt.FieldUpdatedAt)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.SystemPrompt.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(systemprompt.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *SystemPromptUpsertOne) UpdateNewValues() *SystemPromptUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(systemprompt.FieldID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(systemprompt.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.SystemPrompt.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *SystemPromptUpsertOne) Ignore() *SystemPromptUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *SystemPromptUpsertOne) DoNothing() *SystemPromptUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the SystemPromptCreate.OnConflict
+// documentation for more info.
+func (u *SystemPromptUpsertOne) Update(set func(*SystemPromptUpsert)) *SystemPromptUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&SystemPromptUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetScope sets the "scope" field.
+func (u *SystemPromptUpsertOne) SetScope(v string) *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetScope(v)
+	})
+}
+
+// UpdateScope sets the "scope" field to the value that was provided on create.
+func (u *SystemPromptUpsertOne) UpdateScope() *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateScope()
+	})
+}
+
+// SetStage sets the "stage" field.
+func (u *SystemPromptUpsertOne) SetStage(v string) *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetStage(v)
+	})
+}
+
+// UpdateStage sets the "stage" field to the value that was provided on create.
+func (u *SystemPromptUpsertOne) UpdateStage() *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateStage()
+	})
+}
+
+// ClearStage clears the value of the "stage" field.
+func (u *SystemPromptUpsertOne) ClearStage() *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.ClearStage()
+	})
+}
+
+// SetContent sets the "content" field.
+func (u *SystemPromptUpsertOne) SetContent(v string) *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetContent(v)
+	})
+}
+
+// UpdateContent sets the "content" field to the value that was provided on create.
+func (u *SystemPromptUpsertOne) UpdateContent() *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateContent()
+	})
+}
+
+// SetPriority sets the "priority" field.
+func (u *SystemPromptUpsertOne) SetPriority(v int) *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetPriority(v)
+	})
+}
+
+// AddPriority adds v to the "priority" field.
+func (u *SystemPromptUpsertOne) AddPriority(v int) *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.AddPriority(v)
+	})
+}
+
+// UpdatePriority sets the "priority" field to the value that was provided on create.
+func (u *SystemPromptUpsertOne) UpdatePriority() *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdatePriority()
+	})
+}
+
+// SetCreatedBy sets the "created_by" field.
+func (u *SystemPromptUpsertOne) SetCreatedBy(v string) *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetCreatedBy(v)
+	})
+}
+
+// UpdateCreatedBy sets the "created_by" field to the value that was provided on create.
+func (u *SystemPromptUpsertOne) UpdateCreatedBy() *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateCreatedBy()
+	})
+}
+
+// ClearCreatedBy clears the value of the "created_by" field.
+func (u *SystemPromptUpsertOne) ClearCreatedBy() *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.ClearCreatedBy()
+	})
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *SystemPromptUpsertOne) SetUpdatedAt(v time.Time) *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *SystemPromptUpsertOne) UpdateUpdatedAt() *SystemPromptUpsertOne {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *SystemPromptUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for SystemPromptCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *SystemPromptUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *SystemPromptUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: SystemPromptUpsertOne.ID is not supported by MySQL driver. Use SystemPromptUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *SystemPromptUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // SystemPromptCreateBulk is the builder for creating many SystemPrompt entities in bulk.
 type SystemPromptCreateBulk struct {
 	config
 	err      error
 	builders []*SystemPromptCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the SystemPrompt entities in the database.
@@ -286,6 +624,7 @@ func (_c *SystemPromptCreateBulk) Save(ctx context.Context) ([]*SystemPrompt, er
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -332,6 +671,228 @@ func (_c *SystemPromptCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *SystemPromptCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.SystemPrompt.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.SystemPromptUpsert) {
+//			SetScope(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *SystemPromptCreateBulk) OnConflict(opts ...sql.ConflictOption) *SystemPromptUpsertBulk {
+	_c.conflict = opts
+	return &SystemPromptUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.SystemPrompt.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *SystemPromptCreateBulk) OnConflictColumns(columns ...string) *SystemPromptUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &SystemPromptUpsertBulk{
+		create: _c,
+	}
+}
+
+// SystemPromptUpsertBulk is the builder for "upsert"-ing
+// a bulk of SystemPrompt nodes.
+type SystemPromptUpsertBulk struct {
+	create *SystemPromptCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.SystemPrompt.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(systemprompt.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *SystemPromptUpsertBulk) UpdateNewValues() *SystemPromptUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(systemprompt.FieldID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(systemprompt.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.SystemPrompt.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *SystemPromptUpsertBulk) Ignore() *SystemPromptUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *SystemPromptUpsertBulk) DoNothing() *SystemPromptUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the SystemPromptCreateBulk.OnConflict
+// documentation for more info.
+func (u *SystemPromptUpsertBulk) Update(set func(*SystemPromptUpsert)) *SystemPromptUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&SystemPromptUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetScope sets the "scope" field.
+func (u *SystemPromptUpsertBulk) SetScope(v string) *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetScope(v)
+	})
+}
+
+// UpdateScope sets the "scope" field to the value that was provided on create.
+func (u *SystemPromptUpsertBulk) UpdateScope() *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateScope()
+	})
+}
+
+// SetStage sets the "stage" field.
+func (u *SystemPromptUpsertBulk) SetStage(v string) *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetStage(v)
+	})
+}
+
+// UpdateStage sets the "stage" field to the value that was provided on create.
+func (u *SystemPromptUpsertBulk) UpdateStage() *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateStage()
+	})
+}
+
+// ClearStage clears the value of the "stage" field.
+func (u *SystemPromptUpsertBulk) ClearStage() *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.ClearStage()
+	})
+}
+
+// SetContent sets the "content" field.
+func (u *SystemPromptUpsertBulk) SetContent(v string) *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetContent(v)
+	})
+}
+
+// UpdateContent sets the "content" field to the value that was provided on create.
+func (u *SystemPromptUpsertBulk) UpdateContent() *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateContent()
+	})
+}
+
+// SetPriority sets the "priority" field.
+func (u *SystemPromptUpsertBulk) SetPriority(v int) *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetPriority(v)
+	})
+}
+
+// AddPriority adds v to the "priority" field.
+func (u *SystemPromptUpsertBulk) AddPriority(v int) *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.AddPriority(v)
+	})
+}
+
+// UpdatePriority sets the "priority" field to the value that was provided on create.
+func (u *SystemPromptUpsertBulk) UpdatePriority() *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdatePriority()
+	})
+}
+
+// SetCreatedBy sets the "created_by" field.
+func (u *SystemPromptUpsertBulk) SetCreatedBy(v string) *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetCreatedBy(v)
+	})
+}
+
+// UpdateCreatedBy sets the "created_by" field to the value that was provided on create.
+func (u *SystemPromptUpsertBulk) UpdateCreatedBy() *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateCreatedBy()
+	})
+}
+
+// ClearCreatedBy clears the value of the "created_by" field.
+func (u *SystemPromptUpsertBulk) ClearCreatedBy() *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.ClearCreatedBy()
+	})
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *SystemPromptUpsertBulk) SetUpdatedAt(v time.Time) *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *SystemPromptUpsertBulk) UpdateUpdatedAt() *SystemPromptUpsertBulk {
+	return u.Update(func(s *SystemPromptUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *SystemPromptUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the SystemPromptCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for SystemPromptCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *SystemPromptUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

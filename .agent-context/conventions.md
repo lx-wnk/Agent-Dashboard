@@ -21,6 +21,7 @@
 | `DASHBOARD_HOST`                 | Bind address, default `127.0.0.1`; non-loopback address causes boot failure unless `DASHBOARD_REMOTES_ENABLED=true` |
 | `DASHBOARD_REMOTES_ENABLED`      | `true` or `false`, default `false`; opt-in to binding on a non-loopback address (use a VPN or SSH tunnel — never expose to an untrusted network) |
 | `DASHBOARD_SSE_INTERVAL_MS`      | Agent SSE broadcast interval ms, default `3000`                                                               |
+| `DASHBOARD_COST_SCAN_INTERVAL_MS` | Interval ms for the server-side cost-history scan that fills `agent_cost_trends` (read by the Cost Analytics view). Default `300000` (5 min). A scan also always runs once at boot. Set `<= 0` for boot-scan-only (no periodic loop) — note this does NOT fully disable scanning. The scan reads session JSONL across all `DASHBOARD_CLAUDE_CONFIG_DIRS` and providers; it never has agents write cost data. |
 | `DASHBOARD_SPAWN_RATE_LIMIT`     | Max user-initiated spawns per window, default `5`; must be positive integer                                   |
 | `DASHBOARD_SPAWN_RATE_WINDOW_MS` | Spawn rate-limit window ms, default `60000`; must be positive integer                                         |
 | `DASHBOARD_ALLOW_GIT_PUSH`       | `true` or `false`, default `false`; when `true`, removes the global `git push` filter from spawned-agent allow-lists. Per-task override: `metadata.allowGitPush=true`. |

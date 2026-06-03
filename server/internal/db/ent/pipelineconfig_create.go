@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
@@ -17,6 +19,7 @@ type PipelineConfigCreate struct {
 	config
 	mutation *PipelineConfigMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetValue sets the "value" field.
@@ -99,6 +102,7 @@ func (_c *PipelineConfigCreate) createSpec() (*PipelineConfig, *sqlgraph.CreateS
 		_node = &PipelineConfig{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(pipelineconfig.Table, sqlgraph.NewFieldSpec(pipelineconfig.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -110,11 +114,173 @@ func (_c *PipelineConfigCreate) createSpec() (*PipelineConfig, *sqlgraph.CreateS
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.PipelineConfig.Create().
+//		SetValue(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.PipelineConfigUpsert) {
+//			SetValue(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *PipelineConfigCreate) OnConflict(opts ...sql.ConflictOption) *PipelineConfigUpsertOne {
+	_c.conflict = opts
+	return &PipelineConfigUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.PipelineConfig.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *PipelineConfigCreate) OnConflictColumns(columns ...string) *PipelineConfigUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &PipelineConfigUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// PipelineConfigUpsertOne is the builder for "upsert"-ing
+	//  one PipelineConfig node.
+	PipelineConfigUpsertOne struct {
+		create *PipelineConfigCreate
+	}
+
+	// PipelineConfigUpsert is the "OnConflict" setter.
+	PipelineConfigUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetValue sets the "value" field.
+func (u *PipelineConfigUpsert) SetValue(v string) *PipelineConfigUpsert {
+	u.Set(pipelineconfig.FieldValue, v)
+	return u
+}
+
+// UpdateValue sets the "value" field to the value that was provided on create.
+func (u *PipelineConfigUpsert) UpdateValue() *PipelineConfigUpsert {
+	u.SetExcluded(pipelineconfig.FieldValue)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.PipelineConfig.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(pipelineconfig.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *PipelineConfigUpsertOne) UpdateNewValues() *PipelineConfigUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(pipelineconfig.FieldID)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.PipelineConfig.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *PipelineConfigUpsertOne) Ignore() *PipelineConfigUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *PipelineConfigUpsertOne) DoNothing() *PipelineConfigUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the PipelineConfigCreate.OnConflict
+// documentation for more info.
+func (u *PipelineConfigUpsertOne) Update(set func(*PipelineConfigUpsert)) *PipelineConfigUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&PipelineConfigUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetValue sets the "value" field.
+func (u *PipelineConfigUpsertOne) SetValue(v string) *PipelineConfigUpsertOne {
+	return u.Update(func(s *PipelineConfigUpsert) {
+		s.SetValue(v)
+	})
+}
+
+// UpdateValue sets the "value" field to the value that was provided on create.
+func (u *PipelineConfigUpsertOne) UpdateValue() *PipelineConfigUpsertOne {
+	return u.Update(func(s *PipelineConfigUpsert) {
+		s.UpdateValue()
+	})
+}
+
+// Exec executes the query.
+func (u *PipelineConfigUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for PipelineConfigCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *PipelineConfigUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *PipelineConfigUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: PipelineConfigUpsertOne.ID is not supported by MySQL driver. Use PipelineConfigUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *PipelineConfigUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // PipelineConfigCreateBulk is the builder for creating many PipelineConfig entities in bulk.
 type PipelineConfigCreateBulk struct {
 	config
 	err      error
 	builders []*PipelineConfigCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the PipelineConfig entities in the database.
@@ -143,6 +309,7 @@ func (_c *PipelineConfigCreateBulk) Save(ctx context.Context) ([]*PipelineConfig
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -189,6 +356,134 @@ func (_c *PipelineConfigCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *PipelineConfigCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.PipelineConfig.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.PipelineConfigUpsert) {
+//			SetValue(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *PipelineConfigCreateBulk) OnConflict(opts ...sql.ConflictOption) *PipelineConfigUpsertBulk {
+	_c.conflict = opts
+	return &PipelineConfigUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.PipelineConfig.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *PipelineConfigCreateBulk) OnConflictColumns(columns ...string) *PipelineConfigUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &PipelineConfigUpsertBulk{
+		create: _c,
+	}
+}
+
+// PipelineConfigUpsertBulk is the builder for "upsert"-ing
+// a bulk of PipelineConfig nodes.
+type PipelineConfigUpsertBulk struct {
+	create *PipelineConfigCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.PipelineConfig.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(pipelineconfig.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *PipelineConfigUpsertBulk) UpdateNewValues() *PipelineConfigUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(pipelineconfig.FieldID)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.PipelineConfig.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *PipelineConfigUpsertBulk) Ignore() *PipelineConfigUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *PipelineConfigUpsertBulk) DoNothing() *PipelineConfigUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the PipelineConfigCreateBulk.OnConflict
+// documentation for more info.
+func (u *PipelineConfigUpsertBulk) Update(set func(*PipelineConfigUpsert)) *PipelineConfigUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&PipelineConfigUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetValue sets the "value" field.
+func (u *PipelineConfigUpsertBulk) SetValue(v string) *PipelineConfigUpsertBulk {
+	return u.Update(func(s *PipelineConfigUpsert) {
+		s.SetValue(v)
+	})
+}
+
+// UpdateValue sets the "value" field to the value that was provided on create.
+func (u *PipelineConfigUpsertBulk) UpdateValue() *PipelineConfigUpsertBulk {
+	return u.Update(func(s *PipelineConfigUpsert) {
+		s.UpdateValue()
+	})
+}
+
+// Exec executes the query.
+func (u *PipelineConfigUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the PipelineConfigCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for PipelineConfigCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *PipelineConfigUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

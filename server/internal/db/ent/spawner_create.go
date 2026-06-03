@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
@@ -18,6 +20,7 @@ type SpawnerCreate struct {
 	config
 	mutation *SpawnerMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetName sets the "name" field.
@@ -274,6 +277,7 @@ func (_c *SpawnerCreate) createSpec() (*Spawner, *sqlgraph.CreateSpec) {
 		_node = &Spawner{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(spawner.Table, sqlgraph.NewFieldSpec(spawner.FieldID, field.TypeString))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -329,11 +333,462 @@ func (_c *SpawnerCreate) createSpec() (*Spawner, *sqlgraph.CreateSpec) {
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Spawner.Create().
+//		SetName(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.SpawnerUpsert) {
+//			SetName(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *SpawnerCreate) OnConflict(opts ...sql.ConflictOption) *SpawnerUpsertOne {
+	_c.conflict = opts
+	return &SpawnerUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.Spawner.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *SpawnerCreate) OnConflictColumns(columns ...string) *SpawnerUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &SpawnerUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// SpawnerUpsertOne is the builder for "upsert"-ing
+	//  one Spawner node.
+	SpawnerUpsertOne struct {
+		create *SpawnerCreate
+	}
+
+	// SpawnerUpsert is the "OnConflict" setter.
+	SpawnerUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetName sets the "name" field.
+func (u *SpawnerUpsert) SetName(v string) *SpawnerUpsert {
+	u.Set(spawner.FieldName, v)
+	return u
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateName() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldName)
+	return u
+}
+
+// SetSlug sets the "slug" field.
+func (u *SpawnerUpsert) SetSlug(v string) *SpawnerUpsert {
+	u.Set(spawner.FieldSlug, v)
+	return u
+}
+
+// UpdateSlug sets the "slug" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateSlug() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldSlug)
+	return u
+}
+
+// SetCommand sets the "command" field.
+func (u *SpawnerUpsert) SetCommand(v string) *SpawnerUpsert {
+	u.Set(spawner.FieldCommand, v)
+	return u
+}
+
+// UpdateCommand sets the "command" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateCommand() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldCommand)
+	return u
+}
+
+// SetArgs sets the "args" field.
+func (u *SpawnerUpsert) SetArgs(v []string) *SpawnerUpsert {
+	u.Set(spawner.FieldArgs, v)
+	return u
+}
+
+// UpdateArgs sets the "args" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateArgs() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldArgs)
+	return u
+}
+
+// SetEnv sets the "env" field.
+func (u *SpawnerUpsert) SetEnv(v map[string]string) *SpawnerUpsert {
+	u.Set(spawner.FieldEnv, v)
+	return u
+}
+
+// UpdateEnv sets the "env" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateEnv() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldEnv)
+	return u
+}
+
+// SetAdapterType sets the "adapter_type" field.
+func (u *SpawnerUpsert) SetAdapterType(v string) *SpawnerUpsert {
+	u.Set(spawner.FieldAdapterType, v)
+	return u
+}
+
+// UpdateAdapterType sets the "adapter_type" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateAdapterType() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldAdapterType)
+	return u
+}
+
+// SetAdapterConfig sets the "adapter_config" field.
+func (u *SpawnerUpsert) SetAdapterConfig(v map[string]string) *SpawnerUpsert {
+	u.Set(spawner.FieldAdapterConfig, v)
+	return u
+}
+
+// UpdateAdapterConfig sets the "adapter_config" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateAdapterConfig() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldAdapterConfig)
+	return u
+}
+
+// SetModelOverride sets the "model_override" field.
+func (u *SpawnerUpsert) SetModelOverride(v string) *SpawnerUpsert {
+	u.Set(spawner.FieldModelOverride, v)
+	return u
+}
+
+// UpdateModelOverride sets the "model_override" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateModelOverride() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldModelOverride)
+	return u
+}
+
+// ClearModelOverride clears the value of the "model_override" field.
+func (u *SpawnerUpsert) ClearModelOverride() *SpawnerUpsert {
+	u.SetNull(spawner.FieldModelOverride)
+	return u
+}
+
+// SetDescription sets the "description" field.
+func (u *SpawnerUpsert) SetDescription(v string) *SpawnerUpsert {
+	u.Set(spawner.FieldDescription, v)
+	return u
+}
+
+// UpdateDescription sets the "description" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateDescription() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldDescription)
+	return u
+}
+
+// ClearDescription clears the value of the "description" field.
+func (u *SpawnerUpsert) ClearDescription() *SpawnerUpsert {
+	u.SetNull(spawner.FieldDescription)
+	return u
+}
+
+// SetBuiltIn sets the "built_in" field.
+func (u *SpawnerUpsert) SetBuiltIn(v bool) *SpawnerUpsert {
+	u.Set(spawner.FieldBuiltIn, v)
+	return u
+}
+
+// UpdateBuiltIn sets the "built_in" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateBuiltIn() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldBuiltIn)
+	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *SpawnerUpsert) SetUpdatedAt(v time.Time) *SpawnerUpsert {
+	u.Set(spawner.FieldUpdatedAt, v)
+	return u
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateUpdatedAt() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldUpdatedAt)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.Spawner.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(spawner.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *SpawnerUpsertOne) UpdateNewValues() *SpawnerUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(spawner.FieldID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(spawner.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.Spawner.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *SpawnerUpsertOne) Ignore() *SpawnerUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *SpawnerUpsertOne) DoNothing() *SpawnerUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the SpawnerCreate.OnConflict
+// documentation for more info.
+func (u *SpawnerUpsertOne) Update(set func(*SpawnerUpsert)) *SpawnerUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&SpawnerUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetName sets the "name" field.
+func (u *SpawnerUpsertOne) SetName(v string) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetName(v)
+	})
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateName() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateName()
+	})
+}
+
+// SetSlug sets the "slug" field.
+func (u *SpawnerUpsertOne) SetSlug(v string) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetSlug(v)
+	})
+}
+
+// UpdateSlug sets the "slug" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateSlug() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateSlug()
+	})
+}
+
+// SetCommand sets the "command" field.
+func (u *SpawnerUpsertOne) SetCommand(v string) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetCommand(v)
+	})
+}
+
+// UpdateCommand sets the "command" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateCommand() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateCommand()
+	})
+}
+
+// SetArgs sets the "args" field.
+func (u *SpawnerUpsertOne) SetArgs(v []string) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetArgs(v)
+	})
+}
+
+// UpdateArgs sets the "args" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateArgs() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateArgs()
+	})
+}
+
+// SetEnv sets the "env" field.
+func (u *SpawnerUpsertOne) SetEnv(v map[string]string) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetEnv(v)
+	})
+}
+
+// UpdateEnv sets the "env" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateEnv() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateEnv()
+	})
+}
+
+// SetAdapterType sets the "adapter_type" field.
+func (u *SpawnerUpsertOne) SetAdapterType(v string) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetAdapterType(v)
+	})
+}
+
+// UpdateAdapterType sets the "adapter_type" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateAdapterType() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateAdapterType()
+	})
+}
+
+// SetAdapterConfig sets the "adapter_config" field.
+func (u *SpawnerUpsertOne) SetAdapterConfig(v map[string]string) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetAdapterConfig(v)
+	})
+}
+
+// UpdateAdapterConfig sets the "adapter_config" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateAdapterConfig() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateAdapterConfig()
+	})
+}
+
+// SetModelOverride sets the "model_override" field.
+func (u *SpawnerUpsertOne) SetModelOverride(v string) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetModelOverride(v)
+	})
+}
+
+// UpdateModelOverride sets the "model_override" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateModelOverride() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateModelOverride()
+	})
+}
+
+// ClearModelOverride clears the value of the "model_override" field.
+func (u *SpawnerUpsertOne) ClearModelOverride() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.ClearModelOverride()
+	})
+}
+
+// SetDescription sets the "description" field.
+func (u *SpawnerUpsertOne) SetDescription(v string) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetDescription(v)
+	})
+}
+
+// UpdateDescription sets the "description" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateDescription() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateDescription()
+	})
+}
+
+// ClearDescription clears the value of the "description" field.
+func (u *SpawnerUpsertOne) ClearDescription() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.ClearDescription()
+	})
+}
+
+// SetBuiltIn sets the "built_in" field.
+func (u *SpawnerUpsertOne) SetBuiltIn(v bool) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetBuiltIn(v)
+	})
+}
+
+// UpdateBuiltIn sets the "built_in" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateBuiltIn() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateBuiltIn()
+	})
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *SpawnerUpsertOne) SetUpdatedAt(v time.Time) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateUpdatedAt() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *SpawnerUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for SpawnerCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *SpawnerUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *SpawnerUpsertOne) ID(ctx context.Context) (id string, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: SpawnerUpsertOne.ID is not supported by MySQL driver. Use SpawnerUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *SpawnerUpsertOne) IDX(ctx context.Context) string {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // SpawnerCreateBulk is the builder for creating many Spawner entities in bulk.
 type SpawnerCreateBulk struct {
 	config
 	err      error
 	builders []*SpawnerCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the Spawner entities in the database.
@@ -363,6 +818,7 @@ func (_c *SpawnerCreateBulk) Save(ctx context.Context) ([]*Spawner, error) {
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -409,6 +865,291 @@ func (_c *SpawnerCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *SpawnerCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Spawner.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.SpawnerUpsert) {
+//			SetName(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *SpawnerCreateBulk) OnConflict(opts ...sql.ConflictOption) *SpawnerUpsertBulk {
+	_c.conflict = opts
+	return &SpawnerUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.Spawner.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *SpawnerCreateBulk) OnConflictColumns(columns ...string) *SpawnerUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &SpawnerUpsertBulk{
+		create: _c,
+	}
+}
+
+// SpawnerUpsertBulk is the builder for "upsert"-ing
+// a bulk of Spawner nodes.
+type SpawnerUpsertBulk struct {
+	create *SpawnerCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.Spawner.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(spawner.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *SpawnerUpsertBulk) UpdateNewValues() *SpawnerUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(spawner.FieldID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(spawner.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.Spawner.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *SpawnerUpsertBulk) Ignore() *SpawnerUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *SpawnerUpsertBulk) DoNothing() *SpawnerUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the SpawnerCreateBulk.OnConflict
+// documentation for more info.
+func (u *SpawnerUpsertBulk) Update(set func(*SpawnerUpsert)) *SpawnerUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&SpawnerUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetName sets the "name" field.
+func (u *SpawnerUpsertBulk) SetName(v string) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetName(v)
+	})
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateName() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateName()
+	})
+}
+
+// SetSlug sets the "slug" field.
+func (u *SpawnerUpsertBulk) SetSlug(v string) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetSlug(v)
+	})
+}
+
+// UpdateSlug sets the "slug" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateSlug() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateSlug()
+	})
+}
+
+// SetCommand sets the "command" field.
+func (u *SpawnerUpsertBulk) SetCommand(v string) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetCommand(v)
+	})
+}
+
+// UpdateCommand sets the "command" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateCommand() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateCommand()
+	})
+}
+
+// SetArgs sets the "args" field.
+func (u *SpawnerUpsertBulk) SetArgs(v []string) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetArgs(v)
+	})
+}
+
+// UpdateArgs sets the "args" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateArgs() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateArgs()
+	})
+}
+
+// SetEnv sets the "env" field.
+func (u *SpawnerUpsertBulk) SetEnv(v map[string]string) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetEnv(v)
+	})
+}
+
+// UpdateEnv sets the "env" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateEnv() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateEnv()
+	})
+}
+
+// SetAdapterType sets the "adapter_type" field.
+func (u *SpawnerUpsertBulk) SetAdapterType(v string) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetAdapterType(v)
+	})
+}
+
+// UpdateAdapterType sets the "adapter_type" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateAdapterType() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateAdapterType()
+	})
+}
+
+// SetAdapterConfig sets the "adapter_config" field.
+func (u *SpawnerUpsertBulk) SetAdapterConfig(v map[string]string) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetAdapterConfig(v)
+	})
+}
+
+// UpdateAdapterConfig sets the "adapter_config" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateAdapterConfig() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateAdapterConfig()
+	})
+}
+
+// SetModelOverride sets the "model_override" field.
+func (u *SpawnerUpsertBulk) SetModelOverride(v string) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetModelOverride(v)
+	})
+}
+
+// UpdateModelOverride sets the "model_override" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateModelOverride() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateModelOverride()
+	})
+}
+
+// ClearModelOverride clears the value of the "model_override" field.
+func (u *SpawnerUpsertBulk) ClearModelOverride() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.ClearModelOverride()
+	})
+}
+
+// SetDescription sets the "description" field.
+func (u *SpawnerUpsertBulk) SetDescription(v string) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetDescription(v)
+	})
+}
+
+// UpdateDescription sets the "description" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateDescription() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateDescription()
+	})
+}
+
+// ClearDescription clears the value of the "description" field.
+func (u *SpawnerUpsertBulk) ClearDescription() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.ClearDescription()
+	})
+}
+
+// SetBuiltIn sets the "built_in" field.
+func (u *SpawnerUpsertBulk) SetBuiltIn(v bool) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetBuiltIn(v)
+	})
+}
+
+// UpdateBuiltIn sets the "built_in" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateBuiltIn() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateBuiltIn()
+	})
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *SpawnerUpsertBulk) SetUpdatedAt(v time.Time) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateUpdatedAt() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *SpawnerUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the SpawnerCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for SpawnerCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *SpawnerUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

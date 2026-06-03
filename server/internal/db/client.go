@@ -60,6 +60,14 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: rename github_login: %w", err)
 	}
+	// Remove duplicate agent_cost_trends rows (same session_id) before ent auto-migrate
+	// adds the UNIQUE index on session_id. Without this, the index creation would fail
+	// on existing databases that contain duplicates from the pre-upsert BulkInsert era.
+	// Idempotent: on a fresh database the table does not yet exist (no-op).
+	if err := migrateDedupAgentCostTrends(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: dedup agent_cost_trends: %w", err)
+	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -243,6 +251,40 @@ func migrateCopyAuditLogsToAuditEvents(db *sql.DB) error {
 		)
 	`); err != nil {
 		return fmt.Errorf("copy audit_logs: %w", err)
+	}
+	return nil
+}
+
+// migrateDedupAgentCostTrends removes duplicate rows in agent_cost_trends that share
+// the same session_id, keeping the row with the latest recorded_at (highest rowid as
+// tie-breaker). Must run before ent auto-migrate adds the UNIQUE index on session_id,
+// otherwise the index creation would fail on existing databases. Idempotent: on a fresh
+// database the table does not exist yet (no-op). Second run deletes nothing.
+func migrateDedupAgentCostTrends(db *sql.DB) error {
+	var hasTable int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_cost_trends'`,
+	).Scan(&hasTable); err != nil {
+		return fmt.Errorf("check agent_cost_trends table: %w", err)
+	}
+	if hasTable == 0 {
+		return nil // table doesn't exist yet; ent will create it
+	}
+	if _, err := db.Exec(`
+		DELETE FROM agent_cost_trends
+		WHERE rowid NOT IN (
+			SELECT t2.rowid
+			FROM agent_cost_trends t2
+			WHERE t2.rowid = (
+				SELECT t3.rowid
+				FROM agent_cost_trends t3
+				WHERE t3.session_id = t2.session_id
+				ORDER BY t3.recorded_at DESC, t3.rowid DESC
+				LIMIT 1
+			)
+		)
+	`); err != nil {
+		return fmt.Errorf("dedup agent_cost_trends: %w", err)
 	}
 	return nil
 }
