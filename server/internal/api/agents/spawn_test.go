@@ -690,8 +690,8 @@ func TestSpawn_AdditionalDirs_NotInjectedWithoutProjectId(t *testing.T) {
 	m.SetProjectFolderRepo(folderRepo)
 
 	_, err := m.Spawn("u1", map[string]any{
-		"prompt":        "do thing",
-		"cwd":           cwd,
+		"prompt": "do thing",
+		"cwd":    cwd,
 		// no projectId
 		"enableChannel": false,
 	})
@@ -832,6 +832,31 @@ func TestSpawn_PermissionMode_BypassPermissions(t *testing.T) {
 	assert.True(t,
 		containsConsecutive(captured.Args, "--permission-mode", "bypassPermissions"),
 		"expected --permission-mode bypassPermissions in args %v", captured.Args)
+}
+
+func TestSpawn_PermissionMode_AutoAndDontAsk(t *testing.T) {
+	for _, mode := range []string{"auto", "dontAsk", "plan"} {
+		t.Run(mode, func(t *testing.T) {
+			base := t.TempDir()
+			cwd, _ := filepath.EvalSymlinks(base)
+			t.Setenv("HOME", base)
+			capturedPtr := captureExec(t)
+
+			m := NewSpawnManager(5, 60000, nil, nil)
+			_, err := m.Spawn("u1", map[string]any{
+				"prompt":         "do thing",
+				"cwd":            cwd,
+				"permissionMode": mode,
+				"enableChannel":  false,
+			})
+			require.NoError(t, err, "%s must be an accepted permission mode", mode)
+			captured := *capturedPtr
+			require.NotNil(t, captured)
+			assert.True(t,
+				containsConsecutive(captured.Args, "--permission-mode", mode),
+				"expected --permission-mode %s in args %v", mode, captured.Args)
+		})
+	}
 }
 
 func TestSpawn_PermissionMode_InvalidReturnsError(t *testing.T) {
