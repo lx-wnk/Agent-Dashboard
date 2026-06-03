@@ -43,7 +43,13 @@ func (h *CommandsHandler) SlashCommands(w http.ResponseWriter, r *http.Request) 
 	cwd := cmdscope.SanitizeProjectCwd(q.Get("cwd"))
 	scope := cmdscope.ResolveRequestScope(r.Context(), q.Get("sessionId"), q.Get("spawnerId"), cwd, h.spawners, h.agents)
 
-	version, ok := cmdscope.ProbeEngineVersion(scope.Command)
+	// Only Claude scopes have a slash-command surface; skip the version probe
+	// (an exec of scope.Command) for unsupported adapters, which enumerate empty.
+	var version string
+	var ok bool
+	if scope.Supported {
+		version, ok = cmdscope.ProbeEngineVersion(scope.Command)
+	}
 	resp := slashCommandsResponse{
 		Commands:           scope.Commands(),
 		EngineVersion:      version,

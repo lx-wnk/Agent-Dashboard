@@ -78,7 +78,13 @@ func (h *Handler) Skills(w http.ResponseWriter, r *http.Request) {
 // Commands handles GET /api/config/commands.
 func (h *Handler) Commands(w http.ResponseWriter, r *http.Request) {
 	scope := h.resolve(r)
-	version, ok := cmdscope.ProbeEngineVersion(scope.Command)
+	// Only Claude scopes have a slash-command surface; skip the version probe
+	// (an exec of scope.Command) for unsupported adapters, which enumerate empty.
+	var version string
+	var ok bool
+	if scope.Supported {
+		version, ok = cmdscope.ProbeEngineVersion(scope.Command)
+	}
 	writeJSON(w, commandsResponse{
 		Commands:           scope.CommandDetails(),
 		EngineVersion:      version,

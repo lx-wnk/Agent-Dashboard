@@ -3,9 +3,9 @@
 // non-default CLAUDE_CONFIG_DIR) or a live monitored session (which carries the
 // config dir detected from its process env).
 //
-// It is the single canonical source for command/skill enumeration; the HTTP
-// handlers and the legacy parser.GetSlashCommands path both delegate here so
-// the built-in list and the frontmatter parsing live in exactly one place.
+// It is the single canonical source for command/skill enumeration: the HTTP
+// handlers delegate here so the built-in list and the frontmatter parsing live
+// in exactly one place.
 package cmdscope
 
 import (

@@ -221,7 +221,15 @@ export interface DynamicCommandScope {
 const dynamicCommandCache = new Map<string, SlashCommandDef[]>()
 
 function scopeKey(scope: DynamicCommandScope): string {
-  return scope.sessionId ?? scope.spawnerId ?? scope.cwd ?? 'default'
+  // Prefix per identifier kind so distinct namespaces (a session id, a spawner
+  // id, a cwd) can never collide in the cache.
+  if (scope.sessionId)
+    return `sess:${scope.sessionId}`
+  if (scope.spawnerId)
+    return `spawner:${scope.spawnerId}`
+  if (scope.cwd)
+    return `cwd:${scope.cwd}`
+  return 'default'
 }
 
 export async function fetchDynamicCommands(scope: DynamicCommandScope): Promise<SlashCommandDef[]> {
