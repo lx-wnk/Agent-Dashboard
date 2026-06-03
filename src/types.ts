@@ -151,6 +151,8 @@ export interface PipelineTask {
   // regardless of what currentStage is.
   needsUser?: boolean
   latestStageRunStatus?: StageRunStatus | null
+  refineStatus?: 'idle' | 'running' | 'done' | 'failed' | null
+  refineError?: string | null
   currentIteration?: number
   // Session id of the most relevant stage_run (running > most recent with session).
   // Used by the task modal to mount a live "follow along" pane against the

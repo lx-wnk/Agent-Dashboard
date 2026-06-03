@@ -79,17 +79,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <AppModal :open="open" @close="emit('close')">
-    <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
-      <header class="flex justify-between items-center px-5 py-4 border-b border-line flex-shrink-0">
-        <h2 class="text-lg font-semibold text-fg">
-          Past Sessions
-        </h2>
-        <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="emit('close')">
-          &times;
-        </button>
-      </header>
+    <header class="flex justify-between items-center px-5 py-4 border-b border-line shrink-0">
+      <h2 class="text-lg font-semibold text-fg">
+        Past Sessions
+      </h2>
+      <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="emit('close')">
+        &times;
+      </button>
+    </header>
 
-      <div class="flex-1 overflow-y-auto p-5">
+    <div class="flex-1 min-h-0 overflow-y-auto p-5">
         <div class="mb-3">
           <input
             v-model="search"
@@ -134,7 +133,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             </div>
           </div>
         </div>
-      </div>
     </div>
   </AppModal>
 

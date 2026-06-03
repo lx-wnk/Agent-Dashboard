@@ -9,9 +9,6 @@ export interface TrendPoint {
   tokens: number
 }
 
-// Appended values must be kept in sync with the localStorage validator below.
-type ViewMode = 'list' | 'cards' | 'pipeline' | 'config-explorer' | 'cost-analytics' | 'workflows'
-
 const agents = shallowRef<Agent[]>([])
 const costTrend = ref<TrendPoint[]>([])
 const selectedAgent = ref<Agent | null>(null)
@@ -19,11 +16,6 @@ const isLoading = ref(true)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
 const debouncedQuery = ref('')
-const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('agent-view-mode') : null
-const viewMode = ref<ViewMode>(
-  stored === 'list' || stored === 'cards' || stored === 'pipeline' || stored === 'config-explorer' || stored === 'cost-analytics' || stored === 'workflows' ? stored : 'cards',
-)
-
 // Provider filter — append-only addition to the existing search/view UI.
 // When true, only agents with provider === 'claude' (or unset, treated as
 // claude) are shown. Persisted to localStorage so the preference survives
@@ -149,12 +141,6 @@ watch(searchQuery, (q) => {
   }, 200)
 })
 
-// Persist viewMode to localStorage
-watch(viewMode, (v) => {
-  if (typeof localStorage !== 'undefined')
-    localStorage.setItem('agent-view-mode', v)
-})
-
 // Persist provider filter
 watch(hideNonClaude, (v) => {
   if (typeof localStorage !== 'undefined')
@@ -223,7 +209,6 @@ export function useAgents(options?: { autoStart?: boolean }) {
     isLoading,
     error,
     searchQuery,
-    viewMode,
     hideNonClaude,
     selectAgent,
     startStream: startDataStream,

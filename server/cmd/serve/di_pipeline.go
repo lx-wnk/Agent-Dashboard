@@ -14,6 +14,24 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
+// resolveAdditionalDirs returns the extra project-folder paths that should be
+// forwarded to the spawned stage agent as --add-dir flags. It excludes the
+// task's own cwd (already the working directory) so only genuinely additional
+// folders are passed through.
+func resolveAdditionalDirs(folderRepo repo.ProjectFolderRepo) func(ctx context.Context, task *ent.Task) []string {
+	return func(ctx context.Context, task *ent.Task) []string {
+		if task.ProjectID == nil || *task.ProjectID == "" {
+			return nil
+		}
+		folders, err := folderRepo.ListByProject(ctx, *task.ProjectID)
+		if err != nil {
+			slog.Warn("resolveAdditionalDirs: ListByProject failed", "projectID", *task.ProjectID, "err", err)
+			return nil
+		}
+		return services.AdditionalDirsForProject(folders, task.Cwd)
+	}
+}
+
 func provideOrchestrator(
 	cfg config.Config,
 	client *ent.Client,
@@ -29,6 +47,7 @@ func provideOrchestrator(
 	permRepo := repo.NewPermissionRepo(client)
 	auditRepo := repo.NewAuditEventRepo(client)
 	cfgRepo := repo.NewPipelineConfigRepo(client)
+	folderRepo := repo.NewProjectFolderRepo(client)
 
 	var resolveFn pipeline.SpawnerResolverFunc
 	if spawnerResolver != nil {
@@ -50,7 +69,8 @@ func provideOrchestrator(
 		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		WorktreeRoot:     cfg.WorktreeRoot,
 		ForceWorktrees:   cfg.ForceWorktrees,
-		ResolveSpawner:   resolveFn,
+		ResolveSpawner:        resolveFn,
+		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the
 		// active transaction, so the returned snapshot reflects the just-applied
 		// writes before tx.Commit(). The result is forwarded to OnTaskChanged

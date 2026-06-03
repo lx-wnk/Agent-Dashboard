@@ -18,6 +18,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
@@ -30,6 +31,7 @@ import (
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
+	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -76,6 +78,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	broadcaster := sse.NewBroadcaster()
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
+	spawnerBroadcaster := sse.NewSpawnerBroadcaster(sse.NewBroadcaster())
+	projectBroadcaster := sse.NewProjectBroadcaster(sse.NewBroadcaster())
 
 	// Load plugins from configured plugin_dir. ctx is the server-lifetime context
 	// (cancelled on SIGTERM/SIGINT). Load derives a 30-second startup timeout internally.
@@ -153,7 +157,24 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		return nil, nil, nil, cleanup, err
 	}
 
-	taskHandler := provideTaskHandler(entClient, orch, taskBroadcaster)
+	// Construct the detached refinement runner before the task handler so the
+	// nil-safe interface value (refineReaderArg) can be threaded in. The runner
+	// itself is late-bound to taskHandler.BroadcastTaskUpdate after both are ready.
+	var refineRunner *refine.Runner
+	if entClient != nil {
+		refineRunner = refine.NewRunner(repo.NewRefinementTurnRepo(entClient), nil)
+	}
+
+	// Nil-interface guard: a nil *refine.Runner assigned directly to the interface
+	// produces a non-nil interface value (typed nil), which defeats the
+	// `h.refineReader == nil` guard in applyRefineStatus. Compute a true nil
+	// interface when there is no runner.
+	var refineReaderArg tasks.RefineStatusReader
+	if refineRunner != nil {
+		refineReaderArg = refineRunner
+	}
+
+	taskHandler := provideTaskHandler(entClient, orch, taskBroadcaster, refineReaderArg)
 	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster)
 
 	var historyHandler *apihistory.Handler
@@ -169,6 +190,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 			Turns:     repo.NewRefinementTurnRepo(entClient),
 			Tasks:     repo.NewTaskRepo(entClient),
 			StageRuns: repo.NewStageRunRepo(entClient),
+			Runner:    refineRunner,
 			Advance: func(ctx context.Context, taskID string) error {
 				_, err := orch.ProgressTask(ctx, taskID, nil)
 				return err
@@ -180,6 +202,12 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 				return spawnerResolver.Resolve(ctx, taskID)
 			},
 		})
+	}
+
+	// Late-bind the runner → task-handler status broadcast. Must happen after both
+	// are constructed; safe to call multiple times (last write wins in the runner).
+	if refineRunner != nil && taskHandler != nil {
+		refineRunner.SetOnRunChange(taskHandler.BroadcastTaskUpdate)
 	}
 
 	var analyticsHandler *apianalytics.Handler
@@ -227,6 +255,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		ProjectRepo:           projectRepo,
 		ProjectFolderRepo:     projectFolderRepo,
 		SpawnerRepo:           spawnerRepo,
+		SpawnerBroadcaster:    spawnerBroadcaster,
+		ProjectBroadcaster:    projectBroadcaster,
 		TaskProjectOps:        newTaskProjectOps(entClient),
 		TaskHandler:           taskHandler,
 		WebPushHandler:        webPushHandler,

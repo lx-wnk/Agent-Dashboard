@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
 // TaskProjectOps abstracts the task-side operations the project handler needs
@@ -28,9 +29,10 @@ type TaskProjectOps interface {
 
 // Handler exposes CRUD endpoints for projects and their folders.
 type Handler struct {
-	projects projectRepo
-	folders  folderRepo
-	tasks    TaskProjectOps
+	projects    projectRepo
+	folders     folderRepo
+	tasks       TaskProjectOps
+	broadcaster *sse.ProjectBroadcaster
 }
 
 // projectRepo is the subset of repo.ProjectRepo this handler needs.
@@ -54,8 +56,59 @@ type folderRepo interface {
 }
 
 // NewHandler returns a Handler wired with the given repos and task ops.
-func NewHandler(p repo.ProjectRepo, f repo.ProjectFolderRepo, tasks TaskProjectOps) *Handler {
-	return &Handler{projects: p, folders: f, tasks: tasks}
+// broadcaster may be nil (e.g. in tests); emit becomes a no-op then.
+func NewHandler(p repo.ProjectRepo, f repo.ProjectFolderRepo, tasks TaskProjectOps, broadcaster *sse.ProjectBroadcaster) *Handler {
+	return &Handler{projects: p, folders: f, tasks: tasks, broadcaster: broadcaster}
+}
+
+// emit broadcasts a typed project event. No-op when broadcaster is nil.
+func (h *Handler) emit(eventType, id string, payload any) {
+	if h.broadcaster == nil {
+		return
+	}
+	h.broadcaster.Broadcast(sse.ProjectEvent{Type: eventType, ProjectID: id, Payload: payload})
+}
+
+// emitProjectUpdated reloads the project and its folders (same path as Get)
+// and broadcasts a project_updated event. Errors are silently ignored —
+// the HTTP response has already been written by the caller.
+func (h *Handler) emitProjectUpdated(r *http.Request, projectID string) {
+	if h.broadcaster == nil {
+		return
+	}
+	p, err := h.projects.GetWithFolders(r.Context(), projectID)
+	if err != nil {
+		return
+	}
+	folders, _ := p.Edges.FoldersOrErr()
+	count := len(folders)
+	v := toProjectView(p, &count, folders, p.ID)
+	h.emit("project_updated", p.ID, v)
+}
+
+// Stream serves GET /api/projects/stream — live project CRUD events.
+func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	sse.WriteHeaders(w)
+	flusher.Flush()
+	sub := h.broadcaster.Subscribe()
+	defer h.broadcaster.Unsubscribe(sub)
+	for {
+		select {
+		case data, ok := <-sub:
+			if !ok {
+				return
+			}
+			w.Write(data) //nolint:errcheck
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // Mount registers all project + folder routes on r. Caller is responsible
@@ -181,7 +234,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
-	apierr.WriteJSON(w, http.StatusCreated, toProjectView(p, nil, nil, ""))
+	v := toProjectView(p, nil, nil, "")
+	h.emit("project_created", p.ID, v)
+	apierr.WriteJSON(w, http.StatusCreated, v)
 	return nil
 }
 
@@ -253,7 +308,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
-	apierr.WriteJSON(w, http.StatusOK, toProjectView(p, nil, nil, ""))
+	v := toProjectView(p, nil, nil, "")
+	h.emit("project_updated", p.ID, v)
+	apierr.WriteJSON(w, http.StatusOK, v)
 	return nil
 }
 
@@ -286,6 +343,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
+	h.emit("project_deleted", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

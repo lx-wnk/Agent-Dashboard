@@ -139,7 +139,8 @@ func bypassSkip(method, pattern string) bool {
 		return true
 	case strings.HasSuffix(pattern, "/replies"): // channel-reply read, bearer auth
 		return true
-	case pattern == "/api/agents/stream", pattern == "/api/tasks/stream": // long-lived SSE
+	case pattern == "/api/agents/stream", pattern == "/api/tasks/stream",
+		pattern == "/api/spawners/stream", pattern == "/api/projects/stream": // long-lived SSE
 		return true
 	case method == http.MethodDelete && pattern == "/api/me": // account deletion disabled in bypass mode (by design)
 		return true

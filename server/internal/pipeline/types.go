@@ -87,6 +87,12 @@ type StageContext struct {
 	MCPToken             string
 	MCPUrl               string
 
+	// AdditionalDirs holds the paths of project folders beyond the task cwd
+	// that the spawned agent should be able to access. Each path is forwarded
+	// to the `claude` CLI as a --add-dir flag. Populated from
+	// OrchestratorOptions.ResolveAdditionalDirs; nil means no extra dirs.
+	AdditionalDirs []string
+
 	// ResolveSpawner returns the effective DB spawner row for the current task
 	// (task → project → claude-default). Stage handlers invoke this right
 	// before the native Claude spawn so the resulting ent.Spawner can be
@@ -178,6 +184,13 @@ type OrchestratorOptions struct {
 	// before the native Claude path is taken. When nil, stage handlers spawn
 	// with the legacy `claude` CLI (current behaviour).
 	ResolveSpawner SpawnerResolverFunc
+
+	// ResolveAdditionalDirs returns the extra directory paths (beyond task.Cwd)
+	// that the spawned agent should be able to reach via --add-dir. Called once
+	// per task just before StageContext construction. When nil, or when the
+	// function returns nil/empty, no extra directories are added. Errors should
+	// be logged and treated as an empty result — never block the spawn.
+	ResolveAdditionalDirs func(ctx context.Context, task *ent.Task) []string
 
 	OnPermissionRequest func(taskID string, req *ent.PermissionRequest)
 	OnStageFailed       func(taskID string, info StageFailedInfo)

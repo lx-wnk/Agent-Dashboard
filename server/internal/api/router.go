@@ -85,6 +85,12 @@ type RouterDeps struct {
 	ProjectRepo       repo.ProjectRepo
 	ProjectFolderRepo repo.ProjectFolderRepo
 	SpawnerRepo       repo.SpawnerRepo
+	// SpawnerBroadcaster fans out spawner CRUD events to SSE subscribers.
+	// May be nil; Stream is only mounted in DI where a broadcaster is always provided.
+	SpawnerBroadcaster *sse.SpawnerBroadcaster
+	// ProjectBroadcaster fans out project CRUD events to SSE subscribers.
+	// May be nil; Stream is only mounted in DI where a broadcaster is always provided.
+	ProjectBroadcaster *sse.ProjectBroadcaster
 	// TaskProjectOps lets the projects handler check for active tasks and
 	// clear project_id on done/cancelled tasks during DELETE /api/projects/{id}.
 	// May be nil; when nil the project handler skips the active-task check.
@@ -224,8 +230,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		// Projects + ProjectFolders — JWT-protected (no admin gate required).
 		if deps.ProjectRepo != nil && deps.ProjectFolderRepo != nil {
-			projectsHandler := projects.NewHandler(deps.ProjectRepo, deps.ProjectFolderRepo, deps.TaskProjectOps)
+			projectsHandler := projects.NewHandler(deps.ProjectRepo, deps.ProjectFolderRepo, deps.TaskProjectOps, deps.ProjectBroadcaster)
 			projectsHandler.Mount(r)
+			r.Get("/api/projects/stream", projectsHandler.Stream)
 		}
 
 		// Spawners — JWT + admin-or-bypass: spawner CRUD lets the operator define
@@ -233,9 +240,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.SpawnerRepo != nil {
 			r.Group(func(r chi.Router) {
 				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
-				spawnersHandler := spawners.NewHandler(deps.SpawnerRepo)
+				spawnersHandler := spawners.NewHandler(deps.SpawnerRepo, deps.SpawnerBroadcaster)
 				spawnersHandler.Mount(r)
 			})
+			// Read-only live stream — JWT-protected but not admin-gated.
+			streamHandler := spawners.NewHandler(deps.SpawnerRepo, deps.SpawnerBroadcaster)
+			r.Get("/api/spawners/stream", streamHandler.Stream)
 		}
 
 		if deps.WebPushHandler != nil {
@@ -304,6 +314,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			spawnPolicy = services.NewSpawnPolicy(nil)
 		}
 		spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs, deps.SpawnerRepo, spawnPolicy)
+		spawnMgr.SetProjectFolderRepo(deps.ProjectFolderRepo)
 		go spawnMgr.StartPruner(serverCtx)
 		spawnHandler := agents.NewSpawnHandler(spawnMgr)
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)

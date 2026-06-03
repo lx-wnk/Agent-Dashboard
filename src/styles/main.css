@@ -24,33 +24,43 @@
   --color-fg-soft: var(--fg-soft);
   --color-fg-mute: var(--fg-mute);
   --color-fg-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
 }
 
 :root {
-  /* Surfaces */
+  /* Surfaces — calm light: soft, low-contrast chrome */
   --app: var(--color-slate-50);
   --card: #ffffff;
   --raised: var(--color-slate-100);
-  /* Borders */
+  /* Borders — softened */
   --line: var(--color-slate-200);
   --line-strong: var(--color-slate-300);
-  /* Text hierarchy (target ≥7:1 for fg/soft/mute, ≥4.5:1 for faint) */
+  /* Text hierarchy (≥7:1 fg/soft/mute, ≥4.5:1 faint) */
   --fg: var(--color-slate-900);
   --fg-soft: var(--color-slate-700);
   --fg-mute: var(--color-slate-600);
   --fg-faint: var(--color-slate-500);
+  /* Accent — indigo */
+  --accent: var(--color-indigo-600);
+  --accent-soft: var(--color-indigo-100);
 }
 
 .dark {
-  --app: var(--color-slate-950);
-  --card: var(--color-slate-900);
-  --raised: var(--color-slate-800);
-  --line: var(--color-slate-700);
-  --line-strong: var(--color-slate-600);
+  /* Calm dark: deeper background so content lifts via subtle surfaces, not hard borders */
+  --app: #0b0e14;
+  --card: #12151c;
+  --raised: #1c212b;
+  --line: #232a37;
+  --line-strong: #2a313e;
+  /* Text hierarchy — all tiers ≥4.5:1 on the deeper dark surfaces */
   --fg: var(--color-slate-100);
   --fg-soft: var(--color-slate-200);
   --fg-mute: var(--color-slate-300);
   --fg-faint: var(--color-slate-400);
+  --accent: var(--color-indigo-400);
+  --accent-soft: rgba(129, 140, 248, 0.14);
+  --accent-soft: color-mix(in oklch, var(--color-indigo-400) 14%, transparent);
 }
 
 /*

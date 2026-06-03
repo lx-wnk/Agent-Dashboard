@@ -61,20 +61,37 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
     //    in the next assertion.
     await page.locator('#spawn-project').selectOption(project.id)
 
-    // 7. Assert cwd hydrated. AppInput swallows the `id` prop (it uses
-    //    useId() internally and the outer wrapper <div> receives the id via
-    //    Vue attribute fallthrough), so we target the real <input> via the
-    //    data-testid wrapper.
-    const cwdInput = page.locator('[data-testid="spawn-cwd-wrap"] input')
-    await expect(cwdInput).toHaveValue('/tmp')
+    // 7. Assert cwd is NOT a free-text field — the manual working directory
+    //    input was removed. cwd now flows exclusively from the selected
+    //    project folder, so [data-testid="spawn-cwd-wrap"] must not exist.
+    await expect(page.locator('[data-testid="spawn-cwd-wrap"]')).toHaveCount(0)
 
-    // 8. Cancel — we don't want to actually spawn a Claude process. Scope to
+    // Assert the folder picker is not shown (single folder → no picker).
+    await expect(page.locator('#spawn-folder')).toHaveCount(0)
+
+    // 8. Assert spawner picker is present.
+    await expect(page.locator('[data-testid="spawn-spawner"]')).toBeVisible()
+
+    // 9. Assert model select is NOT present.
+    await expect(page.locator('#spawn-model')).toHaveCount(0)
+
+    // 10. Assert channel checkbox is NOT present.
+    await expect(page.locator('#spawn-channel')).toHaveCount(0)
+
+    // 11. Assert permission-mode select is present with three options.
+    const permSelect = page.locator('[data-testid="spawn-permission-mode"]')
+    await expect(permSelect).toBeVisible()
+    await expect(permSelect.locator('option[value="default"]')).toHaveCount(1)
+    await expect(permSelect.locator('option[value="acceptEdits"]')).toHaveCount(1)
+    await expect(permSelect.locator('option[value="bypassPermissions"]')).toHaveCount(1)
+
+    // 12. Cancel — we don't want to actually spawn a Claude process. Scope to
     //    the modal (AppModal renders role="dialog") so we don't accidentally
     //    match a Cancel button elsewhere on the page.
     await page.getByRole('dialog').getByRole('button', { name: /^cancel$/i }).click()
   }
   finally {
-    // 9. Cleanup, even if an assertion above failed.
+    // 13. Cleanup, even if an assertion above failed.
     await request.delete(`/api/projects/${project.id}`, { headers: csrfHeaders })
   }
 })

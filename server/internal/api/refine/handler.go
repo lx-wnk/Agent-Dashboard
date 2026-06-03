@@ -32,6 +32,9 @@ type Deps struct {
 	// the handler falls back to passing nil to the Spawner function (which then
 	// uses the legacy `claude -p` exec path).
 	ResolveSpawner func(ctx context.Context, taskID string) (*ent.Spawner, services.SpawnerSource, error)
+	// Runner owns detached refinement runs + status. When nil, NewHandler
+	// constructs one from Turns + the default spawner.
+	Runner *refine.Runner
 }
 
 // Handler handles /api/refine routes.
@@ -41,9 +44,13 @@ type Handler struct {
 
 // NewHandler creates a Handler with the given dependencies.
 // If deps.Spawner is nil, refine.RunRefinementTurn is used.
+// If deps.Runner is nil, a Runner is constructed from Turns + Spawner.
 func NewHandler(deps Deps) *Handler {
 	if deps.Spawner == nil {
 		deps.Spawner = refine.RunRefinementTurn
+	}
+	if deps.Runner == nil {
+		deps.Runner = refine.NewRunner(deps.Turns, deps.Spawner)
 	}
 	return &Handler{deps: deps}
 }
@@ -54,6 +61,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/refine/{taskId}/turns", h.listTurns)
 	r.Post("/api/refine/{taskId}/turn", h.submitTurn)
 	r.Post("/api/refine/{taskId}/confirm", h.confirm)
+	r.Get("/api/refine/{taskId}/status", h.status)
 }
 
 // TurnResponse is the JSON shape returned by GET /api/refine/{taskId}/turns.
@@ -92,6 +100,18 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// GET /api/refine/{taskId}/status — current refine run status for the task.
+func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
+	taskID := chi.URLParam(r, "taskId")
+	status, errMsg := h.deps.Runner.State(taskID)
+	resp := map[string]string{"status": status}
+	if errMsg != "" {
+		resp["error"] = errMsg
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
 // POST /api/refine/{taskId}/turn — submit a user message and stream the assistant response via SSE.
 func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 	// Auth enforced by RequireAuth middleware (skipped in bypass mode) — see listTurns.
@@ -120,18 +140,7 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Now store the user turn (it won't be included in the history slice above).
-	userRole := "user"
-	if _, err := h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
-		TaskID:  taskID,
-		Role:    userRole,
-		Content: body.Message,
-	}); err != nil {
-		jsonError(w, "failed to store user turn", http.StatusInternalServerError)
-		return
-	}
-
-	// 3. Build history, filtering out sentinel "confirmed" turns so they never
+	// 2. Build history, filtering out sentinel "confirmed" turns so they never
 	//    appear in the model context.
 	turns := make([]refine.Turn, 0, len(history))
 	for _, t := range history {
@@ -162,47 +171,50 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 		WorkDir:         workDir,
 	}
 
-	// Set SSE headers before starting the stream.
-	sse.WriteHeaders(w)
+	// Reject a second submit while a run is in flight (prevents duplicate turns).
+	if h.deps.Runner.IsRunning(taskID) {
+		jsonError(w, "a refinement run is already in progress", http.StatusConflict)
+		return
+	}
 
-	flusher, canFlush := w.(http.Flusher)
+	// 3. Store the user turn only once we know we are starting a new run.
+	if _, err := h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
+		TaskID:  taskID,
+		Role:    "user",
+		Content: body.Message,
+	}); err != nil {
+		jsonError(w, "failed to store user turn", http.StatusInternalServerError)
+		return
+	}
 
-	turnCtx, turnCancel := context.WithTimeout(r.Context(), 5*time.Minute)
-	defer turnCancel()
-
+	// 4. Resolve spawner BEFORE writing SSE headers so we can still send a JSON error.
 	var resolvedSpawner *ent.Spawner
 	if h.deps.ResolveSpawner != nil {
 		sp, _, err := h.deps.ResolveSpawner(r.Context(), taskID)
 		if err != nil {
-			// SSE error frame, then close — do not silently fall through.
-			fmt.Fprintf(w, "data: [ERROR] spawner resolution failed: %s\n\n", err.Error())
-			if canFlush {
-				flusher.Flush()
-			}
+			jsonError(w, "spawner resolution failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		resolvedSpawner = sp
 	}
 
-	stream, err := h.deps.Spawner(turnCtx, cfg, resolvedSpawner)
+	// 5. Delegate to the runner — the goroutine persists the assistant turn even
+	//    after the HTTP request context is cancelled (client disconnect).
+	out, err := h.deps.Runner.Start(taskID, cfg, resolvedSpawner)
 	if err != nil {
-		// Headers already set for SSE — send error as SSE event.
-		fmt.Fprintf(w, "data: [ERROR] %s\n\n", err.Error())
-		if canFlush {
-			flusher.Flush()
-		}
+		jsonError(w, err.Error(), http.StatusConflict)
 		return
 	}
 
-	var sb strings.Builder
+	// 6. Stream the runner's tee channel to the client via SSE.
+	sse.WriteHeaders(w)
+	flusher, canFlush := w.(http.Flusher)
 	for {
 		select {
-		case line, open := <-stream:
+		case line, open := <-out:
 			if !open {
-				goto done
+				return
 			}
-			sb.WriteString(line)
-			sb.WriteString("\n")
 			// Split on embedded newlines to maintain valid SSE framing.
 			for _, l := range strings.Split(line, "\n") {
 				fmt.Fprintf(w, "data: %s\n", l)
@@ -211,21 +223,10 @@ func (h *Handler) submitTurn(w http.ResponseWriter, r *http.Request) {
 			if canFlush {
 				flusher.Flush()
 			}
-		case <-turnCtx.Done():
+		case <-r.Context().Done():
+			// Client disconnected — the runner keeps going and persists the turn.
 			return
 		}
-	}
-
-done:
-	// Store the full assistant response as a turn.
-	assistantRole := "assistant"
-	fullResponse := strings.TrimRight(sb.String(), "\n")
-	if fullResponse != "" {
-		_, _ = h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
-			TaskID:  taskID,
-			Role:    assistantRole,
-			Content: fullResponse,
-		})
 	}
 }
 
@@ -233,6 +234,32 @@ done:
 func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 	// Auth enforced by RequireAuth middleware (skipped in bypass mode) — see listTurns.
 	taskID := chi.URLParam(r, "taskId")
+
+	// Bridge the finalized concept from the refinement turns onto the task BEFORE
+	// advancing. Without this the concept lived only in refinement_turns and the
+	// implementation stage (which reads spec/plan/toolRequests from task.Metadata)
+	// saw an empty {} block. Routing fields (title, branch) land on task columns;
+	// setting SourceBranch also triggers the orchestrator's auto-worktree.
+	backlog := "backlog"
+	update := repo.UpdateTaskInput{CurrentStage: &backlog}
+	if h.deps.Turns != nil {
+		if turns, err := h.deps.Turns.ListForTask(r.Context(), taskID, 0); err == nil {
+			if concept, ok := refine.ExtractConcept(turns); ok {
+				if meta := concept.Metadata(); len(meta) > 0 {
+					update.Metadata = meta
+				}
+				if concept.RefinedTitle != "" {
+					update.Title = &concept.RefinedTitle
+				}
+				if concept.SourceBranch != "" {
+					update.SourceBranch = &concept.SourceBranch
+				}
+				if concept.TargetBranch != "" {
+					update.TargetBranch = &concept.TargetBranch
+				}
+			}
+		}
+	}
 
 	phase := "confirmed"
 	if _, err := h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
@@ -257,9 +284,8 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	backlog := "backlog"
 	if h.deps.Tasks != nil {
-		_, _ = h.deps.Tasks.Update(r.Context(), taskID, repo.UpdateTaskInput{CurrentStage: &backlog})
+		_, _ = h.deps.Tasks.Update(r.Context(), taskID, update)
 	}
 	if h.deps.Advance != nil {
 		_ = h.deps.Advance(r.Context(), taskID)

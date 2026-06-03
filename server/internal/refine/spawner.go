@@ -32,12 +32,42 @@ type Turn struct {
 	Content string
 }
 
+// conceptSchemaInstruction is appended to the system prompt. It is a normal
+// double-quoted string so it can contain the ```json fence that a Go backtick
+// raw-string literal cannot. The confirm handler parses this block out of the
+// final turn (see refine.ExtractConcept) and persists it onto the task.
+const conceptSchemaInstruction = "When you emit \"__phase_done: approval\", you MUST also output, exactly once, a\n" +
+	"fenced JSON block describing the finalized concept the implementation agent will\n" +
+	"execute. Use this exact schema (omit optional fields you have no value for):\n" +
+	"```json\n" +
+	"{\n" +
+	"  \"refinedTitle\": \"<short imperative task title>\",\n" +
+	"  \"spec\": \"<what to build or change, and why>\",\n" +
+	"  \"plan\": [\"<step 1>\", \"<step 2>\"],\n" +
+	"  \"toolRequests\": [\"Bash\", \"Edit\", \"Write\"],\n" +
+	"  \"sourceBranch\": \"<branch to work on, if the user specified one>\",\n" +
+	"  \"targetBranch\": \"<PR target branch, if the user specified one>\"\n" +
+	"}\n" +
+	"```\n" +
+	"Emit this block only at approval, after the marker, and do not explain it."
+
 var promptTmpl = template.Must(template.New("refinement").Parse(`<system>
 You are a refinement assistant helping to clarify and improve a software task.
 Task: {{.TaskTitle}}
 {{- if .TaskDescription}}
 Description: {{.TaskDescription}}
 {{- end}}
+
+Guide the task through these phases in order: analysis, spec, implementation_plan, approval.
+When you have completed a phase, output a line on its own containing exactly:
+__phase_done: <phase>
+using one of these keys: analysis, spec, implementation_plan, approval.
+When the task is clarified enough for the user to confirm, output:
+__phase_done: approval
+Emit each marker at most once, only when that phase is genuinely complete. Do not
+explain the markers to the user.
+
+` + conceptSchemaInstruction + `
 </system>
 {{range .History}}
 <{{.Role}}>{{.Content}}</{{.Role}}>

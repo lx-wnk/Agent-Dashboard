@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -570,6 +571,336 @@ func TestSpawnHandler_CwdOutsideAllowlist_Returns403(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rr.Code,
 		"expected HTTP 403 when cwd is outside all allowed project roots, got %d — body: %s",
 		rr.Code, rr.Body.String())
+}
+
+// fakeProjectFolderRepo satisfies repo.ProjectFolderRepo for spawn tests.
+// Only ListByProject is meaningful; the rest panic to catch unintended calls.
+type fakeProjectFolderRepo struct {
+	// byProject maps projectID → folders returned by ListByProject.
+	byProject map[string][]*ent.ProjectFolder
+	// listErr, when non-nil, is returned by ListByProject.
+	listErr error
+}
+
+func (f *fakeProjectFolderRepo) Create(_ context.Context, _, _ string, _ *string, _ bool) (*ent.ProjectFolder, error) {
+	panic("fakeProjectFolderRepo.Create not implemented")
+}
+func (f *fakeProjectFolderRepo) GetByID(_ context.Context, _ string) (*ent.ProjectFolder, error) {
+	panic("fakeProjectFolderRepo.GetByID not implemented")
+}
+func (f *fakeProjectFolderRepo) ListByProject(_ context.Context, projectID string) ([]*ent.ProjectFolder, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.byProject[projectID], nil
+}
+func (f *fakeProjectFolderRepo) Update(_ context.Context, _ string, _, _ *string, _ bool, _ *bool) (*ent.ProjectFolder, error) {
+	panic("fakeProjectFolderRepo.Update not implemented")
+}
+func (f *fakeProjectFolderRepo) Delete(_ context.Context, _ string) error {
+	panic("fakeProjectFolderRepo.Delete not implemented")
+}
+func (f *fakeProjectFolderRepo) Suggest(_ context.Context, _ string) ([]*ent.ProjectFolder, error) {
+	panic("fakeProjectFolderRepo.Suggest not implemented")
+}
+
+func newFolder(path string) *ent.ProjectFolder { return &ent.ProjectFolder{Path: path} }
+
+// containsFlag returns true if args contains flag followed by value.
+func containsFlag(args []string, flag, value string) bool {
+	return containsConsecutive(args, flag, value)
+}
+
+func TestSpawn_AdditionalDirs_InjectedForMultiFolderProject(t *testing.T) {
+	// Use a real TempDir so os.Stat succeeds; create separate subdirs for cwd and
+	// extra folders so each exists on disk (spawn.go calls os.Stat(cwd)).
+	base := t.TempDir()
+	cwd := filepath.Join(base, "web")
+	shared := filepath.Join(base, "shared")
+	docs := filepath.Join(base, "docs")
+	require.NoError(t, os.MkdirAll(cwd, 0o755))
+	require.NoError(t, os.MkdirAll(shared, 0o755))
+	require.NoError(t, os.MkdirAll(docs, 0o755))
+
+	// Resolve symlinks so HOME and cwd comparisons are consistent.
+	cwd, _ = filepath.EvalSymlinks(cwd)
+	shared, _ = filepath.EvalSymlinks(shared)
+	docs, _ = filepath.EvalSymlinks(docs)
+	base, _ = filepath.EvalSymlinks(base)
+
+	t.Setenv("HOME", base)
+	capturedPtr := captureExec(t)
+
+	folderRepo := &fakeProjectFolderRepo{
+		byProject: map[string][]*ent.ProjectFolder{
+			"proj-1": {newFolder(cwd), newFolder(shared), newFolder(docs)},
+		},
+	}
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	m.SetProjectFolderRepo(folderRepo)
+
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           cwd,
+		"projectId":     "proj-1",
+		"enableChannel": false,
+	})
+	require.NoError(t, err)
+
+	captured := *capturedPtr
+	require.NotNil(t, captured, "expected execStart to be called")
+
+	assert.True(t, containsFlag(captured.Args, "--add-dir", shared),
+		"expected --add-dir %s in args %v", shared, captured.Args)
+	assert.True(t, containsFlag(captured.Args, "--add-dir", docs),
+		"expected --add-dir %s in args %v", docs, captured.Args)
+
+	// cwd itself must NOT appear as --add-dir
+	for i := 0; i+1 < len(captured.Args); i++ {
+		if captured.Args[i] == "--add-dir" && captured.Args[i+1] == cwd {
+			t.Fatalf("cwd %q must not appear as --add-dir, got args %v", cwd, captured.Args)
+		}
+	}
+}
+
+func TestSpawn_AdditionalDirs_NotInjectedWithoutProjectId(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+	capturedPtr := captureExec(t)
+
+	folderRepo := &fakeProjectFolderRepo{
+		byProject: map[string][]*ent.ProjectFolder{
+			"proj-x": {newFolder(cwd), newFolder(filepath.Join(base, "extra"))},
+		},
+	}
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	m.SetProjectFolderRepo(folderRepo)
+
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           cwd,
+		// no projectId
+		"enableChannel": false,
+	})
+	require.NoError(t, err)
+
+	captured := *capturedPtr
+	require.NotNil(t, captured)
+	for _, a := range captured.Args {
+		assert.NotEqual(t, "--add-dir", a,
+			"--add-dir must not appear when no projectId is provided, got args %v", captured.Args)
+	}
+}
+
+func TestSpawn_AdditionalDirs_NotInjectedWithNilRepo(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+	capturedPtr := captureExec(t)
+
+	// SpawnManager without SetProjectFolderRepo → repo is nil
+	m := NewSpawnManager(5, 60000, nil, nil)
+
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           cwd,
+		"projectId":     "proj-1",
+		"enableChannel": false,
+	})
+	require.NoError(t, err)
+
+	captured := *capturedPtr
+	require.NotNil(t, captured)
+	for _, a := range captured.Args {
+		assert.NotEqual(t, "--add-dir", a,
+			"--add-dir must not appear when projectFolderRepo is nil, got args %v", captured.Args)
+	}
+}
+
+func TestSpawn_AdditionalDirs_RepoErrorSkipped(t *testing.T) {
+	// When the repo returns an error, spawn should succeed (warn + continue).
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+	capturedPtr := captureExec(t)
+
+	folderRepo := &fakeProjectFolderRepo{
+		listErr: errors.New("db unavailable"),
+	}
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	m.SetProjectFolderRepo(folderRepo)
+
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           cwd,
+		"projectId":     "proj-1",
+		"enableChannel": false,
+	})
+	require.NoError(t, err, "repo error must not block spawn")
+
+	captured := *capturedPtr
+	require.NotNil(t, captured)
+	for _, a := range captured.Args {
+		assert.NotEqual(t, "--add-dir", a,
+			"--add-dir must not appear when repo errors, got args %v", captured.Args)
+	}
+}
+
+// countOccurrences returns the number of times s appears in args.
+func countOccurrences(args []string, s string) int {
+	n := 0
+	for _, a := range args {
+		if a == s {
+			n++
+		}
+	}
+	return n
+}
+
+func TestSpawn_PermissionMode_ExplicitAcceptEdits(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+	capturedPtr := captureExec(t)
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":         "do thing",
+		"cwd":            cwd,
+		"permissionMode": "acceptEdits",
+		"enableChannel":  false,
+	})
+	require.NoError(t, err)
+	captured := *capturedPtr
+	require.NotNil(t, captured)
+	assert.True(t,
+		containsConsecutive(captured.Args, "--permission-mode", "acceptEdits"),
+		"expected --permission-mode acceptEdits in args %v", captured.Args)
+}
+
+func TestSpawn_PermissionMode_AbsentDefaultsToDefault(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+	capturedPtr := captureExec(t)
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           cwd,
+		"enableChannel": false,
+		// no permissionMode key
+	})
+	require.NoError(t, err)
+	captured := *capturedPtr
+	require.NotNil(t, captured)
+	assert.True(t,
+		containsConsecutive(captured.Args, "--permission-mode", "default"),
+		"expected --permission-mode default when key absent, got %v", captured.Args)
+}
+
+func TestSpawn_PermissionMode_BypassPermissions(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+	capturedPtr := captureExec(t)
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":         "do thing",
+		"cwd":            cwd,
+		"permissionMode": "bypassPermissions",
+		"enableChannel":  false,
+	})
+	require.NoError(t, err)
+	captured := *capturedPtr
+	require.NotNil(t, captured)
+	assert.True(t,
+		containsConsecutive(captured.Args, "--permission-mode", "bypassPermissions"),
+		"expected --permission-mode bypassPermissions in args %v", captured.Args)
+}
+
+func TestSpawn_PermissionMode_InvalidReturnsError(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+	capturedPtr := captureExec(t)
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":         "do thing",
+		"cwd":            cwd,
+		"permissionMode": "nonsense",
+		"enableChannel":  false,
+	})
+	require.Error(t, err, "invalid permissionMode must return an error")
+	assert.Contains(t, err.Error(), "invalid permissionMode")
+	assert.Nil(t, *capturedPtr, "no process must be started on invalid permissionMode")
+}
+
+func TestSpawn_PermissionMode_SpawnerOwnsPermissionMode_NotDoubled(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	capturedPtr := captureExec(t)
+
+	// Spawner declares its own --permission-mode acceptEdits; dashboard must not
+	// append a second --permission-mode flag.
+	row := &ent.Spawner{
+		ID:          "spwn_pm",
+		AdapterType: "claude",
+		Command:     "claude",
+		Args:        []string{"--permission-mode", "acceptEdits"},
+	}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_pm": row}}, nil)
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           cwd,
+		"spawnerId":     "spwn_pm",
+		"enableChannel": false,
+		// caller also sends a permissionMode — must be overridden by spawner guard
+		"permissionMode": "default",
+	})
+	require.NoError(t, err)
+	captured := *capturedPtr
+	require.NotNil(t, captured)
+	assert.Equal(t, 1, countOccurrences(captured.Args, "--permission-mode"),
+		"--permission-mode must appear exactly once (spawner's own), got args %v", captured.Args)
+	assert.True(t,
+		containsConsecutive(captured.Args, "--permission-mode", "acceptEdits"),
+		"spawner's --permission-mode acceptEdits must be preserved, got args %v", captured.Args)
+}
+
+func TestSpawn_PermissionMode_SpawnerDangerouslySkip_NotDoubled(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	capturedPtr := captureExec(t)
+
+	row := &ent.Spawner{
+		ID:          "spwn_skip",
+		AdapterType: "claude",
+		Command:     "claude",
+		Args:        []string{"--dangerously-skip-permissions"},
+	}
+	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_skip": row}}, nil)
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing",
+		"cwd":           cwd,
+		"spawnerId":     "spwn_skip",
+		"enableChannel": false,
+	})
+	require.NoError(t, err)
+	captured := *capturedPtr
+	require.NotNil(t, captured)
+	assert.Equal(t, 0, countOccurrences(captured.Args, "--permission-mode"),
+		"--permission-mode must not be appended when spawner uses --dangerously-skip-permissions, got args %v", captured.Args)
 }
 
 func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import AppButton from './ui/AppButton.vue'
+import { onMounted, ref } from 'vue'
 import { STAGE_LABELS } from '../utils/stageLabels'
+import AppButton from './ui/AppButton.vue'
+import AppModal from './ui/AppModal.vue'
 
 interface SystemPrompt {
   id: string
@@ -225,77 +226,69 @@ onMounted(fetchPrompts)
     </table>
 
     <!-- Create / Edit dialog -->
-    <Transition name="dialog">
-      <div
-        v-if="showDialog"
-        class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center"
-        @click.self="closeDialog"
-      >
-        <div class="bg-card border border-line rounded-xl w-full max-w-[540px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <header class="flex justify-between items-center px-5 py-4 border-b border-line">
-            <h2 class="text-lg font-semibold text-fg">
-              {{ editing ? 'Edit System Prompt' : 'New System Prompt' }}
-            </h2>
-            <button
-              type="button"
-              class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg"
-              @click="closeDialog"
-            >
-              &times;
-            </button>
-          </header>
-          <form class="p-5 flex flex-col gap-4" @submit.prevent="save">
-            <div class="flex flex-col gap-1">
-              <label for="sp-stage" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
-                Stage (blank = all stages)
-              </label>
-              <select
-                id="sp-stage"
-                v-model="form.stage"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
-              >
-                <option v-for="s in STAGES" :key="s" :value="s">
-                  {{ s === '' ? 'All stages' : s.replace(/_/g, ' ') }}
-                </option>
-              </select>
-            </div>
-            <div class="flex flex-col gap-1">
-              <label for="sp-priority" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
-                Priority (higher = applied first)
-              </label>
-              <input
-                id="sp-priority"
-                v-model.number="form.priority"
-                type="number"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
-              >
-            </div>
-            <div class="flex flex-col gap-1">
-              <label for="sp-content" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
-                Content
-              </label>
-              <textarea
-                id="sp-content"
-                v-model="form.content"
-                rows="8"
-                placeholder="Enter custom system prompt text…"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500 font-mono resize-y"
-              />
-            </div>
-            <p v-if="saveError" class="text-xs text-red-600 dark:text-red-400">
-              {{ saveError }}
-            </p>
-          </form>
-          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
-            <AppButton variant="secondary" @click="closeDialog">
-              Cancel
-            </AppButton>
-            <AppButton variant="info" :disabled="saving || !form.content.trim()" @click="save">
-              {{ saving ? 'Saving…' : (editing ? 'Update' : 'Create') }}
-            </AppButton>
-          </footer>
+    <AppModal :open="showDialog" @close="closeDialog">
+      <header class="shrink-0 flex justify-between items-center px-5 py-4 border-b border-line">
+        <h2 class="text-lg font-semibold text-fg">
+          {{ editing ? 'Edit System Prompt' : 'New System Prompt' }}
+        </h2>
+        <button
+          type="button"
+          class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg"
+          @click="closeDialog"
+        >
+          &times;
+        </button>
+      </header>
+      <form class="flex-1 min-h-0 overflow-y-auto p-5 flex flex-col gap-4" @submit.prevent="save">
+        <div class="flex flex-col gap-1">
+          <label for="sp-stage" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
+            Stage (blank = all stages)
+          </label>
+          <select
+            id="sp-stage"
+            v-model="form.stage"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+          >
+            <option v-for="s in STAGES" :key="s" :value="s">
+              {{ s === '' ? 'All stages' : s.replace(/_/g, ' ') }}
+            </option>
+          </select>
         </div>
-      </div>
-    </Transition>
+        <div class="flex flex-col gap-1">
+          <label for="sp-priority" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
+            Priority (higher = applied first)
+          </label>
+          <input
+            id="sp-priority"
+            v-model.number="form.priority"
+            type="number"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+          >
+        </div>
+        <div class="flex flex-col gap-1">
+          <label for="sp-content" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
+            Content
+          </label>
+          <textarea
+            id="sp-content"
+            v-model="form.content"
+            rows="8"
+            placeholder="Enter custom system prompt text…"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500 font-mono resize-y"
+          />
+        </div>
+        <p v-if="saveError" class="text-xs text-red-600 dark:text-red-400">
+          {{ saveError }}
+        </p>
+      </form>
+      <footer class="shrink-0 flex justify-end gap-2 px-5 py-3 border-t border-line">
+        <AppButton variant="secondary" @click="closeDialog">
+          Cancel
+        </AppButton>
+        <AppButton variant="info" :disabled="saving || !form.content.trim()" @click="save">
+          {{ saving ? 'Saving…' : (editing ? 'Update' : 'Create') }}
+        </AppButton>
+      </footer>
+    </AppModal>
   </div>
 </template>

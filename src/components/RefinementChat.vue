@@ -1,23 +1,27 @@
 <script setup lang="ts">
 import type { ImageAttachment } from '../composables/useRefinementChat'
 import type { PipelineTask } from '../types'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
-import { createTask } from '../composables/useTasks'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
 
 const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
 
-const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask], taskCreated: [task: PipelineTask] }>()
+const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
 
 const PHASE_DONE_RE = /__phase_done:\s*\w+/g
 const REFINED_TITLE_RE = /^\*{0,2}[Rr]efined\s+[Tt]itle[^\n]*\n?/gm
 const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/
+// The agent emits the finalized concept as a fenced json block at approval. It is
+// machine data (parsed for the title + persisted onto the task on confirm), so
+// hide it from the chat bubble rather than rendering a raw JSON dump.
+const JSON_BLOCK_STRIP_RE = /```json\n[\s\S]*?```/g
 
 function cleanContent(text: string): string {
   return text
     .replace(PHASE_DONE_RE, '')
     .replace(REFINED_TITLE_RE, '')
+    .replace(JSON_BLOCK_STRIP_RE, '')
     .trimEnd()
 }
 
@@ -53,11 +57,23 @@ const {
   isStreaming,
   error,
   approvalReady,
+  syncStatus,
+  stop,
   loadHistory,
   sendMessage,
   confirm,
   phaseLabel,
 } = useRefinementChat(() => currentTask.value?.id ?? null)
+
+// Live working indicator: show the dots whenever a run is streaming but the
+// last bubble is not yet assistant content — covers both the initial send and
+// a reconnect to a detached run (where only the user turn is loaded).
+const showWorkingDots = computed(() => {
+  if (!isStreaming.value)
+    return false
+  const last = messages.value.at(-1)
+  return !last || last.role === 'user' || !last.content
+})
 
 const EXAMPLE_CHIPS = [
   'Implement a new feature',
@@ -135,16 +151,28 @@ function removeImage(idx: number) {
   pendingImages.value.splice(idx, 1)
 }
 
-watch(() => props.open, async (val) => {
-  if (val && currentTask.value) {
-    await loadHistory()
-  }
+// Abort the client stream + stop status polling whenever the modal closes.
+// The detached server run keeps going and persists; reopening re-syncs below.
+watch(() => props.open, (open) => {
+  if (!open)
+    stop()
 })
 
-onMounted(() => {
-  if (props.open && currentTask.value)
+watch(
+  [() => props.open, () => currentTask.value?.id],
+  ([open, id]) => {
+    if (!open || !id)
+      return
+    // (Re)opened/switched task: drop any prior stream, load its history,
+    // then reflect a detached run that may still be in flight.
+    stop()
     loadHistory()
-})
+    void syncStatus()
+  },
+  { immediate: true },
+)
+
+onUnmounted(stop)
 
 watch(messages, async () => {
   await nextTick()
@@ -153,22 +181,12 @@ watch(messages, async () => {
 
 async function handleSend() {
   const msg = inputText.value.trim()
-  if (!msg || isStreaming.value)
+  if (!msg || isStreaming.value || !currentTask.value)
     return
   const images = pendingImages.value.length > 0 ? [...pendingImages.value] : undefined
   inputText.value = ''
   pendingImages.value = []
   await nextTick(autoResize)
-  if (currentTask.value === null) {
-    const newTask = await createTask({
-      slug: `concept-${Date.now()}`,
-      title: 'New Task',
-      cwd: '/',
-      stage: 'concept',
-    })
-    currentTask.value = newTask
-    emit('taskCreated', newTask)
-  }
   await sendMessage(msg, images)
 }
 
@@ -266,9 +284,9 @@ function isPhaseMarker(idx: number): string | null {
           />
         </template>
 
-        <!-- Streaming indicator -->
+        <!-- Streaming / reconnected-run indicator -->
         <div
-          v-if="isStreaming && !messages.at(-1)?.content"
+          v-if="showWorkingDots"
           class="self-start min-w-[52px] px-3 py-2 rounded-xl rounded-bl-sm bg-raised border border-line text-fg-faint"
         >
           <span class="dot-pulse"><span /><span /><span /></span>
@@ -280,10 +298,12 @@ function isPhaseMarker(idx: number): string | null {
         {{ error }}
       </div>
 
-      <!-- Confirm bar -->
+      <!-- Confirm bar — stays available while you keep refining; the input below
+           remains usable so you can still adjust open decisions. -->
       <div v-if="approvalReady" class="px-5 py-3 border-t border-line shrink-0">
         <button
-          class="w-full py-3 px-4 rounded-xl bg-green-500 text-black font-bold text-[0.95rem] tracking-tight border-none cursor-pointer transition-all hover:opacity-90 hover:-translate-y-px"
+          class="w-full py-3 px-4 rounded-xl bg-green-500 text-black font-bold text-[0.95rem] tracking-tight border-none cursor-pointer transition-all hover:enabled:opacity-90 hover:enabled:-translate-y-px disabled:opacity-40 disabled:cursor-default"
+          :disabled="isStreaming"
           @click="handleConfirm"
         >
           Create Task →
@@ -312,7 +332,7 @@ function isPhaseMarker(idx: number): string | null {
         <button
           class="w-9 h-9 rounded-xl shrink-0 bg-raised border border-line text-slate-400 text-lg cursor-pointer flex items-center justify-center transition-colors hover:enabled:border-blue-400 hover:enabled:text-blue-400 disabled:opacity-35 disabled:cursor-default"
           title="Attach image"
-          :disabled="isStreaming || approvalReady"
+          :disabled="isStreaming"
           @click="fileInputEl?.click()"
         >
           ⊕
@@ -331,7 +351,7 @@ function isPhaseMarker(idx: number): string | null {
           class="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-fg placeholder:text-fg-faint text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
           placeholder="Message..."
           rows="1"
-          :disabled="isStreaming || approvalReady"
+          :disabled="isStreaming"
           @keydown.enter.exact.prevent="handleSend"
           @paste="handlePaste"
         />
@@ -346,7 +366,7 @@ function isPhaseMarker(idx: number): string | null {
         </button>
         <button
           class="w-10 h-10 rounded-xl bg-blue-500 text-white border-none cursor-pointer text-base flex items-center justify-center transition-all hover:enabled:opacity-85 hover:enabled:-translate-y-px disabled:opacity-35 disabled:cursor-default shrink-0"
-          :disabled="isStreaming || (!inputText.trim() && !pendingImages.length) || approvalReady"
+          :disabled="isStreaming || (!inputText.trim() && !pendingImages.length)"
           @click="handleSend"
         >
           →

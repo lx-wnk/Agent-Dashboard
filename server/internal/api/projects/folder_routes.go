@@ -82,6 +82,7 @@ func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	h.emitProjectUpdated(r, projectID)
 	apierr.WriteJSON(w, http.StatusCreated, toFolderView(f, projectID))
 	return nil
 }
@@ -133,6 +134,7 @@ func (h *Handler) UpdateFolder(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
+	h.emitProjectUpdated(r, projectID)
 	apierr.WriteJSON(w, http.StatusOK, toFolderView(f, projectID))
 	return nil
 }
@@ -164,6 +166,7 @@ func (h *Handler) DeleteFolder(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
+	h.emitProjectUpdated(r, projectID)
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

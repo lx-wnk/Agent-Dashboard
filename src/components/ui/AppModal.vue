@@ -1,13 +1,35 @@
 <script setup lang="ts">
-import { nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   open: boolean
   zIndex?: number
   labelledBy?: string
+  /**
+   * Panel sizing.
+   * - `standard` (default): one fixed frame shared by all content modals —
+   *   900px wide, 85vh tall, capped to the viewport. The box does NOT shrink
+   *   when there is little content; the body region scrolls instead. AppModal
+   *   supplies the chrome (bg/border/radius/shadow) and a flex column, so the
+   *   slot only provides header / body / footer sections.
+   * - `auto`: no sizing or chrome — the slot brings its own box. Used by the
+   *   deliberate exceptions (command palette, settings with its own layout).
+   */
+  size?: 'standard' | 'auto'
 }>(), {
   zIndex: 200,
+  size: 'standard',
 })
+
+// Chrome + fixed frame for the standard size. `auto` is a transparent
+// passthrough so exception modals keep their bespoke box.
+const STANDARD_CHROME = 'bg-card border border-line rounded-xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col'
+const panelClass = computed(() => (props.size === 'standard' ? STANDARD_CHROME : ''))
+const panelStyle = computed(() =>
+  props.size === 'standard'
+    ? { width: 'min(900px, calc(100vw - 2rem))', height: 'min(85vh, 800px)' }
+    : undefined,
+)
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -97,6 +119,8 @@ function trapFocus(event: KeyboardEvent) {
         <div
           ref="modalPanelRef"
           class="base-modal-box outline-none"
+          :class="panelClass"
+          :style="panelStyle"
           tabindex="-1"
           @keydown="trapFocus"
         >

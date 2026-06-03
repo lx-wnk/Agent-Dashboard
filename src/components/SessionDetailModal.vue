@@ -167,9 +167,8 @@ async function resumeSession() {
 
 <template>
   <AppModal :open="open" labelled-by="session-detail-title" @close="emit('close')">
-    <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-      <!-- Header -->
-      <header class="flex justify-between items-start px-5 py-4 border-b border-line flex-shrink-0 gap-3">
+    <!-- Header -->
+    <header class="flex justify-between items-start px-5 py-4 border-b border-line shrink-0 gap-3">
         <div class="min-w-0 flex-1">
           <h2 id="session-detail-title" class="text-sm font-semibold text-fg leading-snug line-clamp-2 mb-1.5">
             {{ session?.firstPrompt ?? session?.projectName ?? 'Session' }}
@@ -192,8 +191,8 @@ async function resumeSession() {
         </button>
       </header>
 
-      <!-- Body: message list -->
-      <div ref="scrollContainer" class="flex-1 overflow-y-auto px-4 py-3">
+    <!-- Body: message list -->
+    <div ref="scrollContainer" class="flex-1 min-h-0 overflow-y-auto px-4 py-3">
         <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
           Loading transcript...
         </div>
@@ -227,8 +226,8 @@ async function resumeSession() {
         </template>
       </div>
 
-      <!-- Footer: resume prompt -->
-      <footer class="flex-shrink-0 border-t border-line px-4 py-3">
+    <!-- Footer: resume prompt -->
+    <footer class="shrink-0 border-t border-line px-4 py-3">
         <div class="flex gap-1.5">
           <input
             v-model="resumePrompt"
@@ -255,7 +254,6 @@ async function resumeSession() {
         >
           {{ statusMsg }}
         </p>
-      </footer>
-    </div>
+    </footer>
   </AppModal>
 </template>

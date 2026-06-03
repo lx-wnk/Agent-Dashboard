@@ -38,6 +38,12 @@ type SpawnAgentOptions struct {
 	// claude-default spawner (Command="claude", empty Args/Env) is also
 	// treated as the legacy path so existing tasks spawn byte-identically.
 	Spawner *ent.Spawner
+
+	// AdditionalDirs holds the paths of project folders (beyond the cwd) that
+	// should be accessible to the spawned agent. Each non-empty entry is passed
+	// to the `claude` CLI as `--add-dir <path>`. The default folder is already
+	// the cwd and must NOT appear here.
+	AdditionalDirs []string
 }
 
 type SpawnResult struct {
@@ -131,6 +137,15 @@ func BuildSpawnArgs(opts SpawnAgentOptions) []string {
 		if !containsArg(args, "--model") {
 			args = append(args, "--model", *opts.Spawner.ModelOverride)
 		}
+	}
+	// Grant the spawned agent access to extra project folders. Each path is
+	// passed as a separate --add-dir flag so the claude CLI adds the directory
+	// to its allowed file-system scope. Empty entries are skipped defensively.
+	for _, dir := range opts.AdditionalDirs {
+		if dir == "" {
+			continue
+		}
+		args = append(args, "--add-dir", dir)
 	}
 	return args
 }

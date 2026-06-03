@@ -56,7 +56,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <AppModal :open="!!agent" :z-index="1000" @close="emit('close')">
-    <div v-if="agent" class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-full max-w-[900px] max-h-[80vh] flex flex-col overflow-hidden">
+    <template v-if="agent">
       <div class="bg-raised px-4 py-2.5 flex justify-between items-center flex-shrink-0">
         <div class="flex items-center gap-2.5 min-w-0">
           <AppBadge :variant="agent.status" />
@@ -80,7 +80,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         ref="chatStreamRef"
         :agent="agent"
         :local-messages="localMessages"
-        class="flex-1 p-4"
+        class="flex-1 min-h-0 overflow-y-auto p-4"
       />
       <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="border-t border-line flex-shrink-0">
         <details>
@@ -154,6 +154,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         </details>
       </div>
       <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
-    </div>
+    </template>
   </AppModal>
 </template>

@@ -17,6 +17,7 @@ import (
 	apirefine "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
@@ -72,7 +73,8 @@ func (f *fakeTurnRepo) DeleteForTask(_ context.Context, _ string) error { return
 
 // F027: map-based lookup so not-found is testable.
 type fakeTaskRepo struct {
-	byID map[string]*ent.Task
+	byID       map[string]*ent.Task
+	lastUpdate *repo.UpdateTaskInput // captured by Update for assertions
 }
 
 func newFakeTaskRepo(tasks ...*ent.Task) *fakeTaskRepo {
@@ -93,7 +95,8 @@ func (f *fakeTaskRepo) Create(_ context.Context, _ repo.CreateTaskInput) (*ent.T
 	return nil, nil
 }
 func (f *fakeTaskRepo) GetBySlug(_ context.Context, _ string) (*ent.Task, error) { return nil, nil }
-func (f *fakeTaskRepo) Update(_ context.Context, _ string, _ repo.UpdateTaskInput) (*ent.Task, error) {
+func (f *fakeTaskRepo) Update(_ context.Context, _ string, in repo.UpdateTaskInput) (*ent.Task, error) {
+	f.lastUpdate = &in
 	return nil, nil
 }
 func (f *fakeTaskRepo) Delete(_ context.Context, _ string) error              { return nil }
@@ -119,6 +122,7 @@ func makeRouter(turns *fakeTurnRepo, tasks *fakeTaskRepo, spawner func(context.C
 		Turns:   turns,
 		Tasks:   tasks,
 		Spawner: spawner,
+		Runner:  refine.NewRunner(turns, spawner),
 	})
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))
@@ -188,6 +192,19 @@ func TestListTurns_ReturnsTurns(t *testing.T) {
 	}
 }
 
+// waitFor polls cond() until it returns true or the 2s deadline expires.
+func waitFor(t *testing.T, cond func() bool, msg string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for: %s", msg)
+}
+
 // F025: verify SSE framing and turn persistence, not just status 200.
 func TestSubmitTurn_StreamsResponse(t *testing.T) {
 	spawner := func(_ context.Context, _ refine.SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
@@ -219,15 +236,15 @@ func TestSubmitTurn_StreamsResponse(t *testing.T) {
 		t.Errorf("SSE body missing 'data: Hello' frame: %s", sseBody)
 	}
 	// F025: verify assistant turn was persisted after streaming.
-	var assistantStored bool
-	for _, turn := range turns.turns {
-		if turn.TaskID == "task-1" && strings.Contains(turn.Content, "Hello") {
-			assistantStored = true
+	// Persistence is async (runner goroutine) — poll with a short deadline.
+	waitFor(t, func() bool {
+		for _, turn := range turns.turns {
+			if turn.TaskID == "task-1" && strings.Contains(turn.Content, "Hello") {
+				return true
+			}
 		}
-	}
-	if !assistantStored {
-		t.Error("want assistant turn to be persisted after streaming")
-	}
+		return false
+	}, "assistant turn persisted")
 }
 
 func TestSubmitTurn_RequiresMessage(t *testing.T) {
@@ -316,5 +333,68 @@ func TestConfirm_StoresSentinel(t *testing.T) {
 	}
 	if !found {
 		t.Error("want confirmed sentinel turn to be stored")
+	}
+}
+
+func TestConfirm_PersistsConceptOntoTask(t *testing.T) {
+	concept := "Plan ready.\n\n" +
+		"```json\n" +
+		"{\"refinedTitle\":\"Switch BocPrice to JSON\",\"spec\":\"serialize to JSON\"," +
+		"\"plan\":[\"add reindex\",\"flip serializer\"],\"toolRequests\":[\"Bash\",\"Edit\"]," +
+		"\"sourceBranch\":\"users/claude/eps-fix\"}\n" +
+		"```\n"
+	turnRepo := &fakeTurnRepo{turns: []*ent.RefinementTurn{
+		{ID: "t1", TaskID: "task-1", Role: refinementturn.Role("user"), Content: "build it"},
+		{ID: "t2", TaskID: "task-1", Role: refinementturn.Role("assistant"), Content: concept, Phase: strPtr("approval")},
+	}}
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(turnRepo, tasks, noopSpawner)
+
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/task-1/confirm", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	up := tasks.lastUpdate
+	if up == nil {
+		t.Fatal("expected confirm to update the task")
+	}
+	if up.Title == nil || *up.Title != "Switch BocPrice to JSON" {
+		t.Errorf("Title = %v, want refined title applied", up.Title)
+	}
+	if up.SourceBranch == nil || *up.SourceBranch != "users/claude/eps-fix" {
+		t.Errorf("SourceBranch = %v, want it set (triggers auto-worktree)", up.SourceBranch)
+	}
+	if up.CurrentStage == nil || *up.CurrentStage != "backlog" {
+		t.Errorf("CurrentStage = %v, want backlog", up.CurrentStage)
+	}
+	if up.Metadata == nil || up.Metadata["spec"] != "serialize to JSON" {
+		t.Errorf("Metadata.spec = %v, want concept spec persisted", up.Metadata)
+	}
+	if _, present := up.Metadata["refinedTitle"]; present {
+		t.Error("routing key refinedTitle must not leak into metadata")
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
+func TestStatus_ReturnsIdleForUnknownTask(t *testing.T) {
+	turns := &fakeTurnRepo{}
+	tasks := newFakeTaskRepo()
+	router := makeRouter(turns, tasks, noopSpawner)
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/refine/task-1/status", nil))
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", rr.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body["status"] != "idle" {
+		t.Errorf("status field: got %v, want idle", body["status"])
 	}
 }

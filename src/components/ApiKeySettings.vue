@@ -344,7 +344,7 @@ async function startImport() {
 </script>
 
 <template>
-  <AppModal :open="open" @close="emit('close')">
+  <AppModal :open="open" size="auto" @close="emit('close')">
     <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-[975px] max-w-[calc(100vw-2rem)] h-[700px] max-h-[85vh] flex overflow-hidden">
       <!-- ── Sidebar ──────────────────────────────── -->
       <nav class="w-[260px] flex-shrink-0 bg-app border-r border-line px-3 py-5 flex flex-col">
