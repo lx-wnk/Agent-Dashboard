@@ -72,6 +72,11 @@ const slashSuggestions = computed(() => {
 
 const showSuggestions = computed(() => slashSuggestions.value.length > 0)
 
+// A monitored session without the dashboard channel can't receive a live prompt;
+// sending resumes it as a NEW session (claude --resume). Surface that so it's not
+// mistaken for live injection.
+const isResumeMode = computed(() => !!props.agent && !props.agent.channelAvailable)
+
 function selectSuggestion(cmd: { name: string, disabled?: boolean }) {
   if (cmd.disabled)
     return
@@ -190,7 +195,7 @@ defineExpose({ focus })
         ref="inputEl"
         v-model="promptInput"
         rows="1"
-        placeholder="Enter prompt..."
+        :placeholder="isResumeMode ? 'Prompt… (resumes as a new session)' : 'Enter prompt...'"
         :disabled="isSending"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
@@ -202,7 +207,7 @@ defineExpose({ focus })
         v-else
         ref="inputEl"
         v-model="promptInput"
-        placeholder="Enter prompt..."
+        :placeholder="isResumeMode ? 'Prompt… (resumes as a new session)' : 'Enter prompt...'"
         :disabled="isSending"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
@@ -211,15 +216,26 @@ defineExpose({ focus })
       >
       <button
         type="button"
-        aria-label="Send message"
-        class="bg-blue-600 text-white border-none rounded font-bold cursor-pointer flex-shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
-        :class="variant === 'full' ? 'px-3.5 py-1.5 text-[14px]' : 'px-2.5 py-1 text-[13px]'"
+        :aria-label="isResumeMode ? 'Resume session with prompt (creates a new session)' : 'Send message'"
+        :title="isResumeMode ? 'No live channel — resumes this session as a new session' : 'Send'"
+        class="text-white border-none rounded font-bold cursor-pointer flex-shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+        :class="[
+          variant === 'full' ? 'px-3.5 py-1.5 text-[14px]' : 'px-2.5 py-1 text-[13px]',
+          isResumeMode ? 'bg-amber-600' : 'bg-blue-600',
+        ]"
         :disabled="isSending || promptInput.trim().length === 0"
         @click="handleSend"
       >
-        {{ isSending ? '...' : '↵' }}
+        {{ isSending ? '...' : (isResumeMode ? '⤳' : '↵') }}
       </button>
     </div>
+    <p
+      v-if="isResumeMode && !sendStatus"
+      class="text-[11px] text-amber-700 dark:text-amber-400"
+      :class="variant === 'full' ? 'px-4 pb-2' : 'px-3 pb-1.5 pt-0.5'"
+    >
+      ⤳ No live channel — sending resumes this session as a <strong>new</strong> session. Spawn via the dashboard for live injection.
+    </p>
     <p
       v-if="sendStatus"
       class="text-[11px]"
