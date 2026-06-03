@@ -16,12 +16,24 @@ type SlashCommand struct {
 	Source      string `json:"source"` // "builtin" | "user" | "project" | "plugin:<plugin-id>"
 }
 
+// CommandDetail is a slash command with its on-disk body, for the Config
+// explorer. Built-in commands carry an empty Body.
+type CommandDetail struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Source      string `json:"source"`
+	Body        string `json:"body"`
+}
+
 // SkillEntry is one installed skill available within a Scope.
 type SkillEntry struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Source      string `json:"source"` // "user" | "project" | "plugin:<plugin-id>"
 }
+
+// maxCommandBodyBytes caps the on-disk command file body read into CommandDetail.
+const maxCommandBodyBytes = 1 * 1024 * 1024 // 1 MB
 
 // builtinCommands are the Claude Code commands baked into the CLI binary. The
 // CLI exposes no machine-readable listing, so they are curated here against
@@ -52,31 +64,49 @@ func sourceRank(source string) int {
 	}
 }
 
-// Commands returns the slash commands visible in the scope: built-ins plus user,
-// project, and plugin commands, deduped by name (builtin > project > user >
-// plugin) and sorted builtins-first then by source then name. A non-Claude
-// scope returns an empty slice.
+// Commands returns the slash commands visible in the scope (without bodies):
+// built-ins plus user, project, and plugin commands, deduped by name
+// (builtin > project > user > plugin) and sorted builtins-first then by source
+// then name. A non-Claude scope returns an empty slice.
 func (s Scope) Commands() []SlashCommand {
+	details := s.commandDetails(false)
+	out := make([]SlashCommand, len(details))
+	for i, d := range details {
+		out[i] = SlashCommand{Name: d.Name, Description: d.Description, Source: d.Source}
+	}
+	return out
+}
+
+// CommandDetails returns the same commands as Commands, each with its on-disk
+// body (capped at maxCommandBodyBytes). Built-in commands carry an empty Body.
+func (s Scope) CommandDetails() []CommandDetail {
+	return s.commandDetails(true)
+}
+
+func (s Scope) commandDetails(withBody bool) []CommandDetail {
 	if !s.Supported {
-		return []SlashCommand{}
+		return []CommandDetail{}
 	}
 
-	out := append([]SlashCommand{}, builtinCommands...)
+	out := make([]CommandDetail, 0, len(builtinCommands))
+	for _, b := range builtinCommands {
+		out = append(out, CommandDetail{Name: b.Name, Description: b.Description, Source: b.Source})
+	}
 
-	// User commands: <ConfigDir>/commands/*.md
-	for _, file := range listCommandFiles(filepath.Join(s.ConfigDir, "commands")) {
-		if name, desc, ok := readCommandMeta(file); ok {
-			out = append(out, SlashCommand{Name: name, Description: desc, Source: "user"})
+	collect := func(dir, source string) {
+		for _, file := range listCommandFiles(dir) {
+			if d, ok := readCommand(file, source, withBody); ok {
+				out = append(out, d)
+			}
 		}
 	}
+
+	// User commands: <ConfigDir>/commands/*.md
+	collect(filepath.Join(s.ConfigDir, "commands"), "user")
 
 	// Project commands: <ProjectCwd>/.claude/commands/*.md
 	if s.ProjectCwd != "" {
-		for _, file := range listCommandFiles(filepath.Join(s.ProjectCwd, ".claude", "commands")) {
-			if name, desc, ok := readCommandMeta(file); ok {
-				out = append(out, SlashCommand{Name: name, Description: desc, Source: "project"})
-			}
-		}
+		collect(filepath.Join(s.ProjectCwd, ".claude", "commands"), "project")
 	}
 
 	// Plugin commands: <ConfigDir>/plugins/cache/<plugin-id>/**/commands/*.md
@@ -84,8 +114,8 @@ func (s Scope) Commands() []SlashCommand {
 	for _, pluginRoot := range listPluginRoots(pluginsCache) {
 		source := "plugin:" + filepath.Base(pluginRoot)
 		for _, file := range findCommandFiles(pluginRoot) {
-			if name, desc, ok := readCommandMeta(file); ok {
-				out = append(out, SlashCommand{Name: name, Description: desc, Source: source})
+			if d, ok := readCommand(file, source, withBody); ok {
+				out = append(out, d)
 			}
 		}
 	}
@@ -141,12 +171,12 @@ func skillsInDir(dir, source string) []SkillEntry {
 	return out
 }
 
-func dedupAndSortCommands(in []SlashCommand) []SlashCommand {
+func dedupAndSortCommands(in []CommandDetail) []CommandDetail {
 	sort.SliceStable(in, func(i, j int) bool {
 		return sourceRank(in[i].Source) < sourceRank(in[j].Source)
 	})
 	seen := make(map[string]bool, len(in))
-	deduped := make([]SlashCommand, 0, len(in))
+	deduped := make([]CommandDetail, 0, len(in))
 	for _, c := range in {
 		if seen[c.Name] {
 			continue
@@ -308,22 +338,60 @@ func findCommandFiles(root string) []string {
 	return files
 }
 
-// readCommandMeta returns the slash-command name (filename without .md, prefixed
-// "/"), its frontmatter description, and ok=false when the file is unreadable.
-func readCommandMeta(path string) (name, desc string, ok bool) {
+// readCommand builds a CommandDetail for a slash-command markdown file: name is
+// the filename without .md prefixed with "/", description comes from optional
+// YAML frontmatter, and (when withBody) body is the file content capped at
+// maxCommandBodyBytes. ok is false only when the path has no usable name.
+func readCommand(path, source string, withBody bool) (CommandDetail, bool) {
 	base := strings.TrimSuffix(filepath.Base(path), ".md")
 	if base == "" {
-		return "", "", false
+		return CommandDetail{}, false
 	}
-	name = "/" + base
+	d := CommandDetail{Name: "/" + base, Source: source}
+
+	if withBody {
+		body, desc := readCommandBody(path)
+		d.Body = body
+		d.Description = desc
+		return d, true
+	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return name, "", true
+		return d, true
 	}
 	defer f.Close()
-	desc = parseFrontmatterDescription(f)
-	return name, desc, true
+	d.Description = parseFrontmatterDescription(f)
+	return d, true
+}
+
+// readCommandBody reads the (capped) file content and its frontmatter
+// description in one pass.
+func readCommandBody(path string) (body, desc string) {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return "", ""
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", ""
+	}
+	defer f.Close()
+
+	limit := int64(maxCommandBodyBytes)
+	truncated := info.Size() > limit
+	readSize := info.Size()
+	if truncated {
+		readSize = limit
+	}
+	buf := make([]byte, readSize)
+	n, _ := io.ReadFull(f, buf)
+	body = string(buf[:n])
+	if truncated {
+		body += "\n\n<!-- truncated: file exceeds 1 MB limit -->\n"
+	}
+	desc = parseFrontmatterDescription(strings.NewReader(body))
+	return body, desc
 }
 
 // parseSkillFrontmatter reads the YAML frontmatter of a SKILL.md and returns

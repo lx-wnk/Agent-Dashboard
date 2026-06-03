@@ -29,6 +29,12 @@ type Scope struct {
 	// Supported is false for spawners whose adapter is not Claude Code; such
 	// spawners have no slash-command / skill concept, so enumeration is empty.
 	Supported bool
+	// Source records how the scope was selected: "session" | "spawner" |
+	// "default" | "process". Set by ResolveRequestScope; empty otherwise.
+	Source string
+	// Label is a human-readable scope identifier for the UI (e.g. a spawner
+	// slug, "session:<id>", or "default"). Set by ResolveRequestScope.
+	Label string
 }
 
 // defaultConfigDir returns the process-level config root: CLAUDE_CONFIG_DIR if
