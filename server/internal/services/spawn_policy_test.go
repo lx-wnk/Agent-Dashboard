@@ -247,3 +247,37 @@ func TestIsUnder_ParentDirectory(t *testing.T) {
 		t.Fatal("parent must not be under child")
 	}
 }
+
+func TestSpawnPolicy_AllowResume_PermitsCwdOutsideRoots(t *testing.T) {
+	tmp := resolvedTmp(t)
+	t.Setenv("HOME", tmp)
+
+	projectRoot := filepath.Join(tmp, "myproject")
+	_ = os.MkdirAll(projectRoot, 0o755)
+	roots := func(_ context.Context) ([]string, error) { return []string{projectRoot}, nil }
+	policy := NewSpawnPolicy(roots)
+
+	outside := filepath.Join(tmp, "elsewhere")
+	_ = os.MkdirAll(outside, 0o755)
+
+	// Fresh spawn is rejected (outside roots) ...
+	if err := policy.Allow(context.Background(), outside); err == nil {
+		t.Fatal("expected Allow to reject cwd outside roots")
+	}
+	// ... but resuming an existing session at that cwd is permitted.
+	if err := policy.AllowResume(outside); err != nil {
+		t.Fatalf("expected AllowResume to permit cwd outside roots, got %v", err)
+	}
+}
+
+func TestSpawnPolicy_AllowResume_StillBlocksBlacklist(t *testing.T) {
+	tmp := resolvedTmp(t)
+	t.Setenv("HOME", tmp)
+	policy := NewSpawnPolicy(nil)
+
+	ssh := filepath.Join(tmp, ".ssh")
+	_ = os.MkdirAll(ssh, 0o755)
+	if err := policy.AllowResume(ssh); err == nil {
+		t.Fatal("expected AllowResume to block a sensitive dir")
+	}
+}

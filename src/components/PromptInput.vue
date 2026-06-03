@@ -101,11 +101,28 @@ function onKeydown(e: KeyboardEvent) {
       e.preventDefault()
       selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
     }
-    else if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+    else if (e.key === 'Tab') {
+      // Tab always completes the highlighted suggestion.
       e.preventDefault()
       const cmd = slashSuggestions.value[selectedIndex.value]
       if (cmd)
         selectSuggestion(cmd)
+    }
+    else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      // If the input is already a complete command, send it; otherwise complete
+      // the highlighted suggestion (so a fully-typed /command isn't stuck on the menu).
+      const typed = promptInput.value.trim()
+      const exact = slashSuggestions.value.find(c => c.name === typed)
+      if (exact) {
+        if (!exact.disabled)
+          handleSend()
+      }
+      else {
+        const cmd = slashSuggestions.value[selectedIndex.value]
+        if (cmd)
+          selectSuggestion(cmd)
+      }
     }
     else if (e.key === 'Escape') {
       e.preventDefault()

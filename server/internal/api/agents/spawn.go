@@ -147,17 +147,27 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	if _, err := os.Stat(cwd); err != nil {
 		return 0, fmt.Errorf("directory does not exist: %s", cwd)
 	}
-	if err := m.spawnPolicy.Allow(context.Background(), cwd); err != nil {
+
+	resumeSessionID, _ := body["resumeSessionId"].(string)
+	if resumeSessionID != "" && !uuidRE.MatchString(resumeSessionID) {
+		return 0, fmt.Errorf("invalid sessionId format")
+	}
+
+	// Resuming an existing monitored session runs in the cwd that session already
+	// uses, so only the sensitive-dir blacklist applies. Fresh spawns must pass
+	// the full project-roots allowlist.
+	if resumeSessionID != "" {
+		if err := m.spawnPolicy.AllowResume(cwd); err != nil {
+			return 0, err
+		}
+	} else if err := m.spawnPolicy.Allow(context.Background(), cwd); err != nil {
 		return 0, err
 	}
+
 	model, _ := body["model"].(string)
 	systemPrompt, _ := body["systemPrompt"].(string)
 	if len(systemPrompt) > systemPromptMax {
 		systemPrompt = systemPrompt[:systemPromptMax]
-	}
-	resumeSessionID, _ := body["resumeSessionId"].(string)
-	if resumeSessionID != "" && !uuidRE.MatchString(resumeSessionID) {
-		return 0, fmt.Errorf("invalid sessionId format")
 	}
 
 	permissionMode, _ := body["permissionMode"].(string)
