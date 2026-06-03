@@ -31,8 +31,8 @@ func TestCommands_AllLayers(t *testing.T) {
 	writeFile(t, filepath.Join(cfg, "commands", "deploy.md"), "---\ndescription: Deploy app\n---\nbody")
 	// project command
 	writeFile(t, filepath.Join(cwd, ".claude", "commands", "lint.md"), "no frontmatter")
-	// plugin command
-	writeFile(t, filepath.Join(cfg, "plugins", "cache", "acme-plugin", "v1", "commands", "scan.md"), "---\ndescription: Scan\n---\n")
+	// plugin command: cache/<marketplace>/<plugin>/<version>/commands/<name>.md
+	writeFile(t, filepath.Join(cfg, "plugins", "cache", "market", "acme-plugin", "v1", "commands", "scan.md"), "---\ndescription: Scan\n---\n")
 
 	scope := Scope{ConfigDir: cfg, ProjectCwd: cwd, Command: "claude", Supported: true}
 	got := scope.Commands()
@@ -44,7 +44,8 @@ func TestCommands_AllLayers(t *testing.T) {
 	// layered sources
 	require.Equal(t, "user", byName["/deploy"])
 	require.Equal(t, "project", byName["/lint"])
-	require.Equal(t, "plugin:acme-plugin", byName["/scan"])
+	// plugin command is namespaced /<plugin>:<name> with source plugin:<plugin>
+	require.Equal(t, "plugin:acme-plugin", byName["/acme-plugin:scan"])
 
 	// descriptions parsed from frontmatter
 	for _, c := range got {
@@ -61,10 +62,11 @@ func TestCommands_DedupPrecedence(t *testing.T) {
 	cfg := t.TempDir()
 	cwd := t.TempDir()
 
-	// same command name at user, project, and plugin layers
+	// same bare command name at user + project layers (these collide); the
+	// plugin one is namespaced so it stays distinct.
 	writeFile(t, filepath.Join(cfg, "commands", "build.md"), "---\ndescription: user build\n---")
 	writeFile(t, filepath.Join(cwd, ".claude", "commands", "build.md"), "---\ndescription: project build\n---")
-	writeFile(t, filepath.Join(cfg, "plugins", "cache", "p", "commands", "build.md"), "---\ndescription: plugin build\n---")
+	writeFile(t, filepath.Join(cfg, "plugins", "cache", "market", "p", "commands", "build.md"), "---\ndescription: plugin build\n---")
 	// also collide with a builtin name — builtin must win
 	writeFile(t, filepath.Join(cfg, "commands", "help.md"), "---\ndescription: hijacked\n---")
 
@@ -83,9 +85,11 @@ func TestCommands_DedupPrecedence(t *testing.T) {
 		}
 	}
 
-	require.Equal(t, 1, count["/build"], "build must be deduped")
-	require.Equal(t, "project", build.Source, "project layer shadows user and plugin")
+	require.Equal(t, 1, count["/build"], "bare /build must be deduped across user+project")
+	require.Equal(t, "project", build.Source, "project layer shadows user")
 	require.Equal(t, "project build", build.Description)
+	// the plugin build is namespaced and therefore NOT deduped away
+	require.Equal(t, "plugin:p", names(got)["/p:build"])
 
 	require.Equal(t, 1, count["/help"], "help must be deduped")
 	require.Equal(t, "builtin", help.Source, "builtin can never be overridden")
@@ -97,7 +101,8 @@ func TestSkills_AllLayers(t *testing.T) {
 
 	writeFile(t, filepath.Join(cfg, "skills", "alpha", "SKILL.md"), "---\nname: alpha\ndescription: Alpha skill\n---")
 	writeFile(t, filepath.Join(cwd, ".claude", "skills", "beta", "SKILL.md"), "---\nname: beta\ndescription: Beta\n---")
-	writeFile(t, filepath.Join(cfg, "plugins", "cache", "myplug", "skills", "gamma", "SKILL.md"), "---\nname: gamma\ndescription: Gamma\n---")
+	// plugin skill: cache/<marketplace>/<plugin>/<version>/skills/<name>/SKILL.md
+	writeFile(t, filepath.Join(cfg, "plugins", "cache", "market", "myplug", "1.0", "skills", "gamma", "SKILL.md"), "---\nname: gamma\ndescription: Gamma\n---")
 
 	scope := Scope{ConfigDir: cfg, ProjectCwd: cwd, Command: "claude", Supported: true}
 	got := scope.Skills()
@@ -108,7 +113,28 @@ func TestSkills_AllLayers(t *testing.T) {
 	}
 	require.Equal(t, "user", src["alpha"])
 	require.Equal(t, "project", src["beta"])
-	require.Equal(t, "plugin:myplug", src["gamma"])
+	// plugin skill is namespaced <plugin>:<name>
+	require.Equal(t, "plugin:myplug", src["myplug:gamma"])
+}
+
+func TestSlashCommands_IncludesSkillsAsCommands(t *testing.T) {
+	cfg := t.TempDir()
+	cwd := t.TempDir()
+	// a user skill, a plugin skill, and a real command file
+	writeFile(t, filepath.Join(cfg, "skills", "vue", "SKILL.md"), "---\nname: vue\ndescription: Vue helper\n---")
+	writeFile(t, filepath.Join(cfg, "plugins", "cache", "market", "superpowers", "5.1", "skills", "brainstorming", "SKILL.md"), "---\nname: brainstorming\ndescription: BS\n---")
+	writeFile(t, filepath.Join(cwd, ".claude", "commands", "ship.md"), "---\ndescription: Ship\n---")
+
+	scope := Scope{ConfigDir: cfg, ProjectCwd: cwd, Command: "claude", Supported: true}
+	byName := names(scope.SlashCommands())
+
+	require.Equal(t, "builtin", byName["/help"], "builtins still present")
+	require.Equal(t, "project", byName["/ship"], "command files present")
+	require.Equal(t, "user", byName["/vue"], "user skill exposed as /vue")
+	require.Equal(t, "plugin:superpowers", byName["/superpowers:brainstorming"], "plugin skill exposed namespaced")
+
+	// Commands() (config tab) must NOT include skills
+	require.NotContains(t, names(scope.Commands()), "/vue")
 }
 
 func TestSkills_FallbackNameFromDir(t *testing.T) {

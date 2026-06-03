@@ -39,12 +39,28 @@ const maxCommandBodyBytes = 1 * 1024 * 1024 // 1 MB
 // CLI exposes no machine-readable listing, so they are curated here against
 // CuratedBuiltinsVersion; the version probe surfaces drift (see version.go).
 var builtinCommands = []SlashCommand{
+	{Name: "/add-dir", Description: "Add a working directory", Source: "builtin"},
+	{Name: "/agents", Description: "Manage agents", Source: "builtin"},
+	{Name: "/bug", Description: "Report a bug", Source: "builtin"},
 	{Name: "/clear", Description: "Clear conversation history", Source: "builtin"},
 	{Name: "/compact", Description: "Compact context window", Source: "builtin"},
+	{Name: "/config", Description: "Open settings", Source: "builtin"},
+	{Name: "/cost", Description: "Show token cost of the session", Source: "builtin"},
+	{Name: "/doctor", Description: "Diagnose Claude Code health", Source: "builtin"},
+	{Name: "/export", Description: "Export the conversation", Source: "builtin"},
 	{Name: "/help", Description: "Show available commands", Source: "builtin"},
-	{Name: "/memory", Description: "Show memory files", Source: "builtin"},
+	{Name: "/init", Description: "Initialize a CLAUDE.md", Source: "builtin"},
+	{Name: "/login", Description: "Log in to an account", Source: "builtin"},
+	{Name: "/logout", Description: "Log out", Source: "builtin"},
+	{Name: "/mcp", Description: "Manage MCP servers", Source: "builtin"},
+	{Name: "/memory", Description: "Edit memory files", Source: "builtin"},
 	{Name: "/model", Description: "Switch model", Source: "builtin"},
+	{Name: "/pr-comments", Description: "Show pull request comments", Source: "builtin"},
+	{Name: "/release-notes", Description: "Show release notes", Source: "builtin"},
+	{Name: "/resume", Description: "Resume a previous conversation", Source: "builtin"},
+	{Name: "/review", Description: "Review a pull request", Source: "builtin"},
 	{Name: "/status", Description: "Show session status", Source: "builtin"},
+	{Name: "/terminal-setup", Description: "Configure terminal key bindings", Source: "builtin"},
 	{Name: "/vim", Description: "Toggle vim keybindings", Source: "builtin"},
 }
 
@@ -95,7 +111,7 @@ func (s Scope) commandDetails(withBody bool) []CommandDetail {
 
 	collect := func(dir, source string) {
 		for _, file := range listCommandFiles(dir) {
-			if d, ok := readCommand(file, source, withBody); ok {
+			if d, ok := readCommand(file, source, "", withBody); ok {
 				out = append(out, d)
 			}
 		}
@@ -109,18 +125,39 @@ func (s Scope) commandDetails(withBody bool) []CommandDetail {
 		collect(filepath.Join(s.ProjectCwd, ".claude", "commands"), "project")
 	}
 
-	// Plugin commands: <ConfigDir>/plugins/cache/<plugin-id>/**/commands/*.md
-	pluginsCache := filepath.Join(s.ConfigDir, "plugins", "cache")
-	for _, pluginRoot := range listPluginRoots(pluginsCache) {
-		source := "plugin:" + filepath.Base(pluginRoot)
-		for _, file := range findCommandFiles(pluginRoot) {
-			if d, ok := readCommand(file, source, withBody); ok {
+	// Plugin commands: <ConfigDir>/plugins/cache/<marketplace>/<plugin>/**/commands/*.md
+	// Namespaced as /<plugin>:<name>, matching Claude's invocation syntax.
+	for _, pluginDir := range pluginDirs(filepath.Join(s.ConfigDir, "plugins", "cache")) {
+		plugin := filepath.Base(pluginDir)
+		source := "plugin:" + plugin
+		for _, file := range findCommandFiles(pluginDir) {
+			if d, ok := readCommand(file, source, plugin, withBody); ok {
 				out = append(out, d)
 			}
 		}
 	}
 
 	return dedupAndSortCommands(out)
+}
+
+// SlashCommands returns everything typeable as a leading-slash command in the
+// scope: built-in + file commands AND skills (Claude exposes every skill as a
+// /<name> — or /<plugin>:<name> — command). Deduped by name; a real command
+// shadows a skill of the same name. A non-Claude scope returns an empty slice.
+func (s Scope) SlashCommands() []SlashCommand {
+	if !s.Supported {
+		return []SlashCommand{}
+	}
+	details := s.commandDetails(false)
+	for _, sk := range s.Skills() {
+		details = append(details, CommandDetail{Name: "/" + sk.Name, Description: sk.Description, Source: sk.Source})
+	}
+	details = dedupAndSortCommands(details)
+	out := make([]SlashCommand, len(details))
+	for i, d := range details {
+		out[i] = SlashCommand{Name: d.Name, Description: d.Description, Source: d.Source}
+	}
+	return out
 }
 
 // Skills returns the skills visible in the scope: user, project, and plugin
@@ -141,16 +178,17 @@ func (s Scope) Skills() []SkillEntry {
 		out = append(out, skillsInDir(filepath.Join(s.ProjectCwd, ".claude", "skills"), "project")...)
 	}
 
-	// Plugin skills: <ConfigDir>/plugins/cache/<plugin-id>/**/SKILL.md
-	pluginsCache := filepath.Join(s.ConfigDir, "plugins", "cache")
-	for _, pluginRoot := range listPluginRoots(pluginsCache) {
-		source := "plugin:" + filepath.Base(pluginRoot)
-		for _, file := range findSkillFiles(pluginRoot) {
+	// Plugin skills: <ConfigDir>/plugins/cache/<marketplace>/<plugin>/**/SKILL.md
+	// Namespaced as <plugin>:<skill>, matching Claude's skill identifiers.
+	for _, pluginDir := range pluginDirs(filepath.Join(s.ConfigDir, "plugins", "cache")) {
+		plugin := filepath.Base(pluginDir)
+		source := "plugin:" + plugin
+		for _, file := range findSkillFiles(pluginDir) {
 			name, desc := parseSkillFrontmatter(file)
 			if name == "" {
 				continue
 			}
-			out = append(out, SkillEntry{Name: name, Description: desc, Source: source})
+			out = append(out, SkillEntry{Name: plugin + ":" + name, Description: desc, Source: source})
 		}
 	}
 
@@ -271,9 +309,9 @@ func listSkillDirs(dir string) []string {
 	return names
 }
 
-// listPluginRoots returns the per-plugin top-level directories under cacheDir.
-func listPluginRoots(cacheDir string) []string {
-	entries, err := os.ReadDir(cacheDir)
+// immediateDirs returns the non-hidden immediate child directories of dir.
+func immediateDirs(dir string) []string {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
@@ -282,7 +320,20 @@ func listPluginRoots(cacheDir string) []string {
 		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		out = append(out, filepath.Join(cacheDir, e.Name()))
+		out = append(out, filepath.Join(dir, e.Name()))
+	}
+	sort.Strings(out)
+	return out
+}
+
+// pluginDirs returns the per-plugin directories under the plugin cache. The
+// cache is laid out as <cache>/<marketplace>/<plugin>/<version>/..., so the
+// plugin level is two deep; filepath.Base of each result is the plugin name
+// used as the /<plugin>:<name> command/skill namespace.
+func pluginDirs(cacheDir string) []string {
+	var out []string
+	for _, marketplace := range immediateDirs(cacheDir) {
+		out = append(out, immediateDirs(marketplace)...)
 	}
 	sort.Strings(out)
 	return out
@@ -338,16 +389,22 @@ func findCommandFiles(root string) []string {
 	return files
 }
 
-// readCommand builds a CommandDetail for a slash-command markdown file: name is
-// the filename without .md prefixed with "/", description comes from optional
-// YAML frontmatter, and (when withBody) body is the file content capped at
-// maxCommandBodyBytes. ok is false only when the path has no usable name.
-func readCommand(path, source string, withBody bool) (CommandDetail, bool) {
+// readCommand builds a CommandDetail for a slash-command markdown file. Name is
+// the filename without .md, prefixed "/" and — for plugin commands — namespaced
+// as /<namespace>:<base> to match Claude's invocation syntax (namespace is "" for
+// user/project commands). Description comes from optional YAML frontmatter, and
+// (when withBody) body is the file content capped at maxCommandBodyBytes. ok is
+// false only when the path has no usable name.
+func readCommand(path, source, namespace string, withBody bool) (CommandDetail, bool) {
 	base := strings.TrimSuffix(filepath.Base(path), ".md")
 	if base == "" {
 		return CommandDetail{}, false
 	}
-	d := CommandDetail{Name: "/" + base, Source: source}
+	name := "/" + base
+	if namespace != "" {
+		name = "/" + namespace + ":" + base
+	}
+	d := CommandDetail{Name: name, Source: source}
 
 	if withBody {
 		body, desc := readCommandBody(path)

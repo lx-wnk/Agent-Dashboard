@@ -51,7 +51,7 @@ func (h *CommandsHandler) SlashCommands(w http.ResponseWriter, r *http.Request) 
 		version, ok = cmdscope.ProbeEngineVersion(scope.Command)
 	}
 	resp := slashCommandsResponse{
-		Commands:           scope.Commands(),
+		Commands:           scope.SlashCommands(),
 		EngineVersion:      version,
 		BuiltinsMayBeStale: cmdscope.BuiltinsMayBeStale(version, ok),
 		ScopeSource:        scope.Source,
