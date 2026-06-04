@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 
@@ -174,7 +175,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		refineReaderArg = refineRunner
 	}
 
-	taskHandler := provideTaskHandler(entClient, orch, taskBroadcaster, refineReaderArg)
+	var rawDB *sql.DB
+	if bundle != nil {
+		rawDB = bundle.DB
+	}
+	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg)
 	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster)
 
 	var histImporter *histsvc.Importer

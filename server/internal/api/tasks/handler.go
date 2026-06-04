@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -47,6 +48,7 @@ type Handler struct {
 	client            *ent.Client
 	taskRepo          repo.TaskRepo
 	srRepo            repo.StageRunRepo
+	srBulkRepo        rawrepo.StageRunBulkRepo
 	permRepo          repo.PermissionRepo
 	auditRepo         repo.AuditEventRepo
 	auditEventRepo    repo.AuditEventRepo
@@ -68,6 +70,9 @@ type Deps struct {
 	Client            *ent.Client
 	TaskRepo          repo.TaskRepo
 	SRRepo            repo.StageRunRepo
+	// SRBulkRepo is the window-function bulk repo used by EnrichTasksBulk to
+	// fetch the exact latest stage_run per task regardless of iteration count.
+	SRBulkRepo        rawrepo.StageRunBulkRepo
 	PermRepo          repo.PermissionRepo
 	AuditRepo         repo.AuditEventRepo
 	AuditEventRepo    repo.AuditEventRepo
@@ -87,6 +92,7 @@ func NewHandler(deps Deps) *Handler {
 		client:            deps.Client,
 		taskRepo:          deps.TaskRepo,
 		srRepo:            deps.SRRepo,
+		srBulkRepo:        deps.SRBulkRepo,
 		permRepo:          deps.PermRepo,
 		auditRepo:         deps.AuditRepo,
 		auditEventRepo:    deps.AuditEventRepo,
@@ -225,7 +231,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 		}
 		tasks = filtered
 	}
-	enriched, err := EnrichTasksBulk(r.Context(), tasks, h.srRepo, h.permRepo)
+	enriched, err := EnrichTasksBulk(r.Context(), tasks, h.srRepo, h.permRepo, h.srBulkRepo)
 	if err != nil {
 		return fmt.Errorf("tasks.list.enrich: %w", err)
 	}

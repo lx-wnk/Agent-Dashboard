@@ -1,15 +1,18 @@
 package main
 
 import (
+	"database/sql"
+
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
-func provideTaskHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster, refineReader tasks.RefineStatusReader) *tasks.Handler {
+func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster, refineReader tasks.RefineStatusReader) *tasks.Handler {
 	if client == nil || orch == nil {
 		return nil
 	}
@@ -18,6 +21,7 @@ func provideTaskHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator,
 		Client:            client,
 		TaskRepo:          taskRepo,
 		SRRepo:            repo.NewStageRunRepo(client),
+		SRBulkRepo:        rawrepo.NewStageRunBulkRepo(db),
 		PermRepo:          repo.NewPermissionRepo(client),
 		AuditRepo:         repo.NewAuditEventRepo(client),
 		AuditEventRepo:    repo.NewAuditEventRepo(client),

@@ -36,45 +36,36 @@ func CalculateStatus(lastActivity time.Time) sdk.AgentStatus {
 	}
 }
 
-// channelDiscoveryExists reports whether the dashboard-channel bridge has written
-// a discovery file for the given process PID — i.e. the agent carries the
-// dashboard-channel MCP and can be messaged live via SendMessageToChannel.
-// The file is named by the agent's (parent) PID under ~/.claude/dashboard-channel/.
-// Since buildAgent only runs for processes the scanner found alive, a present
-// discovery file for that PID means a live, channel-reachable agent.
-func channelDiscoveryExists(pid int) bool {
+// channelDiscovery reads the dashboard-channel discovery file for the given PID
+// once and returns both availability and live-injectability in a single I/O
+// operation, replacing the prior two-call pattern (os.Stat + os.ReadFile).
+//
+// channelAvailable is true when the file exists (existence implies the agent
+// carries the dashboard-channel MCP and can be messaged via SendMessageToChannel).
+// liveInjectable is true when the file additionally contains a tmux pane reference
+// or pty-inject flag — either of which enables real keyboard-input delivery into
+// the running interactive Claude session.
+func channelDiscovery(pid int) (channelAvailable, liveInjectable bool) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return false
-	}
-	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid)+".json")
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
-}
-
-// channelLiveInjectable reports whether the agent's discovery file marks the
-// session as live-injectable: it carries a tmux pane (delivered via
-// `tmux send-keys`) or a pty broker (`ptyInject`, delivered to the pty master).
-// Either is a path that actually drives an interactive Claude session, unlike
-// MCP log delivery.
-func channelLiveInjectable(pid int) bool {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
+		return false, false
 	}
 	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid)+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return false
+		// File absent or unreadable — agent has no channel bridge.
+		return false, false
 	}
+	// File present → channel is available.
+	channelAvailable = true
 	var disc struct {
 		TmuxPane  string `json:"tmuxPane"`
 		PtyInject bool   `json:"ptyInject"`
 	}
-	if json.Unmarshal(data, &disc) != nil {
-		return false
+	if json.Unmarshal(data, &disc) == nil {
+		liveInjectable = disc.TmuxPane != "" || disc.PtyInject
 	}
-	return disc.TmuxPane != "" || disc.PtyInject
+	return channelAvailable, liveInjectable
 }
 
 // strPtr returns nil if s is empty, otherwise a pointer to s.
@@ -190,6 +181,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData) sdk.Agent
 		provider = sdk.ProviderClaude
 	}
 	c := EstimateCostForProvider(provider, session.TokenUsage, session.Model)
+	chanAvail, chanInject := channelDiscovery(proc.PID)
 
 	return sdk.Agent{
 		PID:                       proc.PID,
@@ -201,8 +193,8 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData) sdk.Agent
 		ClaudeConfigDir:           proc.ClaudeConfigDir,
 		Entrypoint:                session.Entrypoint,
 		Status:                    CalculateStatus(session.LastActivity),
-		ChannelAvailable:          channelDiscoveryExists(proc.PID),
-		LiveInjectable:            channelLiveInjectable(proc.PID),
+		ChannelAvailable:          chanAvail,
+		LiveInjectable:            chanInject,
 		Uptime:                    proc.Uptime,
 		LastActivity:              session.LastActivity.Format(time.RFC3339),
 		CurrentAction:             strPtr(session.CurrentAction),
