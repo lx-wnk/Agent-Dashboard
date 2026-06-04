@@ -364,6 +364,7 @@ async function startImport() {
               :class="activeSection === 'appearance'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'appearance' ? 'page' : undefined"
               @click="activeSection = 'appearance'"
             >
               <span class="text-sm flex-shrink-0">◑</span> Appearance
@@ -376,6 +377,7 @@ async function startImport() {
               :class="activeSection === 'apiKeys'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'apiKeys' ? 'page' : undefined"
               @click="activeSection = 'apiKeys'"
             >
               <span class="text-sm flex-shrink-0">⬡</span> API Keys
@@ -388,6 +390,7 @@ async function startImport() {
               :class="activeSection === 'remotes'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'remotes' ? 'page' : undefined"
               @click="activeSection = 'remotes'"
             >
               <span class="text-sm flex-shrink-0">⌂</span> Meine Remotes
@@ -400,6 +403,7 @@ async function startImport() {
               :class="activeSection === 'permissionPresets'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'permissionPresets' ? 'page' : undefined"
               @click="activeSection = 'permissionPresets'"
             >
               <span class="text-sm flex-shrink-0">⚿</span> Permissions
@@ -412,6 +416,7 @@ async function startImport() {
               :class="activeSection === 'analytics'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'analytics' ? 'page' : undefined"
               @click="activeSection = 'analytics'"
             >
               <span class="text-sm flex-shrink-0">📊</span> Analytics
@@ -424,6 +429,7 @@ async function startImport() {
               :class="activeSection === 'systemPrompts'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'systemPrompts' ? 'page' : undefined"
               @click="activeSection = 'systemPrompts'"
             >
               <span class="text-sm flex-shrink-0">✦</span> System Prompts
@@ -436,6 +442,7 @@ async function startImport() {
               :class="activeSection === 'plugins'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'plugins' ? 'page' : undefined"
               @click="activeSection = 'plugins'"
             >
               <span class="text-sm flex-shrink-0">🔌</span> Plugins
@@ -448,6 +455,7 @@ async function startImport() {
               :class="activeSection === 'notifications'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'notifications' ? 'page' : undefined"
               @click="activeSection = 'notifications'"
             >
               <span class="text-sm flex-shrink-0">🔔</span> Notifications
@@ -460,6 +468,7 @@ async function startImport() {
               :class="activeSection === 'projects'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'projects' ? 'page' : undefined"
               @click="activeSection = 'projects'"
             >
               <span class="text-sm flex-shrink-0">◫</span> Projects
@@ -472,6 +481,7 @@ async function startImport() {
               :class="activeSection === 'spawners'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'spawners' ? 'page' : undefined"
               @click="activeSection = 'spawners'"
             >
               <span class="text-sm flex-shrink-0">⚙</span> Spawners
