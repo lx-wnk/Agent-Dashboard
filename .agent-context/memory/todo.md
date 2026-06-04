@@ -2,6 +2,18 @@
 
 > All base off `upcoming` branch, work in worktrees.
 
+## Open Roadmap Audit (2026-06-04)
+
+Full triangulation (inline TODOs / GH issues / GH PRs / 36 roadmap IDs / 6 plans 05-19→06-01) → project is ~98% feature-complete. All 6 recent plans shipped in `6ec0bbb` (#114). Only **2 genuinely open items**, both token/cost correctness — specs generated, ready to implement:
+
+| ID | Status | Gap | Spec |
+|---|---|---|---|
+| CI-7 Agent health/anomaly score | PARTIAL | UI (`AgentCard.vue:57`) + `sdk.Agent.HealthScore` exist; `merger/` never computes it → always `0`. Formula: success 40% / cache-hit 25% / error 25% / cost-spike 10% | `docs/superpowers/specs/2026-06-04-ci7-agent-health-score-design.md` |
+| CI-4 Compaction-aware token baseline | OPEN | Compaction (`type:system, subtype:compact_boundary`, `compactMetadata.{preTokens,postTokens}`) resets cumulative tokens; 32KB tail-read misses markers (>300KB files). Real session: 100% under-count (31/7025 vs true 21598/1856151) | `docs/superpowers/specs/2026-06-04-ci4-compaction-token-baseline-design.md` |
+
+Spec key decisions: CI-7 → new `merger/health.go`, 7-day cost baseline injected via `agentbroadcast/loop.go` (layer-safe), error-state hard-caps score ≤30. CI-4 → recommend Option B full-file scan on cache-miss, all changes confined to `parser.go`, ~3.0 PD.
+Next: implement via subagent-driven-development (one worktree per item, zero file overlap — CI-7 touches merger+agentbroadcast, CI-4 touches parser only).
+
 ## Active — Parallel Groups (dispatched 2026-05-22)
 
 | Group | Roadmap | Spec | Plan | Branch | Status |
