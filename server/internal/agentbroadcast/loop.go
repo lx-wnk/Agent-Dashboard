@@ -29,15 +29,25 @@ type broadcastFrame struct {
 	Trend  []any       `json:"trend"`
 }
 
+// BaselineProvider returns the average per-session cost over the past 7 days
+// in USD, used by the agent health score's cost-spike component. A nil provider
+// (or one that returns 0) disables the cost penalty. It is called once per scan
+// tick.
+type BaselineProvider func(ctx context.Context) float64
+
 // Run starts a ticker loop that scans agents every interval and broadcasts
 // the JSON result to all SSE subscribers. Stops when ctx is cancelled.
+//
+// baseline, when non-nil, is consulted once per tick to derive the cost
+// baseline injected into merger.GetAgents for the health score. It may be nil
+// (no baseline → no cost penalty), which preserves correct behaviour.
 //
 // Optimisations applied:
 //   - F-PERF-001: Skip scan entirely when SubscriberCount == 0.
 //   - F-PERF-006: Hash-dedupe frames with FNV-64a; send a heartbeat comment
 //     every 30 s so reverse-proxies do not close idle connections.
 //   - F-PERF-014: emptyTrend is a package-level var, not a per-tick literal.
-func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Duration) {
+func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Duration, baseline BaselineProvider) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -55,7 +65,12 @@ func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Durati
 				continue
 			}
 
-			agents, err := merger.GetAgents(ctx)
+			var baselineCost float64
+			if baseline != nil {
+				baselineCost = baseline(ctx)
+			}
+
+			agents, err := merger.GetAgents(ctx, merger.GetAgentsOpts{BaselinePerSessionCostUSD: baselineCost})
 			if err != nil {
 				slog.Error("agent scan failed", "err", err)
 				continue

@@ -107,9 +107,17 @@ func EstimateCostForProvider(provider sdk.Provider, usage sdk.TokenUsage, model 
 	}
 }
 
+// GetAgentsOpts carries optional settings for a single GetAgents call.
+type GetAgentsOpts struct {
+	// BaselinePerSessionCostUSD is the average per-session cost over the past 7 days,
+	// pre-computed by the caller. Zero means "no baseline available" and disables
+	// the cost-spike component of the health score (no penalty).
+	BaselinePerSessionCostUSD float64
+}
+
 // GetAgents scans running Claude processes and merges them with session data.
 // Processes with no matching active session are silently skipped.
-func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
+func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 	processes, err := scanner.ScanProcesses(ctx)
 	if err != nil {
 		return nil, err
@@ -155,7 +163,7 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 				if err != nil {
 					continue // no matching session; zero value left at agents[i]
 				}
-				agents[i] = buildAgent(proc, session)
+				agents[i] = buildAgent(proc, session, opts.BaselinePerSessionCostUSD)
 			}
 			return nil
 		})
@@ -175,13 +183,14 @@ func GetAgents(ctx context.Context) ([]sdk.Agent, error) {
 
 // buildAgent assembles an sdk.Agent from a scanned process and its resolved
 // session data.
-func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData) sdk.Agent {
+func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData, baselineCost float64) sdk.Agent {
 	provider := proc.Provider
 	if provider == "" {
 		provider = sdk.ProviderClaude
 	}
 	c := EstimateCostForProvider(provider, session.TokenUsage, session.Model)
 	chanAvail, chanInject := channelDiscovery(proc.PID)
+	health := ComputeHealthScore(session, c.Total, c.Unknown, baselineCost)
 
 	return sdk.Agent{
 		PID:                       proc.PID,
@@ -206,6 +215,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData) sdk.Agent
 		CacheCreationCostEstimate: c.CacheCreate,
 		CacheReadCostEstimate:     c.CacheRead,
 		CostUnknown:               c.Unknown,
+		HealthScore:               health,
 		Model:                     strPtr(session.Model),
 		ConversationTurns:         session.ConversationTurns,
 		ToolCounts:                session.ToolCounts,

@@ -16,7 +16,7 @@ import (
 // in an environment with no running Claude processes.
 // It may return an error (e.g. scanner not available) or an empty slice — both are valid.
 func TestGetAgents_DoesNotPanic(t *testing.T) {
-	agents, err := merger.GetAgents(context.Background())
+	agents, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	if err != nil {
 		// Scanner may fail in CI — acceptable.
 		t.Logf("GetAgents returned error (acceptable in CI): %v", err)

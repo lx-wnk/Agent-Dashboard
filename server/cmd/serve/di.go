@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
@@ -44,10 +45,10 @@ import (
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
 
-func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, *histsvc.Importer, func(), error) {
+func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, *histsvc.Importer, agentbroadcast.BaselineProvider, func(), error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 	var entClient *ent.Client
 	if bundle != nil {
@@ -98,7 +99,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 			slog.Info("auth: using plugin provider", "loginURL", loginURL)
 		},
 	}); err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
+		return nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
 	cleanup := func() { pluginRegistry.Shutdown() }
 
@@ -109,7 +110,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if pluginRegistry.HasDir() &&
 		pluginRegistry.HasAttemptedCapability(plugin.CapAuthProvider) &&
 		pluginRegistry.FindByCapability(plugin.CapAuthProvider) == nil {
-		return nil, nil, nil, nil, cleanup, fmt.Errorf(
+		return nil, nil, nil, nil, nil, cleanup, fmt.Errorf(
 			"auth_provider plugin configured but failed health-check — refusing to start with auth disabled",
 		)
 	}
@@ -141,21 +142,21 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		spawnerRepo = repo.NewSpawnerRepo(entClient)
 		if bundle != nil {
 			if err := repairSpawnerAdapterConfig(ctx, bundle.DB); err != nil {
-				return nil, nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
+				return nil, nil, nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
 			}
 		}
 		if err := seedSpawners(ctx, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
+			return nil, nil, nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
 		}
 		if err := migrateAdapterConfigToSpawners(ctx, cfg, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
+			return nil, nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
 		}
 		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo)
 	}
 
 	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver)
 	if err != nil {
-		return nil, nil, nil, nil, cleanup, err
+		return nil, nil, nil, nil, nil, cleanup, err
 	}
 
 	// Construct the detached refinement runner before the task handler so the
@@ -218,10 +219,15 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 
 	var analyticsHandler *apianalytics.Handler
+	var analyticsRepo rawrepo.AnalyticsRepo
 	if bundle != nil {
 		cfgRepo := repo.NewPipelineConfigRepo(entClient)
-		analyticsHandler = apianalytics.NewHandler(rawrepo.NewAnalyticsRepo(bundle.DB), bundle.DB, cfgRepo)
+		analyticsRepo = rawrepo.NewAnalyticsRepo(bundle.DB)
+		analyticsHandler = apianalytics.NewHandler(analyticsRepo, bundle.DB, cfgRepo)
 	}
+	// Cost baseline for the agent health score's cost-spike component. Nil repo
+	// (no database) yields a provider that returns 0 → no cost penalty.
+	baselineProvider := agentbroadcast.NewCostBaselineProvider(analyticsRepo)
 
 	var costHandler *apicost.Handler
 	if bundle != nil {
@@ -283,5 +289,5 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
-	return server, broadcaster, orch, histImporter, cleanup, nil
+	return server, broadcaster, orch, histImporter, baselineProvider, cleanup, nil
 }

@@ -105,7 +105,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if (searchType == "agents" || searchType == "all") && payload.IsAdmin {
-		agents, err := merger.GetAgents(r.Context())
+		agents, err := merger.GetAgents(r.Context(), merger.GetAgentsOpts{})
 		if err == nil {
 			resp.Agents = filterAgents(agents, q, limit)
 		}
