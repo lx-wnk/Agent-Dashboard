@@ -83,11 +83,11 @@ export function useAgentPrompt(
     promptInput.value = ''
 
     try {
-      // Only a tmux-backed session can actually receive a live prompt (delivered
-      // via `tmux send-keys`). channelAvailable alone is not enough: MCP log
-      // delivery is silently dropped for interactive sessions. Everything else
-      // falls through to resume.
-      if (agent.tmuxInjectable) {
+      // Only a live-injectable session can actually receive a live prompt —
+      // delivered to the pty broker or via `tmux send-keys`. channelAvailable
+      // alone is not enough: MCP log delivery is silently dropped for an
+      // interactive session. Everything else falls through to resume.
+      if (agent.liveInjectable) {
         // Channel inject is keyed by PID: the bridge writes a discovery file
         // named by the claude process PID, and the route is /api/agents/{pid}/message.
         const res = await fetch(`/api/agents/${agent.pid}/message`, {
@@ -119,7 +119,7 @@ export function useAgentPrompt(
     }
     catch (err) {
       if (isNetworkFailure(err)) {
-        const useChannel = !!agent.tmuxInjectable
+        const useChannel = !!agent.liveInjectable
         try {
           await addPending({
             agentPid: agent.pid,

@@ -52,11 +52,12 @@ func channelDiscoveryExists(pid int) bool {
 	return err == nil && !info.IsDir()
 }
 
-// channelTmuxInjectable reports whether the agent's discovery file records a tmux
-// pane — meaning the dashboard can deliver prompts as real keyboard input via
-// `tmux send-keys`, the only delivery path that actually drives an interactive
-// Claude session.
-func channelTmuxInjectable(pid int) bool {
+// channelLiveInjectable reports whether the agent's discovery file marks the
+// session as live-injectable: it carries a tmux pane (delivered via
+// `tmux send-keys`) or a pty broker (`ptyInject`, delivered to the pty master).
+// Either is a path that actually drives an interactive Claude session, unlike
+// MCP log delivery.
+func channelLiveInjectable(pid int) bool {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
@@ -67,9 +68,13 @@ func channelTmuxInjectable(pid int) bool {
 		return false
 	}
 	var disc struct {
-		TmuxPane string `json:"tmuxPane"`
+		TmuxPane  string `json:"tmuxPane"`
+		PtyInject bool   `json:"ptyInject"`
 	}
-	return json.Unmarshal(data, &disc) == nil && disc.TmuxPane != ""
+	if json.Unmarshal(data, &disc) != nil {
+		return false
+	}
+	return disc.TmuxPane != "" || disc.PtyInject
 }
 
 // strPtr returns nil if s is empty, otherwise a pointer to s.
@@ -197,7 +202,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData) sdk.Agent
 		Entrypoint:                session.Entrypoint,
 		Status:                    CalculateStatus(session.LastActivity),
 		ChannelAvailable:          channelDiscoveryExists(proc.PID),
-		TmuxInjectable:            channelTmuxInjectable(proc.PID),
+		LiveInjectable:            channelLiveInjectable(proc.PID),
 		Uptime:                    proc.Uptime,
 		LastActivity:              session.LastActivity.Format(time.RFC3339),
 		CurrentAction:             strPtr(session.CurrentAction),

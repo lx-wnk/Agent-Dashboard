@@ -242,11 +242,12 @@ export interface Agent {
   meta?: SessionMeta;
   channelAvailable: boolean;
   /**
-   * TmuxInjectable is true when the agent runs inside tmux and the dashboard can
-   * deliver prompts as real keyboard input via `tmux send-keys` — the only path
-   * that drives an interactive session (MCP log delivery does not).
+   * LiveInjectable is true when the dashboard can deliver a prompt to this
+   * running interactive session as real keyboard input — either via the pty
+   * broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending
+   * resumes the session as a new one (MCP log delivery does not drive it).
    */
-  tmuxInjectable?: boolean;
+  liveInjectable?: boolean;
   lastOutput?: string;
   convergenceAlert: boolean;
   convergenceToolName?: string;

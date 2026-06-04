@@ -72,10 +72,10 @@ const slashSuggestions = computed(() => {
 
 const showSuggestions = computed(() => slashSuggestions.value.length > 0)
 
-// Only a tmux-backed session can receive a live prompt (via `tmux send-keys`).
+// Only a live-injectable session (pty broker or tmux) can receive a live prompt.
 // Any other session resumes as a NEW session (claude --resume) on send — surface
 // that so it's not mistaken for live injection.
-const isResumeMode = computed(() => !!props.agent && !props.agent.tmuxInjectable)
+const isResumeMode = computed(() => !!props.agent && !props.agent.liveInjectable)
 
 function selectSuggestion(cmd: { name: string, disabled?: boolean }) {
   if (cmd.disabled)
@@ -234,7 +234,7 @@ defineExpose({ focus })
       class="text-[11px] text-amber-700 dark:text-amber-400"
       :class="variant === 'full' ? 'px-4 pb-2' : 'px-3 pb-1.5 pt-0.5'"
     >
-      ⤳ Not live-injectable — sending resumes this session as a <strong>new</strong> session. Run the session in tmux (<code>claude-tmux-channel.sh</code>) for live injection.
+      ⤳ Not live-injectable — sending resumes this session as a <strong>new</strong> session. Start it via <code>claude-channel-pty.sh</code> (no tmux) or in tmux for live injection.
     </p>
     <p
       v-if="sendStatus"
