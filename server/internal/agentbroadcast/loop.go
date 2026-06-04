@@ -29,9 +29,10 @@ type broadcastFrame struct {
 	Trend  []any       `json:"trend"`
 }
 
-// BaselineProvider returns the 7-day per-session average cost in USD used by
-// the agent health score's cost-spike component. A nil provider (or one that
-// returns 0) disables the cost penalty. It is called once per scan tick.
+// BaselineProvider returns the average per-session cost over the past 7 days
+// in USD, used by the agent health score's cost-spike component. A nil provider
+// (or one that returns 0) disables the cost penalty. It is called once per scan
+// tick.
 type BaselineProvider func(ctx context.Context) float64
 
 // Run starts a ticker loop that scans agents every interval and broadcasts
@@ -69,7 +70,7 @@ func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Durati
 				baselineCost = baseline(ctx)
 			}
 
-			agents, err := merger.GetAgents(ctx, merger.GetAgentsOpts{BaselineDailyCostUSD: baselineCost})
+			agents, err := merger.GetAgents(ctx, merger.GetAgentsOpts{BaselinePerSessionCostUSD: baselineCost})
 			if err != nil {
 				slog.Error("agent scan failed", "err", err)
 				continue

@@ -109,10 +109,10 @@ func EstimateCostForProvider(provider sdk.Provider, usage sdk.TokenUsage, model 
 
 // GetAgentsOpts carries optional settings for a single GetAgents call.
 type GetAgentsOpts struct {
-	// BaselineDailyCostUSD is the average per-session cost over the past 7 days,
+	// BaselinePerSessionCostUSD is the average per-session cost over the past 7 days,
 	// pre-computed by the caller. Zero means "no baseline available" and disables
 	// the cost-spike component of the health score (no penalty).
-	BaselineDailyCostUSD float64
+	BaselinePerSessionCostUSD float64
 }
 
 // GetAgents scans running Claude processes and merges them with session data.
@@ -163,7 +163,7 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 				if err != nil {
 					continue // no matching session; zero value left at agents[i]
 				}
-				agents[i] = buildAgent(proc, session, opts.BaselineDailyCostUSD)
+				agents[i] = buildAgent(proc, session, opts.BaselinePerSessionCostUSD)
 			}
 			return nil
 		})
