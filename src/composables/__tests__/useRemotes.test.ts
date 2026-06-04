@@ -24,7 +24,7 @@ const defaultRemotes = [
 beforeEach(async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     ok: true,
-    json: () => Promise.resolve(defaultRemotes),
+    json: () => Promise.resolve([...defaultRemotes]),
     status: 200,
   }))
   vi.resetModules()
@@ -63,7 +63,7 @@ describe('useRemotes', () => {
     vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(defaultRemotes),
+        json: () => Promise.resolve([...defaultRemotes]),
         status: 200,
       } as Response)
       .mockResolvedValueOnce({
@@ -88,7 +88,7 @@ describe('useRemotes', () => {
     vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(defaultRemotes),
+        json: () => Promise.resolve([...defaultRemotes]),
         status: 200,
       } as Response)
       .mockResolvedValueOnce({
