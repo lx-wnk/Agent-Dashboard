@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/frontend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
@@ -46,6 +47,15 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
+
+// getAgentsNoBaseline adapts merger.GetAgents to the no-options accessor shape
+// expected by the request-scoped handlers (agents/sessions/config/search). These
+// HTTP read paths do not compute the health-score cost baseline — they pass
+// zero-value opts, so the cost component is neutral (no penalty). The broadcast
+// loop is the single place that injects a real baseline.
+func getAgentsNoBaseline(ctx context.Context) ([]sdk.Agent, error) {
+	return merger.GetAgents(ctx, merger.GetAgentsOpts{})
+}
 
 // RouterConfig holds configuration values for the router.
 type RouterConfig struct {
@@ -198,14 +208,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if !deps.Config.BypassAuth {
 			r.Use(authpkg.RequireAuth(deps.Config.JWTSecret))
 		}
-		agentHandler := agents.NewHandler(merger.GetAgents, deps.AgentBroadcaster)
+		agentHandler := agents.NewHandler(getAgentsNoBaseline, deps.AgentBroadcaster)
 		r.Get("/api/agents", ErrorMiddleware(agentHandler.List))
 		r.Get("/api/agents/stream", agentHandler.Stream)
 		r.Get("/api/agents/{sessionId}/output", sessions.Output)
 
 		r.Get("/api/sessions", sessions.List)
 		r.Get("/api/sessions/{sessionId}/timeline", sessions.Timeline)
-		commandsHandler := sessions.NewCommandsHandler(deps.SpawnerRepo, merger.GetAgents)
+		commandsHandler := sessions.NewCommandsHandler(deps.SpawnerRepo, getAgentsNoBaseline)
 		r.Get("/api/slash-commands", commandsHandler.SlashCommands)
 
 		r.Get("/api/quota", system.Quota)
@@ -326,7 +336,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// and memory files, scoped per spawner / live session via ?spawnerId /
 		// ?sessionId. The only client path accepted is ?cwd, sanitized and used
 		// solely for project-local <cwd>/.claude reads.
-		configHandler := apiconfig.NewHandler(deps.SpawnerRepo, merger.GetAgents)
+		configHandler := apiconfig.NewHandler(deps.SpawnerRepo, getAgentsNoBaseline)
 		r.Get("/api/config/skills", configHandler.Skills)
 		r.Get("/api/config/commands", configHandler.Commands)
 		r.Get("/api/config/memory", configHandler.Memory)
@@ -471,7 +481,7 @@ func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debou
 			if ctx.Err() != nil {
 				return
 			}
-			agents, err := merger.GetAgents(ctx)
+			agents, err := merger.GetAgents(ctx, merger.GetAgentsOpts{})
 			if err != nil {
 				slog.Warn("hooks: debounced rescan failed", "err", err)
 				return

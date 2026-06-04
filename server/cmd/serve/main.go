@@ -45,7 +45,7 @@ func main() {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			srv, broadcaster, orch, histImporter, cleanup, err := initializeServer(ctx, cfg, cfgFile)
+			srv, broadcaster, orch, histImporter, baselineProvider, cleanup, err := initializeServer(ctx, cfg, cfgFile)
 			if err != nil {
 				return err
 			}
@@ -55,7 +55,7 @@ func main() {
 
 			interval := time.Duration(cfg.SSEIntervalMs) * time.Millisecond
 			g.Go(func() error {
-				agentbroadcast.Run(ctx, broadcaster, interval)
+				agentbroadcast.Run(ctx, broadcaster, interval, baselineProvider)
 				return nil
 			})
 
