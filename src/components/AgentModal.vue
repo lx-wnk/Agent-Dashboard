@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
@@ -41,31 +41,21 @@ watch(() => props.agent?.sessionId, (sessionId) => {
     nextTick(() => promptInputRef.value?.focus())
 })
 
-function onKeydown(e: KeyboardEvent) {
-  if (!props.agent)
-    return
-  if (e.key === 'Escape') {
-    e.preventDefault()
-    emit('close')
-  }
-}
-
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+// Escape is handled by AppModal's @keydown.escape on its backdrop — no window listener needed.
 </script>
 
 <template>
-  <AppModal :open="!!agent" :z-index="1000" @close="emit('close')">
+  <AppModal :open="!!agent" :z-index="1000" :labelled-by="agent ? `agent-modal-title-${agent.pid}` : undefined" @close="emit('close')">
     <template v-if="agent">
       <div class="bg-raised px-4 py-2.5 flex justify-between items-center flex-shrink-0">
         <div class="flex items-center gap-2.5 min-w-0">
           <AppBadge :variant="agent.status" />
           <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
-          <span class="font-semibold text-sm text-fg">{{ agent.projectName }}</span>
+          <span :id="`agent-modal-title-${agent.pid}`" class="font-semibold text-sm text-fg">{{ agent.projectName }}</span>
           <MachineBadge v-if="agent.machine" :machine="agent.machine" />
           <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ shortModel(agent.model ?? null) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
         </div>
-        <button type="button" class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg" @click="emit('close')">
+        <button type="button" aria-label="Close" class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg" @click="emit('close')">
           ✕
         </button>
       </div>

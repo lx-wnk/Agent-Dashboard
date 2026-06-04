@@ -37,7 +37,7 @@ All persistent data stays on your machine. No data is synced to a cloud service 
 
 ### Hooks secret
 
-Set via the `DASHBOARD_HOOKS_SECRET` environment variable. If unset, `/api/hooks/event` accepts any loopback request and a warning is logged on startup.
+Set via the `DASHBOARD_HOOKS_SECRET` environment variable. The secret is **always required** — if you do not set it explicitly, one is auto-generated and persisted on first boot (see `config.Load`). `hooks.New` panics at startup if a secret cannot be supplied, so there is no unauthenticated hook path.
 
 ### VAPID private key
 
@@ -65,14 +65,23 @@ None of the following integrations are active by default. Data only leaves your 
 - **Retention:** Push subscriptions persist until you unsubscribe in the browser or delete the database row. There is no automatic expiry — delete entries manually if no longer needed.
 - **Transfer basis:** Mozilla (IE/EU entity), Google LLC (US, DPF), Apple Inc. (US, DPF).
 
-### OpenAI LLM adapter (if configured)
+### LLM adapters (OpenAI / Ollama / custom)
 
-- If you configure an OpenAI-backed spawner, stage agent prompts (including task descriptions and stage outputs) are sent to `api.openai.com` (US).
-- **Transfer basis:** OpenAI Inc. is a US entity covered by the EU–US Data Privacy Framework (DPF).
+**OpenAI** — If you configure an OpenAI-backed spawner, stage agent prompts (including task descriptions and stage outputs) are sent to `api.openai.com` (US). **Transfer basis:** OpenAI Inc. is a US entity covered by the EU–US Data Privacy Framework (DPF).
+
+**Ollama** — Defaults to `http://localhost:11434`; in the default configuration no data leaves the machine. If you configure a remote `base_url`, full stage-agent prompts (task descriptions, stage outputs, possibly source-code excerpts) are sent to that host. You are responsible for that host's data-residency and applicable transfer basis.
 
 ### Office365 OAuth plugin (if configured)
 
-- If you configure the Office365 OAuth plugin, authentication flows through Microsoft Graph. Data residency depends on your Microsoft tenant region; DPF applies for US-based tenants.
+- If you configure the Office365 OAuth plugin, the OAuth flow redirects your browser to Microsoft identity endpoints. Data residency depends on your Microsoft tenant region; DPF applies for US-based tenants.
+- **Scopes requested:** `openid profile email User.Read` (always). `GroupMember.Read.All` is added when `OFFICE365_ALLOWED_GROUP_ID` is set to gate access to a specific Azure AD group.
+- When `GroupMember.Read.All` is requested, the plugin calls `/me/memberOf` on Microsoft Graph and reads the signed-in user's Azure AD group memberships to check for the required group ID. Group IDs are used only to evaluate membership in memory and are **not persisted**.
+- The user's `UserPrincipalName` (an email address) is persisted as `login` in the `users` table, alongside the Microsoft user ID and display name. The access token is used once and then discarded — it is never stored.
+- **What is persisted:** Microsoft user ID, UserPrincipalName (email address as `login`), and display name — in the `users` table. No group IDs are stored.
+
+### Webhook and email notifications (forward-looking)
+
+The notification-config API accepts and persists `webhook_url` (with HMAC authentication) and an `email` channel. **No delivery code for these channels exists yet** — as of the current release, configuring them stores the URL or address locally but nothing is sent via them. When and if delivery is implemented, task notification payloads (title, status, and stage output, which may contain source-code excerpts or other content from the task) will be sent to the configured SMTP server or webhook endpoint. You will be responsible for that endpoint's data handling and applicable transfer basis. This document will be updated when delivery is shipped.
 
 ### Remote dashboard proxy (`DASHBOARD_REMOTES`)
 

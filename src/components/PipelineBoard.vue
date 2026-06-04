@@ -186,6 +186,7 @@ function isHighlightCol(col: ColumnDef): boolean {
             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
             : 'border-line-strong text-fg-soft hover:bg-raised'"
           :style="selectedProjectIds.has(p.id) && p.color ? { borderColor: p.color, backgroundColor: p.color + '22', color: p.color } : {}"
+          :aria-pressed="selectedProjectIds.has(p.id)"
           @click="toggleProjectFilter(p.id)"
         >
           <span v-if="p.color" class="inline-block w-2 h-2 rounded-full mr-1 align-middle" :style="{ backgroundColor: p.color }" aria-hidden="true" />
@@ -198,6 +199,7 @@ function isHighlightCol(col: ColumnDef): boolean {
           :class="selectedProjectIds.has('__none__')
             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
             : 'border-line-strong text-fg-soft hover:bg-raised'"
+          :aria-pressed="selectedProjectIds.has('__none__')"
           @click="toggleProjectFilter('__none__')"
         >
           No project

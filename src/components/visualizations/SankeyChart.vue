@@ -44,6 +44,8 @@ function drawSankey(svg: d3.Selection<SVGSVGElement, unknown, null, undefined>) 
   const width = svgRef.value.clientWidth || 720
   const height = 480
   svg.attr('viewBox', `0 0 ${width} ${height}`)
+  // SVG <title> provides accessible fallback for browsers that surface it to AT
+  svg.append('title').text('Tool-call flow — Sankey diagram')
 
   const nodes = props.data.nodes.map(n => ({ ...n }))
   const links = props.data.links.map(l => ({ ...l }))

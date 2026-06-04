@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
@@ -56,7 +57,12 @@ func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, perm
 	return enrichOne(t, latest, pendingCount)
 }
 
-func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) ([]*EnrichedTask, error) {
+// EnrichTasksBulk enriches a slice of tasks with their latest stage-run status
+// and pending-permission counts. It uses the window-function bulk repo
+// (rawrepo.StageRunBulkRepo.LatestPerTask) for an exact per-task latest query,
+// which is correct regardless of iteration count. srRepo is retained for the
+// single-task EnrichTask path; it is unused here.
+func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo, permRepo repo.PermissionRepo, bulkRepo rawrepo.StageRunBulkRepo) ([]*EnrichedTask, error) {
 	if len(tasks) == 0 {
 		return []*EnrichedTask{}, nil
 	}
@@ -64,7 +70,7 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, srRepo repo.StageRu
 	for i, t := range tasks {
 		ids[i] = t.ID
 	}
-	latestMap, err := srRepo.GetLatestForTasks(ctx, ids)
+	latestMap, err := bulkRepo.LatestPerTask(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

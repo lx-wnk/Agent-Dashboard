@@ -72,20 +72,26 @@ async function remove(id: string) {
     </p>
 
     <form class="flex flex-col gap-2" @submit.prevent="add">
+      <label for="remote-url" class="sr-only">Dashboard URL</label>
       <input
+        id="remote-url"
         v-model="form.url"
         type="url"
         placeholder="http://192.168.1.5:13120"
         required
         class="input-field text-sm"
       >
+      <label for="remote-name" class="sr-only">Name</label>
       <input
+        id="remote-name"
         v-model="form.name"
         type="text"
         placeholder="Name (e.g. MacBook)"
         class="input-field text-sm"
       >
+      <label for="remote-bearer" class="sr-only">Bearer Token</label>
       <input
+        id="remote-bearer"
         v-model="form.bearerKey"
         type="password"
         placeholder="DASHBOARD_API_TOKEN (optional)"

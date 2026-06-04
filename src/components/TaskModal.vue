@@ -2,7 +2,7 @@
 import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import type { StageCostRow } from './StageCostWaterfall.vue'
 import type { SlashCommand } from './TaskSlashCommandMenu.vue'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import { useProjects } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
@@ -118,6 +118,21 @@ const newPermTool = ref('')
 const newPermPattern = ref('')
 const permError = ref('')
 const isGranting = ref(false)
+
+// Two-step confirm for the destructive "Cancel Task" action (irreversible).
+const cancelConfirm = ref(false)
+let cancelConfirmTimer: ReturnType<typeof setTimeout> | undefined
+function onCancelClick() {
+  if (!cancelConfirm.value) {
+    cancelConfirm.value = true
+    cancelConfirmTimer = setTimeout(() => { cancelConfirm.value = false }, 5000)
+    return
+  }
+  if (cancelConfirmTimer)
+    clearTimeout(cancelConfirmTimer)
+  cancelConfirm.value = false
+  void handleAction(() => cancelTask(props.task!.id))
+}
 
 const TASK_SLASH_COMMANDS: SlashCommand[] = [
   { name: '/retry', description: 'Retry the current stage' },
@@ -445,16 +460,7 @@ async function onSlashSelect(cmd: { name: string }) {
   }
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (!props.task)
-    return
-  if (e.key === 'Escape') {
-    e.preventDefault()
-    emit('close')
-  }
-}
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+// Escape is handled by AppModal's @keydown.escape on its backdrop — no window listener needed.
 
 function formatDate(iso: string | null): string {
   if (!iso)
@@ -524,7 +530,7 @@ watch(
 </script>
 
 <template>
-  <AppModal :open="!!task" :z-index="1000" @close="emit('close')">
+  <AppModal :open="!!task" :z-index="1000" :labelled-by="task ? `task-modal-title-${task.id}` : undefined" @close="emit('close')">
     <template v-if="task">
       <header class="flex items-center justify-between px-5 py-4 border-b border-line">
         <div class="flex items-center gap-2.5 flex-wrap">
@@ -541,7 +547,7 @@ watch(
             RUN FAILED
           </span>
           <span class="font-mono text-xs text-blue-600 dark:text-blue-400">{{ task.slug }}</span>
-          <h2 class="text-lg font-semibold text-fg">
+          <h2 :id="`task-modal-title-${task.id}`" class="text-lg font-semibold text-fg">
             {{ task.title }}
           </h2>
         </div>
@@ -763,7 +769,7 @@ watch(
             </div>
             <div v-if="totalCostCents > 0" class="contents">
               <dt class="text-fg-mute text-[11px] uppercase tracking-[0.5px]">
-                Kosten
+                Cost
               </dt><dd class="text-fg font-mono text-xs">
                 {{ formatCost(totalCostCents) }}
               </dd>
@@ -907,7 +913,7 @@ watch(
                 placeholder="Predecessor Task ID"
                 :disabled="isAddingDep"
               />
-              <select v-model="newDepStage" class="px-1.5 py-1 border border-line rounded bg-raised text-fg text-[11px]">
+              <select v-model="newDepStage" aria-label="Required stage" class="px-1.5 py-1 border border-line rounded bg-raised text-fg text-[11px]">
                 <option value="done">
                   Done
                 </option>
@@ -915,7 +921,7 @@ watch(
                   Cancelled
                 </option>
               </select>
-              <select v-model="newDepCancelAction" class="px-1.5 py-1 border border-line rounded bg-raised text-fg text-[11px]">
+              <select v-model="newDepCancelAction" aria-label="On cancel action" class="px-1.5 py-1 border border-line rounded bg-raised text-fg text-[11px]">
                 <option value="on_hold">
                   On Hold (on cancel)
                 </option>
@@ -945,10 +951,10 @@ watch(
             </div>
           </details>
 
-          <!-- 3. Aktuelle Ausgabe -->
+          <!-- 3. Current Output -->
           <div v-if="latestStageRun" class="bg-app border border-line rounded-md px-3.5 py-3 border-t border-line pt-3">
             <div class="text-[10px] uppercase tracking-[0.5px] text-fg-mute font-semibold mb-2">
-              Aktuelle Ausgabe
+              Current Output
             </div>
             <div class="flex items-center gap-2 flex-wrap mb-2">
               <span class="font-mono text-[10px] uppercase bg-raised text-fg-mute px-2 py-0.5 rounded font-semibold">{{ latestStageRun.stage }}</span>
@@ -1132,13 +1138,17 @@ watch(
               Examples: <code class="bg-raised px-[3px] rounded text-[11px]">Write</code>, <code class="bg-raised px-[3px] rounded text-[11px]">Bash</code> with pattern <code class="bg-raised px-[3px] rounded text-[11px]">npm run *</code>
             </p>
             <div class="flex gap-2 items-center">
+              <label for="perm-tool" class="sr-only">Tool</label>
               <input
+                id="perm-tool"
                 v-model="newPermTool"
                 class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1.5 text-fg text-xs focus:outline-none focus:border-blue-500"
                 placeholder="Tool (e.g. Bash, Write)"
                 @keydown.enter="onGrantPermission"
               >
+              <label for="perm-pattern" class="sr-only">Pattern</label>
               <input
+                id="perm-pattern"
                 v-model="newPermPattern"
                 class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1.5 text-fg text-xs focus:outline-none focus:border-blue-500"
                 placeholder="Pattern (optional, e.g. npm run *)"
@@ -1253,10 +1263,10 @@ watch(
             v-if="!isTerminal(task.currentStage)"
             variant="danger"
             :disabled="isActing"
-            title="Stop this task and mark it as cancelled"
-            @click="handleAction(() => cancelTask(task!.id))"
+            :title="cancelConfirm ? 'Click again to confirm — this stops the task and marks it cancelled' : 'Stop this task and mark it as cancelled'"
+            @click="onCancelClick"
           >
-            Cancel Task
+            {{ cancelConfirm ? 'Confirm Cancel?' : 'Cancel Task' }}
           </AppButton>
         </div>
       </footer>
