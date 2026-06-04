@@ -6,10 +6,8 @@ import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import BacklogForm from './components/BacklogForm.vue'
-import EditGateModal from './components/EditGateModal.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import LoginPage from './components/LoginPage.vue'
-import RefinementChat from './components/RefinementChat.vue'
 import SessionList from './components/SessionList.vue'
 import AppShell from './components/shell/AppShell.vue'
 import AppSidebar from './components/shell/AppSidebar.vue'
@@ -39,6 +37,10 @@ const PipelineBoard = defineAsyncComponent(() => import('./components/PipelineBo
 const WorkflowsView = defineAsyncComponent(() => import('./components/WorkflowsView.vue'))
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
 const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
+// Modal/panel components that drag in marked + dompurify (RefinementChat) and diff (EditGateModal) —
+// load on demand so those libs stay out of the first-load entry chunk.
+const RefinementChat = defineAsyncComponent(() => import('./components/RefinementChat.vue'))
+const EditGateModal = defineAsyncComponent(() => import('./components/EditGateModal.vue'))
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const showLogin = computed(() => authEnabled.value && !user.value)
