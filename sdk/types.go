@@ -224,6 +224,10 @@ type Agent struct {
 	ToolCounts                map[string]int `json:"toolCounts"`
 	Meta                      *SessionMeta   `json:"meta"`
 	ChannelAvailable          bool           `json:"channelAvailable"`
+	// TmuxInjectable is true when the agent runs inside tmux and the dashboard can
+	// deliver prompts as real keyboard input via `tmux send-keys` — the only path
+	// that drives an interactive session (MCP log delivery does not).
+	TmuxInjectable            bool           `json:"tmuxInjectable,omitempty"`
 	LastOutput                *string        `json:"lastOutput"`
 	ConvergenceAlert          bool           `json:"convergenceAlert"`
 	ConvergenceToolName       *string        `json:"convergenceToolName"`

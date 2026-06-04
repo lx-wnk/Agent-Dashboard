@@ -83,10 +83,11 @@ export function useAgentPrompt(
     promptInput.value = ''
 
     try {
-      // channelAvailable is only true for a live, dashboard-channel-equipped
-      // process, so an "idle" status (no activity > 5min) is irrelevant — the
-      // process is still alive and polling the channel. Inject directly.
-      if (agent.channelAvailable) {
+      // Only a tmux-backed session can actually receive a live prompt (delivered
+      // via `tmux send-keys`). channelAvailable alone is not enough: MCP log
+      // delivery is silently dropped for interactive sessions. Everything else
+      // falls through to resume.
+      if (agent.tmuxInjectable) {
         // Channel inject is keyed by PID: the bridge writes a discovery file
         // named by the claude process PID, and the route is /api/agents/{pid}/message.
         const res = await fetch(`/api/agents/${agent.pid}/message`, {
@@ -118,7 +119,7 @@ export function useAgentPrompt(
     }
     catch (err) {
       if (isNetworkFailure(err)) {
-        const useChannel = !!agent.channelAvailable
+        const useChannel = !!agent.tmuxInjectable
         try {
           await addPending({
             agentPid: agent.pid,

@@ -72,10 +72,10 @@ const slashSuggestions = computed(() => {
 
 const showSuggestions = computed(() => slashSuggestions.value.length > 0)
 
-// A monitored session without the dashboard channel can't receive a live prompt;
-// sending resumes it as a NEW session (claude --resume). Surface that so it's not
-// mistaken for live injection.
-const isResumeMode = computed(() => !!props.agent && !props.agent.channelAvailable)
+// Only a tmux-backed session can receive a live prompt (via `tmux send-keys`).
+// Any other session resumes as a NEW session (claude --resume) on send — surface
+// that so it's not mistaken for live injection.
+const isResumeMode = computed(() => !!props.agent && !props.agent.tmuxInjectable)
 
 function selectSuggestion(cmd: { name: string, disabled?: boolean }) {
   if (cmd.disabled)

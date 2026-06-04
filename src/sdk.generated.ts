@@ -241,6 +241,12 @@ export interface Agent {
   toolCounts: { [key: string]: number /* int */};
   meta?: SessionMeta;
   channelAvailable: boolean;
+  /**
+   * TmuxInjectable is true when the agent runs inside tmux and the dashboard can
+   * deliver prompts as real keyboard input via `tmux send-keys` — the only path
+   * that drives an interactive session (MCP log delivery does not).
+   */
+  tmuxInjectable?: boolean;
   lastOutput?: string;
   convergenceAlert: boolean;
   convergenceToolName?: string;

@@ -18,8 +18,8 @@ describe('useAgentPrompt routing', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })))
   })
 
-  it('injects via channel when channelAvailable — even when status is idle', async () => {
-    const agent = makeAgent({ channelAvailable: true, status: 'idle' })
+  it('injects via tmux when tmuxInjectable — even when status is idle', async () => {
+    const agent = makeAgent({ tmuxInjectable: true, status: 'idle' })
     const { promptInput, handleSend } = useAgentPrompt(() => agent)
     promptInput.value = 'hello'
     await handleSend()
