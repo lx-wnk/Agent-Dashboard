@@ -103,51 +103,121 @@ func TestScanCompactionBaseline(t *testing.T) {
 // the actual CI-4 bug: the compact_boundary marker lies far before the 32 KB
 // tail window, so the tail parse alone sees only the post-compaction epoch. The
 // full-file baseline scan must recover the pre-compaction tokens.
+//
+// The fixture is laid out so BOTH halves of the total are exactly known:
+//
+//   - Pre-compaction epoch: P assistant turns (output=5 each) followed by a
+//     run of padding turns (output=0 each) whose only job is to push the
+//     compact_boundary well past the last 32 KB of the file. Everything before
+//     the boundary is folded into the baseline by the full scan; padding turns
+//     contribute 0 output so the baseline equals exactly 5*P.
+//   - Post-compaction epoch: Q small turns (output=7 each), sized so the WHOLE
+//     final epoch fits inside the 32 KB tail. The tail loop resets its counters
+//     when it reads the compact_boundary line (which is inside the tail because
+//     the post-compaction section is < 32 KB), then sums exactly the Q turns.
+//     Tail contribution is therefore deterministic: 7*Q.
+//
+// Expected total output = 5*P (baseline) + 7*Q (tail), proving the baseline is
+// folded into the tail total exactly once.
 func TestParseSessionFile_CompactionOutsideTailWindow(t *testing.T) {
-	assistant := func(out int) string {
-		return fmt.Sprintf(`{"type":"assistant","timestamp":"2026-06-04T10:00:00.000Z","message":{"role":"assistant","model":"claude-test","content":[{"type":"text","text":"x"}],"usage":{"input_tokens":10,"output_tokens":%d,"cache_creation_input_tokens":100,"cache_read_input_tokens":1000}}}`, out)
+	const (
+		preOut  = 5  // output_tokens per pre-compaction assistant turn
+		postOut = 7  // output_tokens per post-compaction assistant turn
+		P       = 3  // pre-compaction turns that carry usage
+		Q       = 4  // post-compaction turns (the whole final epoch)
+		preIn   = 10 // input_tokens per pre-compaction turn
+		postIn  = 2  // input_tokens per post-compaction turn
+	)
+
+	assistant := func(in, out int) string {
+		return fmt.Sprintf(`{"type":"assistant","timestamp":"2026-06-04T10:00:00.000Z","message":{"role":"assistant","model":"claude-test","content":[{"type":"text","text":"x"}],"usage":{"input_tokens":%d,"output_tokens":%d,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}`, in, out)
 	}
+	// Zero-usage padding turn — present only to grow the pre-compaction region so
+	// the boundary is shoved outside the tail window. Contributes nothing to any
+	// token sum, keeping the expected totals exact.
+	pad := assistant(0, 0)
 	boundary := `{"type":"system","subtype":"compact_boundary","content":"Conversation compacted","timestamp":"2026-06-04T10:00:00.000Z","uuid":"335ae7b9-0eee-404e-9c9d-0bc52829a958","compactMetadata":{"trigger":"auto","preTokens":167918,"postTokens":10536}}`
 
 	var b strings.Builder
-	// Pre-compaction epoch: 3 turns, output 5 each = 15.
-	for i := 0; i < 3; i++ {
-		b.WriteString(assistant(5))
+	// Pre-compaction epoch: P usage-carrying turns.
+	for i := 0; i < P; i++ {
+		b.WriteString(assistant(preIn, preOut))
 		b.WriteByte('\n')
 	}
-	// The compaction marker.
+	// Offset just past the last usage-carrying pre-compaction turn. These P turns
+	// are the tokens that the tail can never see; the full scan must recover them.
+	preCompactionEnd := int64(b.Len())
+	// Padding: grow the pre-compaction region to ~64 KB with zero-usage turns so
+	// the usage-carrying pre-compaction turns sit far (> 32 KB) before EOF. The
+	// boundary stays near EOF (it must, so the small final epoch fits the tail),
+	// but everything that matters for the baseline is pushed out of the window.
+	for b.Len() < 64*1024 {
+		b.WriteString(pad)
+		b.WriteByte('\n')
+	}
+	// The compaction marker — note its byte offset for the inside-tail assertion.
+	boundaryStart := int64(b.Len())
 	b.WriteString(boundary)
 	b.WriteByte('\n')
-	// Post-compaction epoch padded well past the 32 KB tail window so the marker
-	// and the pre-compaction turns are unreachable by TailRead. Output 1 each.
-	for b.Len() < 64*1024 {
-		b.WriteString(assistant(1))
+	// Post-compaction epoch: Q small turns. Their total byte size is deliberately
+	// kept well under 32 KB so the ENTIRE final epoch (plus the boundary line)
+	// lies inside the tail window — making the tail contribution deterministic.
+	for i := 0; i < Q; i++ {
+		b.WriteString(assistant(postIn, postOut))
 		b.WriteByte('\n')
 	}
+	totalSize := int64(b.Len())
 
 	path := filepath.Join(t.TempDir(), "00000000-0000-0000-0000-000000000000.jsonl")
 	require.NoError(t, os.WriteFile(path, []byte(b.String()), 0o640))
 
-	// The full-file scan must fold in the pre-compaction epoch (output 15) — and
-	// crucially the compact_boundary lies far outside the 32 KB tail window.
+	// Byte-layout invariants that make this a genuine outside-tail exercise:
+	//   1. The usage-carrying pre-compaction turns END more than 32 KB before
+	//      EOF, so they are unreachable by TailRead and ONLY the full scan can
+	//      recover them. (Zero-usage padding fills the gap to the boundary.)
+	//   2. The boundary line BEGINS inside the tail window, so the tail loop sees
+	//      the compact_boundary reset and counts exactly the post-compaction
+	//      epoch — never any padding or pre-compaction usage.
+	const tailWindow = 32 * 1024
+	tailStart := totalSize - tailWindow
+	require.Greater(t, tailStart, preCompactionEnd,
+		"pre-compaction usage turns must end > 32 KB before EOF (unreachable by tail)")
+	require.Greater(t, boundaryStart, tailStart,
+		"boundary line must begin inside the 32 KB tail so the tail loop resets on it")
+
+	// The full-file scan must fold in the pre-compaction epoch (output 5*P) — and
+	// crucially the compact_boundary lies far outside the 32 KB tail window. The
+	// zero-usage padding contributes nothing, so the baseline is exact.
 	baseline, err := scanCompactionBaseline(path)
 	require.NoError(t, err)
-	require.Equal(t, 15, baseline.OutputTokens, "pre-compaction epoch output")
+	require.Equal(t, preOut*P, baseline.OutputTokens, "pre-compaction epoch output (exact)")
+	require.Equal(t, preIn*P, baseline.InputTokens, "pre-compaction epoch input (exact)")
+	require.Greater(t, baseline.OutputTokens, 0, "baseline must be non-zero")
 	require.Greater(t, baseline.lastMarkerOffset, int64(0))
 
 	data, err := ParseSessionFile(path)
 	require.NoError(t, err)
 
-	// End-to-end total = baseline (pre-compaction, 15) + the post-compaction
-	// turns the 32 KB tail can reach. The tail contribution is whatever fits in
-	// the window; the invariant under test is that the baseline is added on top,
-	// so the total strictly exceeds both the baseline alone and the tail alone.
+	// Exact end-to-end total: baseline (pre-compaction, 5*P) folded on top of the
+	// deterministic tail contribution (the whole final epoch, 7*Q). This is the
+	// real proof that the outside-tail baseline is added exactly once — a naive
+	// tail-only parse would yield only 7*Q, and a double-count would yield more
+	// than 5*P + 7*Q.
+	wantOutput := preOut*P + postOut*Q
+	wantInput := preIn*P + postIn*Q
+	require.Equal(t, wantOutput, data.TokenUsage.OutputTokens,
+		"total output must be baseline (5*P) + final epoch (7*Q), each counted once")
+	require.Equal(t, wantInput, data.TokenUsage.InputTokens,
+		"total input must be baseline (10*P) + final epoch (2*Q), each counted once")
+
+	// Sanity: the tail genuinely saw the post-compaction epoch (output > baseline)
+	// and the contribution it added equals exactly the final epoch.
+	tailContribution := data.TokenUsage.OutputTokens - baseline.OutputTokens
 	require.Greater(t, data.TokenUsage.OutputTokens, baseline.OutputTokens,
 		"total must include a post-compaction tail contribution")
-	tailContribution := data.TokenUsage.OutputTokens - baseline.OutputTokens
-	require.Positive(t, tailContribution, "tail must see part of the final epoch")
-	require.Equal(t, baseline.OutputTokens+tailContribution, data.TokenUsage.OutputTokens,
-		"baseline must be folded into the tail-derived total exactly once (no double-count)")
+	require.Positive(t, tailContribution, "tail must see the final epoch")
+	require.Equal(t, postOut*Q, tailContribution,
+		"tail contribution must equal exactly the final epoch (7*Q)")
 }
 
 func TestScanCompactionBaseline_MissingFile(t *testing.T) {
