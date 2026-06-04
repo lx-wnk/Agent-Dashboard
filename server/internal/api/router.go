@@ -481,7 +481,7 @@ func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debou
 			if ctx.Err() != nil {
 				return
 			}
-			agents, err := merger.GetAgents(ctx, merger.GetAgentsOpts{})
+			agents, err := getAgentsNoBaseline(ctx)
 			if err != nil {
 				slog.Warn("hooks: debounced rescan failed", "err", err)
 				return

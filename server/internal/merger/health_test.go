@@ -17,6 +17,10 @@ func toolCounts(total int) map[string]int {
 	return map[string]int{"Bash": total}
 }
 
+// TestComputeHealthScore asserts EXACT deterministic scores. Loose min/max
+// spans are intentionally avoided: a transposed weight or sign error must fail
+// the test rather than slip through a wide range. Each case documents its
+// component-by-component derivation.
 func TestComputeHealthScore(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -24,20 +28,21 @@ func TestComputeHealthScore(t *testing.T) {
 		costEstimate float64
 		costUnknown  bool
 		baseline     float64
-		wantMin      int
-		wantMax      int
+		want         int
 	}{
 		{
+			// ConversationTurns == 0 -> neutral short-circuit, no component math.
 			name: "zero_turns_no_data",
 			session: &parser.SessionData{
 				ConversationTurns: 0,
 				ToolCounts:        toolCounts(0),
 			},
-			wantMin: 50, wantMax: 50,
+			want: 50,
 		},
 		{
-			// successRate 100, cacheHitPct 80, errorComp 100, cost penalty 100 (at baseline)
-			// 0.40*100 + 0.25*80 + 0.25*100 + 0.10*100 = 95
+			// successRate 100, cache 80 (80 read / 100 total), errorComp 100
+			// (0/10 errors), cost 100 (ratio 1.0 at baseline).
+			// 0.40*100 + 0.25*80 + 0.25*100 + 0.10*100 = 40+20+25+10 = 95.
 			name: "perfect_session",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
@@ -47,10 +52,10 @@ func TestComputeHealthScore(t *testing.T) {
 			},
 			costEstimate: 1.0,
 			baseline:     1.0,
-			wantMin:      95, wantMax: 100,
+			want:         95,
 		},
 		{
-			// otherwise perfect but quota error -> hard cap at 30
+			// Otherwise perfect (raw 70) but quota error -> hard cap min(70,30)=30.
 			name: "quota_error_hard_cap",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
@@ -61,33 +66,48 @@ func TestComputeHealthScore(t *testing.T) {
 			},
 			costEstimate: 1.0,
 			baseline:     1.0,
-			wantMin:      0, wantMax: 30,
+			want:         30,
 		},
 		{
-			// successRate 50, cacheHitPct 50 (neutral, no cache), errorComp 100, cost 100 (no baseline)
-			// 0.40*50 + 0.25*50 + 0.25*100 + 0.10*100 = 67.5 -> 68
+			// successRate 50 (5/10 ok), cache 50 (neutral, no cache),
+			// errorComp 50 ((1-0.5)*100), cost 100 (no baseline).
+			// 0.40*50 + 0.25*50 + 0.25*50 + 0.10*100 = 20+12.5+12.5+10 = 55.
 			name: "high_tool_error_rate",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
 				ToolCounts:        toolCounts(10),
 				Meta:              &sdk.SessionMeta{ToolErrors: 5},
 			},
-			wantMin: 60, wantMax: 75,
+			want: 55,
 		},
 		{
-			// successRate 100, cacheHitPct 50 (neutral), errorComp 100, cost 100
-			// 0.40*100 + 0.25*50 + 0.25*100 + 0.10*100 = 87.5 -> 88
+			// 100% tool failure: successRate 0 (0/10 ok), cache 50 (neutral),
+			// errorComp 0 ((1-1.0)*100), cost 100 (no baseline).
+			// 0.40*0 + 0.25*50 + 0.25*0 + 0.10*100 = 0+12.5+0+10 = 22.5 -> 23.
+			// This is the case the recalibration exists for: with no qualitative
+			// ErrorState the old binary slot kept this amber; now it is RED (<40).
+			name: "all_tools_fail",
+			session: &parser.SessionData{
+				ConversationTurns: 5,
+				ToolCounts:        toolCounts(10),
+				Meta:              &sdk.SessionMeta{ToolErrors: 10},
+			},
+			want: 23,
+		},
+		{
+			// successRate 100, cache 50 (neutral), errorComp 100 (0/10), cost 100.
+			// 0.40*100 + 0.25*50 + 0.25*100 + 0.10*100 = 40+12.5+25+10 = 87.5 -> 88.
 			name: "no_cache_usage",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
 				ToolCounts:        toolCounts(10),
 				Meta:              &sdk.SessionMeta{ToolErrors: 0},
 			},
-			wantMin: 85, wantMax: 90,
+			want: 88,
 		},
 		{
-			// successRate 100, cacheHitPct 100, errorComp 100, cost penalty 50 (2x baseline)
-			// 0.40*100 + 0.25*100 + 0.25*100 + 0.10*50 = 95
+			// successRate 100, cache 100, errorComp 100, cost 50 (ratio 2.0).
+			// 0.40*100 + 0.25*100 + 0.25*100 + 0.10*50 = 40+25+25+5 = 95.
 			name: "cost_spike_2x",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
@@ -97,11 +117,11 @@ func TestComputeHealthScore(t *testing.T) {
 			},
 			costEstimate: 2.0,
 			baseline:     1.0,
-			wantMin:      93, wantMax: 97,
+			want:         95,
 		},
 		{
-			// cost penalty 0 (3x baseline)
-			// 0.40*100 + 0.25*100 + 0.25*100 + 0.10*0 = 90
+			// successRate 100, cache 100, errorComp 100, cost 0 (ratio 3.0).
+			// 0.40*100 + 0.25*100 + 0.25*100 + 0.10*0 = 40+25+25+0 = 90.
 			name: "cost_spike_3x_plus",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
@@ -111,10 +131,11 @@ func TestComputeHealthScore(t *testing.T) {
 			},
 			costEstimate: 3.0,
 			baseline:     1.0,
-			wantMin:      88, wantMax: 92,
+			want:         90,
 		},
 		{
-			// perfect session, no baseline -> cost penalty 100
+			// Perfect session, baseline 0 -> cost 100 (no penalty).
+			// 0.40*100 + 0.25*80 + 0.25*100 + 0.10*100 = 95.
 			name: "no_baseline_no_penalty",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
@@ -124,10 +145,10 @@ func TestComputeHealthScore(t *testing.T) {
 			},
 			costEstimate: 5.0,
 			baseline:     0,
-			wantMin:      95, wantMax: 100,
+			want:         95,
 		},
 		{
-			// cost unknown -> no cost penalty even with baseline set
+			// CostUnknown -> cost 100 even with baseline set. Same as perfect: 95.
 			name: "cost_unknown",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
@@ -138,21 +159,22 @@ func TestComputeHealthScore(t *testing.T) {
 			costEstimate: 0,
 			costUnknown:  true,
 			baseline:     1.0,
-			wantMin:      95, wantMax: 100,
+			want:         95,
 		},
 		{
-			// nil meta -> treat ToolErrors as 0 -> successRate 100
-			// successRate 100, cacheHitPct 50, errorComp 100, cost 100 -> 87.5 -> 88
+			// Meta nil -> ToolErrors treated as 0 -> successRate 100, errorComp 100.
+			// cache 50 (neutral), cost 100 (no baseline). 87.5 -> 88.
 			name: "nil_meta",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
 				ToolCounts:        toolCounts(10),
 				Meta:              nil,
 			},
-			wantMin: 85, wantMax: 90,
+			want: 88,
 		},
 		{
-			// all components max -> exactly 100
+			// All components max, cost ratio 0.5 -> penalty clamps to 100.
+			// 0.40*100 + 0.25*100 + 0.25*100 + 0.10*100 = 100.
 			name: "clamp_above_100",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
@@ -162,12 +184,11 @@ func TestComputeHealthScore(t *testing.T) {
 			},
 			costEstimate: 0.5,
 			baseline:     1.0,
-			wantMin:      100, wantMax: 100,
+			want:         100,
 		},
 		{
-			// all components 0: successRate 0 (errors > calls), cacheHitPct 0 (create only),
-			// errorComp 0 (error state present -> also hard cap 30), cost 0 (>3x)
-			// raw = 0; error state present caps to 30 but raw is already 0
+			// successRate 0 (errors > calls), cache 0 (create only),
+			// errorComp 0 (ErrorState set), cost 0 (ratio 10). raw 0, hard cap 0.
 			name: "clamp_below_0",
 			session: &parser.SessionData{
 				ConversationTurns: 5,
@@ -178,17 +199,28 @@ func TestComputeHealthScore(t *testing.T) {
 			},
 			costEstimate: 10.0,
 			baseline:     1.0,
-			wantMin:      0, wantMax: 0,
+			want:         0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := merger.ComputeHealthScore(tt.session, tt.costEstimate, tt.costUnknown, tt.baseline)
-			require.GreaterOrEqual(t, got, tt.wantMin, "score below expected min")
-			require.LessOrEqual(t, got, tt.wantMax, "score above expected max")
-			require.GreaterOrEqual(t, got, 0)
-			require.LessOrEqual(t, got, 100)
+			require.Equal(t, tt.want, got, "exact health score mismatch")
 		})
 	}
+}
+
+// TestComputeHealthScore_AllToolsFailIsRed pins the recalibration's headline
+// guarantee: a session failing 100% of its tool calls (no qualitative
+// ErrorState) lands in the RED chip tier (< 40) instead of staying amber.
+func TestComputeHealthScore_AllToolsFailIsRed(t *testing.T) {
+	session := &parser.SessionData{
+		ConversationTurns: 5,
+		ToolCounts:        toolCounts(10),
+		Meta:              &sdk.SessionMeta{ToolErrors: 10},
+	}
+	got := merger.ComputeHealthScore(session, 0, false, 0)
+	require.Equal(t, 23, got)
+	require.Less(t, got, 40, "100%-tool-failure session must render RED")
 }

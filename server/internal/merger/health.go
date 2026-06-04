@@ -10,7 +10,7 @@ import (
 const (
 	weightSuccessRate = 0.40
 	weightCacheHit    = 0.25
-	weightErrorInv    = 0.25
+	weightErrorRate   = 0.25
 	weightCostSpike   = 0.10
 
 	// errorStateHardCap bounds the score when a recognised error state is present.
@@ -25,7 +25,10 @@ const (
 //
 // The score is a weighted sum of four normalised components:
 //
-//	0.40 × successRate + 0.25 × cacheHitPct + 0.25 × (100 − errorRatePct) + 0.10 × costSpikePenalty
+//	0.40 × successRate + 0.25 × cacheHitPct + 0.25 × errorRateComponent + 0.10 × costSpikePenalty
+//
+// where errorRateComponent = (1 − toolErrorRate) × 100, forced to 0 on a
+// qualitative ErrorState. Tool errors thus influence two components by design.
 //
 // then rounded and clamped to [0, 100]. If the session carries a recognised
 // error state (quota/rate-limit/auth), the result is additionally capped at 30.
@@ -46,12 +49,12 @@ func ComputeHealthScore(session *parser.SessionData, costEstimate float64, costU
 
 	successRate := successRateComponent(session)
 	cacheHitPct := cacheHitComponent(session)
-	errorComponent := errorInverseComponent(session)
+	errorComponent := errorRateComponent(session)
 	costPenalty := costSpikeComponent(costEstimate, costUnknown, baselineCost)
 
 	raw := weightSuccessRate*successRate +
 		weightCacheHit*cacheHitPct +
-		weightErrorInv*errorComponent +
+		weightErrorRate*errorComponent +
 		weightCostSpike*costPenalty
 
 	score := clampInt(int(math.Round(raw)))
@@ -97,13 +100,32 @@ func cacheHitComponent(session *parser.SessionData) float64 {
 	return (float64(read) / float64(total)) * 100
 }
 
-// errorInverseComponent is binary: 100 for a clean session, 0 when a
-// recognised error state is present.
-func errorInverseComponent(session *parser.SessionData) float64 {
+// errorRateComponent reflects the tool-error RATE: (1 − toolErrorRate) × 100,
+// where toolErrorRate = clamp(ToolErrors / totalToolCalls, 0, 1) and is 0 when
+// no tool calls have been made (neutral — no calls, no failures).
+//
+// Tool errors deliberately feed two components (this one AND successRate): a
+// session failing most of its tool calls is dragged down by both, so tool
+// failures matter more than either signal alone. A qualitative ErrorState
+// (quota/rate-limit/auth) overrides the rate and forces this slot to 0 — the
+// same flag also triggers the post-compute hard cap in ComputeHealthScore.
+func errorRateComponent(session *parser.SessionData) float64 {
 	if session.ErrorState != "" {
 		return 0
 	}
-	return 100
+	total := 0
+	for _, n := range session.ToolCounts {
+		total += n
+	}
+	if total == 0 {
+		return 100
+	}
+	toolErrors := 0
+	if session.Meta != nil {
+		toolErrors = session.Meta.ToolErrors
+	}
+	toolErrorRate := clampFloat(float64(toolErrors)/float64(total), 0, 1)
+	return (1 - toolErrorRate) * 100
 }
 
 // costSpikeComponent returns the cost-spike penalty component (higher is better).

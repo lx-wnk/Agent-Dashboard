@@ -37,6 +37,7 @@ The `Agent.HealthScore` field and the `AgentCard.vue` chip that renders it alrea
 | 6 | Non-Claude / cost-unknown | Score = 50 when `CostUnknown == true` (no pricing data to derive cost spike) |
 | 7 | Rounding | `int(math.Round(score))`, then clamped to `[0, 100]` |
 | 8 | Error-state hard penalty | Any non-nil `ErrorState` clamps the score to max 30 regardless of other components |
+| 9 | A.3 error component | Tool-error RATE `(1 − toolErrorRate) × 100`, forced to 0 on a qualitative `ErrorState`. Tool errors intentionally feed two components (A.1 successRate AND A.3) so tool-call failures actually drive severity. |
 
 ## Section A — Score Formula
 
@@ -46,7 +47,7 @@ The composite score is a weighted sum of four components, each normalized to 0�
 HealthScore = clamp(round(
     0.40 × successRate
   + 0.25 × cacheHitPct
-  + 0.25 × (100 − errorRatePct)
+  + 0.25 × errorRateComponent
   + 0.10 × costSpikePenalty
 ), 0, 100)
 ```
@@ -90,22 +91,27 @@ cacheHitPct = (CacheReadTokens / cacheTokens) × 100   if cacheTokens > 0
 
 **Rationale:** A high cache-read ratio indicates the agent is reusing context efficiently. A session that only creates cache and never reads it scores 0 on this component, which is a mild signal of an unusual pattern. The 50-point neutral floor for zero-cache sessions avoids punishing fresh agents unfairly.
 
-### A.3 Error Rate Inverse (weight 0.25)
+### A.3 Error Rate Component (weight 0.25)
 
-**Inputs:** `session.ErrorState` (sdk.ErrorState — one of `quota_exhausted`, `rate_limited`, `auth_failed`, or empty).
+**Inputs:** `session.ToolCounts` (map[string]int — same denominator as A.1), `session.Meta.ToolErrors` (int — treat 0 when `session.Meta == nil`), `session.ErrorState` (sdk.ErrorState — one of `quota_exhausted`, `rate_limited`, `auth_failed`, or empty).
 
 **Formula:**
 ```
-errorRatePct = 100   if session.ErrorState != ""
-             = 0     otherwise
-errorComponent = 100 − errorRatePct
+totalToolCalls  = sum of all values in session.ToolCounts
+toolErrorRate   = clamp(ToolErrors / totalToolCalls, 0, 1)   // 0 when totalToolCalls == 0
+errorComponent  = (1 − toolErrorRate) × 100
+if session.ErrorState != "" { errorComponent = 0 }           // qualitative error forces this slot to 0
 ```
 
-This component is binary: a recognized error state detected in the session log contributes zero to this slot; a clean session contributes 100. The binary representation is intentional — `ErrorState` is a qualitative flag, not a count.
+This component reflects the tool-call failure RATE, not a binary flag. A session failing most of its tool calls scores low here even when no qualitative `ErrorState` was ever set — the change that lets genuine tool-call failures drag the score into the red tier.
+
+**Dual-signal note:** tool errors intentionally feed TWO components — A.1 (successRate) and A.3 (errorComponent). A struggling session is penalized by both, so tool failures matter more than either signal alone. This double-counting is deliberate.
 
 **Edge cases:**
-- `ErrorState` is only set when the parser's regex patterns match assistant output. A session that has never produced a matching error string scores 100 here.
-- The post-compute hard cap (`min(score, 30)` when `ErrorState != nil`) reinforces this: even if success rate and cache hit are perfect, a quota/rate-limit/auth error caps the overall score at 30.
+- `totalToolCalls == 0` → `toolErrorRate = 0` → `errorComponent = 100` (no calls, no failures — neutral), unless `ErrorState` is set → 0.
+- `session.Meta == nil` → treat `ToolErrors = 0` → `errorComponent = 100`.
+- `ToolErrors > totalToolCalls` (corrupt data) → `toolErrorRate` clamps to 1 → `errorComponent = 0`.
+- A qualitative `ErrorState` overrides the rate and forces `errorComponent = 0`. The post-compute hard cap (`min(score, 30)` when `ErrorState != ""`) reinforces this: even with a perfect success rate and cache hit, a quota/rate-limit/auth error caps the overall score at 30.
 
 ### A.4 Cost Spike Penalty (weight 0.10)
 
@@ -230,20 +236,25 @@ No changes to `sdk/types.go`, `src/components/AgentCard.vue`, or any other front
 
 Table-driven tests for `ComputeHealthScore`. Each case builds a `parser.SessionData` and a `float64` baseline and asserts the returned integer.
 
-| Test name | Setup | Expected score range |
-|---|---|---|
-| `zero_turns_no_data` | `ConversationTurns=0`, no tools, no meta | 50 |
-| `perfect_session` | 10 tool calls, 0 errors, 80% cache read ratio, cost at baseline | 95–100 |
-| `quota_error_hard_cap` | `ErrorState=quota_exhausted`, otherwise perfect | ≤ 30 |
-| `high_tool_error_rate` | 10 calls, 5 errors, no cache, no error state | 20–40 |
-| `no_cache_usage` | 10 calls, 0 errors, 0 cache tokens | ~65 (cache component neutral at 50) |
-| `cost_spike_2x` | 0 errors, perfect cache, cost = 2× baseline | ~88 (cost component 50) |
-| `cost_spike_3x_plus` | 0 errors, perfect cache, cost = 3× baseline | ~90 (cost component 0) |
-| `no_baseline_no_penalty` | perfect session, baseline = 0 | 95–100 |
-| `cost_unknown` | `CostUnknown=true`, otherwise perfect | 95–100 (no cost penalty) |
-| `nil_meta` | `Meta = nil`, 10 tool calls | error component uses 0 errors → successRate 100 |
-| `clamp_above_100` | Pathological: all components max | exactly 100 |
-| `clamp_below_0` | Pathological: all components 0 | exactly 0 |
+All expected values are EXACT (asserted with `require.Equal`, no ranges) — a loose span lets a transposed weight pass silently, so the deterministic math is pinned to a single integer per case.
+
+| Test name | Setup | Components (succ / cache / err / cost) | Expected score |
+|---|---|---|---|
+| `zero_turns_no_data` | `ConversationTurns=0`, no tools, no meta | short-circuit (neutral) | 50 |
+| `perfect_session` | 10 calls, 0 errors, 80% cache read ratio, cost at baseline | 100 / 80 / 100 / 100 | 95 |
+| `quota_error_hard_cap` | `ErrorState=quota_exhausted`, otherwise perfect | 100 / 80 / 0 / 100 → raw 70, hard-capped | 30 |
+| `high_tool_error_rate` | 10 calls, 5 errors, no cache, no error state | 50 / 50 / 50 / 100 | 55 |
+| `all_tools_fail` | 10 calls, 10 errors, no cache, no error state, no baseline | 0 / 50 / 0 / 100 → 22.5 | 23 (RED, < 40) |
+| `no_cache_usage` | 10 calls, 0 errors, 0 cache tokens | 100 / 50 / 100 / 100 → 87.5 | 88 |
+| `cost_spike_2x` | 0 errors, perfect cache, cost = 2× baseline | 100 / 100 / 100 / 50 | 95 |
+| `cost_spike_3x_plus` | 0 errors, perfect cache, cost = 3× baseline | 100 / 100 / 100 / 0 | 90 |
+| `no_baseline_no_penalty` | perfect session, baseline = 0 | 100 / 80 / 100 / 100 | 95 |
+| `cost_unknown` | `CostUnknown=true`, otherwise perfect | 100 / 80 / 100 / 100 | 95 |
+| `nil_meta` | `Meta = nil`, 10 tool calls, no cache | 100 / 50 / 100 / 100 → 87.5 | 88 |
+| `clamp_above_100` | All components max (cost ratio 0.5 clamps to 100) | 100 / 100 / 100 / 100 | 100 |
+| `clamp_below_0` | All components 0, error state set | 0 / 0 / 0 / 0 | 0 |
+
+The `all_tools_fail` case is the headline regression guard for this recalibration: under the old binary error slot it scored ~48 (amber) despite failing every tool call; now it lands at 23, in the RED chip tier (< 40).
 
 ### F.2 Integration Guard
 
