@@ -37,6 +37,9 @@ func tmuxSendArgs(socket, pane, message string) (textArgs, enterArgs []string) {
 	return textArgs, enterArgs
 }
 
+// tmuxLookPath resolves the tmux binary; indirected for tests.
+var tmuxLookPath = func() (string, error) { return exec.LookPath("tmux") }
+
 // sendKeysToTmux injects message into the given tmux pane as typed input,
 // followed by Enter, so an interactive Claude session executes it.
 func sendKeysToTmux(ctx context.Context, socket, pane, message string) error {
@@ -45,6 +48,11 @@ func sendKeysToTmux(ctx context.Context, socket, pane, message string) error {
 	}
 	if strings.ContainsAny(socket, "\n\x00") {
 		return fmt.Errorf("invalid tmux socket")
+	}
+	// tmux is a hard requirement for live prompt injection; surface a clear
+	// message rather than a raw exec-not-found error.
+	if _, err := tmuxLookPath(); err != nil {
+		return fmt.Errorf("tmux is required for live prompt injection but was not found on the server PATH; install tmux or send will resume the session instead")
 	}
 	textArgs, enterArgs := tmuxSendArgs(socket, pane, message)
 	if err := tmuxRunner(ctx, textArgs...); err != nil {

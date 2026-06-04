@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,8 +30,9 @@ func TestTmuxSendArgs(t *testing.T) {
 
 func TestSendKeysToTmux_RunsTextThenEnter(t *testing.T) {
 	var calls [][]string
-	orig := tmuxRunner
-	t.Cleanup(func() { tmuxRunner = orig })
+	origRun, origLook := tmuxRunner, tmuxLookPath
+	t.Cleanup(func() { tmuxRunner = origRun; tmuxLookPath = origLook })
+	tmuxLookPath = func() (string, error) { return "/usr/bin/tmux", nil }
 	tmuxRunner = func(_ context.Context, args ...string) error {
 		calls = append(calls, args)
 		return nil
@@ -42,6 +44,19 @@ func TestSendKeysToTmux_RunsTextThenEnter(t *testing.T) {
 	require.Equal(t, "-l", calls[0][3])               // literal text send
 	require.Equal(t, "run it", calls[0][len(calls[0])-1])
 	require.Equal(t, "Enter", calls[1][len(calls[1])-1]) // separate Enter
+}
+
+func TestSendKeysToTmux_TmuxMissing(t *testing.T) {
+	ran := false
+	origRun, origLook := tmuxRunner, tmuxLookPath
+	t.Cleanup(func() { tmuxRunner = origRun; tmuxLookPath = origLook })
+	tmuxRunner = func(_ context.Context, _ ...string) error { ran = true; return nil }
+	tmuxLookPath = func() (string, error) { return "", errors.New("not found") }
+
+	err := sendKeysToTmux(context.Background(), "", "%2", "x")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tmux is required")
+	require.False(t, ran, "must not attempt send when tmux is absent")
 }
 
 func TestSendKeysToTmux_RejectsBadPane(t *testing.T) {
