@@ -199,21 +199,62 @@ interface DynamicCommand {
   source: string
 }
 
+interface DynamicCommandsResponse {
+  commands: DynamicCommand[]
+  engineVersion?: string
+  builtinsMayBeStale?: boolean
+  scopeSource?: string
+  scopeLabel?: string
+}
+
+/**
+ * Scope for resolving a session's slash commands. Prefer sessionId for a live
+ * agent (resolves that session's actual CLAUDE_CONFIG_DIR); spawnerId previews
+ * a spawner's set; cwd adds project-local <cwd>/.claude/commands.
+ */
+export interface DynamicCommandScope {
+  sessionId?: string
+  spawnerId?: string
+  cwd?: string
+}
+
 const dynamicCommandCache = new Map<string, SlashCommandDef[]>()
 
-export async function fetchDynamicCommands(cwd: string): Promise<SlashCommandDef[]> {
-  if (dynamicCommandCache.has(cwd))
-    return dynamicCommandCache.get(cwd)!
+function scopeKey(scope: DynamicCommandScope): string {
+  // Prefix per identifier kind so distinct namespaces (a session id, a spawner
+  // id, a cwd) can never collide in the cache.
+  if (scope.sessionId)
+    return `sess:${scope.sessionId}`
+  if (scope.spawnerId)
+    return `spawner:${scope.spawnerId}`
+  if (scope.cwd)
+    return `cwd:${scope.cwd}`
+  return 'default'
+}
+
+export async function fetchDynamicCommands(scope: DynamicCommandScope): Promise<SlashCommandDef[]> {
+  const key = scopeKey(scope)
+  if (dynamicCommandCache.has(key))
+    return dynamicCommandCache.get(key)!
+
+  const params = new URLSearchParams()
+  if (scope.sessionId)
+    params.set('sessionId', scope.sessionId)
+  if (scope.spawnerId)
+    params.set('spawnerId', scope.spawnerId)
+  if (scope.cwd)
+    params.set('cwd', scope.cwd)
+
   try {
-    const res = await fetch(`/api/slash-commands?cwd=${encodeURIComponent(cwd)}`)
+    const res = await fetch(`/api/slash-commands?${params.toString()}`)
     if (!res.ok)
       return []
-    const data = await res.json() as DynamicCommand[]
-    const cmds: SlashCommandDef[] = data.map(c => ({
+    const data = await res.json() as DynamicCommandsResponse
+    const cmds: SlashCommandDef[] = (data.commands ?? []).map(c => ({
       name: c.name,
       description: c.description,
     }))
-    dynamicCommandCache.set(cwd, cmds)
+    dynamicCommandCache.set(key, cmds)
     return cmds
   }
   catch {

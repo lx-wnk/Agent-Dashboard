@@ -31,9 +31,11 @@ const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
 const selectedIndex = ref(0)
 const dynamicCommands = ref<SlashCommandDef[]>([])
 
-watch(() => props.agent?.cwd, async (cwd) => {
-  if (cwd)
-    dynamicCommands.value = await fetchDynamicCommands(cwd)
+// Prefer sessionId so suggestions reflect the running session's actual
+// CLAUDE_CONFIG_DIR (spawner-dependent); fall back to cwd for project-local commands.
+watch(() => [props.agent?.sessionId, props.agent?.cwd] as const, async ([sessionId, cwd]) => {
+  if (sessionId || cwd)
+    dynamicCommands.value = await fetchDynamicCommands({ sessionId: sessionId || undefined, cwd: cwd || undefined })
 }, { immediate: true })
 
 const slashSuggestions = computed(() => {
@@ -43,9 +45,18 @@ const slashSuggestions = computed(() => {
   if (val.includes(' '))
     return []
   const query = val.toLowerCase()
+  const term = query.slice(1) // drop leading '/'
+  // Match like Claude's slash menu: prefix OR substring on the command name
+  // (so "/review" surfaces /branch-review, /security-review, …). Prefix hits
+  // rank first.
+  const matches = (name: string) => {
+    const n = name.toLowerCase()
+    return n.startsWith(query) || n.slice(1).includes(term)
+  }
+  const rank = (name: string) => (name.toLowerCase().startsWith(query) ? 0 : 1)
 
   const dashboardCmds = SLASH_COMMAND_DEFS
-    .filter(c => c.name.startsWith(query))
+    .filter(c => matches(c.name))
     .map(c => ({
       ...c,
       disabled: !!c.requiresTask && !props.agent?.pipelineTaskId,
@@ -53,13 +64,18 @@ const slashSuggestions = computed(() => {
 
   const seen = new Set(dashboardCmds.map(c => c.name))
   const sessionCmds = dynamicCommands.value
-    .filter(c => c.name.startsWith(query) && !seen.has(c.name))
+    .filter(c => matches(c.name) && !seen.has(c.name))
     .map(c => ({ ...c, disabled: false }))
 
-  return [...dashboardCmds, ...sessionCmds]
+  return [...dashboardCmds, ...sessionCmds].sort((a, b) => rank(a.name) - rank(b.name))
 })
 
 const showSuggestions = computed(() => slashSuggestions.value.length > 0)
+
+// A monitored session without the dashboard channel can't receive a live prompt;
+// sending resumes it as a NEW session (claude --resume). Surface that so it's not
+// mistaken for live injection.
+const isResumeMode = computed(() => !!props.agent && !props.agent.channelAvailable)
 
 function selectSuggestion(cmd: { name: string, disabled?: boolean }) {
   if (cmd.disabled)
@@ -90,11 +106,28 @@ function onKeydown(e: KeyboardEvent) {
       e.preventDefault()
       selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
     }
-    else if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+    else if (e.key === 'Tab') {
+      // Tab always completes the highlighted suggestion.
       e.preventDefault()
       const cmd = slashSuggestions.value[selectedIndex.value]
       if (cmd)
         selectSuggestion(cmd)
+    }
+    else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      // If the input is already a complete command, send it; otherwise complete
+      // the highlighted suggestion (so a fully-typed /command isn't stuck on the menu).
+      const typed = promptInput.value.trim()
+      const exact = slashSuggestions.value.find(c => c.name === typed)
+      if (exact) {
+        if (!exact.disabled)
+          handleSend()
+      }
+      else {
+        const cmd = slashSuggestions.value[selectedIndex.value]
+        if (cmd)
+          selectSuggestion(cmd)
+      }
     }
     else if (e.key === 'Escape') {
       e.preventDefault()
@@ -162,7 +195,7 @@ defineExpose({ focus })
         ref="inputEl"
         v-model="promptInput"
         rows="1"
-        placeholder="Enter prompt..."
+        :placeholder="isResumeMode ? 'Prompt… (resumes as a new session)' : 'Enter prompt...'"
         :disabled="isSending"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
@@ -174,7 +207,7 @@ defineExpose({ focus })
         v-else
         ref="inputEl"
         v-model="promptInput"
-        placeholder="Enter prompt..."
+        :placeholder="isResumeMode ? 'Prompt… (resumes as a new session)' : 'Enter prompt...'"
         :disabled="isSending"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
@@ -183,15 +216,26 @@ defineExpose({ focus })
       >
       <button
         type="button"
-        aria-label="Send message"
-        class="bg-blue-600 text-white border-none rounded font-bold cursor-pointer flex-shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
-        :class="variant === 'full' ? 'px-3.5 py-1.5 text-[14px]' : 'px-2.5 py-1 text-[13px]'"
+        :aria-label="isResumeMode ? 'Resume session with prompt (creates a new session)' : 'Send message'"
+        :title="isResumeMode ? 'No live channel — resumes this session as a new session' : 'Send'"
+        class="text-white border-none rounded font-bold cursor-pointer flex-shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+        :class="[
+          variant === 'full' ? 'px-3.5 py-1.5 text-[14px]' : 'px-2.5 py-1 text-[13px]',
+          isResumeMode ? 'bg-amber-600' : 'bg-blue-600',
+        ]"
         :disabled="isSending || promptInput.trim().length === 0"
         @click="handleSend"
       >
-        {{ isSending ? '...' : '↵' }}
+        {{ isSending ? '...' : (isResumeMode ? '⤳' : '↵') }}
       </button>
     </div>
+    <p
+      v-if="isResumeMode && !sendStatus"
+      class="text-[11px] text-amber-700 dark:text-amber-400"
+      :class="variant === 'full' ? 'px-4 pb-2' : 'px-3 pb-1.5 pt-0.5'"
+    >
+      ⤳ No live channel — sending resumes this session as a <strong>new</strong> session. Spawn via the dashboard for live injection.
+    </p>
     <p
       v-if="sendStatus"
       class="text-[11px]"

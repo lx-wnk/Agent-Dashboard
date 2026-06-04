@@ -14,6 +14,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
@@ -251,22 +252,9 @@ var allowedEnvKeys = map[string]struct{}{
 	"NODE_PATH":       {},
 }
 
-// expandLeadingTilde replaces a leading `~` (bare or `~/`) with the user's home
-// directory, mirroring shell tilde expansion. Other values pass through
-// unchanged. Used for spawner-declared env values, which exec does not expand.
-func expandLeadingTilde(v string) string {
-	if v != "~" && !strings.HasPrefix(v, "~/") {
-		return v
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return v
-	}
-	if v == "~" {
-		return home
-	}
-	return filepath.Join(home, v[2:])
-}
+// expandLeadingTilde is an alias for pathutil.ExpandLeadingTilde kept for
+// package-internal use. Callers outside pipeline should import pathutil directly.
+var expandLeadingTilde = pathutil.ExpandLeadingTilde
 
 func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	// Stage 1: spawner-declared env (lowest precedence). Each entry is

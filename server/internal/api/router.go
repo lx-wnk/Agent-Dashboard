@@ -205,7 +205,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		r.Get("/api/sessions", sessions.List)
 		r.Get("/api/sessions/{sessionId}/timeline", sessions.Timeline)
-		r.Get("/api/slash-commands", sessions.SlashCommands)
+		commandsHandler := sessions.NewCommandsHandler(deps.SpawnerRepo, merger.GetAgents)
+		r.Get("/api/slash-commands", commandsHandler.SlashCommands)
 
 		r.Get("/api/quota", system.Quota)
 		r.Get("/api/config", system.Config)        // frontend expects /api/config
@@ -321,12 +322,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
 
-		// Config explorer — read-only enumeration of installed skills, slash
-		// commands, and known memory files. No path query params accepted;
-		// enumeration is from fixed filesystem prefixes only.
-		r.Get("/api/config/skills", apiconfig.Skills)
-		r.Get("/api/config/commands", apiconfig.Commands)
-		r.Get("/api/config/memory", apiconfig.Memory)
+		// Config explorer — read-only enumeration of skills, slash commands,
+		// and memory files, scoped per spawner / live session via ?spawnerId /
+		// ?sessionId. The only client path accepted is ?cwd, sanitized and used
+		// solely for project-local <cwd>/.claude reads.
+		configHandler := apiconfig.NewHandler(deps.SpawnerRepo, merger.GetAgents)
+		r.Get("/api/config/skills", configHandler.Skills)
+		r.Get("/api/config/commands", configHandler.Commands)
+		r.Get("/api/config/memory", configHandler.Memory)
 
 		// Edit-gate UI endpoints — browser-facing, session-authenticated (or bypass).
 		// Unlike /api/hooks/event and /api/hooks/pre-tool (hook-script ingress, secret

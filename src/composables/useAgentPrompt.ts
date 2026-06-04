@@ -87,7 +87,9 @@ export function useAgentPrompt(
       // process, so an "idle" status (no activity > 5min) is irrelevant — the
       // process is still alive and polling the channel. Inject directly.
       if (agent.channelAvailable) {
-        const res = await fetch(`/api/agents/${agent.sessionId}/message`, {
+        // Channel inject is keyed by PID: the bridge writes a discovery file
+        // named by the claude process PID, and the route is /api/agents/{pid}/message.
+        const res = await fetch(`/api/agents/${agent.pid}/message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: msg }),

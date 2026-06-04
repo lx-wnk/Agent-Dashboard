@@ -165,7 +165,7 @@ jobs:
       - name: Build frontend
         run: pnpm build
       - name: Verify build artifacts present
-        run: test -d dist/assets || { echo "dist/assets missing — vite build did not emit SPA assets"; exit 1; }
+        run: test -d server/frontend/dist/assets || { echo "server/frontend/dist/assets missing — vite build did not emit SPA assets"; exit 1; }
       - name: Check bundle-size budget
         # Thresholds can be tightened/loosened via env without editing the script.
         # Per-chunk JS budgets: vendor (vue) 200 KB, charts (d3) 400 KB, index 100 KB.

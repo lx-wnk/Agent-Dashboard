@@ -43,6 +43,11 @@ type SpawnPolicy interface {
 	// Allow returns nil when cwd is permitted, or a descriptive error otherwise.
 	// The returned error is either ErrCwdBlacklisted or ErrCwdNotAllowed.
 	Allow(ctx context.Context, cwd string) error
+	// AllowResume validates the cwd for resuming an EXISTING session. The session
+	// already runs at this cwd (it is monitored), so only the unconditional
+	// sensitive-dir blacklist applies — not the new-spawn project-roots allowlist.
+	// Returns ErrCwdBlacklisted or nil.
+	AllowResume(cwd string) error
 }
 
 // spawnPolicy is the production implementation.
@@ -57,15 +62,34 @@ func NewSpawnPolicy(roots RootsProvider) SpawnPolicy {
 	return &spawnPolicy{roots: roots}
 }
 
-// Allow implements SpawnPolicy.
-func (p *spawnPolicy) Allow(ctx context.Context, cwd string) error {
-	// Resolve to absolute, canonical path (follow symlinks).
+// canonicalize resolves cwd to an absolute, symlink-resolved path.
+func canonicalize(cwd string) (string, error) {
 	cwdAbs, err := filepath.Abs(cwd)
 	if err != nil {
-		return fmt.Errorf("cwd resolution failed: %w", err)
+		return "", fmt.Errorf("cwd resolution failed: %w", err)
 	}
 	if real, err := filepath.EvalSymlinks(cwdAbs); err == nil {
 		cwdAbs = real
+	}
+	return cwdAbs, nil
+}
+
+// AllowResume implements SpawnPolicy: blacklist-only check for resuming an
+// existing session at its own cwd.
+func (p *spawnPolicy) AllowResume(cwd string) error {
+	cwdAbs, err := canonicalize(cwd)
+	if err != nil {
+		return err
+	}
+	return checkBlacklist(cwdAbs)
+}
+
+// Allow implements SpawnPolicy.
+func (p *spawnPolicy) Allow(ctx context.Context, cwd string) error {
+	// Resolve to absolute, canonical path (follow symlinks).
+	cwdAbs, err := canonicalize(cwd)
+	if err != nil {
+		return err
 	}
 
 	// Unconditional blacklist — sensitive home directories always blocked.

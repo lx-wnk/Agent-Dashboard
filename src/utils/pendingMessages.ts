@@ -97,7 +97,8 @@ export async function replayPending(): Promise<number> {
       try {
         let res: Response
         if (msg.useChannel) {
-          res = await fetch(`/api/agents/${msg.sessionId}/message`, {
+          // Channel inject is keyed by PID (route is /api/agents/{pid}/message).
+          res = await fetch(`/api/agents/${msg.agentPid}/message`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: msg.message }),

@@ -17,6 +17,11 @@ func TestRegenerateEnt(t *testing.T) {
 	cfg := &gen.Config{
 		Target:  "../ent",
 		Package: "github.com/lx-wnk/agent-dashboard/server/internal/db/ent",
+		// Must match the canonical generation feature set, otherwise this
+		// regeneration silently strips the upsert (OnConflict*) helpers that
+		// repo code (e.g. agent_cost_trend_repo.go) depends on — corrupting the
+		// working tree on every `go test` run.
+		Features: []gen.Feature{gen.FeatureUpsert},
 	}
 	if err := entc.Generate("../ent/schema", cfg); err != nil {
 		t.Fatalf("entc.Generate: %v", err)

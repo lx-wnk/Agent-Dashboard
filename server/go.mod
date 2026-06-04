@@ -1,6 +1,6 @@
 module github.com/lx-wnk/agent-dashboard/server
 
-go 1.26.3
+go 1.26.4
 
 replace github.com/lx-wnk/agent-dashboard/sdk => ../sdk
 

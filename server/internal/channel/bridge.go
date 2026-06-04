@@ -112,7 +112,7 @@ func Run(ctx context.Context) error {
 func registerTools(server *mcp.Server, dashboardURL, mcpToken, stageRunID string, parentPid int) {
 	// dashboard_reply tool
 	type replyArgs struct {
-		Message string `json:"message" jsonschema:"description=Reply message to display in the dashboard,required"`
+		Message string `json:"message" jsonschema:"Reply message to display in the dashboard"`
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "dashboard_reply",
