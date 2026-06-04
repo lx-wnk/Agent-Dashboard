@@ -4,9 +4,47 @@
 **Status:** Draft
 **Roadmap ref:** `2026-05-09-agent-dashboard-unified-roadmap-design.md` → CI-4 (P2)
 
+## Revision (2026-06-04, post-PR-#119 review)
+
+The original design (Sections A–F below) partitioned token counting between a
+full "baseline" scan (pre-final epochs only) and the 32 KB tail parse (final
+epoch only). Final review of PR #119 found a **P1 correctness bug** in that
+partition: when the FINAL (post-last-compaction) epoch itself exceeds 32 KB, the
+tail window starts *after* the last `compact_boundary`, so the bytes between the
+boundary and the tail-window start are counted by neither path and are lost
+(reproduced: ~80 KB final epoch undercounted by ~60%, expected 2227 got 904).
+This is exactly CI-4's target scenario — the spec itself notes that session files
+over ~300 KB have all markers outside the tail.
+
+**Simplified design (implemented):** Each assistant message's `usage` is
+**per-message** (the tokens for that single API turn), not a cumulative running
+total — compaction does not reset per-message usage, only the cumulative
+context-window size. Therefore the correct lifetime token total is simply the
+**sum of every assistant message's `usage` across the WHOLE file**. The full
+linear scan (`scanFullFileTokenUsage`) is now the single authoritative source for
+`SessionData.TokenUsage`; it no longer partitions into epochs and no longer
+returns a "baseline offset". The 32 KB tail parse keeps doing only its non-token
+work (most-recent tool counts, model, last-activity timestamp, error state,
+conversation turns, tasks, BTW) and no longer contributes to — nor zeroes — the
+token total. `compact_boundary` lines are still detected, but only to set a
+`hasCompaction` diagnostic flag; they have no effect on the total.
+
+**Strict-improvement side effect:** This also fixes long **non-compacted**
+sessions over 32 KB. The old tail-only token sum undercounted them too (it only
+summed the last 32 KB of messages). The whole-file sum now counts every turn, so
+output values change for long non-compacted sessions — not just compacted ones.
+This is strictly more correct. Caching, the cache-miss-only scan trigger, and the
+"no compaction → totals unchanged for short sessions" property are all preserved.
+
+Sections A–F below describe the original epoch-partition mechanism and are
+retained for historical context; the partition / tail-final-epoch split they
+describe has been replaced by the whole-file sum above.
+
 ## Problem
 
-Claude Code sessions undergo automatic context compaction. When compaction fires, the session's JSONL log continues in the same file but the cumulative `usage` counters on subsequent `assistant` messages restart from near zero (the post-compact summary context, typically 10–25 K tokens). Because `server/internal/parser/parser.go::ParseSessionFile` sums `usage` fields across all entries visible in its 32 KB tail window, every compaction that occurred before the tail window is silently ignored. The dashboard therefore shows drastically under-counted token totals and costs for any session that has been compacted.
+> **Note (corrected by the Revision above):** the original framing below attributed the under-count to per-message `usage` counters "restarting" at compaction. That is inaccurate — each assistant message's `usage` is an independent per-turn delta and does not reset. The real cause is simply that `ParseSessionFile` only summed the **last 32 KB** of messages; a compacted (hence long) session has most of its messages — and thus most of its tokens — before the tail window. The whole-file sum in the Revision fixes this directly. The original text is kept below for context.
+
+Claude Code sessions undergo automatic context compaction, which makes session files long. Because `server/internal/parser/parser.go::ParseSessionFile` sums `usage` fields only across entries visible in its 32 KB tail window, every message before the tail window is silently ignored. The dashboard therefore shows drastically under-counted token totals and costs for any long (typically compacted) session.
 
 Measured on a real 17.5 MB session file (`cf1fdb94-2f07-4779-8c41-28c4ef3dac1c.jsonl`) with 15 compaction events: the tail-read parser returned 31 input tokens and 7 025 output tokens against a true cumulative total of 21 598 input and 1 856 151 output — a 100 % under-count for both dimensions. All 15 `compact_boundary` markers fell outside the 32 KB tail window.
 
