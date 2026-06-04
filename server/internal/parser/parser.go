@@ -59,11 +59,11 @@ type sessionCacheEntry struct {
 	path  string
 	inode uint64
 	mtime time.Time
-	// cached parse output. TokenUsage already includes the compaction baseline
-	// folded in by ParseSessionFile, so a cache hit needs no compaction re-scan.
-	// The whole entry is invalidated on inode/mtime change — and a new compaction
-	// writes a compact_boundary line, bumping mtime — so a fresh full scan runs
-	// exactly when a new compaction (or any other write) appears.
+	// cached parse output. TokenUsage is the authoritative whole-file sum computed
+	// by ParseSessionFile's full scan, so a cache hit needs no re-scan. The whole
+	// entry is invalidated on inode/mtime change — any write (a new turn, a new
+	// compaction) bumps mtime — so a fresh full scan runs exactly when the file
+	// grows.
 	data *SessionData
 	// wall-clock time when this entry was stored
 	cachedAt time.Time
@@ -234,9 +234,11 @@ type jsonlMessage struct {
 
 // isCompactBoundaryType reports whether a (type, subtype) pair is the
 // context-compaction marker the Claude CLI writes at the instant of compaction.
-// After this marker the cumulative per-message usage counters restart from near
-// zero, so token accumulation must reset at this point. This is the single
-// discriminant shared by the tail parse and the full scan. See CI-4 design.
+// Per-message assistant usage is NOT affected by compaction (only the cumulative
+// context-window size resets), so the whole-file token sum ignores the boundary
+// for the total. The marker is still detected to flag a session as compacted for
+// diagnostics. This is the single discriminant shared by the tail parse and the
+// full scan. See CI-4 design.
 func isCompactBoundaryType(typ, subtype string) bool {
 	return typ == "system" && subtype == "compact_boundary"
 }
@@ -288,7 +290,7 @@ type todoInput struct {
 	} `json:"todos"`
 }
 
-// scanEntry is the lean envelope used by scanCompactionBaseline. It decodes the
+// scanEntry is the lean envelope used by scanFullFileTokenUsage. It decodes the
 // type/subtype discriminants and the nested message.usage in a single pass. The
 // usage shape is the shared usageCounters type, so per-message token extraction
 // stays identical to the tail parser via addUsage and cannot drift.
@@ -301,47 +303,44 @@ type scanEntry struct {
 	} `json:"message"`
 }
 
-// compactionBaseline accumulates token counts for all epochs before the
-// current (post-final-compaction) tail window. The tail parse covers the final
-// epoch; this baseline supplies everything before the last compaction so the
-// returned TokenUsage reflects the whole session lifetime. See CI-4 design.
-type compactionBaseline struct {
-	// lastMarkerOffset is the byte offset just past the last compact_boundary
-	// line. Zero when the session has no compaction.
-	lastMarkerOffset int64
+// fullScanUsage is the whole-file token total plus a flag recording whether the
+// session was ever compacted. The token total is the authoritative source for
+// SessionData.TokenUsage on a cache miss — it sums every assistant message's
+// per-message usage across the ENTIRE file, so compaction is irrelevant to the
+// total (per-message usage is unaffected by compaction; only the cumulative
+// context-window size resets at a boundary). See CI-4 design.
+type fullScanUsage struct {
+	// hasCompaction is true when at least one compact_boundary line was seen.
+	// Used only for diagnostics — the token total does not depend on it.
+	hasCompaction bool
 	sdk.TokenUsage
 }
 
-// scanCompactionBaseline does a single linear pass over path to accumulate
-// per-epoch assistant usage counters. It resets the running epoch counter each
-// time it encounters a compact_boundary entry, folding the just-closed epoch
-// into the baseline. The final (post-last-compaction) epoch is deliberately NOT
-// folded in — the 32 KB tail parse covers it. A session with no compaction
-// returns a zero baseline.
+// scanFullFileTokenUsage does a single linear pass over path and sums every
+// assistant message's per-message usage across the whole file. Because each
+// assistant message's usage object is the token count for that one API turn
+// (NOT a cumulative running total), the lifetime token total is simply the sum
+// of all of them — compaction boundaries do not need special handling for the
+// total. This is the correctness fix for CI-4: the 32 KB tail window only ever
+// saw the last few messages, so a final epoch larger than 32 KB (or any long
+// non-compacted session) was undercounted. Summing the whole file fixes both.
 //
 // It reuses addUsage so the per-message usage extraction can never diverge from
 // the tail parse in ParseSessionFile.
-func scanCompactionBaseline(path string) (compactionBaseline, error) {
+func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return compactionBaseline{}, fmt.Errorf("open %s: %w", path, err)
+		return fullScanUsage{}, fmt.Errorf("open %s: %w", path, err)
 	}
 	defer f.Close()
 
-	var baseline compactionBaseline
-	var epoch sdk.TokenUsage
+	var total fullScanUsage
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 256*1024), 4*1024*1024)
 
-	var offset int64
 	for scanner.Scan() {
-		raw := scanner.Bytes()
-		// +1 for the newline byte the scanner strips; tracks the byte position
-		// at the end of the current line for lastMarkerOffset.
-		offset += int64(len(raw)) + 1
-
-		line := bytes.TrimSpace(raw)
+		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
 			continue
 		}
@@ -360,28 +359,23 @@ func scanCompactionBaseline(path string) (compactionBaseline, error) {
 			continue
 		}
 		if isCompactBoundaryType(entry.Type, entry.Subtype) {
-			// Close the current epoch: fold it into the baseline and reset.
-			baseline.InputTokens += epoch.InputTokens
-			baseline.OutputTokens += epoch.OutputTokens
-			baseline.CacheCreationTokens += epoch.CacheCreationTokens
-			baseline.CacheReadTokens += epoch.CacheReadTokens
-			epoch = sdk.TokenUsage{}
-			baseline.lastMarkerOffset = offset
+			// Record that compaction happened (diagnostics only). The token total
+			// is the whole-file sum and is unaffected by the boundary — per-message
+			// usage does not reset, only the context-window cumulative size does.
+			total.hasCompaction = true
 			continue
 		}
 		if entry.Type != "assistant" && entry.Type != "message" {
 			continue
 		}
 		if entry.Message.Role == "assistant" {
-			addUsage(&epoch, entry.Message.Usage)
+			addUsage(&total.TokenUsage, entry.Message.Usage)
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return compactionBaseline{}, fmt.Errorf("scan %s: %w", path, err)
+		return fullScanUsage{}, fmt.Errorf("scan %s: %w", path, err)
 	}
-	// epoch now holds the final (post-last-compaction) epoch — intentionally
-	// dropped; the tail parse accounts for it.
-	return baseline, nil
+	return total, nil
 }
 
 // SessionData is the parsed output of a Claude Code JSONL session log.
@@ -623,14 +617,12 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
 		}
-		// A compaction marker inside the tail window resets the cumulative usage
-		// counters: every post-compaction assistant message restarts its usage
-		// from near zero. Only the final (post-last-compaction) epoch is summed
-		// here; pre-compaction epochs are supplied by scanCompactionBaseline.
-		// This keeps the tail parse and the full scan from double-counting the
-		// boundary regardless of where it falls relative to the 32 KB window.
+		// compact_boundary lines carry no per-message usage and no tool/model/
+		// activity data the tail parse needs — skip them. Token totals come from
+		// the authoritative whole-file scan (scanFullFileTokenUsage) below, so the
+		// tail loop no longer touches data.TokenUsage and no longer needs to reset
+		// on a boundary.
 		if isCompactBoundaryType(entry.Type, entry.Subtype) {
-			data.TokenUsage = sdk.TokenUsage{}
 			continue
 		}
 		// Accept both the legacy "message" envelope and the current direct "assistant" type.
@@ -647,7 +639,8 @@ func ParseSessionFile(path string) (*SessionData, error) {
 			if msg.Model != "" {
 				data.Model = msg.Model
 			}
-			addUsage(&data.TokenUsage, msg.Usage)
+			// Token usage is NOT accumulated here. It comes exclusively from the
+			// whole-file scan below so the tail's 32 KB limit can never undercount.
 			if ts, parseErr := time.Parse(time.RFC3339Nano, entry.Timestamp); parseErr == nil {
 				if ts.After(data.LastActivity) {
 					data.LastActivity = ts
@@ -705,26 +698,27 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		slog.Warn("parser: session scan error — partial data returned", "err", err)
 	}
 
-	// Compaction-aware correction: the tail window only contains the final
-	// post-compaction epoch (the tail loop above resets on any compact_boundary
-	// it sees). A full linear scan recovers the token totals for every earlier
-	// epoch whose compact_boundary fell outside the 32 KB tail window, then folds
-	// them in. Sessions with no compaction get a zero baseline (no-op). This is a
-	// cache-miss path only — ParseSessionFile is not called on an SSE cache hit.
-	baseline, scanErr := scanCompactionBaseline(path)
-	if scanErr != nil {
-		// Non-fatal: fall back to the tail-only totals rather than dropping the
-		// whole session. Under-counting a compacted session is better than no data.
-		slog.Warn("parser: compaction baseline scan failed — token totals may under-count", "path", path, "err", scanErr)
-	} else if baseline.lastMarkerOffset > 0 {
-		slog.Debug("parser: applied compaction baseline",
-			"path", path,
-			"baselineInput", baseline.InputTokens,
-			"baselineOutput", baseline.OutputTokens)
-		data.TokenUsage.InputTokens += baseline.InputTokens
-		data.TokenUsage.OutputTokens += baseline.OutputTokens
-		data.TokenUsage.CacheCreationTokens += baseline.CacheCreationTokens
-		data.TokenUsage.CacheReadTokens += baseline.CacheReadTokens
+	// Authoritative token totals: a single linear pass sums every assistant
+	// message's per-message usage across the WHOLE file. The 32 KB tail above
+	// only ever sees the last handful of messages, so it cannot be trusted for
+	// the token total — this is true for compacted sessions whose final epoch
+	// exceeds 32 KB AND for any long non-compacted session over 32 KB. The full
+	// scan is the only source of TokenUsage; the tail loop deliberately left it
+	// untouched. This runs on the cache-miss path only — ParseSessionFile is not
+	// called on an SSE cache hit.
+	if full, scanErr := scanFullFileTokenUsage(path); scanErr != nil {
+		// Non-fatal: fall back to a tail-only sum rather than dropping the whole
+		// session. Undercounting a large session is better than no data at all.
+		slog.Warn("parser: full token scan failed — falling back to tail-only token totals (may undercount)", "path", path, "err", scanErr)
+		data.TokenUsage = tailOnlyTokenUsage(content)
+	} else {
+		if full.hasCompaction {
+			slog.Debug("parser: whole-file token total (compacted session)",
+				"path", path,
+				"input", full.InputTokens,
+				"output", full.OutputTokens)
+		}
+		data.TokenUsage = full.TokenUsage
 	}
 
 	if len(recentToolNames) > 5 {
@@ -750,6 +744,39 @@ func ParseSessionFile(path string) (*SessionData, error) {
 	}
 
 	return data, nil
+}
+
+// tailOnlyTokenUsage sums per-message assistant usage from the already-read tail
+// content. It is the degraded fallback used only when the authoritative
+// whole-file scan errors (e.g. the file became unreadable between TailRead and
+// the scan). It mirrors the old tail-accumulation behaviour — undercounting a
+// large session, but better than zero. compact_boundary lines carry no usage and
+// are simply skipped (no reset: the whole-file scan is the correct path, this is
+// damage control).
+func tailOnlyTokenUsage(content string) sdk.TokenUsage {
+	var total sdk.TokenUsage
+	scanner := bufio.NewScanner(bytes.NewReader([]byte(content)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var entry jsonlMessage
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		if entry.Type != "assistant" && entry.Type != "message" {
+			continue
+		}
+		var msg msgContent
+		if err := json.Unmarshal(entry.Message, &msg); err != nil {
+			continue
+		}
+		if msg.Role == "assistant" {
+			addUsage(&total, msg.Usage)
+		}
+	}
+	return total
 }
 
 func loadSessionMeta(sessionID string) *sdk.SessionMeta {

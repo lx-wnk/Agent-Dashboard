@@ -62,6 +62,10 @@ func ParseCodexSession(path string) (*SessionData, error) {
 	// real timestamps and turn counts. Otherwise, fall through to the
 	// stub above (mtime-only session data).
 	if strings.HasSuffix(path, ".jsonl") {
+		// NOTE: this calls ParseSessionFile directly, bypassing the session cache —
+		// the whole-file token scan therefore runs on every call. When real Codex
+		// JSONL lands, route through FindSessionForProject (cached) or accept the
+		// per-call full scan deliberately for these (currently small/absent) files.
 		if parsed, err2 := ParseSessionFile(path); err2 == nil {
 			parsed.SessionID = sessionID
 			// Override last activity with at least file mtime when parse
