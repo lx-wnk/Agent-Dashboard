@@ -42,7 +42,9 @@ describe has been replaced by the whole-file sum above.
 
 ## Problem
 
-Claude Code sessions undergo automatic context compaction. When compaction fires, the session's JSONL log continues in the same file but the cumulative `usage` counters on subsequent `assistant` messages restart from near zero (the post-compact summary context, typically 10–25 K tokens). Because `server/internal/parser/parser.go::ParseSessionFile` sums `usage` fields across all entries visible in its 32 KB tail window, every compaction that occurred before the tail window is silently ignored. The dashboard therefore shows drastically under-counted token totals and costs for any session that has been compacted.
+> **Note (corrected by the Revision above):** the original framing below attributed the under-count to per-message `usage` counters "restarting" at compaction. That is inaccurate — each assistant message's `usage` is an independent per-turn delta and does not reset. The real cause is simply that `ParseSessionFile` only summed the **last 32 KB** of messages; a compacted (hence long) session has most of its messages — and thus most of its tokens — before the tail window. The whole-file sum in the Revision fixes this directly. The original text is kept below for context.
+
+Claude Code sessions undergo automatic context compaction, which makes session files long. Because `server/internal/parser/parser.go::ParseSessionFile` sums `usage` fields only across entries visible in its 32 KB tail window, every message before the tail window is silently ignored. The dashboard therefore shows drastically under-counted token totals and costs for any long (typically compacted) session.
 
 Measured on a real 17.5 MB session file (`cf1fdb94-2f07-4779-8c41-28c4ef3dac1c.jsonl`) with 15 compaction events: the tail-read parser returned 31 input tokens and 7 025 output tokens against a true cumulative total of 21 598 input and 1 856 151 output — a 100 % under-count for both dimensions. All 15 `compact_boundary` markers fell outside the 32 KB tail window.
 
