@@ -3,6 +3,7 @@ package merger
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -49,6 +50,31 @@ func channelDiscoveryExists(pid int) bool {
 	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid)+".json")
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+// channelLiveInjectable reports whether the agent's discovery file marks the
+// session as live-injectable: it carries a tmux pane (delivered via
+// `tmux send-keys`) or a pty broker (`ptyInject`, delivered to the pty master).
+// Either is a path that actually drives an interactive Claude session, unlike
+// MCP log delivery.
+func channelLiveInjectable(pid int) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid)+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var disc struct {
+		TmuxPane  string `json:"tmuxPane"`
+		PtyInject bool   `json:"ptyInject"`
+	}
+	if json.Unmarshal(data, &disc) != nil {
+		return false
+	}
+	return disc.TmuxPane != "" || disc.PtyInject
 }
 
 // strPtr returns nil if s is empty, otherwise a pointer to s.
@@ -176,6 +202,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData) sdk.Agent
 		Entrypoint:                session.Entrypoint,
 		Status:                    CalculateStatus(session.LastActivity),
 		ChannelAvailable:          channelDiscoveryExists(proc.PID),
+		LiveInjectable:            channelLiveInjectable(proc.PID),
 		Uptime:                    proc.Uptime,
 		LastActivity:              session.LastActivity.Format(time.RFC3339),
 		CurrentAction:             strPtr(session.CurrentAction),

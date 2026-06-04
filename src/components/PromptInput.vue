@@ -72,10 +72,10 @@ const slashSuggestions = computed(() => {
 
 const showSuggestions = computed(() => slashSuggestions.value.length > 0)
 
-// A monitored session without the dashboard channel can't receive a live prompt;
-// sending resumes it as a NEW session (claude --resume). Surface that so it's not
-// mistaken for live injection.
-const isResumeMode = computed(() => !!props.agent && !props.agent.channelAvailable)
+// Only a live-injectable session (pty broker or tmux) can receive a live prompt.
+// Any other session resumes as a NEW session (claude --resume) on send — surface
+// that so it's not mistaken for live injection.
+const isResumeMode = computed(() => !!props.agent && !props.agent.liveInjectable)
 
 function selectSuggestion(cmd: { name: string, disabled?: boolean }) {
   if (cmd.disabled)
@@ -234,7 +234,7 @@ defineExpose({ focus })
       class="text-[11px] text-amber-700 dark:text-amber-400"
       :class="variant === 'full' ? 'px-4 pb-2' : 'px-3 pb-1.5 pt-0.5'"
     >
-      ⤳ No live channel — sending resumes this session as a <strong>new</strong> session. Spawn via the dashboard for live injection.
+      ⤳ Not live-injectable — sending resumes this session as a <strong>new</strong> session. Start it via <code>claude-channel-pty.sh</code> (no tmux) or in tmux for live injection.
     </p>
     <p
       v-if="sendStatus"

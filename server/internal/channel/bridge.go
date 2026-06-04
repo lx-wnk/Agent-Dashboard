@@ -267,6 +267,25 @@ func isLoopbackURL(rawURL string) bool {
 
 // ─── Discovery ────────────────────────────────────────────────────────────────
 
+// tmuxTarget returns the current tmux pane id and server socket path, read from
+// the inherited environment, or ("","") when not running inside tmux.
+func tmuxTarget() (pane, socket string) {
+	return parseTmuxEnv(os.Getenv("TMUX_PANE"), os.Getenv("TMUX"))
+}
+
+// parseTmuxEnv extracts the pane id and socket path. $TMUX is
+// "<socket>,<server-pid>,<session>"; the socket is the first comma field.
+func parseTmuxEnv(tmuxPane, tmuxEnv string) (pane, socket string) {
+	pane = strings.TrimSpace(tmuxPane)
+	if pane == "" {
+		return "", ""
+	}
+	if tmuxEnv != "" {
+		socket = strings.TrimSpace(strings.SplitN(tmuxEnv, ",", 2)[0])
+	}
+	return pane, socket
+}
+
 func writeDiscovery(parentPid, port int, token string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -277,14 +296,24 @@ func writeDiscovery(parentPid, port int, token string) (string, error) {
 		return "", fmt.Errorf("mkdir: %w", err)
 	}
 	path := filepath.Join(dir, strconv.Itoa(parentPid)+".json")
-	data, _ := json.Marshal(map[string]any{
+	entry := map[string]any{
 		"port":       port,
 		"channelPid": os.Getpid(),
 		"parentPid":  parentPid,
 		"cwd":        cwd(),
 		"token":      token,
 		"startedAt":  time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+	// When claude runs inside tmux, record the pane + socket so the dashboard can
+	// deliver prompts via `tmux send-keys` (real keyboard input) instead of the
+	// MCP log channel, which Claude does not act on for an interactive session.
+	if pane, socket := tmuxTarget(); pane != "" {
+		entry["tmuxPane"] = pane
+		if socket != "" {
+			entry["tmuxSocket"] = socket
+		}
+	}
+	data, _ := json.Marshal(entry)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if os.IsExist(err) {
 		// Stale file from a previous run with the same parent PID — overwrite it.

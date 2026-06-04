@@ -224,6 +224,11 @@ type Agent struct {
 	ToolCounts                map[string]int `json:"toolCounts"`
 	Meta                      *SessionMeta   `json:"meta"`
 	ChannelAvailable          bool           `json:"channelAvailable"`
+	// LiveInjectable is true when the dashboard can deliver a prompt to this
+	// running interactive session as real keyboard input — either via the pty
+	// broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending
+	// resumes the session as a new one (MCP log delivery does not drive it).
+	LiveInjectable            bool           `json:"liveInjectable,omitempty"`
 	LastOutput                *string        `json:"lastOutput"`
 	ConvergenceAlert          bool           `json:"convergenceAlert"`
 	ConvergenceToolName       *string        `json:"convergenceToolName"`

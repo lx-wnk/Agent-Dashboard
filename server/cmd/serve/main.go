@@ -97,6 +97,26 @@ func main() {
 	}
 	root.AddCommand(channelCmd)
 
+	ptyhostCmd := &cobra.Command{
+		Use:   "ptyhost -- <command> [args...]",
+		Short: "Run a command under a pty with dashboard live prompt injection (tmux-free)",
+		// Pass every argument through to the child unchanged (e.g. claude's own flags).
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// ptyhost proxies the child via os.Stdout; keep logs off stdout.
+			slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+				Level: slog.LevelWarn,
+			})))
+			// Drop a leading "--" separator if cobra passed it through.
+			if len(args) > 0 && args[0] == "--" {
+				args = args[1:]
+			}
+			return channel.RunPTY(cmd.Context(), args)
+		},
+		Hidden: true,
+	}
+	root.AddCommand(ptyhostCmd)
+
 	root.AddCommand(serve)
 
 	if err := root.Execute(); err != nil {

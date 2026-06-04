@@ -241,6 +241,13 @@ export interface Agent {
   toolCounts: { [key: string]: number /* int */};
   meta?: SessionMeta;
   channelAvailable: boolean;
+  /**
+   * LiveInjectable is true when the dashboard can deliver a prompt to this
+   * running interactive session as real keyboard input — either via the pty
+   * broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending
+   * resumes the session as a new one (MCP log delivery does not drive it).
+   */
+  liveInjectable?: boolean;
   lastOutput?: string;
   convergenceAlert: boolean;
   convergenceToolName?: string;

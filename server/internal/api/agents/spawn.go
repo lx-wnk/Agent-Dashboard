@@ -430,11 +430,21 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 		return fmt.Errorf("channel not available for PID %d", pid)
 	}
 	var disc struct {
-		Port  int    `json:"port"`
-		Token string `json:"token"`
+		Port       int    `json:"port"`
+		Token      string `json:"token"`
+		TmuxPane   string `json:"tmuxPane"`
+		TmuxSocket string `json:"tmuxSocket"`
 	}
 	if err := json.Unmarshal(data, &disc); err != nil || disc.Port == 0 {
 		return fmt.Errorf("invalid discovery file for PID %d", pid)
+	}
+
+	// Preferred path: if the session runs in tmux, inject the prompt as real
+	// keyboard input via `tmux send-keys`. This actually drives an interactive
+	// Claude session, unlike the MCP log channel below (which Claude does not act
+	// on for an interactive session).
+	if disc.TmuxPane != "" {
+		return sendKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, message)
 	}
 
 	body, _ := json.Marshal(map[string]string{"message": message})
