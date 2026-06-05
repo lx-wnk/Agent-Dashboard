@@ -418,47 +418,80 @@ func (m *SpawnManager) GetStatus(pid int) *SpawnStatus {
 	return &cp
 }
 
-// SendMessageToChannel forwards a message to the channel bridge for the given PID.
+// SendMessageToChannel forwards a message to the running interactive Claude
+// session identified by pid. It consults two discovery files written by the
+// pty-broker and channel-bridge respectively, applying the following delivery
+// precedence so that the most reliable path is always preferred:
+//
+//  1. Bridge file ({pid}.json) with a non-empty tmuxPane → tmux send-keys
+//     (most reliable; the multiplexer owns the pty).
+//  2. Pty file ({pid}.pty.json) with a non-zero port → POST to the pty-broker
+//     HTTP endpoint (loopback; the broker owns the pty master).
+//  3. Bridge file ({pid}.json) with a non-zero port → POST to the channel-bridge
+//     HTTP endpoint (MCP log channel; legacy / pipeline-agent path).
+//
+// If none of the files are present or usable, an error is returned.
 func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, message string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("UserHomeDir: %w", err)
 	}
-	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid)+".json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("channel not available for PID %d", pid)
-	}
-	var disc struct {
-		Port       int    `json:"port"`
-		Token      string `json:"token"`
-		TmuxPane   string `json:"tmuxPane"`
-		TmuxSocket string `json:"tmuxSocket"`
-	}
-	if err := json.Unmarshal(data, &disc); err != nil || disc.Port == 0 {
-		return fmt.Errorf("invalid discovery file for PID %d", pid)
+	base := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid))
+
+	// Attempt 1: read the bridge file for tmux delivery.
+	var bridgePort int
+	var bridgeToken string
+	if data, rerr := os.ReadFile(base + ".json"); rerr == nil {
+		var disc struct {
+			Port       int    `json:"port"`
+			Token      string `json:"token"`
+			TmuxPane   string `json:"tmuxPane"`
+			TmuxSocket string `json:"tmuxSocket"`
+		}
+		if json.Unmarshal(data, &disc) == nil {
+			if disc.TmuxPane != "" {
+				// Highest-priority path: tmux send-keys.
+				return sendKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, message)
+			}
+			bridgePort = disc.Port
+			bridgeToken = disc.Token
+		}
 	}
 
-	// Preferred path: if the session runs in tmux, inject the prompt as real
-	// keyboard input via `tmux send-keys`. This actually drives an interactive
-	// Claude session, unlike the MCP log channel below (which Claude does not act
-	// on for an interactive session).
-	if disc.TmuxPane != "" {
-		return sendKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, message)
+	// Attempt 2: read the pty file for loopback-HTTP delivery.
+	if data, rerr := os.ReadFile(base + ".pty.json"); rerr == nil {
+		var disc struct {
+			Port  int    `json:"port"`
+			Token string `json:"token"`
+		}
+		if json.Unmarshal(data, &disc) == nil && disc.Port != 0 {
+			return sendHTTPMessage(ctx, disc.Port, disc.Token, message)
+		}
 	}
 
+	// Attempt 3: fall back to the bridge HTTP endpoint (legacy/MCP-log path).
+	if bridgePort != 0 {
+		return sendHTTPMessage(ctx, bridgePort, bridgeToken, message)
+	}
+
+	return fmt.Errorf("channel not available for PID %d", pid)
+}
+
+// sendHTTPMessage POSTs message to http://127.0.0.1:{port}/message authenticated
+// with token as a Bearer credential. Shared by the pty-inject and bridge-HTTP paths.
+func sendHTTPMessage(ctx context.Context, port int, token, message string) error {
 	body, _ := json.Marshal(map[string]string{"message": message})
 	req, err := http.NewRequestWithContext(
 		ctx,
 		"POST",
-		fmt.Sprintf("http://127.0.0.1:%d/message", disc.Port),
+		fmt.Sprintf("http://127.0.0.1:%d/message", port),
 		bytes.NewReader(body),
 	)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+disc.Token)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	client := &http.Client{Timeout: channelMsgTimeout}
 	resp, err := client.Do(req)

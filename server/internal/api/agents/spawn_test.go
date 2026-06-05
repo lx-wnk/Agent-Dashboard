@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
@@ -966,4 +969,149 @@ func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {
 		"DASHBOARD_JWT_SECRET must be stripped from child env")
 	assert.Equal(t, "", envValue((*captured).Env, "DASHBOARD_HOOKS_SECRET"),
 		"DASHBOARD_HOOKS_SECRET must be stripped from child env")
+}
+
+// writeDiscoveryFile writes a discovery JSON file for pid under the given dir.
+func writeDiscoveryFile(t *testing.T, dir, filename string, content map[string]any) {
+	t.Helper()
+	data, err := json.Marshal(content)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, filename), data, 0o600))
+}
+
+// TestSendMessageToChannel_PtyFileTakesPrecedenceOverBridgeHTTP verifies that
+// when only the pty file exists (no bridge .json), SendMessageToChannel POSTs
+// to the pty server using the pty token.
+func TestSendMessageToChannel_PtyFileTakesPrecedenceOverBridgeHTTP(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, channelconfig.DiscoveryDir)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	// Set up a fake pty inject HTTP server.
+	var gotToken string
+	var gotMessage string
+	ptySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/message" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		gotToken = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		var body struct {
+			Message string `json:"message"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotMessage = body.Message
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer ptySrv.Close()
+
+	// Extract the port the test server listens on.
+	ptyPort := ptySrv.Listener.Addr().(*net.TCPAddr).Port
+
+	pid := 22001
+	writeDiscoveryFile(t, dir, fmt.Sprintf("%d.pty.json", pid), map[string]any{
+		"port":      ptyPort,
+		"token":     "pty-secret",
+		"ptyInject": true,
+	})
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	err := m.SendMessageToChannel(context.Background(), pid, "hello pty")
+	require.NoError(t, err, "SendMessageToChannel with only pty file must succeed")
+	assert.Equal(t, "pty-secret", gotToken, "must use pty file token")
+	assert.Equal(t, "hello pty", gotMessage, "must send correct message body")
+}
+
+// TestSendMessageToChannel_TmuxTakesPrecedenceOverPty verifies that a bridge
+// file with a tmuxPane triggers tmux send-keys instead of the pty HTTP path,
+// even when both files are present.
+func TestSendMessageToChannel_TmuxTakesPrecedenceOverPty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, channelconfig.DiscoveryDir)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	// Pty server — must NOT be called when tmux path is taken.
+	ptyHit := false
+	ptySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ptyHit = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer ptySrv.Close()
+
+	ptyPort := ptySrv.Listener.Addr().(*net.TCPAddr).Port
+	pid := 22002
+
+	// Bridge file with a tmuxPane.
+	writeDiscoveryFile(t, dir, fmt.Sprintf("%d.json", pid), map[string]any{
+		"port":      9999,
+		"token":     "bridge-secret",
+		"tmuxPane":  "%3",
+		"tmuxSocket": "",
+	})
+	// Pty file also present.
+	writeDiscoveryFile(t, dir, fmt.Sprintf("%d.pty.json", pid), map[string]any{
+		"port":      ptyPort,
+		"token":     "pty-secret",
+		"ptyInject": true,
+	})
+
+	// Intercept tmux — succeed immediately.
+	var tmuxCalled bool
+	origRunner := tmuxRunner
+	origLook := tmuxLookPath
+	t.Cleanup(func() { tmuxRunner = origRunner; tmuxLookPath = origLook })
+	tmuxLookPath = func() (string, error) { return "/usr/bin/tmux", nil }
+	tmuxRunner = func(_ context.Context, _ ...string) error {
+		tmuxCalled = true
+		return nil
+	}
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	err := m.SendMessageToChannel(context.Background(), pid, "via tmux")
+	require.NoError(t, err)
+	assert.True(t, tmuxCalled, "tmux send-keys must be used when bridge file has tmuxPane")
+	assert.False(t, ptyHit, "pty HTTP server must NOT be called when tmux path is taken")
+}
+
+// TestSendMessageToChannel_FallsBackToBridgeHTTPWhenNoPty verifies that when
+// only the bridge file exists (no pty file, no tmuxPane), the HTTP POST goes to
+// the bridge port.
+func TestSendMessageToChannel_FallsBackToBridgeHTTPWhenNoPty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, channelconfig.DiscoveryDir)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	var gotMessage string
+	bridgeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/message" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		var body struct {
+			Message string `json:"message"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotMessage = body.Message
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer bridgeSrv.Close()
+
+	bridgePort := bridgeSrv.Listener.Addr().(*net.TCPAddr).Port
+	pid := 22003
+
+	writeDiscoveryFile(t, dir, fmt.Sprintf("%d.json", pid), map[string]any{
+		"port":  bridgePort,
+		"token": "bridge-token",
+	})
+
+	m := NewSpawnManager(5, 60000, nil, nil)
+	err := m.SendMessageToChannel(context.Background(), pid, "bridge msg")
+	require.NoError(t, err, "must succeed with bridge file only")
+	assert.Equal(t, "bridge msg", gotMessage)
 }

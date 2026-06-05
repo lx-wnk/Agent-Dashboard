@@ -135,9 +135,12 @@ func startPtyHTTPServer(ptmx io.Writer, httpToken string) (*http.Server, int, er
 	return srv, port, nil
 }
 
-// writePtyDiscovery writes the discovery file for a pty-hosted session. It uses
-// the same port/token shape as the MCP bridge (so the dashboard's HTTP delivery
-// is reused) plus ptyInject:true so the UI knows the session is live-injectable.
+// writePtyDiscovery writes the pty-broker discovery file for a pty-hosted
+// session. It writes to {childPid}.pty.json (not {childPid}.json) so it never
+// collides with the channel bridge's {parentPid}.json file when both run for
+// the same claude process. The dashboard reads BOTH files independently:
+//   - {pid}.json  → channel bridge (channelAvailable, tmuxPane)
+//   - {pid}.pty.json → pty broker (channelAvailable, ptyInject)
 func writePtyDiscovery(childPid, port int, token string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -147,7 +150,7 @@ func writePtyDiscovery(childPid, port int, token string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, strconv.Itoa(childPid)+".json")
+	path := filepath.Join(dir, strconv.Itoa(childPid)+".pty.json")
 	data, _ := json.Marshal(map[string]any{
 		"port":      port,
 		"token":     token,
