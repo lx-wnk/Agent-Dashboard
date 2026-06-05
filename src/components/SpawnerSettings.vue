@@ -5,10 +5,12 @@ import { useAdapterCatalog } from '../composables/useAdapterCatalog'
 import {
   createSpawner,
   deleteSpawner,
+  setDefaultSpawner,
   updateSpawner,
   useSpawners,
 } from '../composables/useSpawners'
 import { isAllowedSpawnerCommand } from '../utils/validation'
+import SpawnerDetailView from './SpawnerDetailView.vue'
 import AppButton from './ui/AppButton.vue'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
@@ -62,6 +64,11 @@ interface SpawnerFormState {
 let _envKey = 0
 
 const editingSpawner = ref<Spawner | null>(null)
+// Read-only inspection target, tracked by id so live SSE row updates reflect
+// while the detail view is open. Mutually exclusive with the edit form — opening
+// one closes the other so the section only ever shows a single surface.
+const viewingSpawnerId = ref<string | null>(null)
+const viewingSpawner = computed(() => spawners.value.find(s => s.id === viewingSpawnerId.value) ?? null)
 const isCreating = ref(false)
 const formVisible = ref(false)
 const formSaving = ref(false)
@@ -70,6 +77,9 @@ const form = ref<SpawnerFormState>(emptyForm())
 
 const currentAdapterMeta = computed(() => getByType(form.value.adapterType))
 const showCommandFields = computed(() => usesCommandFields(form.value.adapterType))
+// Editing a built-in: every field is editable except the slug, which the
+// resolution backstop GetBySlug("claude-default") depends on.
+const editingBuiltIn = computed(() => !isCreating.value && !!editingSpawner.value?.builtIn)
 
 function emptyForm(): SpawnerFormState {
   return {
@@ -110,7 +120,17 @@ function onAdapterTypeChange(): void {
   }
 }
 
+function openView(spawner: Spawner) {
+  closeForm()
+  viewingSpawnerId.value = spawner.id
+}
+
+function closeView() {
+  viewingSpawnerId.value = null
+}
+
 function openCreate() {
+  viewingSpawnerId.value = null
   editingSpawner.value = null
   isCreating.value = true
   form.value = emptyForm()
@@ -120,8 +140,8 @@ function openCreate() {
 }
 
 function openEdit(spawner: Spawner) {
-  if (spawner.builtIn)
-    return
+  // Built-in spawners are now editable (slug stays locked in the form below).
+  viewingSpawnerId.value = null
   editingSpawner.value = spawner
   isCreating.value = false
   const adapterType = adapterTypeOf(spawner)
@@ -223,10 +243,15 @@ async function handleSave() {
       modelOverride: form.value.modelOverride.trim() || undefined,
       description: form.value.description.trim() || undefined,
     }
-    if (isCreating.value)
+    if (isCreating.value) {
       await createSpawner(payload)
-    else if (editingSpawner.value)
-      await updateSpawner(editingSpawner.value.id, payload)
+    }
+    else if (editingSpawner.value) {
+      // Built-in slug is immutable server-side — omit it so an unchanged value
+      // can never trip the "cannot change the slug of a built-in spawner" guard.
+      const { slug, ...rest } = payload
+      await updateSpawner(editingSpawner.value.id, editingSpawner.value.builtIn ? rest : payload)
+    }
     await refetch()
     closeForm()
   }
@@ -256,18 +281,37 @@ async function handleDelete(id: string) {
     confirmDeleteId.value = null
   }
 }
+
+// ── Set default ───────────────────────────────────────────────────────────────
+const settingDefaultId = ref<string | null>(null)
+const defaultError = ref<string | null>(null)
+
+async function handleSetDefault(id: string) {
+  defaultError.value = null
+  settingDefaultId.value = id
+  try {
+    await setDefaultSpawner(id)
+    await refetch()
+  }
+  catch (e) {
+    defaultError.value = (e as Error).message
+  }
+  finally {
+    settingDefaultId.value = null
+  }
+}
 </script>
 
 <template>
   <div class="flex flex-col gap-4">
-    <!-- Header -->
-    <div class="flex items-start justify-between gap-3">
+    <!-- Header (hidden while inspecting a single spawner — detail view owns its own header) -->
+    <div v-if="!viewingSpawner" class="flex items-start justify-between gap-3">
       <div v-if="!hideTitle">
         <h3 class="text-[17px] font-bold text-fg mb-1">
           Spawners
         </h3>
         <p class="text-xs text-fg-mute">
-          Configure LLM adapters per spawner row. Built-in spawners are read-only. Each custom row picks an adapter type (claude, ollama, openai, custom) and supplies the adapter-specific config keys.
+          Configure LLM adapters per spawner row. Each row picks an adapter type (claude, ollama, openai, custom) and supplies the adapter-specific config keys. The <strong>Default</strong> row is used whenever a task or its project names no spawner. Built-in rows are editable but cannot be deleted or renamed (slug locked).
         </p>
       </div>
       <AppButton variant="info" class="ml-auto" @click="openCreate">
@@ -281,10 +325,23 @@ async function handleDelete(id: string) {
     <p v-if="deleteError" class="text-xs text-red-600 dark:text-red-400">
       {{ deleteError }}
     </p>
+    <p v-if="defaultError" class="text-xs text-red-600 dark:text-red-400">
+      {{ defaultError }}
+    </p>
 
     <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
       Loading spawners...
     </div>
+
+    <!-- Read-only detail view takes over the section when a row is opened -->
+    <SpawnerDetailView
+      v-else-if="viewingSpawner"
+      :spawner="viewingSpawner"
+      :setting-default="settingDefaultId === viewingSpawner.id"
+      @back="closeView"
+      @edit="openEdit"
+      @set-default="(s) => handleSetDefault(s.id)"
+    />
 
     <!-- Spawner list + form side-by-side when editing -->
     <template v-else>
@@ -311,8 +368,13 @@ async function handleDelete(id: string) {
         <tbody>
           <tr v-for="spawner in spawners" :key="spawner.id" class="last:[&>td]:border-b-0">
             <td class="px-3 py-2.5 border-b border-line">
-              <div class="font-semibold text-fg">
-                {{ spawner.name }}
+              <div class="flex items-center gap-1.5">
+                <span class="font-semibold text-fg">{{ spawner.name }}</span>
+                <span
+                  v-if="spawner.isDefault"
+                  class="text-[9px] font-semibold uppercase tracking-wider px-1 py-px rounded bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400"
+                  title="Used when a task or its project names no spawner"
+                >★ Default</span>
               </div>
               <div v-if="spawner.description" class="text-[11px] text-fg-mute line-clamp-1">
                 {{ spawner.description }}
@@ -336,10 +398,7 @@ async function handleDelete(id: string) {
               >{{ spawner.builtIn ? 'Built-in' : 'Custom' }}</span>
             </td>
             <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
-              <template v-if="spawner.builtIn">
-                <span class="text-xs text-fg-mute">Read-only</span>
-              </template>
-              <template v-else-if="confirmDeleteId === spawner.id">
+              <template v-if="confirmDeleteId === spawner.id">
                 <AppButton variant="danger" size="sm" class="mr-1" @click="handleDelete(spawner.id)">
                   Confirm
                 </AppButton>
@@ -351,11 +410,28 @@ async function handleDelete(id: string) {
                 <button
                   type="button"
                   class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 dark:hover:text-blue-400 mr-1"
+                  @click="openView(spawner)"
+                >
+                  Details
+                </button>
+                <button
+                  v-if="!spawner.isDefault"
+                  type="button"
+                  class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:text-emerald-600 dark:hover:text-emerald-400 mr-1 disabled:opacity-50"
+                  :disabled="settingDefaultId === spawner.id"
+                  @click="handleSetDefault(spawner.id)"
+                >
+                  {{ settingDefaultId === spawner.id ? 'Setting…' : 'Set default' }}
+                </button>
+                <button
+                  type="button"
+                  class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 dark:hover:text-blue-400 mr-1"
                   @click="openEdit(spawner)"
                 >
                   Edit
                 </button>
                 <button
+                  v-if="!spawner.builtIn && !spawner.isDefault"
                   type="button"
                   class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
                   @click="confirmDeleteId = spawner.id"
@@ -400,9 +476,13 @@ async function handleDelete(id: string) {
               id="sp-slug"
               v-model="form.slug"
               type="text"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
+              :readonly="editingBuiltIn"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500 read-only:opacity-60 read-only:cursor-not-allowed"
               placeholder="my-spawner"
             >
+            <p v-if="editingBuiltIn" class="text-[10px] text-fg-mute mt-0.5">
+              Built-in slug is locked.
+            </p>
           </div>
           <div>
             <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-adapter-type">Adapter Type</label>

@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useConfigExplorer } from '../composables/useConfigExplorer'
-import { useSpawners } from '../composables/useSpawners'
 
 type Tab = 'skills' | 'commands' | 'memory'
+
+// Pure presentation of the skills/commands/memory resolved for ONE spawner.
+// The scope is driven entirely by the `spawnerId` prop — `undefined` resolves
+// against the default (claude-default) CLAUDE_CONFIG_DIR. There is no in-view
+// scope picker any more; the surrounding spawner detail view owns the scope.
+const props = defineProps<{ spawnerId?: string }>()
 
 const {
   skills,
@@ -18,12 +23,10 @@ const {
   setSpawner,
 } = useConfigExplorer()
 
-const { spawners } = useSpawners()
-
-// '' = default spawner scope (claude-default). Switching re-enumerates against
-// the selected spawner's CLAUDE_CONFIG_DIR, so claude-work shows its own set.
-const selectedSpawnerId = ref<string>('')
-watch(selectedSpawnerId, id => setSpawner(id || undefined))
+// Re-enumerate whenever the spawner under inspection changes. `immediate` so the
+// first paint already reflects the requested scope rather than the singleton's
+// last-loaded one.
+watch(() => props.spawnerId, id => setSpawner(id), { immediate: true })
 
 const activeTab = ref<Tab>('skills')
 const searchQuery = ref('')
@@ -86,40 +89,21 @@ function formatTimestamp(unixSeconds: number): string {
 
 <template>
   <div class="flex flex-col gap-3">
-    <!-- Scope bar: what this view maps + which spawner it's resolved against -->
-    <div class="flex flex-col gap-2 bg-card border border-line rounded-md p-3">
-      <p class="text-[12px] text-fg-mute m-0 leading-relaxed">
-        The skills, slash commands &amp; memory available to a spawned agent — i.e. what that agent can do.
-        It is resolved per spawner: each spawner's <code class="font-mono">CLAUDE_CONFIG_DIR</code>
-        (e.g. <code class="font-mono">claude-work</code>) surfaces a different set of commands, skills &amp; plugins.
-      </p>
-      <div class="flex items-center gap-2 flex-wrap">
-        <label class="text-[12px] text-fg-mute">Spawner scope:</label>
-        <select
-          v-model="selectedSpawnerId"
-          class="bg-raised border border-line rounded-md px-2 py-1 text-[13px] text-fg focus:outline-none focus:border-blue-500"
-        >
-          <option value="">
-            Default (claude-default)
-          </option>
-          <option v-for="sp in spawners" :key="sp.id" :value="sp.id">
-            {{ sp.name }} ({{ sp.slug }})
-          </option>
-        </select>
-        <span v-if="scopeLabel" class="text-[11px] text-fg-mute px-1.5 py-0.5 rounded bg-raised">
-          {{ scopeLabel }}
-        </span>
-        <span v-if="engineVersion" class="text-[11px] text-fg-faint">
-          engine v{{ engineVersion }}
-        </span>
-        <span
-          v-if="builtinsMayBeStale"
-          class="text-[11px] text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30"
-          title="The engine version differs from the version the built-in command list was curated against; built-ins shown may be out of date."
-        >
-          built-ins may be stale
-        </span>
-      </div>
+    <!-- Scope strip: which CLAUDE_CONFIG_DIR these capabilities resolved against. -->
+    <div v-if="scopeLabel || engineVersion || builtinsMayBeStale" class="flex items-center gap-2 flex-wrap">
+      <span v-if="scopeLabel" class="text-[11px] text-fg-mute px-1.5 py-0.5 rounded bg-raised">
+        {{ scopeLabel }}
+      </span>
+      <span v-if="engineVersion" class="text-[11px] text-fg-faint">
+        engine v{{ engineVersion }}
+      </span>
+      <span
+        v-if="builtinsMayBeStale"
+        class="text-[11px] text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30"
+        title="The engine version differs from the version the built-in command list was curated against; built-ins shown may be out of date."
+      >
+        built-ins may be stale
+      </span>
     </div>
 
     <div class="flex items-center gap-2 flex-wrap">

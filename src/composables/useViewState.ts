@@ -1,9 +1,9 @@
 import { ref, watch } from 'vue'
 
-export type ActiveView = 'dashboard' | 'workflows' | 'pipeline' | 'cost' | 'config'
+export type ActiveView = 'dashboard' | 'workflows' | 'pipeline' | 'cost'
 export type DashboardLayout = 'cards' | 'list'
 
-const ACTIVE_VIEWS: ActiveView[] = ['dashboard', 'workflows', 'pipeline', 'cost', 'config']
+const ACTIVE_VIEWS: ActiveView[] = ['dashboard', 'workflows', 'pipeline', 'cost']
 
 function readInitial(): { view: ActiveView, layout: DashboardLayout } {
   const ls = typeof localStorage !== 'undefined' ? localStorage : null
@@ -33,7 +33,9 @@ function readInitial(): { view: ActiveView, layout: DashboardLayout } {
           view = 'workflows'
           break
         case 'config-explorer':
-          view = 'config'
+          // Config view was folded into Settings → Spawners → Details; send
+          // legacy deep-links to the dashboard rather than a dead view.
+          view = 'dashboard'
           break
         case 'cost-analytics':
           view = 'cost'
