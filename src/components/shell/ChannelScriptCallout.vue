@@ -27,7 +27,7 @@ async function copy() {
 </script>
 
 <template>
-  <div v-if="scriptPath" class="mt-6 flex items-center gap-2 text-[11px] text-fg-faint">
+  <div v-if="scriptPath" class="mt-auto pt-6 flex items-center gap-2 text-[11px] text-fg-faint">
     <span class="whitespace-nowrap">Channel command:</span>
     <code
       data-testid="channel-script-path"
