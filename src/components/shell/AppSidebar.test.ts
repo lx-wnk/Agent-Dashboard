@@ -40,6 +40,7 @@ describe('appSidebar', () => {
     const w = mount(AppSidebar, { props })
     expect(w.text()).toContain('Monitor')
     expect(w.text()).toContain('Build')
+    expect(w.text()).toContain('Insights')
   })
 
   it('clicking a nav item sets activeView', async () => {
