@@ -61,7 +61,12 @@ function badgeFor(view: ActiveView): number | null {
     </div>
 
     <div class="flex-1 flex flex-col gap-0.5 overflow-y-auto">
-      <template v-for="g in grouped" :key="g.group">
+      <div
+        v-for="(g, gi) in grouped"
+        :key="g.group"
+        class="flex flex-col gap-0.5"
+        :class="{ 'mt-auto': gi === grouped.length - 1 }"
+      >
         <div v-if="expanded" class="px-2 pt-3 pb-1 text-[9px] uppercase tracking-wider text-fg-faint font-bold">
           {{ g.group }}
         </div>
@@ -78,7 +83,7 @@ function badgeFor(view: ActiveView): number | null {
             <span class="text-[9px] bg-raised text-fg-mute rounded-full px-1.5 py-0.5">{{ badgeFor(item.view) }}</span>
           </template>
         </NavItem>
-      </template>
+      </div>
     </div>
 
     <SidebarFooter

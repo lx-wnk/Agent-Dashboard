@@ -7,8 +7,13 @@ describe('navConfig', () => {
     expect(views).toEqual(['config', 'cost', 'dashboard', 'pipeline', 'workflows'])
   })
 
-  it('groups are Monitor and Build', () => {
-    expect(NAV_GROUPS).toEqual(['Monitor', 'Build'])
+  it('groups are Monitor, Build and Insights', () => {
+    expect(NAV_GROUPS).toEqual(['Monitor', 'Build', 'Insights'])
+  })
+
+  it('groups Workflows, Cost and Config under Insights', () => {
+    const insights = NAV_ITEMS.filter(i => i.group === 'Insights').map(i => i.view)
+    expect(insights).toEqual(['workflows', 'cost', 'config'])
   })
 
   it('every item belongs to a known group', () => {
