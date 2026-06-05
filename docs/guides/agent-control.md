@@ -10,7 +10,13 @@ For agents started **manually** outside the dashboard, inject the channel binary
 claude --mcp-config '{"mcpServers":{"dashboard-channel":{"command":"/path/to/bin/dashboard-channel"}}}'
 ```
 
-A convenience wrapper is shipped at [`scripts/claude-with-channel.sh`](../../scripts/claude-with-channel.sh).
+Use the built-in `agent-dashboard live` command, which loads the channel MCP automatically and selects the best transport (tmux if available, pty broker otherwise):
+
+```bash
+agent-dashboard live
+agent-dashboard live --resume <session-id>
+agent-dashboard live --yolo   # adds --dangerously-skip-permissions
+```
 
 ## Spawning new agents
 

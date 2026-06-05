@@ -26,13 +26,10 @@ type mcpConfig struct {
 // the channel bridge binary to avoid duplicating the path.
 const DiscoveryDir = ".claude/dashboard-channel"
 
-// WriteTempConfig writes a temporary MCP config file that tells the claude CLI
-// how to start the dashboard-channel MCP server.
-//
-// binaryPath is the absolute path to the agent-dashboard binary.
-// The caller is responsible for deleting the returned file path.
-func WriteTempConfig(binaryPath string) (path string, err error) {
-	cfg := mcpConfig{
+// buildConfig returns the mcpConfig struct for the given binary path.
+// This is the single definition of the channel MCP config shape.
+func buildConfig(binaryPath string) mcpConfig {
+	return mcpConfig{
 		MCPServers: map[string]mcpServerEntry{
 			"dashboard-channel": {
 				Command: binaryPath,
@@ -40,6 +37,31 @@ func WriteTempConfig(binaryPath string) (path string, err error) {
 			},
 		},
 	}
+}
+
+// ConfigJSON returns the inline JSON string for the dashboard-channel MCP
+// server configuration. The string can be passed directly to claude via
+// --mcp-config without writing a file.
+//
+// Example output:
+//
+//	{"mcpServers":{"dashboard-channel":{"command":"/path/to/agent-dashboard","args":["channel"]}}}
+func ConfigJSON(binaryPath string) (string, error) {
+	cfg := buildConfig(binaryPath)
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return "", fmt.Errorf("channelconfig: ConfigJSON marshal: %w", err)
+	}
+	return string(data), nil
+}
+
+// WriteTempConfig writes a temporary MCP config file that tells the claude CLI
+// how to start the dashboard-channel MCP server.
+//
+// binaryPath is the absolute path to the agent-dashboard binary.
+// The caller is responsible for deleting the returned file path.
+func WriteTempConfig(binaryPath string) (path string, err error) {
+	cfg := buildConfig(binaryPath)
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("channelconfig: marshal: %w", err)
