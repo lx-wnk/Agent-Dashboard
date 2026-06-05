@@ -47,7 +47,7 @@ func selectTransport(tmuxEnv string, tmuxPath string) transport {
 // newLiveCmd builds the `agent-dashboard live` cobra command.
 func newLiveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "live -- claude [args...]",
+		Use:   "live [-- claude-args...]",
 		Short: "Run an interactive Claude session the dashboard can monitor and live-drive",
 		Long: `Run an interactive Claude session the dashboard can monitor and live-drive.
 

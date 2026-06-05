@@ -176,12 +176,14 @@ export function useAgentPrompt(
     const msg = resumeConfirm.value
     resumeConfirm.value = null
 
-    // Re-fetch the agent at confirm time — it may have changed (e.g. become live-injectable)
+    // Re-fetch the agent at confirm time — it may have changed (e.g. become
+    // live-injectable). If it now has a live channel, inject instead of
+    // resuming, so confirming never spawns a duplicate detached process.
     const agent = getAgent()
     if (!agent)
       return
 
-    await deliver(agent, msg, 'resume')
+    await deliver(agent, msg, agent.liveInjectable ? 'inject' : 'resume')
   }
 
   /**
