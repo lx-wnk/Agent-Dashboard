@@ -37,6 +37,84 @@ export function useAgentPrompt(
   const isSending = ref(false)
   const sendStatus = ref<'sent' | 'error' | 'queued' | null>(null)
   const sendError = ref('')
+  const resumeConfirm = ref<string | null>(null)
+
+  /**
+   * Shared delivery helper. Performs the correct fetch for inject vs resume,
+   * handles optimistic echo, isSending, sendStatus, offline queueing, and
+   * the 3s auto-clear — so neither handleSend nor confirmResume duplicate this logic.
+   */
+  async function deliver(agent: Agent, msg: string, mode: 'inject' | 'resume'): Promise<void> {
+    // Optimistic: show message immediately before the network round-trip
+    onMessageSent?.({ role: 'human', content: msg, timestamp: new Date().toISOString() })
+    isSending.value = true
+    sendStatus.value = null
+
+    try {
+      if (mode === 'inject') {
+        // Channel inject keyed by PID — route is /api/agents/{pid}/message
+        const res = await fetch(`/api/agents/${agent.pid}/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || `Send failed (${res.status})`)
+        }
+      }
+      else {
+        const res = await fetch('/api/agents/spawn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: msg,
+            cwd: agent.cwd,
+            resumeSessionId: agent.sessionId,
+          }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || `Resume failed (${res.status})`)
+        }
+      }
+      sendStatus.value = 'sent'
+    }
+    catch (err) {
+      if (isNetworkFailure(err)) {
+        const useChannel = mode === 'inject'
+        try {
+          await addPending({
+            agentPid: agent.pid,
+            sessionId: agent.sessionId,
+            message: msg,
+            timestamp: Date.now(),
+            useChannel,
+            cwd: agent.cwd,
+          })
+          await registerBackgroundSync()
+          sendStatus.value = 'queued'
+          sendError.value = 'Offline — message queued'
+        }
+        catch {
+          sendStatus.value = 'error'
+          sendError.value = 'Offline and could not queue message'
+        }
+      }
+      else {
+        sendStatus.value = 'error'
+        sendError.value = err instanceof Error ? err.message : 'Failed'
+      }
+    }
+    finally {
+      isSending.value = false
+      if (sendStatus.value !== 'queued') {
+        setTimeout(() => {
+          sendStatus.value = null
+        }, 3000)
+      }
+    }
+  }
 
   async function handleSend() {
     const agent = getAgent()
@@ -75,82 +153,43 @@ export function useAgentPrompt(
       }
     }
 
-    isSending.value = true
-    sendStatus.value = null
+    if (agent.liveInjectable) {
+      // Live inject — immediate, no confirmation needed
+      promptInput.value = ''
+      await deliver(agent, msg, 'inject')
+    }
+    else {
+      // Non-injectable session: require explicit user confirmation before resuming
+      // to prevent silent duplicate detached processes on each send.
+      resumeConfirm.value = msg
+      promptInput.value = ''
+    }
+  }
 
-    // Optimistic: show message immediately, clear input, don't wait for network
-    onMessageSent?.({ role: 'human', content: msg, timestamp: new Date().toISOString() })
-    promptInput.value = ''
+  /**
+   * Called when the user explicitly confirms resuming a non-injectable session.
+   * Runs the resume delivery with the pending message and clears the confirm state.
+   */
+  async function confirmResume(): Promise<void> {
+    if (resumeConfirm.value === null)
+      return
+    const msg = resumeConfirm.value
+    resumeConfirm.value = null
 
-    try {
-      // Only a live-injectable session can actually receive a live prompt —
-      // delivered to the pty broker or via `tmux send-keys`. channelAvailable
-      // alone is not enough: MCP log delivery is silently dropped for an
-      // interactive session. Everything else falls through to resume.
-      if (agent.liveInjectable) {
-        // Channel inject is keyed by PID: the bridge writes a discovery file
-        // named by the claude process PID, and the route is /api/agents/{pid}/message.
-        const res = await fetch(`/api/agents/${agent.pid}/message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msg }),
-        })
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.error || `Send failed (${res.status})`)
-        }
-      }
-      else {
-        const res = await fetch('/api/agents/spawn', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: msg,
-            cwd: agent.cwd,
-            resumeSessionId: agent.sessionId,
-          }),
-        })
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.error || `Resume failed (${res.status})`)
-        }
-      }
-      sendStatus.value = 'sent'
-    }
-    catch (err) {
-      if (isNetworkFailure(err)) {
-        const useChannel = !!agent.liveInjectable
-        try {
-          await addPending({
-            agentPid: agent.pid,
-            sessionId: agent.sessionId,
-            message: msg,
-            timestamp: Date.now(),
-            useChannel,
-            cwd: agent.cwd,
-          })
-          await registerBackgroundSync()
-          sendStatus.value = 'queued'
-          sendError.value = 'Offline — message queued'
-        }
-        catch {
-          sendStatus.value = 'error'
-          sendError.value = 'Offline and could not queue message'
-        }
-      }
-      else {
-        sendStatus.value = 'error'
-        sendError.value = err instanceof Error ? err.message : 'Failed'
-      }
-    }
-    finally {
-      isSending.value = false
-      if (sendStatus.value !== 'queued') {
-        setTimeout(() => {
-          sendStatus.value = null
-        }, 3000)
-      }
-    }
+    // Re-fetch the agent at confirm time — it may have changed (e.g. become live-injectable)
+    const agent = getAgent()
+    if (!agent)
+      return
+
+    await deliver(agent, msg, 'resume')
+  }
+
+  /**
+   * Cancels a pending resume confirmation, restoring the message to the input.
+   */
+  function cancelResume(): void {
+    promptInput.value = resumeConfirm.value ?? ''
+    resumeConfirm.value = null
   }
 
   const onDrainSuccess = () => {
@@ -160,5 +199,5 @@ export function useAgentPrompt(
   window.addEventListener('drain-success', onDrainSuccess)
   onUnmounted(() => window.removeEventListener('drain-success', onDrainSuccess))
 
-  return { promptInput, isSending, sendStatus, sendError, handleSend }
+  return { promptInput, isSending, sendStatus, sendError, handleSend, resumeConfirm, confirmResume, cancelResume }
 }
