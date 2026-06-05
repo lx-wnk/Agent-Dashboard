@@ -34,6 +34,12 @@ func (Spawner) Fields() []ent.Field {
 		field.String("model_override").Optional().Nillable(),
 		field.String("description").Optional().Nillable(),
 		field.Bool("built_in").Default(false),
+		// is_default marks the deployment-wide fallback spawner used when neither
+		// a task nor its project names one. Exactly one row is true at a time,
+		// enforced by repo.SetDefault (clear-all-then-set-one in a tx) — there is
+		// no direct "unset" path. Orthogonal to built_in: a custom spawner may be
+		// default while the built-in claude-default stays the un-deletable backstop.
+		field.Bool("is_default").Default(false),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

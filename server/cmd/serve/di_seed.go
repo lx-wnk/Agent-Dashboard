@@ -21,8 +21,8 @@ import (
 // repairSpawnerAdapterConfig replaces any row in spawners whose adapter_config
 // column is not a valid JSON value with an empty object. Defends against a
 // historical bug in this schema where the SQL DEFAULT was emitted as the
-// literal string "''{}''" instead of "{}", which then crashed every spawner
-// load with an "invalid character '\''" unmarshal error. Idempotent; runs
+// literal string "”{}”" instead of "{}", which then crashed every spawner
+// load with an "invalid character '\”" unmarshal error. Idempotent; runs
 // before seedSpawners so the subsequent GetBySlug call cannot trip the bug.
 func repairSpawnerAdapterConfig(ctx context.Context, db *sql.DB) error {
 	if db == nil {
@@ -53,36 +53,51 @@ const (
 )
 
 // seedSpawners inserts the built-in claude-default spawner if it is not already
-// present. Idempotent: a no-op once the row exists.
+// present, then guarantees exactly one spawner is flagged is_default. Idempotent:
+// once the row exists and a default is set, it is a no-op.
 func seedSpawners(ctx context.Context, spawnerRepo repo.SpawnerRepo) error {
 	if spawnerRepo == nil {
 		return nil
 	}
-	_, err := spawnerRepo.GetBySlug(ctx, claudeDefaultSpawnerSlug)
-	if err == nil {
-		return nil
-	}
-	if !ent.IsNotFound(err) {
+	claudeDefault, err := spawnerRepo.GetBySlug(ctx, claudeDefaultSpawnerSlug)
+	switch {
+	case err == nil:
+		// already present — fall through to the default-flag guard below.
+	case ent.IsNotFound(err):
+		description := "Built-in Claude CLI spawner — cannot be deleted."
+		claudeDefault, err = spawnerRepo.Create(
+			ctx,
+			"Claude (default)",
+			claudeDefaultSpawnerSlug,
+			"claude",
+			[]string{},
+			map[string]string{},
+			nil,
+			&description,
+			"claude",
+			map[string]string{},
+			true,
+		)
+		if err != nil {
+			return fmt.Errorf("seedSpawners: create claude-default: %w", err)
+		}
+		slog.Info("seeded built-in spawner", "slug", claudeDefaultSpawnerSlug)
+	default:
 		return fmt.Errorf("seedSpawners: lookup claude-default: %w", err)
 	}
 
-	description := "Built-in Claude CLI spawner — cannot be deleted."
-	if _, err := spawnerRepo.Create(
-		ctx,
-		"Claude (default)",
-		claudeDefaultSpawnerSlug,
-		"claude",
-		[]string{},
-		map[string]string{},
-		nil,
-		&description,
-		"claude",
-		map[string]string{},
-		true,
-	); err != nil {
-		return fmt.Errorf("seedSpawners: create claude-default: %w", err)
+	// Guarantee a default exists. Covers fresh installs (just-created row) and
+	// pre-is_default databases (column backfilled to false on auto-migrate, so
+	// no row is flagged yet). A user-chosen default is left untouched.
+	if _, err := spawnerRepo.GetDefault(ctx); err != nil {
+		if !ent.IsNotFound(err) {
+			return fmt.Errorf("seedSpawners: lookup default: %w", err)
+		}
+		if _, _, err := spawnerRepo.SetDefault(ctx, claudeDefault.ID); err != nil {
+			return fmt.Errorf("seedSpawners: set claude-default as default: %w", err)
+		}
+		slog.Info("flagged default spawner", "slug", claudeDefaultSpawnerSlug)
 	}
-	slog.Info("seeded built-in spawner", "slug", claudeDefaultSpawnerSlug)
 	return nil
 }
 
@@ -195,11 +210,11 @@ func ensureImportedSpawner(
 	if _, err := spawnerRepo.Create(
 		ctx,
 		name, slug,
-		"",              // command — adapter-typed spawners ignore the command column
-		[]string{},      // args
+		"",                  // command — adapter-typed spawners ignore the command column
+		[]string{},          // args
 		map[string]string{}, // env
-		nil,             // modelOverride
-		nil,             // description
+		nil,                 // modelOverride
+		nil,                 // description
 		adapterType,
 		adapterConfig,
 		false, // builtIn

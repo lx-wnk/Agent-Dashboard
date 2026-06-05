@@ -163,6 +163,20 @@ func (_u *SpawnerUpdate) SetNillableBuiltIn(v *bool) *SpawnerUpdate {
 	return _u
 }
 
+// SetIsDefault sets the "is_default" field.
+func (_u *SpawnerUpdate) SetIsDefault(v bool) *SpawnerUpdate {
+	_u.mutation.SetIsDefault(v)
+	return _u
+}
+
+// SetNillableIsDefault sets the "is_default" field if the given value is not nil.
+func (_u *SpawnerUpdate) SetNillableIsDefault(v *bool) *SpawnerUpdate {
+	if v != nil {
+		_u.SetIsDefault(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *SpawnerUpdate) SetUpdatedAt(v time.Time) *SpawnerUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -259,6 +273,9 @@ func (_u *SpawnerUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.BuiltIn(); ok {
 		_spec.SetField(spawner.FieldBuiltIn, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.IsDefault(); ok {
+		_spec.SetField(spawner.FieldIsDefault, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(spawner.FieldUpdatedAt, field.TypeTime, value)
@@ -417,6 +434,20 @@ func (_u *SpawnerUpdateOne) SetNillableBuiltIn(v *bool) *SpawnerUpdateOne {
 	return _u
 }
 
+// SetIsDefault sets the "is_default" field.
+func (_u *SpawnerUpdateOne) SetIsDefault(v bool) *SpawnerUpdateOne {
+	_u.mutation.SetIsDefault(v)
+	return _u
+}
+
+// SetNillableIsDefault sets the "is_default" field if the given value is not nil.
+func (_u *SpawnerUpdateOne) SetNillableIsDefault(v *bool) *SpawnerUpdateOne {
+	if v != nil {
+		_u.SetIsDefault(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *SpawnerUpdateOne) SetUpdatedAt(v time.Time) *SpawnerUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -543,6 +574,9 @@ func (_u *SpawnerUpdateOne) sqlSave(ctx context.Context) (_node *Spawner, err er
 	}
 	if value, ok := _u.mutation.BuiltIn(); ok {
 		_spec.SetField(spawner.FieldBuiltIn, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.IsDefault(); ok {
+		_spec.SetField(spawner.FieldIsDefault, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(spawner.FieldUpdatedAt, field.TypeTime, value)

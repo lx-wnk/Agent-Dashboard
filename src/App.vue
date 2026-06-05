@@ -32,7 +32,6 @@ import { formatCost, formatTokens, totalTokenCount } from './utils/format'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
-const ConfigExplorer = defineAsyncComponent(() => import('./components/ConfigExplorer.vue'))
 const PipelineBoard = defineAsyncComponent(() => import('./components/PipelineBoard.vue'))
 const WorkflowsView = defineAsyncComponent(() => import('./components/WorkflowsView.vue'))
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
@@ -297,7 +296,6 @@ onMounted(fetchQuota)
           @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
         />
         <CostAnalyticsView v-else-if="activeView === 'cost'" />
-        <ConfigExplorer v-else-if="activeView === 'config'" />
         <WorkflowsView
           v-else-if="activeView === 'workflows'"
           @navigate="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"

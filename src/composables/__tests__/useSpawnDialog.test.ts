@@ -22,6 +22,7 @@ const sampleSpawner: Spawner = {
   adapterConfig: {},
   modelOverride: 'claude-opus-4-7',
   builtIn: false,
+  isDefault: false,
   createdAt: '',
   updatedAt: '',
 }

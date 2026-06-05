@@ -34,6 +34,7 @@ function makeSpawner(id: string, slug: string, overrides: Partial<Spawner> = {})
     adapterType: 'claude',
     adapterConfig: {},
     builtIn: false,
+    isDefault: false,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,

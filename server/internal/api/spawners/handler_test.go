@@ -66,3 +66,132 @@ func TestCreate_BroadcastsSpawnerCreated(t *testing.T) {
 		t.Fatal("no spawner_created event broadcast")
 	}
 }
+
+// TestUpdate_BuiltInEditableExceptSlug verifies a built-in spawner accepts field
+// edits but rejects a slug change (the resolution backstop depends on its slug).
+func TestUpdate_BuiltInEditableExceptSlug(t *testing.T) {
+	h := newTestHandlerForPkg(t)
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	bi, err := h.repo.Create(t.Context(), "Claude (default)", "claude-default", "claude", nil, nil, nil, nil, "claude", nil, true)
+	if err != nil {
+		t.Fatalf("seed built-in: %v", err)
+	}
+
+	// Editing the name is allowed.
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("PATCH", "/api/spawners/"+bi.ID, bytes.NewBufferString(`{"name":"Renamed Default"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("builtin name edit: got %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var v spawnerView
+	if err := json.Unmarshal(rr.Body.Bytes(), &v); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if v.Name != "Renamed Default" {
+		t.Errorf("name: got %q, want %q", v.Name, "Renamed Default")
+	}
+
+	// Changing the slug of a built-in is forbidden.
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest("PATCH", "/api/spawners/"+bi.ID, bytes.NewBufferString(`{"slug":"new-slug"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rr, req)
+	if rr.Code != 403 {
+		t.Fatalf("builtin slug change: got %d, want 403; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestSetDefault_SwitchesAndBroadcastsBoth verifies POST /default moves the flag
+// atomically and broadcasts an update for both the new and the former default.
+func TestSetDefault_SwitchesAndBroadcastsBoth(t *testing.T) {
+	bc := sse.NewSpawnerBroadcaster(sse.NewBroadcaster())
+	h := newTestHandlerForPkg(t)
+	h.broadcaster = bc
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	a, err := h.repo.Create(t.Context(), "A", "spawner-a", "claude", nil, nil, nil, nil, "claude", nil, false)
+	if err != nil {
+		t.Fatalf("seed a: %v", err)
+	}
+	b, err := h.repo.Create(t.Context(), "B", "spawner-b", "claude", nil, nil, nil, nil, "claude", nil, false)
+	if err != nil {
+		t.Fatalf("seed b: %v", err)
+	}
+	if _, _, err := h.repo.SetDefault(t.Context(), a.ID); err != nil {
+		t.Fatalf("seed default a: %v", err)
+	}
+
+	ch := bc.Subscribe()
+	defer bc.Unsubscribe(ch)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/spawners/"+b.ID+"/default", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("set default: got %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var v spawnerView
+	if err := json.Unmarshal(rr.Body.Bytes(), &v); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !v.IsDefault {
+		t.Error("new default response must have isDefault=true")
+	}
+
+	// The former default must have been cleared.
+	prev, err := h.repo.GetByID(t.Context(), a.ID)
+	if err != nil {
+		t.Fatalf("reload a: %v", err)
+	}
+	if prev.IsDefault {
+		t.Error("former default a must no longer be default")
+	}
+
+	// Two spawner_updated events: the new default and the cleared former default.
+	seen := map[string]bool{}
+	for range 2 {
+		select {
+		case raw := <-ch:
+			var ev map[string]any
+			if err := json.Unmarshal(stripSSEFrame(raw), &ev); err != nil {
+				t.Fatalf("frame not JSON: %v", err)
+			}
+			if ev["type"] != "spawner_updated" {
+				t.Errorf("event type: got %v, want spawner_updated", ev["type"])
+			}
+			seen[ev["spawnerId"].(string)] = true
+		case <-time.After(time.Second):
+			t.Fatal("expected two spawner_updated events")
+		}
+	}
+	if !seen[a.ID] || !seen[b.ID] {
+		t.Errorf("expected updates for both %s and %s, saw %v", a.ID, b.ID, seen)
+	}
+}
+
+// TestDelete_DefaultRejected verifies the current default cannot be deleted.
+func TestDelete_DefaultRejected(t *testing.T) {
+	h := newTestHandlerForPkg(t)
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	a, err := h.repo.Create(t.Context(), "A", "spawner-a", "claude", nil, nil, nil, nil, "claude", nil, false)
+	if err != nil {
+		t.Fatalf("seed a: %v", err)
+	}
+	if _, _, err := h.repo.SetDefault(t.Context(), a.ID); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("DELETE", "/api/spawners/"+a.ID, nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != 409 {
+		t.Fatalf("delete default: got %d, want 409; body=%s", rr.Code, rr.Body.String())
+	}
+}

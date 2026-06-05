@@ -33,7 +33,8 @@ const claudeDefaultSpawnerSlug = "claude-default"
 //
 //  1. task.spawner_id            → SpawnerSourceTask
 //  2. project.default_spawner_id → SpawnerSourceProject
-//  3. claude-default (seeded)    → SpawnerSourceDefault
+//  3. is_default spawner         → SpawnerSourceDefault
+//     (falls back to the claude-default slug if no row is flagged default)
 //
 // Explicit references that fail to load are surfaced as errors — the resolver
 // never silently falls back to a lower tier when a higher one named a spawner
@@ -87,7 +88,11 @@ func (r *spawnerResolver) Resolve(ctx context.Context, taskID string) (*ent.Spaw
 		}
 	}
 
-	// (3) deployment-wide default
+	// (3) deployment-wide default: the is_default row, with the seeded
+	// claude-default slug as the ultimate backstop if none is flagged.
+	if sp, err := r.spawners.GetDefault(ctx); err == nil {
+		return sp, SpawnerSourceDefault, nil
+	}
 	sp, err := r.spawners.GetBySlug(ctx, claudeDefaultSpawnerSlug)
 	if err != nil {
 		return nil, "", fmt.Errorf("spawner_resolver: load %s fallback: %w", claudeDefaultSpawnerSlug, err)

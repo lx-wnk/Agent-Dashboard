@@ -99,6 +99,11 @@ func BuiltIn(v bool) predicate.Spawner {
 	return predicate.Spawner(sql.FieldEQ(FieldBuiltIn, v))
 }
 
+// IsDefault applies equality check predicate on the "is_default" field. It's identical to IsDefaultEQ.
+func IsDefault(v bool) predicate.Spawner {
+	return predicate.Spawner(sql.FieldEQ(FieldIsDefault, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Spawner {
 	return predicate.Spawner(sql.FieldEQ(FieldCreatedAt, v))
@@ -527,6 +532,16 @@ func BuiltInEQ(v bool) predicate.Spawner {
 // BuiltInNEQ applies the NEQ predicate on the "built_in" field.
 func BuiltInNEQ(v bool) predicate.Spawner {
 	return predicate.Spawner(sql.FieldNEQ(FieldBuiltIn, v))
+}
+
+// IsDefaultEQ applies the EQ predicate on the "is_default" field.
+func IsDefaultEQ(v bool) predicate.Spawner {
+	return predicate.Spawner(sql.FieldEQ(FieldIsDefault, v))
+}
+
+// IsDefaultNEQ applies the NEQ predicate on the "is_default" field.
+func IsDefaultNEQ(v bool) predicate.Spawner {
+	return predicate.Spawner(sql.FieldNEQ(FieldIsDefault, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

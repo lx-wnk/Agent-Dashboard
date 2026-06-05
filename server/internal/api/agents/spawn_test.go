@@ -97,6 +97,22 @@ func (f *fakeSpawnerRepo) GetBySlug(_ context.Context, _ string) (*ent.Spawner, 
 	return nil, &ent.NotFoundError{}
 }
 
+func (f *fakeSpawnerRepo) GetDefault(_ context.Context) (*ent.Spawner, error) {
+	for _, s := range f.byID {
+		if s.IsDefault {
+			return s, nil
+		}
+	}
+	return nil, &ent.NotFoundError{}
+}
+
+func (f *fakeSpawnerRepo) SetDefault(_ context.Context, id string) (*ent.Spawner, string, error) {
+	if s, ok := f.byID[id]; ok {
+		return s, "", nil
+	}
+	return nil, "", &ent.NotFoundError{}
+}
+
 func (f *fakeSpawnerRepo) List(_ context.Context) ([]*ent.Spawner, error) {
 	return nil, nil
 }

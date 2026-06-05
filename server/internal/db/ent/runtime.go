@@ -135,12 +135,16 @@ func init() {
 	spawnerDescBuiltIn := spawnerFields[10].Descriptor()
 	// spawner.DefaultBuiltIn holds the default value on creation for the built_in field.
 	spawner.DefaultBuiltIn = spawnerDescBuiltIn.Default.(bool)
+	// spawnerDescIsDefault is the schema descriptor for is_default field.
+	spawnerDescIsDefault := spawnerFields[11].Descriptor()
+	// spawner.DefaultIsDefault holds the default value on creation for the is_default field.
+	spawner.DefaultIsDefault = spawnerDescIsDefault.Default.(bool)
 	// spawnerDescCreatedAt is the schema descriptor for created_at field.
-	spawnerDescCreatedAt := spawnerFields[11].Descriptor()
+	spawnerDescCreatedAt := spawnerFields[12].Descriptor()
 	// spawner.DefaultCreatedAt holds the default value on creation for the created_at field.
 	spawner.DefaultCreatedAt = spawnerDescCreatedAt.Default.(func() time.Time)
 	// spawnerDescUpdatedAt is the schema descriptor for updated_at field.
-	spawnerDescUpdatedAt := spawnerFields[12].Descriptor()
+	spawnerDescUpdatedAt := spawnerFields[13].Descriptor()
 	// spawner.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	spawner.DefaultUpdatedAt = spawnerDescUpdatedAt.Default.(func() time.Time)
 	// spawner.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
