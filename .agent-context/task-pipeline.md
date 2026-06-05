@@ -44,13 +44,21 @@ Stateless helpers consumed by `routes/*` and `mcp/*` (and, where appropriate, by
 `server/internal/services/spawner_resolver.go` resolves the effective spawner for a stage agent using the following precedence:
 
 ```
-task.spawner_id ?? task.project.default_spawner_id ?? claude-default
+task.spawner_id ?? task.project.default_spawner_id ?? spawner WHERE is_default ?? slug claude-default
 ```
 
 Resolution happens once, immediately before `exec`, inside
-`server/internal/pipeline/spawner.go`. The built-in `claude-default`
-spawner preserves current behaviour for tasks and projects that do not set
-a spawner.
+`server/internal/pipeline/spawner.go`. The deployment-wide default is the row
+flagged `is_default` (exactly one at a time, enforced by `SpawnerRepo.SetDefault`
+in a clear-all-then-set-one transaction; the `claude-default` slug is the ultimate
+backstop if no row is flagged). The same `is_default`-then-slug fallback is mirrored
+in `server/internal/cmdscope/request_scope.go` for the config-enumeration scope.
+
+`claude-default` is seeded as the initial default and stays an un-deletable
+backstop. **Built-in spawners are editable** (name/command/args/env/model/
+description) but their **slug is immutable** and they **cannot be deleted**; the
+current default also cannot be deleted (`ErrSpawnerIsDefault`) — pick another
+default first. Mark a different spawner default via `POST /api/spawners/{id}/default`.
 
 **Env-merge order:** custom-spawner `env` is applied first; dashboard vars
 (`DASHBOARD_*`, `CLAUDE_*`) are overlaid afterward and always win.

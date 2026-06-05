@@ -66,6 +66,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/api/spawners", apierr.ErrorMiddleware(h.Create))
 	r.Get("/api/spawners/{id}", apierr.ErrorMiddleware(h.Get))
 	r.Patch("/api/spawners/{id}", apierr.ErrorMiddleware(h.Update))
+	r.Post("/api/spawners/{id}/default", apierr.ErrorMiddleware(h.SetDefault))
 	r.Delete("/api/spawners/{id}", apierr.ErrorMiddleware(h.Delete))
 }
 
@@ -85,6 +86,7 @@ type spawnerView struct {
 	ModelOverride *string           `json:"modelOverride,omitempty"`
 	Description   *string           `json:"description,omitempty"`
 	BuiltIn       bool              `json:"builtIn"`
+	IsDefault     bool              `json:"isDefault"`
 	CreatedAt     string            `json:"createdAt"`
 	UpdatedAt     string            `json:"updatedAt"`
 }
@@ -118,6 +120,7 @@ func toSpawnerView(s *ent.Spawner) spawnerView {
 		ModelOverride: s.ModelOverride,
 		Description:   s.Description,
 		BuiltIn:       s.BuiltIn,
+		IsDefault:     s.IsDefault,
 		CreatedAt:     tsFmt(s.CreatedAt),
 		UpdatedAt:     tsFmt(s.UpdatedAt),
 	}
@@ -224,7 +227,9 @@ type updateBody struct {
 	Description   json.RawMessage   `json:"description"`
 }
 
-// Update partially updates a spawner. Returns 403 if the target is built-in.
+// Update partially updates a spawner. Built-in spawners are editable EXCEPT for
+// their slug (the resolution backstop GetBySlug("claude-default") depends on it)
+// — a slug change on a built-in returns 403.
 // PATCH /api/spawners/{id}
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
@@ -235,13 +240,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
-	if existing.BuiltIn {
-		return apierr.NewAppError(http.StatusForbidden, "cannot modify a built-in spawner")
-	}
 
 	var body updateBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if existing.BuiltIn && body.Slug != nil && *body.Slug != existing.Slug {
+		return apierr.NewAppError(http.StatusForbidden, "cannot change the slug of a built-in spawner")
 	}
 	if body.Slug != nil && !ValidateSlug(*body.Slug) {
 		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
@@ -305,7 +310,32 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// Delete removes a spawner. 403 if built-in, 409 if still referenced.
+// SetDefault makes the given spawner the deployment-wide default, clearing the
+// previous one atomically. Broadcasts an update for both the new and the former
+// default so every connected UI re-renders its badge.
+// POST /api/spawners/{id}/default
+func (h *Handler) SetDefault(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	s, prevID, err := h.repo.SetDefault(r.Context(), id)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.NewAppError(http.StatusNotFound, "spawner not found")
+		}
+		return err
+	}
+	v := toSpawnerView(s)
+	h.emit("spawner_updated", s.ID, v)
+	if prevID != "" {
+		if prev, err := h.repo.GetByID(r.Context(), prevID); err == nil {
+			h.emit("spawner_updated", prev.ID, toSpawnerView(prev))
+		}
+	}
+	apierr.WriteJSON(w, http.StatusOK, v)
+	return nil
+}
+
+// Delete removes a spawner. 403 if built-in, 409 if it is the current default or
+// still referenced by tasks/projects.
 // DELETE /api/spawners/{id}
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
@@ -313,6 +343,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) error {
 		switch {
 		case errors.Is(err, repo.ErrSpawnerBuiltIn):
 			return apierr.NewAppError(http.StatusForbidden, "cannot delete a built-in spawner")
+		case errors.Is(err, repo.ErrSpawnerIsDefault):
+			return apierr.NewAppError(http.StatusConflict, "cannot delete the default spawner; set another default first")
 		case errors.Is(err, repo.ErrSpawnerInUse):
 			return apierr.NewAppError(http.StatusConflict, "spawner is still referenced by tasks or projects")
 		case ent.IsNotFound(err):

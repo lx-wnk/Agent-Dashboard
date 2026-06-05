@@ -26,6 +26,12 @@ func (f fakeSpawners) GetBySlug(_ context.Context, _ string) (*ent.Spawner, erro
 	}
 	return nil, errors.New("not found")
 }
+func (f fakeSpawners) GetDefault(_ context.Context) (*ent.Spawner, error) {
+	if f.agent != nil && f.agent.IsDefault {
+		return f.agent, nil
+	}
+	return nil, errors.New("not found")
+}
 
 func TestSlashCommands_SessionScopedEnvelope(t *testing.T) {
 	cfg := t.TempDir()

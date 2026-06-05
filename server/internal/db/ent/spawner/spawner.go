@@ -33,6 +33,8 @@ const (
 	FieldDescription = "description"
 	// FieldBuiltIn holds the string denoting the built_in field in the database.
 	FieldBuiltIn = "built_in"
+	// FieldIsDefault holds the string denoting the is_default field in the database.
+	FieldIsDefault = "is_default"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -54,6 +56,7 @@ var Columns = []string{
 	FieldModelOverride,
 	FieldDescription,
 	FieldBuiltIn,
+	FieldIsDefault,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -79,6 +82,8 @@ var (
 	DefaultAdapterConfig map[string]string
 	// DefaultBuiltIn holds the default value on creation for the "built_in" field.
 	DefaultBuiltIn bool
+	// DefaultIsDefault holds the default value on creation for the "is_default" field.
+	DefaultIsDefault bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -128,6 +133,11 @@ func ByDescription(opts ...sql.OrderTermOption) OrderOption {
 // ByBuiltIn orders the results by the built_in field.
 func ByBuiltIn(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBuiltIn, opts...).ToFunc()
+}
+
+// ByIsDefault orders the results by the is_default field.
+func ByIsDefault(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIsDefault, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

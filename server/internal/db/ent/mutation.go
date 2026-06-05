@@ -6618,6 +6618,7 @@ type SpawnerMutation struct {
 	model_override *string
 	description    *string
 	built_in       *bool
+	is_default     *bool
 	created_at     *time.Time
 	updated_at     *time.Time
 	clearedFields  map[string]struct{}
@@ -7131,6 +7132,42 @@ func (m *SpawnerMutation) ResetBuiltIn() {
 	m.built_in = nil
 }
 
+// SetIsDefault sets the "is_default" field.
+func (m *SpawnerMutation) SetIsDefault(b bool) {
+	m.is_default = &b
+}
+
+// IsDefault returns the value of the "is_default" field in the mutation.
+func (m *SpawnerMutation) IsDefault() (r bool, exists bool) {
+	v := m.is_default
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsDefault returns the old "is_default" field's value of the Spawner entity.
+// If the Spawner object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SpawnerMutation) OldIsDefault(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsDefault is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsDefault requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsDefault: %w", err)
+	}
+	return oldValue.IsDefault, nil
+}
+
+// ResetIsDefault resets all changes to the "is_default" field.
+func (m *SpawnerMutation) ResetIsDefault() {
+	m.is_default = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *SpawnerMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -7237,7 +7274,7 @@ func (m *SpawnerMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SpawnerMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.name != nil {
 		fields = append(fields, spawner.FieldName)
 	}
@@ -7267,6 +7304,9 @@ func (m *SpawnerMutation) Fields() []string {
 	}
 	if m.built_in != nil {
 		fields = append(fields, spawner.FieldBuiltIn)
+	}
+	if m.is_default != nil {
+		fields = append(fields, spawner.FieldIsDefault)
 	}
 	if m.created_at != nil {
 		fields = append(fields, spawner.FieldCreatedAt)
@@ -7302,6 +7342,8 @@ func (m *SpawnerMutation) Field(name string) (ent.Value, bool) {
 		return m.Description()
 	case spawner.FieldBuiltIn:
 		return m.BuiltIn()
+	case spawner.FieldIsDefault:
+		return m.IsDefault()
 	case spawner.FieldCreatedAt:
 		return m.CreatedAt()
 	case spawner.FieldUpdatedAt:
@@ -7335,6 +7377,8 @@ func (m *SpawnerMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldDescription(ctx)
 	case spawner.FieldBuiltIn:
 		return m.OldBuiltIn(ctx)
+	case spawner.FieldIsDefault:
+		return m.OldIsDefault(ctx)
 	case spawner.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case spawner.FieldUpdatedAt:
@@ -7417,6 +7461,13 @@ func (m *SpawnerMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBuiltIn(v)
+		return nil
+	case spawner.FieldIsDefault:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsDefault(v)
 		return nil
 	case spawner.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -7525,6 +7576,9 @@ func (m *SpawnerMutation) ResetField(name string) error {
 		return nil
 	case spawner.FieldBuiltIn:
 		m.ResetBuiltIn()
+		return nil
+	case spawner.FieldIsDefault:
+		m.ResetIsDefault()
 		return nil
 	case spawner.FieldCreatedAt:
 		m.ResetCreatedAt()

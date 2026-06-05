@@ -319,6 +319,7 @@ export interface Spawner {
   modelOverride?: string
   description?: string
   builtIn: boolean
+  isDefault: boolean
   createdAt: string
   updatedAt: string
 }

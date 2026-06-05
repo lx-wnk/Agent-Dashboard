@@ -115,6 +115,20 @@ func (_c *SpawnerCreate) SetNillableBuiltIn(v *bool) *SpawnerCreate {
 	return _c
 }
 
+// SetIsDefault sets the "is_default" field.
+func (_c *SpawnerCreate) SetIsDefault(v bool) *SpawnerCreate {
+	_c.mutation.SetIsDefault(v)
+	return _c
+}
+
+// SetNillableIsDefault sets the "is_default" field if the given value is not nil.
+func (_c *SpawnerCreate) SetNillableIsDefault(v *bool) *SpawnerCreate {
+	if v != nil {
+		_c.SetIsDefault(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *SpawnerCreate) SetCreatedAt(v time.Time) *SpawnerCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -204,6 +218,10 @@ func (_c *SpawnerCreate) defaults() {
 		v := spawner.DefaultBuiltIn
 		_c.mutation.SetBuiltIn(v)
 	}
+	if _, ok := _c.mutation.IsDefault(); !ok {
+		v := spawner.DefaultIsDefault
+		_c.mutation.SetIsDefault(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := spawner.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -239,6 +257,9 @@ func (_c *SpawnerCreate) check() error {
 	}
 	if _, ok := _c.mutation.BuiltIn(); !ok {
 		return &ValidationError{Name: "built_in", err: errors.New(`ent: missing required field "Spawner.built_in"`)}
+	}
+	if _, ok := _c.mutation.IsDefault(); !ok {
+		return &ValidationError{Name: "is_default", err: errors.New(`ent: missing required field "Spawner.is_default"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Spawner.created_at"`)}
@@ -321,6 +342,10 @@ func (_c *SpawnerCreate) createSpec() (*Spawner, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.BuiltIn(); ok {
 		_spec.SetField(spawner.FieldBuiltIn, field.TypeBool, value)
 		_node.BuiltIn = value
+	}
+	if value, ok := _c.mutation.IsDefault(); ok {
+		_spec.SetField(spawner.FieldIsDefault, field.TypeBool, value)
+		_node.IsDefault = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(spawner.FieldCreatedAt, field.TypeTime, value)
@@ -511,6 +536,18 @@ func (u *SpawnerUpsert) SetBuiltIn(v bool) *SpawnerUpsert {
 // UpdateBuiltIn sets the "built_in" field to the value that was provided on create.
 func (u *SpawnerUpsert) UpdateBuiltIn() *SpawnerUpsert {
 	u.SetExcluded(spawner.FieldBuiltIn)
+	return u
+}
+
+// SetIsDefault sets the "is_default" field.
+func (u *SpawnerUpsert) SetIsDefault(v bool) *SpawnerUpsert {
+	u.Set(spawner.FieldIsDefault, v)
+	return u
+}
+
+// UpdateIsDefault sets the "is_default" field to the value that was provided on create.
+func (u *SpawnerUpsert) UpdateIsDefault() *SpawnerUpsert {
+	u.SetExcluded(spawner.FieldIsDefault)
 	return u
 }
 
@@ -728,6 +765,20 @@ func (u *SpawnerUpsertOne) SetBuiltIn(v bool) *SpawnerUpsertOne {
 func (u *SpawnerUpsertOne) UpdateBuiltIn() *SpawnerUpsertOne {
 	return u.Update(func(s *SpawnerUpsert) {
 		s.UpdateBuiltIn()
+	})
+}
+
+// SetIsDefault sets the "is_default" field.
+func (u *SpawnerUpsertOne) SetIsDefault(v bool) *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetIsDefault(v)
+	})
+}
+
+// UpdateIsDefault sets the "is_default" field to the value that was provided on create.
+func (u *SpawnerUpsertOne) UpdateIsDefault() *SpawnerUpsertOne {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateIsDefault()
 	})
 }
 
@@ -1114,6 +1165,20 @@ func (u *SpawnerUpsertBulk) SetBuiltIn(v bool) *SpawnerUpsertBulk {
 func (u *SpawnerUpsertBulk) UpdateBuiltIn() *SpawnerUpsertBulk {
 	return u.Update(func(s *SpawnerUpsert) {
 		s.UpdateBuiltIn()
+	})
+}
+
+// SetIsDefault sets the "is_default" field.
+func (u *SpawnerUpsertBulk) SetIsDefault(v bool) *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.SetIsDefault(v)
+	})
+}
+
+// UpdateIsDefault sets the "is_default" field to the value that was provided on create.
+func (u *SpawnerUpsertBulk) UpdateIsDefault() *SpawnerUpsertBulk {
+	return u.Update(func(s *SpawnerUpsert) {
+		s.UpdateIsDefault()
 	})
 }
 

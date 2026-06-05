@@ -151,6 +151,18 @@ export async function deleteSpawner(id: string): Promise<void> {
   }
 }
 
+// Mark a spawner as the deployment-wide default. The server clears the previous
+// default atomically and broadcasts both rows, so the SSE/poll feed updates the
+// list — no optimistic mutation needed here.
+export async function setDefaultSpawner(id: string): Promise<Spawner> {
+  const res = await fetch(`/api/spawners/${id}/default`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error((err as { error: string }).error || 'Failed to set default spawner')
+  }
+  return res.json() as Promise<Spawner>
+}
+
 function startStream(): void {
   subscriberCount++
   if (subscriberCount === 1) {

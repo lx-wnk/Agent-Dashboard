@@ -39,6 +39,9 @@ const DefaultSpawnerSlug = "claude-default"
 type SpawnerGetter interface {
 	GetByID(ctx context.Context, id string) (*ent.Spawner, error)
 	GetBySlug(ctx context.Context, slug string) (*ent.Spawner, error)
+	// GetDefault returns the row flagged is_default. NotFound when none is set,
+	// in which case resolution falls through to the slug backstop below.
+	GetDefault(ctx context.Context) (*ent.Spawner, error)
 }
 
 // AgentsFn returns the current live agents (e.g. merger.GetAgents). Used to
@@ -52,8 +55,9 @@ type AgentsFn func(ctx context.Context) ([]sdk.Agent, error)
 //
 //  1. sessionID matches a live agent → that session's detected config dir + cwd
 //  2. spawnerID names a spawner row  → that spawner's config dir (+ request cwd)
-//  3. default spawner (claude-default) → its config dir (+ request cwd)
-//  4. process default (~/.claude or CLAUDE_CONFIG_DIR)
+//  3. is_default spawner → its config dir (+ request cwd)
+//  4. claude-default slug backstop → its config dir (+ request cwd)
+//  5. process default (~/.claude or CLAUDE_CONFIG_DIR)
 //
 // cwd should already be sanitized by the caller (absolute, no traversal); it is
 // only used to read <cwd>/.claude/commands and <cwd>/.claude/skills.
@@ -79,6 +83,12 @@ func ResolveRequestScope(ctx context.Context, sessionID, spawnerID, cwd string, 
 				s.Label = sp.Slug
 				return s
 			}
+		}
+		if sp, err := spawners.GetDefault(ctx); err == nil {
+			s := ResolveSpawnerScope(sp, cwd)
+			s.Source = "default"
+			s.Label = sp.Slug
+			return s
 		}
 		if sp, err := spawners.GetBySlug(ctx, DefaultSpawnerSlug); err == nil {
 			s := ResolveSpawnerScope(sp, cwd)

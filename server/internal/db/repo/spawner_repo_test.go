@@ -188,6 +188,57 @@ func TestSpawnerRepo_DeleteBuiltInRejected(t *testing.T) {
 	require.True(t, errors.Is(err, repo.ErrSpawnerBuiltIn))
 }
 
+func TestSpawnerRepo_SetDefaultEnforcesSingleDefault(t *testing.T) {
+	client := openTestDB(t)
+	r := repo.NewSpawnerRepo(client)
+
+	a, err := r.Create(t.Context(), "A", "a", "claude", nil, nil, nil, nil, "", nil, false)
+	require.NoError(t, err)
+	b, err := r.Create(t.Context(), "B", "b", "claude", nil, nil, nil, nil, "", nil, false)
+	require.NoError(t, err)
+
+	// No default yet.
+	_, err = r.GetDefault(t.Context())
+	require.Error(t, err)
+
+	newA, prev, err := r.SetDefault(t.Context(), a.ID)
+	require.NoError(t, err)
+	require.True(t, newA.IsDefault)
+	require.Empty(t, prev, "no prior default to report")
+
+	def, err := r.GetDefault(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, a.ID, def.ID)
+
+	// Switching to b clears a and reports a as the previous default.
+	newB, prev, err := r.SetDefault(t.Context(), b.ID)
+	require.NoError(t, err)
+	require.True(t, newB.IsDefault)
+	require.Equal(t, a.ID, prev)
+
+	reloadedA, err := r.GetByID(t.Context(), a.ID)
+	require.NoError(t, err)
+	require.False(t, reloadedA.IsDefault, "former default must be cleared")
+
+	def, err = r.GetDefault(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, b.ID, def.ID)
+}
+
+func TestSpawnerRepo_DeleteDefaultRejected(t *testing.T) {
+	client := openTestDB(t)
+	r := repo.NewSpawnerRepo(client)
+
+	a, err := r.Create(t.Context(), "A", "a", "claude", nil, nil, nil, nil, "", nil, false)
+	require.NoError(t, err)
+	_, _, err = r.SetDefault(t.Context(), a.ID)
+	require.NoError(t, err)
+
+	err = r.Delete(t.Context(), a.ID)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, repo.ErrSpawnerIsDefault))
+}
+
 func TestSpawnerRepo_DeleteInUseByTask(t *testing.T) {
 	client := openTestDB(t)
 	r := repo.NewSpawnerRepo(client)

@@ -29,6 +29,15 @@ func (f fakeSpawners) GetBySlug(_ context.Context, slug string) (*ent.Spawner, e
 	return nil, errors.New("not found")
 }
 
+func (f fakeSpawners) GetDefault(_ context.Context) (*ent.Spawner, error) {
+	for _, sp := range f.byID {
+		if sp.IsDefault {
+			return sp, nil
+		}
+	}
+	return nil, errors.New("not found")
+}
+
 func agentsReturning(list ...sdk.Agent) AgentsFn {
 	return func(_ context.Context) ([]sdk.Agent, error) { return list, nil }
 }
