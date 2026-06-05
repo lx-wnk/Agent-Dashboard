@@ -263,7 +263,7 @@ onMounted(fetchQuota)
         </AppTopbar>
       </template>
 
-      <div class="p-5">
+      <div class="p-5 flex flex-col min-h-full">
         <DashboardToolbar
           v-if="activeView === 'dashboard'"
           :layout="dashboardLayout"

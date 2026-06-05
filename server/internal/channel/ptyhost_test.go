@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 )
 
 // syncBuf is a goroutine-safe writer standing in for the pty master.
@@ -72,5 +76,39 @@ func TestPtyHTTPServer_InjectsMessageWithCR(t *testing.T) {
 	}
 	if got := w.String(); got != "/security-review\r" {
 		t.Fatalf("pty got %q, want %q", got, "/security-review\r")
+	}
+}
+
+// TestWritePtyDiscovery_WritesPtyJsonFile asserts that writePtyDiscovery writes
+// a path ending in ".pty.json" (not ".json") so it never collides with the
+// channel bridge's {pid}.json file.
+func TestWritePtyDiscovery_WritesPtyJsonFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	discPath, err := writePtyDiscovery(12345, 9999, "test-token")
+	if err != nil {
+		t.Fatalf("writePtyDiscovery: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(discPath) })
+
+	// Path must end in .pty.json, not .json.
+	if !strings.HasSuffix(discPath, ".pty.json") {
+		t.Errorf("expected path ending in .pty.json, got %q", discPath)
+	}
+
+	// File must exist and contain ptyInject:true.
+	data, err := os.ReadFile(discPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(data), `"ptyInject":true`) {
+		t.Errorf("expected ptyInject:true in discovery file, got %s", data)
+	}
+
+	// The file must live in the canonical discovery directory.
+	expectedDir := filepath.Join(home, channelconfig.DiscoveryDir)
+	if filepath.Dir(discPath) != expectedDir {
+		t.Errorf("expected file in %q, got %q", expectedDir, filepath.Dir(discPath))
 	}
 }

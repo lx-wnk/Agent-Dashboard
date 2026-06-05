@@ -7,17 +7,17 @@
 - **Cost estimation:** Uses the `MODEL_PRICING` lookup table in `server/pricing.ts`.
 - **Spawner env-merge precedence:** Custom-spawner `env` (from the `spawners` table) is injected into the process environment first. Dashboard-controlled vars (`DASHBOARD_*`, `CLAUDE_*`) are then overlaid and always win. `DASHBOARD_JWT_SECRET` and `DASHBOARD_HOOKS_SECRET` are never forwarded to spawned agents regardless of what a custom spawner's `env` map declares. See [ADR-0003](../docs/architecture/adr/0003-pluggable-spawners.md).
 - **Platform support:** macOS and Linux. `server/systemMonitor.ts` uses `top` on macOS and `/proc/stat` on Linux for CPU; `server/processScanner.ts` uses `lsof` on macOS and `/proc/<pid>/cwd` on Linux. Windows is unsupported.
-- **Live prompt injection into a running interactive session** needs real keyboard input on the session's pty — MCP has no inbound primitive (go-sdk `ss.Log` is gated behind a client `setLevel` Claude never sends; TIOCSTI is disabled by default on Linux ≥6.2). The session must therefore be started through one of the two wrappers below (a session launched with bare `claude` is **not** injectable — the dashboard then resumes it as a new session, signalled with an amber ⤳). Both set `Agent.liveInjectable` and reuse the same dashboard delivery (`POST /api/agents/{pid}/message`). Neither is required for anything else — monitoring, the pipeline, and agent→dashboard replies/permissions all work without them.
+- **Live prompt injection into a running interactive session** needs real keyboard input on the session's pty — MCP has no inbound primitive (go-sdk `ss.Log` is gated behind a client `setLevel` Claude never sends; TIOCSTI is disabled by default on Linux ≥6.2). The session must therefore be started through `agent-dashboard live` (a session launched with bare `claude` is **not** injectable — the dashboard then resumes it as a new session, signalled with an amber ⤳). `live` sets `Agent.liveInjectable` and reuses the same dashboard delivery (`POST /api/agents/{pid}/message`). It is not required for anything else — monitoring, the pipeline, and agent→dashboard replies/permissions all work without it.
 
-  | | pty broker — `scripts/claude-channel-pty.sh` | tmux — `scripts/claude-tmux-channel.sh` |
-  |---|---|---|
-  | pty owner | `agent-dashboard ptyhost` (built in) | tmux server |
-  | Install | none (`creack/pty` + `x/term` in the binary) | requires `tmux` on PATH |
-  | Inject | loopback HTTP → writes pty master | `tmux send-keys` |
-  | Detach / reattach | ❌ tied to the terminal (close / SSH drop ⇒ session ends) | ✅ survives disconnect, `tmux attach` to reattach |
-  | Maturity | newer (this project) | battle-tested |
+  `agent-dashboard live` auto-selects the transport and always loads the dashboard-channel MCP:
 
-  **Recommended default: tmux** when the Go server runs on the system for real/long-lived use — detach/reattach and resilience to SSH drops outweigh the one install; same-host/same-user makes its socket caveat moot. **pty broker** is the zero-install fallback for quick local sessions. Use exactly one per session (two pty owners conflict). GNU screen (`screen -X stuff`) is an equivalent not currently implemented.
+  | Transport | When selected | pty owner | Inject | Detach / reattach |
+  |---|---|---|---|---|
+  | Inside-tmux | `$TMUX` is set (already in tmux) | tmux server | `tmux send-keys` | ✅ survives disconnect, `tmux attach` to reattach |
+  | New-tmux | tmux on PATH, not inside tmux | tmux server | `tmux send-keys` | ✅ survives disconnect |
+  | PTY broker | tmux not available | `agent-dashboard ptyhost` (built in) | loopback HTTP → writes pty master | ❌ tied to the terminal (close / SSH drop ⇒ session ends) |
+
+  **Typical usage:** `agent-dashboard live` with no flags. Pass `--yolo` to add `--dangerously-skip-permissions`; all other flags are forwarded to claude unchanged. Install tmux for long-lived use (detach/reattach resilience); the pty broker is the zero-install fallback. Use exactly one transport per session (two pty owners conflict). GNU screen (`screen -X stuff`) is an equivalent not currently implemented.
 
 ## Pipeline Env Vars
 

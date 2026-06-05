@@ -18,7 +18,7 @@ const emit = defineEmits<{ messageSent: [msg: OutputMessage] }>()
 const hintId = useId()
 const listboxId = useId()
 
-const { promptInput, isSending, sendStatus, sendError, handleSend } = useAgentPrompt(
+const { promptInput, isSending, sendStatus, sendError, handleSend, resumeConfirm, confirmResume, cancelResume } = useAgentPrompt(
   () => props.agent,
   msg => emit('messageSent', msg),
   {
@@ -152,6 +152,17 @@ watch(promptInput, (val) => {
   }
 })
 
+function truncate(text: string, max = 80): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+function onConfirmStripKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    cancelResume()
+  }
+}
+
 defineExpose({ focus })
 </script>
 
@@ -233,12 +244,48 @@ defineExpose({ focus })
         {{ isSending ? '...' : (isResumeMode ? '⤳' : '↵') }}
       </button>
     </div>
+    <!-- Resume confirmation strip — shown when a send was intercepted on a non-injectable session -->
+    <div
+      v-if="resumeConfirm !== null"
+      role="region"
+      aria-label="Confirm resume as new session"
+      class="border-t border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/40"
+      :class="variant === 'full' ? 'px-4 py-2.5' : 'px-3 py-2'"
+      @keydown="onConfirmStripKeydown"
+    >
+      <p class="text-[11px] text-amber-800 dark:text-amber-300 mb-2">
+        ⤳ This session is <strong>not live-injectable</strong>. Confirming will resume it as a
+        <strong>new detached session</strong>. Start it via <code>agent-dashboard live</code> for
+        live injection.<br>
+        <span class="font-mono opacity-75">{{ truncate(resumeConfirm) }}</span>
+      </p>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          class="text-white bg-amber-600 hover:brightness-110 border-none rounded font-bold cursor-pointer flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+          :class="variant === 'full' ? 'px-3.5 py-1.5 text-[13px]' : 'px-2.5 py-1 text-[12px]'"
+          :disabled="isSending"
+          @click="confirmResume"
+        >
+          {{ isSending ? '...' : '⤳ Resume as new session' }}
+        </button>
+        <button
+          type="button"
+          class="text-fg-mute bg-transparent border border-line hover:bg-raised rounded cursor-pointer flex-shrink-0"
+          :class="variant === 'full' ? 'px-3.5 py-1.5 text-[13px]' : 'px-2.5 py-1 text-[12px]'"
+          :disabled="isSending"
+          @click="cancelResume"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
     <p
       v-if="isResumeMode && !sendStatus"
       class="text-[11px] text-amber-700 dark:text-amber-400"
       :class="variant === 'full' ? 'px-4 pb-2' : 'px-3 pb-1.5 pt-0.5'"
     >
-      ⤳ Not live-injectable — sending resumes this session as a <strong>new</strong> session. Start it via <code>claude-channel-pty.sh</code> (no tmux) or in tmux for live injection.
+      ⤳ Not live-injectable — sending resumes this session as a <strong>new</strong> session. Start it via <code>agent-dashboard live</code> for live injection (uses tmux automatically if present, pty broker otherwise).
     </p>
     <p
       v-if="sendStatus"

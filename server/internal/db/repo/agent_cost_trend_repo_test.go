@@ -81,6 +81,23 @@ func TestAgentCostTrendRepo_Upsert_Idempotent(t *testing.T) {
 	require.InDelta(t, 2.0, row.CostUsd, 1e-9)
 }
 
+func TestAgentCostTrendRepo_ListSourceMtimes(t *testing.T) {
+	client := openTestDB(t)
+	r := repo.NewAgentCostTrendRepo(client)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	rows := []repo.AgentCostRow{
+		{SessionID: "sess-a", Model: "claude-sonnet-4-6", InputTokens: 10, OutputTokens: 5, CostUSD: 0.001, RecordedAt: now, SourceMtime: 111},
+		{SessionID: "sess-b", Model: "claude-haiku-4-5", InputTokens: 20, OutputTokens: 8, CostUSD: 0.002, RecordedAt: now, SourceMtime: 222},
+	}
+	require.NoError(t, r.Upsert(t.Context(), rows))
+
+	// Real ent Scan into the struct must map session_id/source_mtime via json tags.
+	mtimes, err := r.ListSourceMtimes(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, map[string]int64{"sess-a": 111, "sess-b": 222}, mtimes)
+}
+
 func TestAgentCostTrendRepo_ListByTimeRange_Filtered(t *testing.T) {
 	client := openTestDB(t)
 	r := repo.NewAgentCostTrendRepo(client)

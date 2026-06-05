@@ -56,15 +56,16 @@ func System(w http.ResponseWriter, r *http.Request) {
 // Config handles GET /api/system/config.
 func Config(w http.ResponseWriter, r *http.Request) {
 	home, _ := os.UserHomeDir()
-	// Self binary is next to the server dir; the channel script lives at
-	// <exe_dir>/../scripts/claude-with-channel.sh
+	// Advertise the `agent-dashboard live` entrypoint, using the actual binary path
+	// resolved via os.Executable (same as SelfBinaryPath but without EvalSymlinks so
+	// the displayed path is human-readable and matches what the user installed).
 	exe, _ := os.Executable()
-	scriptAbs := filepath.Join(filepath.Dir(exe), "..", "scripts", "claude-with-channel.sh")
-	scriptAbs, _ = filepath.Abs(scriptAbs)
+	exeAbs, _ := filepath.Abs(exe)
 
-	scriptPath := scriptAbs
-	if strings.HasPrefix(scriptAbs, home) {
-		scriptPath = "~" + scriptAbs[len(home):]
+	// Apply home-directory shortening so the UI displays a tidy path.
+	scriptPath := exeAbs + " live"
+	if strings.HasPrefix(exeAbs, home) {
+		scriptPath = "~" + exeAbs[len(home):] + " live"
 	}
 
 	w.Header().Set("Content-Type", "application/json")

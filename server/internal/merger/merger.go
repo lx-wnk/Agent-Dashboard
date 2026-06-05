@@ -36,35 +36,54 @@ func CalculateStatus(lastActivity time.Time) sdk.AgentStatus {
 	}
 }
 
-// channelDiscovery reads the dashboard-channel discovery file for the given PID
-// once and returns both availability and live-injectability in a single I/O
-// operation, replacing the prior two-call pattern (os.Stat + os.ReadFile).
+// channelDiscovery reads the dashboard-channel discovery files for the given PID
+// and returns both availability and live-injectability.
 //
-// channelAvailable is true when the file exists (existence implies the agent
-// carries the dashboard-channel MCP and can be messaged via SendMessageToChannel).
-// liveInjectable is true when the file additionally contains a tmux pane reference
-// or pty-inject flag — either of which enables real keyboard-input delivery into
-// the running interactive Claude session.
+// Two files are consulted independently (a missing or unreadable file simply
+// contributes nothing — no error):
+//
+//   - {pid}.json     — channel bridge: written by bridge.go. Presence implies
+//     channelAvailable. Contains tmuxPane/tmuxSocket for tmux-based injection.
+//   - {pid}.pty.json — pty broker: written by ptyhost.go. Presence also implies
+//     channelAvailable. Contains ptyInject:true for loopback-HTTP injection.
+//
+// This two-file model avoids the collision that occurred on the no-tmux path:
+// previously ptyhost.go and bridge.go both wrote to {pid}.json, and the bridge
+// (booting ~1s after ptyhost) overwrote the ptyInject field, breaking
+// liveInjectable detection.
+//
+// channelAvailable is true when either file exists.
+// liveInjectable is true when the bridge file's tmuxPane is non-empty OR the
+// pty file's ptyInject field is true.
 func channelDiscovery(pid int) (channelAvailable, liveInjectable bool) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false, false
 	}
-	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid)+".json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		// File absent or unreadable — agent has no channel bridge.
-		return false, false
+	base := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid))
+
+	// Read bridge file ({pid}.json).
+	if data, err := os.ReadFile(base + ".json"); err == nil {
+		channelAvailable = true
+		var disc struct {
+			TmuxPane string `json:"tmuxPane"`
+		}
+		if json.Unmarshal(data, &disc) == nil && disc.TmuxPane != "" {
+			liveInjectable = true
+		}
 	}
-	// File present → channel is available.
-	channelAvailable = true
-	var disc struct {
-		TmuxPane  string `json:"tmuxPane"`
-		PtyInject bool   `json:"ptyInject"`
+
+	// Read pty file ({pid}.pty.json).
+	if data, err := os.ReadFile(base + ".pty.json"); err == nil {
+		channelAvailable = true
+		var disc struct {
+			PtyInject bool `json:"ptyInject"`
+		}
+		if json.Unmarshal(data, &disc) == nil && disc.PtyInject {
+			liveInjectable = true
+		}
 	}
-	if json.Unmarshal(data, &disc) == nil {
-		liveInjectable = disc.TmuxPane != "" || disc.PtyInject
-	}
+
 	return channelAvailable, liveInjectable
 }
 

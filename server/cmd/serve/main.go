@@ -117,6 +117,8 @@ func main() {
 	}
 	root.AddCommand(ptyhostCmd)
 
+	root.AddCommand(newLiveCmd())
+
 	root.AddCommand(serve)
 
 	if err := root.Execute(); err != nil {

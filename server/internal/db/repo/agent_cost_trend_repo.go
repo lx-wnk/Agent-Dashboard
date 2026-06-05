@@ -100,8 +100,8 @@ func (r *entAgentCostTrendRepo) ListByTimeRange(ctx context.Context, from, to ti
 // The importer uses this to determine which files are unchanged and can be skipped.
 func (r *entAgentCostTrendRepo) ListSourceMtimes(ctx context.Context) (map[string]int64, error) {
 	type sessionMtime struct {
-		SessionID   string
-		SourceMtime int64
+		SessionID   string `json:"session_id"`
+		SourceMtime int64  `json:"source_mtime"`
 	}
 	var results []sessionMtime
 	if err := r.client.AgentCostTrend.Query().

@@ -20,7 +20,7 @@ describe('channelScriptCallout', () => {
     }))
     const w = mount(ChannelScriptCallout)
     await flushPromises()
-    expect(w.text()).not.toContain('Channel script')
+    expect(w.text()).not.toContain('Channel command')
   })
 
   it('copies the path to clipboard on click', async () => {
