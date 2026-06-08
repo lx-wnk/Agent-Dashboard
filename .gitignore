@@ -47,12 +47,13 @@ package-lock.json
 /outputs/
 **/coverage.out
 
-# Vue SPA build output — the placeholder dist/index.html is committed so go:embed
-# compiles without requiring a pnpm build first. Everything else under dist/ is a
-# real `vite build` artifact (assets/, icons, manifest, service worker, etc.) and
-# is ignored so build output never bloats or dirties the repo.
+# Vue SPA build output — only dist/.gitkeep is committed so `//go:embed all:dist`
+# (the all: prefix embeds dot-files) compiles without requiring a pnpm build first.
+# Everything else under dist/ (index.html, assets/, icons, manifest, service worker)
+# is a real `vite build` artifact and is ignored so build output never bloats or
+# dirties the repo. The SPA is unservable until `task build:all` populates dist/.
 server/frontend/dist/*
-!server/frontend/dist/index.html
+!server/frontend/dist/.gitkeep
 server/coverage.out
 
 # Playwright per-run output
