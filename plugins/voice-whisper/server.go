@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 )
@@ -41,11 +42,13 @@ func NewServer(t Transcriber) *http.ServeMux {
 
 		tmp, err := os.CreateTemp("", "voice-*.webm")
 		if err != nil {
+			slog.Error("transcribe: temp file", "err", err)
 			http.Error(w, "temp file", http.StatusInternalServerError)
 			return
 		}
 		defer os.Remove(tmp.Name())
 		if _, err := io.Copy(tmp, file); err != nil {
+			slog.Error("transcribe: write audio", "err", err)
 			http.Error(w, "write audio", http.StatusInternalServerError)
 			return
 		}
@@ -53,6 +56,7 @@ func NewServer(t Transcriber) *http.ServeMux {
 
 		text, err := t.Transcribe(r.Context(), tmp.Name())
 		if err != nil {
+			slog.Error("transcribe failed", "err", err)
 			http.Error(w, "transcription failed", http.StatusBadGateway)
 			return
 		}
