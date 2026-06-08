@@ -27,6 +27,10 @@ func TestNewReverseProxy_ProxiesAndStripsPrefixAndHeaders(t *testing.T) {
 		backendPath = r.URL.Path
 		cookieHeader = r.Header.Get("Cookie")
 		authHeader = r.Header.Get("Authorization")
+		// Set an explicit Content-Length so the test can assert the proxy strips it
+		// (the gzip middleware recompresses the body downstream — a forwarded
+		// upstream Content-Length would yield ERR_CONTENT_LENGTH_MISMATCH).
+		w.Header().Set("Content-Length", "2")
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok")
 	}))
@@ -57,4 +61,8 @@ func TestNewReverseProxy_ProxiesAndStripsPrefixAndHeaders(t *testing.T) {
 	// Sensitive headers must not reach the plugin backend.
 	assert.Empty(t, cookieHeader, "Cookie header must be stripped before forwarding")
 	assert.Empty(t, authHeader, "Authorization header must be stripped before forwarding")
+
+	// Upstream Content-Length must be stripped so the downstream gzip middleware
+	// can recompress without advertising a stale length (ERR_CONTENT_LENGTH_MISMATCH).
+	assert.Empty(t, rec.Header().Get("Content-Length"), "proxy must drop upstream Content-Length")
 }
