@@ -1,0 +1,47 @@
+<!-- src/components/PluginSlot.vue -->
+<script setup lang="ts">
+import type { SlotAddon, SlotContext, UnmountFn } from '../utils/pluginSlot'
+import { onBeforeUnmount, onMounted, ref, toRaw } from 'vue'
+import { loadSlotAddons } from '../composables/usePluginSlots'
+
+const props = withDefaults(defineProps<{
+  name: string
+  ctx: SlotContext
+  // Injectable for tests; defaults to the real discovery loader.
+  loader?: (slot: string) => Promise<SlotAddon[]>
+}>(), {
+  loader: loadSlotAddons,
+})
+
+const containerEl = ref<HTMLElement | null>(null)
+const unmounts: UnmountFn[] = []
+
+onMounted(async () => {
+  const addons = await props.loader(props.name)
+  const container = containerEl.value
+  if (!container)
+    return
+  for (const addon of addons) {
+    const host = document.createElement('div')
+    host.setAttribute('data-addon-host', '')
+    container.appendChild(host)
+    // toRaw: addons receive the plain ctx object, not Vue's reactive proxy.
+    unmounts.push(addon.mount(host, toRaw(props.ctx)))
+  }
+})
+
+onBeforeUnmount(() => {
+  for (const fn of unmounts) {
+    try {
+      fn()
+    }
+    catch {
+      // Addon teardown failures must not break host unmount.
+    }
+  }
+})
+</script>
+
+<template>
+  <div ref="containerEl" class="contents" />
+</template>
