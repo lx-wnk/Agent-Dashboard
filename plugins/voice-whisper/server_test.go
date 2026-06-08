@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -50,6 +51,42 @@ func TestTranscribeReturnsText(t *testing.T) {
 	}
 	if out.Text != "hello world" {
 		t.Fatalf("text = %q, want %q", out.Text, "hello world")
+	}
+}
+
+type failingTranscriber struct{}
+
+func (failingTranscriber) Transcribe(_ context.Context, _ string) (string, error) {
+	return "", errors.New("boom")
+}
+
+func TestTranscribeError502(t *testing.T) {
+	srv := NewServer(failingTranscriber{})
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, _ := mw.CreateFormFile("audio", "clip.webm")
+	fw.Write([]byte("x"))
+	mw.Close()
+	req := httptest.NewRequest(http.MethodPost, "/transcribe", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", rec.Code)
+	}
+}
+
+func TestTranscribeMissingAudio400(t *testing.T) {
+	srv := NewServer(fakeTranscriber{})
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	mw.Close() // no audio field
+	req := httptest.NewRequest(http.MethodPost, "/transcribe", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }
 

@@ -54,4 +54,21 @@ describe('RefinementChat voice slot', () => {
       .element as HTMLTextAreaElement
     expect(textarea.value).toContain('hello world')
   })
+
+  it('disables the textarea while a slot addon reports busy', async () => {
+    const busyAddon: SlotAddon = {
+      slot: 'refinement-input-addon',
+      mount: (_el, ctx) => { ctx.setBusy(true); return () => {} },
+    }
+    const wrapper = mount(RefinementChat, {
+      props: {
+        open: true,
+        task: { id: 't1', slug: 's', title: 'T', status: 'refinement' } as any,
+        slotLoader: async () => [busyAddon],
+      },
+    })
+    await flushPromises()
+    const textarea = wrapper.get('textarea[placeholder="Message..."]').element as HTMLTextAreaElement
+    expect(textarea.disabled).toBe(true)
+  })
 })

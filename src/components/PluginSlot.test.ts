@@ -43,4 +43,21 @@ describe('PluginSlot', () => {
     await flushPromises()
     expect(wrapper.find('[data-addon-host]').exists()).toBe(false)
   })
+
+  it('does not mount addons if unmounted before the loader resolves', async () => {
+    let resolveLoader!: (a: SlotAddon[]) => void
+    const pending = new Promise<SlotAddon[]>((r) => { resolveLoader = r })
+    const mountFn = vi.fn(() => () => {})
+    const loader = vi.fn().mockReturnValue(pending)
+
+    const wrapper = mount(PluginSlot, {
+      props: { name: 'refinement-input-addon', ctx: fakeCtx(), loader },
+    })
+    // unmount BEFORE the loader resolves
+    wrapper.unmount()
+    resolveLoader([{ slot: 'refinement-input-addon', mount: mountFn }])
+    await flushPromises()
+
+    expect(mountFn).not.toHaveBeenCalled()
+  })
 })

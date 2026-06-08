@@ -28,8 +28,14 @@ onMounted(async () => {
     const host = document.createElement('div')
     host.setAttribute('data-addon-host', '')
     container.appendChild(host)
-    // toRaw: addons receive the plain ctx object, not Vue's reactive proxy.
-    unmounts.push(addon.mount(host, toRaw(props.ctx)))
+    try {
+      // toRaw: addons receive the plain ctx object, not Vue's reactive proxy.
+      unmounts.push(addon.mount(host, toRaw(props.ctx)))
+    }
+    catch {
+      // A broken addon's mount must not prevent other addons from mounting.
+      host.remove()
+    }
   }
 })
 
