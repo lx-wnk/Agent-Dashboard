@@ -9,10 +9,9 @@ linters:
         - fmt.Fprintln
         - (io.Closer).Close
         - (*os.File).Close
-
-issues:
-  exclude-rules:
-    - path: ".*_test\\.go$"
-      linters: [errcheck]
-    - linters: [revive]
-      text: "stutters"
+  exclusions:
+    rules:
+      - path: ".*_test\\.go$"
+        linters: [errcheck]
+      - linters: [revive]
+        text: "stutters"
