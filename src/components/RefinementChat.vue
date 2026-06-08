@@ -5,13 +5,13 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
 import PluginSlot from './PluginSlot.vue'
-import type { SlotContext } from '../utils/pluginSlot'
+import type { SlotAddon, SlotContext } from '../utils/pluginSlot'
 
 const props = defineProps<{
   open: boolean
   task: PipelineTask | null
   // Optional: lets tests inject a fake slot loader. Production uses the default.
-  slotLoader?: (slot: string) => Promise<import('../utils/pluginSlot').SlotAddon[]>
+  slotLoader?: (slot: string) => Promise<SlotAddon[]>
 }>()
 
 const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
@@ -377,7 +377,7 @@ function isPhaseMarker(idx: number): string | null {
           class="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-fg placeholder:text-fg-faint text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
           placeholder="Message..."
           rows="1"
-          :disabled="isStreaming"
+          :disabled="isStreaming || slotBusy"
           @keydown.enter.exact.prevent="handleSend"
           @paste="handlePaste"
         />
@@ -392,7 +392,7 @@ function isPhaseMarker(idx: number): string | null {
         </button>
         <button
           class="w-10 h-10 rounded-xl bg-blue-500 text-white border-none cursor-pointer text-base flex items-center justify-center transition-all hover:enabled:opacity-85 hover:enabled:-translate-y-px disabled:opacity-35 disabled:cursor-default shrink-0"
-          :disabled="isStreaming || (!inputText.trim() && !pendingImages.length)"
+          :disabled="isStreaming || slotBusy || (!inputText.trim() && !pendingImages.length)"
           @click="handleSend"
         >
           →
