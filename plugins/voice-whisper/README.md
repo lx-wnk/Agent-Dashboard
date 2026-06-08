@@ -5,7 +5,10 @@ Local, on-device speech-to-text for the refinement chat. Audio never leaves the 
 ## Prerequisites
 - `ffmpeg` on PATH (or set `FFMPEG_BIN`)
 - whisper.cpp CLI (`whisper-cli`) on PATH (or set `VOICE_WHISPER_BIN`)
-- A ggml model file; set `VOICE_WHISPER_MODEL` (default `models/ggml-base.en.bin`)
+- A ggml model file; set `VOICE_WHISPER_MODEL`. **For any non-English language use a
+  multilingual model** (e.g. `ggml-small.bin`, `ggml-medium.bin`) — the `*.en` models
+  are English-only and will mistranscribe other languages. With `VOICE_WHISPER_LANG=auto`
+  (default) whisper detects the language per clip.
 
 ## Build
 ```bash
@@ -23,7 +26,8 @@ the refinement chat once the plugin's `/health` passes.
 | `VOICE_WHISPER_ADDR` | `127.0.0.1:19010` | Listen address (loopback only) |
 | `FFMPEG_BIN` | `ffmpeg` | ffmpeg binary |
 | `VOICE_WHISPER_BIN` | `whisper-cli` | whisper.cpp CLI binary |
-| `VOICE_WHISPER_MODEL` | `models/ggml-base.en.bin` | ggml model path |
+| `VOICE_WHISPER_MODEL` | `models/ggml-base.en.bin` | ggml model path (use a multilingual model for non-English) |
+| `VOICE_WHISPER_LANG` | `auto` | spoken-language hint passed to whisper `-l` (`auto` = detect; or `de`, `en`, …) |
 
 ## How it works
 The dashboard reverse-proxies `/api/settings/plugins/voice-whisper/*` to this process

@@ -4,5 +4,5 @@
   "capabilities": ["route_extension"],
   "addr": "127.0.0.1:19010",
   "command": ["./voice-whisper"],
-  "env": ["VOICE_WHISPER_MODEL", "VOICE_WHISPER_BIN", "FFMPEG_BIN"]
+  "env": ["VOICE_WHISPER_MODEL", "VOICE_WHISPER_BIN", "FFMPEG_BIN", "VOICE_WHISPER_LANG"]
 }

@@ -13,6 +13,7 @@ type whisperCLI struct {
 	ffmpegBin  string // default "ffmpeg"
 	whisperBin string // VOICE_WHISPER_BIN
 	modelPath  string // VOICE_WHISPER_MODEL
+	lang       string // VOICE_WHISPER_LANG; "auto" lets whisper detect (needs a multilingual model)
 }
 
 func newWhisperCLI() whisperCLI {
@@ -20,6 +21,7 @@ func newWhisperCLI() whisperCLI {
 		ffmpegBin:  envOr("FFMPEG_BIN", "ffmpeg"),
 		whisperBin: envOr("VOICE_WHISPER_BIN", "whisper-cli"),
 		modelPath:  envOr("VOICE_WHISPER_MODEL", "models/ggml-base.en.bin"),
+		lang:       envOr("VOICE_WHISPER_LANG", "auto"),
 	}
 }
 
@@ -42,9 +44,10 @@ func (c whisperCLI) Transcribe(ctx context.Context, audioPath string) (string, e
 
 	outBase := audioPath + ".out"
 	defer func() { _ = os.Remove(outBase + ".txt") }()
-	// whisper.cpp: -otxt writes <outBase>.txt
+	// whisper.cpp: -otxt writes <outBase>.txt; -l auto detects language per clip
+	// (requires a multilingual model — the *.en models are English-only).
 	w := exec.CommandContext(ctx, c.whisperBin, "-m", c.modelPath, "-f", wav,
-		"-otxt", "-of", outBase, "-nt")
+		"-l", c.lang, "-otxt", "-of", outBase, "-nt")
 	if out, err := w.CombinedOutput(); err != nil {
 		return "", &cmdErr{"whisper", out, err}
 	}
