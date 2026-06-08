@@ -15,11 +15,13 @@ const props = defineProps<{
   todayCostLabel: string
   quotaPct: number
   theme: 'dark' | 'light'
+  canInstall: boolean
 }>()
 const emit = defineEmits<{
   openSessions: []
   openSettings: []
   toggleTheme: []
+  install: []
 }>()
 
 const { expanded, pinned, togglePinned, setHovering } = useSidebar()
@@ -93,9 +95,11 @@ function badgeFor(view: ActiveView): number | null {
       :today-cost-label="todayCostLabel"
       :quota-pct="quotaPct"
       :theme="theme"
+      :can-install="canInstall"
       @open-sessions="emit('openSessions')"
       @open-settings="emit('openSettings')"
       @toggle-theme="emit('toggleTheme')"
+      @install="emit('install')"
     />
   </nav>
 </template>

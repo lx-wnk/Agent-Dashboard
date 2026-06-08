@@ -29,6 +29,7 @@ const props = {
   totalTokensLabel: '1.2M',
   quotaPct: 73,
   theme: 'dark' as const,
+  canInstall: false,
 }
 
 describe('appSidebar', () => {

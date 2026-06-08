@@ -228,9 +228,11 @@ onMounted(fetchQuota)
           :today-cost-label="todayCostLabel"
           :quota-pct="quotaPct"
           :theme="theme"
+          :can-install="canInstall"
           @open-sessions="showSessions = true"
           @open-settings="showSettings = true"
           @toggle-theme="toggleTheme"
+          @install="promptInstall"
         />
       </template>
 
@@ -384,18 +386,6 @@ onMounted(fetchQuota)
       @navigate-task="task => selectTask(task)"
       @navigate-agent="agent => selectAgent(agent)"
     />
-
-    <!-- PWA install prompt -->
-    <div v-if="canInstall" class="fixed bottom-20 right-6 z-[1900]">
-      <button
-        type="button"
-        class="bg-raised text-fg-mute border border-line rounded-md px-3.5 py-2 text-[13px] font-semibold cursor-pointer hover:brightness-110 shadow-md"
-        title="Install Agent Dashboard as a PWA"
-        @click="promptInstall"
-      >
-        Install app
-      </button>
-    </div>
   </div>
   <div v-else class="min-h-screen bg-app" />
 </template>
