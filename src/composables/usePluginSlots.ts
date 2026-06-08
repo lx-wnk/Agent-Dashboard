@@ -1,20 +1,9 @@
 import type { SlotAddon, SlotAddonModule } from '../utils/pluginSlot'
-
-interface PluginInfo {
-  id: string
-  capabilities: string[]
-}
+import { fetchPluginList, type PluginInfo } from '../utils/plugins'
 
 interface LoadDeps {
   fetchPlugins?: () => Promise<PluginInfo[]>
   importAddon?: (url: string) => Promise<SlotAddonModule>
-}
-
-async function defaultFetchPlugins(): Promise<PluginInfo[]> {
-  const res = await fetch('/api/settings/plugins', { credentials: 'same-origin' })
-  if (!res.ok)
-    return []
-  return res.json()
 }
 
 // `@vite-ignore` keeps Vite from trying to resolve the plugin URL at build time —
@@ -29,7 +18,7 @@ function defaultImportAddon(url: string): Promise<SlotAddonModule> {
  * health-checked) are imported — never an arbitrary URL.
  */
 export async function loadSlotAddons(slot: string, deps: LoadDeps = {}): Promise<SlotAddon[]> {
-  const fetchPlugins = deps.fetchPlugins ?? defaultFetchPlugins
+  const fetchPlugins = deps.fetchPlugins ?? fetchPluginList
   const importAddon = deps.importAddon ?? defaultImportAddon
 
   const plugins = await fetchPlugins()
