@@ -32,7 +32,7 @@ func envOr(key, def string) string {
 
 func (c whisperCLI) Transcribe(ctx context.Context, audioPath string) (string, error) {
 	wav := audioPath + ".wav"
-	defer os.Remove(wav)
+	defer func() { _ = os.Remove(wav) }()
 	// -ar 16000 -ac 1: whisper.cpp expects 16kHz mono.
 	conv := exec.CommandContext(ctx, c.ffmpegBin, "-y", "-i", audioPath,
 		"-ar", "16000", "-ac", "1", wav)
@@ -41,7 +41,7 @@ func (c whisperCLI) Transcribe(ctx context.Context, audioPath string) (string, e
 	}
 
 	outBase := audioPath + ".out"
-	defer os.Remove(outBase + ".txt")
+	defer func() { _ = os.Remove(outBase + ".txt") }()
 	// whisper.cpp: -otxt writes <outBase>.txt
 	w := exec.CommandContext(ctx, c.whisperBin, "-m", c.modelPath, "-f", wav,
 		"-otxt", "-of", outBase, "-nt")

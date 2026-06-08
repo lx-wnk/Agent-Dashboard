@@ -46,7 +46,7 @@ func NewServer(t Transcriber) *http.ServeMux {
 			http.Error(w, "temp file", http.StatusInternalServerError)
 			return
 		}
-		defer os.Remove(tmp.Name())
+		defer func() { _ = os.Remove(tmp.Name()) }()
 		if _, err := io.Copy(tmp, file); err != nil {
 			slog.Error("transcribe: write audio", "err", err)
 			http.Error(w, "write audio", http.StatusInternalServerError)
@@ -65,7 +65,7 @@ func NewServer(t Transcriber) *http.ServeMux {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"text": text})
+		_ = json.NewEncoder(w).Encode(map[string]string{"text": text})
 	})
 
 	return mux
