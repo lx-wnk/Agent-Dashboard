@@ -13,12 +13,11 @@ linters:
         - (*compress/gzip.Writer).Close
         - (*database/sql.Rows).Close
         - (github.com/lx-wnk/agent-dashboard/server/internal/db/ent.Client).Close
-
-issues:
-  exclude-rules:
-    - path: ".*_test\\.go$"
-      linters: [errcheck]
-    - path: "internal/db/ent/"
-      linters: [staticcheck, govet, revive, errcheck]
-    - linters: [revive]
-      text: "stutters"
+  exclusions:
+    rules:
+      - path: ".*_test\\.go$"
+        linters: [errcheck]
+      - path: "internal/db/ent/"
+        linters: [staticcheck, govet, revive, errcheck]
+      - linters: [revive]
+        text: "stutters"
