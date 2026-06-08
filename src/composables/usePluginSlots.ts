@@ -21,7 +21,14 @@ export async function loadSlotAddons(slot: string, deps: LoadDeps = {}): Promise
   const fetchPlugins = deps.fetchPlugins ?? fetchPluginList
   const importAddon = deps.importAddon ?? defaultImportAddon
 
-  const plugins = await fetchPlugins()
+  let plugins: PluginInfo[]
+  try {
+    plugins = await fetchPlugins()
+  }
+  catch {
+    // Plugin list unavailable → no addons; the slot degrades to empty.
+    return []
+  }
   const candidates = plugins.filter(p => p.capabilities.includes('route_extension'))
 
   const addons: SlotAddon[] = []

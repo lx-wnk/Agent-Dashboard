@@ -35,4 +35,12 @@ describe('loadSlotAddons', () => {
 
     expect(addons).toEqual([])
   })
+
+  it('returns [] when the plugin-list fetch fails (slot degrades gracefully)', async () => {
+    const fetchPlugins = vi.fn().mockRejectedValue(new Error('HTTP 500'))
+    const importAddon = vi.fn()
+    const addons = await loadSlotAddons('refinement-input-addon', { fetchPlugins, importAddon })
+    expect(addons).toEqual([])
+    expect(importAddon).not.toHaveBeenCalled()
+  })
 })
