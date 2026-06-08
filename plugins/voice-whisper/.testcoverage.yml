@@ -1,0 +1,6 @@
+exclude:
+  paths:
+    - main\.go$
+    - whisper\.go$
+threshold:
+  total: 55

@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [github-oauth, office365-oauth]
+        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -94,7 +94,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [github-oauth, office365-oauth]
+        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -118,6 +118,8 @@ jobs:
           - sdk
           - plugins/github-oauth
           - plugins/office365-oauth
+          - plugins/voice-whisper
+          - plugins/voice-webspeech
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -143,7 +145,7 @@ jobs:
         run: go build -o /dev/null ./cmd/serve/...
       - name: Build plugin binaries
         run: |
-          for plugin in plugins/github-oauth plugins/office365-oauth; do
+          for plugin in plugins/github-oauth plugins/office365-oauth plugins/voice-whisper plugins/voice-webspeech; do
             echo "=== building $plugin ===" && (cd "$plugin" && GOWORK=off go build -o /dev/null .)
           done
 
