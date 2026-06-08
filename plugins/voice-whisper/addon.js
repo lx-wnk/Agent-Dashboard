@@ -53,7 +53,16 @@ export default {
       }
     }
 
-    btn.addEventListener('click', () => (recorder ? stop() : void start()))
+    btn.addEventListener('click', () => {
+      if (recorder) {
+        stop()
+        return
+      }
+      start().catch((err) => {
+        btn.title = `Voice error: ${err.message}`
+        ctx.setBusy(false)
+      })
+    })
     el.appendChild(btn)
 
     return () => {

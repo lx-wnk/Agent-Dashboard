@@ -41,6 +41,7 @@ func (c whisperCLI) Transcribe(ctx context.Context, audioPath string) (string, e
 	}
 
 	outBase := audioPath + ".out"
+	defer os.Remove(outBase + ".txt")
 	// whisper.cpp: -otxt writes <outBase>.txt
 	w := exec.CommandContext(ctx, c.whisperBin, "-m", c.modelPath, "-f", wav,
 		"-otxt", "-of", outBase, "-nt")
@@ -48,7 +49,6 @@ func (c whisperCLI) Transcribe(ctx context.Context, audioPath string) (string, e
 		return "", &cmdErr{"whisper", out, err}
 	}
 	txt, err := os.ReadFile(outBase + ".txt")
-	os.Remove(outBase + ".txt")
 	if err != nil {
 		return "", err
 	}

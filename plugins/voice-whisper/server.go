@@ -28,7 +28,7 @@ func NewServer(t Transcriber) *http.ServeMux {
 
 	mux.HandleFunc("GET /addon.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
-		w.Write(addonJS)
+		_, _ = w.Write(addonJS)
 	})
 
 	mux.HandleFunc("POST /transcribe", func(w http.ResponseWriter, r *http.Request) {
