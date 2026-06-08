@@ -30,12 +30,20 @@ export default {
         btn.textContent = '🎙'
         ctx.setBusy(false)
       }
-      rec.onerror = () => {
-        btn.title = 'Voice error'
+      rec.onerror = (e) => {
+        btn.title = `Voice error: ${e.error || 'unknown'}`
       }
-      rec.start()
-      btn.textContent = '⏹'
-      ctx.setBusy(true)
+      try {
+        rec.start()
+        btn.textContent = '⏹'
+        ctx.setBusy(true)
+      }
+      catch (err) {
+        rec = null
+        btn.textContent = '🎙'
+        btn.title = `Voice error: ${err.message}`
+        ctx.setBusy(false)
+      }
     }
 
     function stop() {
