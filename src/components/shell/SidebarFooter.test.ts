@@ -9,6 +9,7 @@ const base = {
   totalTokensLabel: '1.2M',
   quotaPct: 73,
   theme: 'dark' as const,
+  canInstall: false,
 }
 
 describe('sidebarFooter', () => {
@@ -31,5 +32,18 @@ describe('sidebarFooter', () => {
     expect(w.emitted('openSessions')).toHaveLength(1)
     expect(w.emitted('openSettings')).toHaveLength(1)
     expect(w.emitted('toggleTheme')).toHaveLength(1)
+  })
+
+  it('hides install button unless canInstall', () => {
+    const w = mount(SidebarFooter, { props: base })
+    expect(w.find('[data-testid="footer-install"]').exists()).toBe(false)
+  })
+
+  it('shows install button and emits install when canInstall', async () => {
+    const w = mount(SidebarFooter, { props: { ...base, canInstall: true } })
+    const btn = w.get('[data-testid="footer-install"]')
+    expect(btn.text()).toContain('Install PWA')
+    await btn.trigger('click')
+    expect(w.emitted('install')).toHaveLength(1)
   })
 })

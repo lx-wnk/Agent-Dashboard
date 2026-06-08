@@ -25,7 +25,6 @@ import (
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
-	"github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/projects"
@@ -223,10 +222,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/system/config", system.Config) // keep old path for compatibility
 		r.Get("/api/system", system.System)        // frontend expects /api/system
 		r.Get("/api/system/system", system.System) // keep old path for compatibility
-
-		r.Get("/api/memory", memory.List)
-		r.Get("/api/memory/*", memory.Get)
-		r.Put("/api/memory/*", memory.Put)
 
 		r.Get("/api/me", ErrorMiddleware(authHandler.Me))
 		r.Delete("/api/me", ErrorMiddleware(authHandler.DeleteMe))

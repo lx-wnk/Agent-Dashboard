@@ -6,11 +6,13 @@ defineProps<{
   todayCostLabel: string
   quotaPct: number
   theme: 'dark' | 'light'
+  canInstall: boolean
 }>()
 defineEmits<{
   openSessions: []
   openSettings: []
   toggleTheme: []
+  install: []
 }>()
 </script>
 
@@ -43,6 +45,17 @@ defineEmits<{
         </div>
       </div>
     </div>
+    <button
+      v-if="canInstall"
+      type="button"
+      data-testid="footer-install"
+      class="flex items-center gap-2 rounded-lg px-2 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      :class="expanded ? 'w-full' : 'w-full justify-center'"
+      :title="!expanded ? 'Install PWA' : undefined"
+      @click="$emit('install')"
+    >
+      <span aria-hidden="true">⬇</span><span v-if="expanded">Install PWA</span><span v-else class="sr-only">Install PWA</span>
+    </button>
     <div class="flex items-center" :class="expanded ? 'gap-1' : 'flex-col gap-1'">
       <button
         type="button"
