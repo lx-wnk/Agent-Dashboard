@@ -21,20 +21,17 @@ type Transcriber interface {
 func NewServer(t Transcriber) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	mux.HandleFunc("/addon.js", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /addon.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
 		w.Write(addonJS)
 	})
 
-	mux.HandleFunc("/transcribe", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+	mux.HandleFunc("POST /transcribe", func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 100<<20) // 100 MiB cap on audio upload
 		file, _, err := r.FormFile("audio")
 		if err != nil {
 			http.Error(w, "missing audio field", http.StatusBadRequest)
