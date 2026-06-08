@@ -1,0 +1,8 @@
+{
+  "id": "voice-whisper",
+  "version": "0.1.0",
+  "capabilities": ["route_extension"],
+  "addr": "127.0.0.1:19010",
+  "command": ["./voice-whisper"],
+  "env": ["VOICE_WHISPER_MODEL", "VOICE_WHISPER_BIN", "FFMPEG_BIN"]
+}
