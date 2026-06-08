@@ -52,7 +52,11 @@ func NewServer(t Transcriber) *http.ServeMux {
 			http.Error(w, "write audio", http.StatusInternalServerError)
 			return
 		}
-		tmp.Close()
+		if err := tmp.Close(); err != nil {
+			slog.Error("transcribe: close temp file", "err", err)
+			http.Error(w, "write audio", http.StatusInternalServerError)
+			return
+		}
 
 		text, err := t.Transcribe(r.Context(), tmp.Name())
 		if err != nil {
