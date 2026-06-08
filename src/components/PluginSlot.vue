@@ -15,9 +15,12 @@ const props = withDefaults(defineProps<{
 
 const containerEl = ref<HTMLElement | null>(null)
 const unmounts: UnmountFn[] = []
+let cancelled = false
 
 onMounted(async () => {
   const addons = await props.loader(props.name)
+  if (cancelled)
+    return
   const container = containerEl.value
   if (!container)
     return
@@ -31,6 +34,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  cancelled = true
   for (const fn of unmounts) {
     try {
       fn()

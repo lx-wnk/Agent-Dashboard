@@ -29,6 +29,7 @@ describe('PluginSlot', () => {
     expect(mountFn.mock.calls[0][0]).toBeInstanceOf(HTMLElement)
     expect(mountFn.mock.calls[0][1]).toBe(ctx)
     expect(wrapper.text()).toContain('mic')
+    expect(wrapper.findAll('[data-addon-host]').length).toBe(1)
 
     wrapper.unmount()
     expect(unmount).toHaveBeenCalledTimes(1)
