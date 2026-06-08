@@ -4,8 +4,15 @@ import type { PipelineTask } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
+import PluginSlot from './PluginSlot.vue'
+import type { SlotContext } from '../utils/pluginSlot'
 
-const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
+const props = defineProps<{
+  open: boolean
+  task: PipelineTask | null
+  // Optional: lets tests inject a fake slot loader. Production uses the default.
+  slotLoader?: (slot: string) => Promise<import('../utils/pluginSlot').SlotAddon[]>
+}>()
 
 const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
 
@@ -41,6 +48,20 @@ const chatEl = ref<HTMLElement | null>(null)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const pendingImages = ref<ImageAttachment[]>([])
+
+const slotBusy = ref(false)
+
+// Voice-agnostic bridge handed to plugin addons. insertText appends into the same
+// model the textarea is bound to (v-model="inputText"); setBusy drives a local flag.
+const slotCtx: SlotContext = {
+  insertText: (text: string) => {
+    inputText.value += (inputText.value && !inputText.value.endsWith(' ') ? ' ' : '') + text
+    void nextTick(autoResize)
+  },
+  setBusy: (busy: boolean) => {
+    slotBusy.value = busy
+  },
+}
 
 function autoResize() {
   const el = textareaEl.value
@@ -337,6 +358,11 @@ function isPhaseMarker(idx: number): string | null {
         >
           ⊕
         </button>
+        <PluginSlot
+          name="refinement-input-addon"
+          :ctx="slotCtx"
+          :loader="props.slotLoader"
+        />
         <input
           ref="fileInputEl"
           type="file"
