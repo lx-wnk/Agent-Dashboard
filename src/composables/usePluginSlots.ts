@@ -11,7 +11,7 @@ interface LoadDeps {
 }
 
 async function defaultFetchPlugins(): Promise<PluginInfo[]> {
-  const res = await fetch('/api/settings/plugins')
+  const res = await fetch('/api/settings/plugins', { credentials: 'same-origin' })
   if (!res.ok)
     return []
   return res.json()
