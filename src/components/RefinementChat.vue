@@ -385,7 +385,7 @@ function isPhaseMarker(idx: number): string | null {
           v-if="messages.length > 0 && !approvalReady"
           class="w-10 h-10 rounded-xl shrink-0 bg-green-500 text-black border-none cursor-pointer text-base font-bold flex items-center justify-center transition-all hover:enabled:opacity-85 hover:enabled:-translate-y-px disabled:opacity-35 disabled:cursor-default"
           title="Ja, passt so — weiter"
-          :disabled="isStreaming"
+          :disabled="isStreaming || slotBusy"
           @click="sendMessage('Ja, passt so. Mach weiter.')"
         >
           ✓
