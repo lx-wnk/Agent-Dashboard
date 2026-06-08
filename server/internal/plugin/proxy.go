@@ -18,11 +18,15 @@ func NewReverseProxy(entry Entry, stripPrefix string) http.Handler {
 			http.Error(w, "plugin address invalid", http.StatusServiceUnavailable)
 		})
 	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Rewrite = func(r *httputil.ProxyRequest) {
-		r.SetURL(target)
-		r.Out.Header.Del("Cookie")
-		r.Out.Header.Del("Authorization")
+	// Use Rewrite only — never combine with Director (NewSingleHostReverseProxy sets
+	// Director, and net/http/httputil rejects a ReverseProxy that has both set,
+	// failing every request with 502). r.SetURL replaces what the Director did.
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(target)
+			r.Out.Header.Del("Cookie")
+			r.Out.Header.Del("Authorization")
+		},
 	}
 	return http.StripPrefix(stripPrefix, proxy)
 }
