@@ -366,6 +366,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// the channel bridge. Resolution endpoints stay in the protected group above.
 	if deps.TaskHandler != nil && deps.ApiKeyRepo != nil {
 		r.Group(func(r chi.Router) {
+			r.Use(authRateLimiter)
 			r.Use(mcp.McpAuthMiddleware(deps.ApiKeyRepo))
 			deps.TaskHandler.MountAgentIngress(r)
 		})

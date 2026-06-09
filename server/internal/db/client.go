@@ -51,6 +51,13 @@ func Open(path string) (*DBBundle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("db: open %q: %w", path, err)
 	}
+	if path == ":memory:" {
+		// A bare ":memory:" database is per-connection: each pooled connection
+		// opens its own empty schema, so migrations on one connection are invisible
+		// to queries that land on another. Pin to a single connection so the whole
+		// pool shares one in-memory database. Test-only path.
+		sqlDB.SetMaxOpenConns(1)
+	}
 	drv := entsql.OpenDB(dialect.SQLite, sqlDB)
 	client := ent.NewClient(ent.Driver(drv))
 	// Rename github_login → provider_login before ent auto-migrate so ent finds

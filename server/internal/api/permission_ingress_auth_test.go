@@ -10,6 +10,8 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/stretchr/testify/require"
+
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
@@ -155,6 +157,7 @@ func TestPermissionIngress_NoOriginValidBearer_Succeeds(t *testing.T) {
 	if code == http.StatusForbidden || code == http.StatusUnauthorized {
 		t.Errorf("expected auth/CSRF to pass for valid Bearer + no Origin, got %d", code)
 	}
+	require.NotEqual(t, http.StatusInternalServerError, code, "must not 500 (unexpected handler error)")
 }
 
 // TestPermissionIngress_NoBearer_401 asserts that omitting the Authorization
