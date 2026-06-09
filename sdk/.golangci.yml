@@ -1,6 +1,7 @@
 version: "2"
 
-issues:
-  exclude-rules:
-    - linters: [revive]
-      text: "stutters"
+linters:
+  exclusions:
+    rules:
+      - linters: [revive]
+        text: "stutters"

@@ -1,9 +1,7 @@
 import { onMounted, ref } from 'vue'
+import { fetchPluginList, type PluginInfo } from '../utils/plugins'
 
-export interface PluginInfo {
-  id: string
-  capabilities: string[]
-}
+export type { PluginInfo }
 
 export function usePlugins() {
   const plugins = ref<PluginInfo[]>([])
@@ -14,10 +12,7 @@ export function usePlugins() {
     loading.value = true
     error.value = null
     try {
-      const res = await fetch('/api/settings/plugins', { credentials: 'same-origin' })
-      if (!res.ok)
-        throw new Error(`Failed to load plugins (HTTP ${res.status}: ${res.statusText})`)
-      plugins.value = await res.json()
+      plugins.value = await fetchPluginList()
     }
     catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load plugins'

@@ -61,6 +61,7 @@ Vue 3 + TypeScript SPA (unchanged structure from TypeScript-server era).
 - `src/composables/useSessions.ts` — fetch resumable session list via `/api/sessions`
 - `src/composables/useSystemResources.ts` — poll CPU/memory/disk metrics via `/api/system` with visibility-aware interval
 - `src/composables/usePlugins.ts` — fetch installed plugin list via `/api/settings/plugins`
+- `src/composables/usePluginSlots.ts` — loads `addon.js` from `route_extension` plugins for a named slot; route_extension plugins (e.g. voice-whisper, voice-webspeech) contribute frontend UI this way
 - `src/composables/useCostHeatmap.ts` — fetch 7×24 cost heatmap grid via `/api/analytics/heatmap`
 - `src/composables/useCostForecast.ts` — fetch cost trend, forecast points, and budget alerts via `/api/analytics/cost-forecast`
 - `src/composables/useRemotes.ts` — CRUD for remote dashboard registrations via `/api/remotes`
@@ -69,8 +70,11 @@ Vue 3 + TypeScript SPA (unchanged structure from TypeScript-server era).
 - `src/components/AgentCard.vue` — card view tile
 - `src/components/AgentModal.vue` — full session modal (transcript, ToolTimeline, TaskList, SubAgentList, prompt)
 - `src/components/KanbanBoard.vue` — task kanban across agents
+- `src/components/PluginSlot.vue` — mount host that renders plugin addons into a named slot
 - `src/types.ts` — shared TypeScript interfaces (`Agent`, `TokenUsage`, `SessionMeta`, etc.)
 - `src/utils/format.ts` — token, cost, uptime, model name formatting
+- `src/utils/plugins.ts` — `fetchPluginList`, single source for the `/api/settings/plugins` fetch shared by `usePlugins` and `usePluginSlots`
+- `src/utils/pluginSlot.ts` — generic, voice-agnostic plugin-slot contract (`SlotContext`, `SlotAddon`)
 
 ## Pipeline UI (`src/components/` + `src/composables/`)
 
