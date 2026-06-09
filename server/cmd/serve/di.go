@@ -284,7 +284,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		CostHandler:           costHandler,
 		VisualizationsHandler: apivisualizations.NewHandler(),
 		MCPHandler:            mcpHandler,
-		ChannelReply:          agents.NewChannelReplyHandler(replyStore),
+		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo),
 		PluginRegistry:        pluginRegistry,
 	}
 	router := api.NewRouter(routerDeps)

@@ -1,16 +1,14 @@
 package agents
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 )
 
 const maxRepliesPerPID = 50
@@ -76,17 +74,23 @@ func (s *ReplyStore) Since(parentPid int, since string) []Reply {
 
 // ChannelReplyHandler handles the /api/channel-reply endpoint.
 type ChannelReplyHandler struct {
-	store *ReplyStore
+	store   *ReplyStore
+	apiKeys repo.ApiKeyRepo
 }
 
-// NewChannelReplyHandler creates a handler backed by the given store.
-func NewChannelReplyHandler(store *ReplyStore) *ChannelReplyHandler {
-	return &ChannelReplyHandler{store: store}
+// NewChannelReplyHandler creates a handler backed by the given store. apiKeys
+// authenticates the bridge's bearer token (the MCP api_keys token it already
+// sends on every outbound call) — the same mechanism /api/mcp uses.
+func NewChannelReplyHandler(store *ReplyStore, apiKeys repo.ApiKeyRepo) *ChannelReplyHandler {
+	return &ChannelReplyHandler{store: store, apiKeys: apiKeys}
 }
 
 // Post handles POST /api/channel-reply.
 // The channel bridge posts here to store agent replies on behalf of a parent PID.
-// Auth: reads the discovery file for the parent PID and validates the bearer token.
+// Auth: the bearer token is the MCP api_keys token the bridge sends on every
+// outbound call (DASHBOARD_MCP_TOKEN), validated by SHA-256 hash lookup — the
+// same mechanism /api/mcp uses. (The per-PID discovery-file token is for the
+// INBOUND dashboard→agent direction only and is never sent on this call.)
 func (h *ChannelReplyHandler) Post(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ParentPid int    `json:"parentPid"`
@@ -102,8 +106,12 @@ func (h *ChannelReplyHandler) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := bearerToken(r)
-	if !validateChannelToken(body.ParentPid, token) {
+	if h.apiKeys == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	hash := mcp.HashToken(bearerToken(r))
+	if _, err := h.apiKeys.GetByHash(r.Context(), hash); err != nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
@@ -128,30 +136,6 @@ func (h *ChannelReplyHandler) GetReplies(w http.ResponseWriter, r *http.Request)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(replies)
-}
-
-// validateChannelToken reads the discovery file for parentPid and compares the
-// stored token against the provided token using constant-time comparison.
-func validateChannelToken(parentPid int, token string) bool {
-	if token == "" {
-		return false
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	path := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(parentPid)+".json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	var disc struct {
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(data, &disc); err != nil || disc.Token == "" {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(token), []byte(disc.Token)) == 1
 }
 
 func bearerToken(r *http.Request) string {
