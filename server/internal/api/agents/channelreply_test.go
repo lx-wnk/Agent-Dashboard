@@ -1,14 +1,98 @@
 package agents
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// fakeApiKeyRepo implements just enough of repo.ApiKeyRepo for the Post auth tests.
+type fakeApiKeyRepo struct {
+	repo.ApiKeyRepo
+	getByHash func(hash string) (*ent.ApiKey, error)
+}
+
+func (f *fakeApiKeyRepo) GetByHash(_ context.Context, hash string) (*ent.ApiKey, error) {
+	return f.getByHash(hash)
+}
+
+func postReplyReq(t *testing.T, authHeader string) *http.Request {
+	t.Helper()
+	body := `{"parentPid":1234,"message":"hi","timestamp":"2026-06-09T10:00:00Z"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-reply", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
+	}
+	return req
+}
+
+func TestChannelReplyPost_ValidToken_Stores(t *testing.T) {
+	const raw = "mcp_valid_token"
+	var seenHash string
+	store := NewReplyStore()
+	keys := &fakeApiKeyRepo{getByHash: func(h string) (*ent.ApiKey, error) {
+		seenHash = h
+		return &ent.ApiKey{}, nil
+	}}
+	h := NewChannelReplyHandler(store, keys)
+
+	rec := httptest.NewRecorder()
+	h.Post(rec, postReplyReq(t, "Bearer "+raw))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, mcp.HashToken(raw), seenHash, "handler must look up the SHA-256 hash of the bearer token")
+	require.Len(t, store.Since(1234, ""), 1)
+}
+
+func TestChannelReplyPost_BadToken_401(t *testing.T) {
+	store := NewReplyStore()
+	keys := &fakeApiKeyRepo{getByHash: func(string) (*ent.ApiKey, error) {
+		return nil, errors.New("not found")
+	}}
+	h := NewChannelReplyHandler(store, keys)
+
+	rec := httptest.NewRecorder()
+	h.Post(rec, postReplyReq(t, "Bearer wrong"))
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Empty(t, store.Since(1234, ""), "reply must not be stored on auth failure")
+}
+
+func TestChannelReplyPost_NoBearer_401(t *testing.T) {
+	store := NewReplyStore()
+	keys := &fakeApiKeyRepo{getByHash: func(string) (*ent.ApiKey, error) {
+		return nil, errors.New("not found")
+	}}
+	h := NewChannelReplyHandler(store, keys)
+
+	rec := httptest.NewRecorder()
+	h.Post(rec, postReplyReq(t, ""))
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestChannelReplyPost_NilRepo_401(t *testing.T) {
+	store := NewReplyStore()
+	h := NewChannelReplyHandler(store, nil)
+
+	rec := httptest.NewRecorder()
+	h.Post(rec, postReplyReq(t, "Bearer anything"))
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
 
 func TestReplyStore_StoreAndRetrieve(t *testing.T) {
 	s := NewReplyStore()
