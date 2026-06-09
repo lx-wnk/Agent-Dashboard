@@ -182,3 +182,30 @@ func TestChannelStageOutput_UnknownStageRun_404(t *testing.T) {
 		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestChannelStageOutput_WrongTypes_400(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	fake := &fakeStageRunRepo{}
+
+	h := agents.NewChannelStageOutputHandler(fake)
+
+	// output is an array, not an object — wrong type
+	body, _ := json.Marshal(map[string]any{
+		"stageRunId": "run-1",
+		"output":     []any{"not", "an", "object"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-stage-output", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.Post(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if fake.capturedInput != nil {
+		t.Error("Update should not have been called")
+	}
+}

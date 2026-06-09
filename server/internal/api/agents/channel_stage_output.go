@@ -41,10 +41,16 @@ func (h *ChannelStageOutputHandler) Post(w http.ResponseWriter, r *http.Request)
 	var stageRunID string
 	var output map[string]any
 	if hasID {
-		_ = json.Unmarshal(stageRunIDRaw, &stageRunID)
+		if err := json.Unmarshal(stageRunIDRaw, &stageRunID); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "stageRunId must be a string")
+			return
+		}
 	}
 	if hasOutput {
-		_ = json.Unmarshal(outputRaw, &output)
+		if err := json.Unmarshal(outputRaw, &output); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "output must be an object")
+			return
+		}
 	}
 
 	if stageRunID == "" || !hasOutput || output == nil {
