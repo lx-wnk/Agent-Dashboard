@@ -139,8 +139,6 @@ func (h *Handler) Mount(r chi.Router) {
 	// Permission requests.
 	r.Get("/api/tasks/{id}/permission-requests", apierr.ErrorMiddleware(h.listPermissionRequests))
 	r.Post("/api/tasks/{id}/permissions/bulk", apierr.ErrorMiddleware(h.bulkGrantPermissions))
-	r.Post("/api/permission-requests", apierr.ErrorMiddleware(h.createPermissionRequest))
-	r.Post("/api/permission-requests/bulk", apierr.ErrorMiddleware(h.bulkCreatePermissionRequests))
 	r.Post("/api/permission-requests/bulk-resolve", apierr.ErrorMiddleware(h.bulkResolvePermissionRequests))
 
 	// Dependencies.
@@ -177,6 +175,15 @@ func (h *Handler) Mount(r chi.Router) {
 	// Export + feedback.
 	r.Get("/api/tasks/export", apierr.ErrorMiddleware(h.exportTasks))
 	r.Get("/api/tasks/{id}/feedback", apierr.ErrorMiddleware(h.listFeedback))
+}
+
+// MountAgentIngress registers agent-initiated permission-request CREATE routes.
+// Called server-to-server by the channel bridge with a bearer MCP token (no
+// Origin/JWT), so the caller mounts them OUTSIDE the JWT/same-origin group,
+// behind McpAuthMiddleware. Resolution/grant routes stay in Mount.
+func (h *Handler) MountAgentIngress(r chi.Router) {
+	r.Post("/api/permission-requests", apierr.ErrorMiddleware(h.createPermissionRequest))
+	r.Post("/api/permission-requests/bulk", apierr.ErrorMiddleware(h.bulkCreatePermissionRequests))
 }
 
 func (h *Handler) broadcastEnrichedUpdate(ctx context.Context, taskID string) {

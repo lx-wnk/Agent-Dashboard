@@ -361,6 +361,17 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/{pid}/replies", deps.ChannelReply.GetReplies)
 	}
 
+	// Agent-ingress permission-request creation — bearer token auth via api_keys
+	// (MCP token), no JWT/Origin/loopback middleware: server-to-server call from
+	// the channel bridge. Resolution endpoints stay in the protected group above.
+	if deps.TaskHandler != nil && deps.ApiKeyRepo != nil {
+		r.Group(func(r chi.Router) {
+			r.Use(authRateLimiter)
+			r.Use(mcp.McpAuthMiddleware(deps.ApiKeyRepo))
+			deps.TaskHandler.MountAgentIngress(r)
+		})
+	}
+
 	// MCP endpoint — Bearer token auth (API key), not JWT session auth.
 	// F-SEC-010: per-IP rate limit prevents SHA-256 amplification DoS on the
 	// API-key lookup path. Applied alongside the existing auth middleware.
