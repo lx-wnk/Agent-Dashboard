@@ -5,6 +5,7 @@
 //
 //   - dashboard_reply: let the agent send status updates back to the dashboard.
 //   - request_permission: forward bulk permission requests to the dashboard server.
+//   - set_stage_output: submit this stage's structured result to the dashboard for validation.
 //   - HTTP server: receive dashboard → agent messages (forwarded as MCP log notifications).
 //   - Discovery file: ~/.claude/dashboard-channel/{parentPid}.json so the dashboard can
 //     find the HTTP server's port and ephemeral token.
@@ -165,6 +166,34 @@ func registerTools(server *mcp.Server, dashboardURL, mcpToken, stageRunID string
 		}
 		return textResult(resp), nil, nil
 	})
+
+	// set_stage_output tool
+	type stageOutputArgs struct {
+		Output     map[string]any `json:"output"     jsonschema:"The stage result object, in the exact shape your prompt specified."`
+		StageRunID *string        `json:"stageRunId,omitempty" jsonschema:"auto-injected from DASHBOARD_STAGE_RUN_ID env"`
+	}
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "set_stage_output",
+		Description: setStageOutputDesc,
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args stageOutputArgs) (*mcp.CallToolResult, any, error) {
+		sid := stageRunID
+		if args.StageRunID != nil && *args.StageRunID != "" {
+			sid = *args.StageRunID
+		}
+		if sid == "" {
+			return errResult("No stageRunId — cannot submit stage output. Task is not orchestrator-managed."), nil, nil
+		}
+		if args.Output == nil {
+			return errResult("set_stage_output requires an `output` object."), nil, nil
+		}
+
+		_, apiErr := callDashboard(dashboardURL, mcpToken, "POST", "/api/channel-stage-output",
+			map[string]any{"stageRunId": sid, "output": args.Output})
+		if apiErr != nil {
+			return errResult("Stage output rejected: " + apiErr.Error() + ". Fix and call set_stage_output again."), nil, nil
+		}
+		return textResult("Stage output accepted."), nil, nil
+	})
 }
 
 // ─── HTTP server ──────────────────────────────────────────────────────────────
@@ -200,7 +229,9 @@ func startHTTPServer(
 			http.Error(w, "read error", http.StatusBadRequest)
 			return
 		}
-		var payload struct{ Message string `json:"message"` }
+		var payload struct {
+			Message string `json:"message"`
+		}
 		if err := json.Unmarshal(body, &payload); err != nil || payload.Message == "" {
 			http.Error(w, `{"error":"missing message"}`, http.StatusBadRequest)
 			return
@@ -465,3 +496,5 @@ Mandatory pattern:
   3. On [PERMISSION GRANTED] resume: re-scan remaining work and bulk-request everything else.
 
 Single-tool form (tool + pattern) is kept for compatibility but strongly discouraged.`
+
+const setStageOutputDesc = `Submit this stage's structured result to the dashboard. Call this as your FINAL action — the dashboard validates the object against the per-stage schema and returns an error on mismatch; you must fix the output and call again. This is the reliable replacement for emitting a ` + "```" + `json block in a message.`

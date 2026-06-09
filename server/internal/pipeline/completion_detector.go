@@ -99,6 +99,17 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 		return CompletionResult{Kind: "still_running"}, nil
 	}
 
+	// Tool-written stage output: the agent submitted its result via the
+	// set_stage_output MCP tool and the endpoint already validated it against
+	// the per-stage schema. Use it directly — no JSONL scrape, no retry loop.
+	// The synthetic-adapter marker (synthetic_session_file) is handled by the
+	// block below, so exclude it here.
+	if len(sr.Output) > 0 {
+		if _, isSynthetic := sr.Output["synthetic_session_file"]; !isSynthetic {
+			return CompletionResult{Kind: "completed", Output: sr.Output}, nil
+		}
+	}
+
 	// Non-Claude adapters store the synthetic JSONL path in stage_run.output.
 	// Use it directly instead of scanning ~/.claude/projects/...
 	if sr.Output != nil {

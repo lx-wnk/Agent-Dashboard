@@ -118,6 +118,7 @@ type RouterDeps struct {
 	AdapterHandler        *adapters.Handler
 	MCPHandler            http.Handler
 	ChannelReply          *agents.ChannelReplyHandler
+	ChannelStageOutput    *agents.ChannelStageOutputHandler
 	PluginRegistry        *plugin.Registry
 }
 
@@ -359,6 +360,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.ChannelReply != nil {
 		r.Post("/api/channel-reply", deps.ChannelReply.Post)
 		r.Get("/api/agents/{pid}/replies", deps.ChannelReply.GetReplies)
+	}
+
+	// Channel-stage-output endpoint — bearer token auth via api_keys (MCP token),
+	// no JWT/Origin/loopback middleware — server-to-server call from the bridge.
+	if deps.ChannelStageOutput != nil {
+		r.Post("/api/channel-stage-output", deps.ChannelStageOutput.Post)
 	}
 
 	// Agent-ingress permission-request creation — bearer token auth via api_keys

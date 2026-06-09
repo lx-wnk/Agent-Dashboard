@@ -136,6 +136,7 @@ func bypassSkip(method, pattern string) bool {
 	case pattern == "/api/hooks/event", pattern == "/api/hooks/pre-tool": // hook-script ingress, bearer-secret auth
 		return true
 	case pattern == "/api/mcp", pattern == "/api/channel-reply",
+		pattern == "/api/channel-stage-output",
 		pattern == "/api/permission-requests", pattern == "/api/permission-requests/bulk": // bearer-token auth, outside JWT group
 		return true
 	case strings.HasSuffix(pattern, "/replies"): // channel-reply read, bearer auth

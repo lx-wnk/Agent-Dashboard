@@ -257,6 +257,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 	adapterHandler := adapters.NewHandler()
 	replyStore := agents.NewReplyStore()
+	var channelStageOutputHandler *agents.ChannelStageOutputHandler
+	if entClient != nil {
+		channelStageOutputHandler = agents.NewChannelStageOutputHandler(repo.NewStageRunRepo(entClient), apiKeyRepo)
+	}
 
 	routerDeps := api.RouterDeps{
 		Ctx:                   ctx,
@@ -285,6 +289,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		VisualizationsHandler: apivisualizations.NewHandler(),
 		MCPHandler:            mcpHandler,
 		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo),
+		ChannelStageOutput:    channelStageOutputHandler,
 		PluginRegistry:        pluginRegistry,
 	}
 	router := api.NewRouter(routerDeps)

@@ -147,3 +147,55 @@ func TestValidateStageOutput_Finalization_WrongType(t *testing.T) {
 	})
 	require.False(t, v.OK)
 }
+
+// TestDetectCompletion_ToolOutput_UsedDirectly verifies that when sr.Output is
+// populated (e.g. via set_stage_output MCP tool), DetectCompletion returns it
+// directly without touching the JSONL scrape path.
+func TestDetectCompletion_ToolOutput_UsedDirectly(t *testing.T) {
+	sr := &ent.StageRun{
+		ID:    "sr-1",
+		Stage: "implementation",
+		Pid:   ptr(1),
+		Output: map[string]any{
+			"summary":   "from tool",
+			"commits":   []any{},
+			"openItems": []any{},
+		},
+	}
+	deps := pipeline.CompletionDeps{
+		IsPidAlive: func(int) bool { return false },
+		ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
+			t.Fatal("scrape must not run when tool output is present")
+			return pipeline.StageOutputRead{}, nil
+		},
+	}
+	res, err := pipeline.DetectCompletion(sr, "/tmp", deps)
+	require.NoError(t, err)
+	require.Equal(t, "completed", res.Kind)
+	require.Equal(t, "from tool", res.Output["summary"])
+}
+
+// TestDetectCompletion_SyntheticMarker_NotTreatedAsToolOutput verifies that an
+// sr.Output containing "synthetic_session_file" is NOT short-circuited as
+// tool output — it must fall through to the synthetic-file handling path.
+// With a non-existent path and no session found, the result must be "failed".
+func TestDetectCompletion_SyntheticMarker_NotTreatedAsToolOutput(t *testing.T) {
+	sr := &ent.StageRun{
+		ID:    "sr-2",
+		Stage: "implementation",
+		Pid:   ptr(1),
+		Output: map[string]any{
+			"synthetic_session_file": "/nonexistent/x.jsonl",
+		},
+	}
+	now := time.Now()
+	sr.StartedAt = &now
+	deps := pipeline.CompletionDeps{
+		IsPidAlive:  func(int) bool { return false },
+		ReadOutput:  func(string, string) (pipeline.StageOutputRead, error) { return pipeline.StageOutputRead{}, nil },
+		FindSession: func(string, string) (string, error) { return "", nil },
+	}
+	res, err := pipeline.DetectCompletion(sr, "/tmp", deps)
+	require.NoError(t, err)
+	require.Equal(t, "failed", res.Kind)
+}
