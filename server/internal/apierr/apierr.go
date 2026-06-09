@@ -7,14 +7,19 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/domainerr"
 )
 
-// Sentinel errors — use errors.Is() to check.
+// Sentinel errors — aliases to the stdlib-only domainerr package so the db
+// layer can wrap them without importing net/http. Alias identity preserves
+// errors.Is matching for all existing apierr.* consumers. This package remains
+// the single place where these sentinels map to HTTP status codes.
 var (
-	ErrNotFound   = errors.New("not found")
-	ErrConflict   = errors.New("conflict")
-	ErrBadRequest = errors.New("bad request")
-	ErrForbidden  = errors.New("forbidden")
+	ErrNotFound   = domainerr.ErrNotFound
+	ErrConflict   = domainerr.ErrConflict
+	ErrBadRequest = domainerr.ErrBadRequest
+	ErrForbidden  = domainerr.ErrForbidden
 )
 
 // AppError carries an explicit HTTP status code.
