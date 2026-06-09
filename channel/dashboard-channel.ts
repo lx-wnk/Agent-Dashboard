@@ -165,6 +165,25 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
         // Either `permissions` OR `tool` must be present — enforced at runtime.
       },
     },
+    {
+      name: 'set_stage_output',
+      description:
+        'Submit this stage\'s structured result to the dashboard. Call this as your FINAL action — the dashboard validates the object against the per-stage schema and returns an error on mismatch; you must fix the output and call again. This is the reliable replacement for emitting a ```json block in a message.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          output: {
+            type: 'object',
+            description: 'The stage result object, in the exact shape your prompt specified.',
+          },
+          stageRunId: {
+            type: 'string',
+            description: 'auto-injected from DASHBOARD_STAGE_RUN_ID env',
+          },
+        },
+        required: ['output'],
+      },
+    },
   ],
 }))
 
@@ -289,6 +308,47 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     catch (err) {
       return {
         content: [{ type: 'text', text: `Could not reach dashboard: ${(err as Error).message}` }],
+      }
+    }
+  }
+
+  if (req.params.name === 'set_stage_output') {
+    const args = req.params.arguments as { output?: Record<string, unknown>, stageRunId?: string }
+    const stageRunId = args.stageRunId || process.env.DASHBOARD_STAGE_RUN_ID
+    if (!stageRunId) {
+      return {
+        content: [{ type: 'text', text: 'No stageRunId — cannot submit stage output. Task is not orchestrator-managed.' }],
+        isError: true,
+      }
+    }
+    if (!args.output || typeof args.output !== 'object') {
+      return {
+        content: [{ type: 'text', text: 'set_stage_output requires an `output` object.' }],
+        isError: true,
+      }
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/channel-stage-output`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${TOKEN}`,
+        },
+        body: JSON.stringify({ stageRunId, output: args.output }),
+      })
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '')
+        return {
+          content: [{ type: 'text', text: `Stage output rejected (${res.status}): ${errBody.slice(0, 500)}. Fix and call set_stage_output again.` }],
+          isError: true,
+        }
+      }
+      return { content: [{ type: 'text', text: 'Stage output accepted.' }] }
+    }
+    catch (err) {
+      return {
+        content: [{ type: 'text', text: `Could not reach dashboard: ${(err as Error).message}` }],
+        isError: true,
       }
     }
   }
