@@ -56,11 +56,6 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		entClient = bundle.Client
 	}
 
-	var searchHandler *search.Handler
-	if bundle != nil {
-		searchHandler = search.NewHandler(rawrepo.NewSearchRepo(bundle.DB))
-	}
-
 	var webPushHandler *apiwp.Handler
 	if bundle != nil {
 		notifCfgRepo := rawrepo.NewNotificationConfigRepo(bundle.DB)
@@ -238,6 +233,13 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	var pipelineEnricher merger.Enricher
 	if entClient != nil {
 		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver)
+	}
+
+	// Built here (not earlier) so it captures pipelineEnricher — admin agent
+	// search results carry the same pipeline-task annotation as /api/agents.
+	var searchHandler *search.Handler
+	if bundle != nil {
+		searchHandler = search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), pipelineEnricher)
 	}
 
 	var costHandler *apicost.Handler
