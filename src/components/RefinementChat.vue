@@ -4,8 +4,15 @@ import type { PipelineTask } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
+import PluginSlot from './PluginSlot.vue'
+import type { SlotAddon, SlotContext } from '../utils/pluginSlot'
 
-const props = defineProps<{ open: boolean, task: PipelineTask | null }>()
+const props = defineProps<{
+  open: boolean
+  task: PipelineTask | null
+  // Optional: lets tests inject a fake slot loader. Production uses the default.
+  slotLoader?: (slot: string) => Promise<SlotAddon[]>
+}>()
 
 const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
 
@@ -41,6 +48,20 @@ const chatEl = ref<HTMLElement | null>(null)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const pendingImages = ref<ImageAttachment[]>([])
+
+const slotBusy = ref(false)
+
+// Voice-agnostic bridge handed to plugin addons. insertText appends into the same
+// model the textarea is bound to (v-model="inputText"); setBusy drives a local flag.
+const slotCtx: SlotContext = {
+  insertText: (text: string) => {
+    inputText.value += (inputText.value && !inputText.value.endsWith(' ') ? ' ' : '') + text
+    void nextTick(autoResize)
+  },
+  setBusy: (busy: boolean) => {
+    slotBusy.value = busy
+  },
+}
 
 function autoResize() {
   const el = textareaEl.value
@@ -337,6 +358,11 @@ function isPhaseMarker(idx: number): string | null {
         >
           ⊕
         </button>
+        <PluginSlot
+          name="refinement-input-addon"
+          :ctx="slotCtx"
+          :loader="props.slotLoader"
+        />
         <input
           ref="fileInputEl"
           type="file"
@@ -351,7 +377,7 @@ function isPhaseMarker(idx: number): string | null {
           class="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-fg placeholder:text-fg-faint text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
           placeholder="Message..."
           rows="1"
-          :disabled="isStreaming"
+          :disabled="isStreaming || slotBusy"
           @keydown.enter.exact.prevent="handleSend"
           @paste="handlePaste"
         />
@@ -359,14 +385,14 @@ function isPhaseMarker(idx: number): string | null {
           v-if="messages.length > 0 && !approvalReady"
           class="w-10 h-10 rounded-xl shrink-0 bg-green-500 text-black border-none cursor-pointer text-base font-bold flex items-center justify-center transition-all hover:enabled:opacity-85 hover:enabled:-translate-y-px disabled:opacity-35 disabled:cursor-default"
           title="Ja, passt so — weiter"
-          :disabled="isStreaming"
+          :disabled="isStreaming || slotBusy"
           @click="sendMessage('Ja, passt so. Mach weiter.')"
         >
           ✓
         </button>
         <button
           class="w-10 h-10 rounded-xl bg-blue-500 text-white border-none cursor-pointer text-base flex items-center justify-center transition-all hover:enabled:opacity-85 hover:enabled:-translate-y-px disabled:opacity-35 disabled:cursor-default shrink-0"
-          :disabled="isStreaming || (!inputText.trim() && !pendingImages.length)"
+          :disabled="isStreaming || slotBusy || (!inputText.trim() && !pendingImages.length)"
           @click="handleSend"
         >
           →

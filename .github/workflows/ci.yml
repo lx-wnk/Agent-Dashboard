@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [github-oauth, office365-oauth]
+        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -84,6 +84,9 @@ jobs:
           go-version-file: ${{ matrix.module }}/go.mod
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+      - name: Verify golangci config
+        working-directory: ${{ matrix.module }}
+        run: golangci-lint config verify
       - name: Lint
         working-directory: ${{ matrix.module }}
         run: golangci-lint run ./...
@@ -94,7 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [github-oauth, office365-oauth]
+        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -103,6 +106,9 @@ jobs:
           cache-dependency-path: plugins/${{ matrix.plugin }}/go.sum
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+      - name: Verify golangci config
+        working-directory: plugins/${{ matrix.plugin }}
+        run: GOWORK=off golangci-lint config verify
       - name: Lint
         working-directory: plugins/${{ matrix.plugin }}
         run: GOWORK=off golangci-lint run ./...
@@ -118,6 +124,8 @@ jobs:
           - sdk
           - plugins/github-oauth
           - plugins/office365-oauth
+          - plugins/voice-whisper
+          - plugins/voice-webspeech
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -143,7 +151,7 @@ jobs:
         run: go build -o /dev/null ./cmd/serve/...
       - name: Build plugin binaries
         run: |
-          for plugin in plugins/github-oauth plugins/office365-oauth; do
+          for plugin in plugins/github-oauth plugins/office365-oauth plugins/voice-whisper plugins/voice-webspeech; do
             echo "=== building $plugin ===" && (cd "$plugin" && GOWORK=off go build -o /dev/null .)
           done
 

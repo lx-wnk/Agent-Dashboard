@@ -32,6 +32,8 @@ REST mirror: `POST /api/tasks/:id/permissions/bulk` accepts the same `{template?
 
 Spawned agents must call `request_permission` with `permissions: [...]` as their first action. The server's `POST /api/permission-requests/bulk` auto-resolves any entries already covered by granted task_permissions (silent, no UI prompt) and only surfaces uncovered entries as ON HOLD. Single-tool legacy form still works.
 
+**Auth + mounting:** the two CREATE endpoints (`POST /api/permission-requests`, `POST /api/permission-requests/bulk`) are mounted **outside** the JWT/same-origin group and authenticated by the MCP `api_keys` bearer token (`McpAuthMiddleware`, rate-limited like `/api/mcp`), because the channel bridge calls them server-to-server with no `Origin`/JWT. Resolution endpoints (`POST /api/permission-requests/{id}/resolve`, `/bulk-resolve`, and grant `POST /api/tasks/{id}/permissions/bulk`) stay JWT + same-origin protected (browser-driven). `TaskHandler.MountAgentIngress` registers the bearer-authed create routes; `TaskHandler.Mount` registers everything else.
+
 ## MCP Self-Service Permissions (Spawned Agents)
 
 If you (a spawned agent) hit a tool that is denied, do NOT write prose asking the user. Use the dashboard-channel `request_permission` MCP tool — and prefer the BULK form.

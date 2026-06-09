@@ -1,0 +1,46 @@
+import type { SlotAddon, SlotAddonModule } from '../utils/pluginSlot'
+import { fetchPluginList, type PluginInfo } from '../utils/plugins'
+
+interface LoadDeps {
+  fetchPlugins?: () => Promise<PluginInfo[]>
+  importAddon?: (url: string) => Promise<SlotAddonModule>
+}
+
+// `@vite-ignore` keeps Vite from trying to resolve the plugin URL at build time —
+// it is served at runtime by the plugin process via the dashboard reverse proxy.
+function defaultImportAddon(url: string): Promise<SlotAddonModule> {
+  return import(/* @vite-ignore */ url)
+}
+
+/**
+ * Discover route_extension plugins that provide a FE addon for `slot`.
+ * Security: only plugins enumerated by `/api/settings/plugins` (registry-discovered,
+ * health-checked) are imported — never an arbitrary URL.
+ */
+export async function loadSlotAddons(slot: string, deps: LoadDeps = {}): Promise<SlotAddon[]> {
+  const fetchPlugins = deps.fetchPlugins ?? fetchPluginList
+  const importAddon = deps.importAddon ?? defaultImportAddon
+
+  let plugins: PluginInfo[]
+  try {
+    plugins = await fetchPlugins()
+  }
+  catch {
+    // Plugin list unavailable → no addons; the slot degrades to empty.
+    return []
+  }
+  const candidates = plugins.filter(p => p.capabilities.includes('route_extension'))
+
+  const addons: SlotAddon[] = []
+  for (const p of candidates) {
+    try {
+      const mod = await importAddon(`/api/settings/plugins/${p.id}/addon.js`)
+      if (mod.default?.slot === slot)
+        addons.push(mod.default)
+    }
+    catch {
+      // No addon.js (404) or bad module — skip this plugin, others continue.
+    }
+  }
+  return addons
+}
