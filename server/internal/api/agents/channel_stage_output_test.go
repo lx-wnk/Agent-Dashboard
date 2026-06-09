@@ -46,7 +46,7 @@ func (f *fakeApiKeyRepo) GetByHash(_ context.Context, _ string) (*ent.ApiKey, er
 
 func TestChannelStageOutput_ValidImplementation_Persists(t *testing.T) {
 	fake := &fakeStageRunRepo{
-		run: &ent.StageRun{ID: "run-1", Stage: "implementation"},
+		run: &ent.StageRun{ID: "run-1", Stage: "implementation", Status: "running"},
 	}
 	fakeKeys := &fakeApiKeyRepo{valid: true}
 
@@ -80,7 +80,7 @@ func TestChannelStageOutput_ValidImplementation_Persists(t *testing.T) {
 
 func TestChannelStageOutput_BadToken_401(t *testing.T) {
 	fake := &fakeStageRunRepo{
-		run: &ent.StageRun{ID: "run-1", Stage: "implementation"},
+		run: &ent.StageRun{ID: "run-1", Stage: "implementation", Status: "running"},
 	}
 	fakeKeys := &fakeApiKeyRepo{valid: false}
 
@@ -107,7 +107,7 @@ func TestChannelStageOutput_BadToken_401(t *testing.T) {
 
 func TestChannelStageOutput_SchemaInvalid_422(t *testing.T) {
 	fake := &fakeStageRunRepo{
-		run: &ent.StageRun{ID: "run-2", Stage: "self_review"},
+		run: &ent.StageRun{ID: "run-2", Stage: "self_review", Status: "running"},
 	}
 	fakeKeys := &fakeApiKeyRepo{valid: true}
 
@@ -137,7 +137,7 @@ func TestChannelStageOutput_UnknownStageRun_404(t *testing.T) {
 	fake := &fakeStageRunRepo{
 		getErr: context.DeadlineExceeded, // any non-nil error
 	}
-	// apiKeyRepo not reached — 404 fires before auth
+	// auth runs first; valid token so the handler proceeds to GetByID and 404s
 	fakeKeys := &fakeApiKeyRepo{valid: true}
 
 	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
@@ -155,6 +155,63 @@ func TestChannelStageOutput_UnknownStageRun_404(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestChannelStageOutput_BadTokenUnknownRun_401(t *testing.T) {
+	fake := &fakeStageRunRepo{} // GetByID must not be reached
+	fakeKeys := &fakeApiKeyRepo{valid: false}
+
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
+
+	body, _ := json.Marshal(map[string]any{
+		"stageRunId": "any-run-id",
+		"output":     map[string]any{"x": 1},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-stage-output", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer bad-token")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.Post(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+	// auth fires before lookup — Update must not be called either
+	if fake.capturedInput != nil {
+		t.Error("Update should not have been called")
+	}
+}
+
+func TestChannelStageOutput_TerminalRun_409(t *testing.T) {
+	fake := &fakeStageRunRepo{
+		run: &ent.StageRun{ID: "run-done", Stage: "implementation", Status: "done"},
+	}
+	fakeKeys := &fakeApiKeyRepo{valid: true}
+
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
+
+	body, _ := json.Marshal(map[string]any{
+		"stageRunId": "run-done",
+		"output": map[string]any{
+			"summary":   "done",
+			"commits":   []any{"abc"},
+			"openItems": []any{},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-stage-output", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.Post(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	if fake.capturedInput != nil {
+		t.Error("Update should not have been called for a terminal run")
 	}
 }
 

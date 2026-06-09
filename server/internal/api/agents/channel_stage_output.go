@@ -60,15 +60,20 @@ func (h *ChannelStageOutputHandler) Post(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	hash := mcp.HashToken(bearerToken(r))
+	if _, err := h.apiKeys.GetByHash(r.Context(), hash); err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	sr, err := h.stageRuns.GetByID(r.Context(), stageRunID)
 	if err != nil || sr == nil {
 		writeJSONError(w, http.StatusNotFound, "stage_run not found")
 		return
 	}
 
-	hash := mcp.HashToken(bearerToken(r))
-	if _, err := h.apiKeys.GetByHash(r.Context(), hash); err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+	if sr.Status == "done" || sr.Status == "failed" {
+		writeJSONError(w, http.StatusConflict, "stage run already finalized")
 		return
 	}
 
