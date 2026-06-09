@@ -362,8 +362,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/{pid}/replies", deps.ChannelReply.GetReplies)
 	}
 
-	// Channel-stage-output endpoint — bearer token auth via discovery file (no JWT,
-	// no Origin/loopback middleware): server-to-server call from the bridge.
+	// Channel-stage-output endpoint — bearer token auth via api_keys (MCP token),
+	// no JWT/Origin/loopback middleware — server-to-server call from the bridge.
 	if deps.ChannelStageOutput != nil {
 		r.Post("/api/channel-stage-output", deps.ChannelStageOutput.Post)
 	}

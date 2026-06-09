@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
-	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
@@ -34,33 +31,26 @@ func (f *fakeStageRunRepo) Update(_ context.Context, _ string, in repo.UpdateSta
 	return f.run, nil
 }
 
-// writeDiscoveryFile creates the per-PID discovery file under the given home dir.
-func writeDiscoveryFile(t *testing.T, home string, pid int, token string) {
-	t.Helper()
-	dir := filepath.Join(home, channelconfig.DiscoveryDir)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatalf("mkdir discovery dir: %v", err)
+// fakeApiKeyRepo implements repo.ApiKeyRepo; GetByHash returns a valid key or error.
+type fakeApiKeyRepo struct {
+	repo.ApiKeyRepo
+	valid bool
+}
+
+func (f *fakeApiKeyRepo) GetByHash(_ context.Context, _ string) (*ent.ApiKey, error) {
+	if f.valid {
+		return &ent.ApiKey{}, nil
 	}
-	data, _ := json.Marshal(map[string]string{"token": token})
-	if err := os.WriteFile(filepath.Join(dir, strconv.Itoa(pid)+".json"), data, 0o600); err != nil {
-		t.Fatalf("write discovery file: %v", err)
-	}
+	return nil, errors.New("invalid token")
 }
 
 func TestChannelStageOutput_ValidImplementation_Persists(t *testing.T) {
-	pid := 4242
-	tok := "tok-abc"
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	writeDiscoveryFile(t, home, pid, tok)
-
-	pidVal := pid
 	fake := &fakeStageRunRepo{
-		run: &ent.StageRun{ID: "run-1", Stage: "implementation", Pid: &pidVal},
+		run: &ent.StageRun{ID: "run-1", Stage: "implementation"},
 	}
+	fakeKeys := &fakeApiKeyRepo{valid: true}
 
-	h := agents.NewChannelStageOutputHandler(fake)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
 
 	body, _ := json.Marshal(map[string]any{
 		"stageRunId": "run-1",
@@ -71,7 +61,7 @@ func TestChannelStageOutput_ValidImplementation_Persists(t *testing.T) {
 		},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/channel-stage-output", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Authorization", "Bearer valid-token")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -89,19 +79,12 @@ func TestChannelStageOutput_ValidImplementation_Persists(t *testing.T) {
 }
 
 func TestChannelStageOutput_BadToken_401(t *testing.T) {
-	pid := 4242
-	tok := "tok-abc"
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	writeDiscoveryFile(t, home, pid, tok)
-
-	pidVal := pid
 	fake := &fakeStageRunRepo{
-		run: &ent.StageRun{ID: "run-1", Stage: "implementation", Pid: &pidVal},
+		run: &ent.StageRun{ID: "run-1", Stage: "implementation"},
 	}
+	fakeKeys := &fakeApiKeyRepo{valid: false}
 
-	h := agents.NewChannelStageOutputHandler(fake)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
 
 	body, _ := json.Marshal(map[string]any{
 		"stageRunId": "run-1",
@@ -123,19 +106,12 @@ func TestChannelStageOutput_BadToken_401(t *testing.T) {
 }
 
 func TestChannelStageOutput_SchemaInvalid_422(t *testing.T) {
-	pid := 9999
-	tok := "tok-xyz"
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	writeDiscoveryFile(t, home, pid, tok)
-
-	pidVal := pid
 	fake := &fakeStageRunRepo{
-		run: &ent.StageRun{ID: "run-2", Stage: "self_review", Pid: &pidVal},
+		run: &ent.StageRun{ID: "run-2", Stage: "self_review"},
 	}
+	fakeKeys := &fakeApiKeyRepo{valid: true}
 
-	h := agents.NewChannelStageOutputHandler(fake)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
 
 	// empty output is missing required self_review fields
 	body, _ := json.Marshal(map[string]any{
@@ -143,7 +119,7 @@ func TestChannelStageOutput_SchemaInvalid_422(t *testing.T) {
 		"output":     map[string]any{},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/channel-stage-output", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Authorization", "Bearer valid-token")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -158,14 +134,13 @@ func TestChannelStageOutput_SchemaInvalid_422(t *testing.T) {
 }
 
 func TestChannelStageOutput_UnknownStageRun_404(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
 	fake := &fakeStageRunRepo{
 		getErr: context.DeadlineExceeded, // any non-nil error
 	}
+	// apiKeyRepo not reached — 404 fires before auth
+	fakeKeys := &fakeApiKeyRepo{valid: true}
 
-	h := agents.NewChannelStageOutputHandler(fake)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
 
 	body, _ := json.Marshal(map[string]any{
 		"stageRunId": "no-such-run",
@@ -184,12 +159,10 @@ func TestChannelStageOutput_UnknownStageRun_404(t *testing.T) {
 }
 
 func TestChannelStageOutput_WrongTypes_400(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
 	fake := &fakeStageRunRepo{}
+	fakeKeys := &fakeApiKeyRepo{valid: true}
 
-	h := agents.NewChannelStageOutputHandler(fake)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
 
 	// output is an array, not an object — wrong type
 	body, _ := json.Marshal(map[string]any{

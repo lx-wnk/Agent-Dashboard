@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
@@ -13,11 +14,12 @@ import (
 // against the per-stage schema before being persisted to stage_runs.output.
 type ChannelStageOutputHandler struct {
 	stageRuns repo.StageRunRepo
+	apiKeys   repo.ApiKeyRepo
 }
 
-// NewChannelStageOutputHandler creates a handler backed by the given repo.
-func NewChannelStageOutputHandler(stageRuns repo.StageRunRepo) *ChannelStageOutputHandler {
-	return &ChannelStageOutputHandler{stageRuns: stageRuns}
+// NewChannelStageOutputHandler creates a handler backed by the given repos.
+func NewChannelStageOutputHandler(stageRuns repo.StageRunRepo, apiKeys repo.ApiKeyRepo) *ChannelStageOutputHandler {
+	return &ChannelStageOutputHandler{stageRuns: stageRuns, apiKeys: apiKeys}
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
@@ -64,11 +66,8 @@ func (h *ChannelStageOutputHandler) Post(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	pid := 0
-	if sr.Pid != nil {
-		pid = *sr.Pid
-	}
-	if !validateChannelToken(pid, bearerToken(r)) {
+	hash := mcp.HashToken(bearerToken(r))
+	if _, err := h.apiKeys.GetByHash(r.Context(), hash); err != nil {
 		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
