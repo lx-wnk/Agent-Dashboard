@@ -45,8 +45,9 @@ func ImplementationPrompt(t *ent.Task, conceptOutput map[string]any, reviewFeedb
 
 Work step-by-step through the concept plan. Commit each logical change via git.
 
-When finished, produce a `+"```json```"+` block as your final output:
-{"summary": string, "commits": string[], "openItems": string[]}`,
+When finished, submit your result as your FINAL action by calling the `+"`set_stage_output`"+` MCP tool with an `+"`output`"+` object of exactly this shape:
+{"summary": string, "commits": string[], "openItems": string[]}
+If `+"`set_stage_output`"+` is unavailable, instead emit the same object as a `+"```json```"+` block.`,
 		t.Title,
 		strOrEmpty(t.Description),
 		string(conceptJSON),
@@ -78,7 +79,7 @@ Review the implementation against:
 3. Code quality — DRY violations, dead code, missing error handling?
 4. Test coverage — are the changes tested?
 
-Respond with a `+"```json```"+` block: {"passed": bool, "findings": [{"severity": "high"|"medium"|"low", "description": string, "file": string|null}], "summary": string}.`,
+Submit your result as your FINAL action by calling the `+"`set_stage_output`"+` MCP tool with an `+"`output`"+` object of exactly this shape: {"passed": bool, "findings": [{"severity": "high"|"medium"|"low", "description": string, "file": string|null}], "summary": string}. If `+"`set_stage_output`"+` is unavailable, instead emit the same object as a `+"```json```"+` block.`,
 			t.Title, strOrEmpty(t.Description), string(implJSON)),
 	}
 }
@@ -105,7 +106,7 @@ Produce a user-facing summary of what was done. Include:
 - Known open todos or caveats
 - Concrete test steps the user can run to verify the change
 
-Respond with a `+"```json```"+` block: {"summary": string, "insights": string[], "openTodos": string[], "testPlan": string[]}.`,
+Submit your result as your FINAL action by calling the `+"`set_stage_output`"+` MCP tool with an `+"`output`"+` object of exactly this shape: {"summary": string, "insights": string[], "openTodos": string[], "testPlan": string[]}. If `+"`set_stage_output`"+` is unavailable, instead emit the same object as a `+"```json```"+` block.`,
 			t.Title, strOrEmpty(t.Description), history),
 	}
 }
