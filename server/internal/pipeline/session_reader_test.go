@@ -92,6 +92,20 @@ func TestFindNewestSessionID_NoCutoffReturnsNewest(t *testing.T) {
 	require.Equal(t, "newer", got)
 }
 
+func TestSessionFileExists(t *testing.T) {
+	cfgDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", cfgDir)
+	cwd := t.TempDir()
+	projectDir, derr := pipeline.ResolvedProjectDir(cwd)
+	require.NoError(t, derr)
+	require.NoError(t, os.MkdirAll(projectDir, 0o700))
+	writeSession(t, projectDir, "live-session", time.Now())
+
+	require.True(t, pipeline.SessionFileExists(cwd, "live-session"), "existing session JSONL must be reported present")
+	require.False(t, pipeline.SessionFileExists(cwd, "gone-session"), "missing session JSONL must report absent")
+	require.False(t, pipeline.SessionFileExists(cwd, ""), "empty session id must report absent")
+}
+
 func TestExtractJsonBlock_LastBlock(t *testing.T) {
 	text := "prose\n```json\n{\"a\":1}\n```\nmore\n```json\n{\"b\":2}\n```"
 	result := pipeline.ExtractJsonBlock(text)

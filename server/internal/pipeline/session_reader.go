@@ -55,6 +55,18 @@ func findSessionFilePath(cwd, sessionID string) string {
 	return ""
 }
 
+// SessionFileExists reports whether a <sessionID>.jsonl exists under any of
+// cwd's candidate project dirs. The retry path uses it to decide whether a
+// prior stage_run's session can actually be resumed before passing --resume to
+// claude — a recorded session_id whose JSONL was deleted must fall back to a
+// fresh spawn instead of handing claude a --resume id it can't load.
+func SessionFileExists(cwd, sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	return findSessionFilePath(cwd, sessionID) != ""
+}
+
 // findCutoffToleranceMs is how far before the recorded start a session file may
 // be modified and still count as "this run's" session — absorbs the small skew
 // between when the stage_run row is stamped and when claude first writes its

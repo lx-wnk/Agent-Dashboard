@@ -67,9 +67,9 @@ type Handler struct {
 type Deps struct {
 	// Client is the ent client used to open transactions for atomic multi-write operations.
 	// When nil, transactional paths fall back to individual writes (e.g. in tests).
-	Client            *ent.Client
-	TaskRepo          repo.TaskRepo
-	SRRepo            repo.StageRunRepo
+	Client   *ent.Client
+	TaskRepo repo.TaskRepo
+	SRRepo   repo.StageRunRepo
 	// SRBulkRepo is the window-function bulk repo used by EnrichTasksBulk to
 	// fetch the exact latest stage_run per task regardless of iteration count.
 	SRBulkRepo        rawrepo.StageRunBulkRepo
@@ -595,10 +595,11 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 		AdditionalPrompt string `json:"additionalPrompt"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "retry_requested", "task:"+id, map[string]any{"actor": "user", "stage": latest.Stage, "iteration": latest.Iteration})
+	resumeSessionID := h.resolveResumeSessionID(r.Context(), t)
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "retry_requested", "task:"+id, map[string]any{"actor": "user", "stage": latest.Stage, "iteration": latest.Iteration, "resumed": resumeSessionID != ""})
 	var opts *pipeline.ProgressOpts
-	if body.AdditionalPrompt != "" {
-		opts = &pipeline.ProgressOpts{UserAdditionalPrompt: body.AdditionalPrompt}
+	if body.AdditionalPrompt != "" || resumeSessionID != "" {
+		opts = &pipeline.ProgressOpts{UserAdditionalPrompt: body.AdditionalPrompt, ResumeSessionID: resumeSessionID}
 	}
 	sr, err := h.orchestrator.ProgressTask(r.Context(), id, opts)
 	if err != nil {
@@ -609,6 +610,33 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
 	return jsonReply(w, http.StatusOK, sr)
+}
+
+// resolveResumeSessionID picks the session a user-triggered retry should resume:
+// the newest stage_run on the task's current stage whose recorded session JSONL
+// still exists on disk. Walking back (not just reading the single latest run)
+// keeps consecutive retries resumable even when a resumed claude continues the
+// PRIOR run's session id without stamping it onto the new run. Returns "" when
+// no resumable session is found, so the caller falls back to a fresh spawn.
+func (h *Handler) resolveResumeSessionID(ctx context.Context, t *ent.Task) string {
+	cwd := t.Cwd
+	if t.WorktreePath != nil && *t.WorktreePath != "" {
+		cwd = *t.WorktreePath
+	}
+	runs, err := h.srRepo.ListForTask(ctx, t.ID)
+	if err != nil {
+		return ""
+	}
+	for i := len(runs) - 1; i >= 0; i-- {
+		run := runs[i]
+		if run.Stage != t.CurrentStage || run.SessionID == nil || *run.SessionID == "" {
+			continue
+		}
+		if pipeline.SessionFileExists(cwd, *run.SessionID) {
+			return *run.SessionID
+		}
+	}
+	return ""
 }
 
 func (h *Handler) listStageRuns(w http.ResponseWriter, r *http.Request) error {

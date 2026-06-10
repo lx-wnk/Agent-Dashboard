@@ -192,6 +192,7 @@ The following `pipeline/` symbols may be imported at runtime from `api/*` and `m
 | `ResolvedProjectDir` | `session_reader.go` | `api/tasks/analyze_routes.go` |
 | `FindNewestSessionID` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
 | `ReadLastStageJsonOutput` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
+| `SessionFileExists` | `session_reader.go` | `api/tasks/handler.go` |
 | `ValidateStageOutput` | `completion_detector.go` | `api/agents/channel_stage_output.go` |
 
 These are session-reader and process-monitor helpers — they do not touch the state machine (orchestrator, stage handlers, completion detector). New `pipeline/` imports from `api/*` or `mcp/*` require an explicit justification here before being added.
