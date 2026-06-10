@@ -143,6 +143,12 @@ export interface PipelineTask {
   silverBullet: boolean
   /** Soft priority used after silver-bullet and stage-furthest-first. */
   priority: TaskPriority
+  /**
+   * Manual drag-and-drop order within a stage column. Gap-based float; lower
+   * sorts first. Tiebreaker between priority and createdAt in runner pickup.
+   * Seeded from createdAt on the server, so it is effectively always present.
+   */
+  rank?: number | null
   // Owning user (multi-user mode). Null for legacy/system tasks created
   // before multi-user was introduced; only admins see those.
   userId: string | null

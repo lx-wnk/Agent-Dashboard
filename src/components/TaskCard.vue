@@ -41,7 +41,16 @@ function stageLabel(stage: PipelineStage): string {
     @keydown.space.prevent="$emit('select', task)"
   >
     <div class="flex justify-between items-baseline gap-2">
-      <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
+      <span class="flex items-center gap-1 overflow-hidden">
+        <span
+          class="task-drag-handle cursor-grab active:cursor-grabbing text-fg-mute hover:text-fg-soft select-none leading-none -ml-0.5"
+          title="Drag to reorder"
+          aria-label="Drag to reorder"
+          @click.stop
+          @keydown.enter.stop
+        >⠿</span>
+        <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
+      </span>
       <span class="text-[10px] text-fg-mute">{{ shortDate(task.createdAt) }}</span>
     </div>
     <div class="text-[13px] font-semibold text-fg leading-tight line-clamp-2">
