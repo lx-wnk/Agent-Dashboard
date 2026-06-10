@@ -407,6 +407,7 @@ var (
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
 		{Name: "project_id", Type: field.TypeString, Nullable: true},
 		{Name: "spawner_id", Type: field.TypeString, Nullable: true},
+		{Name: "rank", Type: field.TypeFloat64, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
@@ -432,9 +433,9 @@ var (
 				Columns: []*schema.Column{TasksColumns[18]},
 			},
 			{
-				Name:    "task_silver_bullet_priority_created_at",
+				Name:    "task_silver_bullet_priority_rank_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[20]},
+				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[20], TasksColumns[21]},
 			},
 		},
 	}

@@ -119,6 +119,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/tasks/{id}/permissions", apierr.ErrorMiddleware(h.listPermissions))
 	r.Post("/api/tasks", apierr.ErrorMiddleware(h.create))
 	r.Patch("/api/tasks/{id}", apierr.ErrorMiddleware(h.update))
+	r.Post("/api/tasks/{id}/rank", apierr.ErrorMiddleware(h.rankTask))
 	r.Delete("/api/tasks/{id}", apierr.ErrorMiddleware(h.delete))
 	r.Post("/api/tasks/{id}/progress", apierr.ErrorMiddleware(h.progress))
 	r.Post("/api/tasks/{id}/cancel", apierr.ErrorMiddleware(h.cancel))
@@ -500,6 +501,38 @@ func parseNullableString(raw json.RawMessage) (*string, bool, error) {
 		return nil, false, err
 	}
 	return &v, false, nil
+}
+
+// rankTask repositions a task within its stage column. The body carries the IDs
+// of the cards immediately above (before) and below (after) the drop target;
+// either may be empty when dropping at a column edge. The server computes the
+// midpoint rank so concurrent drops stay race-safe.
+func (h *Handler) rankTask(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	var body struct {
+		Before string `json:"before"`
+		After  string `json:"after"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if body.Before == id || body.After == id {
+		return apierr.NewAppError(http.StatusBadRequest, "before/after must not equal the task being ranked")
+	}
+	updated, err := h.taskRepo.RerankBetween(r.Context(), id, body.Before, body.After)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.ErrNotFound
+		}
+		return fmt.Errorf("tasks.rankTask: %w", err)
+	}
+	h.broadcastEnrichedUpdate(r.Context(), id)
+	enriched, err := EnrichTask(r.Context(), updated, h.srRepo, h.permRepo)
+	if err != nil {
+		return fmt.Errorf("tasks.rankTask.enrich: %w", err)
+	}
+	h.applyRefineStatus(enriched, id)
+	return jsonReply(w, http.StatusOK, enriched)
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {

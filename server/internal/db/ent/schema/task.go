@@ -34,6 +34,7 @@ func (Task) Fields() []ent.Field {
 		field.JSON("metadata", map[string]any{}).Optional(),
 		field.String("project_id").Optional().Nillable(),
 		field.String("spawner_id").Optional().Nillable(),
+		field.Float("rank").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}
@@ -54,6 +55,6 @@ func (Task) Indexes() []ent.Index {
 		index.Fields("current_stage"),
 		index.Fields("parent_task_id"),
 		index.Fields("project_id"),
-		index.Fields("silver_bullet", "priority", "created_at"),
+		index.Fields("silver_bullet", "priority", "rank", "created_at"),
 	}
 }

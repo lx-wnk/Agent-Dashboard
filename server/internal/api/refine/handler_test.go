@@ -99,6 +99,9 @@ func (f *fakeTaskRepo) Update(_ context.Context, _ string, in repo.UpdateTaskInp
 	f.lastUpdate = &in
 	return nil, nil
 }
+func (f *fakeTaskRepo) RerankBetween(_ context.Context, _, _, _ string) (*ent.Task, error) {
+	return nil, nil
+}
 func (f *fakeTaskRepo) Delete(_ context.Context, _ string) error              { return nil }
 func (f *fakeTaskRepo) ListForUser(_ context.Context, _ string, _ bool) ([]*ent.Task, error) {
 	return nil, nil

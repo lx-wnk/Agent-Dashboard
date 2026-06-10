@@ -16,6 +16,7 @@ type TaskRepo interface {
 	GetByID(ctx context.Context, id string) (*ent.Task, error)
 	GetBySlug(ctx context.Context, slug string) (*ent.Task, error)
 	Update(ctx context.Context, id string, input UpdateTaskInput) (*ent.Task, error)
+	RerankBetween(ctx context.Context, id, beforeID, afterID string) (*ent.Task, error)
 	Delete(ctx context.Context, id string) error
 	ListForUser(ctx context.Context, userID string, isAdmin bool) ([]*ent.Task, error)
 	ListPickable(ctx context.Context) ([]*ent.Task, error)
@@ -43,6 +44,7 @@ type CreateTaskInput struct {
 	Metadata            map[string]any
 	ProjectID           *string
 	SpawnerID           *string
+	Rank                *float64
 }
 
 type UpdateTaskInput struct {
@@ -62,8 +64,22 @@ type UpdateTaskInput struct {
 	TargetBranch        *string
 	ProjectID           *string
 	SpawnerID           *string
+	Rank                *float64
 	ClearProjectID      bool
 	ClearSpawnerID      bool
+}
+
+// rankGap is the spacing applied when a card is dropped at the top or bottom of
+// a column (no neighbor on one side). Between two neighbors the midpoint is used.
+const rankGap = 1 << 20
+
+// effectiveRank returns the task's stored rank, falling back to its creation
+// time (as microseconds) so unranked legacy rows still order deterministically.
+func effectiveRank(t *ent.Task) float64 {
+	if t.Rank != nil {
+		return *t.Rank
+	}
+	return float64(t.CreatedAt.UnixMicro())
 }
 
 type entTaskRepo struct{ client *ent.Client }
@@ -115,6 +131,13 @@ func (r *entTaskRepo) Create(ctx context.Context, in CreateTaskInput) (*ent.Task
 		q = q.SetMetadata(in.Metadata)
 	}
 	q = q.SetNillableProjectID(in.ProjectID).SetNillableSpawnerID(in.SpawnerID)
+	if in.Rank != nil {
+		q = q.SetRank(*in.Rank)
+	} else {
+		// Seed rank from creation time so new cards land last in their column and
+		// sort identically to created_at order until the user drags them.
+		q = q.SetRank(float64(time.Now().UnixMicro()))
+	}
 	t, err := q.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("task.Create: %w", err)
@@ -191,10 +214,73 @@ func (r *entTaskRepo) Update(ctx context.Context, id string, in UpdateTaskInput)
 	} else if in.SpawnerID != nil {
 		q = q.SetSpawnerID(*in.SpawnerID)
 	}
+	if in.Rank != nil {
+		q = q.SetRank(*in.Rank)
+	}
 	t, err := q.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("task.Update: %w", err)
 	}
+	return t, nil
+}
+
+// RerankBetween assigns task id a new rank positioned between beforeID (the card
+// above the drop, lower rank) and afterID (the card below, higher rank). Either
+// neighbor may be empty when dropping at a column edge. The read of both
+// neighbors and the write happen inside one transaction so concurrent drops
+// cannot interleave and compute a stale midpoint.
+func (r *entTaskRepo) RerankBetween(ctx context.Context, id, beforeID, afterID string) (*ent.Task, error) {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("task.RerankBetween: begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	neighborRank := func(tid string) (float64, bool, error) {
+		if tid == "" {
+			return 0, false, nil
+		}
+		t, err := tx.Task.Get(ctx, tid)
+		if err != nil {
+			return 0, false, err
+		}
+		return effectiveRank(t), true, nil
+	}
+
+	beforeRank, hasBefore, err := neighborRank(beforeID)
+	if err != nil {
+		return nil, fmt.Errorf("task.RerankBetween: before %q: %w", beforeID, err)
+	}
+	afterRank, hasAfter, err := neighborRank(afterID)
+	if err != nil {
+		return nil, fmt.Errorf("task.RerankBetween: after %q: %w", afterID, err)
+	}
+
+	var newRank float64
+	switch {
+	case hasBefore && hasAfter:
+		newRank = (beforeRank + afterRank) / 2
+	case hasBefore:
+		newRank = beforeRank + rankGap
+	case hasAfter:
+		newRank = afterRank - rankGap
+	default:
+		newRank = float64(time.Now().UnixMicro())
+	}
+
+	t, err := tx.Task.UpdateOneID(id).SetRank(newRank).SetUpdatedAt(time.Now()).Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("task.RerankBetween: update %q: %w", id, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("task.RerankBetween: commit: %w", err)
+	}
+	committed = true
 	return t, nil
 }
 
@@ -236,6 +322,7 @@ func (r *entTaskRepo) ListPickable(ctx context.Context) ([]*ent.Task, error) {
 		Order(
 			task.BySilverBullet(sql.OrderDesc()),
 			task.ByPriority(sql.OrderDesc()),
+			task.ByRank(sql.OrderAsc()),
 			task.ByCreatedAt(sql.OrderAsc()),
 		).
 		All(ctx)
