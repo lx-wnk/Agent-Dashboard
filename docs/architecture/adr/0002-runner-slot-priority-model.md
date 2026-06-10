@@ -62,7 +62,12 @@ When a free slot exists, the driver loop picks from the pool of
    `backlog` on the same priority tier.
 3. **Priority field** — `high` > `medium` > `low`, set at creation and
    editable later.
-4. **Creation time** — older tasks win. Final tiebreaker, stable.
+4. **Rank** — manual drag-and-drop order within a stage column, set via the
+   Kanban board (`POST /api/tasks/{id}/rank`). A gap-based float (lower wins),
+   seeded from `created_at` so it matches FIFO until a card is dragged. The
+   server computes the midpoint between the drop neighbors, so concurrent
+   drops stay race-safe. Breaks ties within the same priority tier.
+5. **Creation time** — older tasks win. Final tiebreaker, stable.
 
 ### 3. Pickable pool
 

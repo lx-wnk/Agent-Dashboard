@@ -33,7 +33,7 @@ Stateless helpers consumed by `routes/*` and `mcp/*` (and, where appropriate, by
 
 ## Runner Slots
 
-`maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `implementation`. Agent-less stages (`concept`, `backlog`) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → createdAt) and the sticky-run invariant.
+`maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `implementation`. Agent-less stages (`concept`, `backlog`) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → rank → createdAt) and the sticky-run invariant. `rank` is the manual drag-and-drop order set via the Kanban board (`POST /api/tasks/{id}/rank`), a gap-based float seeded from createdAt; it breaks ties within the same priority tier.
 
 ## Stage Timeout
 
