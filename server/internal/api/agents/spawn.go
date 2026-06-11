@@ -19,7 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -217,8 +216,8 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	binary := claudeBin
 	var spawnerArgs []string
 	if spawnerRow != nil {
-		if !spawners.ValidateCommand(spawnerRow.Command) {
-			return 0, fmt.Errorf("spawner command not permitted")
+		if ok, reason := services.ValidateSpawnerCommand(spawnerRow.Command); !ok {
+			return 0, fmt.Errorf("spawner command not permitted: %s", reason)
 		}
 		if bad := firstReservedFlag(spawnerRow.Args); bad != "" {
 			return 0, fmt.Errorf("spawner args may not include reserved flag %q", bad)
