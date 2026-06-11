@@ -112,6 +112,12 @@ type StageContext struct {
 	// May be nil if the feature is not configured.
 	SystemPromptRepo SystemPromptQuerier
 
+	// StageModelFn returns the effective per-stage model for the current stage,
+	// applying: coded Balanced default → DB config row. Task/spawner explicit
+	// overrides are applied on top by stage_handlers.go after calling this.
+	// Returns "" when no stage-level default applies (non-agent stages).
+	StageModelFn func(ctx context.Context, stage string) string
+
 	// DispatchHTTPSpawn runs the given HTTP spawn function in the goroutine pool
 	// and returns immediately. The caller should return AsyncRunningTransition{PID:0}
 	// after calling this. Results are drained by the orchestrator on the next tick.

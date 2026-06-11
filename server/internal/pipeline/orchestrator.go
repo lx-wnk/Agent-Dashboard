@@ -44,6 +44,15 @@ const (
 	defaultRateLimitBackoff    = 600
 	maxRateLimitRetriesKey     = "maxRateLimitRetries"
 	defaultMaxRateLimitRetries = 36
+
+	// Per-stage model config key prefix (e.g. stageModelKeyPrefix+"implementation").
+	stageModelKeyPrefix = "stageModel."
+
+	// Balanced defaults: implementation gets the most capable model, finalization
+	// the fastest. An explicit DB row or task/spawner override takes precedence.
+	defaultModelImplementation = "claude-opus-4-6"
+	defaultModelSelfReview     = "claude-sonnet-4-6"
+	defaultModelFinalization   = "claude-haiku-4-5"
 )
 
 // httpSpawnResult carries the outcome of an asynchronous HTTP-adapter spawn.
@@ -74,6 +83,11 @@ type PipelineOrchestrator struct {
 
 type cachedConfig struct {
 	value     int
+	expiresAt time.Time
+}
+
+type cachedConfigStr struct {
+	value     string
 	expiresAt time.Time
 }
 
@@ -160,6 +174,39 @@ func (o *PipelineOrchestrator) getCachedConfigNumber(ctx context.Context, key st
 	n := int(o.opts.ConfigRepo.GetNumber(ctx, key, float64(fallback)))
 	o.configCache.Store(key, cachedConfig{value: n, expiresAt: time.Now().Add(60 * time.Second)})
 	return n
+}
+
+func (o *PipelineOrchestrator) getCachedConfigString(ctx context.Context, key string, fallback string) string {
+	if v, ok := o.configCache.Load(key); ok {
+		c, ok := v.(cachedConfigStr)
+		if ok && time.Now().Before(c.expiresAt) {
+			return c.value
+		}
+	}
+	s := o.opts.ConfigRepo.GetString(ctx, key, fallback)
+	o.configCache.Store(key, cachedConfigStr{value: s, expiresAt: time.Now().Add(60 * time.Second)})
+	return s
+}
+
+// EffectiveStageModel returns the effective model for the given stage, applying
+// coded default → DB config row precedence. Exported for use by api/* handlers.
+func (o *PipelineOrchestrator) EffectiveStageModel(ctx context.Context, stage string) string {
+	return o.stageModelDefault(ctx, stage)
+}
+
+// stageModelDefault returns the effective per-stage model string, applying the
+// full precedence: coded default → DB config row → (caller applies task/spawner override).
+func (o *PipelineOrchestrator) stageModelDefault(ctx context.Context, stage string) string {
+	var coded string
+	switch stage {
+	case "implementation":
+		coded = defaultModelImplementation
+	case "self_review":
+		coded = defaultModelSelfReview
+	case "finalization":
+		coded = defaultModelFinalization
+	}
+	return o.getCachedConfigString(ctx, stageModelKeyPrefix+stage, coded)
 }
 
 // Run starts the orchestrator tick loop. It blocks until ctx is cancelled.
