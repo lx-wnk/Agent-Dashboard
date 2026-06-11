@@ -5,6 +5,8 @@ import { fetchProjectFolders } from '../composables/useProjectFolders'
 import { useProjects } from '../composables/useProjects'
 import { useSpawnDialog } from '../composables/useSpawnDialog'
 import { useSpawners } from '../composables/useSpawners'
+import { errorMessage } from '../utils/errorMessage'
+import { SPAWN_AUTOCLOSE_MS } from '../utils/timing'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
@@ -185,10 +187,10 @@ async function handleSpawn() {
         resetForm()
         emit('close')
       }
-    }, 3000)
+    }, SPAWN_AUTOCLOSE_MS)
   }
   catch (err: unknown) {
-    errorMsg.value = err instanceof Error ? err.message : 'Failed to spawn agent'
+    errorMsg.value = errorMessage(err, 'Failed to spawn agent')
     isSpawning.value = false
   }
 }
