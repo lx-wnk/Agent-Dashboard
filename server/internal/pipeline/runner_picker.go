@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/ranking"
 )
 
 // pickNextTasksForFreeSlots selects tasks for available runner slots and calls
@@ -128,18 +129,10 @@ func shouldSwap(a, b *ent.Task, priorityRank map[string]int, stageIdx func(strin
 	if pi != pj {
 		return pi < pj // b has higher priority — b should come first
 	}
-	ri, rj := effectiveRank(a), effectiveRank(b)
+	ri, rj := ranking.EffectiveRank(a), ranking.EffectiveRank(b)
 	if ri != rj {
 		return ri > rj // b has the lower rank (manual drag order) — b should come first
 	}
 	return a.CreatedAt.After(b.CreatedAt) // b is older — b should come first
 }
 
-// effectiveRank returns the task's manual drag rank, falling back to its
-// creation time (microseconds) so unranked rows still order deterministically.
-func effectiveRank(t *ent.Task) float64 {
-	if t.Rank != nil {
-		return *t.Rank
-	}
-	return float64(t.CreatedAt.UnixMicro())
-}

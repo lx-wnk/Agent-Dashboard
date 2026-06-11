@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
+	"github.com/lx-wnk/agent-dashboard/server/internal/ranking"
 )
 
 type TaskRepo interface {
@@ -73,14 +74,6 @@ type UpdateTaskInput struct {
 // a column (no neighbor on one side). Between two neighbors the midpoint is used.
 const rankGap = 1 << 20
 
-// effectiveRank returns the task's stored rank, falling back to its creation
-// time (as microseconds) so unranked legacy rows still order deterministically.
-func effectiveRank(t *ent.Task) float64 {
-	if t.Rank != nil {
-		return *t.Rank
-	}
-	return float64(t.CreatedAt.UnixMicro())
-}
 
 type entTaskRepo struct{ client *ent.Client }
 
@@ -249,7 +242,7 @@ func (r *entTaskRepo) RerankBetween(ctx context.Context, id, beforeID, afterID s
 		if err != nil {
 			return 0, false, err
 		}
-		return effectiveRank(t), true, nil
+		return ranking.EffectiveRank(t), true, nil
 	}
 
 	beforeRank, hasBefore, err := neighborRank(beforeID)
