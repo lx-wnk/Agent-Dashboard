@@ -235,10 +235,6 @@ func (m *SpawnManager) resolveSpawner(sub string, body map[string]any, req *spaw
 		req.model = *row.ModelOverride
 	}
 
-	if req.projectID != "" {
-		slog.Info("spawn: projectId attached", "sub", sub, "projectId", req.projectID, "spawnerId", row.ID)
-	}
-
 	return row, nil
 }
 
@@ -361,6 +357,14 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	spawnerRow, err := m.resolveSpawner(sub, body, req)
 	if err != nil {
 		return 0, err
+	}
+
+	if req.projectID != "" {
+		var spawnerID string
+		if spawnerRow != nil {
+			spawnerID = spawnerRow.ID
+		}
+		slog.Info("spawn: projectId attached", "sub", sub, "projectId", req.projectID, "spawnerId", spawnerID)
 	}
 
 	binary, args, err := m.buildSpawnArgs(req, spawnerRow)
