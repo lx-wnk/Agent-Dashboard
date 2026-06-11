@@ -1,8 +1,23 @@
 <script setup lang="ts">
+import type { SankeyLink, SankeyNode } from 'd3-sankey'
 import type { SankeyData } from '../../sdk.generated'
 import * as d3 from 'd3'
 import { sankey as d3Sankey, sankeyLinkHorizontal } from 'd3-sankey'
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { errorMessage } from '../../utils/errorMessage'
+
+// User-defined node/link properties carried through the layout, on top of the
+// d3-sankey-computed geometry (x0/y0/width/…).
+interface NodeExtra { id: string, name: string }
+interface LinkExtra { value: number }
+type SNode = SankeyNode<NodeExtra, LinkExtra>
+type SLink = SankeyLink<NodeExtra, LinkExtra>
+
+// A laid-out link's source/target is the resolved node object; narrow the
+// `number | string | SNode` union d3-sankey types it as.
+function nodeName(endpoint: SLink['source']): string {
+  return typeof endpoint === 'object' ? endpoint.name : String(endpoint)
+}
 
 const props = defineProps<{
   data: SankeyData | null
@@ -33,7 +48,7 @@ function render() {
   }
   catch (err) {
     svg.selectAll('*').remove()
-    renderError.value = `Could not lay out sankey: ${(err as Error).message}`
+    renderError.value = `Could not lay out sankey: ${errorMessage(err)}`
   }
 }
 
@@ -50,7 +65,7 @@ function drawSankey(svg: d3.Selection<SVGSVGElement, unknown, null, undefined>) 
   const nodes = props.data.nodes.map(n => ({ ...n }))
   const links = props.data.links.map(l => ({ ...l }))
 
-  const layout = d3Sankey<{ id: string, name: string }, { value: number }>()
+  const layout = d3Sankey<NodeExtra, LinkExtra>()
     .nodeId(d => d.id)
     .nodeWidth(15)
     .nodePadding(12)
@@ -70,7 +85,7 @@ function drawSankey(svg: d3.Selection<SVGSVGElement, unknown, null, undefined>) 
     .attr('width', d => (d.x1 ?? 0) - (d.x0 ?? 0))
     .attr('fill', d => color(d.name))
     .append('title')
-    .text(d => `${d.name}\n${(d as any).value ?? 0}`)
+    .text(d => `${d.name}\n${d.value ?? 0}`)
 
   svg.append('g')
     .attr('fill', 'none')
@@ -82,7 +97,7 @@ function drawSankey(svg: d3.Selection<SVGSVGElement, unknown, null, undefined>) 
     .attr('stroke', '#94a3b8')
     .attr('stroke-width', d => Math.max(1, d.width ?? 1))
     .append('title')
-    .text(d => `${(d.source as any).name} → ${(d.target as any).name}\n${d.value}`)
+    .text(d => `${nodeName(d.source)} → ${nodeName(d.target)}\n${d.value}`)
 
   svg.append('g')
     .style('font-size', '11px')
