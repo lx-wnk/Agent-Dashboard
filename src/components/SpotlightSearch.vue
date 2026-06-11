@@ -216,14 +216,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               Tasks
             </div>
-            <button
+            <div
               v-for="(task, idx) in results.tasks"
               :id="`spotlight-opt-${idx}`"
               :key="`task-${task.id}`"
-              type="button"
               role="option"
+              tabindex="-1"
               :aria-selected="selectedIdx === idx"
-              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors"
+              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors cursor-pointer"
               :class="selectedIdx === idx
                 ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                 : 'text-fg-soft hover:bg-slate-50 dark:hover:bg-slate-800'"
@@ -233,7 +233,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <span class="text-[10px] uppercase tracking-wide text-slate-400 w-10 flex-shrink-0">Task</span>
               <span class="truncate">{{ task.title }}</span>
               <span class="ml-auto text-[10px] text-slate-400">{{ task.currentStage }}</span>
-            </button>
+            </div>
           </template>
 
           <!-- Agents section -->
@@ -244,14 +244,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             >
               Agents
             </div>
-            <button
+            <div
               v-for="(agent, idx) in results.agents"
               :id="`spotlight-opt-${results.tasks.length + idx}`"
               :key="`agent-${agent.sessionId}`"
-              type="button"
               role="option"
+              tabindex="-1"
               :aria-selected="selectedIdx === (results.tasks.length + idx)"
-              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors"
+              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors cursor-pointer"
               :class="selectedIdx === (results.tasks.length + idx)
                 ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                 : 'text-fg-soft hover:bg-slate-50 dark:hover:bg-slate-800'"
@@ -261,7 +261,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <span class="text-[10px] uppercase tracking-wide text-slate-400 w-10 flex-shrink-0">Agent</span>
               <span class="truncate">{{ agent.projectName }}</span>
               <span class="ml-auto text-[10px] text-slate-400">{{ agent.status }}</span>
-            </button>
+            </div>
           </template>
         </template>
       </div>
