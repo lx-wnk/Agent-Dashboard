@@ -66,19 +66,39 @@ declares.
 ### Security
 
 **Command allow-list.** The `command` field is validated at create/update
-time against a conservative allow-list:
+time by `services.ValidateSpawnerCommand` (in
+`server/internal/services/spawn_policy.go`, co-located with the cwd
+`SpawnPolicy` and reusing its `canonicalize`/`isUnder` helpers). The same
+function is the single authority for both the spawner CRUD handlers and the
+agent spawn path (`api/agents`), eliminating the former lateral
+`api/agents → api/spawners` import.
 
-- Exact names: `claude`, `claude-code`
-- Prefix `npx` (for `npx @anthropic-ai/claude-code`)
-- Absolute paths that resolve under the current user's home directory
-  (`~/bin`, `~/.local/bin`, standard Homebrew/nix prefixes) or under
-  `/usr/local/bin`, `/opt/homebrew/bin`
-- Hard-blocked: any path under `/tmp`, `/var/tmp`, or any world-writable
-  directory
+The rule is an **allow-list**, not a blacklist:
 
-The allow-list can be extended at server startup via
-`DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated command names or
-absolute path prefixes) without code changes.
+- Bare names: `claude`, `claude-code`, `npx` (plus bare entries of
+  `DASHBOARD_SPAWNER_ALLOWED_COMMANDS`)
+- Absolute paths must `EvalSymlinks`-resolve (the file must exist) **and** the
+  resolved binary's parent directory must lie under a **trusted bin dir**:
+  `/usr/bin`, `/bin`, `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`,
+  the resolved directory of the `claude` binary on `PATH`, plus absolute-path
+  entries of `DASHBOARD_SPAWNER_ALLOWED_COMMANDS`
+- Anything else — unresolvable paths, or resolved paths outside every trusted
+  dir — is hard-rejected with a specific reason
+
+Resolving symlinks **before** the trust check closes the previous
+symlink-into-`/tmp` bypass: the old blacklist allowed any path that was not
+literally under `/tmp`/`/var/tmp` and never followed symlinks, so a trusted-
+looking path symlinked to a `/tmp` target slipped through.
+
+The trusted-dir set can be extended at server startup via
+`DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated; bare names add to the
+bare allow-list, absolute paths add trusted bin dirs) without code changes.
+
+> **Migration note (allow-list tightening).** Existing spawner rows are not
+> re-validated on upgrade, but the next create/update of a row with an
+> absolute `command` outside a trusted bin dir will now be rejected. Operators
+> relying on a custom binary location must add its directory to
+> `DASHBOARD_SPAWNER_ALLOWED_COMMANDS`.
 
 **CRUD gating.** Creating, updating, and deleting spawners requires the
 `keys:manage` MCP scope (the highest scope tier). Arbitrary spawner

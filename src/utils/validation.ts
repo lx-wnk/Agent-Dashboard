@@ -26,14 +26,18 @@ export function isAbsolutePath(p: string): boolean {
 
 /**
  * Allowed bare command names for spawner commands.
- * SSOT — backend mirrors the same rule.
+ * Keep in sync with services.DefaultAllowedCommands (server is authoritative).
  */
 const ALLOWED_SPAWNER_BARE_NAMES = new Set(['claude', 'claude-code', 'npx'])
 
 /**
- * Returns true when `cmd` is an acceptable spawner command:
- * - Bare names: claude, claude-code, npx
- * - Absolute paths that do NOT reside under /tmp or /var/tmp
+ * Advisory client-side pre-check for a spawner command. The SERVER is
+ * authoritative: services.ValidateSpawnerCommand resolves symlinks and requires
+ * absolute paths to live under a trusted bin directory. The browser cannot
+ * resolve realpaths, so this only catches obviously-bad bare names early and
+ * lets any absolute path through — the server makes the final decision.
+ * - Bare names: must be claude, claude-code, or npx.
+ * - Absolute paths: accepted optimistically here; server enforces the trusted-dir rule.
  */
 export function isAllowedSpawnerCommand(cmd: string): boolean {
   if (!cmd || !cmd.trim())
@@ -41,13 +45,6 @@ export function isAllowedSpawnerCommand(cmd: string): boolean {
   const trimmed = cmd.trim()
   if (ALLOWED_SPAWNER_BARE_NAMES.has(trimmed))
     return true
-  if (trimmed.startsWith('/')) {
-    // Absolute path — disallow /tmp and /var/tmp trees
-    if (trimmed.startsWith('/tmp/') || trimmed === '/tmp')
-      return false
-    if (trimmed.startsWith('/var/tmp/') || trimmed === '/var/tmp')
-      return false
-    return true
-  }
-  return false
+  // Absolute paths can't be realpath-resolved client-side; defer to the server.
+  return trimmed.startsWith('/')
 }
