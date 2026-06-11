@@ -45,9 +45,8 @@ function stageLabel(stage: PipelineStage): string {
         <span
           class="task-drag-handle cursor-grab active:cursor-grabbing text-fg-mute hover:text-fg-soft select-none leading-none -ml-0.5"
           title="Drag to reorder"
-          aria-label="Drag to reorder"
+          aria-hidden="true"
           @click.stop
-          @keydown.enter.stop
         >⠿</span>
         <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
       </span>
