@@ -51,15 +51,16 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
 
 <template>
   <div
-    class="bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer transition-all flex flex-col gap-1.5"
+    class="relative bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer transition-all flex flex-col gap-1.5"
     :class="task.isBlocked ? 'opacity-60 hover:opacity-85' : 'hover:border-blue-500 dark:hover:border-blue-400 hover:-translate-y-px'"
-    tabindex="0"
-    role="button"
-    :aria-label="`Open task ${task.title}`"
-    @click="$emit('select', task)"
-    @keydown.enter="$emit('select', task)"
-    @keydown.space.prevent="$emit('select', task)"
   >
+    <button
+      type="button"
+      class="absolute inset-0 w-full h-full rounded-md focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+      :aria-label="`Open task ${task.title}`"
+      data-testid="task-card-open"
+      @click="$emit('select', task)"
+    />
     <div class="flex justify-between items-baseline gap-2">
       <span class="flex items-center gap-1 overflow-hidden">
         <span
@@ -87,7 +88,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
     </div>
     <button
       v-if="task.currentStage === 'concept'"
-      class="self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+      class="relative z-10 self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
       @click.stop="emit('openChat', task)"
       @keydown.enter.stop
       @keydown.space.stop

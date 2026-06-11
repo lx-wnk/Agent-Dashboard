@@ -21,16 +21,14 @@ async function copy() {
 <template>
   <div v-if="scriptPath" class="mt-auto pt-6 flex items-center gap-2 text-[11px] text-fg-faint">
     <span class="whitespace-nowrap">Channel command:</span>
-    <code
+    <button
+      type="button"
       data-testid="channel-script-path"
       class="font-mono text-[11px] text-fg-mute bg-raised px-2 py-0.5 rounded cursor-pointer select-all transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-      tabindex="0"
-      role="button"
       :title="copied ? 'Copied!' : 'Click to copy'"
+      :aria-label="`Copy channel command ${scriptPath}`"
       @click="copy"
-      @keydown.enter="copy"
-      @keydown.space.prevent="copy"
-    >{{ scriptPath }}</code>
+    >{{ scriptPath }}</button>
     <span v-if="copied" class="text-green-600 dark:text-green-400">Copied!</span>
   </div>
 </template>
