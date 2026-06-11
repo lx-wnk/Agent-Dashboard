@@ -13,6 +13,10 @@ function maxCost(): number {
 function cellOpacity(cost: number): number {
   return cost === 0 ? 0 : 0.1 + 0.9 * (cost / maxCost())
 }
+
+function cellLabel(dow: string, hourIdx: number, cost: number): string {
+  return `${dow} ${HOUR_LABELS[hourIdx]}: $${cost.toFixed(4)}`
+}
 </script>
 
 <template>
@@ -27,33 +31,71 @@ function cellOpacity(cost: number): number {
       {{ error }}
     </div>
     <div v-else class="overflow-x-auto">
-      <div class="flex">
-        <div class="w-10 flex-shrink-0" />
-        <div style="display: grid; grid-template-columns: repeat(24, minmax(28px, 1fr));">
-          <span
-            v-for="h in HOUR_LABELS"
-            :key="h"
-            class="text-[9px] text-slate-400 truncate text-center"
-          >{{ h.slice(0, 2) }}</span>
-        </div>
-      </div>
-      <div v-for="(dow, dowIdx) in DOW_LABELS" :key="dow" class="flex items-center mb-0.5">
-        <div class="w-10 text-[11px] text-slate-500 flex-shrink-0 text-right pr-2">
-          {{ dow }}
-        </div>
-        <div style="display: grid; grid-template-columns: repeat(24, minmax(28px, 1fr)); gap: 2px; flex: 1;">
-          <div
-            v-for="(_, hourIdx) in 24"
-            :key="hourIdx"
-            class="h-5 rounded-sm"
-            :style="{ backgroundColor: `rgba(59, 130, 246, ${cellOpacity(grid[dowIdx][hourIdx])})` }"
-            :title="`${dow} ${HOUR_LABELS[hourIdx]}: $${grid[dowIdx][hourIdx].toFixed(4)}`"
-          />
-        </div>
-      </div>
+      <table class="heatmap-table border-collapse">
+        <caption class="sr-only">
+          Cost by hour of day and day of week
+        </caption>
+        <thead>
+          <tr>
+            <!-- empty corner cell aligns with row-header column -->
+            <td />
+            <th
+              v-for="h in HOUR_LABELS"
+              :key="h"
+              scope="col"
+              class="text-[9px] text-slate-400 text-center font-normal px-0"
+              style="width: 28px; min-width: 28px;"
+            >
+              {{ h.slice(0, 2) }}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(dow, dowIdx) in DOW_LABELS" :key="dow" class="mb-0.5">
+            <th
+              scope="row"
+              class="text-[11px] text-slate-500 text-right pr-2 font-normal"
+              style="width: 40px; min-width: 40px;"
+            >
+              {{ dow }}
+            </th>
+            <td
+              v-for="hourIdx in 24"
+              :key="hourIdx - 1"
+              class="p-0"
+              style="width: 28px; min-width: 28px; height: 20px;"
+              :aria-label="cellLabel(dow, hourIdx - 1, grid[dowIdx][hourIdx - 1])"
+            >
+              <!-- decorative color fill; data is in aria-label above -->
+              <div
+                class="h-5 w-full rounded-sm"
+                aria-hidden="true"
+                :style="{ backgroundColor: `rgba(59, 130, 246, ${cellOpacity(grid[dowIdx][hourIdx - 1])})` }"
+              />
+            </td>
+          </tr>
+        </tbody>
+      </table>
       <p class="text-[10px] text-slate-400 mt-2">
-        Cell intensity proportional to total cost. Hover for exact value.
+        Cell intensity proportional to total cost.
       </p>
     </div>
   </div>
 </template>
+
+<style scoped>
+.heatmap-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.heatmap-table td,
+.heatmap-table th {
+  padding: 0;
+  vertical-align: middle;
+}
+
+.heatmap-table tbody tr + tr {
+  margin-top: 2px;
+}
+</style>
