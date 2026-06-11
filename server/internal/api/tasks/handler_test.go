@@ -118,6 +118,14 @@ func (n *noopOrchestrator) ClearStalePendingPermissions(_ context.Context, _ str
 func (n *noopOrchestrator) RequeueForUser(_ context.Context, _ string, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
+func (n *noopOrchestrator) EffectiveStageModel(_ context.Context, stage string) string {
+	defaults := map[string]string{
+		"implementation": "claude-opus-4-6",
+		"self_review":    "claude-sonnet-4-6",
+		"finalization":   "claude-haiku-4-5",
+	}
+	return defaults[stage]
+}
 
 func TestListTasks_Empty(t *testing.T) {
 	_, r := newTestHandler(t)

@@ -53,6 +53,7 @@ const ResumeContinueInstructionForTest = resumeContinueInstruction
 // SyntheticSpawnPIDForTest exposes syntheticSpawnPID for use in test capture
 // spawn functions that want to return the canonical no-op PID.
 const SyntheticSpawnPIDForTest = syntheticSpawnPID
+
 // NewAgentStageHandlerForTest creates an agentStageHandler with the given spawn
 // function injected, so unit tests can capture SpawnAgentOptions without running
 // a real claude subprocess.

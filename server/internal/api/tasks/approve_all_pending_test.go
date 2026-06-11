@@ -37,6 +37,7 @@ func (c *requeueCapture) RequeueForUser(_ context.Context, taskID, _ string) (*e
 func (c *requeueCapture) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
 func (c *requeueCapture) InvalidateConfigCache()                                   {}
 func (c *requeueCapture) ClearStalePendingPermissions(_ context.Context, _ string) {}
+func (c *requeueCapture) EffectiveStageModel(_ context.Context, _ string) string   { return "" }
 
 func newApproveAllHandler(t *testing.T, orch tasks.OrchestratorIface) (*ent.Client, *chi.Mux) {
 	t.Helper()

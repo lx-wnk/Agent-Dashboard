@@ -45,6 +45,7 @@ func (o *lifecycleOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ str
 }
 func (o *lifecycleOrchestrator) InvalidateConfigCache()                                   {}
 func (o *lifecycleOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}
+func (o *lifecycleOrchestrator) EffectiveStageModel(_ context.Context, _ string) string   { return "" }
 
 func newLifecycleHandler(t *testing.T, orch tasks.OrchestratorIface) (*ent.Client, *chi.Mux) {
 	t.Helper()

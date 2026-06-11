@@ -46,6 +46,7 @@ type OrchestratorIface interface {
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
 	InvalidateConfigCache()
 	ClearStalePendingPermissions(ctx context.Context, taskID string)
+	EffectiveStageModel(ctx context.Context, stage string) string
 }
 
 // Handler handles task REST endpoints.
