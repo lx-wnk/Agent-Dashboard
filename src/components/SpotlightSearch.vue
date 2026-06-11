@@ -10,7 +10,6 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const query = ref('')
-const dialogRef = ref<HTMLDivElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const selectedIdx = ref(0)
 
@@ -103,31 +102,6 @@ watch(query, (q) => {
   }, 200)
 })
 
-// Focus trap: cycle focus among interactive elements within the dialog
-function trapFocus(e: KeyboardEvent) {
-  if (e.key !== 'Tab' || !dialogRef.value)
-    return
-
-  const focusable = dialogRef.value.querySelectorAll<HTMLElement>(
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-  )
-  const first = focusable[0]
-  const last = focusable[focusable.length - 1]
-
-  if (e.shiftKey) {
-    if (document.activeElement === first) {
-      e.preventDefault()
-      last?.focus()
-    }
-  }
-  else {
-    if (document.activeElement === last) {
-      e.preventDefault()
-      first?.focus()
-    }
-  }
-}
-
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault()
@@ -141,10 +115,6 @@ function onKeydown(e: KeyboardEvent) {
     return
   if (e.key === 'Escape') {
     closeDialog()
-    return
-  }
-  if (e.key === 'Tab') {
-    trapFocus(e)
     return
   }
   if (e.key === 'ArrowDown') {
@@ -171,14 +141,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <AppModal :open="open" :z-index="2000" size="auto" @close="closeDialog">
+  <AppModal :open="open" :z-index="2000" size="auto" labelled-by="spotlight-search-label" @close="closeDialog">
     <div
-      ref="dialogRef"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Quick search"
       class="bg-card rounded-xl border border-line shadow-2xl w-full max-w-lg overflow-hidden"
     >
+      <span id="spotlight-search-label" class="sr-only">Quick search</span>
       <!-- Live region for result count -->
       <div aria-live="polite" class="sr-only">
         {{ flatResults.length }} results
