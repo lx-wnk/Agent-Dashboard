@@ -1,17 +1,11 @@
 import type { Project } from '../types'
 import { onUnmounted, ref, shallowRef } from 'vue'
-import { SSE_RETRY_DELAY_MS } from '../utils/sse'
+import { errorMessage } from '../utils/errorMessage'
+import { createSseResource } from './useSseResource'
 
 const projects = shallowRef<Project[]>([])
 const isLoading = ref(true)
 const error = ref<string | null>(null)
-
-let eventSource: EventSource | null = null
-let pollTimer: ReturnType<typeof setInterval> | null = null
-let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
-let subscriberCount = 0
-
-const FALLBACK_POLL_MS = 60_000
 
 export interface ProjectEvent {
   type: 'project_created' | 'project_updated' | 'project_deleted'
@@ -29,7 +23,7 @@ async function fetchProjects(): Promise<void> {
     error.value = null
   }
   catch (err) {
-    error.value = (err as Error).message
+    error.value = errorMessage(err)
     isLoading.value = false
   }
 }
@@ -55,53 +49,23 @@ function applyEvent(event: ProjectEvent): void {
   }
 }
 
-function startSSE(): void {
-  if (eventSource)
-    return
-  // NOTE: /api/projects/stream SSE endpoint pending — polling fallback active by design.
-  eventSource = new EventSource('/api/projects/stream')
-  eventSource.onmessage = (e) => {
-    try {
-      const event: ProjectEvent = JSON.parse(e.data)
-      applyEvent(event)
-    }
-    catch {
-      // ignore malformed messages
-    }
+function handleSseMessage(data: string): void {
+  try {
+    const event: ProjectEvent = JSON.parse(data)
+    applyEvent(event)
   }
-  eventSource.onerror = () => {
-    if (eventSource?.readyState === EventSource.CLOSED) {
-      stopSSE()
-      startPolling()
-      sseRetryTimer = setTimeout(() => {
-        stopPolling()
-        startSSE()
-      }, SSE_RETRY_DELAY_MS)
-    }
+  catch {
+    // ignore malformed messages
   }
 }
 
-function stopSSE(): void {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
-}
-
-function startPolling(): void {
-  if (pollTimer)
-    return
-  pollTimer = setInterval(() => {
-    void fetchProjects()
-  }, FALLBACK_POLL_MS)
-}
-
-function stopPolling(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
+// NOTE: /api/projects/stream SSE endpoint pending — the CLOSED→poll fallback
+// keeps the list fresh until the backend stream ships.
+const sse = createSseResource({
+  streamUrl: '/api/projects/stream',
+  fetchInitial: fetchProjects,
+  onMessage: handleSseMessage,
+})
 
 export interface CreateProjectInput {
   slug: string
@@ -152,35 +116,17 @@ export async function fetchProject(id: string): Promise<Project> {
   return res.json() as Promise<Project>
 }
 
-function startStream(): void {
-  subscriberCount++
-  if (subscriberCount === 1) {
-    void fetchProjects()
-    startSSE()
-  }
-}
-
 export function useProjects(options?: { autoStart?: boolean }) {
   if (options?.autoStart !== false)
-    startStream()
+    sse.startStream()
 
-  onUnmounted(() => {
-    subscriberCount--
-    if (subscriberCount === 0) {
-      stopSSE()
-      stopPolling()
-      if (sseRetryTimer) {
-        clearTimeout(sseRetryTimer)
-        sseRetryTimer = null
-      }
-    }
-  })
+  onUnmounted(sse.stopStream)
 
   return {
     projects,
     isLoading,
     error,
     refetch: fetchProjects,
-    startStream,
+    startStream: sse.startStream,
   }
 }
