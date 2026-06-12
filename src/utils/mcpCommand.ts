@@ -1,8 +1,11 @@
-/** Canonical MCP server name — matches the server's own serverInfo.name. */
+/** MCP server name — must stay in sync with serverInfo.name in server/internal/mcp/jsonrpc.go. */
 export const MCP_SERVER_NAME = 'dashboard-tasks'
 
 function mcpUrl(origin: string): string {
-  return `${origin.replace(/\/+$/, '')}/api/mcp`
+  const trimmed = origin.replace(/\/+$/, '')
+  if (!/^https?:\/\/[a-z0-9.\-_]+(:\d+)?$/i.test(trimmed))
+    throw new Error(`Unexpected origin format: ${trimmed}`)
+  return `${trimmed}/api/mcp`
 }
 
 export function buildMcpAddCommand(origin: string, token: string): string {

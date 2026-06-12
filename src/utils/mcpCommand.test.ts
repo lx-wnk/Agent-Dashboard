@@ -20,13 +20,21 @@ describe('buildMcpAddCommand', () => {
   it('uses the canonical server name', () => {
     expect(buildMcpAddCommand('http://h', 'mcp_x')).toContain(` ${MCP_SERVER_NAME} `)
   })
+
+  it('strips multiple trailing slashes', () => {
+    expect(buildMcpAddCommand('http://h//', 'mcp_x')).toContain('http://h/api/mcp')
+  })
+
+  it('rejects an origin with shell metacharacters', () => {
+    expect(() => buildMcpAddCommand('http://h"; rm -rf ~', 'mcp_x')).toThrow()
+  })
 })
 
 describe('buildMcpJsonConfig', () => {
   it('produces valid JSON that round-trips with the expected shape', () => {
     const json = buildMcpJsonConfig('https://dash.example.com', 'mcp_abc123')
     const parsed = JSON.parse(json)
-    expect(parsed.mcpServers['dashboard-tasks']).toEqual({
+    expect(parsed.mcpServers[MCP_SERVER_NAME]).toEqual({
       type: 'http',
       url: 'https://dash.example.com/api/mcp',
       headers: { Authorization: 'Bearer mcp_abc123' },
@@ -35,7 +43,7 @@ describe('buildMcpJsonConfig', () => {
 
   it('strips a trailing slash on origin', () => {
     const parsed = JSON.parse(buildMcpJsonConfig('http://127.0.0.1:13120/', 'mcp_x'))
-    expect(parsed.mcpServers['dashboard-tasks'].url).toBe('http://127.0.0.1:13120/api/mcp')
+    expect(parsed.mcpServers[MCP_SERVER_NAME].url).toBe('http://127.0.0.1:13120/api/mcp')
   })
 
   it('is pretty-printed with 2-space indentation', () => {
