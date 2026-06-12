@@ -56,12 +56,13 @@ func TestStripForwardedHeaders_RemovesForwardingHeaders(t *testing.T) {
 	if gotFwd != "" {
 		t.Errorf("Forwarded should be stripped, got %q", gotFwd)
 	}
-	// X-Forwarded-For and X-Real-IP must NOT be stripped.
-	if gotXFF != "1.2.3.4" {
-		t.Errorf("X-Forwarded-For must be preserved, got %q", gotXFF)
+	// X-Forwarded-For and X-Real-IP must be stripped: the dashboard binds to
+	// loopback only, so a client-supplied IP header is always spoofed.
+	if gotXFF != "" {
+		t.Errorf("X-Forwarded-For should be stripped, got %q", gotXFF)
 	}
-	if gotXRI != "1.2.3.4" {
-		t.Errorf("X-Real-IP must be preserved, got %q", gotXRI)
+	if gotXRI != "" {
+		t.Errorf("X-Real-IP should be stripped, got %q", gotXRI)
 	}
 }
 
