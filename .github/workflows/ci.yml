@@ -15,7 +15,7 @@ jobs:
       matrix:
         module: [server, sdk]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ matrix.module }}/go.mod
@@ -53,7 +53,7 @@ jobs:
       matrix:
         plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: plugins/${{ matrix.plugin }}/go.mod
@@ -78,7 +78,7 @@ jobs:
       matrix:
         module: [server, sdk]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ matrix.module }}/go.mod
@@ -99,7 +99,7 @@ jobs:
       matrix:
         plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: plugins/${{ matrix.plugin }}/go.mod
@@ -127,7 +127,7 @@ jobs:
           - plugins/voice-whisper
           - plugins/voice-webspeech
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ matrix.module }}/go.mod
@@ -142,7 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, lint, test-plugins, lint-plugins]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version: stable
@@ -160,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
