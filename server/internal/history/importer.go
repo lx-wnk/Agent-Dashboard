@@ -2,9 +2,11 @@
 package history
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -327,14 +329,15 @@ func (imp *Importer) extractCostRow(ctx context.Context, filePath string) (*repo
 	if info.Size() > maxFileSizeBytes {
 		return nil, fmt.Errorf("file too large (%d bytes)", info.Size())
 	}
-	rawBytes, err := os.ReadFile(filePath)
+	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("readfile: %w", err)
+		return nil, fmt.Errorf("open: %w", err)
 	}
+	defer f.Close()
 	sourceMtime := info.ModTime().UnixNano()
 
 	sessionID := sessionIDFromPath(filePath)
-	usage, model, lastActivity, cwd, err := parseTokensFromRaw(string(rawBytes))
+	usage, model, lastActivity, cwd, err := parseTokensFromReader(f)
 	if err != nil {
 		return nil, err
 	}
@@ -396,9 +399,21 @@ type jsonlEntry struct {
 	} `json:"message"`
 }
 
-// parseTokensFromRaw extracts cumulative token usage, model, last activity, and cwd from raw JSONL.
-// lastActivity is zero when no timestamp could be parsed; the caller falls back to file mtime in that case.
+// parseTokensFromRaw is a thin wrapper over parseTokensFromReader retained for
+// tests that already hold the file content as a string.
 func parseTokensFromRaw(raw string) (sdk.TokenUsage, string, time.Time, string, error) {
+	return parseTokensFromReader(strings.NewReader(raw))
+}
+
+// parseTokensFromReader extracts cumulative token usage, model, last activity, and
+// cwd by streaming JSONL line-by-line from r. lastActivity is zero when no
+// timestamp could be parsed; the caller falls back to file mtime in that case.
+//
+// Streaming (rather than reading the whole file into a []byte and Split-ing it)
+// keeps memory flat at one line regardless of session size. The scanner buffer is
+// enlarged to match the parser package so a single long line (large tool output)
+// does not trip bufio.ErrTooLong and silently drop the row.
+func parseTokensFromReader(r io.Reader) (sdk.TokenUsage, string, time.Time, string, error) {
 	var (
 		total        sdk.TokenUsage
 		model        = "claude-sonnet-4-6"
@@ -406,8 +421,11 @@ func parseTokensFromRaw(raw string) (sdk.TokenUsage, string, time.Time, string, 
 		cwd          string
 	)
 
-	for _, line := range strings.Split(raw, "\n") {
-		line = strings.TrimSpace(line)
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 256*1024), 4*1024*1024)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
@@ -444,6 +462,9 @@ func parseTokensFromRaw(raw string) (sdk.TokenUsage, string, time.Time, string, 
 				lastActivity = ts
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return total, model, lastActivity, cwd, fmt.Errorf("scan: %w", err)
 	}
 
 	return total, model, lastActivity, cwd, nil
