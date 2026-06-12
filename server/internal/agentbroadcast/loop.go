@@ -42,12 +42,16 @@ type BaselineProvider func(ctx context.Context) float64
 // baseline injected into merger.GetAgents for the health score. It may be nil
 // (no baseline → no cost penalty), which preserves correct behaviour.
 //
+// enricher, when non-nil, annotates each scanned agent with its linked pipeline
+// task (read-only SQLite crossing). It may be nil (no enrichment), which leaves
+// PipelineTaskID/Title empty — the same as before the crossing existed.
+//
 // Optimisations applied:
 //   - F-PERF-001: Skip scan entirely when SubscriberCount == 0.
 //   - F-PERF-006: Hash-dedupe frames with FNV-64a; send a heartbeat comment
 //     every 30 s so reverse-proxies do not close idle connections.
 //   - F-PERF-014: emptyTrend is a package-level var, not a per-tick literal.
-func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Duration, baseline BaselineProvider) {
+func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Duration, baseline BaselineProvider, enricher merger.Enricher) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -70,7 +74,10 @@ func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Durati
 				baselineCost = baseline(ctx)
 			}
 
-			agents, err := merger.GetAgents(ctx, merger.GetAgentsOpts{BaselinePerSessionCostUSD: baselineCost})
+			agents, err := merger.GetAgents(ctx, merger.GetAgentsOpts{
+				BaselinePerSessionCostUSD: baselineCost,
+				Enricher:                  enricher,
+			})
 			if err != nil {
 				slog.Error("agent scan failed", "err", err)
 				continue
