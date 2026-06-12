@@ -19,6 +19,7 @@ import (
 	"time"
 
 	sdk "github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pricing"
@@ -29,7 +30,7 @@ const (
 	maxParallelKey             = "maxParallelOrchestrators"
 	defaultMaxParallel         = 3
 	stageTimeoutKey            = "stageTimeoutSeconds"
-	defaultStageTimeoutSeconds = 1800
+	defaultStageTimeoutSeconds = db.DefaultStageTimeoutSeconds
 	awaitingUserTimeoutKey     = "awaitingUserTimeoutSeconds"
 	defaultAwaitingUserTimeout = 14400 // 4h
 	pendingStaleDuration       = 5 * time.Minute

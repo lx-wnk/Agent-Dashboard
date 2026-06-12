@@ -19,11 +19,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/httputil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
@@ -129,28 +129,36 @@ func (m *SpawnManager) pruneAttempts(sub string) {
 	}
 }
 
-// Spawn validates the request, spawns a claude process, and returns the PID.
-// sub identifies the requesting user (JWT sub claim). Pass "__global__" in bypass-auth mode.
-func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
-	m.mu.Lock()
-	m.recordAttempt(sub)
-	m.mu.Unlock()
+// spawnRequest carries validated fields extracted from the raw request body.
+type spawnRequest struct {
+	prompt          string
+	cwd             string
+	resumeSessionID string
+	model           string
+	systemPrompt    string
+	permissionMode  string
+	projectID       string
+	enableChannel   bool
+}
 
+// enforceSpawnPolicy validates the request body fields and applies the spawn
+// policy gate. Rate-limit recordAttempt must be called before this method.
+func (m *SpawnManager) enforceSpawnPolicy(body map[string]any) (*spawnRequest, error) {
 	prompt, _ := body["prompt"].(string)
 	if prompt == "" {
-		return 0, fmt.Errorf("missing or invalid prompt")
+		return nil, fmt.Errorf("missing or invalid prompt")
 	}
 	cwd, _ := body["cwd"].(string)
 	if cwd == "" {
-		return 0, fmt.Errorf("missing or invalid cwd")
+		return nil, fmt.Errorf("missing or invalid cwd")
 	}
 	if _, err := os.Stat(cwd); err != nil {
-		return 0, fmt.Errorf("directory does not exist: %s", cwd)
+		return nil, fmt.Errorf("directory does not exist: %s", cwd)
 	}
 
 	resumeSessionID, _ := body["resumeSessionId"].(string)
 	if resumeSessionID != "" && !uuidRE.MatchString(resumeSessionID) {
-		return 0, fmt.Errorf("invalid sessionId format")
+		return nil, fmt.Errorf("invalid sessionId format")
 	}
 
 	// Resuming an existing monitored session runs in the cwd that session already
@@ -158,10 +166,10 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	// the full project-roots allowlist.
 	if resumeSessionID != "" {
 		if err := m.spawnPolicy.AllowResume(cwd); err != nil {
-			return 0, err
+			return nil, err
 		}
 	} else if err := m.spawnPolicy.Allow(context.Background(), cwd); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	model, _ := body["model"].(string)
@@ -175,109 +183,202 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		permissionMode = "default"
 	} else {
 		if _, ok := allowedPermissionModes[permissionMode]; !ok {
-			return 0, fmt.Errorf("invalid permissionMode")
+			return nil, fmt.Errorf("invalid permissionMode")
 		}
-	}
-
-	// Resolve spawner if provided.
-	var spawnerRow *ent.Spawner
-	if spawnerID, ok := body["spawnerId"].(string); ok && spawnerID != "" {
-		if m.spawnerRepo == nil {
-			return 0, fmt.Errorf("spawner not configured")
-		}
-		row, err := m.spawnerRepo.GetByID(context.Background(), spawnerID)
-		if err != nil {
-			if ent.IsNotFound(err) {
-				return 0, fmt.Errorf("spawner not found")
-			}
-			return 0, fmt.Errorf("spawner lookup failed: %w", err)
-		}
-		switch row.AdapterType {
-		case "ollama", "openai":
-			return 0, fmt.Errorf("adapter %s not supported for user-initiated spawns; use pipeline tasks instead", row.AdapterType)
-		}
-		spawnerRow = row
 	}
 
 	projectID, _ := body["projectId"].(string)
-	if projectID != "" {
-		spawnerIDForLog := ""
-		if spawnerRow != nil {
-			spawnerIDForLog = spawnerRow.ID
-		}
-		slog.Info("spawn: projectId attached", "sub", sub, "projectId", projectID, "spawnerId", spawnerIDForLog)
-	}
 
 	enableChannel, _ := body["enableChannel"].(bool)
 	if _, hasChannel := body["enableChannel"]; !hasChannel {
 		enableChannel = true // default on
 	}
 
-	// Resolve command + base args.
-	binary := claudeBin
+	return &spawnRequest{
+		prompt:          prompt,
+		cwd:             cwd,
+		resumeSessionID: resumeSessionID,
+		model:           model,
+		systemPrompt:    systemPrompt,
+		permissionMode:  permissionMode,
+		projectID:       projectID,
+		enableChannel:   enableChannel,
+	}, nil
+}
+
+// resolveSpawner looks up the spawner row when spawnerId is set in the body,
+// rejects unsupported adapter types, and hydrates req.model from ModelOverride
+// when the caller did not supply one.
+func (m *SpawnManager) resolveSpawner(sub string, body map[string]any, req *spawnRequest) (*ent.Spawner, error) {
+	spawnerID, ok := body["spawnerId"].(string)
+	if !ok || spawnerID == "" {
+		return nil, nil
+	}
+
+	if m.spawnerRepo == nil {
+		return nil, fmt.Errorf("spawner not configured")
+	}
+	row, err := m.spawnerRepo.GetByID(context.Background(), spawnerID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("spawner not found")
+		}
+		return nil, fmt.Errorf("spawner lookup failed: %w", err)
+	}
+	switch row.AdapterType {
+	case "ollama", "openai":
+		return nil, fmt.Errorf("adapter %s not supported for user-initiated spawns; use pipeline tasks instead", row.AdapterType)
+	}
+
+	// Hydrate model from override when caller didn't supply one.
+	if req.model == "" && row.ModelOverride != nil && *row.ModelOverride != "" {
+		req.model = *row.ModelOverride
+	}
+
+	return row, nil
+}
+
+// buildSpawnArgs assembles the binary path and full argument list for the
+// claude process. Order: spawner args first, canonical args last.
+func (m *SpawnManager) buildSpawnArgs(req *spawnRequest, spawnerRow *ent.Spawner) (binary string, args []string, err error) {
+	binary = claudeBin
 	var spawnerArgs []string
+
 	if spawnerRow != nil {
-		if !spawners.ValidateCommand(spawnerRow.Command) {
-			return 0, fmt.Errorf("spawner command not permitted")
+		if ok, reason := services.ValidateSpawnerCommand(spawnerRow.Command); !ok {
+			return "", nil, fmt.Errorf("spawner command not permitted: %s", reason)
 		}
 		if bad := firstReservedFlag(spawnerRow.Args); bad != "" {
-			return 0, fmt.Errorf("spawner args may not include reserved flag %q", bad)
+			return "", nil, fmt.Errorf("spawner args may not include reserved flag %q", bad)
 		}
 		if spawnerRow.AdapterType == "custom" {
 			binary = spawnerRow.Command
 		}
 		spawnerArgs = append(spawnerArgs, spawnerRow.Args...)
-
-		// Hydrate model from override when caller didn't supply one.
-		if model == "" && spawnerRow.ModelOverride != nil && *spawnerRow.ModelOverride != "" {
-			model = *spawnerRow.ModelOverride
-		}
 	}
 
 	var canonicalArgs []string
-	if resumeSessionID != "" {
-		canonicalArgs = append(canonicalArgs, "--resume", resumeSessionID)
+	if req.resumeSessionID != "" {
+		canonicalArgs = append(canonicalArgs, "--resume", req.resumeSessionID)
 	}
-	canonicalArgs = append(canonicalArgs, "-p", prompt)
-	if model != "" {
-		canonicalArgs = append(canonicalArgs, "--model", model)
+	canonicalArgs = append(canonicalArgs, "-p", req.prompt)
+	if req.model != "" {
+		canonicalArgs = append(canonicalArgs, "--model", req.model)
 	}
-	if systemPrompt != "" {
-		canonicalArgs = append(canonicalArgs, "--system-prompt", systemPrompt)
+	if req.systemPrompt != "" {
+		canonicalArgs = append(canonicalArgs, "--system-prompt", req.systemPrompt)
 	}
 	// Only append --permission-mode when the resolved spawner has not declared
 	// its own permission posture. A spawner that already passes --permission-mode
 	// or --dangerously-skip-permissions would otherwise get a second, conflicting
 	// flag which causes claude to error.
 	if !spawnerArgsControlPermissionMode(spawnerArgs) {
-		canonicalArgs = append(canonicalArgs, "--permission-mode", permissionMode)
+		canonicalArgs = append(canonicalArgs, "--permission-mode", req.permissionMode)
 	}
 
 	// Inject --add-dir for additional project folders (multi-folder projects).
 	// Only applies to native claude and custom adapters; ollama/openai are already
 	// blocked above, so this guard is defence-in-depth for any future adapter types.
-	if projectID != "" && m.projectFolderRepo != nil &&
+	if req.projectID != "" && m.projectFolderRepo != nil &&
 		(spawnerRow == nil || spawnerRow.AdapterType == "" || spawnerRow.AdapterType == "claude" || spawnerRow.AdapterType == "custom") {
-		folders, err := m.projectFolderRepo.ListByProject(context.Background(), projectID)
-		if err != nil {
-			slog.Warn("spawn: ListByProject failed; skipping --add-dir injection", "projectId", projectID, "err", err)
+		folders, lerr := m.projectFolderRepo.ListByProject(context.Background(), req.projectID)
+		if lerr != nil {
+			slog.Warn("spawn: ListByProject failed; skipping --add-dir injection", "projectId", req.projectID, "err", lerr)
 		} else {
-			for _, dir := range services.AdditionalDirsForProject(folders, cwd) {
+			for _, dir := range services.AdditionalDirsForProject(folders, req.cwd) {
 				canonicalArgs = append(canonicalArgs, "--add-dir", dir)
 			}
 		}
 	}
 
 	// Order: spawner args first, canonical args last so user-supplied flags win.
-	args := append(spawnerArgs, canonicalArgs...)
+	args = append(spawnerArgs, canonicalArgs...)
+	return binary, args, nil
+}
+
+// watchProcess drains stderr, waits for exit, updates status, and cleans up.
+func (m *SpawnManager) watchProcess(cmd *exec.Cmd, status *SpawnStatus, stderrPipe io.ReadCloser, channelCfgPath string) {
+	if stderrPipe != nil {
+		buf := make([]byte, 1024)
+		for {
+			n, err := stderrPipe.Read(buf)
+			if n > 0 {
+				m.mu.Lock()
+				status.Stderr += string(buf[:n])
+				if len(status.Stderr) > maxStderrBytes {
+					status.Stderr = status.Stderr[len(status.Stderr)-maxStderrBytes:]
+				}
+				m.mu.Unlock()
+			}
+			if err != nil {
+				break
+			}
+		}
+	}
+	// Wait for process exit.
+	if err := cmd.Wait(); err != nil {
+		m.mu.Lock()
+		status.Status = "error"
+		status.Stderr += "\n" + err.Error()
+		m.mu.Unlock()
+	} else {
+		code := cmd.ProcessState.ExitCode()
+		m.mu.Lock()
+		status.Status = "exited"
+		status.ExitCode = &code
+		m.mu.Unlock()
+	}
+	if channelCfgPath != "" {
+		_ = os.Remove(channelCfgPath)
+	}
+	// Prune old entries.
+	m.mu.Lock()
+	for k, s := range m.spawnStore {
+		t, err := time.Parse(time.RFC3339, s.StartedAt)
+		if err == nil && time.Since(t) > spawnStoreMaxAge {
+			delete(m.spawnStore, k)
+		}
+	}
+	m.mu.Unlock()
+}
+
+// Spawn validates the request, spawns a claude process, and returns the PID.
+// sub identifies the requesting user (JWT sub claim). Pass "__global__" in bypass-auth mode.
+func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
+	m.mu.Lock()
+	m.recordAttempt(sub)
+	m.mu.Unlock()
+
+	req, err := m.enforceSpawnPolicy(body)
+	if err != nil {
+		return 0, err
+	}
+
+	spawnerRow, err := m.resolveSpawner(sub, body, req)
+	if err != nil {
+		return 0, err
+	}
+
+	if req.projectID != "" {
+		var spawnerID string
+		if spawnerRow != nil {
+			spawnerID = spawnerRow.ID
+		}
+		slog.Info("spawn: projectId attached", "sub", sub, "projectId", req.projectID, "spawnerId", spawnerID)
+	}
+
+	binary, args, err := m.buildSpawnArgs(req, spawnerRow)
+	if err != nil {
+		return 0, err
+	}
 
 	var channelCfgPath string
-	if enableChannel {
-		selfBin, err := channelconfig.SelfBinaryPath()
-		if err != nil {
-			slog.Warn("spawn: channel disabled — cannot resolve self binary", "err", err)
-		} else if cfgPath, err := channelconfig.WriteTempConfig(selfBin); err != nil {
-			slog.Warn("spawn: channel disabled — cannot write MCP config", "err", err)
+	if req.enableChannel {
+		selfBin, selfErr := channelconfig.SelfBinaryPath()
+		if selfErr != nil {
+			slog.Warn("spawn: channel disabled — cannot resolve self binary", "err", selfErr)
+		} else if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin); cfgErr != nil {
+			slog.Warn("spawn: channel disabled — cannot write MCP config", "err", cfgErr)
 		} else {
 			channelCfgPath = cfgPath
 			channelArg := "--mcp-config"
@@ -291,8 +392,8 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	}
 
 	cmd := exec.Command(binary, args...)
-	cmd.Dir = cwd
-	cmd.Env = mergeEnv(spawnerRow)
+	cmd.Dir = req.cwd
+	cmd.Env = resolveSpawnEnv(spawnerRow)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
@@ -310,8 +411,8 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		PID:       pid,
 		Status:    "running",
 		StartedAt: time.Now().UTC().Format(time.RFC3339),
-		Prompt:    prompt[:min(len(prompt), 200)],
-		Cwd:       cwd,
+		Prompt:    req.prompt[:min(len(req.prompt), 200)],
+		Cwd:       req.cwd,
 	}
 	if spawnerRow != nil {
 		status.SpawnerID = spawnerRow.ID
@@ -321,51 +422,7 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	m.spawnStore[pid] = status
 	m.mu.Unlock()
 
-	// Collect stderr in a bounded ring-buffer.
-	go func() {
-		if stderrPipe != nil {
-			buf := make([]byte, 1024)
-			for {
-				n, err := stderrPipe.Read(buf)
-				if n > 0 {
-					m.mu.Lock()
-					status.Stderr += string(buf[:n])
-					if len(status.Stderr) > maxStderrBytes {
-						status.Stderr = status.Stderr[len(status.Stderr)-maxStderrBytes:]
-					}
-					m.mu.Unlock()
-				}
-				if err != nil {
-					break
-				}
-			}
-		}
-		// Wait for process exit.
-		if err := cmd.Wait(); err != nil {
-			m.mu.Lock()
-			status.Status = "error"
-			status.Stderr += "\n" + err.Error()
-			m.mu.Unlock()
-		} else {
-			code := cmd.ProcessState.ExitCode()
-			m.mu.Lock()
-			status.Status = "exited"
-			status.ExitCode = &code
-			m.mu.Unlock()
-		}
-		if channelCfgPath != "" {
-			_ = os.Remove(channelCfgPath)
-		}
-		// Prune old entries.
-		m.mu.Lock()
-		for k, s := range m.spawnStore {
-			t, err := time.Parse(time.RFC3339, s.StartedAt)
-			if err == nil && time.Since(t) > spawnStoreMaxAge {
-				delete(m.spawnStore, k)
-			}
-		}
-		m.mu.Unlock()
-	}()
+	go m.watchProcess(cmd, status, stderrPipe, channelCfgPath)
 
 	return pid, nil
 }
@@ -499,7 +556,7 @@ func sendHTTPMessage(ctx context.Context, port int, token, message string) error
 		return fmt.Errorf("channel unreachable: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if !httputil.Is2xx(resp.StatusCode) {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return fmt.Errorf("channel error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
@@ -597,12 +654,12 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
-// mergeEnv builds the child process env per ADR-0003:
+// resolveSpawnEnv builds the child process env per ADR-0003:
 //  1. start with os.Environ()
 //  2. overlay spawner.Env
 //  3. dashboard-controlled vars (DASHBOARD_*, CLAUDE_*) always win
 //  4. strip DASHBOARD_JWT_SECRET and DASHBOARD_HOOKS_SECRET
-func mergeEnv(s *ent.Spawner) []string {
+func resolveSpawnEnv(s *ent.Spawner) []string {
 	merged := map[string]string{}
 	for _, kv := range os.Environ() {
 		if i := strings.IndexByte(kv, '='); i > 0 {
@@ -646,7 +703,7 @@ var allowedPermissionModes = map[string]struct{}{
 
 // reservedSpawnerFlags are CLI flags the dashboard sets itself; spawner-row
 // args must not re-declare them. The list mirrors the canonical args built
-// in Spawn(): --resume, -p, --model, --system-prompt, --mcp-config.
+// in buildSpawnArgs(): --resume, -p, --model, --system-prompt, --mcp-config.
 // --permission-mode is intentionally NOT listed here: spawners may legitimately
 // set their own permission posture (handled by spawnerArgsControlPermissionMode).
 var reservedSpawnerFlags = map[string]struct{}{

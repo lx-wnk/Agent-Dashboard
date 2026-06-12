@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -166,8 +167,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 	if !ValidateSlug(body.Slug) {
 		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
 	}
-	if !ValidateCommand(body.Command) {
-		return apierr.NewAppError(http.StatusBadRequest, "command not allowed; must be in allow-list or an absolute path outside /tmp")
+	if ok, reason := services.ValidateSpawnerCommand(body.Command); !ok {
+		return apierr.NewAppError(http.StatusBadRequest, reason)
 	}
 	if msg, ok := ValidateEnv(body.Env); !ok {
 		return apierr.NewAppError(http.StatusBadRequest, msg)
@@ -251,8 +252,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 	if body.Slug != nil && !ValidateSlug(*body.Slug) {
 		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
 	}
-	if body.Command != nil && !ValidateCommand(*body.Command) {
-		return apierr.NewAppError(http.StatusBadRequest, "command not allowed; must be in allow-list or an absolute path outside /tmp")
+	if body.Command != nil {
+		if ok, reason := services.ValidateSpawnerCommand(*body.Command); !ok {
+			return apierr.NewAppError(http.StatusBadRequest, reason)
+		}
 	}
 	if body.Env != nil {
 		if msg, ok := ValidateEnv(body.Env); !ok {

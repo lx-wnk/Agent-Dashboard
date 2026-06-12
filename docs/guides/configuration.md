@@ -35,7 +35,7 @@ cp .env.dist .env
 | `DASHBOARD_SPAWN_RATE_WINDOW_MS` | `60000` | Spawn rate-limit window (ms) |
 | `DASHBOARD_ALLOW_GIT_PUSH` | `false` | Allow `git push` in spawned agents. Per-task override: `metadata.allowGitPush=true` |
 | `DASHBOARD_ALLOW_GIT_PULL` | `false` | Enable `POST /api/tasks/:id/git-action` with `action:'pull'` (ff-only) |
-| `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` | — | Comma-separated extra command names / path prefixes permitted in the `spawners.command` field |
+| `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` | — | Comma-separated extension of the `spawners.command` allow-list: bare entries add permitted bare names, absolute entries add trusted bin directories. Absolute commands must resolve (via `EvalSymlinks`) under a trusted dir — the old "outside /tmp" rule is replaced by this allow-list |
 
 ## Channel & hooks (injected automatically)
 

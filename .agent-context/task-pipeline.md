@@ -65,10 +65,17 @@ default first. Mark a different spawner default via `POST /api/spawners/{id}/def
 `DASHBOARD_JWT_SECRET` and `DASHBOARD_HOOKS_SECRET` are never forwarded to
 spawned agents.
 
-**Command allow-list:** the `spawners.command` field is validated against a
-conservative allow-list at create/update time. Extend the default list via
-`DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated). CRUD requires the
-`keys:manage` MCP scope.
+**Command allow-list:** the `spawners.command` field is validated by
+`services.ValidateSpawnerCommand` (`server/internal/services/spawn_policy.go`)
+at create/update time and again on the agent spawn path — one authority, no
+`api/agents → api/spawners` import. Bare names (`claude`, `claude-code`, `npx`)
+are allow-listed; absolute paths must `EvalSymlinks`-resolve and sit under a
+trusted bin dir (`/usr/bin`, `/bin`, `/usr/local/bin`, `/opt/homebrew/bin`,
+`~/.local/bin`, the resolved `claude` dir). Resolving symlinks before the trust
+check closes the symlink-into-`/tmp` bypass. Extend both sets via
+`DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated — bare names extend the
+name list, absolute paths add trusted dirs). CRUD requires the `keys:manage`
+MCP scope.
 
 **Adapter dispatch:** the resolved Spawner row also carries an
 `adapter_type` field. `server/internal/pipeline/stage_handlers.go::Execute`
@@ -165,13 +172,25 @@ The Go backend enforces the same layering intent as the TypeScript rules above, 
 ```
 cmd/serve/main.go + di.go   ← composition root only
         │
-        ├── api/           may import: db/repo, db/rawrepo, auth, mcp, pipeline (ProgressOpts + allowlisted helpers — see table below), plugin, sse, merger, config, services
+        ├── api/           may import: db/repo, db/rawrepo, auth, mcp, pipeline (ProgressOpts + allowlisted helpers — see table below), plugin, sse, merger, config, services, llmadapter
         ├── mcp/tools/     may import: db/repo, pipeline (ProgressOpts + allowlisted helpers), sse, services
-        ├── pipeline/      may import: db/repo, db/ent, auth, config, channelconfig, sdk (types only), services
+        ├── pipeline/      may import: db/repo, db/ent, auth, config, channelconfig, sdk (types only), services, llmadapter
+        ├── refine/        may import: db/repo, db/ent, llmadapter, sdk (types only)
         ├── services/      may import: db/repo, db/ent, auth, config, paths, platform, sdk (types only); never imports pipeline/, api/, mcp/, or plugin/ at runtime
+        ├── llmadapter/    may import: db/ent only (leaf — no state-machine reference; see ADR-0005)
         ├── db/repo        may import: db/ent only
         └── plugin/        may import: auth only
 ```
+
+`llmadapter/` is a leaf package holding the pluggable-spawner transport
+(`LLMSpawner` / `StreamingLLMSpawner` / `LLMSpawnArgs`,
+`NewLLMSpawnerFromSpawner`, `AvailableAdapters`, and the Ollama/OpenAI/custom
+adapters). It depends only on stdlib + `db/ent`. It was extracted from
+`pipeline/` (ADR-0005) to delete the upward edges `refine -> pipeline` and
+`api/adapters -> pipeline`: those packages reached into `pipeline/` only to
+get adapter symbols, so `NewLLMSpawnerFromSpawner` / `AvailableAdapters` are
+no longer cross-pipeline reaches. `pipeline/stage_handlers.go` still uses the
+factory, now as a normal high-to-low import of the leaf.
 
 `services/` mirrors the TypeScript Rule 3 above: it hosts stateless
 helpers (worktree manager, spawner resolver, resource recommender,

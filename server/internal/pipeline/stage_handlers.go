@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
 )
 
 // agentStageHandler is the generic stage handler for agent-driven stages.
@@ -45,7 +46,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	// custom-command abstraction. The adapter writes its own synthetic JSONL
 	// session file so the completion detector can read the output unchanged.
 	if resolved != nil && resolved.AdapterType != "" && resolved.AdapterType != "claude" {
-		adapter, err := NewLLMSpawnerFromSpawner(resolved)
+		adapter, err := llmadapter.NewLLMSpawnerFromSpawner(resolved)
 		if err != nil {
 			return nil, fmt.Errorf("agentStageHandler.Execute(%s): build adapter: %w", h.stage, err)
 		}
@@ -71,7 +72,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 			cwd = *ctx.Task.WorktreePath
 		}
 		allowedTools := buildAllowedToolsList(ctx)
-		spawnArgs := LLMSpawnArgs{
+		spawnArgs := llmadapter.LLMSpawnArgs{
 			TaskID:       ctx.Task.ID,
 			StageRunID:   ctx.StageRun.ID,
 			Stage:        h.stage,

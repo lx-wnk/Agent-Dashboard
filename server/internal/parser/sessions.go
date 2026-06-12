@@ -48,10 +48,10 @@ type OutputMessage struct {
 }
 
 type jsonlFileEntry struct {
-	sessionID          string
-	filePath           string
-	projectDirEncoded  string
-	mtime              time.Time
+	sessionID         string
+	filePath          string
+	projectDirEncoded string
+	mtime             time.Time
 }
 
 // GetSessions scans all known Claude config directories and returns the 100 most
@@ -68,37 +68,37 @@ func GetSessions(ctx context.Context) ([]SessionInfo, error) {
 			continue
 		}
 
-	for _, dirEntry := range projectDirs {
-		if !dirEntry.IsDir() {
-			continue
-		}
-		dirPath := filepath.Join(projectsDir, dirEntry.Name())
-		files, err := os.ReadDir(dirPath)
-		if err != nil {
-			continue
-		}
-		for _, f := range files {
-			if f.IsDir() || !strings.HasSuffix(f.Name(), ".jsonl") {
+		for _, dirEntry := range projectDirs {
+			if !dirEntry.IsDir() {
 				continue
 			}
-			sessionID := strings.TrimSuffix(f.Name(), ".jsonl")
-			if !uuidRE.MatchString(sessionID) || seenSessions[sessionID] {
-				continue
-			}
-			seenSessions[sessionID] = true
-			fullPath := filepath.Join(dirPath, f.Name())
-			info, err := f.Info()
+			dirPath := filepath.Join(projectsDir, dirEntry.Name())
+			files, err := os.ReadDir(dirPath)
 			if err != nil {
 				continue
 			}
-			allFiles = append(allFiles, jsonlFileEntry{
-				sessionID:         sessionID,
-				filePath:          fullPath,
-				projectDirEncoded: dirEntry.Name(),
-				mtime:             info.ModTime(),
-			})
+			for _, f := range files {
+				if f.IsDir() || !strings.HasSuffix(f.Name(), ".jsonl") {
+					continue
+				}
+				sessionID := strings.TrimSuffix(f.Name(), ".jsonl")
+				if !uuidRE.MatchString(sessionID) || seenSessions[sessionID] {
+					continue
+				}
+				seenSessions[sessionID] = true
+				fullPath := filepath.Join(dirPath, f.Name())
+				info, err := f.Info()
+				if err != nil {
+					continue
+				}
+				allFiles = append(allFiles, jsonlFileEntry{
+					sessionID:         sessionID,
+					filePath:          fullPath,
+					projectDirEncoded: dirEntry.Name(),
+					mtime:             info.ModTime(),
+				})
+			}
 		}
-	}
 	} // end configDir loop
 
 	// Sort newest first, cap at maxSessions
@@ -416,10 +416,182 @@ type queuedAttachment struct {
 	Prompt json.RawMessage `json:"prompt"`
 }
 
+// outputAccumulator collects OutputMessages while tracking TaskCreate indices
+// for back-resolution when a tool_result carries the real task ID.
+type outputAccumulator struct {
+	messages          []OutputMessage
+	taskCreateIndices map[string]int    // tool_use_id → index in messages
+	taskSubjects      map[string]string // tool_use_id → subject
+}
+
+func newOutputAccumulator() *outputAccumulator {
+	return &outputAccumulator{
+		taskCreateIndices: make(map[string]int),
+		taskSubjects:      make(map[string]string),
+	}
+}
+
+func (a *outputAccumulator) handleAttachment(e rawEntry, ts *string) {
+	var att queuedAttachment
+	if err := json.Unmarshal(e.Attachment, &att); err == nil && att.Type == "queued_command" {
+		for _, text := range extractTextFromPrompt(att.Prompt) {
+			a.messages = append(a.messages, OutputMessage{Role: "human", Content: text, Timestamp: ts, Queued: true})
+		}
+	}
+}
+
+func (a *outputAccumulator) handleResult(e rawEntry, ts *string) {
+	var resultStr string
+	if err := json.Unmarshal(e.Result, &resultStr); err != nil {
+		resultStr = string(e.Result)
+	}
+	if len(resultStr) > 1000 {
+		resultStr = resultStr[:1000]
+	}
+	a.messages = append(a.messages, OutputMessage{Role: "tool_result", Content: resultStr, Timestamp: ts})
+}
+
+func (a *outputAccumulator) handleUserMessage(msg rawMessage, ts *string) {
+	for _, text := range extractTextFromContent(msg.Content) {
+		if isSystemXMLContent(text) {
+			continue
+		}
+		a.messages = append(a.messages, OutputMessage{Role: "human", Content: text, Timestamp: ts})
+	}
+	var blocks []rawBlock
+	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+		return
+	}
+	for _, b := range blocks {
+		if b.Type != "tool_result" || len(b.Content) == 0 {
+			continue
+		}
+		var content string
+		if err := json.Unmarshal(b.Content, &content); err != nil {
+			content = string(b.Content)
+		}
+		if len(content) > 1000 {
+			content = content[:1000]
+		}
+		// Resolve TaskCreate → real ID
+		if b.ToolUseID != "" {
+			if idx, ok := a.taskCreateIndices[b.ToolUseID]; ok {
+				if realID := strings.TrimSpace(content); realID != "" {
+					a.messages[idx].TaskID = &realID
+					if subj, ok2 := a.taskSubjects[b.ToolUseID]; ok2 {
+						a.taskSubjects[realID] = subj
+					}
+				}
+			}
+		}
+		a.messages = append(a.messages, OutputMessage{Role: "tool_result", Content: content, Timestamp: ts})
+	}
+}
+
+func (a *outputAccumulator) handleToolUse(b rawBlock, ts *string) {
+	if b.Name == "" {
+		return
+	}
+	switch b.Name {
+	case "TaskCreate":
+		var inp taskCreateInput
+		_ = json.Unmarshal(b.Input, &inp)
+		subject := inp.Subject
+		if subject == "" {
+			subject = inp.Description
+		}
+		if subject == "" {
+			subject = "Task"
+		}
+		a.taskCreateIndices[b.ID] = len(a.messages)
+		a.taskSubjects[b.ID] = subject
+		taskStatus := "pending"
+		taskID := b.ID
+		a.messages = append(a.messages, OutputMessage{
+			Role:       "task",
+			Content:    subject,
+			Timestamp:  ts,
+			TaskStatus: &taskStatus,
+			TaskID:     &taskID,
+		})
+
+	case "TaskUpdate":
+		var inp taskUpdateInput
+		_ = json.Unmarshal(b.Input, &inp)
+		subject := a.taskSubjects[inp.TaskID]
+		if subject == "" {
+			subject = "Task"
+		}
+		status := inp.Status
+		if status == "" {
+			status = "in_progress"
+		}
+		realID := inp.TaskID
+		a.messages = append(a.messages, OutputMessage{
+			Role:       "task",
+			Content:    subject,
+			Timestamp:  ts,
+			TaskStatus: &status,
+			TaskID:     &realID,
+		})
+
+	case "Agent":
+		var inp agentInput
+		_ = json.Unmarshal(b.Input, &inp)
+		content := inp.Description
+		if content == "" {
+			content = "Sub-agent"
+		}
+		subType := inp.SubagentType
+		if subType == "" {
+			subType = "general"
+		}
+		a.messages = append(a.messages, OutputMessage{
+			Role:         "subagent",
+			Content:      content,
+			Timestamp:    ts,
+			SubagentType: &subType,
+		})
+
+	default:
+		var inp toolInput
+		_ = json.Unmarshal(b.Input, &inp)
+		var fp *string
+		if inp.FilePath != "" {
+			fp = &inp.FilePath
+		} else if inp.Path != "" {
+			fp = &inp.Path
+		}
+		toolName := b.Name
+		a.messages = append(a.messages, OutputMessage{
+			Role:      "tool_call",
+			Content:   b.Name,
+			Timestamp: ts,
+			ToolName:  &toolName,
+			FilePath:  fp,
+		})
+	}
+}
+
+func (a *outputAccumulator) handleAssistantMessage(msg rawMessage, ts *string) {
+	var blocks []rawBlock
+	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+		return
+	}
+	for _, b := range blocks {
+		switch b.Type {
+		case "text":
+			if text := strings.TrimSpace(b.Text); text != "" {
+				a.messages = append(a.messages, OutputMessage{Role: "assistant", Content: text, Timestamp: ts})
+			}
+		case "tool_use":
+			a.handleToolUse(b, ts)
+		}
+	}
+}
+
 func parseOutputMessages(raw string, lastOnly bool) []OutputMessage {
-	var messages []OutputMessage
-	taskCreateIndices := make(map[string]int)    // tool_use_id → index in messages
-	taskSubjects := make(map[string]string)      // tool_use_id → subject
+	acc := newOutputAccumulator()
 
 	for _, line := range strings.Split(raw, "\n") {
 		line = strings.TrimSpace(line)
@@ -432,31 +604,14 @@ func parseOutputMessages(raw string, lastOnly bool) []OutputMessage {
 		}
 		ts := strPtr(e.Timestamp)
 
-		// Queued commands
 		if e.Type == "attachment" {
-			var att queuedAttachment
-			if err := json.Unmarshal(e.Attachment, &att); err == nil && att.Type == "queued_command" {
-				for _, text := range extractTextFromPrompt(att.Prompt) {
-					msg := OutputMessage{Role: "human", Content: text, Timestamp: ts, Queued: true}
-					messages = append(messages, msg)
-				}
-			}
+			acc.handleAttachment(e, ts)
 			continue
 		}
-
-		// Standalone tool results (older format)
 		if e.Type == "result" && len(e.Result) > 0 {
-			var resultStr string
-			if err := json.Unmarshal(e.Result, &resultStr); err != nil {
-				resultStr = string(e.Result)
-			}
-			if len(resultStr) > 1000 {
-				resultStr = resultStr[:1000]
-			}
-			messages = append(messages, OutputMessage{Role: "tool_result", Content: resultStr, Timestamp: ts})
+			acc.handleResult(e, ts)
 			continue
 		}
-
 		if len(e.Message) == 0 {
 			continue
 		}
@@ -464,160 +619,26 @@ func parseOutputMessages(raw string, lastOnly bool) []OutputMessage {
 		if err := json.Unmarshal(e.Message, &msg); err != nil {
 			continue
 		}
-
 		// User messages (new format: type=="user"; legacy format: type=="message" with role=="user")
 		if (e.Type == "user" || (e.Type == "message" && msg.Role == "user")) && msg.Role == "user" {
-			for _, text := range extractTextFromContent(msg.Content) {
-				if isSystemXMLContent(text) {
-					continue
-				}
-				messages = append(messages, OutputMessage{Role: "human", Content: text, Timestamp: ts})
-			}
-			// Tool results inside user message
-			var blocks []rawBlock
-			if err := json.Unmarshal(msg.Content, &blocks); err == nil {
-				for _, b := range blocks {
-					if b.Type != "tool_result" || len(b.Content) == 0 {
-						continue
-					}
-					var content string
-					if err := json.Unmarshal(b.Content, &content); err != nil {
-						content = string(b.Content)
-					}
-					if len(content) > 1000 {
-						content = content[:1000]
-					}
-					// Resolve TaskCreate → real ID
-					if b.ToolUseID != "" {
-						if idx, ok := taskCreateIndices[b.ToolUseID]; ok {
-							realID := strings.TrimSpace(content)
-							if realID != "" {
-								messages[idx].TaskID = &realID
-								if subj, ok2 := taskSubjects[b.ToolUseID]; ok2 {
-									taskSubjects[realID] = subj
-								}
-							}
-						}
-					}
-					messages = append(messages, OutputMessage{Role: "tool_result", Content: content, Timestamp: ts})
-				}
-			}
+			acc.handleUserMessage(msg, ts)
 			continue
 		}
-
 		// Assistant messages (new format: type=="assistant"; legacy format: type=="message" with role=="assistant")
-		if e.Type != "assistant" && (e.Type != "message" || msg.Role != "assistant") {
-			continue
-		}
-		var blocks []rawBlock
-		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
-			continue
-		}
-		for _, b := range blocks {
-			switch b.Type {
-			case "text":
-				text := strings.TrimSpace(b.Text)
-				if text == "" {
-					continue
-				}
-				messages = append(messages, OutputMessage{Role: "assistant", Content: text, Timestamp: ts})
-
-			case "tool_use":
-				if b.Name == "" {
-					continue
-				}
-				switch b.Name {
-				case "TaskCreate":
-					var inp taskCreateInput
-					_ = json.Unmarshal(b.Input, &inp)
-					subject := inp.Subject
-					if subject == "" {
-						subject = inp.Description
-					}
-					if subject == "" {
-						subject = "Task"
-					}
-					taskCreateIndices[b.ID] = len(messages)
-					taskSubjects[b.ID] = subject
-					taskStatus := "pending"
-					taskID := b.ID
-					messages = append(messages, OutputMessage{
-						Role:       "task",
-						Content:    subject,
-						Timestamp:  ts,
-						TaskStatus: &taskStatus,
-						TaskID:     &taskID,
-					})
-
-				case "TaskUpdate":
-					var inp taskUpdateInput
-					_ = json.Unmarshal(b.Input, &inp)
-					subject := taskSubjects[inp.TaskID]
-					if subject == "" {
-						subject = "Task"
-					}
-					status := inp.Status
-					if status == "" {
-						status = "in_progress"
-					}
-					realID := inp.TaskID
-					messages = append(messages, OutputMessage{
-						Role:       "task",
-						Content:    subject,
-						Timestamp:  ts,
-						TaskStatus: &status,
-						TaskID:     &realID,
-					})
-
-				case "Agent":
-					var inp agentInput
-					_ = json.Unmarshal(b.Input, &inp)
-					content := inp.Description
-					if content == "" {
-						content = "Sub-agent"
-					}
-					subType := inp.SubagentType
-					if subType == "" {
-						subType = "general"
-					}
-					messages = append(messages, OutputMessage{
-						Role:         "subagent",
-						Content:      content,
-						Timestamp:    ts,
-						SubagentType: &subType,
-					})
-
-				default:
-					var inp toolInput
-					_ = json.Unmarshal(b.Input, &inp)
-					var fp *string
-					if inp.FilePath != "" {
-						fp = &inp.FilePath
-					} else if inp.Path != "" {
-						fp = &inp.Path
-					}
-					toolName := b.Name
-					messages = append(messages, OutputMessage{
-						Role:      "tool_call",
-						Content:   b.Name,
-						Timestamp: ts,
-						ToolName:  &toolName,
-						FilePath:  fp,
-					})
-				}
-			}
+		if e.Type == "assistant" || (e.Type == "message" && msg.Role == "assistant") {
+			acc.handleAssistantMessage(msg, ts)
 		}
 	}
 
 	if lastOnly {
-		for i := len(messages) - 1; i >= 0; i-- {
-			if messages[i].Role == "assistant" {
-				return messages[i : i+1]
+		for i := len(acc.messages) - 1; i >= 0; i-- {
+			if acc.messages[i].Role == "assistant" {
+				return acc.messages[i : i+1]
 			}
 		}
 		return nil
 	}
-	return messages
+	return acc.messages
 }
 
 // extractTextFromContent extracts plain text from a content field (string or block array).
