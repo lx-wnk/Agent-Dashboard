@@ -16,7 +16,7 @@ jobs:
         module: [server, sdk]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ matrix.module }}/go.mod
           cache-dependency-path: go.work.sum
@@ -54,7 +54,7 @@ jobs:
         plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: plugins/${{ matrix.plugin }}/go.mod
           cache-dependency-path: plugins/${{ matrix.plugin }}/go.sum
@@ -79,7 +79,7 @@ jobs:
         module: [server, sdk]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ matrix.module }}/go.mod
       - name: Install golangci-lint
@@ -100,7 +100,7 @@ jobs:
         plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: plugins/${{ matrix.plugin }}/go.mod
           cache-dependency-path: plugins/${{ matrix.plugin }}/go.sum
@@ -128,7 +128,7 @@ jobs:
           - plugins/voice-webspeech
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ matrix.module }}/go.mod
       - name: Install govulncheck
@@ -143,7 +143,7 @@ jobs:
     needs: [test, lint, test-plugins, lint-plugins]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
       - name: Build server binary
