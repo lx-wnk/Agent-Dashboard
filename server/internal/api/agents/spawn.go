@@ -24,6 +24,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/httputil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
@@ -499,7 +500,7 @@ func sendHTTPMessage(ctx context.Context, port int, token, message string) error
 		return fmt.Errorf("channel unreachable: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if !httputil.Is2xx(resp.StatusCode) {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return fmt.Errorf("channel error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}

@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 )
 
 func (h *Handler) getPipelineConfig(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	maxParallel := int(h.cfgRepo.GetNumber(ctx, "maxParallelOrchestrators", 3))
-	stageTimeout := int(h.cfgRepo.GetNumber(ctx, "stageTimeoutSeconds", 1800))
+	stageTimeout := int(h.cfgRepo.GetNumber(ctx, "stageTimeoutSeconds", db.DefaultStageTimeoutSeconds))
 	return jsonReply(w, http.StatusOK, map[string]int{
 		"maxParallelOrchestrators": maxParallel,
 		"stageTimeoutSeconds":      stageTimeout,
