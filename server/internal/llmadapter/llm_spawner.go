@@ -1,4 +1,4 @@
-package pipeline
+package llmadapter
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 
 // LLMSpawnArgs carries everything an LLM adapter needs to run a stage.
 type LLMSpawnArgs struct {
-	TaskID       string
-	StageRunID   string
+	TaskID     string
+	StageRunID string
 	// Stage is the pipeline stage name (e.g. "implementation", "self_review").
 	// It is set by agentStageHandler.Execute so that PerStageSpawner can route
 	// the call to the correct adapter.
