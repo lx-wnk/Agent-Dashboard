@@ -227,6 +227,9 @@ func (o *PipelineOrchestrator) tick(ctx context.Context) error {
 	if err := o.sweepOrphanRuns(ctx, allRunning); err != nil {
 		slog.Error("sweepOrphanRuns error", "err", err)
 	}
+	if err := o.sweepRequeueableRuns(ctx); err != nil {
+		slog.Error("sweepRequeueableRuns error", "err", err)
+	}
 	o.pickNextTasksForFreeSlots(ctx, allRunning)
 	return nil
 }

@@ -50,9 +50,10 @@ type UpdateStageRunInput struct {
 	StartedAt       *time.Time
 	EndedAt         *time.Time
 	LastGrantAt     *time.Time
-	RetryCount      *int
-	NextRetryAt     *time.Time
+	RetryCount       *int
+	NextRetryAt      *time.Time
 	NextRetryAtClear bool
+	StartedAtClear   bool
 }
 
 type entStageRunRepo struct {
@@ -181,7 +182,9 @@ func (r *entStageRunRepo) Update(ctx context.Context, id string, in UpdateStageR
 	if in.CostCents != nil {
 		q = q.SetCostCents(*in.CostCents)
 	}
-	if in.StartedAt != nil {
+	if in.StartedAtClear {
+		q = q.ClearStartedAt()
+	} else if in.StartedAt != nil {
 		q = q.SetStartedAt(*in.StartedAt)
 	}
 	if in.EndedAt != nil {

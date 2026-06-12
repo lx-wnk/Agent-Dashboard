@@ -144,6 +144,31 @@ func TestStageRunRepo_GetLatestForTasks(t *testing.T) {
 	require.Equal(t, run2.ID, latest[taskID2].ID)
 }
 
+func TestStageRunRepo_Update_StartedAtClear(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-started-at-clear")
+	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 0})
+	require.NoError(t, err)
+
+	now := time.Now().Truncate(time.Second)
+	updated, err := sr.Update(ctx, run.ID, repo.UpdateStageRunInput{StartedAt: &now})
+	require.NoError(t, err)
+	require.NotNil(t, updated.StartedAt)
+	require.Equal(t, now.UTC(), updated.StartedAt.UTC())
+
+	cleared, err := sr.Update(ctx, run.ID, repo.UpdateStageRunInput{StartedAtClear: true})
+	require.NoError(t, err)
+	require.Nil(t, cleared.StartedAt)
+
+	reloaded, err := sr.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Nil(t, reloaded.StartedAt)
+}
+
 func TestStageRunRepo_Update_RetryFields(t *testing.T) {
 	client := openDB(t)
 	ctx := context.Background()

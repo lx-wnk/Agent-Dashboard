@@ -23,3 +23,13 @@ var ClassifyInfraForTest = classifyInfra
 func (o *PipelineOrchestrator) FinalizeCompletedAsyncRunsForTest(ctx context.Context, runs []*ent.StageRun) error {
 	return o.finalizeCompletedAsyncRuns(ctx, runs)
 }
+
+// SweepRequeueableRunsForTest exposes sweepRequeueableRuns for testing.
+func (o *PipelineOrchestrator) SweepRequeueableRunsForTest(ctx context.Context) error {
+	return o.sweepRequeueableRuns(ctx)
+}
+
+// SweepOrphanRunsForTest exposes sweepOrphanRuns for testing.
+func (o *PipelineOrchestrator) SweepOrphanRunsForTest(ctx context.Context, allRunning []*ent.StageRun) error {
+	return o.sweepOrphanRuns(ctx, allRunning)
+}
