@@ -15,3 +15,6 @@ func (o *PipelineOrchestrator) DecideCompletedTransitionForTest(
 ) StageTransition {
 	return o.decideCompletedTransition(ctx, task, run, output)
 }
+
+// ClassifyInfraForTest exposes classifyInfra for testing.
+var ClassifyInfraForTest = classifyInfra

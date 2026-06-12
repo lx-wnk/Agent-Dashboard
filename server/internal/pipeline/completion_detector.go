@@ -3,9 +3,16 @@ package pipeline
 import (
 	"fmt"
 	"os"
+	"regexp"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
+
+var quotaLimitRe = regexp.MustCompile(`(?i)(usage|rate|session)[ _-]?limit|quota|exceeded your|overloaded_error|claude (was )?killed`)
+
+func classifyInfra(rawText, errStr string) bool {
+	return quotaLimitRe.MatchString(rawText) || quotaLimitRe.MatchString(errStr)
+}
 
 const agentMessageMaxChars = 2000
 
@@ -63,6 +70,7 @@ type CompletionResult struct {
 	Output    map[string]any
 	Error     string
 	Retryable bool
+	Infra     bool
 }
 
 type CompletionDeps struct {
@@ -118,7 +126,7 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 				defer func() { _ = os.Remove(syntheticFile) }() // clean up synthetic session after reading
 				read, err := ReadLastStageJsonOutputFromFile(syntheticFile)
 				if err != nil {
-					return CompletionResult{Kind: "failed", Error: fmt.Sprintf("synthetic session read error: %s", err)}, nil
+					return CompletionResult{Kind: "failed", Error: fmt.Sprintf("synthetic session read error: %s", err), Infra: true}, nil
 				}
 				if read.Output == nil {
 					if read.RawText != "" {
@@ -130,9 +138,10 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 							Kind:   "failed",
 							Error:  "adapter did not produce a ```json output block",
 							Output: map[string]any{"agentMessage": trimmed},
+							Infra:  true,
 						}, nil
 					}
-					return CompletionResult{Kind: "failed", Error: "no parseable json output in synthetic session"}, nil
+					return CompletionResult{Kind: "failed", Error: "no parseable json output in synthetic session", Infra: true}, nil
 				}
 				v := validateFn(sr.Stage, read.Output)
 				if !v.OK {
@@ -149,11 +158,11 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 	}
 	if sessionID == "" {
 		if sr.StartedAt == nil {
-			return CompletionResult{Kind: "failed", Error: "stage_run never started — cannot locate session"}, nil
+			return CompletionResult{Kind: "failed", Error: "stage_run never started — cannot locate session", Infra: true}, nil
 		}
 		found, err := findSessionFn(cwd, sr.StartedAt.Format("2006-01-02T15:04:05Z"))
 		if err != nil {
-			return CompletionResult{Kind: "failed", Error: fmt.Sprintf("session lookup error: %s", err)}, nil
+			return CompletionResult{Kind: "failed", Error: fmt.Sprintf("session lookup error: %s", err), Infra: true}, nil
 		}
 		sessionID = found
 		if sessionID != "" && deps.PersistSID != nil {
@@ -166,12 +175,13 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 		return CompletionResult{
 			Kind:  "failed",
 			Error: fmt.Sprintf("no session JSONL found in %s after %v (cwd=%s)", projectDir, sr.StartedAt, cwd),
+			Infra: true,
 		}, nil
 	}
 
 	read, err := readOutputFn(cwd, sessionID)
 	if err != nil {
-		return CompletionResult{Kind: "failed", Error: fmt.Sprintf("session read error: %s", err)}, nil
+		return CompletionResult{Kind: "failed", Error: fmt.Sprintf("session read error: %s", err), Infra: true}, nil
 	}
 	if read.Output == nil {
 		if read.RawText != "" {
@@ -183,9 +193,10 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 				Kind:   "failed",
 				Error:  "agent did not produce a ```json output block",
 				Output: map[string]any{"agentMessage": trimmed},
+				Infra:  true,
 			}, nil
 		}
-		return CompletionResult{Kind: "failed", Error: "no parseable json output in session tail"}, nil
+		return CompletionResult{Kind: "failed", Error: "no parseable json output in session tail", Infra: true}, nil
 	}
 
 	v := validateFn(sr.Stage, read.Output)
