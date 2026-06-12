@@ -14,9 +14,13 @@ func (h *Handler) getPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	maxParallel := int(h.cfgRepo.GetNumber(ctx, "maxParallelOrchestrators", 3))
 	stageTimeout := int(h.cfgRepo.GetNumber(ctx, "stageTimeoutSeconds", db.DefaultStageTimeoutSeconds))
+	maxAutoRetries := int(h.cfgRepo.GetNumber(ctx, "maxAutoRetries", 3))
+	retryBackoffSeconds := int(h.cfgRepo.GetNumber(ctx, "retryBackoffSeconds", 60))
 	return jsonReply(w, http.StatusOK, map[string]int{
 		"maxParallelOrchestrators": maxParallel,
 		"stageTimeoutSeconds":      stageTimeout,
+		"maxAutoRetries":           maxAutoRetries,
+		"retryBackoffSeconds":      retryBackoffSeconds,
 	})
 }
 
