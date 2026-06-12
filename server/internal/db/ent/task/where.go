@@ -155,6 +155,11 @@ func SpawnerID(v string) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldSpawnerID, v))
 }
 
+// Rank applies equality check predicate on the "rank" field. It's identical to RankEQ.
+func Rank(v float64) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldRank, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldCreatedAt, v))
@@ -1288,6 +1293,56 @@ func SpawnerIDEqualFold(v string) predicate.Task {
 // SpawnerIDContainsFold applies the ContainsFold predicate on the "spawner_id" field.
 func SpawnerIDContainsFold(v string) predicate.Task {
 	return predicate.Task(sql.FieldContainsFold(FieldSpawnerID, v))
+}
+
+// RankEQ applies the EQ predicate on the "rank" field.
+func RankEQ(v float64) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldRank, v))
+}
+
+// RankNEQ applies the NEQ predicate on the "rank" field.
+func RankNEQ(v float64) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldRank, v))
+}
+
+// RankIn applies the In predicate on the "rank" field.
+func RankIn(vs ...float64) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldRank, vs...))
+}
+
+// RankNotIn applies the NotIn predicate on the "rank" field.
+func RankNotIn(vs ...float64) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldRank, vs...))
+}
+
+// RankGT applies the GT predicate on the "rank" field.
+func RankGT(v float64) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldRank, v))
+}
+
+// RankGTE applies the GTE predicate on the "rank" field.
+func RankGTE(v float64) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldRank, v))
+}
+
+// RankLT applies the LT predicate on the "rank" field.
+func RankLT(v float64) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldRank, v))
+}
+
+// RankLTE applies the LTE predicate on the "rank" field.
+func RankLTE(v float64) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldRank, v))
+}
+
+// RankIsNil applies the IsNil predicate on the "rank" field.
+func RankIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldRank))
+}
+
+// RankNotNil applies the NotNil predicate on the "rank" field.
+func RankNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldRank))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

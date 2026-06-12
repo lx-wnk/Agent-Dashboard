@@ -383,6 +383,33 @@ func (_u *TaskUpdate) ClearSpawnerID() *TaskUpdate {
 	return _u
 }
 
+// SetRank sets the "rank" field.
+func (_u *TaskUpdate) SetRank(v float64) *TaskUpdate {
+	_u.mutation.ResetRank()
+	_u.mutation.SetRank(v)
+	return _u
+}
+
+// SetNillableRank sets the "rank" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableRank(v *float64) *TaskUpdate {
+	if v != nil {
+		_u.SetRank(*v)
+	}
+	return _u
+}
+
+// AddRank adds value to the "rank" field.
+func (_u *TaskUpdate) AddRank(v float64) *TaskUpdate {
+	_u.mutation.AddRank(v)
+	return _u
+}
+
+// ClearRank clears the value of the "rank" field.
+func (_u *TaskUpdate) ClearRank() *TaskUpdate {
+	_u.mutation.ClearRank()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *TaskUpdate) SetUpdatedAt(v time.Time) *TaskUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -702,6 +729,15 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.SpawnerIDCleared() {
 		_spec.ClearField(task.FieldSpawnerID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Rank(); ok {
+		_spec.SetField(task.FieldRank, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRank(); ok {
+		_spec.AddField(task.FieldRank, field.TypeFloat64, value)
+	}
+	if _u.mutation.RankCleared() {
+		_spec.ClearField(task.FieldRank, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(task.FieldUpdatedAt, field.TypeTime, value)
@@ -1258,6 +1294,33 @@ func (_u *TaskUpdateOne) ClearSpawnerID() *TaskUpdateOne {
 	return _u
 }
 
+// SetRank sets the "rank" field.
+func (_u *TaskUpdateOne) SetRank(v float64) *TaskUpdateOne {
+	_u.mutation.ResetRank()
+	_u.mutation.SetRank(v)
+	return _u
+}
+
+// SetNillableRank sets the "rank" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableRank(v *float64) *TaskUpdateOne {
+	if v != nil {
+		_u.SetRank(*v)
+	}
+	return _u
+}
+
+// AddRank adds value to the "rank" field.
+func (_u *TaskUpdateOne) AddRank(v float64) *TaskUpdateOne {
+	_u.mutation.AddRank(v)
+	return _u
+}
+
+// ClearRank clears the value of the "rank" field.
+func (_u *TaskUpdateOne) ClearRank() *TaskUpdateOne {
+	_u.mutation.ClearRank()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *TaskUpdateOne) SetUpdatedAt(v time.Time) *TaskUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -1607,6 +1670,15 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if _u.mutation.SpawnerIDCleared() {
 		_spec.ClearField(task.FieldSpawnerID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Rank(); ok {
+		_spec.SetField(task.FieldRank, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRank(); ok {
+		_spec.AddField(task.FieldRank, field.TypeFloat64, value)
+	}
+	if _u.mutation.RankCleared() {
+		_spec.ClearField(task.FieldRank, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(task.FieldUpdatedAt, field.TypeTime, value)

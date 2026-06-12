@@ -143,6 +143,40 @@ func TestSortPickCandidates_OlderFirst(t *testing.T) {
 	require.Equal(t, "newer", tasks[1].ID)
 }
 
+func TestSortPickCandidates_LowerRankFirst(t *testing.T) {
+	// Give the lower-rank task a NEWER created_at to prove rank beats created_at.
+	lowRank := ptr(100.0)
+	highRank := ptr(900.0)
+	newerTime := time.Now()
+	olderTime := newerTime.Add(-10 * time.Minute)
+
+	lowRankTask := &ent.Task{ID: "low-rank", CurrentStage: "implementation", Priority: "medium", SilverBullet: false, Rank: lowRank, CreatedAt: newerTime}
+	highRankTask := &ent.Task{ID: "high-rank", CurrentStage: "implementation", Priority: "medium", SilverBullet: false, Rank: highRank, CreatedAt: olderTime}
+
+	// Place high-rank task first to confirm sort moves low-rank to front.
+	tasks := []*ent.Task{highRankTask, lowRankTask}
+	pipeline.SortPickCandidatesForTest(tasks)
+
+	require.Equal(t, "low-rank", tasks[0].ID, "lower rank must sort first regardless of created_at")
+	require.Equal(t, "high-rank", tasks[1].ID)
+}
+
+func TestSortPickCandidates_PriorityBeatsRank(t *testing.T) {
+	// High priority + high rank must still sort before low priority + low rank.
+	highRank := ptr(999999.0)
+	lowRank := ptr(1.0)
+	now := time.Now()
+
+	highPriority := &ent.Task{ID: "high-prio", CurrentStage: "implementation", Priority: "high", SilverBullet: false, Rank: highRank, CreatedAt: now}
+	lowPriority := &ent.Task{ID: "low-prio", CurrentStage: "implementation", Priority: "low", SilverBullet: false, Rank: lowRank, CreatedAt: now}
+
+	tasks := []*ent.Task{lowPriority, highPriority}
+	pipeline.SortPickCandidatesForTest(tasks)
+
+	require.Equal(t, "high-prio", tasks[0].ID, "high priority must sort first even with a worse (higher) rank")
+	require.Equal(t, "low-prio", tasks[1].ID)
+}
+
 // --- decideCompletedTransition tests ---
 
 func TestDecideCompletedTransition_Finalization(t *testing.T) {

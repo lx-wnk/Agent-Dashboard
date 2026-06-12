@@ -9845,6 +9845,8 @@ type TaskMutation struct {
 	metadata                 *map[string]interface{}
 	project_id               *string
 	spawner_id               *string
+	rank                     *float64
+	addrank                  *float64
 	created_at               *time.Time
 	updated_at               *time.Time
 	clearedFields            map[string]struct{}
@@ -10878,6 +10880,76 @@ func (m *TaskMutation) ResetSpawnerID() {
 	delete(m.clearedFields, task.FieldSpawnerID)
 }
 
+// SetRank sets the "rank" field.
+func (m *TaskMutation) SetRank(f float64) {
+	m.rank = &f
+	m.addrank = nil
+}
+
+// Rank returns the value of the "rank" field in the mutation.
+func (m *TaskMutation) Rank() (r float64, exists bool) {
+	v := m.rank
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRank returns the old "rank" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldRank(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRank is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRank requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRank: %w", err)
+	}
+	return oldValue.Rank, nil
+}
+
+// AddRank adds f to the "rank" field.
+func (m *TaskMutation) AddRank(f float64) {
+	if m.addrank != nil {
+		*m.addrank += f
+	} else {
+		m.addrank = &f
+	}
+}
+
+// AddedRank returns the value that was added to the "rank" field in this mutation.
+func (m *TaskMutation) AddedRank() (r float64, exists bool) {
+	v := m.addrank
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearRank clears the value of the "rank" field.
+func (m *TaskMutation) ClearRank() {
+	m.rank = nil
+	m.addrank = nil
+	m.clearedFields[task.FieldRank] = struct{}{}
+}
+
+// RankCleared returns if the "rank" field was cleared in this mutation.
+func (m *TaskMutation) RankCleared() bool {
+	_, ok := m.clearedFields[task.FieldRank]
+	return ok
+}
+
+// ResetRank resets all changes to the "rank" field.
+func (m *TaskMutation) ResetRank() {
+	m.rank = nil
+	m.addrank = nil
+	delete(m.clearedFields, task.FieldRank)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *TaskMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -11200,7 +11272,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 21)
+	fields := make([]string, 0, 22)
 	if m.slug != nil {
 		fields = append(fields, task.FieldSlug)
 	}
@@ -11258,6 +11330,9 @@ func (m *TaskMutation) Fields() []string {
 	if m.spawner_id != nil {
 		fields = append(fields, task.FieldSpawnerID)
 	}
+	if m.rank != nil {
+		fields = append(fields, task.FieldRank)
+	}
 	if m.created_at != nil {
 		fields = append(fields, task.FieldCreatedAt)
 	}
@@ -11310,6 +11385,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.ProjectID()
 	case task.FieldSpawnerID:
 		return m.SpawnerID()
+	case task.FieldRank:
+		return m.Rank()
 	case task.FieldCreatedAt:
 		return m.CreatedAt()
 	case task.FieldUpdatedAt:
@@ -11361,6 +11438,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldProjectID(ctx)
 	case task.FieldSpawnerID:
 		return m.OldSpawnerID(ctx)
+	case task.FieldRank:
+		return m.OldRank(ctx)
 	case task.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case task.FieldUpdatedAt:
@@ -11507,6 +11586,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetSpawnerID(v)
 		return nil
+	case task.FieldRank:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRank(v)
+		return nil
 	case task.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -11541,6 +11627,9 @@ func (m *TaskMutation) AddedFields() []string {
 	if m.addstage_timeout_seconds != nil {
 		fields = append(fields, task.FieldStageTimeoutSeconds)
 	}
+	if m.addrank != nil {
+		fields = append(fields, task.FieldRank)
+	}
 	return fields
 }
 
@@ -11557,6 +11646,8 @@ func (m *TaskMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedCostBudgetCents()
 	case task.FieldStageTimeoutSeconds:
 		return m.AddedStageTimeoutSeconds()
+	case task.FieldRank:
+		return m.AddedRank()
 	}
 	return nil, false
 }
@@ -11593,6 +11684,13 @@ func (m *TaskMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddStageTimeoutSeconds(v)
+		return nil
+	case task.FieldRank:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRank(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Task numeric field %s", name)
@@ -11634,6 +11732,9 @@ func (m *TaskMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(task.FieldSpawnerID) {
 		fields = append(fields, task.FieldSpawnerID)
+	}
+	if m.FieldCleared(task.FieldRank) {
+		fields = append(fields, task.FieldRank)
 	}
 	return fields
 }
@@ -11681,6 +11782,9 @@ func (m *TaskMutation) ClearField(name string) error {
 		return nil
 	case task.FieldSpawnerID:
 		m.ClearSpawnerID()
+		return nil
+	case task.FieldRank:
+		m.ClearRank()
 		return nil
 	}
 	return fmt.Errorf("unknown Task nullable field %s", name)
@@ -11746,6 +11850,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldSpawnerID:
 		m.ResetSpawnerID()
+		return nil
+	case task.FieldRank:
+		m.ResetRank()
 		return nil
 	case task.FieldCreatedAt:
 		m.ResetCreatedAt()

@@ -169,3 +169,119 @@ func TestTaskRepo_GetBySlug_NotFound(t *testing.T) {
 	_, err := r.GetBySlug(ctx, "does-not-exist")
 	require.Error(t, err)
 }
+
+func ptrFloat(v float64) *float64 { return &v }
+
+func TestTaskRepo_RerankBetween(t *testing.T) {
+	const gap = 1 << 20 // rankGap constant from task_repo.go
+
+	tests := []struct {
+		name       string
+		beforeRank *float64
+		afterRank  *float64
+		// wantRank is a function so the "empty-empty" case can assert > 0 without a fixed value.
+		check func(t *testing.T, got float64)
+	}{
+		{
+			name:       "midpoint between two ranked neighbors",
+			beforeRank: ptrFloat(1000.0),
+			afterRank:  ptrFloat(3000.0),
+			check: func(t *testing.T, got float64) {
+				t.Helper()
+				require.InDelta(t, 2000.0, got, 0.001, "rank should be midpoint of 1000 and 3000")
+			},
+		},
+		{
+			name:       "before-only: drop at bottom adds rankGap",
+			beforeRank: ptrFloat(5000.0),
+			afterRank:  nil,
+			check: func(t *testing.T, got float64) {
+				t.Helper()
+				require.InDelta(t, 5000.0+gap, got, 0.001, "rank should be before+gap")
+			},
+		},
+		{
+			name:       "after-only: drop at top subtracts rankGap",
+			beforeRank: nil,
+			afterRank:  ptrFloat(8000.0),
+			check: func(t *testing.T, got float64) {
+				t.Helper()
+				require.InDelta(t, 8000.0-gap, got, 0.001, "rank should be after-gap")
+			},
+		},
+		{
+			name:       "empty-empty: fallback returns positive rank",
+			beforeRank: nil,
+			afterRank:  nil,
+			check: func(t *testing.T, got float64) {
+				t.Helper()
+				require.Greater(t, got, 0.0, "fallback rank must be positive (unix microseconds)")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := openDB(t)
+			r := repo.NewTaskRepo(client)
+			ctx := context.Background()
+
+			// Seed the task under test with a known initial rank so it doesn't
+			// accidentally match any neighbor value.
+			target, err := r.Create(ctx, repo.CreateTaskInput{
+				Slug:                "target",
+				Title:               "Target",
+				Cwd:                 "/tmp",
+				CurrentStage:        "concept",
+				Priority:            "medium",
+				MaxIterations:       20,
+				StageTimeoutSeconds: 1800,
+				Rank:                ptrFloat(9999.0),
+			})
+			require.NoError(t, err)
+
+			var beforeID, afterID string
+
+			if tc.beforeRank != nil {
+				before, err := r.Create(ctx, repo.CreateTaskInput{
+					Slug:                "before",
+					Title:               "Before",
+					Cwd:                 "/tmp",
+					CurrentStage:        "concept",
+					Priority:            "medium",
+					MaxIterations:       20,
+					StageTimeoutSeconds: 1800,
+					Rank:                tc.beforeRank,
+				})
+				require.NoError(t, err)
+				beforeID = before.ID
+			}
+
+			if tc.afterRank != nil {
+				after, err := r.Create(ctx, repo.CreateTaskInput{
+					Slug:                "after",
+					Title:               "After",
+					Cwd:                 "/tmp",
+					CurrentStage:        "concept",
+					Priority:            "medium",
+					MaxIterations:       20,
+					StageTimeoutSeconds: 1800,
+					Rank:                tc.afterRank,
+				})
+				require.NoError(t, err)
+				afterID = after.ID
+			}
+
+			updated, err := r.RerankBetween(ctx, target.ID, beforeID, afterID)
+			require.NoError(t, err)
+			require.NotNil(t, updated.Rank, "Rank pointer must be set after RerankBetween")
+			tc.check(t, *updated.Rank)
+
+			// Verify the rank is persisted by re-fetching.
+			fetched, err := r.GetByID(ctx, target.ID)
+			require.NoError(t, err)
+			require.NotNil(t, fetched.Rank)
+			require.InDelta(t, *updated.Rank, *fetched.Rank, 0.001, "persisted rank must match returned rank")
+		})
+	}
+}

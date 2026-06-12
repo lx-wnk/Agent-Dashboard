@@ -33,7 +33,7 @@ Stateless helpers consumed by `routes/*` and `mcp/*` (and, where appropriate, by
 
 ## Runner Slots
 
-`maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `implementation`. Agent-less stages (`concept`, `backlog`) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → createdAt) and the sticky-run invariant.
+`maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `implementation`. Agent-less stages (`concept`, `backlog`) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → rank → createdAt) and the sticky-run invariant. `rank` is the manual drag-and-drop order set via the Kanban board (`POST /api/tasks/{id}/rank`), a gap-based float seeded from createdAt; it breaks ties within the same priority tier.
 
 ## Stage Timeout
 
@@ -211,6 +211,7 @@ The following `pipeline/` symbols may be imported at runtime from `api/*` and `m
 | `ResolvedProjectDir` | `session_reader.go` | `api/tasks/analyze_routes.go` |
 | `FindNewestSessionID` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
 | `ReadLastStageJsonOutput` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
+| `SessionFileExists` | `session_reader.go` | `api/tasks/handler.go` |
 | `ValidateStageOutput` | `completion_detector.go` | `api/agents/channel_stage_output.go` |
 
 These are session-reader and process-monitor helpers — they do not touch the state machine (orchestrator, stage handlers, completion detector). New `pipeline/` imports from `api/*` or `mcp/*` require an explicit justification here before being added.
