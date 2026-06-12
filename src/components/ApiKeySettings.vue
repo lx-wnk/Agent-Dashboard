@@ -129,7 +129,9 @@ async function resetPresets(cwd: string) {
   }
 }
 
-watch(activeSection, (val) => {
+watch(activeSection, (val, oldVal) => {
+  if (oldVal === 'apiKeys')
+    dismissReveal()
   if (val === 'permissionPresets')
     void loadPresets()
   if (val === 'analytics')
@@ -304,6 +306,22 @@ async function copyValue(target: 'token' | 'cli' | 'json', value: string) {
     copiedTarget.value = null
     errorTarget.value = null
   }, 2000)
+}
+
+function copyGlyph(target: 'token' | 'cli' | 'json') {
+  if (copiedTarget.value === target)
+    return '✓'
+  if (errorTarget.value === target)
+    return '✗'
+  return '⧉'
+}
+
+function copyLabel(target: 'cli' | 'json', base: string) {
+  if (copiedTarget.value === target)
+    return 'Copied'
+  if (errorTarget.value === target)
+    return 'Copy failed'
+  return base
 }
 
 function dismissReveal() {
@@ -924,7 +942,7 @@ async function startImport() {
         </header>
         <div class="p-5">
           <p class="text-[13px] text-fg-mute mb-3">
-            Save this token now — it will <strong class="text-yellow-600 dark:text-yellow-400">never be shown again</strong>.
+            Save this token now — it will <strong class="text-amber-700 dark:text-yellow-400">never be shown again</strong>.
           </p>
           <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
             {{ tokenVisible ? revealedToken : maskToken(revealedToken ?? '') }}
@@ -955,37 +973,40 @@ async function startImport() {
 
           <div class="mt-5 border-t border-line pt-4">
             <p class="text-[13px] text-fg-mute mb-1">
-              Connect a Claude Code session to this dashboard's task tools:
+              {{ canAuthorTasks ? "Connect a Claude Code session to this dashboard's task tools:" : "Connect a Claude Code session (this key has read-only access to task tools):" }}
             </p>
-            <p v-if="!canAuthorTasks" class="text-[11px] text-yellow-600 dark:text-yellow-400 mb-3">
+            <p v-if="!canAuthorTasks" class="text-[11px] text-amber-700 dark:text-yellow-400 mb-3">
               Read-only key — creating or refining tasks needs the Developer or Admin role.
             </p>
 
-            <span class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">CLI command</span>
-            <div class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line break-all mt-1 mb-3">
+            <span id="mcp-cli-label" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">CLI command</span>
+            <div role="region" :aria-labelledby="'mcp-cli-label'" tabindex="0" class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line break-all mt-1 mb-3">
               {{ mcpAddCommand }}
               <button
                 type="button"
-                class="absolute right-2 top-2 p-1 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors"
-                :aria-label="copiedTarget === 'cli' ? 'Copied' : 'Copy CLI command'"
+                class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                :aria-label="copyLabel('cli', 'Copy CLI command')"
                 @click="copyValue('cli', mcpAddCommand)"
               >
-                <span class="text-[11px]">{{ copiedTarget === 'cli' ? '✓' : errorTarget === 'cli' ? '✗' : '⧉' }}</span>
+                <span class="text-[13px]">{{ copyGlyph('cli') }}</span>
               </button>
             </div>
 
-            <span class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">JSON config</span>
-            <div class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line whitespace-pre overflow-x-auto mt-1">
+            <span id="mcp-json-label" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">JSON config</span>
+            <div role="region" :aria-labelledby="'mcp-json-label'" tabindex="0" class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line whitespace-pre overflow-x-auto mt-1">
               {{ mcpJsonConfig }}
               <button
                 type="button"
-                class="absolute right-2 top-2 p-1 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors"
-                :aria-label="copiedTarget === 'json' ? 'Copied' : 'Copy JSON config'"
+                class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                :aria-label="copyLabel('json', 'Copy JSON config')"
                 @click="copyValue('json', mcpJsonConfig)"
               >
-                <span class="text-[11px]">{{ copiedTarget === 'json' ? '✓' : errorTarget === 'json' ? '✗' : '⧉' }}</span>
+                <span class="text-[13px]">{{ copyGlyph('json') }}</span>
               </button>
             </div>
+            <p class="text-[11px] text-fg-mute mt-3">
+              Contains your secret token — don't share it. The CLI command writes it to <code class="font-mono">~/.claude.json</code>; keep that file out of version control.
+            </p>
           </div>
         </div>
         <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
