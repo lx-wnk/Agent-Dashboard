@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
@@ -88,6 +89,70 @@ func TestOrchestrator_FailTransition_TaskStageUnchanged(t *testing.T) {
 	updated, err := taskRepo.GetByID(context.Background(), task.ID)
 	require.NoError(t, err)
 	require.Equal(t, "implementation", updated.CurrentStage)
+}
+
+func TestOrchestrator_RequeueTransition(t *testing.T) {
+	ctx := context.Background()
+	onStageFailed := false
+
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	client := bundle.Client
+	t.Cleanup(func() { _ = client.Close() })
+
+	taskRepo := repo.NewTaskRepo(client)
+	srRepo := repo.NewStageRunRepo(client)
+	permRepo := repo.NewPermissionRepo(client)
+	auditRepo := repo.NewAuditEventRepo(client)
+	cfgRepo := repo.NewPipelineConfigRepo(client)
+
+	futureTime := time.Now().Add(5 * time.Minute)
+
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:       taskRepo,
+		StageRunRepo:   srRepo,
+		PermissionRepo: permRepo,
+		AuditRepo:      auditRepo,
+		ConfigRepo:     cfgRepo,
+		OnStageFailed:  func(_ string, _ pipeline.StageFailedInfo) { onStageFailed = true },
+	})
+	require.NoError(t, err)
+
+	orch.SetHandlerOverride("implementation", &stubStageHandler{
+		stage: "implementation",
+		transition: pipeline.RequeueTransition{
+			Reason:      "quota",
+			Attempt:     1,
+			NextRetryAt: futureTime,
+			Output:      map[string]any{"extra": "data"},
+		},
+	})
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:                "requeue-test",
+		Title:               "Requeue Test",
+		Cwd:                 "/tmp",
+		CurrentStage:        "implementation",
+		Priority:            "medium",
+		MaxIterations:       3,
+		StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	sr, err := orch.ProgressTask(ctx, task.ID, nil)
+	require.NoError(t, err)
+	require.Equal(t, "requeued", sr.Status)
+	require.Equal(t, 1, sr.RetryCount)
+	require.NotNil(t, sr.NextRetryAt)
+	require.WithinDuration(t, futureTime, *sr.NextRetryAt, time.Second)
+	require.Equal(t, "quota", sr.Output["requeue_reason"])
+	require.EqualValues(t, 1, sr.Output["attempt"])
+
+	updated, err := taskRepo.GetByID(ctx, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, "implementation", updated.CurrentStage)
+
+	require.False(t, onStageFailed, "OnStageFailed must not be called for requeue")
 }
 
 

@@ -53,6 +53,13 @@ type AsyncRunningTransition struct {
 	Output      map[string]any
 }
 
+type RequeueTransition struct {
+	Reason      string
+	Output      map[string]any
+	Attempt     int
+	NextRetryAt time.Time
+}
+
 func (NextTransition) isTransition()         {}
 func (DoneTransition) isTransition()         {}
 func (FailTransition) isTransition()         {}
@@ -60,6 +67,7 @@ func (WaitUserTransition) isTransition()     {}
 func (IterateTransition) isTransition()      {}
 func (OnHoldTransition) isTransition()       {}
 func (AsyncRunningTransition) isTransition() {}
+func (RequeueTransition) isTransition()      {}
 
 // SystemPromptQuerier is a narrow interface so pipeline does not import the full repo package.
 type SystemPromptQuerier interface {
