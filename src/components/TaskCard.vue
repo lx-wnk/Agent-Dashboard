@@ -45,9 +45,8 @@ function stageLabel(stage: PipelineStage): string {
         <span
           class="task-drag-handle cursor-grab active:cursor-grabbing text-fg-mute hover:text-fg-soft select-none leading-none -ml-0.5"
           title="Drag to reorder"
-          aria-label="Drag to reorder"
+          aria-hidden="true"
           @click.stop
-          @keydown.enter.stop
         >⠿</span>
         <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
       </span>
@@ -63,6 +62,8 @@ function stageLabel(stage: PipelineStage): string {
       v-if="task.currentStage === 'concept'"
       class="self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
       @click.stop="emit('openChat', task)"
+      @keydown.enter.stop
+      @keydown.space.stop
     >
       Continue Chat →
     </button>

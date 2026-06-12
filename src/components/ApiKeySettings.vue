@@ -163,8 +163,9 @@ async function refreshPatterns() {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
-    if (showCreateDialog.value || confirmRevokeId.value || confirmRegenerateId.value || confirmResetCwd.value) {
-      showCreateDialog.value = false
+    // AppModal handles ESC for showCreateDialog and revealedToken dialogs.
+    // Only handle inline confirmation states here; fall through to outer close.
+    if (confirmRevokeId.value || confirmRegenerateId.value || confirmResetCwd.value) {
       confirmRevokeId.value = null
       confirmRegenerateId.value = null
       confirmResetCwd.value = null
@@ -836,114 +837,110 @@ async function startImport() {
     </div>
 
     <!-- Create key dialog -->
-    <Transition name="dialog">
-      <div v-if="showCreateDialog" class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center" @click.self="closeCreateDialog">
-        <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <header class="flex justify-between items-center px-5 py-4 border-b border-line">
-            <h2 class="text-lg font-semibold text-fg">
-              Create API Key
-            </h2>
-            <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="closeCreateDialog">
-              &times;
-            </button>
-          </header>
-          <form class="p-5" @submit.prevent="handleCreate">
-            <div class="flex flex-col gap-1 mb-3.5">
-              <label for="key-name" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Name</label>
-              <input
-                id="key-name"
-                v-model="newKeyName"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
-                type="text"
-                required
-                placeholder="e.g. CI pipeline key"
-                autofocus
-              >
-            </div>
-            <div class="flex flex-col gap-1 mb-3.5">
-              <label for="key-group" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Role / Scope Group</label>
-              <select
-                id="key-group"
-                v-model="newKeyGroup"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
-              >
-                <option value="viewer">
-                  Viewer — tasks:read
-                </option>
-                <option value="operator">
-                  Operator — tasks:read, pipeline:control
-                </option>
-                <option value="developer">
-                  Developer — tasks:read, tasks:write, pipeline:control
-                </option>
-                <option value="admin">
-                  Admin — all scopes
-                </option>
-              </select>
-            </div>
-            <p v-if="createError" class="text-xs text-red-600 dark:text-red-400 mb-2">
-              {{ createError }}
-            </p>
-          </form>
-          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
-            <AppButton variant="secondary" @click="closeCreateDialog">
-              Cancel
-            </AppButton>
-            <AppButton variant="info" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
-              {{ isCreating ? 'Creating...' : 'Create Key' }}
-            </AppButton>
-          </footer>
-        </div>
+    <AppModal :open="showCreateDialog" size="auto" :z-index="300" labelled-by="create-key-dialog-title" @close="closeCreateDialog">
+      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+        <header class="flex justify-between items-center px-5 py-4 border-b border-line">
+          <h2 id="create-key-dialog-title" class="text-lg font-semibold text-fg">
+            Create API Key
+          </h2>
+          <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="closeCreateDialog">
+            &times;
+          </button>
+        </header>
+        <form class="p-5" @submit.prevent="handleCreate">
+          <div class="flex flex-col gap-1 mb-3.5">
+            <label for="key-name" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Name</label>
+            <input
+              id="key-name"
+              v-model="newKeyName"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              type="text"
+              required
+              placeholder="e.g. CI pipeline key"
+              autofocus
+            >
+          </div>
+          <div class="flex flex-col gap-1 mb-3.5">
+            <label for="key-group" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Role / Scope Group</label>
+            <select
+              id="key-group"
+              v-model="newKeyGroup"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+            >
+              <option value="viewer">
+                Viewer — tasks:read
+              </option>
+              <option value="operator">
+                Operator — tasks:read, pipeline:control
+              </option>
+              <option value="developer">
+                Developer — tasks:read, tasks:write, pipeline:control
+              </option>
+              <option value="admin">
+                Admin — all scopes
+              </option>
+            </select>
+          </div>
+          <p v-if="createError" class="text-xs text-red-600 dark:text-red-400 mb-2">
+            {{ createError }}
+          </p>
+        </form>
+        <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
+          <AppButton variant="secondary" @click="closeCreateDialog">
+            Cancel
+          </AppButton>
+          <AppButton variant="info" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
+            {{ isCreating ? 'Creating...' : 'Create Key' }}
+          </AppButton>
+        </footer>
       </div>
-    </Transition>
+    </AppModal>
 
     <!-- Token reveal dialog -->
-    <Transition name="dialog">
-      <div v-if="revealedToken" class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center" @click.self="dismissReveal">
-        <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <header class="flex justify-between items-center px-5 py-4 border-b border-line">
-            <h2 class="text-lg font-semibold text-fg">
-              Your new API key
-            </h2>
-          </header>
-          <div class="p-5">
-            <p class="text-[13px] text-fg-mute mb-3">
-              Save this token now — it will <strong class="text-yellow-600 dark:text-yellow-400">never be shown again</strong>.
-            </p>
-            <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
-              {{ tokenVisible ? revealedToken : maskToken(revealedToken ?? '') }}
-              <button
-                type="button"
-                class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 text-green-500 transition-colors"
-                :aria-label="tokenVisible ? 'Hide token' : 'Show token'"
-                :aria-pressed="tokenVisible"
-                @click="tokenVisible = !tokenVisible"
-              >
-                <svg v-if="tokenVisible" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              </button>
-            </div>
-            <div class="flex justify-end">
-              <AppButton variant="info" @click="copyToken">
-                <span v-if="copyHint === '__error__'">Copy failed</span>
-                <span v-else-if="copyHint">Copied!</span>
-                <span v-else>Copy to clipboard</span>
-              </AppButton>
-            </div>
+    <AppModal :open="!!revealedToken" size="auto" :z-index="300" labelled-by="token-reveal-dialog-title" @close="dismissReveal">
+      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+        <header class="flex justify-between items-center px-5 py-4 border-b border-line">
+          <h2 id="token-reveal-dialog-title" class="text-lg font-semibold text-fg">
+            Your new API key
+          </h2>
+        </header>
+        <div class="p-5">
+          <p class="text-[13px] text-fg-mute mb-3">
+            Save this token now — it will <strong class="text-yellow-600 dark:text-yellow-400">never be shown again</strong>.
+          </p>
+          <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
+            {{ tokenVisible ? revealedToken : maskToken(revealedToken ?? '') }}
+            <button
+              type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 text-green-500 transition-colors"
+              :aria-label="tokenVisible ? 'Hide token' : 'Show token'"
+              :aria-pressed="tokenVisible"
+              @click="tokenVisible = !tokenVisible"
+            >
+              <svg v-if="tokenVisible" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
           </div>
-          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
-            <AppButton variant="secondary" @click="dismissReveal">
-              Done — I have saved the token
+          <div class="flex justify-end">
+            <AppButton variant="info" @click="copyToken">
+              <span v-if="copyHint === '__error__'">Copy failed</span>
+              <span v-else-if="copyHint">Copied!</span>
+              <span v-else>Copy to clipboard</span>
             </AppButton>
-          </footer>
+          </div>
         </div>
+        <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
+          <AppButton variant="secondary" @click="dismissReveal">
+            Done — I have saved the token
+          </AppButton>
+        </footer>
       </div>
-    </Transition>
+    </AppModal>
   </AppModal>
 </template>
