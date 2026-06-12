@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { ApiKey, McpScope } from '../types'
-import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
 import { maskToken } from '../utils/format'
+import { buildMcpAddCommand, buildMcpJsonConfig } from '../utils/mcpCommand'
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 import RemoteSettings from './RemoteSettings.vue'
@@ -38,8 +39,18 @@ const createError = ref('')
 
 // Token reveal modal
 const revealedToken = ref<string | null>(null)
-const copyHint = ref<string | null>(null)
+const revealedScopes = ref<McpScope[]>([])
+const copiedTarget = ref<'token' | 'cli' | 'json' | null>(null)
+const errorTarget = ref<'token' | 'cli' | 'json' | null>(null)
 const tokenVisible = ref(false)
+
+const mcpAddCommand = computed(() =>
+  revealedToken.value ? buildMcpAddCommand(window.location.origin, revealedToken.value) : '',
+)
+const mcpJsonConfig = computed(() =>
+  revealedToken.value ? buildMcpJsonConfig(window.location.origin, revealedToken.value) : '',
+)
+const canAuthorTasks = computed(() => revealedScopes.value.includes('tasks:write'))
 
 // Revoke / regenerate confirmation
 const confirmRevokeId = ref<string | null>(null)
@@ -216,6 +227,7 @@ async function regenerateKey(key: ApiKey) {
     else
       keys.value.unshift(data.key)
     revealedToken.value = data.token
+    revealedScopes.value = data.key.scopes
   }
   catch (e) {
     errorMsg.value = (e as Error).message
@@ -264,6 +276,7 @@ async function handleCreate() {
     const data = await res.json() as { key: ApiKey, token: string }
     keys.value.unshift(data.key)
     revealedToken.value = data.token
+    revealedScopes.value = data.key.scopes
     closeCreateDialog()
   }
   catch (e) {
@@ -274,25 +287,30 @@ async function handleCreate() {
   }
 }
 
-// --- Copy token ---
-async function copyToken() {
-  if (!revealedToken.value)
+// --- Copy helpers ---
+async function copyValue(target: 'token' | 'cli' | 'json', value: string) {
+  if (!value)
     return
   try {
-    await navigator.clipboard.writeText(revealedToken.value)
-    copyHint.value = revealedToken.value
+    await navigator.clipboard.writeText(value)
+    copiedTarget.value = target
+    errorTarget.value = null
   }
   catch {
-    copyHint.value = '__error__'
+    errorTarget.value = target
+    copiedTarget.value = null
   }
   setTimeout(() => {
-    copyHint.value = null
+    copiedTarget.value = null
+    errorTarget.value = null
   }, 2000)
 }
 
 function dismissReveal() {
   revealedToken.value = null
-  copyHint.value = null
+  revealedScopes.value = []
+  copiedTarget.value = null
+  errorTarget.value = null
   tokenVisible.value = false
 }
 
@@ -928,11 +946,46 @@ async function startImport() {
             </button>
           </div>
           <div class="flex justify-end">
-            <AppButton variant="info" @click="copyToken">
-              <span v-if="copyHint === '__error__'">Copy failed</span>
-              <span v-else-if="copyHint">Copied!</span>
+            <AppButton variant="info" @click="copyValue('token', revealedToken ?? '')">
+              <span v-if="errorTarget === 'token'">Copy failed</span>
+              <span v-else-if="copiedTarget === 'token'">Copied!</span>
               <span v-else>Copy to clipboard</span>
             </AppButton>
+          </div>
+
+          <div class="mt-5 border-t border-line pt-4">
+            <p class="text-[13px] text-fg-mute mb-1">
+              Connect a Claude Code session to this dashboard's task tools:
+            </p>
+            <p v-if="!canAuthorTasks" class="text-[11px] text-yellow-600 dark:text-yellow-400 mb-3">
+              Read-only key — creating or refining tasks needs the Developer or Admin role.
+            </p>
+
+            <span class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">CLI command</span>
+            <div class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line break-all mt-1 mb-3">
+              {{ mcpAddCommand }}
+              <button
+                type="button"
+                class="absolute right-2 top-2 p-1 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors"
+                :aria-label="copiedTarget === 'cli' ? 'Copied' : 'Copy CLI command'"
+                @click="copyValue('cli', mcpAddCommand)"
+              >
+                <span class="text-[11px]">{{ copiedTarget === 'cli' ? '✓' : errorTarget === 'cli' ? '✗' : '⧉' }}</span>
+              </button>
+            </div>
+
+            <span class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">JSON config</span>
+            <div class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line whitespace-pre overflow-x-auto mt-1">
+              {{ mcpJsonConfig }}
+              <button
+                type="button"
+                class="absolute right-2 top-2 p-1 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors"
+                :aria-label="copiedTarget === 'json' ? 'Copied' : 'Copy JSON config'"
+                @click="copyValue('json', mcpJsonConfig)"
+              >
+                <span class="text-[11px]">{{ copiedTarget === 'json' ? '✓' : errorTarget === 'json' ? '✗' : '⧉' }}</span>
+              </button>
+            </div>
           </div>
         </div>
         <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
