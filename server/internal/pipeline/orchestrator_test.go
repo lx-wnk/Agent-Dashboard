@@ -543,3 +543,143 @@ func TestFinalizeCompletedAsyncRuns_HardFail_NeitherInfraNorRetryable(t *testing
 	require.Equal(t, "agent panicked", updated.Output["error"])
 	require.Nil(t, updated.Output["auto_retries_exhausted"], "hard fail must not set auto_retries_exhausted")
 }
+
+// --- picker guard tests ---
+
+// makePickerTask creates a pending task at "implementation" stage for picker tests.
+func makePickerTask(t *testing.T, ctx context.Context, taskRepo repo.TaskRepo, slug string) *ent.Task {
+	t.Helper()
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:                slug,
+		Title:               slug,
+		Cwd:                 "/tmp",
+		CurrentStage:        "implementation",
+		Priority:            "medium",
+		MaxIterations:       3,
+		StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+	return task
+}
+
+func TestPicker_RequeuedRun_NotPicked(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	task := makePickerTask(t, ctx, taskRepo, "requeued-guard-test")
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "implementation",
+		Iteration:   0,
+		SessionName: "requeued-guard-impl-0",
+	})
+	require.NoError(t, err)
+
+	future := time.Now().Add(5 * time.Minute)
+	retryCount := 1
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status:      strPtr("requeued"),
+		RetryCount:  &retryCount,
+		NextRetryAt: &future,
+	})
+	require.NoError(t, err)
+
+	orch.PickNextTasksForFreeSlots(ctx, nil)
+
+	runs, err := srRepo.ListForTask(ctx, task.ID)
+	require.NoError(t, err)
+	for _, r := range runs {
+		require.NotEqual(t, "running", r.Status, "requeued run must not be promoted to running during cooldown")
+	}
+}
+
+func TestPicker_AfterSweepFlipsToPending_TaskIsPicked(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	task := makePickerTask(t, ctx, taskRepo, "sweep-then-pick-test")
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "implementation",
+		Iteration:   0,
+		SessionName: "sweep-then-pick-impl-0",
+	})
+	require.NoError(t, err)
+
+	future := time.Now().Add(5 * time.Minute)
+	retryCount := 1
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status:      strPtr("requeued"),
+		RetryCount:  &retryCount,
+		NextRetryAt: &future,
+	})
+	require.NoError(t, err)
+
+	// Simulate sweep: flip the run to pending (as sweepRequeueableRuns would do).
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status:          strPtr("pending"),
+		PIDClear:        true,
+		StartedAtClear:  true,
+		NextRetryAtClear: true,
+	})
+	require.NoError(t, err)
+
+	orch.PickNextTasksForFreeSlots(ctx, nil)
+
+	runs, err := srRepo.ListForTask(ctx, task.ID)
+	require.NoError(t, err)
+	picked := false
+	for _, r := range runs {
+		if r.Status == "running" {
+			picked = true
+		}
+	}
+	require.True(t, picked, "task must be picked after sweep flips run to pending")
+}
+
+func TestPicker_UniqueRunningInvariant_AtMostOneRunning(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	task := makePickerTask(t, ctx, taskRepo, "unique-running-test")
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "implementation",
+		Iteration:   0,
+		SessionName: "unique-running-impl-0",
+	})
+	require.NoError(t, err)
+
+	future := time.Now().Add(5 * time.Minute)
+	retryCount := 1
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status:      strPtr("requeued"),
+		RetryCount:  &retryCount,
+		NextRetryAt: &future,
+	})
+	require.NoError(t, err)
+
+	// Simulate sweep: promote to pending.
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status:          strPtr("pending"),
+		PIDClear:        true,
+		StartedAtClear:  true,
+		NextRetryAtClear: true,
+	})
+	require.NoError(t, err)
+
+	orch.PickNextTasksForFreeSlots(ctx, nil)
+
+	runs, err := srRepo.ListForTask(ctx, task.ID)
+	require.NoError(t, err)
+	runningCount := 0
+	for _, r := range runs {
+		if r.Status == "running" {
+			runningCount++
+		}
+	}
+	require.LessOrEqual(t, runningCount, 1, "at most one stage_run may be in running status for the same task")
+}

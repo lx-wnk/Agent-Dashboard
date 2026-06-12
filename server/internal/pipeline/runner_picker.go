@@ -45,7 +45,7 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 		// Only skip if the latest run is specifically on the current stage and blocking.
 		// If the latest run is for a different stage, no run exists for currentStage yet.
 		if latest := latestByTask[t.ID]; latest != nil && latest.Stage == t.CurrentStage &&
-			(latest.Status == "awaiting_user" || latest.Status == "failed") {
+			(latest.Status == "awaiting_user" || latest.Status == "failed" || latest.Status == "requeued") {
 			continue
 		}
 		ready = append(ready, t)

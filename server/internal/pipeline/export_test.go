@@ -33,3 +33,8 @@ func (o *PipelineOrchestrator) SweepRequeueableRunsForTest(ctx context.Context) 
 func (o *PipelineOrchestrator) SweepOrphanRunsForTest(ctx context.Context, allRunning []*ent.StageRun) error {
 	return o.sweepOrphanRuns(ctx, allRunning)
 }
+
+// PickNextTasksForFreeSlots exposes pickNextTasksForFreeSlots for testing.
+func (o *PipelineOrchestrator) PickNextTasksForFreeSlots(ctx context.Context, allRunning []*ent.StageRun) {
+	o.pickNextTasksForFreeSlots(ctx, allRunning)
+}
