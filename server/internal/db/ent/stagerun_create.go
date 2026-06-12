@@ -183,6 +183,34 @@ func (_c *StageRunCreate) SetNillableLastGrantAt(v *time.Time) *StageRunCreate {
 	return _c
 }
 
+// SetRetryCount sets the "retry_count" field.
+func (_c *StageRunCreate) SetRetryCount(v int) *StageRunCreate {
+	_c.mutation.SetRetryCount(v)
+	return _c
+}
+
+// SetNillableRetryCount sets the "retry_count" field if the given value is not nil.
+func (_c *StageRunCreate) SetNillableRetryCount(v *int) *StageRunCreate {
+	if v != nil {
+		_c.SetRetryCount(*v)
+	}
+	return _c
+}
+
+// SetNextRetryAt sets the "next_retry_at" field.
+func (_c *StageRunCreate) SetNextRetryAt(v time.Time) *StageRunCreate {
+	_c.mutation.SetNextRetryAt(v)
+	return _c
+}
+
+// SetNillableNextRetryAt sets the "next_retry_at" field if the given value is not nil.
+func (_c *StageRunCreate) SetNillableNextRetryAt(v *time.Time) *StageRunCreate {
+	if v != nil {
+		_c.SetNextRetryAt(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *StageRunCreate) SetCreatedAt(v time.Time) *StageRunCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -274,6 +302,10 @@ func (_c *StageRunCreate) defaults() {
 		v := stagerun.DefaultCostCents
 		_c.mutation.SetCostCents(v)
 	}
+	if _, ok := _c.mutation.RetryCount(); !ok {
+		v := stagerun.DefaultRetryCount
+		_c.mutation.SetRetryCount(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := stagerun.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -299,6 +331,9 @@ func (_c *StageRunCreate) check() error {
 	}
 	if _, ok := _c.mutation.CostCents(); !ok {
 		return &ValidationError{Name: "cost_cents", err: errors.New(`ent: missing required field "StageRun.cost_cents"`)}
+	}
+	if _, ok := _c.mutation.RetryCount(); !ok {
+		return &ValidationError{Name: "retry_count", err: errors.New(`ent: missing required field "StageRun.retry_count"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "StageRun.created_at"`)}
@@ -389,6 +424,14 @@ func (_c *StageRunCreate) createSpec() (*StageRun, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.LastGrantAt(); ok {
 		_spec.SetField(stagerun.FieldLastGrantAt, field.TypeTime, value)
 		_node.LastGrantAt = &value
+	}
+	if value, ok := _c.mutation.RetryCount(); ok {
+		_spec.SetField(stagerun.FieldRetryCount, field.TypeInt, value)
+		_node.RetryCount = value
+	}
+	if value, ok := _c.mutation.NextRetryAt(); ok {
+		_spec.SetField(stagerun.FieldNextRetryAt, field.TypeTime, value)
+		_node.NextRetryAt = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(stagerun.FieldCreatedAt, field.TypeTime, value)
@@ -689,6 +732,42 @@ func (u *StageRunUpsert) ClearLastGrantAt() *StageRunUpsert {
 	return u
 }
 
+// SetRetryCount sets the "retry_count" field.
+func (u *StageRunUpsert) SetRetryCount(v int) *StageRunUpsert {
+	u.Set(stagerun.FieldRetryCount, v)
+	return u
+}
+
+// UpdateRetryCount sets the "retry_count" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateRetryCount() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldRetryCount)
+	return u
+}
+
+// AddRetryCount adds v to the "retry_count" field.
+func (u *StageRunUpsert) AddRetryCount(v int) *StageRunUpsert {
+	u.Add(stagerun.FieldRetryCount, v)
+	return u
+}
+
+// SetNextRetryAt sets the "next_retry_at" field.
+func (u *StageRunUpsert) SetNextRetryAt(v time.Time) *StageRunUpsert {
+	u.Set(stagerun.FieldNextRetryAt, v)
+	return u
+}
+
+// UpdateNextRetryAt sets the "next_retry_at" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdateNextRetryAt() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldNextRetryAt)
+	return u
+}
+
+// ClearNextRetryAt clears the value of the "next_retry_at" field.
+func (u *StageRunUpsert) ClearNextRetryAt() *StageRunUpsert {
+	u.SetNull(stagerun.FieldNextRetryAt)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
 // Using this option is equivalent to using:
 //
@@ -985,6 +1064,48 @@ func (u *StageRunUpsertOne) UpdateLastGrantAt() *StageRunUpsertOne {
 func (u *StageRunUpsertOne) ClearLastGrantAt() *StageRunUpsertOne {
 	return u.Update(func(s *StageRunUpsert) {
 		s.ClearLastGrantAt()
+	})
+}
+
+// SetRetryCount sets the "retry_count" field.
+func (u *StageRunUpsertOne) SetRetryCount(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetRetryCount(v)
+	})
+}
+
+// AddRetryCount adds v to the "retry_count" field.
+func (u *StageRunUpsertOne) AddRetryCount(v int) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddRetryCount(v)
+	})
+}
+
+// UpdateRetryCount sets the "retry_count" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateRetryCount() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateRetryCount()
+	})
+}
+
+// SetNextRetryAt sets the "next_retry_at" field.
+func (u *StageRunUpsertOne) SetNextRetryAt(v time.Time) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetNextRetryAt(v)
+	})
+}
+
+// UpdateNextRetryAt sets the "next_retry_at" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdateNextRetryAt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateNextRetryAt()
+	})
+}
+
+// ClearNextRetryAt clears the value of the "next_retry_at" field.
+func (u *StageRunUpsertOne) ClearNextRetryAt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearNextRetryAt()
 	})
 }
 
@@ -1451,6 +1572,48 @@ func (u *StageRunUpsertBulk) UpdateLastGrantAt() *StageRunUpsertBulk {
 func (u *StageRunUpsertBulk) ClearLastGrantAt() *StageRunUpsertBulk {
 	return u.Update(func(s *StageRunUpsert) {
 		s.ClearLastGrantAt()
+	})
+}
+
+// SetRetryCount sets the "retry_count" field.
+func (u *StageRunUpsertBulk) SetRetryCount(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetRetryCount(v)
+	})
+}
+
+// AddRetryCount adds v to the "retry_count" field.
+func (u *StageRunUpsertBulk) AddRetryCount(v int) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.AddRetryCount(v)
+	})
+}
+
+// UpdateRetryCount sets the "retry_count" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateRetryCount() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateRetryCount()
+	})
+}
+
+// SetNextRetryAt sets the "next_retry_at" field.
+func (u *StageRunUpsertBulk) SetNextRetryAt(v time.Time) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetNextRetryAt(v)
+	})
+}
+
+// UpdateNextRetryAt sets the "next_retry_at" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdateNextRetryAt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdateNextRetryAt()
+	})
+}
+
+// ClearNextRetryAt clears the value of the "next_retry_at" field.
+func (u *StageRunUpsertBulk) ClearNextRetryAt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearNextRetryAt()
 	})
 }
 

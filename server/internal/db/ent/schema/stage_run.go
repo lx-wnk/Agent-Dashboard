@@ -28,6 +28,8 @@ func (StageRun) Fields() []ent.Field {
 		field.Time("started_at").Optional().Nillable(),
 		field.Time("ended_at").Optional().Nillable(),
 		field.Time("last_grant_at").Optional().Nillable(),
+		field.Int("retry_count").Default(0),
+		field.Time("next_retry_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable().Annotations(entsql.Default("datetime('now')")),
 	}
 }

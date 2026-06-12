@@ -7660,6 +7660,9 @@ type StageRunMutation struct {
 	started_at                 *time.Time
 	ended_at                   *time.Time
 	last_grant_at              *time.Time
+	retry_count                *int
+	addretry_count             *int
+	next_retry_at              *time.Time
 	created_at                 *time.Time
 	clearedFields              map[string]struct{}
 	task                       *string
@@ -8416,6 +8419,111 @@ func (m *StageRunMutation) ResetLastGrantAt() {
 	delete(m.clearedFields, stagerun.FieldLastGrantAt)
 }
 
+// SetRetryCount sets the "retry_count" field.
+func (m *StageRunMutation) SetRetryCount(i int) {
+	m.retry_count = &i
+	m.addretry_count = nil
+}
+
+// RetryCount returns the value of the "retry_count" field in the mutation.
+func (m *StageRunMutation) RetryCount() (r int, exists bool) {
+	v := m.retry_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRetryCount returns the old "retry_count" field's value of the StageRun entity.
+// If the StageRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *StageRunMutation) OldRetryCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRetryCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRetryCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRetryCount: %w", err)
+	}
+	return oldValue.RetryCount, nil
+}
+
+// AddRetryCount adds i to the "retry_count" field.
+func (m *StageRunMutation) AddRetryCount(i int) {
+	if m.addretry_count != nil {
+		*m.addretry_count += i
+	} else {
+		m.addretry_count = &i
+	}
+}
+
+// AddedRetryCount returns the value that was added to the "retry_count" field in this mutation.
+func (m *StageRunMutation) AddedRetryCount() (r int, exists bool) {
+	v := m.addretry_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRetryCount resets all changes to the "retry_count" field.
+func (m *StageRunMutation) ResetRetryCount() {
+	m.retry_count = nil
+	m.addretry_count = nil
+}
+
+// SetNextRetryAt sets the "next_retry_at" field.
+func (m *StageRunMutation) SetNextRetryAt(t time.Time) {
+	m.next_retry_at = &t
+}
+
+// NextRetryAt returns the value of the "next_retry_at" field in the mutation.
+func (m *StageRunMutation) NextRetryAt() (r time.Time, exists bool) {
+	v := m.next_retry_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNextRetryAt returns the old "next_retry_at" field's value of the StageRun entity.
+// If the StageRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *StageRunMutation) OldNextRetryAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNextRetryAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNextRetryAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNextRetryAt: %w", err)
+	}
+	return oldValue.NextRetryAt, nil
+}
+
+// ClearNextRetryAt clears the value of the "next_retry_at" field.
+func (m *StageRunMutation) ClearNextRetryAt() {
+	m.next_retry_at = nil
+	m.clearedFields[stagerun.FieldNextRetryAt] = struct{}{}
+}
+
+// NextRetryAtCleared returns if the "next_retry_at" field was cleared in this mutation.
+func (m *StageRunMutation) NextRetryAtCleared() bool {
+	_, ok := m.clearedFields[stagerun.FieldNextRetryAt]
+	return ok
+}
+
+// ResetNextRetryAt resets all changes to the "next_retry_at" field.
+func (m *StageRunMutation) ResetNextRetryAt() {
+	m.next_retry_at = nil
+	delete(m.clearedFields, stagerun.FieldNextRetryAt)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *StageRunMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -8567,7 +8675,7 @@ func (m *StageRunMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *StageRunMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 16)
 	if m.task != nil {
 		fields = append(fields, stagerun.FieldTaskID)
 	}
@@ -8607,6 +8715,12 @@ func (m *StageRunMutation) Fields() []string {
 	if m.last_grant_at != nil {
 		fields = append(fields, stagerun.FieldLastGrantAt)
 	}
+	if m.retry_count != nil {
+		fields = append(fields, stagerun.FieldRetryCount)
+	}
+	if m.next_retry_at != nil {
+		fields = append(fields, stagerun.FieldNextRetryAt)
+	}
 	if m.created_at != nil {
 		fields = append(fields, stagerun.FieldCreatedAt)
 	}
@@ -8644,6 +8758,10 @@ func (m *StageRunMutation) Field(name string) (ent.Value, bool) {
 		return m.EndedAt()
 	case stagerun.FieldLastGrantAt:
 		return m.LastGrantAt()
+	case stagerun.FieldRetryCount:
+		return m.RetryCount()
+	case stagerun.FieldNextRetryAt:
+		return m.NextRetryAt()
 	case stagerun.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -8681,6 +8799,10 @@ func (m *StageRunMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldEndedAt(ctx)
 	case stagerun.FieldLastGrantAt:
 		return m.OldLastGrantAt(ctx)
+	case stagerun.FieldRetryCount:
+		return m.OldRetryCount(ctx)
+	case stagerun.FieldNextRetryAt:
+		return m.OldNextRetryAt(ctx)
 	case stagerun.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -8783,6 +8905,20 @@ func (m *StageRunMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetLastGrantAt(v)
 		return nil
+	case stagerun.FieldRetryCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRetryCount(v)
+		return nil
+	case stagerun.FieldNextRetryAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNextRetryAt(v)
+		return nil
 	case stagerun.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -8810,6 +8946,9 @@ func (m *StageRunMutation) AddedFields() []string {
 	if m.addcost_cents != nil {
 		fields = append(fields, stagerun.FieldCostCents)
 	}
+	if m.addretry_count != nil {
+		fields = append(fields, stagerun.FieldRetryCount)
+	}
 	return fields
 }
 
@@ -8826,6 +8965,8 @@ func (m *StageRunMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTokensUsed()
 	case stagerun.FieldCostCents:
 		return m.AddedCostCents()
+	case stagerun.FieldRetryCount:
+		return m.AddedRetryCount()
 	}
 	return nil, false
 }
@@ -8863,6 +9004,13 @@ func (m *StageRunMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddCostCents(v)
 		return nil
+	case stagerun.FieldRetryCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRetryCount(v)
+		return nil
 	}
 	return fmt.Errorf("unknown StageRun numeric field %s", name)
 }
@@ -8891,6 +9039,9 @@ func (m *StageRunMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(stagerun.FieldLastGrantAt) {
 		fields = append(fields, stagerun.FieldLastGrantAt)
+	}
+	if m.FieldCleared(stagerun.FieldNextRetryAt) {
+		fields = append(fields, stagerun.FieldNextRetryAt)
 	}
 	return fields
 }
@@ -8926,6 +9077,9 @@ func (m *StageRunMutation) ClearField(name string) error {
 		return nil
 	case stagerun.FieldLastGrantAt:
 		m.ClearLastGrantAt()
+		return nil
+	case stagerun.FieldNextRetryAt:
+		m.ClearNextRetryAt()
 		return nil
 	}
 	return fmt.Errorf("unknown StageRun nullable field %s", name)
@@ -8973,6 +9127,12 @@ func (m *StageRunMutation) ResetField(name string) error {
 		return nil
 	case stagerun.FieldLastGrantAt:
 		m.ResetLastGrantAt()
+		return nil
+	case stagerun.FieldRetryCount:
+		m.ResetRetryCount()
+		return nil
+	case stagerun.FieldNextRetryAt:
+		m.ResetNextRetryAt()
 		return nil
 	case stagerun.FieldCreatedAt:
 		m.ResetCreatedAt()

@@ -125,6 +125,16 @@ func LastGrantAt(v time.Time) predicate.StageRun {
 	return predicate.StageRun(sql.FieldEQ(FieldLastGrantAt, v))
 }
 
+// RetryCount applies equality check predicate on the "retry_count" field. It's identical to RetryCountEQ.
+func RetryCount(v int) predicate.StageRun {
+	return predicate.StageRun(sql.FieldEQ(FieldRetryCount, v))
+}
+
+// NextRetryAt applies equality check predicate on the "next_retry_at" field. It's identical to NextRetryAtEQ.
+func NextRetryAt(v time.Time) predicate.StageRun {
+	return predicate.StageRun(sql.FieldEQ(FieldNextRetryAt, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.StageRun {
 	return predicate.StageRun(sql.FieldEQ(FieldCreatedAt, v))
@@ -803,6 +813,96 @@ func LastGrantAtIsNil() predicate.StageRun {
 // LastGrantAtNotNil applies the NotNil predicate on the "last_grant_at" field.
 func LastGrantAtNotNil() predicate.StageRun {
 	return predicate.StageRun(sql.FieldNotNull(FieldLastGrantAt))
+}
+
+// RetryCountEQ applies the EQ predicate on the "retry_count" field.
+func RetryCountEQ(v int) predicate.StageRun {
+	return predicate.StageRun(sql.FieldEQ(FieldRetryCount, v))
+}
+
+// RetryCountNEQ applies the NEQ predicate on the "retry_count" field.
+func RetryCountNEQ(v int) predicate.StageRun {
+	return predicate.StageRun(sql.FieldNEQ(FieldRetryCount, v))
+}
+
+// RetryCountIn applies the In predicate on the "retry_count" field.
+func RetryCountIn(vs ...int) predicate.StageRun {
+	return predicate.StageRun(sql.FieldIn(FieldRetryCount, vs...))
+}
+
+// RetryCountNotIn applies the NotIn predicate on the "retry_count" field.
+func RetryCountNotIn(vs ...int) predicate.StageRun {
+	return predicate.StageRun(sql.FieldNotIn(FieldRetryCount, vs...))
+}
+
+// RetryCountGT applies the GT predicate on the "retry_count" field.
+func RetryCountGT(v int) predicate.StageRun {
+	return predicate.StageRun(sql.FieldGT(FieldRetryCount, v))
+}
+
+// RetryCountGTE applies the GTE predicate on the "retry_count" field.
+func RetryCountGTE(v int) predicate.StageRun {
+	return predicate.StageRun(sql.FieldGTE(FieldRetryCount, v))
+}
+
+// RetryCountLT applies the LT predicate on the "retry_count" field.
+func RetryCountLT(v int) predicate.StageRun {
+	return predicate.StageRun(sql.FieldLT(FieldRetryCount, v))
+}
+
+// RetryCountLTE applies the LTE predicate on the "retry_count" field.
+func RetryCountLTE(v int) predicate.StageRun {
+	return predicate.StageRun(sql.FieldLTE(FieldRetryCount, v))
+}
+
+// NextRetryAtEQ applies the EQ predicate on the "next_retry_at" field.
+func NextRetryAtEQ(v time.Time) predicate.StageRun {
+	return predicate.StageRun(sql.FieldEQ(FieldNextRetryAt, v))
+}
+
+// NextRetryAtNEQ applies the NEQ predicate on the "next_retry_at" field.
+func NextRetryAtNEQ(v time.Time) predicate.StageRun {
+	return predicate.StageRun(sql.FieldNEQ(FieldNextRetryAt, v))
+}
+
+// NextRetryAtIn applies the In predicate on the "next_retry_at" field.
+func NextRetryAtIn(vs ...time.Time) predicate.StageRun {
+	return predicate.StageRun(sql.FieldIn(FieldNextRetryAt, vs...))
+}
+
+// NextRetryAtNotIn applies the NotIn predicate on the "next_retry_at" field.
+func NextRetryAtNotIn(vs ...time.Time) predicate.StageRun {
+	return predicate.StageRun(sql.FieldNotIn(FieldNextRetryAt, vs...))
+}
+
+// NextRetryAtGT applies the GT predicate on the "next_retry_at" field.
+func NextRetryAtGT(v time.Time) predicate.StageRun {
+	return predicate.StageRun(sql.FieldGT(FieldNextRetryAt, v))
+}
+
+// NextRetryAtGTE applies the GTE predicate on the "next_retry_at" field.
+func NextRetryAtGTE(v time.Time) predicate.StageRun {
+	return predicate.StageRun(sql.FieldGTE(FieldNextRetryAt, v))
+}
+
+// NextRetryAtLT applies the LT predicate on the "next_retry_at" field.
+func NextRetryAtLT(v time.Time) predicate.StageRun {
+	return predicate.StageRun(sql.FieldLT(FieldNextRetryAt, v))
+}
+
+// NextRetryAtLTE applies the LTE predicate on the "next_retry_at" field.
+func NextRetryAtLTE(v time.Time) predicate.StageRun {
+	return predicate.StageRun(sql.FieldLTE(FieldNextRetryAt, v))
+}
+
+// NextRetryAtIsNil applies the IsNil predicate on the "next_retry_at" field.
+func NextRetryAtIsNil() predicate.StageRun {
+	return predicate.StageRun(sql.FieldIsNull(FieldNextRetryAt))
+}
+
+// NextRetryAtNotNil applies the NotNil predicate on the "next_retry_at" field.
+func NextRetryAtNotNil() predicate.StageRun {
+	return predicate.StageRun(sql.FieldNotNull(FieldNextRetryAt))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
