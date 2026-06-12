@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import * as d3 from 'd3'
+import { axisBottom, axisLeft } from 'd3-axis'
+import { scaleLinear, scaleTime } from 'd3-scale'
+import { select } from 'd3-selection'
+import { line } from 'd3-shape'
 import { ref, watch } from 'vue'
 import { useCostForecast } from '../composables/useCostForecast'
 import type { ForecastTrendPoint, ForecastPoint } from '../composables/useCostForecast'
@@ -11,7 +14,7 @@ function renderChart(trendData: ForecastTrendPoint[], forecastData: ForecastPoin
   if (!svgRef.value)
     return
 
-  const svg = d3.select(svgRef.value)
+  const svg = select(svgRef.value)
   svg.selectAll('*').remove()
 
   const margin = { top: 20, right: 20, bottom: 40, left: 60 }
@@ -23,14 +26,14 @@ function renderChart(trendData: ForecastTrendPoint[], forecastData: ForecastPoin
 
   const allT = [...trendData.map(p => p.t), ...forecastData.map(p => p.t)]
   const allY = [...trendData.map(p => p.y), ...forecastData.map(p => p.projectedCost)]
-  const x = d3.scaleTime()
+  const x = scaleTime()
     .domain([new Date(Math.min(...allT)), new Date(Math.max(...allT))])
     .range([0, W])
-  const y = d3.scaleLinear()
+  const y = scaleLinear()
     .domain([0, Math.max(0.01, ...allY) * 1.1])
     .range([H, 0])
 
-  const trendLine = d3.line<ForecastTrendPoint>().x(d => x(new Date(d.t))).y(d => y(d.y))
+  const trendLine = line<ForecastTrendPoint>().x(d => x(new Date(d.t))).y(d => y(d.y))
   g.append('path')
     .datum(trendData)
     .attr('fill', 'none')
@@ -38,7 +41,7 @@ function renderChart(trendData: ForecastTrendPoint[], forecastData: ForecastPoin
     .attr('stroke-width', 2)
     .attr('d', trendLine)
 
-  const forecastLine = d3.line<ForecastPoint>()
+  const forecastLine = line<ForecastPoint>()
     .x(d => x(new Date(d.t)))
     .y(d => y(d.projectedCost))
   const bridge: ForecastPoint[] = trendData.length > 0 && forecastData.length > 0
@@ -54,12 +57,12 @@ function renderChart(trendData: ForecastTrendPoint[], forecastData: ForecastPoin
 
   g.append('g')
     .attr('transform', `translate(0,${H})`)
-    .call(d3.axisBottom(x).ticks(6))
+    .call(axisBottom(x).ticks(6))
     .selectAll('text')
     .attr('font-size', '10px')
 
   g.append('g')
-    .call(d3.axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
+    .call(axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
     .selectAll('text')
     .attr('font-size', '10px')
 }
