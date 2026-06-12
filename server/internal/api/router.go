@@ -158,7 +158,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// attacker-controlled X-Forwarded-Host / X-Forwarded-Proto / Forwarded values.
 	r.Use(StripForwardedHeaders)
 	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.RealIP)
 	r.Use(SlogMiddleware)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(SecurityHeaders)
