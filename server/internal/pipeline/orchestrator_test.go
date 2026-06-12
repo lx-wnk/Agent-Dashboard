@@ -343,3 +343,203 @@ func TestDecideCompletedTransition_SelfReview_MaxCyclesReached(t *testing.T) {
 	_, ok := transition.(pipeline.WaitUserTransition)
 	require.True(t, ok, "self_review at max cycles must produce WaitUserTransition, got %T", transition)
 }
+
+// --- infra-failure auto-requeue branch tests ---
+
+// makeRunningStageRun creates a task + stage_run already in "running" status with the given retryCount.
+func makeRunningStageRun(t *testing.T, ctx context.Context, taskRepo repo.TaskRepo, srRepo repo.StageRunRepo, retryCount int) (*ent.Task, *ent.StageRun) {
+	t.Helper()
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:                "infra-test",
+		Title:               "Infra Test",
+		Cwd:                 "/tmp",
+		CurrentStage:        "implementation",
+		Priority:            "medium",
+		MaxIterations:       3,
+		StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "implementation",
+		Iteration:   0,
+		SessionName: "infra-test-impl-0",
+	})
+	require.NoError(t, err)
+
+	// Set to running with a dead PID so finalizeCompletedAsyncRuns processes it.
+	deadPID := -1
+	now := time.Now()
+	sr, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status:     strPtr("running"),
+		PID:        &deadPID,
+		StartedAt:  &now,
+		RetryCount: &retryCount,
+	})
+	require.NoError(t, err)
+	return task, sr
+}
+
+func strPtr(s string) *string { return &s }
+
+func makeOrchestratorWithSRRepo(t *testing.T) (*pipeline.PipelineOrchestrator, repo.TaskRepo, repo.StageRunRepo) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	permRepo := repo.NewPermissionRepo(bundle.Client)
+	auditRepo := repo.NewAuditEventRepo(bundle.Client)
+	cfgRepo := repo.NewPipelineConfigRepo(bundle.Client)
+
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:       taskRepo,
+		StageRunRepo:   srRepo,
+		PermissionRepo: permRepo,
+		AuditRepo:      auditRepo,
+		ConfigRepo:     cfgRepo,
+	})
+	require.NoError(t, err)
+	return orch, taskRepo, srRepo
+}
+
+func TestFinalizeCompletedAsyncRuns_InfraFailure_Requeues(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	_, run := makeRunningStageRun(t, ctx, taskRepo, srRepo, 0)
+
+	orch.SetCompletionDetector(func(_ *ent.StageRun, _ string, _ pipeline.CompletionDeps) (pipeline.CompletionResult, error) {
+		return pipeline.CompletionResult{Kind: "failed", Error: "quota exceeded", Infra: true}, nil
+	})
+
+	before := time.Now()
+	err := orch.FinalizeCompletedAsyncRunsForTest(ctx, []*ent.StageRun{run})
+	require.NoError(t, err)
+
+	updated, err := srRepo.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, "requeued", updated.Status)
+	require.Equal(t, 1, updated.RetryCount)
+	require.NotNil(t, updated.NextRetryAt)
+	require.True(t, updated.NextRetryAt.After(before), "NextRetryAt must be in the future")
+	require.Equal(t, "quota exceeded", updated.Output["requeue_reason"])
+}
+
+func TestFinalizeCompletedAsyncRuns_InfraFailure_ExhaustedBudget_HardFails(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	// defaultMaxAutoRetries is 3; start with retryCount == 3 → budget exhausted.
+	_, run := makeRunningStageRun(t, ctx, taskRepo, srRepo, 3)
+
+	orch.SetCompletionDetector(func(_ *ent.StageRun, _ string, _ pipeline.CompletionDeps) (pipeline.CompletionResult, error) {
+		return pipeline.CompletionResult{Kind: "failed", Error: "overloaded_error", Infra: true}, nil
+	})
+
+	err := orch.FinalizeCompletedAsyncRunsForTest(ctx, []*ent.StageRun{run})
+	require.NoError(t, err)
+
+	updated, err := srRepo.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, "failed", updated.Status)
+	require.NotNil(t, updated.Output["auto_retries_exhausted"], "output must contain auto_retries_exhausted key")
+	require.EqualValues(t, 3, updated.Output["auto_retries_exhausted"])
+}
+
+func TestFinalizeCompletedAsyncRuns_SchemaReject_Iter0_Iterates(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	_, run := makeRunningStageRun(t, ctx, taskRepo, srRepo, 0)
+
+	orch.SetCompletionDetector(func(_ *ent.StageRun, _ string, _ pipeline.CompletionDeps) (pipeline.CompletionResult, error) {
+		return pipeline.CompletionResult{Kind: "failed", Error: "missing field: passed", Retryable: true}, nil
+	})
+
+	err := orch.FinalizeCompletedAsyncRunsForTest(ctx, []*ent.StageRun{run})
+	require.NoError(t, err)
+
+	updated, err := srRepo.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	// IterateTransition marks the original run "done" and creates a new one
+	require.Equal(t, "done", updated.Status)
+}
+
+func TestFinalizeCompletedAsyncRuns_SchemaReject_Iter1_WaitsUser(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:                "schema-iter1",
+		Title:               "Schema Iter1 Test",
+		Cwd:                 "/tmp",
+		CurrentStage:        "implementation",
+		Priority:            "medium",
+		MaxIterations:       3,
+		StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	// Create iteration 0 as "done" so the partial unique index on running is free.
+	iter0, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "implementation",
+		Iteration:   0,
+		SessionName: "schema-iter1-impl-0",
+	})
+	require.NoError(t, err)
+	_, err = srRepo.Update(ctx, iter0.ID, repo.UpdateStageRunInput{Status: strPtr("done")})
+	require.NoError(t, err)
+
+	// Create iteration 1 in running state.
+	iter1, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "implementation",
+		Iteration:   1,
+		SessionName: "schema-iter1-impl-1",
+	})
+	require.NoError(t, err)
+	deadPID := -1
+	now := time.Now()
+	iter1, err = srRepo.Update(ctx, iter1.ID, repo.UpdateStageRunInput{
+		Status:    strPtr("running"),
+		PID:       &deadPID,
+		StartedAt: &now,
+	})
+	require.NoError(t, err)
+
+	orch.SetCompletionDetector(func(_ *ent.StageRun, _ string, _ pipeline.CompletionDeps) (pipeline.CompletionResult, error) {
+		return pipeline.CompletionResult{Kind: "failed", Error: "missing field: passed", Retryable: true}, nil
+	})
+
+	err = orch.FinalizeCompletedAsyncRunsForTest(ctx, []*ent.StageRun{iter1})
+	require.NoError(t, err)
+
+	updated, err := srRepo.GetByID(ctx, iter1.ID)
+	require.NoError(t, err)
+	require.Equal(t, "awaiting_user", updated.Status)
+}
+
+func TestFinalizeCompletedAsyncRuns_HardFail_NeitherInfraNorRetryable(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	_, run := makeRunningStageRun(t, ctx, taskRepo, srRepo, 0)
+
+	orch.SetCompletionDetector(func(_ *ent.StageRun, _ string, _ pipeline.CompletionDeps) (pipeline.CompletionResult, error) {
+		return pipeline.CompletionResult{Kind: "failed", Error: "agent panicked", Infra: false, Retryable: false}, nil
+	})
+
+	err := orch.FinalizeCompletedAsyncRunsForTest(ctx, []*ent.StageRun{run})
+	require.NoError(t, err)
+
+	updated, err := srRepo.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, "failed", updated.Status)
+	require.Equal(t, "agent panicked", updated.Output["error"])
+	require.Nil(t, updated.Output["auto_retries_exhausted"], "hard fail must not set auto_retries_exhausted")
+}

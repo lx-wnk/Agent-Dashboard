@@ -18,3 +18,8 @@ func (o *PipelineOrchestrator) DecideCompletedTransitionForTest(
 
 // ClassifyInfraForTest exposes classifyInfra for testing.
 var ClassifyInfraForTest = classifyInfra
+
+// FinalizeCompletedAsyncRunsForTest exposes finalizeCompletedAsyncRuns for testing.
+func (o *PipelineOrchestrator) FinalizeCompletedAsyncRunsForTest(ctx context.Context, runs []*ent.StageRun) error {
+	return o.finalizeCompletedAsyncRuns(ctx, runs)
+}

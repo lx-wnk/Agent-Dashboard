@@ -36,6 +36,10 @@ const (
 	pendingStaleDuration       = 5 * time.Minute
 	maxReviewCyclesKey         = "maxReviewCycles"
 	defaultMaxReviewCycles     = 3
+	maxAutoRetriesKey          = "maxAutoRetries"
+	defaultMaxAutoRetries      = 3
+	retryBackoffKey            = "retryBackoffSeconds"
+	defaultRetryBackoff        = 60
 )
 
 // httpSpawnResult carries the outcome of an asynchronous HTTP-adapter spawn.
@@ -435,29 +439,63 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			continue
 		}
 
-		// failed
-		if !result.Retryable {
-			if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: result.Output}); err != nil {
-				slog.Error("finalizeCompletedAsyncRuns.applyTransition.hardFail", "err", err)
+		// failed — three cases in priority order
+
+		if result.Infra {
+			maxRetries := o.getCachedConfigNumber(ctx, maxAutoRetriesKey, defaultMaxAutoRetries)
+			if fresh.RetryCount < maxRetries {
+				attempt := fresh.RetryCount + 1
+				backoffSec := o.getCachedConfigNumber(ctx, retryBackoffKey, defaultRetryBackoff) * attempt // linear backoff
+				nextRetryAt := time.Now().Add(time.Duration(backoffSec) * time.Second)
+				slog.Info("orchestrator: requeuing infra-failed run",
+					"runID", fresh.ID, "stage", fresh.Stage, "attempt", attempt,
+					"maxAutoRetries", maxRetries, "backoffSec", backoffSec)
+				if _, err := o.applyTransition(ctx, task, fresh, RequeueTransition{
+					Reason:      result.Error,
+					Output:      result.Output,
+					Attempt:     attempt,
+					NextRetryAt: nextRetryAt,
+				}); err != nil {
+					slog.Error("finalizeCompletedAsyncRuns.applyTransition.requeue", "err", err)
+				}
+			} else {
+				slog.Warn("orchestrator: auto-retry budget exhausted — hard failing",
+					"runID", fresh.ID, "stage", fresh.Stage, "maxAutoRetries", maxRetries)
+				output := make(map[string]any, len(result.Output)+1)
+				for k, v := range result.Output {
+					output[k] = v
+				}
+				output["auto_retries_exhausted"] = maxRetries
+				if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: output}); err != nil {
+					slog.Error("finalizeCompletedAsyncRuns.applyTransition.hardFail", "err", err)
+				}
 			}
 			continue
 		}
-		// Schema rejection retry logic: iter 0 → iterate; iter >= 1 → wait_user
-		if fresh.Iteration == 0 {
-			if _, err := o.applyTransition(ctx, task, fresh, IterateTransition{Output: map[string]any{
-				"validation_error": result.Error,
-				"rejected_output":  result.Output,
-			}}); err != nil {
-				slog.Error("finalizeCompletedAsyncRuns.applyTransition.iterate", "err", err)
+
+		if result.Retryable {
+			// Schema rejection retry logic: iter 0 → iterate; iter >= 1 → wait_user
+			if fresh.Iteration == 0 {
+				if _, err := o.applyTransition(ctx, task, fresh, IterateTransition{Output: map[string]any{
+					"validation_error": result.Error,
+					"rejected_output":  result.Output,
+				}}); err != nil {
+					slog.Error("finalizeCompletedAsyncRuns.applyTransition.iterate", "err", err)
+				}
+			} else {
+				if _, err := o.applyTransition(ctx, task, fresh, WaitUserTransition{
+					Reason:    fmt.Sprintf("schema validation failed twice at stage %s: %s", fresh.Stage, result.Error),
+					Output:    map[string]any{"validation_error": result.Error, "rejected_output": result.Output},
+					AgentDone: true,
+				}); err != nil {
+					slog.Error("finalizeCompletedAsyncRuns.applyTransition.waitUser", "err", err)
+				}
 			}
-		} else {
-			if _, err := o.applyTransition(ctx, task, fresh, WaitUserTransition{
-				Reason:    fmt.Sprintf("schema validation failed twice at stage %s: %s", fresh.Stage, result.Error),
-				Output:    map[string]any{"validation_error": result.Error, "rejected_output": result.Output},
-				AgentDone: true,
-			}); err != nil {
-				slog.Error("finalizeCompletedAsyncRuns.applyTransition.waitUser", "err", err)
-			}
+			continue
+		}
+
+		if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: result.Output}); err != nil {
+			slog.Error("finalizeCompletedAsyncRuns.applyTransition.hardFail", "err", err)
 		}
 	}
 	return nil
