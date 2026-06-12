@@ -9,20 +9,24 @@ export interface PipelineConfig {
 
 const config = ref<PipelineConfig | null>(null)
 const maxAutoRetries = ref(3)
-let fetched = false
+let configPromise: Promise<void> | null = null
 
-async function fetchConfig() {
-  if (fetched)
-    return
-  fetched = true
-  try {
-    const res = await fetch('/api/pipeline/config')
-    if (res.ok) {
-      config.value = await res.json()
-      maxAutoRetries.value = config.value!.maxAutoRetries
+function fetchConfig() {
+  if (configPromise)
+    return configPromise
+  configPromise = (async () => {
+    try {
+      const res = await fetch('/api/pipeline/config')
+      if (res.ok) {
+        config.value = await res.json()
+        maxAutoRetries.value = config.value!.maxAutoRetries
+      }
     }
-  }
-  catch { /* keep default */ }
+    catch {
+      configPromise = null // allow a later retry after a failed fetch
+    }
+  })()
+  return configPromise
 }
 
 export function usePipelineConfig() {
