@@ -65,16 +65,12 @@ describe('isAllowedSpawnerCommand', () => {
     expect(isAllowedSpawnerCommand('npx')).toBe(true)
   })
 
-  it('accepts absolute paths outside tmp', () => {
+  it('accepts any absolute path (advisory only — server enforces trusted-dir rule)', () => {
     expect(isAllowedSpawnerCommand('/usr/local/bin/x')).toBe(true)
     expect(isAllowedSpawnerCommand('/opt/company/bin/runner')).toBe(true)
-  })
-
-  it('rejects absolute paths in /tmp or /var/tmp', () => {
-    expect(isAllowedSpawnerCommand('/tmp/evil')).toBe(false)
-    expect(isAllowedSpawnerCommand('/tmp')).toBe(false)
-    expect(isAllowedSpawnerCommand('/var/tmp/x')).toBe(false)
-    expect(isAllowedSpawnerCommand('/var/tmp')).toBe(false)
+    // The browser cannot resolve realpaths, so even /tmp passes the client
+    // pre-check; services.ValidateSpawnerCommand rejects it server-side.
+    expect(isAllowedSpawnerCommand('/tmp/evil')).toBe(true)
   })
 
   it('rejects unknown bare names', () => {

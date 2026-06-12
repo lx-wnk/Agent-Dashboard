@@ -40,7 +40,7 @@
 | `DASHBOARD_HOOKS_DEBOUNCE_MS`    | Debounce window before SSE rescan after a hook event, default `100`ms |
 | `DASHBOARD_ALLOW_GIT_PULL`       | `true` or `false`, default `false`; enables `POST /api/tasks/:id/git-action` with `action:'pull'` (git pull --ff-only on task worktree) |
 | `DASHBOARD_CLAUDE_CONFIG_DIRS`   | Comma-separated list of Claude config directories to search for session JSONL files, e.g. `~/.claude-personal,~/.claude-work`. Searched before auto-detection. Useful when the dashboard process is not started with `CLAUDE_CONFIG_DIR` set, or on shared machines with multiple profiles. |
-| `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` | Comma-separated list of additional command names or absolute path prefixes that are permitted in the `spawners.command` field, e.g. `my-claude-wrapper,/opt/company/bin`. Extends the conservative built-in allow-list without requiring a code change. Optional. |
+| `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` | Comma-separated extension of the `spawners.command` allow-list enforced by `services.ValidateSpawnerCommand`. Bare entries (e.g. `my-claude-wrapper`) extend the permitted bare-name set; absolute entries (e.g. `/opt/company/bin`) add **trusted bin directories** under which an absolute command may resolve. Absolute commands must `EvalSymlinks`-resolve and sit under a trusted dir — the former "any path outside /tmp" rule (and its symlink-into-/tmp bypass) is gone. Optional. |
 
 ## Legacy Adapter Migration (post-merge)
 

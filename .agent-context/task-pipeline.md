@@ -65,10 +65,17 @@ default first. Mark a different spawner default via `POST /api/spawners/{id}/def
 `DASHBOARD_JWT_SECRET` and `DASHBOARD_HOOKS_SECRET` are never forwarded to
 spawned agents.
 
-**Command allow-list:** the `spawners.command` field is validated against a
-conservative allow-list at create/update time. Extend the default list via
-`DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated). CRUD requires the
-`keys:manage` MCP scope.
+**Command allow-list:** the `spawners.command` field is validated by
+`services.ValidateSpawnerCommand` (`server/internal/services/spawn_policy.go`)
+at create/update time and again on the agent spawn path — one authority, no
+`api/agents → api/spawners` import. Bare names (`claude`, `claude-code`, `npx`)
+are allow-listed; absolute paths must `EvalSymlinks`-resolve and sit under a
+trusted bin dir (`/usr/bin`, `/bin`, `/usr/local/bin`, `/opt/homebrew/bin`,
+`~/.local/bin`, the resolved `claude` dir). Resolving symlinks before the trust
+check closes the symlink-into-`/tmp` bypass. Extend both sets via
+`DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated — bare names extend the
+name list, absolute paths add trusted dirs). CRUD requires the `keys:manage`
+MCP scope.
 
 **Adapter dispatch:** the resolved Spawner row also carries an
 `adapter_type` field. `server/internal/pipeline/stage_handlers.go::Execute`
