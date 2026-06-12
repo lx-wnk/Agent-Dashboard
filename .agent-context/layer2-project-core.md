@@ -10,7 +10,7 @@
 
 - Server MUST bind to `127.0.0.1` — never `0.0.0.0` (reads sensitive Claude session data)
 - Subagents discovered from `~/.claude/projects/{encoded_path}/{sessionId}/subagents/*.jsonl`
-- Agent status thresholds: active < 30s, waiting < 5min, idle > 5min (since last activity)
+- Agent status thresholds: `activeThreshold` (30s) and `waitingThreshold` (5min) in `server/internal/merger/merger.go` (`CalculateStatus`); idle is the default case beyond `waitingThreshold` (no const)
 
 ## Single Source of Truth (SSOT)
 
