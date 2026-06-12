@@ -42,6 +42,10 @@
 | `DASHBOARD_CLAUDE_CONFIG_DIRS`   | Comma-separated list of Claude config directories to search for session JSONL files, e.g. `~/.claude-personal,~/.claude-work`. Searched before auto-detection. Useful when the dashboard process is not started with `CLAUDE_CONFIG_DIR` set, or on shared machines with multiple profiles. |
 | `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` | Comma-separated extension of the `spawners.command` allow-list enforced by `services.ValidateSpawnerCommand`. Bare entries (e.g. `my-claude-wrapper`) extend the permitted bare-name set; absolute entries (e.g. `/opt/company/bin`) add **trusted bin directories** under which an absolute command may resolve. Absolute commands must `EvalSymlinks`-resolve and sit under a trusted dir — the former "any path outside /tmp" rule (and its symlink-into-/tmp bypass) is gone. Optional. |
 
+## Auto-Requeue Config Keys
+
+`maxAutoRetries` (default 3) and `retryBackoffSeconds` (default 60) are pipeline_config keys that govern the self-healing auto-requeue for infra-class stage-run failures. Both are read/write via `GET|PUT /api/pipeline/config`. The `requeued` stage-run status represents a run in cooldown between retries; it is non-blocking (`needsUser` excludes it). Full lifecycle and classification rules: [task-pipeline.md — Auto-Requeue](task-pipeline.md#auto-requeue-self-healing).
+
 ## Legacy Adapter Migration (post-merge)
 
 - `DASHBOARD_SPAWN_COMMAND` is deprecated. On first boot it is migrated to a Spawner row with `slug='imported-custom'` (`adapter_type='custom'`); after migration the env var has no runtime effect. Prefer creating Custom-adapter spawners via the UI (`/settings/spawners`) or `POST /api/spawners`.

@@ -39,6 +39,46 @@ Stateless helpers consumed by `routes/*` and `mcp/*` (and, where appropriate, by
 
 `stageTimeoutSeconds` (pipeline_config key, default 1800) is enforced by the orchestrator's tick loop. If a stage agent's PID is still alive after this many seconds, the orchestrator sends SIGTERM and applies a `fail` transition, freeing its runner slot. Set to `0` to disable. Written via `UPDATE pipeline_config SET value='3600' WHERE key='stageTimeoutSeconds'` (or INSERT if absent).
 
+## Auto-Requeue (Self-Healing)
+
+Infra-class stage-run failures are automatically requeued instead of parking on `needsUser`.
+
+**Failure classification:**
+
+| Class | Examples | Action |
+|---|---|---|
+| `Infra` | process killed, no session JSONL, unparseable output, quota/session-limit error | auto-requeue |
+| Schema | stage output fails schema validation | iterate → wait_user (existing path, unchanged) |
+| Hard (budget exhausted) | `retry_count >= maxAutoRetries` | hard `failed` → needsUser |
+
+**Stage-run status `requeued`:** the run is updated in place (same row, no new iteration) with incremented `retry_count` and a `next_retry_at` cooldown timestamp. It is non-blocking — `needsUser` excludes `requeued` runs.
+
+**Lifecycle:**
+
+```
+running
+  │ infra fail, retry_count < maxAutoRetries
+  ▼
+requeued  ──(cooldown elapsed, sweep promotes)──►  pending  ──(picker)──►  running
+  │
+  │ retry_count >= maxAutoRetries
+  ▼
+failed  →  needsUser
+```
+
+**Tick order (required):** finalize completed runs → awaiting-user sweep → orphan sweep → requeue sweep (`sweepRequeueableRuns`) → picker. The requeue sweep promotes cooldown-elapsed `requeued` runs back to `pending`, clearing `started_at`/`pid`/`next_retry_at` (keeping `retry_count`). The picker skips `requeued` runs during cooldown.
+
+**Config keys:**
+
+| Key | Default | Description |
+|---|---|---|
+| `maxAutoRetries` | `3` | Max infra-retries before hard fail |
+| `retryBackoffSeconds` | `60` | Linear backoff; `next_retry_at = now + retryBackoffSeconds × attempt` |
+
+Both keys are readable via `GET /api/pipeline/config` and writable via `PUT /api/pipeline/config`. Validation: both must be `>= 0`.
+
+**UI:** a distinct "Retrying N/max · next retry in Xs" chip is shown while a run is in `requeued` status.
+
 ## Spawner Resolution
 
 `server/internal/services/spawner_resolver.go` resolves the effective spawner for a stage agent using the following precedence:

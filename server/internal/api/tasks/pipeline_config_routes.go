@@ -28,6 +28,8 @@ func (h *Handler) putPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 	var body struct {
 		MaxParallelOrchestrators *int `json:"maxParallelOrchestrators"`
 		StageTimeoutSeconds      *int `json:"stageTimeoutSeconds"`
+		MaxAutoRetries           *int `json:"maxAutoRetries"`
+		RetryBackoffSeconds      *int `json:"retryBackoffSeconds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return fmt.Errorf("pipeline_config.put: decode: %w", err)
@@ -46,6 +48,22 @@ func (h *Handler) putPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 			return fmt.Errorf("pipeline_config.put: stageTimeoutSeconds must be >= 0")
 		}
 		if err := h.cfgRepo.Set(ctx, "stageTimeoutSeconds", strconv.Itoa(*body.StageTimeoutSeconds)); err != nil {
+			return fmt.Errorf("pipeline_config.put: %w", err)
+		}
+	}
+	if body.MaxAutoRetries != nil {
+		if *body.MaxAutoRetries < 0 {
+			return fmt.Errorf("pipeline_config.put: maxAutoRetries must be >= 0")
+		}
+		if err := h.cfgRepo.Set(ctx, "maxAutoRetries", strconv.Itoa(*body.MaxAutoRetries)); err != nil {
+			return fmt.Errorf("pipeline_config.put: %w", err)
+		}
+	}
+	if body.RetryBackoffSeconds != nil {
+		if *body.RetryBackoffSeconds < 0 {
+			return fmt.Errorf("pipeline_config.put: retryBackoffSeconds must be >= 0")
+		}
+		if err := h.cfgRepo.Set(ctx, "retryBackoffSeconds", strconv.Itoa(*body.RetryBackoffSeconds)); err != nil {
 			return fmt.Errorf("pipeline_config.put: %w", err)
 		}
 	}

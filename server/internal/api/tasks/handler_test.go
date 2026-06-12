@@ -189,6 +189,35 @@ func TestGetPipelineConfig_ReturnsRetryKeys(t *testing.T) {
 	}
 }
 
+func TestPutPipelineConfig_RetryKeys(t *testing.T) {
+	_, r := newTestHandler(t)
+
+	body := map[string]any{
+		"maxAutoRetries":      5,
+		"retryBackoffSeconds": 120,
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req = withAuth(t, req)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var result map[string]int
+	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result["maxAutoRetries"] != 5 {
+		t.Errorf("expected maxAutoRetries=5, got %d", result["maxAutoRetries"])
+	}
+	if result["retryBackoffSeconds"] != 120 {
+		t.Errorf("expected retryBackoffSeconds=120, got %d", result["retryBackoffSeconds"])
+	}
+}
+
 func TestCreateTask_DuplicateSlug(t *testing.T) {
 	_, r := newTestHandler(t)
 
