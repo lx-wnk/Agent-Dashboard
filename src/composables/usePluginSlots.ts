@@ -1,6 +1,7 @@
+import type { PluginInfo } from '../utils/plugins'
 import type { LoadedAddon, SlotAddonModule, SlotName } from '../utils/pluginSlot'
+import { fetchPluginList } from '../utils/plugins'
 import { PLUGIN_UI_CAPABILITY } from '../utils/pluginSlot'
-import { fetchPluginList, type PluginInfo } from '../utils/plugins'
 
 /** Per-plugin UI manifest served at `/api/settings/plugins/{id}/ui-manifest.json`. */
 export interface UiManifest {
