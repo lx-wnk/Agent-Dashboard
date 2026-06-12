@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -326,15 +327,15 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 
 	priority := body.Priority
 	if priority == "" {
-		priority = "medium"
+		priority = db.DefaultPriority
 	}
 	stage := body.Stage
 	if stage == "" {
-		stage = "concept"
+		stage = db.DefaultStage
 	}
 	maxIter := body.MaxIterations
 	if maxIter <= 0 {
-		maxIter = 20
+		maxIter = db.DefaultMaxIterations
 	}
 	payload, _ := auth.PayloadFromContext(r.Context())
 	userID := payload.Sub
@@ -348,7 +349,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		CurrentStage:        stage,
 		SilverBullet:        body.SilverBullet,
 		MaxIterations:       maxIter,
-		StageTimeoutSeconds: 1800,
+		StageTimeoutSeconds: db.DefaultStageTimeoutSeconds,
 		ProjectID:           projectIDPtr,
 		SpawnerID:           spawnerIDPtr,
 	})

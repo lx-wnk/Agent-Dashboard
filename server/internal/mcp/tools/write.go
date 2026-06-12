@@ -145,7 +145,7 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"slug":               map[string]any{"type": "string", "description": "Unique slug matching ^[a-z0-9]+(?:-[a-z0-9]+)*$ (max 64 chars)"},
+				"slug":               map[string]any{"type": "string", "description": "Unique " + validation.SlugPatternMessage},
 				"title":              map[string]any{"type": "string"},
 				"cwd":                map[string]any{"type": "string", "description": "Absolute working directory path"},
 				"description":        map[string]any{"type": "string"},

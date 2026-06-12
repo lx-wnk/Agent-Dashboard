@@ -58,3 +58,7 @@ server/coverage.out
 
 # Playwright per-run output
 test-results/
+###> agent-context (transient working state) ###
+# Per-session task plan, kept locally to avoid merge conflicts across branches.
+/.agent-context/memory/todo.md
+###< agent-context ###

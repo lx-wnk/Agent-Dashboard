@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/httputil"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -402,7 +403,7 @@ func callDashboard(baseURL, token, method, path string, body any) (string, error
 	if readErr != nil {
 		slog.Warn("channel: callDashboard body read error", "err", readErr)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if !httputil.Is2xx(resp.StatusCode) {
 		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 	return formatPermResponse(respBody), nil

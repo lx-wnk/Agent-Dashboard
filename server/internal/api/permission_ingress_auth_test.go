@@ -96,7 +96,7 @@ func buildIngressRouter(t *testing.T, rawToken string) http.Handler {
 		RemotesHandler:        remotes.NewHandler(repo.NewRemoteRegistrationRepo(c)),
 		PresetsHandler:        presets.NewHandler(repo.NewPermissionPresetRepo(c)),
 		SystemPromptsHandler:  systemprompts.NewHandler(repo.NewSystemPromptRepo(c)),
-		SearchHandler:         search.NewHandler(rawrepo.NewSearchRepo(rawDB)),
+		SearchHandler:         search.NewHandler(rawrepo.NewSearchRepo(rawDB), nil),
 		HistoryHandler:        apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
 		RefineHandler: refineapi.NewHandler(refineapi.Deps{
 			Turns:     repo.NewRefinementTurnRepo(c),

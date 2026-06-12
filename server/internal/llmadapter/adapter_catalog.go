@@ -1,4 +1,4 @@
-package pipeline
+package llmadapter
 
 // AdapterMeta describes one available LLM adapter and its configuration
 // requirements. The catalog is the single source of truth consumed by both

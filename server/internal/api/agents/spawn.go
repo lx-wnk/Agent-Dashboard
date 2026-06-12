@@ -19,11 +19,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/httputil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
@@ -245,8 +245,8 @@ func (m *SpawnManager) buildSpawnArgs(req *spawnRequest, spawnerRow *ent.Spawner
 	var spawnerArgs []string
 
 	if spawnerRow != nil {
-		if !spawners.ValidateCommand(spawnerRow.Command) {
-			return "", nil, fmt.Errorf("spawner command not permitted")
+		if ok, reason := services.ValidateSpawnerCommand(spawnerRow.Command); !ok {
+			return "", nil, fmt.Errorf("spawner command not permitted: %s", reason)
 		}
 		if bad := firstReservedFlag(spawnerRow.Args); bad != "" {
 			return "", nil, fmt.Errorf("spawner args may not include reserved flag %q", bad)
@@ -556,7 +556,7 @@ func sendHTTPMessage(ctx context.Context, port int, token, message string) error
 		return fmt.Errorf("channel unreachable: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if !httputil.Is2xx(resp.StatusCode) {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return fmt.Errorf("channel error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}

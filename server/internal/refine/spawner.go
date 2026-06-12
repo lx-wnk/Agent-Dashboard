@@ -11,7 +11,7 @@ import (
 	"text/template"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
 )
 
 // SpawnConfig holds the parameters for a single refinement turn.
@@ -148,18 +148,18 @@ func runExecPath(ctx context.Context, cfg SpawnConfig, sp *ent.Spawner, prompt s
 }
 
 func runAdapterPath(ctx context.Context, cfg SpawnConfig, sp *ent.Spawner, prompt string) (<-chan string, error) {
-	adapter, err := pipeline.NewLLMSpawnerFromSpawner(sp)
+	adapter, err := llmadapter.NewLLMSpawnerFromSpawner(sp)
 	if err != nil {
 		return nil, fmt.Errorf("refine: build adapter: %w", err)
 	}
 	if adapter == nil {
 		return nil, fmt.Errorf("refine: adapter factory returned nil for type %q", sp.AdapterType)
 	}
-	streamer, ok := adapter.(pipeline.StreamingLLMSpawner)
+	streamer, ok := adapter.(llmadapter.StreamingLLMSpawner)
 	if !ok {
 		return nil, fmt.Errorf("refine: adapter %q does not support streaming", sp.AdapterType)
 	}
-	args := pipeline.LLMSpawnArgs{
+	args := llmadapter.LLMSpawnArgs{
 		SystemPrompt: "You are a refinement assistant helping to clarify and improve a software task.",
 		UserPrompt:   prompt,
 		WorkDir:      cfg.WorkDir,

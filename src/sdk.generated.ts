@@ -30,22 +30,35 @@ export interface SessionMeta {
   firstPrompt: string;
 }
 /**
+ * SubAgentStatus is the lifecycle state of a spawned sub-agent.
+ */
+export const SubAgentStatusActive = "active";
+export const SubAgentStatusCompleted = "completed";
+export type SubAgentStatus = typeof SubAgentStatusActive | typeof SubAgentStatusCompleted;
+/**
  * SubAgent represents a sub-agent spawned by a parent Claude session.
  */
 export interface SubAgent {
   id: string;
   type: string;
-  status: string; // "active" | "completed"
+  status: SubAgentStatus;
   currentAction: string;
   sessionFile: string;
 }
+/**
+ * TaskInfoStatus is the state of a TodoWrite-tracked task.
+ */
+export const TaskInfoStatusPending = "pending";
+export const TaskInfoStatusInProgress = "in_progress";
+export const TaskInfoStatusCompleted = "completed";
+export type TaskInfoStatus = typeof TaskInfoStatusPending | typeof TaskInfoStatusInProgress | typeof TaskInfoStatusCompleted;
 /**
  * TaskInfo is a task tracked by Claude Code's internal task list.
  */
 export interface TaskInfo {
   id: string;
   subject: string;
-  status: string;
+  status: TaskInfoStatus;
 }
 /**
  * AgentStatus is the computed activity state of an agent process.
