@@ -103,6 +103,7 @@ export type StageRunStatus
     | 'on_hold'
     | 'done'
     | 'failed'
+    | 'requeued'
 
 export type TaskPriority = 'high' | 'medium' | 'low'
 
@@ -157,6 +158,8 @@ export interface PipelineTask {
   // regardless of what currentStage is.
   needsUser?: boolean
   latestStageRunStatus?: StageRunStatus | null
+  autoRetryCount?: number | null
+  nextRetryAt?: string | null
   refineStatus?: 'idle' | 'running' | 'done' | 'failed' | null
   refineError?: string | null
   currentIteration?: number
