@@ -60,12 +60,12 @@ describe('taskCard retry state', () => {
     expect(wrapper.text()).toContain('Retrying')
   })
 
-  it('does NOT render retry chip for normal failed task', () => {
+  it('does NOT render retry chip for normal failed task, but DOES show needs-user block', () => {
     const wrapper = mount(TaskCard, {
       props: {
         task: {
           ...baseTask,
-          latestStageRunStatus: 'failed',
+          latestStageRunStatus: 'awaiting_user',
           needsUser: true,
           autoRetryCount: null,
           nextRetryAt: null,
@@ -73,6 +73,7 @@ describe('taskCard retry state', () => {
       },
     })
     expect(wrapper.text()).not.toContain('Retrying')
+    expect(wrapper.text()).toContain('Needs Permission')
   })
 
   it('does NOT render needs-user block for requeued task', () => {

@@ -7,22 +7,25 @@ export interface PipelineConfig {
   retryBackoffSeconds: number
 }
 
-export function usePipelineConfig() {
-  const config = ref<PipelineConfig | null>(null)
-  const maxAutoRetries = ref(3)
+const config = ref<PipelineConfig | null>(null)
+const maxAutoRetries = ref(3)
+let fetched = false
 
-  async function fetchConfig() {
-    try {
-      const res = await fetch('/api/pipeline/config')
-      if (res.ok) {
-        config.value = await res.json()
-        maxAutoRetries.value = config.value!.maxAutoRetries
-      }
+async function fetchConfig() {
+  if (fetched)
+    return
+  fetched = true
+  try {
+    const res = await fetch('/api/pipeline/config')
+    if (res.ok) {
+      config.value = await res.json()
+      maxAutoRetries.value = config.value!.maxAutoRetries
     }
-    catch { /* keep default */ }
   }
+  catch { /* keep default */ }
+}
 
+export function usePipelineConfig() {
   fetchConfig()
-
   return { config, maxAutoRetries }
 }
