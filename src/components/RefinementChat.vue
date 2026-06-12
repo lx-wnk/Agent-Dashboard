@@ -5,13 +5,13 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
 import PluginSlot from './PluginSlot.vue'
-import type { SlotAddon, SlotContext } from '../utils/pluginSlot'
+import type { LoadedAddon, SlotContext } from '../utils/pluginSlot'
 
 const props = defineProps<{
   open: boolean
   task: PipelineTask | null
   // Optional: lets tests inject a fake slot loader. Production uses the default.
-  slotLoader?: (slot: string) => Promise<SlotAddon[]>
+  slotLoader?: (slot: string) => Promise<LoadedAddon[]>
 }>()
 
 const emit = defineEmits<{ close: [], confirmed: [task: PipelineTask] }>()
