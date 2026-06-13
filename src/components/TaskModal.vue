@@ -2,9 +2,9 @@
 import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import type { StageCostRow } from './StageCostWaterfall.vue'
 import type { SlashCommand } from './TaskSlashCommandMenu.vue'
-import { useClipboard } from '@vueuse/core'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
+import { useCopyId } from '../composables/useCopyId'
 import { useProjects } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
 import {
@@ -45,17 +45,7 @@ import WorktreePanel from './WorktreePanel.vue'
 const props = defineProps<{ task: PipelineTask | null }>()
 const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
 
-const modalCopiedId = ref(false)
-const { copy: clipboardCopy } = useClipboard({ legacy: true })
-function copyTaskId() {
-  if (!props.task)
-    return
-  clipboardCopy(props.task.id)
-  modalCopiedId.value = true
-  setTimeout(() => {
-    modalCopiedId.value = false
-  }, 1200)
-}
+const { copy: copyTaskId, copied: modalCopiedId } = useCopyId(() => props.task?.id ?? '')
 
 const { agents } = useAgents()
 const { projects } = useProjects()
