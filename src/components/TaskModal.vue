@@ -4,6 +4,7 @@ import type { StageCostRow } from './StageCostWaterfall.vue'
 import type { SlashCommand } from './TaskSlashCommandMenu.vue'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
+import { useCopyId } from '../composables/useCopyId'
 import { useProjects } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
 import {
@@ -43,6 +44,8 @@ import WorktreePanel from './WorktreePanel.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
 const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
+
+const { copy: copyTaskId, copied: modalCopiedId } = useCopyId(() => props.task?.id ?? '')
 
 const { agents } = useAgents()
 const { projects } = useProjects()
@@ -547,6 +550,15 @@ watch(
             RUN FAILED
           </span>
           <span class="font-mono text-xs text-blue-600 dark:text-blue-400">{{ task.slug }}</span>
+          <button
+            type="button"
+            class="font-mono text-[10px] px-1.5 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
+            :aria-label="`Copy task id ${task.id}`"
+            :title="modalCopiedId ? 'Copied!' : task.id"
+            @click="copyTaskId"
+          >
+            {{ modalCopiedId ? 'copied' : task.id }}
+          </button>
           <h2 :id="`task-modal-title-${task.id}`" class="text-lg font-semibold text-fg">
             {{ task.title }}
           </h2>
