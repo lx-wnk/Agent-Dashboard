@@ -22,6 +22,7 @@ import AppModal from './components/ui/AppModal.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { usePWA } from './composables/usePWA'
+import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
 import { useTasks } from './composables/useTasks'
 import { useTodayCost } from './composables/useTodayCost'
@@ -42,6 +43,7 @@ const RefinementChat = defineAsyncComponent(() => import('./components/Refinemen
 const EditGateModal = defineAsyncComponent(() => import('./components/EditGateModal.vue'))
 
 const { user, authEnabled, loaded, loadUser } = useUser()
+const { homedir, loadServerConfig } = useServerConfig()
 const showLogin = computed(() => authEnabled.value && !user.value)
 const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
@@ -68,6 +70,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 onMounted(() => {
   loadUser()
+  void loadServerConfig()
   window.addEventListener('keydown', handleKeydown)
 })
 
@@ -129,11 +132,6 @@ const showRefinementChat = ref(false)
 const showBacklogForm = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
-const homeDir = ref('')
-
-fetch('/api/config').then(r => r.json()).then((d) => {
-  homeDir.value = d.homedir
-}).catch(() => {})
 
 function openNewTask() {
   showBacklogForm.value = true
@@ -379,7 +377,7 @@ onMounted(fetchQuota)
         <BacklogForm @created-and-refine="onCreateTaskAndRefine" />
       </div>
     </AppModal>
-    <SessionList :open="showSessions" :home-dir="homeDir" @close="showSessions = false" />
+    <SessionList :open="showSessions" :home-dir="homedir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
     <EditGateModal />
     <SpotlightSearch

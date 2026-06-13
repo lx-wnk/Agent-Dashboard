@@ -3,6 +3,7 @@ import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } fr
 import { useIntervalFn } from '@vueuse/core'
 import { computed, ref } from 'vue'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
+import { shortId, useCopyId } from '../composables/useCopyId'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
@@ -10,6 +11,8 @@ import WorktreePill from './WorktreePill.vue'
 
 const props = defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
+
+const { copy: copyId, copied: idCopied } = useCopyId(props.task.id)
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -66,6 +69,13 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
           @click.stop
         >⠿</span>
         <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
+        <button
+          type="button"
+          class="font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
+          :aria-label="`Copy task id ${task.id}`"
+          :title="task.id"
+          @click.stop.prevent="copyId()"
+        >{{ idCopied ? 'copied' : `#${shortId(task.id)}` }}</button>
       </span>
       <span class="text-[10px] text-fg-mute">{{ shortDate(task.createdAt) }}</span>
     </div>
