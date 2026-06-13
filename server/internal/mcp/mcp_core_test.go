@@ -94,7 +94,7 @@ func TestMCPHandler_Initialize(t *testing.T) {
 	assert.Equal(t, protocolVersion, result["protocolVersion"])
 	serverInfo, ok := result["serverInfo"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "dashboard-tasks", serverInfo["name"])
+	assert.Equal(t, ServerName, serverInfo["name"])
 }
 
 // ---------------------------------------------------------------------------
