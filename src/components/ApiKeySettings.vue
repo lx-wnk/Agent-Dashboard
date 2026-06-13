@@ -21,7 +21,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
-const { mcpServerName, mcpEndpoint } = useServerConfig()
+const { mcpServerName, mcpEndpoint, loadServerConfig } = useServerConfig()
 
 // --- Nav ---
 type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'projects' | 'spawners'
@@ -52,6 +52,10 @@ const mcpAddCommand = computed(() =>
 const mcpJsonConfig = computed(() =>
   revealedToken.value && mcpServerName.value ? buildMcpJsonConfig(window.location.origin, revealedToken.value, mcpServerName.value, mcpEndpoint.value) : '',
 )
+const mcpBlocks = computed(() => [
+  { key: 'cli' as const, label: 'CLI command', labelId: 'mcp-cli-label', value: mcpAddCommand.value, extraClass: 'break-all' },
+  { key: 'json' as const, label: 'JSON config', labelId: 'mcp-json-label', value: mcpJsonConfig.value, extraClass: 'whitespace-pre overflow-x-auto' },
+])
 const canAuthorTasks = computed(() => revealedScopes.value.includes('tasks:write'))
 
 // Revoke / regenerate confirmation
@@ -190,7 +194,10 @@ function onKeydown(e: KeyboardEvent) {
     }
   }
 }
-onMounted(() => window.addEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  void loadServerConfig()
+})
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 // --- Revoke key ---
@@ -973,47 +980,34 @@ async function startImport() {
               Read-only key — creating or refining tasks needs the Developer or Admin role.
             </p>
 
-            <span id="mcp-cli-label" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">CLI command</span>
-            <div role="region" :aria-labelledby="'mcp-cli-label'" tabindex="0" class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line break-all mt-1 mb-3">
-              {{ mcpAddCommand }}
-              <button
-                type="button"
-                class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
-                :aria-label="copyLabel('cli', 'Copy CLI command')"
-                @click="copyValue('cli', mcpAddCommand)"
+            <template v-for="b in mcpBlocks" :key="b.key">
+              <span :id="b.labelId" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">{{ b.label }}</span>
+              <div
+                role="region"
+                :aria-labelledby="b.labelId"
+                tabindex="0"
+                class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line mt-1 mb-3"
+                :class="b.extraClass"
               >
-                <svg v-if="copiedTarget === 'cli'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-                <svg v-else-if="errorTarget === 'cli'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                </svg>
-              </button>
-            </div>
-
-            <span id="mcp-json-label" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">JSON config</span>
-            <div role="region" :aria-labelledby="'mcp-json-label'" tabindex="0" class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line whitespace-pre overflow-x-auto mt-1">
-              {{ mcpJsonConfig }}
-              <button
-                type="button"
-                class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
-                :aria-label="copyLabel('json', 'Copy JSON config')"
-                @click="copyValue('json', mcpJsonConfig)"
-              >
-                <svg v-if="copiedTarget === 'json'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-                <svg v-else-if="errorTarget === 'json'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                </svg>
-              </button>
-            </div>
+                {{ b.value }}
+                <button
+                  type="button"
+                  class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                  :aria-label="copyLabel(b.key, `Copy ${b.label}`)"
+                  @click="copyValue(b.key, b.value)"
+                >
+                  <svg v-if="copiedTarget === b.key" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  <svg v-else-if="errorTarget === b.key" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                </button>
+              </div>
+            </template>
             <p class="text-[11px] text-fg-mute mt-3">
               Contains your secret token — don't share it. The CLI command writes it to <code class="font-mono">~/.claude.json</code>; keep that file out of version control.
             </p>

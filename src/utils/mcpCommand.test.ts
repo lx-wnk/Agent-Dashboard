@@ -28,6 +28,14 @@ describe('buildMcpAddCommand', () => {
   it('rejects an origin with shell metacharacters', () => {
     expect(() => buildMcpAddCommand('http://h"; rm -rf ~', 'mcp_x', 'dashboard-tasks', '/api/mcp')).toThrow()
   })
+
+  it('rejects a serverName with spaces or special chars', () => {
+    expect(() => buildMcpAddCommand('http://h', 'tok', 'bad name', '/api/mcp')).toThrow('Unexpected server name')
+  })
+
+  it('rejects an endpoint without a leading slash', () => {
+    expect(() => buildMcpAddCommand('http://h', 'tok', 'dashboard-tasks', 'no-leading-slash')).toThrow('Unexpected endpoint path')
+  })
 })
 
 describe('buildMcpJsonConfig', () => {
