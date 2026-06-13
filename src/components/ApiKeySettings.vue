@@ -310,14 +310,6 @@ async function copyValue(target: 'token' | 'cli' | 'json', value: string) {
   }, 2000)
 }
 
-function copyGlyph(target: 'token' | 'cli' | 'json') {
-  if (copiedTarget.value === target)
-    return '✓'
-  if (errorTarget.value === target)
-    return '✗'
-  return '⧉'
-}
-
 function copyLabel(target: 'cli' | 'json', base: string) {
   if (copiedTarget.value === target)
     return 'Copied'
@@ -990,7 +982,15 @@ async function startImport() {
                 :aria-label="copyLabel('cli', 'Copy CLI command')"
                 @click="copyValue('cli', mcpAddCommand)"
               >
-                <span class="text-[13px]">{{ copyGlyph('cli') }}</span>
+                <svg v-if="copiedTarget === 'cli'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <svg v-else-if="errorTarget === 'cli'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
               </button>
             </div>
 
@@ -1003,7 +1003,15 @@ async function startImport() {
                 :aria-label="copyLabel('json', 'Copy JSON config')"
                 @click="copyValue('json', mcpJsonConfig)"
               >
-                <span class="text-[13px]">{{ copyGlyph('json') }}</span>
+                <svg v-if="copiedTarget === 'json'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <svg v-else-if="errorTarget === 'json'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
               </button>
             </div>
             <p class="text-[11px] text-fg-mute mt-3">
