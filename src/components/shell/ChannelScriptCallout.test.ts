@@ -1,24 +1,35 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { ref } from 'vue'
 import ChannelScriptCallout from './ChannelScriptCallout.vue'
 
+vi.mock('../../composables/useServerConfig', () => ({
+  useServerConfig: vi.fn(),
+}))
+
+import { useServerConfig } from '../../composables/useServerConfig'
+
+function mountWithScriptPath(path: string) {
+  vi.mocked(useServerConfig).mockReturnValue({
+    scriptPath: ref(path),
+    mcpServerName: ref(''),
+    mcpEndpoint: ref(''),
+    homedir: ref(''),
+    loaded: ref(true),
+    loadServerConfig: vi.fn().mockResolvedValue(undefined),
+  })
+  return mount(ChannelScriptCallout)
+}
+
 describe('channelScriptCallout', () => {
-  it('renders the script path from /api/config', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ scriptPath: '/home/u/.claude/channel.mjs', homedir: '/home/u' }),
-    }))
-    const w = mount(ChannelScriptCallout)
+  it('renders the script path from server config', async () => {
+    const w = mountWithScriptPath('/home/u/.claude/channel.mjs')
     await flushPromises()
     expect(w.text()).toContain('/home/u/.claude/channel.mjs')
   })
 
   it('renders nothing when scriptPath is absent', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ homedir: '/home/u' }),
-    }))
-    const w = mount(ChannelScriptCallout)
+    const w = mountWithScriptPath('')
     await flushPromises()
     expect(w.text()).not.toContain('Channel command')
   })
@@ -26,11 +37,7 @@ describe('channelScriptCallout', () => {
   it('copies the path to clipboard on click', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ scriptPath: '/p/channel.mjs', homedir: '/home/u' }),
-    }))
-    const w = mount(ChannelScriptCallout)
+    const w = mountWithScriptPath('/p/channel.mjs')
     await flushPromises()
     await w.get('[data-testid="channel-script-path"]').trigger('click')
     expect(writeText).toHaveBeenCalledWith('/p/channel.mjs')

@@ -3,6 +3,7 @@ import type { ApiKey, McpScope } from '../types'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
+import { useServerConfig } from '../composables/useServerConfig'
 import { maskToken } from '../utils/format'
 import { buildMcpAddCommand, buildMcpJsonConfig } from '../utils/mcpCommand'
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
@@ -20,6 +21,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
+const { mcpServerName, mcpEndpoint } = useServerConfig()
 
 // --- Nav ---
 type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'projects' | 'spawners'
@@ -45,10 +47,10 @@ const errorTarget = ref<'token' | 'cli' | 'json' | null>(null)
 const tokenVisible = ref(false)
 
 const mcpAddCommand = computed(() =>
-  revealedToken.value ? buildMcpAddCommand(window.location.origin, revealedToken.value) : '',
+  revealedToken.value && mcpServerName.value ? buildMcpAddCommand(window.location.origin, revealedToken.value, mcpServerName.value, mcpEndpoint.value) : '',
 )
 const mcpJsonConfig = computed(() =>
-  revealedToken.value ? buildMcpJsonConfig(window.location.origin, revealedToken.value) : '',
+  revealedToken.value && mcpServerName.value ? buildMcpJsonConfig(window.location.origin, revealedToken.value, mcpServerName.value, mcpEndpoint.value) : '',
 )
 const canAuthorTasks = computed(() => revealedScopes.value.includes('tasks:write'))
 
