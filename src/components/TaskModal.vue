@@ -2,6 +2,7 @@
 import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import type { StageCostRow } from './StageCostWaterfall.vue'
 import type { SlashCommand } from './TaskSlashCommandMenu.vue'
+import { useClipboard } from '@vueuse/core'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import { useProjects } from '../composables/useProjects'
@@ -43,6 +44,18 @@ import WorktreePanel from './WorktreePanel.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
 const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
+
+const modalCopiedId = ref(false)
+const { copy: clipboardCopy } = useClipboard({ legacy: true })
+function copyTaskId() {
+  if (!props.task)
+    return
+  clipboardCopy(props.task.id)
+  modalCopiedId.value = true
+  setTimeout(() => {
+    modalCopiedId.value = false
+  }, 1200)
+}
 
 const { agents } = useAgents()
 const { projects } = useProjects()
@@ -547,6 +560,15 @@ watch(
             RUN FAILED
           </span>
           <span class="font-mono text-xs text-blue-600 dark:text-blue-400">{{ task.slug }}</span>
+          <button
+            type="button"
+            class="font-mono text-[10px] px-1.5 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
+            :aria-label="`Copy task id ${task.id}`"
+            :title="modalCopiedId ? 'Copied!' : task.id"
+            @click="copyTaskId"
+          >
+            {{ modalCopiedId ? 'copied' : task.id }}
+          </button>
           <h2 :id="`task-modal-title-${task.id}`" class="text-lg font-semibold text-fg">
             {{ task.title }}
           </h2>
