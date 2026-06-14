@@ -79,8 +79,11 @@ while IFS= read -r line; do
   fi
 done < "${TMP_GO_RAW}" > "${TMP_GO_FIXED}"
 
-# Deduplicate by module path (first occurrence wins after stable sort)
-GO_SORTED="$(sort -t',' -k1,1 "${TMP_GO_FIXED}" | awk -F',' '!seen[$1]++')"
+# Deduplicate by module path (first occurrence wins after stable sort).
+# LC_ALL=C forces byte/codepoint ordering so the output is identical across
+# platforms (a locale-sensitive sort places uppercase module paths differently
+# on macOS vs the Linux CI runner, producing a spurious freshness diff).
+GO_SORTED="$(LC_ALL=C sort -t',' -k1,1 "${TMP_GO_FIXED}" | awk -F',' '!seen[$1]++')"
 
 # ── Check for Unknown licenses ─────────────────────────────────────────────────
 

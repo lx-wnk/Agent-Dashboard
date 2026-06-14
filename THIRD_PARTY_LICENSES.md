@@ -12,6 +12,7 @@ The following third-party packages are used as transitive dependencies.
 |--------|---------|-------------|
 | ariga.io/atlas | Apache-2.0 | https://github.com/ariga/atlas/blob/2c6300d0a3e1/LICENSE |
 | entgo.io/ent | Apache-2.0 | https://github.com/ent/ent/blob/v0.14.6/LICENSE |
+| github.com/SherClockHolmes/webpush-go | MIT | https://github.com/SherClockHolmes/webpush-go/blob/v1.4.0/LICENSE |
 | github.com/agext/levenshtein | Apache-2.0 | https://github.com/agext/levenshtein/blob/v1.2.3/LICENSE |
 | github.com/apparentlymart/go-textseg/v15/textseg | MIT | https://github.com/apparentlymart/go-textseg/blob/v15.0.0/LICENSE |
 | github.com/bmatcuk/doublestar | MIT | https://github.com/bmatcuk/doublestar/blob/v1.3.4/LICENSE |
@@ -41,7 +42,6 @@ The following third-party packages are used as transitive dependencies.
 | github.com/remyoudompheng/bigfft | BSD-3-Clause | https://github.com/remyoudompheng/bigfft/blob/24d4a6f8daec/LICENSE |
 | github.com/segmentio/asm | MIT | https://github.com/segmentio/asm/blob/v1.1.3/LICENSE |
 | github.com/segmentio/encoding | MIT | https://github.com/segmentio/encoding/blob/v0.5.4/LICENSE |
-| github.com/SherClockHolmes/webpush-go | MIT | https://github.com/SherClockHolmes/webpush-go/blob/v1.4.0/LICENSE |
 | github.com/spf13/cobra | Apache-2.0 | https://github.com/spf13/cobra/blob/v1.10.2/LICENSE.txt |
 | github.com/spf13/pflag | BSD-3-Clause | https://github.com/spf13/pflag/blob/v1.0.9/LICENSE |
 | github.com/yosida95/uritemplate/v3 | BSD-3-Clause | https://github.com/yosida95/uritemplate/blob/v3.0.2/LICENSE |
