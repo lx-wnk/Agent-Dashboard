@@ -387,7 +387,11 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			}
 			// Cost budget enforcement (subprocess runs only — HTTP runs finalize atomically)
 			if run.Pid != nil && task.CostBudgetCents != nil && *task.CostBudgetCents > 0 {
-				spent, _ := o.opts.StageRunRepo.SumCompletedCostCents(ctx, task.ID)
+				spent, err := o.opts.StageRunRepo.SumCompletedCostCents(ctx, task.ID)
+				if err != nil {
+					slog.Warn("orchestrator: cost budget sum failed — skipping enforcement this tick",
+						"taskID", task.ID, "err", err)
+				}
 				if spent > int64(*task.CostBudgetCents) {
 					slog.Warn("orchestrator: task exceeded cost budget — killing agent",
 						"taskID", task.ID, "spent", spent, "budget", *task.CostBudgetCents)
@@ -405,7 +409,11 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			}
 			// Token budget enforcement (subprocess runs only — HTTP runs finalize atomically)
 			if run.Pid != nil && task.TokenBudget != nil && *task.TokenBudget > 0 {
-				spent, _ := o.opts.StageRunRepo.SumCompletedTokens(ctx, task.ID)
+				spent, err := o.opts.StageRunRepo.SumCompletedTokens(ctx, task.ID)
+				if err != nil {
+					slog.Warn("orchestrator: token budget sum failed — skipping enforcement this tick",
+						"taskID", task.ID, "err", err)
+				}
 				if spent > int64(*task.TokenBudget) {
 					slog.Warn("orchestrator: task exceeded token budget — killing agent",
 						"taskID", task.ID, "spent", spent, "budget", *task.TokenBudget)

@@ -267,6 +267,15 @@ func (h *Handler) getOne(w http.ResponseWriter, r *http.Request) error {
 	return jsonReply(w, http.StatusOK, enriched)
 }
 
+// clampNegativeBudget collapses a negative budget to 0 (disabled). 0 already
+// means "no budget"; a negative value is nonsensical and would be silently
+// treated as disabled by the enforcement guard anyway.
+func clampNegativeBudget(p *int) {
+	if p != nil && *p < 0 {
+		*p = 0
+	}
+}
+
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
 		Slug            string  `json:"slug"`
@@ -344,11 +353,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		v := db.DefaultCostBudgetCents
 		costBudget = &v
 	}
+	clampNegativeBudget(costBudget)
 	tokenBudget := body.TokenBudget
 	if tokenBudget == nil {
 		v := db.DefaultTokenBudget
 		tokenBudget = &v
 	}
+	clampNegativeBudget(tokenBudget)
 	payload, _ := auth.PayloadFromContext(r.Context())
 	userID := payload.Sub
 	task, err := h.taskRepo.Create(r.Context(), repo.CreateTaskInput{
@@ -467,6 +478,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	clampNegativeBudget(body.CostBudgetCents)
+	clampNegativeBudget(body.TokenBudget)
 	updated, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{
 		Title:           body.Title,
 		Description:     body.Description,
