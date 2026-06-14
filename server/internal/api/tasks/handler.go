@@ -269,16 +269,18 @@ func (h *Handler) getOne(w http.ResponseWriter, r *http.Request) error {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
-		Slug          string  `json:"slug"`
-		Title         string  `json:"title"`
-		Description   *string `json:"description"`
-		Cwd           string  `json:"cwd"`
-		Priority      string  `json:"priority"`
-		Stage         string  `json:"stage"`
-		SilverBullet  bool    `json:"silverBullet"`
-		MaxIterations int     `json:"maxIterations"`
-		ProjectID     string  `json:"projectId"`
-		SpawnerID     string  `json:"spawnerId"`
+		Slug            string  `json:"slug"`
+		Title           string  `json:"title"`
+		Description     *string `json:"description"`
+		Cwd             string  `json:"cwd"`
+		Priority        string  `json:"priority"`
+		Stage           string  `json:"stage"`
+		SilverBullet    bool    `json:"silverBullet"`
+		MaxIterations   int     `json:"maxIterations"`
+		CostBudgetCents *int    `json:"costBudgetCents"`
+		TokenBudget     *int    `json:"tokenBudget"`
+		ProjectID       string  `json:"projectId"`
+		SpawnerID       string  `json:"spawnerId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -337,6 +339,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if maxIter <= 0 {
 		maxIter = db.DefaultMaxIterations
 	}
+	costBudget := body.CostBudgetCents
+	if costBudget == nil {
+		v := db.DefaultCostBudgetCents
+		costBudget = &v
+	}
+	tokenBudget := body.TokenBudget
+	if tokenBudget == nil {
+		v := db.DefaultTokenBudget
+		tokenBudget = &v
+	}
 	payload, _ := auth.PayloadFromContext(r.Context())
 	userID := payload.Sub
 	task, err := h.taskRepo.Create(r.Context(), repo.CreateTaskInput{
@@ -350,6 +362,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		SilverBullet:        body.SilverBullet,
 		MaxIterations:       maxIter,
 		StageTimeoutSeconds: db.DefaultStageTimeoutSeconds,
+		CostBudgetCents:     costBudget,
+		TokenBudget:         tokenBudget,
 		ProjectID:           projectIDPtr,
 		SpawnerID:           spawnerIDPtr,
 	})
@@ -401,15 +415,17 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		return apierr.ErrNotFound
 	}
 	var body struct {
-		Title         *string         `json:"title"`
-		Description   *string         `json:"description"`
-		Priority      *string         `json:"priority"`
-		SilverBullet  *bool           `json:"silverBullet"`
-		MaxIterations *int            `json:"maxIterations"`
-		CurrentStage  *string         `json:"currentStage"`
-		Cwd           *string         `json:"cwd"`
-		ProjectID     json.RawMessage `json:"projectId"`
-		SpawnerID     json.RawMessage `json:"spawnerId"`
+		Title           *string         `json:"title"`
+		Description     *string         `json:"description"`
+		Priority        *string         `json:"priority"`
+		SilverBullet    *bool           `json:"silverBullet"`
+		MaxIterations   *int            `json:"maxIterations"`
+		CostBudgetCents *int            `json:"costBudgetCents"`
+		TokenBudget     *int            `json:"tokenBudget"`
+		CurrentStage    *string         `json:"currentStage"`
+		Cwd             *string         `json:"cwd"`
+		ProjectID       json.RawMessage `json:"projectId"`
+		SpawnerID       json.RawMessage `json:"spawnerId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -452,15 +468,17 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	updated, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{
-		Title:          body.Title,
-		Description:    body.Description,
-		Priority:       body.Priority,
-		SilverBullet:   body.SilverBullet,
-		MaxIterations:  body.MaxIterations,
-		ProjectID:      projectIDPtr,
-		SpawnerID:      spawnerIDPtr,
-		ClearProjectID: clearProject,
-		ClearSpawnerID: clearSpawner,
+		Title:           body.Title,
+		Description:     body.Description,
+		Priority:        body.Priority,
+		SilverBullet:    body.SilverBullet,
+		MaxIterations:   body.MaxIterations,
+		CostBudgetCents: body.CostBudgetCents,
+		TokenBudget:     body.TokenBudget,
+		ProjectID:       projectIDPtr,
+		SpawnerID:       spawnerIDPtr,
+		ClearProjectID:  clearProject,
+		ClearSpawnerID:  clearSpawner,
 	})
 	if err != nil {
 		return fmt.Errorf("tasks.update: %w", err)
