@@ -33,12 +33,10 @@ The following third-party packages are used as transitive dependencies.
 | github.com/knadh/koanf/providers/env | MIT | https://github.com/knadh/koanf/blob/providers/env/v1.1.0/providers/env/LICENSE |
 | github.com/knadh/koanf/providers/file | MIT | https://github.com/knadh/koanf/blob/providers/file/v1.2.1/providers/file/LICENSE |
 | github.com/knadh/koanf/v2 | MIT | https://github.com/knadh/koanf/blob/v2.3.5/LICENSE |
-| github.com/mattn/go-isatty | MIT | https://github.com/mattn/go-isatty/blob/v0.0.20/LICENSE |
 | github.com/mitchellh/copystructure | MIT | https://github.com/mitchellh/copystructure/blob/v1.2.0/LICENSE |
 | github.com/mitchellh/go-wordwrap | MIT | https://github.com/mitchellh/go-wordwrap/blob/v1.0.1/LICENSE.md |
 | github.com/mitchellh/reflectwalk | MIT | https://github.com/mitchellh/reflectwalk/blob/v1.0.2/LICENSE |
 | github.com/modelcontextprotocol/go-sdk | Apache-2.0 | https://github.com/modelcontextprotocol/go-sdk/blob/v1.6.1/LICENSE |
-| github.com/ncruces/go-strftime | MIT | https://github.com/ncruces/go-strftime/blob/v1.0.0/LICENSE |
 | github.com/remyoudompheng/bigfft | BSD-3-Clause | https://github.com/remyoudompheng/bigfft/blob/24d4a6f8daec/LICENSE |
 | github.com/segmentio/asm | MIT | https://github.com/segmentio/asm/blob/v1.1.3/LICENSE |
 | github.com/segmentio/encoding | MIT | https://github.com/segmentio/encoding/blob/v0.5.4/LICENSE |

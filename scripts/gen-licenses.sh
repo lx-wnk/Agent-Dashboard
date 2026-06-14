@@ -34,6 +34,13 @@ trap 'rm -f "${TMP_GO_RAW}" "${TMP_GO_FIXED}" "${TMP_FRONTEND_JSON}"' EXIT
 
 # ── Collect Go deps ────────────────────────────────────────────────────────────
 
+# The Go build list is GOOS-dependent (build constraints pull in different
+# packages per platform, e.g. mattn/go-isatty on darwin only). Pin GOOS/GOARCH
+# to the linux/amd64 CI target so the attribution is canonical no matter which
+# platform regenerates it.
+export GOOS=linux
+export GOARCH=amd64
+
 # go-licenses exits non-zero when it cannot classify a module; that case is
 # deliberately tolerated here and resolved downstream by LICENSE_OVERRIDES and
 # the ',Unknown,' gate. Stderr is left visible so genuine failures surface in
