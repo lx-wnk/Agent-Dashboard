@@ -40,12 +40,16 @@ Rewire the consumers:
 
 | Consumer | Change |
 |---|---|
-| `pipeline/worktree.go` | derives root/path/branch via the leaf and runs git via a package `Runner.Combined`; keeps the `-b`-then-bare-add fallback, dual-error string, `os.Stat` idempotency, `MkdirAll(0o750)`, and `ensureTaskWorktree`'s signature (uses `context.Background()` internally — zero caller churn). **Gains a timeout it lacked.** |
+| `pipeline/worktree.go` | derives root/path/branch via the leaf and runs git via a package `Runner.Combined`; keeps the `-b`-then-bare-add fallback, dual-error string, `os.Stat` idempotency, `MkdirAll(0o750)`, and `ensureTaskWorktree`'s signature (uses `context.Background()` internally — zero caller churn). **Gains a bounded timeout it lacked** (120s for mutations such as `git worktree add`, vs 15s for inspection reads). |
 | `services/worktree_manager.go` | holds `*worktree.Runner`; drops `gitBin`/`timeout`/`runGit`; repoints `currentBranch`/`remoteRefExists`/`revListCount`/`dirtyState` to `runner.Output`. Distinct checkout-branch/base derivation left untouched. |
 | `config/config.go` | `Defaults().WorktreeRoot` references `worktree.DefaultRootDirName` instead of the literal. |
 
-No behaviour change: `pipeline/worktree_test.go` stays green unmodified and
-`WorktreeStatus` output is identical.
+One intentional behaviour change: pipeline mutations, previously run with a
+bare untimed `exec.Command`, now inherit the leaf's 120s mutation timeout — a
+deliberately generous bound that won't fire for a healthy `git worktree add`
+but prevents an indefinite hang. Inspection reads keep the 15s bound.
+Otherwise behaviour is preserved: `pipeline/worktree_test.go` stays green
+unmodified and `WorktreeStatus` output is identical.
 
 ## Consequences
 

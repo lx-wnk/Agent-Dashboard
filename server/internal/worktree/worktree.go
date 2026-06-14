@@ -20,22 +20,32 @@ const (
 	BranchPrefix = "feat/"
 )
 
-const defaultTimeout = 15 * time.Second
+const (
+	// defaultReadTimeout bounds inspection reads (Output) — fast metadata
+	// queries that should never hang.
+	defaultReadTimeout = 15 * time.Second
+	// defaultMutationTimeout bounds mutations (Combined) such as
+	// `git worktree add`, which can legitimately run long on large repos or
+	// slow filesystems; the tighter read bound would SIGKILL a valid checkout.
+	defaultMutationTimeout = 120 * time.Second
+)
 
-// Runner executes git commands with a bounded per-call timeout.
+// Runner executes git commands with a bounded per-call timeout that depends on
+// whether the call is a read (Output) or a mutation (Combined).
 type Runner struct {
-	bin     string
-	timeout time.Duration
+	bin             string
+	readTimeout     time.Duration
+	mutationTimeout time.Duration
 }
 
 // NewRunner resolves the git binary via PATH (falling back to "git") and
-// returns a Runner with the default 15s timeout.
+// returns a Runner with the default read/mutation timeouts.
 func NewRunner() *Runner {
 	bin, err := exec.LookPath("git")
 	if err != nil || bin == "" {
 		bin = "git"
 	}
-	return &Runner{bin: bin, timeout: defaultTimeout}
+	return &Runner{bin: bin, readTimeout: defaultReadTimeout, mutationTimeout: defaultMutationTimeout}
 }
 
 // Output runs git in cwd and returns stdout only — for read-only inspection
@@ -51,7 +61,11 @@ func (r *Runner) Combined(ctx context.Context, cwd string, args ...string) (stri
 }
 
 func (r *Runner) run(ctx context.Context, cwd string, combined bool, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	timeout := r.readTimeout
+	if combined {
+		timeout = r.mutationTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, r.bin, args...)
 	cmd.Dir = cwd
