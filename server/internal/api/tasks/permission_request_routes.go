@@ -305,29 +305,41 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		outcome = "denied"
 	}
 
-	// Collect IDs to resolve.
+	// Object-level authz: only the task's own pending requests are resolvable,
+	// so a caller cannot flip permission requests belonging to a different task.
+	runs, err := h.srRepo.ListForTask(r.Context(), body.TaskID)
+	if err != nil {
+		return fmt.Errorf("bulk_resolve: list runs: %w", err)
+	}
+	runIDs := make([]string, len(runs))
+	for i, sr := range runs {
+		runIDs[i] = sr.ID
+	}
+	pending, err := h.permRepo.ListPendingForTask(r.Context(), body.TaskID, runIDs)
+	if err != nil {
+		return fmt.Errorf("bulk_resolve: list pending: %w", err)
+	}
+
 	var idsToResolve []string
+	var resolveErrors []string
 	if body.All {
-		runs, err := h.srRepo.ListForTask(r.Context(), body.TaskID)
-		if err != nil {
-			return fmt.Errorf("bulk_resolve: list runs: %w", err)
-		}
-		runIDs := make([]string, len(runs))
-		for i, sr := range runs {
-			runIDs[i] = sr.ID
-		}
-		pending, err := h.permRepo.ListPendingForTask(r.Context(), body.TaskID, runIDs)
-		if err != nil {
-			return fmt.Errorf("bulk_resolve: list pending: %w", err)
-		}
 		for _, req := range pending {
 			idsToResolve = append(idsToResolve, req.ID)
 		}
 	} else {
-		idsToResolve = body.PermissionIDs
+		allowed := make(map[string]bool, len(pending))
+		for _, req := range pending {
+			allowed[req.ID] = true
+		}
+		for _, id := range body.PermissionIDs {
+			if allowed[id] {
+				idsToResolve = append(idsToResolve, id)
+			} else {
+				resolveErrors = append(resolveErrors, fmt.Sprintf("permission %s not pending for task %s", id, body.TaskID))
+			}
+		}
 	}
 
-	var resolveErrors []string
 	for _, id := range idsToResolve {
 		if err := h.permRepo.ResolvePermissionRequest(r.Context(), id, outcome); err != nil {
 			resolveErrors = append(resolveErrors, err.Error())
