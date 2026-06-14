@@ -286,7 +286,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
 		TaskID        string   `json:"taskId"`
-		Decision      string   `json:"decision"`
+		Outcome       string   `json:"outcome"`
 		PermissionIDs []string `json:"permissionIds"`
 		All           bool     `json:"all"`
 	}
@@ -296,14 +296,11 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 	if body.TaskID == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "taskId is required")
 	}
-	if body.Decision != "accept" && body.Decision != "reject" {
-		return apierr.NewAppError(http.StatusBadRequest, "decision must be accept or reject")
+	if body.Outcome != "granted" && body.Outcome != "denied" {
+		return apierr.NewAppError(http.StatusBadRequest, "outcome must be granted or denied")
 	}
 
-	outcome := "granted"
-	if body.Decision == "reject" {
-		outcome = "denied"
-	}
+	outcome := body.Outcome
 
 	// Object-level authz: only the task's own pending requests are resolvable,
 	// so a caller cannot flip permission requests belonging to a different task.

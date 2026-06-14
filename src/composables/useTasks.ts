@@ -404,7 +404,7 @@ export async function bulkResolvePermissionRequests(
   const res = await fetch(`/api/permission-requests/bulk-resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ taskId, decision: outcome === 'granted' ? 'accept' : 'reject', permissionIds }),
+    body: JSON.stringify({ taskId, outcome, permissionIds }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))

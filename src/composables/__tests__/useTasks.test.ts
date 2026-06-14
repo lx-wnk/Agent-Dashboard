@@ -172,7 +172,7 @@ describe('useTasks', () => {
     expect(JSON.parse(init.body)).toEqual({ outcome: 'granted' })
   })
 
-  it('bulkResolvePermissionRequests maps granted to accept and sends permissionIds', async () => {
+  it('bulkResolvePermissionRequests sends the outcome and permissionIds', async () => {
     const mod = await import('../useTasks')
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ resolved: 2, errors: [] }) })
     vi.stubGlobal('fetch', fetchMock)
@@ -182,17 +182,17 @@ describe('useTasks', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/permission-requests/bulk-resolve')
     expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body)).toEqual({ taskId: 'T1', decision: 'accept', permissionIds: ['R1', 'R2'] })
+    expect(JSON.parse(init.body)).toEqual({ taskId: 'T1', outcome: 'granted', permissionIds: ['R1', 'R2'] })
   })
 
-  it('bulkResolvePermissionRequests maps denied to reject', async () => {
+  it('bulkResolvePermissionRequests sends a denied outcome', async () => {
     const mod = await import('../useTasks')
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ resolved: 1, errors: [] }) })
     vi.stubGlobal('fetch', fetchMock)
 
     await mod.bulkResolvePermissionRequests('T1', ['R1'], 'denied')
 
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ taskId: 'T1', decision: 'reject', permissionIds: ['R1'] })
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ taskId: 'T1', outcome: 'denied', permissionIds: ['R1'] })
   })
 
   it('bulkResolvePermissionRequests returns the resolved/errors payload', async () => {
