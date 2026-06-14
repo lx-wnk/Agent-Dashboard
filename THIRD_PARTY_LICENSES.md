@@ -18,7 +18,7 @@ The following third-party packages are used as transitive dependencies.
 | github.com/creack/pty | MIT | https://github.com/creack/pty/blob/v1.1.24/LICENSE |
 | github.com/dustin/go-humanize | MIT | https://github.com/dustin/go-humanize/blob/v1.0.1/LICENSE |
 | github.com/fsnotify/fsnotify | BSD-3-Clause | https://github.com/fsnotify/fsnotify/blob/v1.9.0/LICENSE |
-| github.com/go-chi/chi/v5 | MIT | https://github.com/go-chi/chi/blob/v5.2.5/LICENSE |
+| github.com/go-chi/chi/v5 | MIT | https://github.com/go-chi/chi/blob/v5.3.0/LICENSE |
 | github.com/go-openapi/inflect | MIT | https://github.com/go-openapi/inflect/blob/v0.19.0/LICENCE |
 | github.com/go-viper/mapstructure/v2 | MIT | https://github.com/go-viper/mapstructure/blob/v2.4.0/LICENSE |
 | github.com/golang-jwt/jwt/v5 | MIT | https://github.com/golang-jwt/jwt/blob/v5.3.1/LICENSE |
@@ -31,12 +31,12 @@ The following third-party packages are used as transitive dependencies.
 | github.com/knadh/koanf/providers/confmap | MIT | https://github.com/knadh/koanf/blob/providers/confmap/v1.0.0/providers/confmap/LICENSE |
 | github.com/knadh/koanf/providers/env | MIT | https://github.com/knadh/koanf/blob/providers/env/v1.1.0/providers/env/LICENSE |
 | github.com/knadh/koanf/providers/file | MIT | https://github.com/knadh/koanf/blob/providers/file/v1.2.1/providers/file/LICENSE |
-| github.com/knadh/koanf/v2 | MIT | https://github.com/knadh/koanf/blob/v2.3.4/LICENSE |
+| github.com/knadh/koanf/v2 | MIT | https://github.com/knadh/koanf/blob/v2.3.5/LICENSE |
 | github.com/mattn/go-isatty | MIT | https://github.com/mattn/go-isatty/blob/v0.0.20/LICENSE |
 | github.com/mitchellh/copystructure | MIT | https://github.com/mitchellh/copystructure/blob/v1.2.0/LICENSE |
 | github.com/mitchellh/go-wordwrap | MIT | https://github.com/mitchellh/go-wordwrap/blob/v1.0.1/LICENSE.md |
 | github.com/mitchellh/reflectwalk | MIT | https://github.com/mitchellh/reflectwalk/blob/v1.0.2/LICENSE |
-| github.com/modelcontextprotocol/go-sdk | Apache-2.0 | https://github.com/modelcontextprotocol/go-sdk/blob/v1.6.0/LICENSE |
+| github.com/modelcontextprotocol/go-sdk | Apache-2.0 | https://github.com/modelcontextprotocol/go-sdk/blob/v1.6.1/LICENSE |
 | github.com/ncruces/go-strftime | MIT | https://github.com/ncruces/go-strftime/blob/v1.0.0/LICENSE |
 | github.com/remyoudompheng/bigfft | BSD-3-Clause | https://github.com/remyoudompheng/bigfft/blob/24d4a6f8daec/LICENSE |
 | github.com/segmentio/asm | MIT | https://github.com/segmentio/asm/blob/v1.1.3/LICENSE |
@@ -47,19 +47,19 @@ The following third-party packages are used as transitive dependencies.
 | github.com/yosida95/uritemplate/v3 | BSD-3-Clause | https://github.com/yosida95/uritemplate/blob/v3.0.2/LICENSE |
 | github.com/zclconf/go-cty-yaml | Apache-2.0 | https://github.com/zclconf/go-cty-yaml/blob/v1.1.0/LICENSE |
 | github.com/zclconf/go-cty/cty | MIT | https://github.com/zclconf/go-cty/blob/v1.14.4/LICENSE |
-| golang.org/x/crypto/hkdf | BSD-3-Clause | https://cs.opensource.google/go/x/crypto/+/v0.31.0:LICENSE |
+| golang.org/x/crypto/hkdf | BSD-3-Clause | https://cs.opensource.google/go/x/crypto/+/v0.45.0:LICENSE |
 | golang.org/x/mod/semver | BSD-3-Clause | https://cs.opensource.google/go/x/mod/+/v0.33.0:LICENSE |
 | golang.org/x/oauth2 | BSD-3-Clause | https://cs.opensource.google/go/x/oauth2/+/v0.35.0:LICENSE |
-| golang.org/x/sync/errgroup | BSD-3-Clause | https://cs.opensource.google/go/x/sync/+/v0.20.0:LICENSE |
-| golang.org/x/sys | BSD-3-Clause | https://cs.opensource.google/go/x/sys/+/v0.44.0:LICENSE |
-| golang.org/x/term | BSD-3-Clause | https://cs.opensource.google/go/x/term/+/v0.43.0:LICENSE |
-| golang.org/x/text | BSD-3-Clause | https://cs.opensource.google/go/x/text/+/v0.21.0:LICENSE |
+| golang.org/x/sync/errgroup | BSD-3-Clause | https://cs.opensource.google/go/x/sync/+/v0.21.0:LICENSE |
+| golang.org/x/sys | BSD-3-Clause | https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE |
+| golang.org/x/term | BSD-3-Clause | https://cs.opensource.google/go/x/term/+/v0.44.0:LICENSE |
+| golang.org/x/text | BSD-3-Clause | https://cs.opensource.google/go/x/text/+/v0.31.0:LICENSE |
 | golang.org/x/time/rate | BSD-3-Clause | https://cs.opensource.google/go/x/time/+/v0.15.0:LICENSE |
 | gopkg.in/yaml.v3 | MIT | https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE |
-| modernc.org/libc | MIT | https://gitlab.com/cznic/libc/blob/v1.72.0/LICENSE-3RD-PARTY.md |
+| modernc.org/libc | MIT | https://gitlab.com/cznic/libc/blob/v1.72.3/LICENSE-3RD-PARTY.md |
 | modernc.org/mathutil | BSD-3-Clause | https://pkg.go.dev/modernc.org/mathutil |
 | modernc.org/memory | BSD-3-Clause | https://gitlab.com/cznic/memory/blob/v1.11.0/LICENSE-GO |
-| modernc.org/sqlite | BSD-3-Clause | https://gitlab.com/cznic/sqlite/blob/v1.50.0/LICENSE |
+| modernc.org/sqlite | BSD-3-Clause | https://gitlab.com/cznic/sqlite/blob/v1.52.0/LICENSE |
 
 ## Frontend Dependencies
 
@@ -73,6 +73,7 @@ The following third-party packages are used as transitive dependencies.
 | @jridgewell/sourcemap-codec | 1.5.5 | MIT |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT |
 | @types/trusted-types | 2.0.7 | MIT |
+| @types/web-bluetooth | 0.0.21 | MIT |
 | @vue/compiler-core | 3.5.32 | MIT |
 | @vue/compiler-dom | 3.5.32 | MIT |
 | @vue/compiler-sfc | 3.5.32 | MIT |
@@ -82,6 +83,10 @@ The following third-party packages are used as transitive dependencies.
 | @vue/runtime-dom | 3.5.32 | MIT |
 | @vue/server-renderer | 3.5.32 | MIT |
 | @vue/shared | 3.5.32 | MIT |
+| @vueuse/core | 14.3.0 | MIT |
+| @vueuse/integrations | 14.3.0 | MIT |
+| @vueuse/metadata | 14.3.0 | MIT |
+| @vueuse/shared | 14.3.0 | MIT |
 | accepts | 2.0.0 | MIT |
 | agent-base | 7.1.4 | MIT |
 | ajv | 8.18.0 | MIT |
@@ -93,6 +98,7 @@ The following third-party packages are used as transitive dependencies.
 | bytes | 3.1.2 | MIT |
 | call-bind-apply-helpers | 1.0.2 | MIT |
 | call-bound | 1.0.4 | MIT |
+| change-case | 5.4.4 | MIT |
 | commander | 7.2.0 | MIT |
 | consola | 3.4.2 | MIT |
 | content-disposition | 1.0.1 | MIT |
@@ -142,7 +148,7 @@ The following third-party packages are used as transitive dependencies.
 | delaunator | 5.1.0 | ISC |
 | depd | 2.0.0 | MIT |
 | diff | 9.0.0 | BSD-3-Clause |
-| dompurify | 3.3.3 | (MPL-2.0 OR Apache-2.0) |
+| dompurify | 3.4.9 | (MPL-2.0 OR Apache-2.0) |
 | dunder-proto | 1.0.1 | MIT |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 |
 | ee-first | 1.1.1 | MIT |
@@ -169,14 +175,14 @@ The following third-party packages are used as transitive dependencies.
 | gopd | 1.2.0 | MIT |
 | has-symbols | 1.1.0 | MIT |
 | hasown | 2.0.2 | MIT |
-| hono | 4.12.12 | MIT |
+| hono | 4.12.25 | MIT |
 | http-errors | 2.0.1 | MIT |
 | http_ece | 1.2.0 | MIT |
 | https-proxy-agent | 7.0.6 | MIT |
 | iconv-lite | 0.6.3, 0.7.2 | MIT |
 | inherits | 2.0.4 | ISC |
 | internmap | 1.0.1, 2.0.3 | ISC |
-| ip-address | 10.1.0 | MIT |
+| ip-address | 10.2.0 | MIT |
 | ipaddr.js | 1.9.1 | MIT |
 | is-promise | 4.0.0 | MIT |
 | isexe | 2.0.0 | ISC |
@@ -196,7 +202,7 @@ The following third-party packages are used as transitive dependencies.
 | minimalistic-assert | 1.0.1 | ISC |
 | minimist | 1.2.8 | MIT |
 | ms | 2.1.3 | MIT |
-| nanoid | 3.3.11 | MIT |
+| nanoid | 3.3.12 | MIT |
 | negotiator | 1.0.0 | MIT |
 | nodemailer | 8.0.5 | MIT-0 |
 | object-assign | 4.1.1 | MIT |
@@ -208,9 +214,9 @@ The following third-party packages are used as transitive dependencies.
 | path-to-regexp | 8.4.2 | MIT |
 | picocolors | 1.1.1 | ISC |
 | pkce-challenge | 5.0.1 | MIT |
-| postcss | 8.5.8 | MIT |
+| postcss | 8.5.15 | MIT |
 | proxy-addr | 2.0.7 | MIT |
-| qs | 6.15.0 | BSD-3-Clause |
+| qs | 6.15.2 | BSD-3-Clause |
 | range-parser | 1.2.1 | MIT |
 | raw-body | 3.0.2 | MIT |
 | require-from-string | 2.0.2 | MIT |
@@ -228,6 +234,7 @@ The following third-party packages are used as transitive dependencies.
 | side-channel-list | 1.0.0 | MIT |
 | side-channel-map | 1.0.1 | MIT |
 | side-channel-weakmap | 1.0.2 | MIT |
+| sortablejs | 1.15.7 | MIT |
 | source-map-js | 1.2.1 | BSD-3-Clause |
 | statuses | 2.0.2 | MIT |
 | toidentifier | 1.0.1 | MIT |
