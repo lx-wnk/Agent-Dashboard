@@ -63,3 +63,76 @@ func TestBuildFeedbackPrefix_NoError(t *testing.T) {
 	prefix := pipeline.BuildFeedbackPrefix(nil)
 	require.Empty(t, prefix)
 }
+
+func TestBuildStageUserPrompt(t *testing.T) {
+	const fullSpec = "## Task Spec\n\nDo the full thing."
+	const extraInstruction = "also do this extra thing"
+
+	tests := []struct {
+		name            string
+		resumeSessionID string
+		priorOutput     map[string]any
+		additionalPrompt string
+		wantContains    []string
+		wantAbsent      []string
+	}{
+		{
+			name:         "fresh run passes full spec through",
+			wantContains: []string{fullSpec},
+		},
+		{
+			name:            "resume omits full spec, injects continue instruction",
+			resumeSessionID: "sess-abc123",
+			wantAbsent:      []string{fullSpec},
+			wantContains:    []string{pipeline.ResumeContinueInstructionForTest},
+		},
+		{
+			name:             "user additional prompt appended on fresh run",
+			additionalPrompt: extraInstruction,
+			wantContains:     []string{fullSpec, extraInstruction},
+		},
+		{
+			name:             "user additional prompt appended on resume",
+			resumeSessionID:  "sess-def456",
+			additionalPrompt: extraInstruction,
+			wantContains:     []string{pipeline.ResumeContinueInstructionForTest, extraInstruction},
+			wantAbsent:       []string{fullSpec},
+		},
+		{
+			name: "prior iteration feedback preserved on fresh run",
+			priorOutput: map[string]any{
+				"validation_error": "missing field: passed",
+				"rejected_output":  map[string]any{"x": 1},
+			},
+			wantContains: []string{"CORRECTION REQUIRED", "missing field: passed", fullSpec},
+		},
+		{
+			name:            "prior iteration feedback preserved on resume",
+			resumeSessionID: "sess-ghi789",
+			priorOutput: map[string]any{
+				"validation_error": "missing field: passed",
+				"rejected_output":  map[string]any{"x": 1},
+			},
+			wantContains: []string{"CORRECTION REQUIRED", "missing field: passed", pipeline.ResumeContinueInstructionForTest},
+			wantAbsent:   []string{fullSpec},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &pipeline.StageContext{
+				ResumeSessionID:      tc.resumeSessionID,
+				PriorIterationOutput: tc.priorOutput,
+				UserAdditionalPrompt: tc.additionalPrompt,
+			}
+			bundle := pipeline.PromptBundle{UserPrompt: fullSpec}
+			result := pipeline.BuildStageUserPromptForTest(ctx, bundle, pipeline.BuildFeedbackPrefix(ctx.PriorIterationOutput))
+			for _, want := range tc.wantContains {
+				require.Contains(t, result, want)
+			}
+			for _, absent := range tc.wantAbsent {
+				require.NotContains(t, result, absent)
+			}
+		})
+	}
+}
