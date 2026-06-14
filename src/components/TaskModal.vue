@@ -402,7 +402,7 @@ async function handleAction(action: () => Promise<void>) {
 }
 
 async function onResolve(req: PermissionRequest, outcome: 'granted' | 'denied') {
-  await handleAction(() => resolvePermissionRequest(req.id, outcome))
+  await handleAction(() => resolvePermissionRequest(props.task!.id, req.id, outcome))
 }
 
 // Pending requests grouped by stage_run so the bulk-resolve buttons can
@@ -419,9 +419,9 @@ const pendingByStageRun = computed<Array<{ stageRunId: string, requests: Permiss
   return Array.from(groups.entries()).map(([stageRunId, requests]) => ({ stageRunId, requests }))
 })
 
-async function onResolveAll(stageRunId: string, outcome: 'granted' | 'denied') {
+async function onResolveAll(requests: PermissionRequest[], outcome: 'granted' | 'denied') {
   await handleAction(async () => {
-    await bulkResolvePermissionRequests(stageRunId, outcome)
+    await bulkResolvePermissionRequests(props.task!.id, requests.map(r => r.id), outcome)
   })
 }
 
@@ -459,7 +459,7 @@ async function onSlashSelect(cmd: { name: string }) {
       if (props.task) {
         await handleAction(async () => {
           for (const group of pendingByStageRun.value)
-            await bulkResolvePermissionRequests(group.stageRunId, 'granted')
+            await bulkResolvePermissionRequests(props.task!.id, group.requests.map(r => r.id), 'granted')
         })
       }
       break
@@ -661,7 +661,7 @@ watch(
                   variant="primary"
                   size="sm"
                   :disabled="isActing"
-                  @click="onResolveAll(group.stageRunId, 'granted')"
+                  @click="onResolveAll(group.requests, 'granted')"
                 >
                   Grant All ({{ group.requests.length }})
                 </AppButton>
@@ -669,7 +669,7 @@ watch(
                   variant="danger"
                   size="sm"
                   :disabled="isActing"
-                  @click="onResolveAll(group.stageRunId, 'denied')"
+                  @click="onResolveAll(group.requests, 'denied')"
                 >
                   Deny All ({{ group.requests.length }})
                 </AppButton>
@@ -1102,7 +1102,7 @@ watch(
                   variant="primary"
                   size="sm"
                   :disabled="isActing"
-                  @click="onResolveAll(group.stageRunId, 'granted')"
+                  @click="onResolveAll(group.requests, 'granted')"
                 >
                   Grant All ({{ group.requests.length }})
                 </AppButton>
@@ -1110,7 +1110,7 @@ watch(
                   variant="danger"
                   size="sm"
                   :disabled="isActing"
-                  @click="onResolveAll(group.stageRunId, 'denied')"
+                  @click="onResolveAll(group.requests, 'denied')"
                 >
                   Deny All ({{ group.requests.length }})
                 </AppButton>
