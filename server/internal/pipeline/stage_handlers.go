@@ -25,8 +25,8 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	if custom := buildCustomSystemPrompt(ctx, h.stage); custom != "" {
 		bundle.SystemPrompt = custom + "\n\n---\n\n" + bundle.SystemPrompt
 	}
-	fullUserPrompt := buildStageUserPrompt(ctx, bundle)
-	feedback := BuildFeedbackPrefix(ctx.PriorIterationOutput) // used only for the audit log below
+	feedback := BuildFeedbackPrefix(ctx.PriorIterationOutput)
+	fullUserPrompt := buildStageUserPrompt(ctx, bundle, feedback)
 
 	// Resolve the effective DB spawner immediately before exec. Failure to
 	// resolve is fatal — we do NOT silently fall back to the bare `claude`
@@ -181,8 +181,7 @@ const resumeContinueInstruction = "Continue your previous attempt on this task. 
 // buildStageUserPrompt assembles the user-facing prompt for a stage execution.
 // On resume, the full task spec (bundle.UserPrompt) is swapped for a short
 // "continue" instruction; feedback and additional-prompt suffix are preserved.
-func buildStageUserPrompt(ctx *StageContext, bundle PromptBundle) string {
-	feedback := BuildFeedbackPrefix(ctx.PriorIterationOutput)
+func buildStageUserPrompt(ctx *StageContext, bundle PromptBundle, feedback string) string {
 	userPrompt := bundle.UserPrompt
 	if ctx.ResumeSessionID != "" {
 		userPrompt = resumeContinueInstruction

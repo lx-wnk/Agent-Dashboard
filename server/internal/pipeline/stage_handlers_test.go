@@ -126,7 +126,7 @@ func TestBuildStageUserPrompt(t *testing.T) {
 				UserAdditionalPrompt: tc.additionalPrompt,
 			}
 			bundle := pipeline.PromptBundle{UserPrompt: fullSpec}
-			result := pipeline.BuildStageUserPromptForTest(ctx, bundle)
+			result := pipeline.BuildStageUserPromptForTest(ctx, bundle, pipeline.BuildFeedbackPrefix(ctx.PriorIterationOutput))
 			for _, want := range tc.wantContains {
 				require.Contains(t, result, want)
 			}
