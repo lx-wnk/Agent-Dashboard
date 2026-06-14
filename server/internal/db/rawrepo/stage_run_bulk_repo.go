@@ -41,10 +41,12 @@ func (r *sqlStageRunBulkRepo) LatestPerTask(ctx context.Context, taskIDs []strin
 	placeholders, args := buildInArgs(taskIDs)
 	q := fmt.Sprintf(`
 SELECT id, task_id, stage, session_id, session_name, pid, status, iteration,
-       output, tokens_used, cost_cents, started_at, ended_at, last_grant_at, created_at
+       output, tokens_used, cost_cents, started_at, ended_at, last_grant_at, created_at,
+       retry_count, next_retry_at
 FROM (
     SELECT id, task_id, stage, session_id, session_name, pid, status, iteration,
            output, tokens_used, cost_cents, started_at, ended_at, last_grant_at, created_at,
+           retry_count, next_retry_at,
            ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY created_at DESC) AS rn
     FROM stage_runs
     WHERE task_id IN (%s)
@@ -81,7 +83,8 @@ func (r *sqlStageRunBulkRepo) AllForTaskIDs(ctx context.Context, taskIDs []strin
 	placeholders, args := buildInArgs(taskIDs)
 	q := fmt.Sprintf(`
 SELECT id, task_id, stage, session_id, session_name, pid, status, iteration,
-       output, tokens_used, cost_cents, started_at, ended_at, last_grant_at, created_at
+       output, tokens_used, cost_cents, started_at, ended_at, last_grant_at, created_at,
+       retry_count, next_retry_at
 FROM stage_runs
 WHERE task_id IN (%s)
 ORDER BY task_id, iteration ASC`, placeholders)
@@ -134,6 +137,7 @@ func scanStageRun(rows *sql.Rows) (*ent.StageRun, error) {
 		startedAt   sql.NullTime
 		endedAt     sql.NullTime
 		lastGrantAt sql.NullTime
+		nextRetryAt sql.NullTime
 	)
 	err := rows.Scan(
 		&sr.ID, &sr.TaskID, &sr.Stage,
@@ -142,6 +146,7 @@ func scanStageRun(rows *sql.Rows) (*ent.StageRun, error) {
 		&outputRaw, &sr.TokensUsed, &sr.CostCents,
 		&startedAt, &endedAt, &lastGrantAt,
 		&sr.CreatedAt,
+		&sr.RetryCount, &nextRetryAt,
 	)
 	if err != nil {
 		return nil, err
@@ -173,6 +178,10 @@ func scanStageRun(rows *sql.Rows) (*ent.StageRun, error) {
 	if lastGrantAt.Valid {
 		t := lastGrantAt.Time
 		sr.LastGrantAt = &t
+	}
+	if nextRetryAt.Valid {
+		t := nextRetryAt.Time
+		sr.NextRetryAt = &t
 	}
 	return &sr, nil
 }

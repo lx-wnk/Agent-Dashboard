@@ -3,6 +3,7 @@ package repo_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/stretchr/testify/require"
@@ -141,4 +142,65 @@ func TestStageRunRepo_GetLatestForTasks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, run1b.ID, latest[taskID1].ID)
 	require.Equal(t, run2.ID, latest[taskID2].ID)
+}
+
+func TestStageRunRepo_Update_StartedAtClear(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-started-at-clear")
+	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 0})
+	require.NoError(t, err)
+
+	now := time.Now().Truncate(time.Second)
+	updated, err := sr.Update(ctx, run.ID, repo.UpdateStageRunInput{StartedAt: &now})
+	require.NoError(t, err)
+	require.NotNil(t, updated.StartedAt)
+	require.Equal(t, now.UTC(), updated.StartedAt.UTC())
+
+	cleared, err := sr.Update(ctx, run.ID, repo.UpdateStageRunInput{StartedAtClear: true})
+	require.NoError(t, err)
+	require.Nil(t, cleared.StartedAt)
+
+	reloaded, err := sr.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Nil(t, reloaded.StartedAt)
+}
+
+func TestStageRunRepo_Update_RetryFields(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-retry-1")
+	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+
+	retryCount := 3
+	nextRetryAt := time.Now().Add(time.Minute).Truncate(time.Second)
+	updated, err := sr.Update(ctx, run.ID, repo.UpdateStageRunInput{
+		RetryCount:  &retryCount,
+		NextRetryAt: &nextRetryAt,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, updated.RetryCount)
+	require.NotNil(t, updated.NextRetryAt)
+	require.Equal(t, nextRetryAt.UTC(), updated.NextRetryAt.UTC())
+
+	reloaded, err := sr.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, 3, reloaded.RetryCount)
+	require.NotNil(t, reloaded.NextRetryAt)
+	require.Equal(t, nextRetryAt.UTC(), reloaded.NextRetryAt.UTC())
+
+	cleared, err := sr.Update(ctx, run.ID, repo.UpdateStageRunInput{NextRetryAtClear: true})
+	require.NoError(t, err)
+	require.Nil(t, cleared.NextRetryAt)
+
+	reloaded2, err := sr.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Nil(t, reloaded2.NextRetryAt)
 }

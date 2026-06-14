@@ -2,9 +2,11 @@
 import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import type { StageCostRow } from './StageCostWaterfall.vue'
 import type { SlashCommand } from './TaskSlashCommandMenu.vue'
+import { useIntervalFn } from '@vueuse/core'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '../composables/useAgents'
 import { useCopyId } from '../composables/useCopyId'
+import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { useProjects } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
 import {
@@ -26,6 +28,7 @@ import {
   resumeStageTask,
   retryTask,
 } from '../composables/useTasks'
+import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusChipClass } from '../utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
@@ -50,6 +53,10 @@ const { copy: copyTaskId, copied: modalCopiedId } = useCopyId(() => props.task?.
 const { agents } = useAgents()
 const { projects } = useProjects()
 const { spawners } = useSpawners()
+
+const { maxAutoRetries: modalMaxAutoRetries } = usePipelineConfig()
+const modalRetrySecondsLeft = ref(0)
+useIntervalFn(() => { modalRetrySecondsLeft.value = secondsUntil(props.task?.nextRetryAt) }, 1000, { immediate: true })
 
 // Project / spawner re-assignment state
 const isAssigningProject = ref(false)
@@ -549,6 +556,11 @@ watch(
           <span v-if="isFailedRun(task)" class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400" title="Latest stage run failed">
             RUN FAILED
           </span>
+          <span
+            v-if="task.autoRetryCount != null"
+            class="text-[10px] px-1.5 py-px rounded uppercase font-mono bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400"
+            :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${modalMaxAutoRetries})`"
+          >Retrying · {{ task.autoRetryCount }}/{{ modalMaxAutoRetries }}{{ modalRetrySecondsLeft > 0 ? ` · ${modalRetrySecondsLeft}s` : '' }}</span>
           <span class="font-mono text-xs text-blue-600 dark:text-blue-400">{{ task.slug }}</span>
           <button
             type="button"

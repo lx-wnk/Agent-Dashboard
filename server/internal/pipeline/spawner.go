@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+	"testing"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
@@ -19,6 +20,24 @@ import (
 )
 
 var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
+
+// realAgentSpawnEnvKey, when set to "1", re-enables real agent spawning inside
+// test binaries. Without it, test binaries never launch a real agent.
+const realAgentSpawnEnvKey = "DASHBOARD_ALLOW_REAL_AGENT_SPAWN"
+
+// syntheticSpawnPID is the PID returned for the stubbed spawn used in tests.
+// It is intentionally a value no real process owns, so IsPidAlive reports false
+// and syscallKill is a harmless no-op (no risk of signalling the test process).
+const syntheticSpawnPID = 2147483647
+
+// realAgentSpawnAllowed reports whether a real agent process may be launched.
+// Production binaries always may. Test binaries may NOT unless the operator
+// explicitly opts in via DASHBOARD_ALLOW_REAL_AGENT_SPAWN=1 — this prevents any
+// test (in this or any other package) from connecting to a real agent and
+// burning API tokens.
+func realAgentSpawnAllowed() bool {
+	return !testing.Testing() || os.Getenv(realAgentSpawnEnvKey) == "1"
+}
 
 const systemPromptMaxChars = 10000
 
@@ -424,6 +443,12 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	cwd := opts.Task.Cwd
 	if opts.Task.WorktreePath != nil && *opts.Task.WorktreePath != "" {
 		cwd = *opts.Task.WorktreePath
+	}
+	// Test guard: never launch a real agent from a test binary unless explicitly
+	// opted in. Returns a synthetic running result so spawn-dependent tests stay
+	// deterministic and token-free.
+	if !realAgentSpawnAllowed() {
+		return SpawnResult{PID: syntheticSpawnPID, Cwd: cwd, Cleanup: func() {}}, nil
 	}
 	allowGitPush := IsGitPushAllowed(opts.Task)
 	settingsPath, wrote, isLocal, err := writeSettingsFile(cwd, opts.Permissions, opts.EnableChannel, allowGitPush)

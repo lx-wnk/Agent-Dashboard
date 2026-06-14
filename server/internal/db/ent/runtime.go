@@ -167,8 +167,12 @@ func init() {
 	stagerunDescCostCents := stagerunFields[10].Descriptor()
 	// stagerun.DefaultCostCents holds the default value on creation for the cost_cents field.
 	stagerun.DefaultCostCents = stagerunDescCostCents.Default.(int)
+	// stagerunDescRetryCount is the schema descriptor for retry_count field.
+	stagerunDescRetryCount := stagerunFields[14].Descriptor()
+	// stagerun.DefaultRetryCount holds the default value on creation for the retry_count field.
+	stagerun.DefaultRetryCount = stagerunDescRetryCount.Default.(int)
 	// stagerunDescCreatedAt is the schema descriptor for created_at field.
-	stagerunDescCreatedAt := stagerunFields[14].Descriptor()
+	stagerunDescCreatedAt := stagerunFields[16].Descriptor()
 	// stagerun.DefaultCreatedAt holds the default value on creation for the created_at field.
 	stagerun.DefaultCreatedAt = stagerunDescCreatedAt.Default.(func() time.Time)
 	systempromptFields := schema.SystemPrompt{}.Fields()

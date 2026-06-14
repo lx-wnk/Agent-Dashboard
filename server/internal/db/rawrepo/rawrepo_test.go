@@ -3,9 +3,11 @@ package rawrepo_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
 func openTestDB(t *testing.T) *db.DBBundle {
@@ -117,5 +119,67 @@ func TestPushSubscriptionRepo_Register(t *testing.T) {
 	subs, _ = repo.ListAll(ctx)
 	if len(subs) != 1 {
 		t.Fatalf("expected 1 sub after duplicate register, got %d", len(subs))
+	}
+}
+
+// TestStageRunBulkRepo_LatestPerTask_RetryFields verifies that retry_count and
+// next_retry_at are correctly scanned by LatestPerTask.
+func TestStageRunBulkRepo_LatestPerTask_RetryFields(t *testing.T) {
+	bundle := openTestDB(t)
+	ctx := context.Background()
+
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	bulkRepo := rawrepo.NewStageRunBulkRepo(bundle.DB)
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:         "bulk-retry-test",
+		Title:        "Bulk Retry Test",
+		Cwd:          "/tmp/bulk-retry-test",
+		CurrentStage: "implementation",
+		Priority:     "medium",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 1,
+	})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+
+	retryCount := 3
+	nextRetryAt := time.Now().Add(60 * time.Second).UTC().Truncate(time.Second)
+	status := "requeued"
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status:      &status,
+		RetryCount:  &retryCount,
+		NextRetryAt: &nextRetryAt,
+	})
+	if err != nil {
+		t.Fatalf("update stage run: %v", err)
+	}
+
+	latest, err := bulkRepo.LatestPerTask(ctx, []string{task.ID})
+	if err != nil {
+		t.Fatalf("LatestPerTask: %v", err)
+	}
+
+	got, ok := latest[task.ID]
+	if !ok || got == nil {
+		t.Fatal("expected stage run in LatestPerTask result")
+	}
+	if got.RetryCount != 3 {
+		t.Errorf("expected RetryCount=3, got %d", got.RetryCount)
+	}
+	if got.NextRetryAt == nil {
+		t.Fatal("expected NextRetryAt to be set")
+	}
+	if !got.NextRetryAt.Equal(nextRetryAt) {
+		t.Errorf("expected NextRetryAt=%v, got %v", nextRetryAt, *got.NextRetryAt)
 	}
 }

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
+import { useIntervalFn } from '@vueuse/core'
+import { computed, ref } from 'vue'
+import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { shortId, useCopyId } from '../composables/useCopyId'
+import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
 import WorktreePill from './WorktreePill.vue'
@@ -21,6 +25,7 @@ const RUN_STATUS_LABELS: Record<StageRunStatus, string> = {
   on_hold: 'On Hold',
   done: 'Done',
   failed: 'Failed',
+  requeued: 'Requeued',
 }
 
 function runStatusLabel(status: StageRunStatus): string {
@@ -30,6 +35,18 @@ function runStatusLabel(status: StageRunStatus): string {
 function stageLabel(stage: PipelineStage): string {
   return STAGE_LABELS[stage] || stage
 }
+
+const { maxAutoRetries } = usePipelineConfig()
+
+const retrySecondsLeft = ref(0)
+
+function refreshCountdown() {
+  retrySecondsLeft.value = secondsUntil(props.task.nextRetryAt)
+}
+
+const isRequeued = computed(() => props.task.autoRetryCount != null)
+
+useIntervalFn(refreshCountdown, 1000, { immediate: true })
 </script>
 
 <template>
@@ -99,6 +116,11 @@ function stageLabel(stage: PipelineStage): string {
         :class="runStatusChipClass(task.latestStageRunStatus)"
         :title="`Latest stage run: ${runStatusLabel(task.latestStageRunStatus)}`"
       >{{ runStatusLabel(task.latestStageRunStatus) }}</span>
+      <span
+        v-if="isRequeued"
+        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700/60"
+        :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${maxAutoRetries})`"
+      >Retrying · {{ task.autoRetryCount }}/{{ maxAutoRetries }}{{ retrySecondsLeft > 0 ? ` · ${retrySecondsLeft}s` : '' }}</span>
       <span
         v-if="task.needsUser && task.latestStageRunStatus === 'awaiting_user'"
         class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-yellow-100 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700/60"
