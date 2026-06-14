@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/platform"
 )
 
@@ -100,8 +101,10 @@ func Config(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"scriptPath": scriptPath,
-		"homedir":    home,
+		"scriptPath":    scriptPath,
+		"homedir":       home,
+		"mcpServerName": mcp.ServerName,
+		"mcpEndpoint":   mcp.EndpointPath,
 	})
 }
 

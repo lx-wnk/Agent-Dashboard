@@ -10,7 +10,6 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const query = ref('')
-const dialogRef = ref<HTMLDivElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const selectedIdx = ref(0)
 
@@ -103,31 +102,6 @@ watch(query, (q) => {
   }, 200)
 })
 
-// Focus trap: cycle focus among interactive elements within the dialog
-function trapFocus(e: KeyboardEvent) {
-  if (e.key !== 'Tab' || !dialogRef.value)
-    return
-
-  const focusable = dialogRef.value.querySelectorAll<HTMLElement>(
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-  )
-  const first = focusable[0]
-  const last = focusable[focusable.length - 1]
-
-  if (e.shiftKey) {
-    if (document.activeElement === first) {
-      e.preventDefault()
-      last?.focus()
-    }
-  }
-  else {
-    if (document.activeElement === last) {
-      e.preventDefault()
-      first?.focus()
-    }
-  }
-}
-
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault()
@@ -141,10 +115,6 @@ function onKeydown(e: KeyboardEvent) {
     return
   if (e.key === 'Escape') {
     closeDialog()
-    return
-  }
-  if (e.key === 'Tab') {
-    trapFocus(e)
     return
   }
   if (e.key === 'ArrowDown') {
@@ -171,14 +141,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <AppModal :open="open" :z-index="2000" size="auto" @close="closeDialog">
+  <AppModal :open="open" :z-index="2000" size="auto" labelled-by="spotlight-search-label" @close="closeDialog">
     <div
-      ref="dialogRef"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Quick search"
       class="bg-card rounded-xl border border-line shadow-2xl w-full max-w-lg overflow-hidden"
     >
+      <span id="spotlight-search-label" class="sr-only">Quick search</span>
       <!-- Live region for result count -->
       <div aria-live="polite" class="sr-only">
         {{ flatResults.length }} results
@@ -216,14 +183,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               Tasks
             </div>
-            <button
+            <div
               v-for="(task, idx) in results.tasks"
               :id="`spotlight-opt-${idx}`"
               :key="`task-${task.id}`"
-              type="button"
               role="option"
+              tabindex="-1"
               :aria-selected="selectedIdx === idx"
-              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors"
+              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors cursor-pointer"
               :class="selectedIdx === idx
                 ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                 : 'text-fg-soft hover:bg-slate-50 dark:hover:bg-slate-800'"
@@ -233,7 +200,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <span class="text-[10px] uppercase tracking-wide text-slate-400 w-10 flex-shrink-0">Task</span>
               <span class="truncate">{{ task.title }}</span>
               <span class="ml-auto text-[10px] text-slate-400">{{ task.currentStage }}</span>
-            </button>
+            </div>
           </template>
 
           <!-- Agents section -->
@@ -244,14 +211,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             >
               Agents
             </div>
-            <button
+            <div
               v-for="(agent, idx) in results.agents"
               :id="`spotlight-opt-${results.tasks.length + idx}`"
               :key="`agent-${agent.sessionId}`"
-              type="button"
               role="option"
+              tabindex="-1"
               :aria-selected="selectedIdx === (results.tasks.length + idx)"
-              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors"
+              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors cursor-pointer"
               :class="selectedIdx === (results.tasks.length + idx)
                 ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                 : 'text-fg-soft hover:bg-slate-50 dark:hover:bg-slate-800'"
@@ -261,7 +228,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <span class="text-[10px] uppercase tracking-wide text-slate-400 w-10 flex-shrink-0">Agent</span>
               <span class="truncate">{{ agent.projectName }}</span>
               <span class="ml-auto text-[10px] text-slate-400">{{ agent.status }}</span>
-            </button>
+            </div>
           </template>
         </template>
       </div>

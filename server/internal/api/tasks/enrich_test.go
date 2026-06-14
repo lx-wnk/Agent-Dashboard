@@ -1,54 +1,129 @@
-package tasks
+package tasks_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
-	"github.com/stretchr/testify/require"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
-// TestMemoizeProbe_OnePerDistinctPid verifies the memo calls the underlying probe
-// exactly once per distinct pid, regardless of how often a pid recurs.
-func TestMemoizeProbe_OnePerDistinctPid(t *testing.T) {
-	calls := map[int]int{}
-	probe := func(pid int) bool {
-		calls[pid]++
-		return pid%2 == 0 // arbitrary deterministic result
+// enrichForTest is a thin wrapper so tests don't repeat the nil permRepo wiring.
+func enrichForTest(ctx context.Context, t *testing.T, task *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) *tasks.EnrichedTask {
+	t.Helper()
+	enriched, err := tasks.EnrichTask(ctx, task, srRepo, permRepo)
+	if err != nil {
+		t.Fatalf("EnrichTask: %v", err)
 	}
-	isAlive := memoizeProbe(probe)
-
-	for _, pid := range []int{10, 10, 20, 10, 20, 30} {
-		isAlive(pid)
-	}
-
-	require.Equal(t, 1, calls[10], "pid 10 must be probed once")
-	require.Equal(t, 1, calls[20], "pid 20 must be probed once")
-	require.Equal(t, 1, calls[30], "pid 30 must be probed once")
-	require.True(t, isAlive(10))   // 10 is even → alive, served from cache
-	require.False(t, isAlive(15))  // 15 odd → not alive
-	require.Equal(t, 1, calls[15]) // and probed once
+	return enriched
 }
 
-// TestEnrichOne_AwaitingUserZombieGating verifies a dead-pid awaiting_user run with
-// pending permissions is flagged blocked/needsUser, while a live pid is not — and
-// that isAlive is consulted exactly once for the run's pid.
-func TestEnrichOne_AwaitingUserZombieGating(t *testing.T) {
-	pid := 4242
-	task := &ent.Task{CurrentStage: "implementation"}
-	latest := &ent.StageRun{Stage: "implementation", Status: "awaiting_user", Pid: &pid}
+func TestEnrichOne_Requeued_PopulatesRetryFields(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
 
-	// Dead pid → zombie await; with pending permissions it is blocked + needsUser.
-	deadCalls := 0
-	deadProbe := memoizeProbe(func(int) bool { deadCalls++; return false })
-	dead, err := enrichOne(task, latest, 1, deadProbe)
-	require.NoError(t, err)
-	require.True(t, dead.BlockedByPendingPermissions)
-	require.True(t, dead.NeedsUser)
-	require.Equal(t, 1, deadCalls, "isAlive must be consulted once for the run pid")
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	permRepo := repo.NewPermissionRepo(bundle.Client)
+	ctx := context.Background()
 
-	// Live pid → not a zombie await; not blocked by the zombie path.
-	liveProbe := memoizeProbe(func(int) bool { return true })
-	live, err := enrichOne(task, latest, 1, liveProbe)
-	require.NoError(t, err)
-	require.False(t, live.BlockedByPendingPermissions)
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:         "enrich-requeued",
+		Title:        "Enrich Requeued",
+		Cwd:          "/tmp/enrich-requeued",
+		CurrentStage: "implementation",
+		Priority:     "medium",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 1,
+	})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+
+	retryCount := 2
+	nextRetryAt := time.Now().Add(30 * time.Second).UTC().Truncate(time.Second)
+	status := "requeued"
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status:      &status,
+		RetryCount:  &retryCount,
+		NextRetryAt: &nextRetryAt,
+	})
+	if err != nil {
+		t.Fatalf("update stage run: %v", err)
+	}
+
+	enriched := enrichForTest(ctx, t, task, srRepo, permRepo)
+
+	if enriched.LatestStageRunStatus == nil || *enriched.LatestStageRunStatus != "requeued" {
+		t.Errorf("expected latestStageRunStatus=requeued, got %v", enriched.LatestStageRunStatus)
+	}
+	if enriched.NeedsUser {
+		t.Error("expected needsUser=false for requeued status")
+	}
+	if enriched.AutoRetryCount == nil || *enriched.AutoRetryCount != 2 {
+		t.Errorf("expected autoRetryCount=2, got %v", enriched.AutoRetryCount)
+	}
+	if enriched.NextRetryAt == nil {
+		t.Error("expected nextRetryAt to be set")
+	}
+}
+
+func TestEnrichOne_RetryCountZero_AutoRetryCountNil(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	permRepo := repo.NewPermissionRepo(bundle.Client)
+	ctx := context.Background()
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:         "enrich-zero-retry",
+		Title:        "Enrich Zero Retry",
+		Cwd:          "/tmp/enrich-zero-retry",
+		CurrentStage: "implementation",
+		Priority:     "medium",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 1,
+	})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+
+	status := "requeued"
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status: &status,
+	})
+	if err != nil {
+		t.Fatalf("update stage run: %v", err)
+	}
+
+	enriched := enrichForTest(ctx, t, task, srRepo, permRepo)
+
+	if enriched.AutoRetryCount != nil {
+		t.Errorf("expected autoRetryCount=nil for retry_count=0, got %v", *enriched.AutoRetryCount)
+	}
 }

@@ -232,6 +232,7 @@ async function onCreateAndRefine(): Promise<void> {
       <AppButton
         variant="primary"
         :disabled="!canSubmit"
+        :aria-busy="isSubmitting"
         data-testid="details-submit-refine"
         @click="onCreateAndRefine"
       >

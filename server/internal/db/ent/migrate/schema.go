@@ -314,6 +314,8 @@ var (
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "ended_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_grant_at", Type: field.TypeTime, Nullable: true},
+		{Name: "retry_count", Type: field.TypeInt, Default: 0},
+		{Name: "next_retry_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime, Default: "datetime('now')"},
 		{Name: "task_id", Type: field.TypeString},
 	}
@@ -325,7 +327,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "stage_runs_tasks_stage_runs",
-				Columns:    []*schema.Column{StageRunsColumns[14]},
+				Columns:    []*schema.Column{StageRunsColumns[16]},
 				RefColumns: []*schema.Column{TasksColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -339,17 +341,17 @@ var (
 			{
 				Name:    "stagerun_task_id_stage_iteration",
 				Unique:  false,
-				Columns: []*schema.Column{StageRunsColumns[14], StageRunsColumns[1], StageRunsColumns[6]},
+				Columns: []*schema.Column{StageRunsColumns[16], StageRunsColumns[1], StageRunsColumns[6]},
 			},
 			{
 				Name:    "stagerun_task_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{StageRunsColumns[14], StageRunsColumns[13]},
+				Columns: []*schema.Column{StageRunsColumns[16], StageRunsColumns[15]},
 			},
 			{
 				Name:    "stagerun_task_id",
 				Unique:  true,
-				Columns: []*schema.Column{StageRunsColumns[14]},
+				Columns: []*schema.Column{StageRunsColumns[16]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "status = 'running'",
 				},
@@ -407,6 +409,7 @@ var (
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
 		{Name: "project_id", Type: field.TypeString, Nullable: true},
 		{Name: "spawner_id", Type: field.TypeString, Nullable: true},
+		{Name: "rank", Type: field.TypeFloat64, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
@@ -432,9 +435,9 @@ var (
 				Columns: []*schema.Column{TasksColumns[18]},
 			},
 			{
-				Name:    "task_silver_bullet_priority_created_at",
+				Name:    "task_silver_bullet_priority_rank_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[20]},
+				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[20], TasksColumns[21]},
 			},
 		},
 	}

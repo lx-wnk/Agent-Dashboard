@@ -72,15 +72,15 @@ html, body {
   color: var(--fg);
 }
 
-/* Scrollbar */
+/* Scrollbar — uses theme tokens so it follows light/dark mode */
 :root {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-slate-700) transparent;
+  scrollbar-color: var(--line-strong) transparent;
 }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-slate-700); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-slate-500); }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fg-faint); }
 
 /* Global markdown styles for v-html content (AgentChatStream) — cannot be scoped */
 .markdown-body { white-space: normal; }
@@ -133,4 +133,13 @@ html, body {
 @keyframes pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
+}
+
+/* WCAG 2.3.3 — suppress all motion when the user has requested reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

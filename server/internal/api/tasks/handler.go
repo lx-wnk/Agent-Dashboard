@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -67,9 +68,9 @@ type Handler struct {
 type Deps struct {
 	// Client is the ent client used to open transactions for atomic multi-write operations.
 	// When nil, transactional paths fall back to individual writes (e.g. in tests).
-	Client            *ent.Client
-	TaskRepo          repo.TaskRepo
-	SRRepo            repo.StageRunRepo
+	Client   *ent.Client
+	TaskRepo repo.TaskRepo
+	SRRepo   repo.StageRunRepo
 	// SRBulkRepo is the window-function bulk repo used by EnrichTasksBulk to
 	// fetch the exact latest stage_run per task regardless of iteration count.
 	SRBulkRepo        rawrepo.StageRunBulkRepo
@@ -119,6 +120,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/tasks/{id}/permissions", apierr.ErrorMiddleware(h.listPermissions))
 	r.Post("/api/tasks", apierr.ErrorMiddleware(h.create))
 	r.Patch("/api/tasks/{id}", apierr.ErrorMiddleware(h.update))
+	r.Post("/api/tasks/{id}/rank", apierr.ErrorMiddleware(h.rankTask))
 	r.Delete("/api/tasks/{id}", apierr.ErrorMiddleware(h.delete))
 	r.Post("/api/tasks/{id}/progress", apierr.ErrorMiddleware(h.progress))
 	r.Post("/api/tasks/{id}/cancel", apierr.ErrorMiddleware(h.cancel))
@@ -325,15 +327,15 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 
 	priority := body.Priority
 	if priority == "" {
-		priority = "medium"
+		priority = db.DefaultPriority
 	}
 	stage := body.Stage
 	if stage == "" {
-		stage = "concept"
+		stage = db.DefaultStage
 	}
 	maxIter := body.MaxIterations
 	if maxIter <= 0 {
-		maxIter = 20
+		maxIter = db.DefaultMaxIterations
 	}
 	payload, _ := auth.PayloadFromContext(r.Context())
 	userID := payload.Sub
@@ -347,7 +349,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		CurrentStage:        stage,
 		SilverBullet:        body.SilverBullet,
 		MaxIterations:       maxIter,
-		StageTimeoutSeconds: 1800,
+		StageTimeoutSeconds: db.DefaultStageTimeoutSeconds,
 		ProjectID:           projectIDPtr,
 		SpawnerID:           spawnerIDPtr,
 	})
@@ -502,6 +504,38 @@ func parseNullableString(raw json.RawMessage) (*string, bool, error) {
 	return &v, false, nil
 }
 
+// rankTask repositions a task within its stage column. The body carries the IDs
+// of the cards immediately above (before) and below (after) the drop target;
+// either may be empty when dropping at a column edge. The server computes the
+// midpoint rank so concurrent drops stay race-safe.
+func (h *Handler) rankTask(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	var body struct {
+		Before string `json:"before"`
+		After  string `json:"after"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if body.Before == id || body.After == id {
+		return apierr.NewAppError(http.StatusBadRequest, "before/after must not equal the task being ranked")
+	}
+	updated, err := h.taskRepo.RerankBetween(r.Context(), id, body.Before, body.After)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.ErrNotFound
+		}
+		return fmt.Errorf("tasks.rankTask: %w", err)
+	}
+	h.broadcastEnrichedUpdate(r.Context(), id)
+	enriched, err := EnrichTask(r.Context(), updated, h.srRepo, h.permRepo)
+	if err != nil {
+		return fmt.Errorf("tasks.rankTask.enrich: %w", err)
+	}
+	h.applyRefineStatus(enriched, id)
+	return jsonReply(w, http.StatusOK, enriched)
+}
+
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
 	if err := h.taskRepo.Delete(r.Context(), id); err != nil {
@@ -562,10 +596,11 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 		AdditionalPrompt string `json:"additionalPrompt"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "retry_requested", "task:"+id, map[string]any{"actor": "user", "stage": latest.Stage, "iteration": latest.Iteration})
+	resumeSessionID := h.resolveResumeSessionID(r.Context(), t)
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "retry_requested", "task:"+id, map[string]any{"actor": "user", "stage": latest.Stage, "iteration": latest.Iteration, "resumed": resumeSessionID != ""})
 	var opts *pipeline.ProgressOpts
-	if body.AdditionalPrompt != "" {
-		opts = &pipeline.ProgressOpts{UserAdditionalPrompt: body.AdditionalPrompt}
+	if body.AdditionalPrompt != "" || resumeSessionID != "" {
+		opts = &pipeline.ProgressOpts{UserAdditionalPrompt: body.AdditionalPrompt, ResumeSessionID: resumeSessionID}
 	}
 	sr, err := h.orchestrator.ProgressTask(r.Context(), id, opts)
 	if err != nil {
@@ -576,6 +611,33 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
 	return jsonReply(w, http.StatusOK, sr)
+}
+
+// resolveResumeSessionID picks the session a user-triggered retry should resume:
+// the newest stage_run on the task's current stage whose recorded session JSONL
+// still exists on disk. Walking back (not just reading the single latest run)
+// keeps consecutive retries resumable even when a resumed claude continues the
+// PRIOR run's session id without stamping it onto the new run. Returns "" when
+// no resumable session is found, so the caller falls back to a fresh spawn.
+func (h *Handler) resolveResumeSessionID(ctx context.Context, t *ent.Task) string {
+	cwd := t.Cwd
+	if t.WorktreePath != nil && *t.WorktreePath != "" {
+		cwd = *t.WorktreePath
+	}
+	runs, err := h.srRepo.ListForTask(ctx, t.ID)
+	if err != nil {
+		return ""
+	}
+	for i := len(runs) - 1; i >= 0; i-- {
+		run := runs[i]
+		if run.Stage != t.CurrentStage || run.SessionID == nil || *run.SessionID == "" {
+			continue
+		}
+		if pipeline.SessionFileExists(cwd, *run.SessionID) {
+			return *run.SessionID
+		}
+	}
+	return ""
 }
 
 func (h *Handler) listStageRuns(w http.ResponseWriter, r *http.Request) error {

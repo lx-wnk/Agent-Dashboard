@@ -246,12 +246,21 @@ watch(() => props.agent?.status, () => {
 
 onUnmounted(stopRefresh)
 
+// Latest plain-text message for the sr-only live region — avoids re-announcing the full transcript.
+const latestMessageText = computed<string>(() => {
+  for (let i = chatEntries.value.length - 1; i >= 0; i--) {
+    const entry = chatEntries.value[i]
+    if (entry.kind === 'message')
+      return entry.msg.content ?? ''
+  }
+  return ''
+})
+
 defineExpose({ scrollToBottom })
 </script>
 
 <template>
-  <!-- UX-11: aria-live="polite" so new chat messages are announced to screen readers -->
-  <div ref="outputEl" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed" aria-live="polite" aria-atomic="false" aria-relevant="additions" aria-label="Chat transcript">
+  <div ref="outputEl" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed" aria-label="Chat transcript">
     <div v-if="agent?.machine" class="text-fg-mute text-center py-12">
       Session output is not available for remote agents.
     </div>
@@ -362,4 +371,7 @@ defineExpose({ scrollToBottom })
       {{ agent.currentAction }}...
     </div>
   </div>
+  <!-- Announces only the latest message to screen readers; placed outside the scrollable div
+       so scroll events cannot re-trigger the live region. -->
+  <span class="sr-only" aria-live="polite" aria-atomic="true">{{ latestMessageText }}</span>
 </template>

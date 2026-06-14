@@ -54,7 +54,7 @@ func MCPHandler(registry ToolRegistry) http.HandlerFunc {
 				Result: map[string]any{
 					"protocolVersion": protocolVersion,
 					"capabilities":    map[string]any{"tools": map[string]any{}},
-					"serverInfo":      map[string]any{"name": "dashboard-tasks", "version": "1.0.0"},
+					"serverInfo":      map[string]any{"name": ServerName, "version": "1.0.0"},
 				},
 			})
 

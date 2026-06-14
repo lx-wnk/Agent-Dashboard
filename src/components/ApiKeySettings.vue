@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { ApiKey, McpScope } from '../types'
-import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
+import { useServerConfig } from '../composables/useServerConfig'
 import { maskToken } from '../utils/format'
+import { buildMcpAddCommand, buildMcpJsonConfig } from '../utils/mcpCommand'
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 import RemoteSettings from './RemoteSettings.vue'
@@ -19,6 +21,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
+const { mcpServerName, mcpEndpoint, loadServerConfig } = useServerConfig()
 
 // --- Nav ---
 type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'projects' | 'spawners'
@@ -38,8 +41,22 @@ const createError = ref('')
 
 // Token reveal modal
 const revealedToken = ref<string | null>(null)
-const copyHint = ref<string | null>(null)
+const revealedScopes = ref<McpScope[]>([])
+const copiedTarget = ref<'token' | 'cli' | 'json' | null>(null)
+const errorTarget = ref<'token' | 'cli' | 'json' | null>(null)
 const tokenVisible = ref(false)
+
+const mcpAddCommand = computed(() =>
+  revealedToken.value && mcpServerName.value ? buildMcpAddCommand(window.location.origin, revealedToken.value, mcpServerName.value, mcpEndpoint.value) : '',
+)
+const mcpJsonConfig = computed(() =>
+  revealedToken.value && mcpServerName.value ? buildMcpJsonConfig(window.location.origin, revealedToken.value, mcpServerName.value, mcpEndpoint.value) : '',
+)
+const mcpBlocks = computed(() => [
+  { key: 'cli' as const, label: 'CLI command', labelId: 'mcp-cli-label', value: mcpAddCommand.value, extraClass: 'break-all' },
+  { key: 'json' as const, label: 'JSON config', labelId: 'mcp-json-label', value: mcpJsonConfig.value, extraClass: 'whitespace-pre overflow-x-auto' },
+])
+const canAuthorTasks = computed(() => revealedScopes.value.includes('tasks:write'))
 
 // Revoke / regenerate confirmation
 const confirmRevokeId = ref<string | null>(null)
@@ -118,7 +135,9 @@ async function resetPresets(cwd: string) {
   }
 }
 
-watch(activeSection, (val) => {
+watch(activeSection, (val, oldVal) => {
+  if (oldVal === 'apiKeys')
+    dismissReveal()
   if (val === 'permissionPresets')
     void loadPresets()
   if (val === 'analytics')
@@ -163,8 +182,9 @@ async function refreshPatterns() {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
-    if (showCreateDialog.value || confirmRevokeId.value || confirmRegenerateId.value || confirmResetCwd.value) {
-      showCreateDialog.value = false
+    // AppModal handles ESC for showCreateDialog and revealedToken dialogs.
+    // Only handle inline confirmation states here; fall through to outer close.
+    if (confirmRevokeId.value || confirmRegenerateId.value || confirmResetCwd.value) {
       confirmRevokeId.value = null
       confirmRegenerateId.value = null
       confirmResetCwd.value = null
@@ -174,7 +194,10 @@ function onKeydown(e: KeyboardEvent) {
     }
   }
 }
-onMounted(() => window.addEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  void loadServerConfig()
+})
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 // --- Revoke key ---
@@ -215,6 +238,7 @@ async function regenerateKey(key: ApiKey) {
     else
       keys.value.unshift(data.key)
     revealedToken.value = data.token
+    revealedScopes.value = data.key.scopes
   }
   catch (e) {
     errorMsg.value = (e as Error).message
@@ -263,6 +287,7 @@ async function handleCreate() {
     const data = await res.json() as { key: ApiKey, token: string }
     keys.value.unshift(data.key)
     revealedToken.value = data.token
+    revealedScopes.value = data.key.scopes
     closeCreateDialog()
   }
   catch (e) {
@@ -273,25 +298,38 @@ async function handleCreate() {
   }
 }
 
-// --- Copy token ---
-async function copyToken() {
-  if (!revealedToken.value)
+// --- Copy helpers ---
+async function copyValue(target: 'token' | 'cli' | 'json', value: string) {
+  if (!value)
     return
   try {
-    await navigator.clipboard.writeText(revealedToken.value)
-    copyHint.value = revealedToken.value
+    await navigator.clipboard.writeText(value)
+    copiedTarget.value = target
+    errorTarget.value = null
   }
   catch {
-    copyHint.value = '__error__'
+    errorTarget.value = target
+    copiedTarget.value = null
   }
   setTimeout(() => {
-    copyHint.value = null
+    copiedTarget.value = null
+    errorTarget.value = null
   }, 2000)
+}
+
+function copyLabel(target: 'cli' | 'json', base: string) {
+  if (copiedTarget.value === target)
+    return 'Copied'
+  if (errorTarget.value === target)
+    return 'Copy failed'
+  return base
 }
 
 function dismissReveal() {
   revealedToken.value = null
-  copyHint.value = null
+  revealedScopes.value = []
+  copiedTarget.value = null
+  errorTarget.value = null
   tokenVisible.value = false
 }
 
@@ -836,114 +874,151 @@ async function startImport() {
     </div>
 
     <!-- Create key dialog -->
-    <Transition name="dialog">
-      <div v-if="showCreateDialog" class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center" @click.self="closeCreateDialog">
-        <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <header class="flex justify-between items-center px-5 py-4 border-b border-line">
-            <h2 class="text-lg font-semibold text-fg">
-              Create API Key
-            </h2>
-            <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="closeCreateDialog">
-              &times;
-            </button>
-          </header>
-          <form class="p-5" @submit.prevent="handleCreate">
-            <div class="flex flex-col gap-1 mb-3.5">
-              <label for="key-name" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Name</label>
-              <input
-                id="key-name"
-                v-model="newKeyName"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
-                type="text"
-                required
-                placeholder="e.g. CI pipeline key"
-                autofocus
-              >
-            </div>
-            <div class="flex flex-col gap-1 mb-3.5">
-              <label for="key-group" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Role / Scope Group</label>
-              <select
-                id="key-group"
-                v-model="newKeyGroup"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
-              >
-                <option value="viewer">
-                  Viewer — tasks:read
-                </option>
-                <option value="operator">
-                  Operator — tasks:read, pipeline:control
-                </option>
-                <option value="developer">
-                  Developer — tasks:read, tasks:write, pipeline:control
-                </option>
-                <option value="admin">
-                  Admin — all scopes
-                </option>
-              </select>
-            </div>
-            <p v-if="createError" class="text-xs text-red-600 dark:text-red-400 mb-2">
-              {{ createError }}
-            </p>
-          </form>
-          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
-            <AppButton variant="secondary" @click="closeCreateDialog">
-              Cancel
-            </AppButton>
-            <AppButton variant="info" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
-              {{ isCreating ? 'Creating...' : 'Create Key' }}
-            </AppButton>
-          </footer>
-        </div>
+    <AppModal :open="showCreateDialog" size="auto" :z-index="300" labelled-by="create-key-dialog-title" @close="closeCreateDialog">
+      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+        <header class="flex justify-between items-center px-5 py-4 border-b border-line">
+          <h2 id="create-key-dialog-title" class="text-lg font-semibold text-fg">
+            Create API Key
+          </h2>
+          <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="closeCreateDialog">
+            &times;
+          </button>
+        </header>
+        <form class="p-5" @submit.prevent="handleCreate">
+          <div class="flex flex-col gap-1 mb-3.5">
+            <label for="key-name" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Name</label>
+            <input
+              id="key-name"
+              v-model="newKeyName"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              type="text"
+              required
+              placeholder="e.g. CI pipeline key"
+              autofocus
+            >
+          </div>
+          <div class="flex flex-col gap-1 mb-3.5">
+            <label for="key-group" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Role / Scope Group</label>
+            <select
+              id="key-group"
+              v-model="newKeyGroup"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+            >
+              <option value="viewer">
+                Viewer — tasks:read
+              </option>
+              <option value="operator">
+                Operator — tasks:read, pipeline:control
+              </option>
+              <option value="developer">
+                Developer — tasks:read, tasks:write, pipeline:control
+              </option>
+              <option value="admin">
+                Admin — all scopes
+              </option>
+            </select>
+          </div>
+          <p v-if="createError" class="text-xs text-red-600 dark:text-red-400 mb-2">
+            {{ createError }}
+          </p>
+        </form>
+        <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
+          <AppButton variant="secondary" @click="closeCreateDialog">
+            Cancel
+          </AppButton>
+          <AppButton variant="info" :disabled="isCreating || !newKeyName.trim()" @click="handleCreate">
+            {{ isCreating ? 'Creating...' : 'Create Key' }}
+          </AppButton>
+        </footer>
       </div>
-    </Transition>
+    </AppModal>
 
     <!-- Token reveal dialog -->
-    <Transition name="dialog">
-      <div v-if="revealedToken" class="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center" @click.self="dismissReveal">
-        <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <header class="flex justify-between items-center px-5 py-4 border-b border-line">
-            <h2 class="text-lg font-semibold text-fg">
-              Your new API key
-            </h2>
-          </header>
-          <div class="p-5">
-            <p class="text-[13px] text-fg-mute mb-3">
-              Save this token now — it will <strong class="text-yellow-600 dark:text-yellow-400">never be shown again</strong>.
-            </p>
-            <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
-              {{ tokenVisible ? revealedToken : maskToken(revealedToken ?? '') }}
-              <button
-                type="button"
-                class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 text-green-500 transition-colors"
-                :aria-label="tokenVisible ? 'Hide token' : 'Show token'"
-                :aria-pressed="tokenVisible"
-                @click="tokenVisible = !tokenVisible"
-              >
-                <svg v-if="tokenVisible" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              </button>
-            </div>
-            <div class="flex justify-end">
-              <AppButton variant="info" @click="copyToken">
-                <span v-if="copyHint === '__error__'">Copy failed</span>
-                <span v-else-if="copyHint">Copied!</span>
-                <span v-else>Copy to clipboard</span>
-              </AppButton>
-            </div>
+    <AppModal :open="!!revealedToken" size="auto" :z-index="300" labelled-by="token-reveal-dialog-title" @close="dismissReveal">
+      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+        <header class="flex justify-between items-center px-5 py-4 border-b border-line">
+          <h2 id="token-reveal-dialog-title" class="text-lg font-semibold text-fg">
+            Your new API key
+          </h2>
+        </header>
+        <div class="p-5">
+          <p class="text-[13px] text-fg-mute mb-3">
+            Save this token now — it will <strong class="text-amber-700 dark:text-yellow-400">never be shown again</strong>.
+          </p>
+          <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
+            {{ tokenVisible ? revealedToken : maskToken(revealedToken ?? '') }}
+            <button
+              type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 text-green-500 transition-colors"
+              :aria-label="tokenVisible ? 'Hide token' : 'Show token'"
+              :aria-pressed="tokenVisible"
+              @click="tokenVisible = !tokenVisible"
+            >
+              <svg v-if="tokenVisible" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
           </div>
-          <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
-            <AppButton variant="secondary" @click="dismissReveal">
-              Done — I have saved the token
+          <div class="flex justify-end">
+            <AppButton variant="info" @click="copyValue('token', revealedToken ?? '')">
+              <span v-if="errorTarget === 'token'">Copy failed</span>
+              <span v-else-if="copiedTarget === 'token'">Copied!</span>
+              <span v-else>Copy to clipboard</span>
             </AppButton>
-          </footer>
+          </div>
+
+          <div class="mt-5 border-t border-line pt-4">
+            <p class="text-[13px] text-fg-mute mb-1">
+              {{ canAuthorTasks ? "Connect a Claude Code session to this dashboard's task tools:" : "Connect a Claude Code session (this key has read-only access to task tools):" }}
+            </p>
+            <p v-if="!canAuthorTasks" class="text-[11px] text-amber-700 dark:text-yellow-400 mb-3">
+              Read-only key — creating or refining tasks needs the Developer or Admin role.
+            </p>
+
+            <template v-for="b in mcpBlocks" :key="b.key">
+              <span :id="b.labelId" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">{{ b.label }}</span>
+              <div
+                role="region"
+                :aria-labelledby="b.labelId"
+                tabindex="0"
+                class="relative font-mono text-xs bg-raised text-fg-soft p-3 pr-10 rounded border border-line mt-1 mb-3"
+                :class="b.extraClass"
+              >
+                {{ b.value }}
+                <button
+                  type="button"
+                  class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                  :aria-label="copyLabel(b.key, `Copy ${b.label}`)"
+                  @click="copyValue(b.key, b.value)"
+                >
+                  <svg v-if="copiedTarget === b.key" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  <svg v-else-if="errorTarget === b.key" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                </button>
+              </div>
+            </template>
+            <p class="text-[11px] text-fg-mute mt-3">
+              Contains your secret token — don't share it. The CLI command writes it to <code class="font-mono">~/.claude.json</code>; keep that file out of version control.
+            </p>
+          </div>
         </div>
+        <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
+          <AppButton variant="secondary" @click="dismissReveal">
+            Done — I have saved the token
+          </AppButton>
+        </footer>
       </div>
-    </Transition>
+    </AppModal>
   </AppModal>
 </template>

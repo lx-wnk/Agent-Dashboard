@@ -167,8 +167,12 @@ func init() {
 	stagerunDescCostCents := stagerunFields[10].Descriptor()
 	// stagerun.DefaultCostCents holds the default value on creation for the cost_cents field.
 	stagerun.DefaultCostCents = stagerunDescCostCents.Default.(int)
+	// stagerunDescRetryCount is the schema descriptor for retry_count field.
+	stagerunDescRetryCount := stagerunFields[14].Descriptor()
+	// stagerun.DefaultRetryCount holds the default value on creation for the retry_count field.
+	stagerun.DefaultRetryCount = stagerunDescRetryCount.Default.(int)
 	// stagerunDescCreatedAt is the schema descriptor for created_at field.
-	stagerunDescCreatedAt := stagerunFields[14].Descriptor()
+	stagerunDescCreatedAt := stagerunFields[16].Descriptor()
 	// stagerun.DefaultCreatedAt holds the default value on creation for the created_at field.
 	stagerun.DefaultCreatedAt = stagerunDescCreatedAt.Default.(func() time.Time)
 	systempromptFields := schema.SystemPrompt{}.Fields()
@@ -222,11 +226,11 @@ func init() {
 	// task.DefaultSilverBullet holds the default value on creation for the silver_bullet field.
 	task.DefaultSilverBullet = taskDescSilverBullet.Default.(bool)
 	// taskDescCreatedAt is the schema descriptor for created_at field.
-	taskDescCreatedAt := taskFields[20].Descriptor()
+	taskDescCreatedAt := taskFields[21].Descriptor()
 	// task.DefaultCreatedAt holds the default value on creation for the created_at field.
 	task.DefaultCreatedAt = taskDescCreatedAt.Default.(func() time.Time)
 	// taskDescUpdatedAt is the schema descriptor for updated_at field.
-	taskDescUpdatedAt := taskFields[21].Descriptor()
+	taskDescUpdatedAt := taskFields[22].Descriptor()
 	// task.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	task.DefaultUpdatedAt = taskDescUpdatedAt.Default.(func() time.Time)
 	// task.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

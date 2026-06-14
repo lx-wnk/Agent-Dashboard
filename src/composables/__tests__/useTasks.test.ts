@@ -97,4 +97,65 @@ describe('useTasks', () => {
     expect(typeof result.tasksByStage).toBe('function')
     wrapper.unmount()
   })
+
+  it('tasksByStageMap orders each stage by rank ascending', () => {
+    const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
+    result.tasks.value = [
+      { id: 'c', currentStage: 'backlog', rank: 300, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'a', currentStage: 'backlog', rank: 100, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', currentStage: 'backlog', rank: 200, createdAt: '2026-01-01T00:00:00Z' },
+    ] as any
+    expect(result.tasksByStageMap.value.backlog!.map(t => t.id)).toEqual(['a', 'b', 'c'])
+    wrapper.unmount()
+  })
+
+  it('falls back to createdAt when rank is absent', () => {
+    const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
+    result.tasks.value = [
+      { id: 'new', currentStage: 'backlog', createdAt: '2026-02-01T00:00:00Z' },
+      { id: 'old', currentStage: 'backlog', createdAt: '2026-01-01T00:00:00Z' },
+    ] as any
+    expect(result.tasksByStageMap.value.backlog!.map(t => t.id)).toEqual(['old', 'new'])
+    wrapper.unmount()
+  })
+
+  it('reorderTask sets the midpoint rank optimistically, then reconciles with the server value', async () => {
+    const mod = await import('../useTasks')
+    const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
+    result.tasks.value = [
+      { id: 'a', currentStage: 'backlog', rank: 1000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'm', currentStage: 'backlog', rank: 5000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', currentStage: 'backlog', rank: 3000, createdAt: '2026-01-01T00:00:00Z' },
+    ] as any
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ id: 'm', rank: 2222 }),
+    }))
+
+    const pending = mod.reorderTask('m', 'a', 'b')
+    // Synchronous optimistic update: midpoint of 1000 and 3000.
+    expect(result.tasks.value.find(t => t.id === 'm')!.rank).toBe(2000)
+    await pending
+    // Reconciled with the server-authoritative rank.
+    expect(result.tasks.value.find(t => t.id === 'm')!.rank).toBe(2222)
+    wrapper.unmount()
+  })
+
+  it('reorderTask rolls back the rank when the server rejects', async () => {
+    const mod = await import('../useTasks')
+    const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
+    result.tasks.value = [
+      { id: 'a', currentStage: 'backlog', rank: 1000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'm', currentStage: 'backlog', rank: 5000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', currentStage: 'backlog', rank: 3000, createdAt: '2026-01-01T00:00:00Z' },
+    ] as any
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({ error: 'boom' }),
+    }))
+
+    await expect(mod.reorderTask('m', 'a', 'b')).rejects.toThrow('boom')
+    expect(result.tasks.value.find(t => t.id === 'm')!.rank).toBe(5000)
+    wrapper.unmount()
+  })
 })

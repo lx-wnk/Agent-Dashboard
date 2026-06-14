@@ -33,11 +33,51 @@ Stateless helpers consumed by `routes/*` and `mcp/*` (and, where appropriate, by
 
 ## Runner Slots
 
-`maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `implementation`. Agent-less stages (`concept`, `backlog`) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → createdAt) and the sticky-run invariant.
+`maxParallelOrchestrators` (pipeline_config key, default 3) is the **global** cap on concurrently-driven tasks — it applies to every agent-driven stage, not just `implementation`. Agent-less stages (`concept`, `backlog`) bypass the cap. See ADR-0002 for the pickup priority order (silver-bullet → furthest stage → priority → rank → createdAt) and the sticky-run invariant. `rank` is the manual drag-and-drop order set via the Kanban board (`POST /api/tasks/{id}/rank`), a gap-based float seeded from createdAt; it breaks ties within the same priority tier.
 
 ## Stage Timeout
 
 `stageTimeoutSeconds` (pipeline_config key, default 1800) is enforced by the orchestrator's tick loop. If a stage agent's PID is still alive after this many seconds, the orchestrator sends SIGTERM and applies a `fail` transition, freeing its runner slot. Set to `0` to disable. Written via `UPDATE pipeline_config SET value='3600' WHERE key='stageTimeoutSeconds'` (or INSERT if absent).
+
+## Auto-Requeue (Self-Healing)
+
+Infra-class stage-run failures are automatically requeued instead of parking on `needsUser`.
+
+**Failure classification:**
+
+| Class | Examples | Action |
+|---|---|---|
+| `Infra` | process killed, no session JSONL, unparseable output, quota/session-limit error | auto-requeue |
+| Schema | stage output fails schema validation | iterate → wait_user (existing path, unchanged) |
+| Hard (budget exhausted) | `retry_count >= maxAutoRetries` | hard `failed` → needsUser |
+
+**Stage-run status `requeued`:** the run is updated in place (same row, no new iteration) with incremented `retry_count` and a `next_retry_at` cooldown timestamp. It is non-blocking — `needsUser` excludes `requeued` runs.
+
+**Lifecycle:**
+
+```
+running
+  │ infra fail, retry_count < maxAutoRetries
+  ▼
+requeued  ──(cooldown elapsed, sweep promotes)──►  pending  ──(picker)──►  running
+  │
+  │ retry_count >= maxAutoRetries
+  ▼
+failed  →  needsUser
+```
+
+**Tick order (required):** finalize completed runs → awaiting-user sweep → orphan sweep → requeue sweep (`sweepRequeueableRuns`) → picker. The requeue sweep promotes cooldown-elapsed `requeued` runs back to `pending`, clearing `started_at`/`pid`/`next_retry_at` (keeping `retry_count`). The picker skips `requeued` runs during cooldown.
+
+**Config keys:**
+
+| Key | Default | Description |
+|---|---|---|
+| `maxAutoRetries` | `3` | Max infra-retries before hard fail |
+| `retryBackoffSeconds` | `60` | Linear backoff; `next_retry_at = now + retryBackoffSeconds × attempt` |
+
+Both keys are readable via `GET /api/pipeline/config` and writable via `PUT /api/pipeline/config`. Validation: both must be `>= 0`.
+
+**UI:** a distinct "Retrying N/max · next retry in Xs" chip is shown while a run is in `requeued` status.
 
 ## Spawner Resolution
 
@@ -65,10 +105,17 @@ default first. Mark a different spawner default via `POST /api/spawners/{id}/def
 `DASHBOARD_JWT_SECRET` and `DASHBOARD_HOOKS_SECRET` are never forwarded to
 spawned agents.
 
-**Command allow-list:** the `spawners.command` field is validated against a
-conservative allow-list at create/update time. Extend the default list via
-`DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated). CRUD requires the
-`keys:manage` MCP scope.
+**Command allow-list:** the `spawners.command` field is validated by
+`services.ValidateSpawnerCommand` (`server/internal/services/spawn_policy.go`)
+at create/update time and again on the agent spawn path — one authority, no
+`api/agents → api/spawners` import. Bare names (`claude`, `claude-code`, `npx`)
+are allow-listed; absolute paths must `EvalSymlinks`-resolve and sit under a
+trusted bin dir (`/usr/bin`, `/bin`, `/usr/local/bin`, `/opt/homebrew/bin`,
+`~/.local/bin`, the resolved `claude` dir). Resolving symlinks before the trust
+check closes the symlink-into-`/tmp` bypass. Extend both sets via
+`DASHBOARD_SPAWNER_ALLOWED_COMMANDS` (comma-separated — bare names extend the
+name list, absolute paths add trusted dirs). CRUD requires the `keys:manage`
+MCP scope.
 
 **Adapter dispatch:** the resolved Spawner row also carries an
 `adapter_type` field. `server/internal/pipeline/stage_handlers.go::Execute`
@@ -165,13 +212,25 @@ The Go backend enforces the same layering intent as the TypeScript rules above, 
 ```
 cmd/serve/main.go + di.go   ← composition root only
         │
-        ├── api/           may import: db/repo, db/rawrepo, auth, mcp, pipeline (ProgressOpts + allowlisted helpers — see table below), plugin, sse, merger, config, services
+        ├── api/           may import: db/repo, db/rawrepo, auth, mcp, pipeline (ProgressOpts + allowlisted helpers — see table below), plugin, sse, merger, config, services, llmadapter
         ├── mcp/tools/     may import: db/repo, pipeline (ProgressOpts + allowlisted helpers), sse, services
-        ├── pipeline/      may import: db/repo, db/ent, auth, config, channelconfig, sdk (types only), services
+        ├── pipeline/      may import: db/repo, db/ent, auth, config, channelconfig, sdk (types only), services, llmadapter
+        ├── refine/        may import: db/repo, db/ent, llmadapter, sdk (types only)
         ├── services/      may import: db/repo, db/ent, auth, config, paths, platform, sdk (types only); never imports pipeline/, api/, mcp/, or plugin/ at runtime
+        ├── llmadapter/    may import: db/ent only (leaf — no state-machine reference; see ADR-0005)
         ├── db/repo        may import: db/ent only
         └── plugin/        may import: auth only
 ```
+
+`llmadapter/` is a leaf package holding the pluggable-spawner transport
+(`LLMSpawner` / `StreamingLLMSpawner` / `LLMSpawnArgs`,
+`NewLLMSpawnerFromSpawner`, `AvailableAdapters`, and the Ollama/OpenAI/custom
+adapters). It depends only on stdlib + `db/ent`. It was extracted from
+`pipeline/` (ADR-0005) to delete the upward edges `refine -> pipeline` and
+`api/adapters -> pipeline`: those packages reached into `pipeline/` only to
+get adapter symbols, so `NewLLMSpawnerFromSpawner` / `AvailableAdapters` are
+no longer cross-pipeline reaches. `pipeline/stage_handlers.go` still uses the
+factory, now as a normal high-to-low import of the leaf.
 
 `services/` mirrors the TypeScript Rule 3 above: it hosts stateless
 helpers (worktree manager, spawner resolver, resource recommender,
@@ -192,6 +251,7 @@ The following `pipeline/` symbols may be imported at runtime from `api/*` and `m
 | `ResolvedProjectDir` | `session_reader.go` | `api/tasks/analyze_routes.go` |
 | `FindNewestSessionID` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
 | `ReadLastStageJsonOutput` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
+| `SessionFileExists` | `session_reader.go` | `api/tasks/handler.go` |
 | `ValidateStageOutput` | `completion_detector.go` | `api/agents/channel_stage_output.go` |
 
 These are session-reader and process-monitor helpers — they do not touch the state machine (orchestrator, stage handlers, completion detector). New `pipeline/` imports from `api/*` or `mcp/*` require an explicit justification here before being added.

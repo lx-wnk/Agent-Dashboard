@@ -10,13 +10,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
 )
 
 // availableAdapters is a thin shim re-exporting the canonical catalog from
-// pipeline.AvailableAdapters. Both the pipeline dispatch (adapter_factory.go)
+// llmadapter.AvailableAdapters. Both the pipeline dispatch (adapter_factory.go)
 // and this HTTP handler must agree on adapter names and required config keys.
-var availableAdapters = pipeline.AvailableAdapters
+var availableAdapters = llmadapter.AvailableAdapters
 
 // retiredEndpointBody is the JSON body returned by all retired adapter routes.
 // Stable contract so UI clients can detect the migration uniformly.

@@ -260,6 +260,20 @@ func (_c *TaskCreate) SetNillableSpawnerID(v *string) *TaskCreate {
 	return _c
 }
 
+// SetRank sets the "rank" field.
+func (_c *TaskCreate) SetRank(v float64) *TaskCreate {
+	_c.mutation.SetRank(v)
+	return _c
+}
+
+// SetNillableRank sets the "rank" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableRank(v *float64) *TaskCreate {
+	if v != nil {
+		_c.SetRank(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *TaskCreate) SetCreatedAt(v time.Time) *TaskCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -572,6 +586,10 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.SpawnerID(); ok {
 		_spec.SetField(task.FieldSpawnerID, field.TypeString, value)
 		_node.SpawnerID = &value
+	}
+	if value, ok := _c.mutation.Rank(); ok {
+		_spec.SetField(task.FieldRank, field.TypeFloat64, value)
+		_node.Rank = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(task.FieldCreatedAt, field.TypeTime, value)
@@ -1015,6 +1033,30 @@ func (u *TaskUpsert) ClearSpawnerID() *TaskUpsert {
 	return u
 }
 
+// SetRank sets the "rank" field.
+func (u *TaskUpsert) SetRank(v float64) *TaskUpsert {
+	u.Set(task.FieldRank, v)
+	return u
+}
+
+// UpdateRank sets the "rank" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateRank() *TaskUpsert {
+	u.SetExcluded(task.FieldRank)
+	return u
+}
+
+// AddRank adds v to the "rank" field.
+func (u *TaskUpsert) AddRank(v float64) *TaskUpsert {
+	u.Add(task.FieldRank, v)
+	return u
+}
+
+// ClearRank clears the value of the "rank" field.
+func (u *TaskUpsert) ClearRank() *TaskUpsert {
+	u.SetNull(task.FieldRank)
+	return u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (u *TaskUpsert) SetUpdatedAt(v time.Time) *TaskUpsert {
 	u.Set(task.FieldUpdatedAt, v)
@@ -1446,6 +1488,34 @@ func (u *TaskUpsertOne) UpdateSpawnerID() *TaskUpsertOne {
 func (u *TaskUpsertOne) ClearSpawnerID() *TaskUpsertOne {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearSpawnerID()
+	})
+}
+
+// SetRank sets the "rank" field.
+func (u *TaskUpsertOne) SetRank(v float64) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetRank(v)
+	})
+}
+
+// AddRank adds v to the "rank" field.
+func (u *TaskUpsertOne) AddRank(v float64) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddRank(v)
+	})
+}
+
+// UpdateRank sets the "rank" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateRank() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateRank()
+	})
+}
+
+// ClearRank clears the value of the "rank" field.
+func (u *TaskUpsertOne) ClearRank() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearRank()
 	})
 }
 
@@ -2049,6 +2119,34 @@ func (u *TaskUpsertBulk) UpdateSpawnerID() *TaskUpsertBulk {
 func (u *TaskUpsertBulk) ClearSpawnerID() *TaskUpsertBulk {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearSpawnerID()
+	})
+}
+
+// SetRank sets the "rank" field.
+func (u *TaskUpsertBulk) SetRank(v float64) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetRank(v)
+	})
+}
+
+// AddRank adds v to the "rank" field.
+func (u *TaskUpsertBulk) AddRank(v float64) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddRank(v)
+	})
+}
+
+// UpdateRank sets the "rank" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateRank() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateRank()
+	})
+}
+
+// ClearRank clears the value of the "rank" field.
+func (u *TaskUpsertBulk) ClearRank() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearRank()
 	})
 }
 
