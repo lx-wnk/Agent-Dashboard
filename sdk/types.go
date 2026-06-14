@@ -229,6 +229,18 @@ type PendingToolUse struct {
 	Pattern string `json:"pattern"`
 }
 
+// HookEvent is one lifecycle-hook event recorded for a session when the opt-in
+// hook receiver is installed (POST /api/hooks/event). It adds per-event
+// granularity on top of the process/JSONL scan. Tool and Summary are truncated,
+// secret-safe projections of the raw hook payload — never the full tool_input or
+// tool_response.
+type HookEvent struct {
+	Type    string `json:"type"`    // hook type, e.g. "PreToolUse" | "PostToolUse" | "Stop"
+	Tool    string `json:"tool"`    // tool name, empty for non-tool hooks
+	At      string `json:"at"`      // RFC3339 timestamp the event was received
+	Summary string `json:"summary"` // truncated, secret-safe payload preview
+}
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
 	PID         int      `json:"pid"`
@@ -279,4 +291,8 @@ type Agent struct {
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`
+	// RecentHookEvents carries per-event hook granularity for sessions where the
+	// opt-in hook receiver holds events. Omitted entirely when no hook is
+	// installed, so clients without hooks receive byte-identical payloads.
+	RecentHookEvents []HookEvent `json:"recentHookEvents,omitempty"`
 }
