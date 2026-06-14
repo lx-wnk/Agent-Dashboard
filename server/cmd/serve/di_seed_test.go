@@ -118,7 +118,7 @@ func TestMigrateAdapterConfigToSpawners_Idempotent(t *testing.T) {
 
 	cfg := config.Config{Adapters: config.AdapterConfig{ //nolint:staticcheck // boot-migration test asserts deprecated config shape
 		Default: "ollama",
-		Ollama:  config.OllamaConfig{Host: "h"}, //nolint:staticcheck // boot-migration test asserts deprecated config shape
+		Ollama:  config.OllamaConfig{Host: "h"},    //nolint:staticcheck // boot-migration test asserts deprecated config shape
 		OpenAI:  config.OpenAIConfig{BaseURL: "b"}, //nolint:staticcheck // boot-migration test asserts deprecated config shape
 	}}
 

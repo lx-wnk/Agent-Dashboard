@@ -155,7 +155,6 @@ func TestOrchestrator_RequeueTransition(t *testing.T) {
 	require.False(t, onStageFailed, "OnStageFailed must not be called for requeue")
 }
 
-
 // --- sortPickCandidates tests ---
 
 func TestSortPickCandidates_SilverBulletFirst(t *testing.T) {
@@ -619,9 +618,9 @@ func TestPicker_AfterSweepFlipsToPending_TaskIsPicked(t *testing.T) {
 
 	// Simulate sweep: flip the run to pending (as sweepRequeueableRuns would do).
 	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
-		Status:          strPtr("pending"),
-		PIDClear:        true,
-		StartedAtClear:  true,
+		Status:           strPtr("pending"),
+		PIDClear:         true,
+		StartedAtClear:   true,
 		NextRetryAtClear: true,
 	})
 	require.NoError(t, err)
@@ -664,9 +663,9 @@ func TestPicker_UniqueRunningInvariant_AtMostOneRunning(t *testing.T) {
 
 	// Simulate sweep: promote to pending.
 	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
-		Status:          strPtr("pending"),
-		PIDClear:        true,
-		StartedAtClear:  true,
+		Status:           strPtr("pending"),
+		PIDClear:         true,
+		StartedAtClear:   true,
 		NextRetryAtClear: true,
 	})
 	require.NoError(t, err)

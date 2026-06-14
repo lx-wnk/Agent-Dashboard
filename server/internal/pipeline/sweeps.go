@@ -91,9 +91,9 @@ func (o *PipelineOrchestrator) sweepRequeueableRuns(ctx context.Context) error {
 }
 
 // sweepOrphanRuns reaps three zombie modes:
-//   1. Non-terminal stage_run whose parent task is parked (done/cancelled/on_hold).
-//   2. on_hold stage_run with a dead PID.
-//   3. pending stage_run stuck > 5 min without a PID.
+//  1. Non-terminal stage_run whose parent task is parked (done/cancelled/on_hold).
+//  2. on_hold stage_run with a dead PID.
+//  3. pending stage_run stuck > 5 min without a PID.
 func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning []*ent.StageRun) error {
 	pendings, _ := o.opts.StageRunRepo.ListPending(ctx)
 	requeued, _ := o.opts.StageRunRepo.ListByStatus(ctx, "requeued")

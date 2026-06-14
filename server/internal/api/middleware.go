@@ -97,8 +97,8 @@ func RequireSameOriginForMutations(next http.Handler) http.Handler {
 // loopback addresses and are therefore allowed through RequireLoopbackHost.
 var loopbackHosts = map[string]bool{
 	"127.0.0.1": true,
-	"localhost":  true,
-	"::1":        true,
+	"localhost": true,
+	"::1":       true,
 }
 
 // RequireLoopbackHostConfig holds optional configuration for RequireLoopbackHost.

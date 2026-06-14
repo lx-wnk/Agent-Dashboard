@@ -93,14 +93,14 @@ type RouterDeps struct {
 	// Ctx is the server-lifetime context. When cancelled (e.g. on shutdown) any
 	// background goroutines started by the router (e.g. debounced rescan) are
 	// also cancelled. If nil, context.Background() is used as a fallback.
-	Ctx               context.Context
-	Config            RouterConfig
-	AgentBroadcaster  *sse.Broadcaster
+	Ctx              context.Context
+	Config           RouterConfig
+	AgentBroadcaster *sse.Broadcaster
 	// Enricher, when non-nil, annotates each scanned agent with its linked
 	// pipeline task (read-only SQLite crossing). Applied to every request-scoped
 	// GetAgents call below via the agentsAccessor closure. May be nil (no DB →
 	// no enrichment). The broadcast loop receives the same enricher separately.
-	Enricher merger.Enricher
+	Enricher          merger.Enricher
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
