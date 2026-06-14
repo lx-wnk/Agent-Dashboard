@@ -181,7 +181,7 @@ func TestPermissionIngress_ResolutionStaysProtected(t *testing.T) {
 	const rawToken = "mcp_test_ingress_token_valid_9012"
 	router := buildIngressRouter(t, rawToken)
 
-	body := `{"taskId":"t-x","decision":"deny","all":true}`
+	body := `{"taskId":"t-x","outcome":"denied","all":true}`
 	code := driveIngressRequest(router, "/api/permission-requests/bulk-resolve", "Bearer "+rawToken, body)
 
 	if code != http.StatusForbidden {

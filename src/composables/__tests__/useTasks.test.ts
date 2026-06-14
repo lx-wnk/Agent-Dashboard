@@ -158,4 +158,62 @@ describe('useTasks', () => {
     expect(result.tasks.value.find(t => t.id === 'm')!.rank).toBe(5000)
     wrapper.unmount()
   })
+
+  it('resolvePermissionRequest posts to the task-scoped route with the outcome', async () => {
+    const mod = await import('../useTasks')
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await mod.resolvePermissionRequest('T1', 'R1', 'granted')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/tasks/T1/permission-requests/R1/resolve')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toEqual({ outcome: 'granted' })
+  })
+
+  it('bulkResolvePermissionRequests sends the outcome and permissionIds', async () => {
+    const mod = await import('../useTasks')
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ resolved: 2, errors: [] }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await mod.bulkResolvePermissionRequests('T1', ['R1', 'R2'], 'granted')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/permission-requests/bulk-resolve')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toEqual({ taskId: 'T1', outcome: 'granted', permissionIds: ['R1', 'R2'] })
+  })
+
+  it('bulkResolvePermissionRequests sends a denied outcome', async () => {
+    const mod = await import('../useTasks')
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ resolved: 1, errors: [] }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await mod.bulkResolvePermissionRequests('T1', ['R1'], 'denied')
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ taskId: 'T1', outcome: 'denied', permissionIds: ['R1'] })
+  })
+
+  it('bulkResolvePermissionRequests returns the resolved/errors payload', async () => {
+    const mod = await import('../useTasks')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ resolved: 1, errors: ['permission R2 not pending for task T1'] }),
+    }))
+
+    const res = await mod.bulkResolvePermissionRequests('T1', ['R1', 'R2'], 'granted')
+
+    expect(res).toEqual({ resolved: 1, errors: ['permission R2 not pending for task T1'] })
+  })
+
+  it('resolvePermissionRequest throws the server error on a non-ok response', async () => {
+    const mod = await import('../useTasks')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({ error: 'not found' }),
+    }))
+
+    await expect(mod.resolvePermissionRequest('T1', 'R1', 'granted')).rejects.toThrow('not found')
+  })
 })

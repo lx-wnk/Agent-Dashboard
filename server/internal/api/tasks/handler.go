@@ -712,6 +712,19 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 	if body.Outcome != "granted" && body.Outcome != "denied" {
 		return apierr.NewAppError(http.StatusBadRequest, "outcome must be granted or denied")
 	}
+	// Object-level authz: the request must belong to the task in the URL,
+	// otherwise the nested {taskId}/{reqID} path is not an enforced scope.
+	pr, err := h.permRepo.GetPermissionRequest(r.Context(), reqID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.ErrNotFound
+		}
+		return fmt.Errorf("tasks.resolvePermissionRequest.get: %w", err)
+	}
+	sr, err := h.srRepo.GetByID(r.Context(), pr.StageRunID)
+	if err != nil || sr.TaskID != id {
+		return apierr.ErrNotFound
+	}
 	if err := h.permRepo.ResolvePermissionRequest(r.Context(), reqID, body.Outcome); err != nil {
 		return fmt.Errorf("tasks.resolvePermissionRequest: %w", err)
 	}
