@@ -185,4 +185,3 @@ func scanStageRun(rows *sql.Rows) (*ent.StageRun, error) {
 	}
 	return &sr, nil
 }
-

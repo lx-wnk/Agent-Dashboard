@@ -22,11 +22,11 @@ var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 func TestStripForwardedHeaders_RemovesForwardingHeaders(t *testing.T) {
 	// Capture what headers the inner handler sees.
 	var (
-		gotXFH    string
-		gotXFP    string
-		gotFwd    string
-		gotXFF    string // must NOT be stripped
-		gotXRI    string // must NOT be stripped
+		gotXFH string
+		gotXFP string
+		gotFwd string
+		gotXFF string // must NOT be stripped
+		gotXRI string // must NOT be stripped
 	)
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotXFH = r.Header.Get("X-Forwarded-Host")
