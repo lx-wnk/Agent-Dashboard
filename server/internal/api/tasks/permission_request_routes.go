@@ -239,10 +239,10 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 	}
 
 	type result struct {
-		Tool       string  `json:"tool"`
-		Pattern    *string `json:"pattern"`
-		AutoGranted bool   `json:"autoGranted"`
-		RequestID  *string `json:"requestId,omitempty"`
+		Tool        string  `json:"tool"`
+		Pattern     *string `json:"pattern"`
+		AutoGranted bool    `json:"autoGranted"`
+		RequestID   *string `json:"requestId,omitempty"`
 	}
 
 	results := make([]result, 0, len(body.Entries))

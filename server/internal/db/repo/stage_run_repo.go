@@ -40,16 +40,16 @@ type CreateStageRunInput struct {
 }
 
 type UpdateStageRunInput struct {
-	Status          *string
-	PID             *int
-	PIDClear        bool
-	SessionID       *string
-	Output          map[string]any
-	TokensUsed      *int
-	CostCents       *int
-	StartedAt       *time.Time
-	EndedAt         *time.Time
-	LastGrantAt     *time.Time
+	Status           *string
+	PID              *int
+	PIDClear         bool
+	SessionID        *string
+	Output           map[string]any
+	TokensUsed       *int
+	CostCents        *int
+	StartedAt        *time.Time
+	EndedAt          *time.Time
+	LastGrantAt      *time.Time
 	RetryCount       *int
 	NextRetryAt      *time.Time
 	NextRetryAtClear bool

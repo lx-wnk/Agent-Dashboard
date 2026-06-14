@@ -360,4 +360,3 @@ func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, ta
 	}
 	return NextTransition{Stage: NextStage(run.Stage), Output: output}
 }
-

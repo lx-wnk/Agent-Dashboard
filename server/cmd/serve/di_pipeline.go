@@ -58,17 +58,17 @@ func provideOrchestrator(
 	}
 
 	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
-		Client:           client,
-		TaskRepo:         taskRepo,
-		StageRunRepo:     srRepo,
-		PermissionRepo:   permRepo,
-		AuditRepo:        auditRepo,
-		ConfigRepo:       cfgRepo,
-		SystemPromptRepo: systemPromptRepo,
-		MCPToken:         cfg.MCPToken,
-		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
-		WorktreeRoot:     cfg.WorktreeRoot,
-		ForceWorktrees:   cfg.ForceWorktrees,
+		Client:                client,
+		TaskRepo:              taskRepo,
+		StageRunRepo:          srRepo,
+		PermissionRepo:        permRepo,
+		AuditRepo:             auditRepo,
+		ConfigRepo:            cfgRepo,
+		SystemPromptRepo:      systemPromptRepo,
+		MCPToken:              cfg.MCPToken,
+		MCPUrl:                fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
+		WorktreeRoot:          cfg.WorktreeRoot,
+		ForceWorktrees:        cfg.ForceWorktrees,
 		ResolveSpawner:        resolveFn,
 		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the

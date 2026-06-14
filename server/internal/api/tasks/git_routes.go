@@ -58,14 +58,14 @@ type gitLastCommit struct {
 }
 
 type gitStatus struct {
-	Branch     string         `json:"branch"`
-	AheadCount int            `json:"aheadCount"`
-	BehindCount int           `json:"behindCount"`
-	Staged     []string       `json:"staged"`
-	Unstaged   []string       `json:"unstaged"`
-	Untracked  []string       `json:"untracked"`
-	LastCommit *gitLastCommit `json:"lastCommit"`
-	RemoteURL  *string        `json:"remoteUrl"`
+	Branch      string         `json:"branch"`
+	AheadCount  int            `json:"aheadCount"`
+	BehindCount int            `json:"behindCount"`
+	Staged      []string       `json:"staged"`
+	Unstaged    []string       `json:"unstaged"`
+	Untracked   []string       `json:"untracked"`
+	LastCommit  *gitLastCommit `json:"lastCommit"`
+	RemoteURL   *string        `json:"remoteUrl"`
 }
 
 func runGit(ctx context.Context, cwd string, args ...string) (string, error) {
@@ -207,7 +207,6 @@ func (h *Handler) gitActionHandler(w http.ResponseWriter, r *http.Request) error
 	}
 	return jsonReply(w, http.StatusOK, map[string]string{"output": output})
 }
-
 
 func (h *Handler) taskRunHandler(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")

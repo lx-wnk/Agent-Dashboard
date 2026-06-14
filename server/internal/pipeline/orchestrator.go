@@ -2,11 +2,11 @@
 //
 // File layout (all in package pipeline):
 //
-//   orchestrator.go     — PipelineOrchestrator struct, Run/tick entry, helpers
-//   runner_picker.go    — pickNextTasksForFreeSlots, sort helpers (F-PERF-007, F-PERF-010)
-//   sweeps.go           — sweepAwaitingUserRuns, sweepOrphanRuns
-//   progress_guards.go  — runProgressTaskLocked (Re-entry Guard + Lingering-Pending Gate)
-//   transitions.go      — applyTransition, applyTransitionWrites, decideCompletedTransition
+//	orchestrator.go     — PipelineOrchestrator struct, Run/tick entry, helpers
+//	runner_picker.go    — pickNextTasksForFreeSlots, sort helpers (F-PERF-007, F-PERF-010)
+//	sweeps.go           — sweepAwaitingUserRuns, sweepOrphanRuns
+//	progress_guards.go  — runProgressTaskLocked (Re-entry Guard + Lingering-Pending Gate)
+//	transitions.go      — applyTransition, applyTransitionWrites, decideCompletedTransition
 package pipeline
 
 import (
