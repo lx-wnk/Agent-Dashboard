@@ -200,7 +200,7 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: go.work.sum
       - name: Install go-licenses
-        run: go install github.com/google/go-licenses@latest
+        run: go install github.com/google/go-licenses@v1.6.0
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0

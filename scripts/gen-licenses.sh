@@ -10,7 +10,7 @@ GO_LICENSES="$(go env GOPATH)/bin/go-licenses"
 
 if [[ ! -x "${GO_LICENSES}" ]]; then
   echo "ERROR: go-licenses not found at ${GO_LICENSES}" >&2
-  echo "Install it with: go install github.com/google/go-licenses@latest" >&2
+  echo "Install it with: go install github.com/google/go-licenses@v1.6.0" >&2
   exit 1
 fi
 
@@ -34,6 +34,10 @@ trap 'rm -f "${TMP_GO_RAW}" "${TMP_GO_FIXED}" "${TMP_FRONTEND_JSON}"' EXIT
 
 # ── Collect Go deps ────────────────────────────────────────────────────────────
 
+# go-licenses exits non-zero when it cannot classify a module; that case is
+# deliberately tolerated here and resolved downstream by LICENSE_OVERRIDES and
+# the ',Unknown,' gate. Stderr is left visible so genuine failures surface in
+# CI logs instead of being silently swallowed.
 collect_go() {
   local dir="$1"
   local gowork_off="${2:-false}"
@@ -41,11 +45,11 @@ collect_go() {
   if [[ "${gowork_off}" == "true" ]]; then
     (cd "${dir}" && GOWORK=off go build ./... 2>/dev/null || true)
     (cd "${dir}" && GOWORK=off "${GO_LICENSES}" report ./... \
-      --ignore github.com/lx-wnk/agent-dashboard 2>/dev/null) || true
+      --ignore github.com/lx-wnk/agent-dashboard) || true
   else
     (cd "${dir}" && go build ./... 2>/dev/null || true)
     (cd "${dir}" && "${GO_LICENSES}" report ./... \
-      --ignore github.com/lx-wnk/agent-dashboard 2>/dev/null) || true
+      --ignore github.com/lx-wnk/agent-dashboard) || true
   fi
 }
 
