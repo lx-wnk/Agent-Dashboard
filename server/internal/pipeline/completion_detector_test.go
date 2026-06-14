@@ -1,6 +1,7 @@
 package pipeline_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -198,4 +199,123 @@ func TestDetectCompletion_SyntheticMarker_NotTreatedAsToolOutput(t *testing.T) {
 	res, err := pipeline.DetectCompletion(sr, "/tmp", deps)
 	require.NoError(t, err)
 	require.Equal(t, "failed", res.Kind)
+}
+
+func TestDetectCompletion_InfraAxis(t *testing.T) {
+	type tc struct {
+		name      string
+		sr        func() *ent.StageRun
+		deps      pipeline.CompletionDeps
+		wantKind  string
+		wantInfra bool
+		wantRetry bool
+	}
+
+	now := time.Now()
+	sid := "sid-infra"
+
+	cases := []tc{
+		{
+			name: "schema_validation_reject_retryable_not_infra",
+			sr:   func() *ent.StageRun { return stageRun("self_review", ptr(0), &sid, &now) },
+			deps: pipeline.CompletionDeps{
+				IsPidAlive: func(int) bool { return false },
+				ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
+					return pipeline.StageOutputRead{
+						Output:  map[string]any{"summary": "ok"},
+						RawText: "```json\n{}\n```",
+					}, nil
+				},
+			},
+			wantKind:  "failed",
+			wantRetry: true,
+			wantInfra: false,
+		},
+		{
+			name: "no_session_jsonl_found_is_infra",
+			sr: func() *ent.StageRun {
+				return stageRun("implementation", ptr(0), nil, &now)
+			},
+			deps: pipeline.CompletionDeps{
+				IsPidAlive:  func(int) bool { return false },
+				FindSession: func(string, string) (string, error) { return "", nil },
+			},
+			wantKind:  "failed",
+			wantInfra: true,
+		},
+		{
+			name: "agent_did_not_produce_json_block_is_infra",
+			sr:   func() *ent.StageRun { return stageRun("implementation", ptr(0), &sid, &now) },
+			deps: pipeline.CompletionDeps{
+				IsPidAlive: func(int) bool { return false },
+				ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
+					return pipeline.StageOutputRead{RawText: "some agent output without json block"}, nil
+				},
+			},
+			wantKind:  "failed",
+			wantInfra: true,
+		},
+		{
+			name: "session_read_error_is_infra",
+			sr:   func() *ent.StageRun { return stageRun("implementation", ptr(0), &sid, &now) },
+			deps: pipeline.CompletionDeps{
+				IsPidAlive: func(int) bool { return false },
+				ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
+					return pipeline.StageOutputRead{}, fmt.Errorf("disk read failed")
+				},
+			},
+			wantKind:  "failed",
+			wantInfra: true,
+		},
+		{
+			name: "clean_valid_json_not_infra",
+			sr:   func() *ent.StageRun { return stageRun("implementation", ptr(0), &sid, &now) },
+			deps: pipeline.CompletionDeps{
+				IsPidAlive: func(int) bool { return false },
+				ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
+					return pipeline.StageOutputRead{
+						Output:  map[string]any{"summary": "done", "commits": []any{}, "openItems": []any{}},
+						RawText: "```json\n{}\n```",
+					}, nil
+				},
+			},
+			wantKind:  "completed",
+			wantInfra: false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res, err := pipeline.DetectCompletion(c.sr(), "/tmp", c.deps)
+			require.NoError(t, err)
+			require.Equal(t, c.wantKind, res.Kind)
+			require.Equal(t, c.wantInfra, res.Infra, "Infra mismatch")
+			if c.wantRetry {
+				require.True(t, res.Retryable)
+			}
+		})
+	}
+}
+
+func TestClassifyInfra(t *testing.T) {
+	cases := []struct {
+		rawText string
+		errStr  string
+		want    bool
+	}{
+		{"session limit reached", "", true},
+		{"", "overloaded_error occurred", true},
+		{"Claude was killed", "", true},
+		{"exceeded your quota", "", true},
+		{"rate_limit hit", "", true},
+		{"usage limit exceeded", "", true},
+		{"missing required field: passed", "", false},
+		{"", "missing required field: summary", false},
+		{"normal output text", "some other error", false},
+	}
+
+	for _, c := range cases {
+		got := pipeline.ClassifyInfraForTest(c.rawText, c.errStr)
+		require.Equal(t, c.want, got, "rawText=%q errStr=%q", c.rawText, c.errStr)
+	}
 }

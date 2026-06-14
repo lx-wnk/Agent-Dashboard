@@ -1,20 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useServerConfig } from '../../composables/useServerConfig'
 
-const scriptPath = ref('')
+const { scriptPath, loadServerConfig } = useServerConfig()
 const copied = ref(false)
 
-onMounted(async () => {
-  try {
-    const res = await fetch('/api/config')
-    if (res.ok) {
-      const data = await res.json()
-      scriptPath.value = data.scriptPath ?? ''
-    }
-  }
-  catch {
-    // ignore — callout simply renders nothing
-  }
+onMounted(() => {
+  void loadServerConfig()
 })
 
 async function copy() {

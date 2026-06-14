@@ -45,6 +45,10 @@ type StageRun struct {
 	EndedAt *time.Time `json:"ended_at,omitempty"`
 	// LastGrantAt holds the value of the "last_grant_at" field.
 	LastGrantAt *time.Time `json:"last_grant_at,omitempty"`
+	// RetryCount holds the value of the "retry_count" field.
+	RetryCount int `json:"retry_count,omitempty"`
+	// NextRetryAt holds the value of the "next_retry_at" field.
+	NextRetryAt *time.Time `json:"next_retry_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -91,11 +95,11 @@ func (*StageRun) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case stagerun.FieldOutput:
 			values[i] = new([]byte)
-		case stagerun.FieldPid, stagerun.FieldIteration, stagerun.FieldTokensUsed, stagerun.FieldCostCents:
+		case stagerun.FieldPid, stagerun.FieldIteration, stagerun.FieldTokensUsed, stagerun.FieldCostCents, stagerun.FieldRetryCount:
 			values[i] = new(sql.NullInt64)
 		case stagerun.FieldID, stagerun.FieldTaskID, stagerun.FieldStage, stagerun.FieldSessionID, stagerun.FieldSessionName, stagerun.FieldStatus:
 			values[i] = new(sql.NullString)
-		case stagerun.FieldStartedAt, stagerun.FieldEndedAt, stagerun.FieldLastGrantAt, stagerun.FieldCreatedAt:
+		case stagerun.FieldStartedAt, stagerun.FieldEndedAt, stagerun.FieldLastGrantAt, stagerun.FieldNextRetryAt, stagerun.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -204,6 +208,19 @@ func (_m *StageRun) assignValues(columns []string, values []any) error {
 				_m.LastGrantAt = new(time.Time)
 				*_m.LastGrantAt = value.Time
 			}
+		case stagerun.FieldRetryCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field retry_count", values[i])
+			} else if value.Valid {
+				_m.RetryCount = int(value.Int64)
+			}
+		case stagerun.FieldNextRetryAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field next_retry_at", values[i])
+			} else if value.Valid {
+				_m.NextRetryAt = new(time.Time)
+				*_m.NextRetryAt = value.Time
+			}
 		case stagerun.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -304,6 +321,14 @@ func (_m *StageRun) String() string {
 	builder.WriteString(", ")
 	if v := _m.LastGrantAt; v != nil {
 		builder.WriteString("last_grant_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("retry_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RetryCount))
+	builder.WriteString(", ")
+	if v := _m.NextRetryAt; v != nil {
+		builder.WriteString("next_retry_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")

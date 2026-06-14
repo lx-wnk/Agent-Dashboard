@@ -15,3 +15,26 @@ func (o *PipelineOrchestrator) DecideCompletedTransitionForTest(
 ) StageTransition {
 	return o.decideCompletedTransition(ctx, task, run, output)
 }
+
+// ClassifyInfraForTest exposes classifyInfra for testing.
+var ClassifyInfraForTest = classifyInfra
+
+// FinalizeCompletedAsyncRunsForTest exposes finalizeCompletedAsyncRuns for testing.
+func (o *PipelineOrchestrator) FinalizeCompletedAsyncRunsForTest(ctx context.Context, runs []*ent.StageRun) error {
+	return o.finalizeCompletedAsyncRuns(ctx, runs)
+}
+
+// SweepRequeueableRunsForTest exposes sweepRequeueableRuns for testing.
+func (o *PipelineOrchestrator) SweepRequeueableRunsForTest(ctx context.Context) error {
+	return o.sweepRequeueableRuns(ctx)
+}
+
+// SweepOrphanRunsForTest exposes sweepOrphanRuns for testing.
+func (o *PipelineOrchestrator) SweepOrphanRunsForTest(ctx context.Context, allRunning []*ent.StageRun) error {
+	return o.sweepOrphanRuns(ctx, allRunning)
+}
+
+// PickNextTasksForFreeSlots exposes pickNextTasksForFreeSlots for testing.
+func (o *PipelineOrchestrator) PickNextTasksForFreeSlots(ctx context.Context, allRunning []*ent.StageRun) {
+	o.pickNextTasksForFreeSlots(ctx, allRunning)
+}

@@ -40,6 +40,10 @@ const (
 	FieldEndedAt = "ended_at"
 	// FieldLastGrantAt holds the string denoting the last_grant_at field in the database.
 	FieldLastGrantAt = "last_grant_at"
+	// FieldRetryCount holds the string denoting the retry_count field in the database.
+	FieldRetryCount = "retry_count"
+	// FieldNextRetryAt holds the string denoting the next_retry_at field in the database.
+	FieldNextRetryAt = "next_retry_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// EdgeTask holds the string denoting the task edge name in mutations.
@@ -80,6 +84,8 @@ var Columns = []string{
 	FieldStartedAt,
 	FieldEndedAt,
 	FieldLastGrantAt,
+	FieldRetryCount,
+	FieldNextRetryAt,
 	FieldCreatedAt,
 }
 
@@ -102,6 +108,8 @@ var (
 	DefaultTokensUsed int
 	// DefaultCostCents holds the default value on creation for the "cost_cents" field.
 	DefaultCostCents int
+	// DefaultRetryCount holds the default value on creation for the "retry_count" field.
+	DefaultRetryCount int
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -172,6 +180,16 @@ func ByEndedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByLastGrantAt orders the results by the last_grant_at field.
 func ByLastGrantAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastGrantAt, opts...).ToFunc()
+}
+
+// ByRetryCount orders the results by the retry_count field.
+func ByRetryCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetryCount, opts...).ToFunc()
+}
+
+// ByNextRetryAt orders the results by the next_retry_at field.
+func ByNextRetryAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNextRetryAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.
