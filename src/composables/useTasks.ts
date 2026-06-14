@@ -379,8 +379,8 @@ export async function fetchPendingPermissionRequests(taskId: string): Promise<Pe
   return await res.json() as PermissionRequest[]
 }
 
-export async function resolvePermissionRequest(taskId: string, id: string, outcome: 'granted' | 'denied'): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/permission-requests/${id}/resolve`, {
+export async function resolvePermissionRequest(taskId: string, requestId: string, outcome: 'granted' | 'denied'): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/permission-requests/${requestId}/resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ outcome }),

@@ -421,7 +421,9 @@ const pendingByStageRun = computed<Array<{ stageRunId: string, requests: Permiss
 
 async function onResolveAll(requests: PermissionRequest[], outcome: 'granted' | 'denied') {
   await handleAction(async () => {
-    await bulkResolvePermissionRequests(props.task!.id, requests.map(r => r.id), outcome)
+    const { errors } = await bulkResolvePermissionRequests(props.task!.id, requests.map(r => r.id), outcome)
+    if (errors.length)
+      throw new Error(`${errors.length} request(s) failed: ${errors.join('; ')}`)
   })
 }
 
@@ -458,8 +460,11 @@ async function onSlashSelect(cmd: { name: string }) {
     case '/grant':
       if (props.task) {
         await handleAction(async () => {
-          for (const group of pendingByStageRun.value)
-            await bulkResolvePermissionRequests(props.task!.id, group.requests.map(r => r.id), 'granted')
+          for (const group of pendingByStageRun.value) {
+            const { errors } = await bulkResolvePermissionRequests(props.task!.id, group.requests.map(r => r.id), 'granted')
+            if (errors.length)
+              throw new Error(`${errors.length} request(s) failed: ${errors.join('; ')}`)
+          }
         })
       }
       break
