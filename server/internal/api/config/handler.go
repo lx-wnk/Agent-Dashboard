@@ -33,10 +33,11 @@ func NewHandler(spawners cmdscope.SpawnerGetter, agents cmdscope.AgentsFn) *Hand
 
 // MemoryEntry describes a single memory file (CLAUDE.md / AGENTS.md).
 type MemoryEntry struct {
-	Path  string `json:"path"`
-	Scope string `json:"scope"` // "user" | "project"
-	Size  int64  `json:"size"`
-	MTime int64  `json:"mtime"` // unix seconds
+	Path     string `json:"path"`
+	Scope    string `json:"scope"` // "user" | "project"
+	Size     int64  `json:"size"`
+	MTime    int64  `json:"mtime"` // unix seconds
+	Editable bool   `json:"editable"`
 }
 
 type skillsResponse struct {
@@ -151,10 +152,11 @@ func enumerateMemoryFiles(scope cmdscope.Scope) []MemoryEntry {
 			continue
 		}
 		out = append(out, MemoryEntry{
-			Path:  c.path,
-			Scope: c.scope,
-			Size:  info.Size(),
-			MTime: info.ModTime().Unix(),
+			Path:     c.path,
+			Scope:    c.scope,
+			Size:     info.Size(),
+			MTime:    info.ModTime().Unix(),
+			Editable: cmdscope.IsEditableSource(c.scope),
 		})
 	}
 

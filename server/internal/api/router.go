@@ -353,6 +353,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/config/skills", configHandler.Skills)
 		r.Get("/api/config/commands", configHandler.Commands)
 		r.Get("/api/config/memory", configHandler.Memory)
+		// Single-file read/write for editable (user/project) config files. Writes
+		// are authorized only against the scope's enumerated editable set.
+		r.Get("/api/config/file", configHandler.File)
+		r.Put("/api/config/file", configHandler.SaveFile)
 
 		// Edit-gate UI endpoints — browser-facing, session-authenticated (or bypass).
 		// Unlike /api/hooks/event and /api/hooks/pre-tool (hook-script ingress, secret
