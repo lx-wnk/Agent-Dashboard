@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createSseResource } from '../useSseResource'
 import { SSE_FALLBACK_POLL_MS, SSE_RETRY_DELAY_MS } from '../../utils/sse'
+import { createSseResource } from '../useSseResource'
 
 class MockEventSource {
   static instances: MockEventSource[] = []

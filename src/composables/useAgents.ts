@@ -3,8 +3,8 @@ import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { errorMessage } from '../utils/errorMessage'
 import { totalTokenCount } from '../utils/format'
 import { AGENTS_POLL_MS } from '../utils/sse'
-import { createSseResource } from './useSseResource'
 import { drainPendingMessages } from './usePendingMessages'
+import { createSseResource } from './useSseResource'
 
 export interface TrendPoint {
   t: number

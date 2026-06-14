@@ -1,4 +1,5 @@
 import { onMounted, ref } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 import { fetchPluginList, type PluginInfo } from '../utils/plugins'
 
 export type { PluginInfo }
@@ -15,7 +16,7 @@ export function usePlugins() {
       plugins.value = await fetchPluginList()
     }
     catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load plugins'
+      error.value = errorMessage(e, 'Failed to load plugins')
     }
     finally {
       loading.value = false

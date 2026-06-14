@@ -3,6 +3,7 @@ import type { Project, Spawner } from '../types'
 import { computed, ref, watch } from 'vue'
 import { createProject, deleteProject } from '../composables/useProjects'
 import { createFolder } from '../composables/useProjectFolders'
+import { errorMessage } from '../utils/errorMessage'
 import { slugify } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 
@@ -64,7 +65,7 @@ async function submit(): Promise<void> {
     project = await createProject(projectInput)
   }
   catch (e) {
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
     isSubmitting.value = false
     return
   }
@@ -74,7 +75,7 @@ async function submit(): Promise<void> {
     emit('created', { ...project, folders: [folder] })
   }
   catch (e) {
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
     await deleteProject(project.id).catch(() => {})
   }
   finally {

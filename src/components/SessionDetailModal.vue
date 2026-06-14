@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
 import { nextTick, onUnmounted, ref, watch } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 import { formatCost, shortModel } from '../utils/format'
 import AppModal from './ui/AppModal.vue'
 
@@ -83,7 +84,7 @@ async function fetchMessages(sessionId: string) {
   catch (err: unknown) {
     if (signal.aborted)
       return
-    fetchError.value = err instanceof Error ? err.message : 'Failed to load transcript'
+    fetchError.value = errorMessage(err, 'Failed to load transcript')
   }
   finally {
     if (!signal.aborted)
@@ -154,7 +155,7 @@ async function resumeSession() {
   }
   catch (err: unknown) {
     statusIsError.value = true
-    statusMsg.value = err instanceof Error ? err.message : 'Failed'
+    statusMsg.value = errorMessage(err, 'Failed')
     setTimeout(() => {
       statusMsg.value = ''
     }, 4000)

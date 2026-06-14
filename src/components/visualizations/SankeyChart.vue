@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SankeyLink, SankeyNode } from 'd3-sankey'
+import type { SankeyLink } from 'd3-sankey'
 import type { SankeyData } from '../../sdk.generated'
 import * as d3 from 'd3'
 import { sankey as d3Sankey, sankeyLinkHorizontal } from 'd3-sankey'
@@ -10,20 +10,19 @@ import { errorMessage } from '../../utils/errorMessage'
 // d3-sankey-computed geometry (x0/y0/width/…).
 interface NodeExtra { id: string, name: string }
 interface LinkExtra { value: number }
-type SNode = SankeyNode<NodeExtra, LinkExtra>
 type SLink = SankeyLink<NodeExtra, LinkExtra>
-
-// A laid-out link's source/target is the resolved node object; narrow the
-// `number | string | SNode` union d3-sankey types it as.
-function nodeName(endpoint: SLink['source']): string {
-  return typeof endpoint === 'object' ? endpoint.name : String(endpoint)
-}
 
 const props = defineProps<{
   data: SankeyData | null
   loading: boolean
   error: string | null
 }>()
+
+// A laid-out link's source/target is the resolved node object; narrow the
+// `number | string | node` union d3-sankey types it as.
+function nodeName(endpoint: SLink['source']): string {
+  return typeof endpoint === 'object' ? endpoint.name : String(endpoint)
+}
 
 const svgRef = ref<SVGSVGElement | null>(null)
 // Surfaces a d3-sankey layout failure (e.g. "circular link" if a cyclic

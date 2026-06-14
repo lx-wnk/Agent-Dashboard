@@ -3,6 +3,7 @@ import type { ApiKey, McpScope } from '../types'
 import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
+import { errorMessage } from '../utils/errorMessage'
 import { maskToken } from '../utils/format'
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
@@ -71,7 +72,7 @@ async function loadKeys() {
     keys.value = await res.json()
   }
   catch (e) {
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
   }
   finally {
     isLoading.value = false
@@ -94,7 +95,7 @@ async function loadPresets() {
     presets.value = await res.json()
   }
   catch (e) {
-    presetsError.value = e instanceof Error ? e.message : 'Failed to load'
+    presetsError.value = errorMessage(e, 'Failed to load')
   }
   finally {
     presetsLoading.value = false
@@ -114,7 +115,7 @@ async function resetPresets(cwd: string) {
     await loadPresets()
   }
   catch (e) {
-    presetsError.value = e instanceof Error ? e.message : 'Failed to reset'
+    presetsError.value = errorMessage(e, 'Failed to reset')
   }
 }
 
@@ -140,7 +141,7 @@ async function loadPatterns() {
     patterns.value = data.patterns
   }
   catch (e) {
-    patternsError.value = e instanceof Error ? e.message : 'Failed to load'
+    patternsError.value = errorMessage(e, 'Failed to load')
   }
 }
 
@@ -154,7 +155,7 @@ async function refreshPatterns() {
     await loadPatterns()
   }
   catch (e) {
-    patternsError.value = e instanceof Error ? e.message : 'Failed to refresh'
+    patternsError.value = errorMessage(e, 'Failed to refresh')
   }
   finally {
     patternsLoading.value = false
@@ -194,7 +195,7 @@ async function revokeKey(key: ApiKey) {
   }
   catch (e) {
     key.active = true
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
   }
 }
 
@@ -217,7 +218,7 @@ async function regenerateKey(key: ApiKey) {
     revealedToken.value = data.token
   }
   catch (e) {
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
   }
   finally {
     isRegenerating.value = false
@@ -266,7 +267,7 @@ async function handleCreate() {
     closeCreateDialog()
   }
   catch (e) {
-    createError.value = (e as Error).message
+    createError.value = errorMessage(e)
   }
   finally {
     isCreating.value = false

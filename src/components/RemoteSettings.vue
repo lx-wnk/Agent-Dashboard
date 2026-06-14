@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRemotes } from '../composables/useRemotes'
+import { errorMessage } from '../utils/errorMessage'
 
 const { remotes, error, addRemote, removeRemote } = useRemotes()
 
@@ -17,7 +18,7 @@ async function add() {
     form.value = { url: '', name: '', bearerKey: '' }
   }
   catch (e) {
-    error.value = (e as Error).message
+    error.value = errorMessage(e)
   }
   finally {
     saving.value = false
