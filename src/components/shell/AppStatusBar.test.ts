@@ -47,7 +47,11 @@ describe('appStatusBar', () => {
     expect(seg.attributes('aria-expanded')).toBe('false')
     await seg.trigger('click')
     expect(seg.attributes('aria-expanded')).toBe('true')
-    expect(w.find('[data-testid="panel-system"]').exists()).toBe(true)
+    const panel = w.get('[data-testid="panel-system"]')
+    expect(panel.text()).toContain('CPU 34%')
+    expect(panel.text()).toContain('MEM 62%')
+    expect(panel.text()).toContain('DISK 48%')
+    expect(panel.text()).toContain('LOAD 1.20 1.00 0.80')
   })
 
   it('collapses to a corner tab', async () => {

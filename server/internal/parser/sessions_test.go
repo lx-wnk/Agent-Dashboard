@@ -174,3 +174,91 @@ func TestParseOutputMessages_LastOnly(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, "second", msgs[0].Content)
 }
+
+// TestParseOutputMessages_QueuedCommandAttachment verifies that an attachment
+// entry with type queued_command produces a human message with Queued=true.
+func TestParseOutputMessages_QueuedCommandAttachment(t *testing.T) {
+	entry := map[string]any{
+		"type":      "attachment",
+		"timestamp": "2025-01-15T10:30:00.000Z",
+		"attachment": map[string]any{
+			"type":   "queued_command",
+			"prompt": "run the build",
+		},
+	}
+	b, err := json.Marshal(entry)
+	require.NoError(t, err)
+
+	msgs := parseOutputMessages(string(b), false)
+
+	require.Len(t, msgs, 1)
+	require.Equal(t, "human", msgs[0].Role)
+	require.True(t, msgs[0].Queued)
+	require.Equal(t, "run the build", msgs[0].Content)
+}
+
+// TestParseOutputMessages_LegacyResultTruncation verifies that a standalone
+// result entry with content longer than 1000 chars is truncated to 1000 chars.
+func TestParseOutputMessages_LegacyResultTruncation(t *testing.T) {
+	longResult := strings.Repeat("x", 1500)
+	entry := map[string]any{
+		"type":      "result",
+		"timestamp": "2025-01-15T10:30:00.000Z",
+		"result":    longResult,
+	}
+	b, err := json.Marshal(entry)
+	require.NoError(t, err)
+
+	msgs := parseOutputMessages(string(b), false)
+
+	require.Len(t, msgs, 1)
+	require.Equal(t, "tool_result", msgs[0].Role)
+	require.Equal(t, 1000, len(msgs[0].Content))
+}
+
+// TestParseOutputMessages_TaskCreateRealIDResolution verifies that when a
+// TaskCreate tool_use is followed by a tool_result carrying the real task ID,
+// the task message's TaskID is updated from the placeholder to the real ID.
+func TestParseOutputMessages_TaskCreateRealIDResolution(t *testing.T) {
+	inputJSON, _ := json.Marshal(map[string]any{"subject": "Build feature"})
+	assistantLine := buildAssistantLine(t, []map[string]any{
+		{
+			"type":  "tool_use",
+			"id":    "tu_task1",
+			"name":  "TaskCreate",
+			"input": json.RawMessage(inputJSON),
+		},
+	})
+
+	userMsg := map[string]any{
+		"role": "user",
+		"content": []map[string]any{
+			{
+				"type":        "tool_result",
+				"tool_use_id": "tu_task1",
+				"content":     "real-task-id-42",
+			},
+		},
+	}
+	userMsgBytes, _ := json.Marshal(userMsg)
+	userEntry := map[string]any{
+		"type":      "user",
+		"timestamp": "2025-01-15T10:30:01.000Z",
+		"message":   json.RawMessage(userMsgBytes),
+	}
+	userEntryBytes, _ := json.Marshal(userEntry)
+
+	raw := assistantLine + "\n" + string(userEntryBytes)
+	msgs := parseOutputMessages(raw, false)
+
+	var taskMsg *OutputMessage
+	for i := range msgs {
+		if msgs[i].Role == "task" {
+			taskMsg = &msgs[i]
+			break
+		}
+	}
+	require.NotNil(t, taskMsg, "expected a task message")
+	require.NotNil(t, taskMsg.TaskID)
+	require.Equal(t, "real-task-id-42", *taskMsg.TaskID)
+}

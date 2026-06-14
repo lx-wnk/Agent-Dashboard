@@ -259,6 +259,47 @@ func (_u *StageRunUpdate) ClearLastGrantAt() *StageRunUpdate {
 	return _u
 }
 
+// SetRetryCount sets the "retry_count" field.
+func (_u *StageRunUpdate) SetRetryCount(v int) *StageRunUpdate {
+	_u.mutation.ResetRetryCount()
+	_u.mutation.SetRetryCount(v)
+	return _u
+}
+
+// SetNillableRetryCount sets the "retry_count" field if the given value is not nil.
+func (_u *StageRunUpdate) SetNillableRetryCount(v *int) *StageRunUpdate {
+	if v != nil {
+		_u.SetRetryCount(*v)
+	}
+	return _u
+}
+
+// AddRetryCount adds value to the "retry_count" field.
+func (_u *StageRunUpdate) AddRetryCount(v int) *StageRunUpdate {
+	_u.mutation.AddRetryCount(v)
+	return _u
+}
+
+// SetNextRetryAt sets the "next_retry_at" field.
+func (_u *StageRunUpdate) SetNextRetryAt(v time.Time) *StageRunUpdate {
+	_u.mutation.SetNextRetryAt(v)
+	return _u
+}
+
+// SetNillableNextRetryAt sets the "next_retry_at" field if the given value is not nil.
+func (_u *StageRunUpdate) SetNillableNextRetryAt(v *time.Time) *StageRunUpdate {
+	if v != nil {
+		_u.SetNextRetryAt(*v)
+	}
+	return _u
+}
+
+// ClearNextRetryAt clears the value of the "next_retry_at" field.
+func (_u *StageRunUpdate) ClearNextRetryAt() *StageRunUpdate {
+	_u.mutation.ClearNextRetryAt()
+	return _u
+}
+
 // AddPermissionRequestIDs adds the "permission_requests" edge to the PermissionRequest entity by IDs.
 func (_u *StageRunUpdate) AddPermissionRequestIDs(ids ...string) *StageRunUpdate {
 	_u.mutation.AddPermissionRequestIDs(ids...)
@@ -415,6 +456,18 @@ func (_u *StageRunUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.LastGrantAtCleared() {
 		_spec.ClearField(stagerun.FieldLastGrantAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RetryCount(); ok {
+		_spec.SetField(stagerun.FieldRetryCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRetryCount(); ok {
+		_spec.AddField(stagerun.FieldRetryCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.NextRetryAt(); ok {
+		_spec.SetField(stagerun.FieldNextRetryAt, field.TypeTime, value)
+	}
+	if _u.mutation.NextRetryAtCleared() {
+		_spec.ClearField(stagerun.FieldNextRetryAt, field.TypeTime)
 	}
 	if _u.mutation.PermissionRequestsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -711,6 +764,47 @@ func (_u *StageRunUpdateOne) ClearLastGrantAt() *StageRunUpdateOne {
 	return _u
 }
 
+// SetRetryCount sets the "retry_count" field.
+func (_u *StageRunUpdateOne) SetRetryCount(v int) *StageRunUpdateOne {
+	_u.mutation.ResetRetryCount()
+	_u.mutation.SetRetryCount(v)
+	return _u
+}
+
+// SetNillableRetryCount sets the "retry_count" field if the given value is not nil.
+func (_u *StageRunUpdateOne) SetNillableRetryCount(v *int) *StageRunUpdateOne {
+	if v != nil {
+		_u.SetRetryCount(*v)
+	}
+	return _u
+}
+
+// AddRetryCount adds value to the "retry_count" field.
+func (_u *StageRunUpdateOne) AddRetryCount(v int) *StageRunUpdateOne {
+	_u.mutation.AddRetryCount(v)
+	return _u
+}
+
+// SetNextRetryAt sets the "next_retry_at" field.
+func (_u *StageRunUpdateOne) SetNextRetryAt(v time.Time) *StageRunUpdateOne {
+	_u.mutation.SetNextRetryAt(v)
+	return _u
+}
+
+// SetNillableNextRetryAt sets the "next_retry_at" field if the given value is not nil.
+func (_u *StageRunUpdateOne) SetNillableNextRetryAt(v *time.Time) *StageRunUpdateOne {
+	if v != nil {
+		_u.SetNextRetryAt(*v)
+	}
+	return _u
+}
+
+// ClearNextRetryAt clears the value of the "next_retry_at" field.
+func (_u *StageRunUpdateOne) ClearNextRetryAt() *StageRunUpdateOne {
+	_u.mutation.ClearNextRetryAt()
+	return _u
+}
+
 // AddPermissionRequestIDs adds the "permission_requests" edge to the PermissionRequest entity by IDs.
 func (_u *StageRunUpdateOne) AddPermissionRequestIDs(ids ...string) *StageRunUpdateOne {
 	_u.mutation.AddPermissionRequestIDs(ids...)
@@ -897,6 +991,18 @@ func (_u *StageRunUpdateOne) sqlSave(ctx context.Context) (_node *StageRun, err 
 	}
 	if _u.mutation.LastGrantAtCleared() {
 		_spec.ClearField(stagerun.FieldLastGrantAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RetryCount(); ok {
+		_spec.SetField(stagerun.FieldRetryCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRetryCount(); ok {
+		_spec.AddField(stagerun.FieldRetryCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.NextRetryAt(); ok {
+		_spec.SetField(stagerun.FieldNextRetryAt, field.TypeTime, value)
+	}
+	if _u.mutation.NextRetryAtCleared() {
+		_spec.ClearField(stagerun.FieldNextRetryAt, field.TypeTime)
 	}
 	if _u.mutation.PermissionRequestsCleared() {
 		edge := &sqlgraph.EdgeSpec{

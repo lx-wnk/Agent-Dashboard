@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/ranking"
 )
 
 // pickNextTasksForFreeSlots selects tasks for available runner slots and calls
@@ -44,7 +45,7 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 		// Only skip if the latest run is specifically on the current stage and blocking.
 		// If the latest run is for a different stage, no run exists for currentStage yet.
 		if latest := latestByTask[t.ID]; latest != nil && latest.Stage == t.CurrentStage &&
-			(latest.Status == "awaiting_user" || latest.Status == "failed") {
+			(latest.Status == "awaiting_user" || latest.Status == "failed" || latest.Status == "requeued") {
 			continue
 		}
 		ready = append(ready, t)
@@ -128,5 +129,10 @@ func shouldSwap(a, b *ent.Task, priorityRank map[string]int, stageIdx func(strin
 	if pi != pj {
 		return pi < pj // b has higher priority — b should come first
 	}
+	ri, rj := ranking.EffectiveRank(a), ranking.EffectiveRank(b)
+	if ri != rj {
+		return ri > rj // b has the lower rank (manual drag order) — b should come first
+	}
 	return a.CreatedAt.After(b.CreatedAt) // b is older — b should come first
 }
+

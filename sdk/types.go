@@ -24,20 +24,37 @@ type SessionMeta struct {
 	FirstPrompt   string `json:"firstPrompt"`
 }
 
+// SubAgentStatus is the lifecycle state of a spawned sub-agent.
+type SubAgentStatus string
+
+const (
+	SubAgentStatusActive    SubAgentStatus = "active"
+	SubAgentStatusCompleted SubAgentStatus = "completed"
+)
+
 // SubAgent represents a sub-agent spawned by a parent Claude session.
 type SubAgent struct {
-	ID            string `json:"id"`
-	Type          string `json:"type"`
-	Status        string `json:"status"` // "active" | "completed"
-	CurrentAction string `json:"currentAction"`
-	SessionFile   string `json:"sessionFile"`
+	ID            string         `json:"id"`
+	Type          string         `json:"type"`
+	Status        SubAgentStatus `json:"status"`
+	CurrentAction string         `json:"currentAction"`
+	SessionFile   string         `json:"sessionFile"`
 }
+
+// TaskInfoStatus is the state of a TodoWrite-tracked task.
+type TaskInfoStatus string
+
+const (
+	TaskInfoStatusPending    TaskInfoStatus = "pending"
+	TaskInfoStatusInProgress TaskInfoStatus = "in_progress"
+	TaskInfoStatusCompleted  TaskInfoStatus = "completed"
+)
 
 // TaskInfo is a task tracked by Claude Code's internal task list.
 type TaskInfo struct {
-	ID      string `json:"id"`
-	Subject string `json:"subject"`
-	Status  string `json:"status"`
+	ID      string         `json:"id"`
+	Subject string         `json:"subject"`
+	Status  TaskInfoStatus `json:"status"`
 }
 
 // AgentStatus is the computed activity state of an agent process.

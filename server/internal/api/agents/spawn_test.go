@@ -468,7 +468,7 @@ func TestMergeEnv_NilSpawner_StripsSecrets(t *testing.T) {
 	t.Setenv("DASHBOARD_HOOKS_SECRET", "y")
 	t.Setenv("DASHBOARD_KEEP_ME", "z")
 
-	env := mergeEnv(nil)
+	env := resolveSpawnEnv(nil)
 	if envValue(env, "DASHBOARD_JWT_SECRET") != "" {
 		t.Fatalf("JWT secret must be stripped on nil-spawner path")
 	}
@@ -1063,9 +1063,9 @@ func TestSendMessageToChannel_TmuxTakesPrecedenceOverPty(t *testing.T) {
 
 	// Bridge file with a tmuxPane.
 	writeDiscoveryFile(t, dir, fmt.Sprintf("%d.json", pid), map[string]any{
-		"port":      9999,
-		"token":     "bridge-secret",
-		"tmuxPane":  "%3",
+		"port":       9999,
+		"token":      "bridge-secret",
+		"tmuxPane":   "%3",
 		"tmuxSocket": "",
 	})
 	// Pty file also present.

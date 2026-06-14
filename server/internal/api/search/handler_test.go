@@ -37,7 +37,7 @@ func newTestRouter(t *testing.T) (*chi.Mux, *db.DBBundle) {
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
 
-	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB))
+	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), nil)
 
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))
@@ -168,7 +168,7 @@ func TestSearch_TaskVisibility_NonAdmin(t *testing.T) {
 		t.Fatalf("insert bob task: %v", err)
 	}
 
-	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB))
+	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), nil)
 	ro := chi.NewRouter()
 	ro.Use(auth.RequireAuth(testJWTSecret))
 	ro.Get("/api/search", apierr.ErrorMiddleware(h.Search))
@@ -222,7 +222,7 @@ func TestSearch_TypeAgents_NonAdmin(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
 
-	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB))
+	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), nil)
 	ro := chi.NewRouter()
 	ro.Use(auth.RequireAuth(testJWTSecret))
 	ro.Get("/api/search", apierr.ErrorMiddleware(h.Search))

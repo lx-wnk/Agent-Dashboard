@@ -103,6 +103,7 @@ export type StageRunStatus
     | 'on_hold'
     | 'done'
     | 'failed'
+    | 'requeued'
 
 export type TaskPriority = 'high' | 'medium' | 'low'
 
@@ -143,6 +144,12 @@ export interface PipelineTask {
   silverBullet: boolean
   /** Soft priority used after silver-bullet and stage-furthest-first. */
   priority: TaskPriority
+  /**
+   * Manual drag-and-drop order within a stage column. Gap-based float; lower
+   * sorts first. Tiebreaker between priority and createdAt in runner pickup.
+   * Seeded from createdAt on the server, so it is effectively always present.
+   */
+  rank?: number | null
   // Owning user (multi-user mode). Null for legacy/system tasks created
   // before multi-user was introduced; only admins see those.
   userId: string | null
@@ -151,6 +158,8 @@ export interface PipelineTask {
   // regardless of what currentStage is.
   needsUser?: boolean
   latestStageRunStatus?: StageRunStatus | null
+  autoRetryCount?: number | null
+  nextRetryAt?: string | null
   refineStatus?: 'idle' | 'running' | 'done' | 'failed' | null
   refineError?: string | null
   currentIteration?: number

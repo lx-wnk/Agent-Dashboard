@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
-import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
+import { useIntervalFn } from '@vueuse/core'
+import { computed, ref } from 'vue'
+import { usePipelineConfig } from '../composables/usePipelineConfig'
+import { shortId, useCopyId } from '../composables/useCopyId'
+import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
+import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
 import WorktreePill from './WorktreePill.vue'
 
-defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
+const props = defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
+
+const { copy: copyId, copied: idCopied } = useCopyId(props.task.id)
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -18,6 +25,7 @@ const RUN_STATUS_LABELS: Record<StageRunStatus, string> = {
   on_hold: 'On Hold',
   done: 'Done',
   failed: 'Failed',
+  requeued: 'Requeued',
 }
 
 function runStatusLabel(status: StageRunStatus): string {
@@ -27,6 +35,18 @@ function runStatusLabel(status: StageRunStatus): string {
 function stageLabel(stage: PipelineStage): string {
   return STAGE_LABELS[stage] || stage
 }
+
+const { maxAutoRetries } = usePipelineConfig()
+
+const retrySecondsLeft = ref(0)
+
+function refreshCountdown() {
+  retrySecondsLeft.value = secondsUntil(props.task.nextRetryAt)
+}
+
+const isRequeued = computed(() => props.task.autoRetryCount != null)
+
+useIntervalFn(refreshCountdown, 1000, { immediate: true })
 </script>
 
 <template>
@@ -41,7 +61,22 @@ function stageLabel(stage: PipelineStage): string {
     @keydown.space.prevent="$emit('select', task)"
   >
     <div class="flex justify-between items-baseline gap-2">
-      <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
+      <span class="flex items-center gap-1 overflow-hidden">
+        <span
+          class="task-drag-handle cursor-grab active:cursor-grabbing text-fg-mute hover:text-fg-soft select-none leading-none -ml-0.5"
+          title="Drag to reorder"
+          aria-hidden="true"
+          @click.stop
+        >⠿</span>
+        <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
+        <button
+          type="button"
+          class="font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
+          :aria-label="`Copy task id ${task.id}`"
+          :title="task.id"
+          @click.stop.prevent="copyId()"
+        >{{ idCopied ? 'copied' : `#${shortId(task.id)}` }}</button>
+      </span>
       <span class="text-[10px] text-fg-mute">{{ shortDate(task.createdAt) }}</span>
     </div>
     <div class="text-[13px] font-semibold text-fg leading-tight line-clamp-2">
@@ -54,6 +89,8 @@ function stageLabel(stage: PipelineStage): string {
       v-if="task.currentStage === 'concept'"
       class="self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
       @click.stop="emit('openChat', task)"
+      @keydown.enter.stop
+      @keydown.space.stop
     >
       Continue Chat →
     </button>
@@ -79,6 +116,11 @@ function stageLabel(stage: PipelineStage): string {
         :class="runStatusChipClass(task.latestStageRunStatus)"
         :title="`Latest stage run: ${runStatusLabel(task.latestStageRunStatus)}`"
       >{{ runStatusLabel(task.latestStageRunStatus) }}</span>
+      <span
+        v-if="isRequeued"
+        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700/60"
+        :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${maxAutoRetries})`"
+      >Retrying · {{ task.autoRetryCount }}/{{ maxAutoRetries }}{{ retrySecondsLeft > 0 ? ` · ${retrySecondsLeft}s` : '' }}</span>
       <span
         v-if="task.needsUser && task.latestStageRunStatus === 'awaiting_user'"
         class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-yellow-100 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700/60"

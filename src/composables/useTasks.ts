@@ -14,6 +14,75 @@ export interface TaskEvent {
   payload?: unknown
 }
 
+// Gap applied when a card is dropped at a column edge (no neighbor on one side).
+// Mirrors rankGap in server/internal/db/repo/task_repo.go.
+const RANK_GAP = 1 << 20
+
+/**
+ * Effective sort key for a task: its manual drag rank, falling back to creation
+ * time (microseconds) so unranked rows still order deterministically. Mirrors
+ * effectiveRank() on the server.
+ */
+export function effectiveRank(t: PipelineTask): number {
+  return t.rank ?? new Date(t.createdAt).getTime() * 1000
+}
+
+function byRank(a: PipelineTask, b: PipelineTask): number {
+  return effectiveRank(a) - effectiveRank(b)
+}
+
+/**
+ * Reposition a task between two neighbors via drag-and-drop. Applies the
+ * server-computed midpoint optimistically (so the card stays put on drop) and
+ * rolls back to the previous rank if the request fails. beforeId/afterId are the
+ * cards immediately above/below the drop target; null at a column edge.
+ */
+export async function reorderTask(
+  taskId: string,
+  beforeId: string | null,
+  afterId: string | null,
+): Promise<void> {
+  const moved = tasks.value.find(t => t.id === taskId)
+  if (!moved)
+    return
+  const before = beforeId ? tasks.value.find(t => t.id === beforeId) : undefined
+  const after = afterId ? tasks.value.find(t => t.id === afterId) : undefined
+
+  const prevRank = moved.rank
+  moved.rank = midpointRank(before, after)
+  tasks.value = [...tasks.value]
+
+  try {
+    const res = await fetch(`/api/tasks/${taskId}/rank`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ before: beforeId ?? '', after: afterId ?? '' }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+      throw new Error(err.error || 'Failed to reorder task')
+    }
+    const updated = await res.json() as PipelineTask
+    moved.rank = updated.rank
+    tasks.value = [...tasks.value]
+  }
+  catch (err) {
+    moved.rank = prevRank
+    tasks.value = [...tasks.value]
+    throw err
+  }
+}
+
+function midpointRank(before?: PipelineTask, after?: PipelineTask): number {
+  if (before && after)
+    return (effectiveRank(before) + effectiveRank(after)) / 2
+  if (before)
+    return effectiveRank(before) + RANK_GAP
+  if (after)
+    return effectiveRank(after) - RANK_GAP
+  return Date.now() * 1000
+}
+
 async function fetchTasks() {
   try {
     const res = await fetch('/api/tasks')
@@ -350,7 +419,7 @@ export function useTasks(options?: { autoStart?: boolean }) {
   }
 
   function tasksByStage(stage: PipelineStage): PipelineTask[] {
-    return tasks.value.filter(t => t.currentStage === stage)
+    return tasks.value.filter(t => t.currentStage === stage).sort(byRank)
   }
 
   const tasksByStageMap = computed(() => {
@@ -360,6 +429,8 @@ export function useTasks(options?: { autoStart?: boolean }) {
         map[task.currentStage] = []
       map[task.currentStage]!.push(task)
     }
+    for (const stage of Object.keys(map) as PipelineStage[])
+      map[stage]!.sort(byRank)
     return map
   })
 

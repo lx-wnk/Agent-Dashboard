@@ -34,18 +34,21 @@ type EnrichedTask struct {
 	CostBudgetCents     *int                   `json:"costBudgetCents"`
 	StageTimeoutSeconds int                    `json:"stageTimeoutSeconds"`
 	SilverBullet        bool                   `json:"silverBullet"`
+	Rank                *float64               `json:"rank"`
 	Metadata            map[string]interface{} `json:"metadata"`
 	CreatedAt           time.Time              `json:"createdAt"`
 	UpdatedAt           time.Time              `json:"updatedAt"`
 	// Computed fields — not stored in DB.
-	NeedsUser                   bool    `json:"needsUser"`
-	LatestStageRunStatus        *string `json:"latestStageRunStatus"`
-	RefineStatus                *string `json:"refineStatus,omitempty"`
-	RefineError                 *string `json:"refineError,omitempty"`
-	CurrentIteration            int     `json:"currentIteration"`
-	ActiveSessionID             *string `json:"activeSessionId"`
-	ActivePID                   *int    `json:"activePid"`
-	BlockedByPendingPermissions bool    `json:"blockedByPendingPermissions"`
+	NeedsUser                   bool       `json:"needsUser"`
+	LatestStageRunStatus        *string    `json:"latestStageRunStatus"`
+	AutoRetryCount              *int       `json:"autoRetryCount,omitempty"`
+	NextRetryAt                 *time.Time `json:"nextRetryAt,omitempty"`
+	RefineStatus                *string    `json:"refineStatus,omitempty"`
+	RefineError                 *string    `json:"refineError,omitempty"`
+	CurrentIteration            int        `json:"currentIteration"`
+	ActiveSessionID             *string    `json:"activeSessionId"`
+	ActivePID                   *int       `json:"activePid"`
+	BlockedByPendingPermissions bool       `json:"blockedByPendingPermissions"`
 }
 
 func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) (*EnrichedTask, error) {
@@ -122,6 +125,15 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int) (*Enric
 		(latestStatus != nil && (*latestStatus == "awaiting_user" || *latestStatus == "on_hold" || *latestStatus == "failed")) ||
 		hasPendingPermissions || blockedByPendingPermissions
 
+	var autoRetryCount *int
+	var nextRetryAt *time.Time
+	if latestBelongsToCurrent {
+		if latest.RetryCount > 0 {
+			autoRetryCount = &latest.RetryCount
+		}
+		nextRetryAt = latest.NextRetryAt
+	}
+
 	var activeSessionID *string
 	var activePID *int
 	if latest != nil {
@@ -151,11 +163,14 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int) (*Enric
 		CostBudgetCents:             t.CostBudgetCents,
 		StageTimeoutSeconds:         t.StageTimeoutSeconds,
 		SilverBullet:                t.SilverBullet,
+		Rank:                        t.Rank,
 		Metadata:                    t.Metadata,
 		CreatedAt:                   t.CreatedAt,
 		UpdatedAt:                   t.UpdatedAt,
 		NeedsUser:                   needsUser,
 		LatestStageRunStatus:        latestStatus,
+		AutoRetryCount:              autoRetryCount,
+		NextRetryAt:                 nextRetryAt,
 		CurrentIteration:            currentIteration,
 		ActiveSessionID:             activeSessionID,
 		ActivePID:                   activePID,

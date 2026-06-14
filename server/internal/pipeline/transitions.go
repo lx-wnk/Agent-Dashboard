@@ -229,6 +229,26 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 			map[string]any{"pid": tr.PID, "stage": sr.Stage})
 		updatedRunID = sr.ID
 
+	case RequeueTransition:
+		output := tr.Output
+		if output == nil {
+			output = map[string]any{}
+		}
+		output["requeue_reason"] = tr.Reason
+		output["attempt"] = tr.Attempt
+		nextRetry := tr.NextRetryAt
+		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+			Status:      strPtr("requeued"),
+			RetryCount:  &tr.Attempt,
+			NextRetryAt: &nextRetry,
+			Output:      output,
+		}); err != nil {
+			return nil, nil, fmt.Errorf("applyTransition.requeue.updateRun: %w", err)
+		}
+		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "stage_requeued", "task:"+task.ID,
+			map[string]any{"stage": sr.Stage, "attempt": tr.Attempt, "reason": tr.Reason})
+		updatedRunID = sr.ID
+
 	default:
 		panic(fmt.Sprintf("orchestrator.applyTransition: unhandled transition type %T", t))
 	}
@@ -274,6 +294,8 @@ func transitionKindName(t StageTransition) string {
 		return "on_hold"
 	case AsyncRunningTransition:
 		return "async_running"
+	case RequeueTransition:
+		return "requeue"
 	default:
 		return "unknown"
 	}

@@ -24,7 +24,7 @@ func TestMCPEndpoint_Initialize(t *testing.T) {
 	result := resp["result"].(map[string]any)
 	require.Equal(t, "2024-11-05", result["protocolVersion"])
 	info := result["serverInfo"].(map[string]any)
-	require.Equal(t, "dashboard-tasks", info["name"])
+	require.Equal(t, mcp.ServerName, info["name"])
 }
 
 func TestMCPEndpoint_ToolsList_SortedAlphabetically(t *testing.T) {
