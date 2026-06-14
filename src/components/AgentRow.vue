@@ -14,24 +14,27 @@ const { getIdentity } = useAgentIdentity()
 
 <template>
   <tr
-    class="cursor-pointer transition-colors hover:bg-app focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
-    tabindex="0"
-    role="row"
-    :aria-label="`Open details for ${agent.projectName}`"
+    class="cursor-pointer transition-colors hover:bg-app"
     @click="$emit('select', agent)"
-    @keydown.enter="$emit('select', agent)"
-    @keydown.space.prevent="$emit('select', agent)"
   >
     <td class="w-24 px-3 py-2.5 border-b border-line text-sm">
       <AppBadge :variant="agent.status" />
     </td>
     <td class="px-3 py-2.5 border-b border-line text-sm text-fg font-medium">
-      <span class="mr-1 text-sm" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
-      <span
-        :style="{ backgroundColor: getIdentity(agent.projectPath).color }"
-        class="inline-block w-2 h-2 rounded-full mr-1 flex-shrink-0"
-      />
-      {{ agent.projectName }}
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 bg-transparent border-none p-0 text-sm font-medium text-fg cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2"
+        :aria-label="`Open details for ${agent.projectName}`"
+        @click.stop="$emit('select', agent)"
+      >
+        <span class="mr-1 text-sm" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
+        <span
+          :style="{ backgroundColor: getIdentity(agent.projectPath).color }"
+          class="inline-block w-2 h-2 rounded-full mr-1 flex-shrink-0"
+          aria-hidden="true"
+        />
+        {{ agent.projectName }}
+      </button>
       <ProviderBadge :provider="agent.provider" />
       <span
         v-if="agent.channelAvailable"

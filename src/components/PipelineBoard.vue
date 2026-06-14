@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { PipelineStage, PipelineTask } from '../types'
 import { computed, ref } from 'vue'
-import { useTasks } from '../composables/useTasks'
 import { useProjects } from '../composables/useProjects'
-import TaskCard from './TaskCard.vue'
+import { useTasks } from '../composables/useTasks'
 import { STAGE_LABELS } from '../utils/stageLabels'
+import SortableTaskList from './SortableTaskList.vue'
+import TaskCard from './TaskCard.vue'
 
 const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
 
@@ -185,7 +186,7 @@ function isHighlightCol(col: ColumnDef): boolean {
           :class="selectedProjectIds.has(p.id)
             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
             : 'border-line-strong text-fg-soft hover:bg-raised'"
-          :style="selectedProjectIds.has(p.id) && p.color ? { borderColor: p.color, backgroundColor: p.color + '22', color: p.color } : {}"
+          :style="selectedProjectIds.has(p.id) && p.color ? { borderColor: p.color, backgroundColor: `${p.color}22`, color: p.color } : {}"
           :aria-pressed="selectedProjectIds.has(p.id)"
           @click="toggleProjectFilter(p.id)"
         >
@@ -288,8 +289,8 @@ function isHighlightCol(col: ColumnDef): boolean {
                 <span class="text-xs text-slate-400" aria-hidden="true">{{ epicExpanded[epic.parent.id] ? '▲' : '▼' }}</span>
               </button>
               <div
-                :id="`epic-children-${epic.parent.id}`"
                 v-if="epicExpanded[epic.parent.id]"
+                :id="`epic-children-${epic.parent.id}`"
                 class="pl-3 pr-2 pb-2 pt-1 space-y-1.5"
               >
                 <TaskCard
@@ -303,11 +304,9 @@ function isHighlightCol(col: ColumnDef): boolean {
               </div>
             </div>
           </template>
-          <TaskCard
-            v-for="task in tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId))"
-            :key="task.id"
-            :task="task"
-            :project="task.projectId ? projectById.get(task.projectId) ?? null : null"
+          <SortableTaskList
+            :tasks="tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId))"
+            :project-by-id="projectById"
             @select="(t) => emit('select', t)"
             @open-chat="(t) => emit('openChat', t)"
           />

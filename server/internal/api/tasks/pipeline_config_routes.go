@@ -6,15 +6,21 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 )
 
 func (h *Handler) getPipelineConfig(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	maxParallel := int(h.cfgRepo.GetNumber(ctx, "maxParallelOrchestrators", 3))
-	stageTimeout := int(h.cfgRepo.GetNumber(ctx, "stageTimeoutSeconds", 1800))
+	stageTimeout := int(h.cfgRepo.GetNumber(ctx, "stageTimeoutSeconds", db.DefaultStageTimeoutSeconds))
+	maxAutoRetries := int(h.cfgRepo.GetNumber(ctx, "maxAutoRetries", 3))
+	retryBackoffSeconds := int(h.cfgRepo.GetNumber(ctx, "retryBackoffSeconds", 60))
 	return jsonReply(w, http.StatusOK, map[string]int{
 		"maxParallelOrchestrators": maxParallel,
 		"stageTimeoutSeconds":      stageTimeout,
+		"maxAutoRetries":           maxAutoRetries,
+		"retryBackoffSeconds":      retryBackoffSeconds,
 	})
 }
 
@@ -22,6 +28,8 @@ func (h *Handler) putPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 	var body struct {
 		MaxParallelOrchestrators *int `json:"maxParallelOrchestrators"`
 		StageTimeoutSeconds      *int `json:"stageTimeoutSeconds"`
+		MaxAutoRetries           *int `json:"maxAutoRetries"`
+		RetryBackoffSeconds      *int `json:"retryBackoffSeconds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return fmt.Errorf("pipeline_config.put: decode: %w", err)
@@ -40,6 +48,22 @@ func (h *Handler) putPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 			return fmt.Errorf("pipeline_config.put: stageTimeoutSeconds must be >= 0")
 		}
 		if err := h.cfgRepo.Set(ctx, "stageTimeoutSeconds", strconv.Itoa(*body.StageTimeoutSeconds)); err != nil {
+			return fmt.Errorf("pipeline_config.put: %w", err)
+		}
+	}
+	if body.MaxAutoRetries != nil {
+		if *body.MaxAutoRetries < 0 {
+			return fmt.Errorf("pipeline_config.put: maxAutoRetries must be >= 0")
+		}
+		if err := h.cfgRepo.Set(ctx, "maxAutoRetries", strconv.Itoa(*body.MaxAutoRetries)); err != nil {
+			return fmt.Errorf("pipeline_config.put: %w", err)
+		}
+	}
+	if body.RetryBackoffSeconds != nil {
+		if *body.RetryBackoffSeconds < 0 {
+			return fmt.Errorf("pipeline_config.put: retryBackoffSeconds must be >= 0")
+		}
+		if err := h.cfgRepo.Set(ctx, "retryBackoffSeconds", strconv.Itoa(*body.RetryBackoffSeconds)); err != nil {
 			return fmt.Errorf("pipeline_config.put: %w", err)
 		}
 	}

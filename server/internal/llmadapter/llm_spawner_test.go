@@ -1,4 +1,4 @@
-package pipeline_test
+package llmadapter_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
 )
 
 // parseAndExtractAssistantText mimics what session_reader.go does:
@@ -64,8 +64,8 @@ func TestOllamaSpawner_Spawn_WritesSessionFile(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	spawner := &pipeline.OllamaSpawner{Host: srv.URL, DefaultModel: "llama3"}
-	result, err := spawner.Spawn(context.Background(), pipeline.LLMSpawnArgs{
+	spawner := &llmadapter.OllamaSpawner{Host: srv.URL, DefaultModel: "llama3"}
+	result, err := spawner.Spawn(context.Background(), llmadapter.LLMSpawnArgs{
 		TaskID:       "t1",
 		StageRunID:   "sr1",
 		UserPrompt:   "do the thing",
@@ -105,8 +105,8 @@ func TestOpenAISpawner_Spawn_WritesSessionFile(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	spawner := &pipeline.OpenAISpawner{BaseURL: srv.URL, DefaultModel: "gpt-4o"}
-	result, err := spawner.Spawn(context.Background(), pipeline.LLMSpawnArgs{
+	spawner := &llmadapter.OpenAISpawner{BaseURL: srv.URL, DefaultModel: "gpt-4o"}
+	result, err := spawner.Spawn(context.Background(), llmadapter.LLMSpawnArgs{
 		TaskID:     "t2",
 		StageRunID: "sr2",
 		UserPrompt: "do a thing",
@@ -131,16 +131,16 @@ func TestOpenAISpawner_Spawn_WritesSessionFile(t *testing.T) {
 }
 
 func TestOllamaSpawner_Name(t *testing.T) {
-	s := &pipeline.OllamaSpawner{}
+	s := &llmadapter.OllamaSpawner{}
 	assert.Equal(t, "ollama", s.Name())
 }
 
 func TestOpenAISpawner_Name(t *testing.T) {
-	s := &pipeline.OpenAISpawner{}
+	s := &llmadapter.OpenAISpawner{}
 	assert.Equal(t, "openai", s.Name())
 }
 
 func TestCustomCommandSpawner_Name(t *testing.T) {
-	s := &pipeline.CustomCommandSpawner{Command: "/bin/echo"}
+	s := &llmadapter.CustomCommandSpawner{Command: "/bin/echo"}
 	assert.Equal(t, "custom", s.Name())
 }

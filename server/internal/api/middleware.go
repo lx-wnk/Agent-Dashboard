@@ -269,18 +269,20 @@ func NewIPRateLimiter(ctx context.Context, cfg IPRateLimiterConfig) func(http.Ha
 // inbound request. Since the dashboard binds exclusively to loopback (127.0.0.1)
 // these headers should never be present, and trusting them would allow an
 // attacker on the local machine to spoof origin metadata understood by other
-// middleware (e.g. RealIP, CORS checks). Stripping them here, as the very first
-// middleware in the chain, ensures no downstream handler ever sees them.
+// middleware (e.g. CORS checks) or the client IP recorded for a request.
+// Stripping them here, as the very first middleware in the chain, ensures no
+// downstream handler ever sees them and RemoteAddr always reflects the real
+// socket peer.
 //
-// Headers stripped: X-Forwarded-Host, X-Forwarded-Proto, Forwarded.
-// X-Forwarded-For and X-Real-IP are intentionally left in place: chi's RealIP
-// middleware uses X-Forwarded-For to set RemoteAddr, and in multi-machine setups
-// (VPN / SSH tunnel) a trusted reverse proxy may legitimately set it.
+// Headers stripped: X-Forwarded-Host, X-Forwarded-Proto, Forwarded,
+// X-Forwarded-For, X-Real-IP.
 func StripForwardedHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Del("X-Forwarded-Host")
 		r.Header.Del("X-Forwarded-Proto")
 		r.Header.Del("Forwarded")
+		r.Header.Del("X-Forwarded-For")
+		r.Header.Del("X-Real-IP")
 		next.ServeHTTP(w, r)
 	})
 }

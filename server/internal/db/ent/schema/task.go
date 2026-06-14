@@ -22,6 +22,8 @@ func (Task) Fields() []ent.Field {
 		field.String("worktree_path").Optional().Nillable(),
 		field.String("source_branch").Optional().Nillable(),
 		field.String("target_branch").Optional().Nillable(),
+		// Defaults below mirror db.Default* (db/defaults.go); the schema cannot
+		// import that package without an ent-codegen import cycle. Keep in sync.
 		field.String("current_stage").Default("concept"),
 		field.String("priority").Default("medium"),
 		field.String("user_id").Optional().Nillable(),
@@ -34,6 +36,7 @@ func (Task) Fields() []ent.Field {
 		field.JSON("metadata", map[string]any{}).Optional(),
 		field.String("project_id").Optional().Nillable(),
 		field.String("spawner_id").Optional().Nillable(),
+		field.Float("rank").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}
@@ -54,6 +57,6 @@ func (Task) Indexes() []ent.Index {
 		index.Fields("current_stage"),
 		index.Fields("parent_task_id"),
 		index.Fields("project_id"),
-		index.Fields("silver_bullet", "priority", "created_at"),
+		index.Fields("silver_bullet", "priority", "rank", "created_at"),
 	}
 }

@@ -47,13 +47,21 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
-// getAgentsNoBaseline adapts merger.GetAgents to the no-options accessor shape
-// expected by the request-scoped handlers (agents/sessions/config/search). These
-// HTTP read paths do not compute the health-score cost baseline — they pass
-// zero-value opts, so the cost component is neutral (no penalty). The broadcast
-// loop is the single place that injects a real baseline.
-func getAgentsNoBaseline(ctx context.Context) ([]sdk.Agent, error) {
-	return merger.GetAgents(ctx, merger.GetAgentsOpts{})
+// newAgentsAccessor builds the request-scoped GetAgents accessor expected by the
+// read handlers (agents/sessions/config/search). The return type is an unnamed
+// func so it stays assignable to each handler's own named accessor type
+// (agents.GetAgentsFn, cmdscope.AgentsFn, …).
+//
+// These HTTP read paths do not compute the health-score cost baseline — they pass
+// zero-value baseline opts, so the cost component is neutral (no penalty); the
+// broadcast loop is the single place that injects a real baseline. The
+// pipeline-task enricher, by contrast, IS applied here so request-scoped reads
+// carry the same PipelineTaskID/Title annotation as the SSE stream. A nil
+// enricher disables it.
+func newAgentsAccessor(enricher merger.Enricher) func(ctx context.Context) ([]sdk.Agent, error) {
+	return func(ctx context.Context) ([]sdk.Agent, error) {
+		return merger.GetAgents(ctx, merger.GetAgentsOpts{Enricher: enricher})
+	}
 }
 
 // RouterConfig holds configuration values for the router.
@@ -88,6 +96,11 @@ type RouterDeps struct {
 	Ctx               context.Context
 	Config            RouterConfig
 	AgentBroadcaster  *sse.Broadcaster
+	// Enricher, when non-nil, annotates each scanned agent with its linked
+	// pipeline task (read-only SQLite crossing). Applied to every request-scoped
+	// GetAgents call below via the agentsAccessor closure. May be nil (no DB →
+	// no enrichment). The broadcast loop receives the same enricher separately.
+	Enricher merger.Enricher
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -129,6 +142,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 		serverCtx = context.Background()
 	}
 
+	// Single request-scoped GetAgents accessor, shared by every read path below
+	// (SSOT). Captures the injected pipeline-task enricher so HTTP reads and the
+	// debounced rescan carry the same task annotation as the SSE broadcast loop.
+	getAgents := newAgentsAccessor(deps.Enricher)
+
 	r := chi.NewRouter()
 
 	// Build the per-IP rate limiter once; it owns its cleanup goroutine.
@@ -140,7 +158,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// attacker-controlled X-Forwarded-Host / X-Forwarded-Proto / Forwarded values.
 	r.Use(StripForwardedHeaders)
 	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.RealIP)
 	r.Use(SlogMiddleware)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(SecurityHeaders)
@@ -162,7 +179,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if debounceMs <= 0 {
 		debounceMs = 100
 	}
-	hooksHandler := hooks.New(deps.Config.HooksSecret, newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs))
+	hooksHandler := hooks.New(deps.Config.HooksSecret, newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents))
 	r.Post("/api/hooks/event", hooksHandler.Event)
 	r.Post("/api/hooks/pre-tool", hooksHandler.PreTool)
 	// NOTE: /api/hooks/respond and /api/hooks/pending are browser-facing (the edit
@@ -208,14 +225,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if !deps.Config.BypassAuth {
 			r.Use(authpkg.RequireAuth(deps.Config.JWTSecret))
 		}
-		agentHandler := agents.NewHandler(getAgentsNoBaseline, deps.AgentBroadcaster)
+		agentHandler := agents.NewHandler(getAgents, deps.AgentBroadcaster)
 		r.Get("/api/agents", ErrorMiddleware(agentHandler.List))
 		r.Get("/api/agents/stream", agentHandler.Stream)
 		r.Get("/api/agents/{sessionId}/output", sessions.Output)
 
 		r.Get("/api/sessions", sessions.List)
 		r.Get("/api/sessions/{sessionId}/timeline", sessions.Timeline)
-		commandsHandler := sessions.NewCommandsHandler(deps.SpawnerRepo, getAgentsNoBaseline)
+		commandsHandler := sessions.NewCommandsHandler(deps.SpawnerRepo, getAgents)
 		r.Get("/api/slash-commands", commandsHandler.SlashCommands)
 
 		r.Get("/api/quota", system.Quota)
@@ -332,7 +349,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// and memory files, scoped per spawner / live session via ?spawnerId /
 		// ?sessionId. The only client path accepted is ?cwd, sanitized and used
 		// solely for project-local <cwd>/.claude reads.
-		configHandler := apiconfig.NewHandler(deps.SpawnerRepo, getAgentsNoBaseline)
+		configHandler := apiconfig.NewHandler(deps.SpawnerRepo, getAgents)
 		r.Get("/api/config/skills", configHandler.Skills)
 		r.Get("/api/config/commands", configHandler.Commands)
 		r.Get("/api/config/memory", configHandler.Memory)
@@ -384,7 +401,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// API-key lookup path. Applied alongside the existing auth middleware.
 	// Mounted outside the JWT group so OAuth-less clients can reach it.
 	if deps.MCPHandler != nil {
-		r.With(authRateLimiter, mcp.McpAuthMiddleware(deps.ApiKeyRepo)).Post("/api/mcp", deps.MCPHandler.ServeHTTP)
+		r.With(authRateLimiter, mcp.McpAuthMiddleware(deps.ApiKeyRepo)).Post(mcp.EndpointPath, deps.MCPHandler.ServeHTTP)
 	}
 
 	// Vue SPA catch-all — must be last (after all API routes)
@@ -478,7 +495,7 @@ func gzipMiddleware(next http.Handler) http.Handler {
 // newDebouncedRescan returns an OnEventFn that triggers an agent rescan after debounceMs.
 // Multiple calls within the window collapse into one rescan.
 // ctx should be the server-lifetime context so the rescan is cancelled on shutdown.
-func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debounceMs int) hooks.OnEventFn {
+func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debounceMs int, getAgents func(context.Context) ([]sdk.Agent, error)) hooks.OnEventFn {
 	var mu sync.Mutex
 	var timer *time.Timer
 	delay := time.Duration(debounceMs) * time.Millisecond
@@ -494,7 +511,7 @@ func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debou
 			if ctx.Err() != nil {
 				return
 			}
-			agents, err := getAgentsNoBaseline(ctx)
+			agents, err := getAgents(ctx)
 			if err != nil {
 				slog.Warn("hooks: debounced rescan failed", "err", err)
 				return

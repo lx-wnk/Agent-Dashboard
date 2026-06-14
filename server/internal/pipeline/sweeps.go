@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
 // sweepAwaitingUserRuns reaps awaiting_user stage_runs whose agent process has
@@ -67,13 +68,39 @@ func (o *PipelineOrchestrator) sweepAwaitingUserRuns(ctx context.Context, allRun
 	return nil
 }
 
+// sweepRequeueableRuns promotes requeued runs back to pending once their cooldown has elapsed.
+func (o *PipelineOrchestrator) sweepRequeueableRuns(ctx context.Context) error {
+	requeued, _ := o.opts.StageRunRepo.ListByStatus(ctx, "requeued")
+	now := time.Now()
+	for _, run := range requeued {
+		if run.NextRetryAt == nil || run.NextRetryAt.After(now) {
+			continue
+		}
+		slog.Info("orchestrator: requeue cooldown elapsed — promoting to pending",
+			"runID", run.ID, "stage", run.Stage, "retryCount", run.RetryCount)
+		if _, err := o.opts.StageRunRepo.Update(ctx, run.ID, repo.UpdateStageRunInput{
+			Status:           strPtr("pending"),
+			PIDClear:         true,
+			StartedAtClear:   true,
+			NextRetryAtClear: true,
+		}); err != nil {
+			slog.Error("sweepRequeueableRuns.update", "runID", run.ID, "err", err)
+		}
+	}
+	return nil
+}
+
 // sweepOrphanRuns reaps three zombie modes:
 //   1. Non-terminal stage_run whose parent task is parked (done/cancelled/on_hold).
 //   2. on_hold stage_run with a dead PID.
 //   3. pending stage_run stuck > 5 min without a PID.
 func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning []*ent.StageRun) error {
 	pendings, _ := o.opts.StageRunRepo.ListPending(ctx)
-	all := append(allRunning, pendings...)
+	requeued, _ := o.opts.StageRunRepo.ListByStatus(ctx, "requeued")
+	all := make([]*ent.StageRun, 0, len(allRunning)+len(pendings)+len(requeued))
+	all = append(all, allRunning...)
+	all = append(all, pendings...)
+	all = append(all, requeued...)
 	for _, run := range all {
 		task, err := o.opts.TaskRepo.GetByID(ctx, run.TaskID)
 		if err != nil {

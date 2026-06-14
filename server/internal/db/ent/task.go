@@ -56,6 +56,8 @@ type Task struct {
 	ProjectID *string `json:"project_id,omitempty"`
 	// SpawnerID holds the value of the "spawner_id" field.
 	SpawnerID *string `json:"spawner_id,omitempty"`
+	// Rank holds the value of the "rank" field.
+	Rank *float64 `json:"rank,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -126,6 +128,8 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case task.FieldSilverBullet:
 			values[i] = new(sql.NullBool)
+		case task.FieldRank:
+			values[i] = new(sql.NullFloat64)
 		case task.FieldMaxIterations, task.FieldTokenBudget, task.FieldCostBudgetCents, task.FieldStageTimeoutSeconds:
 			values[i] = new(sql.NullInt64)
 		case task.FieldID, task.FieldSlug, task.FieldTitle, task.FieldDescription, task.FieldCwd, task.FieldWorktreePath, task.FieldSourceBranch, task.FieldTargetBranch, task.FieldCurrentStage, task.FieldPriority, task.FieldUserID, task.FieldParentTaskID, task.FieldProjectID, task.FieldSpawnerID:
@@ -279,6 +283,13 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 				_m.SpawnerID = new(string)
 				*_m.SpawnerID = value.String
 			}
+		case task.FieldRank:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field rank", values[i])
+			} else if value.Valid {
+				_m.Rank = new(float64)
+				*_m.Rank = value.Float64
+			}
 		case task.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -422,6 +433,11 @@ func (_m *Task) String() string {
 	if v := _m.SpawnerID; v != nil {
 		builder.WriteString("spawner_id=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.Rank; v != nil {
+		builder.WriteString("rank=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")

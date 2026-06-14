@@ -6,11 +6,103 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
+
+// DefaultAllowedCommands are the bare command names always permitted in the
+// spawners.command field. Extra entries can be appended via the
+// DASHBOARD_SPAWNER_ALLOWED_COMMANDS env var (comma-separated; each entry is
+// either a bare name or an absolute trusted bin directory).
+var DefaultAllowedCommands = []string{"claude", "claude-code", "npx"}
+
+// ValidateSpawnerCommand reports whether command is permitted for a spawner row
+// and, when not, returns a human-readable reason for a 400 response.
+//
+// Bare names: allowed only when listed in DefaultAllowedCommands or as a bare
+// entry of DASHBOARD_SPAWNER_ALLOWED_COMMANDS.
+//
+// Absolute paths: must EvalSymlinks-resolve (the file must exist) and the
+// resolved binary's parent directory must lie under a trusted bin directory
+// (see trustedBinDirs). Resolving symlinks before the trust check closes the
+// symlink-into-/tmp bypass.
+func ValidateSpawnerCommand(command string) (bool, string) {
+	if command == "" {
+		return false, "command must not be empty"
+	}
+
+	if strings.HasPrefix(command, "/") {
+		resolved, err := filepath.EvalSymlinks(command)
+		if err != nil {
+			return false, fmt.Sprintf("command path %q could not be resolved", command)
+		}
+		parent := filepath.Dir(resolved)
+		for _, dir := range trustedBinDirs() {
+			trusted, err := canonicalize(dir)
+			if err != nil {
+				continue
+			}
+			if isUnder(parent, trusted) {
+				return true, ""
+			}
+		}
+		return false, fmt.Sprintf("command path %q is not under a trusted bin directory", command)
+	}
+
+	if slices.Contains(DefaultAllowedCommands, command) {
+		return true, ""
+	}
+	for _, extra := range extraAllowedCommandsFromEnv() {
+		if !strings.HasPrefix(extra, "/") && command == extra {
+			return true, ""
+		}
+	}
+	return false, fmt.Sprintf("command %q is not in the allow-list", command)
+}
+
+// trustedBinDirs returns the set of directories under which an absolute spawner
+// command is permitted: the standard system/Homebrew bin dirs, the user's
+// ~/.local/bin, the resolved directory of the `claude` binary on PATH, and any
+// absolute-path entries of DASHBOARD_SPAWNER_ALLOWED_COMMANDS.
+func trustedBinDirs() []string {
+	dirs := []string{"/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin"}
+	if home, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs, filepath.Join(home, ".local", "bin"))
+	}
+	if p, err := exec.LookPath("claude"); err == nil {
+		if real, err := filepath.EvalSymlinks(p); err == nil {
+			p = real
+		}
+		dirs = append(dirs, filepath.Dir(p))
+	}
+	for _, extra := range extraAllowedCommandsFromEnv() {
+		if strings.HasPrefix(extra, "/") {
+			dirs = append(dirs, extra)
+		}
+	}
+	return dirs
+}
+
+// extraAllowedCommandsFromEnv reads and parses DASHBOARD_SPAWNER_ALLOWED_COMMANDS
+// into a slice (trims whitespace, drops empty entries).
+func extraAllowedCommandsFromEnv() []string {
+	raw := os.Getenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
 
 // sensitiveHomeDirs are home-relative directory names that are unconditionally
 // blacklisted as spawn working directories, regardless of any project roots.

@@ -13,6 +13,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 )
 
 // DBBundle holds both the ent client and the underlying *sql.DB.
@@ -78,6 +79,12 @@ func Open(path string) (*DBBundle, error) {
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
+	}
+	// Backfill task.rank for legacy rows created before the field existed, seeding
+	// from created_at so existing column order is preserved. Idempotent.
+	if err := backfillTaskRank(context.Background(), client); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: backfill task rank: %w", err)
 	}
 	// migrateDropBareWebFetchGrants must run after ent auto-migrate (which creates
 	// the task_permissions table) and before the server accepts traffic.
@@ -179,6 +186,28 @@ func runRawMigrations(db *sql.DB) error {
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("raw migration failed: %w\nstatement: %s", err, stmt)
+		}
+	}
+	return nil
+}
+
+// backfillTaskRank assigns a rank to every task whose rank is still NULL, seeding
+// it from created_at (as microseconds) so the column's existing order is preserved
+// and new midpoint inserts have room to subdivide. Idempotent: a second run finds
+// no NULL-rank rows and does nothing.
+func backfillTaskRank(ctx context.Context, client *ent.Client) error {
+	tasks, err := client.Task.Query().Where(task.RankIsNil()).All(ctx)
+	if err != nil {
+		return fmt.Errorf("query unranked tasks: %w", err)
+	}
+	if len(tasks) == 0 {
+		return nil
+	}
+	slog.Warn("migration: backfilling task.rank from created_at", "count", len(tasks))
+	for _, t := range tasks {
+		seed := float64(t.CreatedAt.UnixMicro())
+		if _, err := client.Task.UpdateOneID(t.ID).SetRank(seed).Save(ctx); err != nil {
+			return fmt.Errorf("backfill rank for task %q: %w", t.ID, err)
 		}
 	}
 	return nil

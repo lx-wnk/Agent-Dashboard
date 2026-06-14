@@ -667,7 +667,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 									tasks = append(tasks, sdk.TaskInfo{
 										ID:      td.ID,
 										Subject: td.Content,
-										Status:  td.Status,
+										Status:  sdk.TaskInfoStatus(td.Status),
 									})
 								}
 								data.Tasks = tasks

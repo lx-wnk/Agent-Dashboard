@@ -126,12 +126,25 @@ func EstimateCostForProvider(provider sdk.Provider, usage sdk.TokenUsage, model 
 	}
 }
 
+// Enricher optionally annotates the freshly-built agent slice with data that
+// lives outside the filesystem scan (e.g. pipeline task links from SQLite). It
+// mutates agents in place by index and MUST be fail-soft: any lookup error
+// leaves the affected agent untouched. A nil Enricher disables enrichment.
+//
+// Defined here (not in db/repo) so merger stays a leaf package with no db
+// dependency; the composition root injects a db-backed implementation, mirroring
+// the BaselineProvider injection.
+type Enricher func(ctx context.Context, agents []sdk.Agent)
+
 // GetAgentsOpts carries optional settings for a single GetAgents call.
 type GetAgentsOpts struct {
 	// BaselinePerSessionCostUSD is the average per-session cost over the past 7 days,
 	// pre-computed by the caller. Zero means "no baseline available" and disables
 	// the cost-spike component of the health score (no penalty).
 	BaselinePerSessionCostUSD float64
+	// Enricher, when non-nil, is invoked once after the agent slice is built and
+	// filtered, before return. See the Enricher type doc.
+	Enricher Enricher
 }
 
 // GetAgents scans running Claude processes and merges them with session data.
@@ -196,6 +209,9 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 		if a.SessionID != "" {
 			result = append(result, a)
 		}
+	}
+	if opts.Enricher != nil {
+		opts.Enricher(ctx, result)
 	}
 	return result, nil
 }

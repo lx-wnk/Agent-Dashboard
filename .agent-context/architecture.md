@@ -30,6 +30,7 @@ Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + manual DI in `cm
 | `api/wphandler/` | Web Push subscription + send |
 | `api/history/` | Historical session cost import SSE |
 | `pipeline/` | State machine, orchestrator, stage handlers, completion detector, agent spawner |
+| `llmadapter/` | Leaf: pluggable-spawner transport (`LLMSpawner`/`StreamingLLMSpawner`, `NewLLMSpawnerFromSpawner`, `AvailableAdapters`, Ollama/OpenAI/custom adapters). Deps: `db/ent` only. Extracted from `pipeline/` per ADR-0005 |
 | `db/` | ent ORM schemas + repos (tasks, stage_runs, users, api_keys, presets, remotes, refine, cost_history, web_push subscriptions) |
 | `mcp/` | Stateless StreamableHTTP MCP server — 19 tools, 4 scope tiers |
 | `auth/` | JWT helpers, GitHub OAuth client |
