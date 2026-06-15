@@ -3,15 +3,15 @@ package eval
 
 // Metric key constants — single source of truth for all metric identifiers.
 const (
-	MetricSuccessRate              = "success_rate"
-	MetricMeanIterations           = "mean_iterations_to_success"
-	MetricFirstIterValidationFail  = "first_iter_validation_fail_rate"
-	MetricAwaitingUserRate         = "awaiting_user_rate"
-	MetricEscalationRate           = "escalation_rate"
-	MetricMeanDurationSeconds      = "mean_duration_seconds"
-	MetricMeanCostCents            = "mean_cost_cents"
-	MetricMeanTokens               = "mean_tokens"
-	MetricTimeoutRate              = "timeout_rate"
+	MetricSuccessRate             = "success_rate"
+	MetricMeanIterations          = "mean_iterations_to_success"
+	MetricFirstIterValidationFail = "first_iter_validation_fail_rate"
+	MetricAwaitingUserRate        = "awaiting_user_rate"
+	MetricEscalationRate          = "escalation_rate"
+	MetricMeanDurationSeconds     = "mean_duration_seconds"
+	MetricMeanCostCents           = "mean_cost_cents"
+	MetricMeanTokens              = "mean_tokens"
+	MetricTimeoutRate             = "timeout_rate"
 )
 
 // MetricKind classifies how a metric is interpreted by the drift algorithm.

@@ -144,7 +144,7 @@ func TestDetectDrift_ImprovementDoesNotFire(t *testing.T) {
 	}
 	baseline := map[Dimension]map[string]Baseline{
 		dim: {
-			MetricSuccessRate:  {Mean: 0.70, Stddev: 0.05, SampleCount: 50},
+			MetricSuccessRate:   {Mean: 0.70, Stddev: 0.05, SampleCount: 50},
 			MetricMeanCostCents: {Mean: 100, Stddev: 5, SampleCount: 50},
 		},
 	}

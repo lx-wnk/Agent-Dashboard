@@ -275,9 +275,9 @@ func createRun(t *testing.T, sr repo.StageRunRepo, ctx context.Context, taskID, 
 	}
 	sessionID := uuid.New().String()
 	if _, err := sr.Update(ctx, run.ID, repo.UpdateStageRunInput{
-		Status:    &status,
-		SessionID: &sessionID,
-		CostCents: &costCents,
+		Status:     &status,
+		SessionID:  &sessionID,
+		CostCents:  &costCents,
 		TokensUsed: &tokensUsed,
 	}); err != nil {
 		t.Fatalf("update stage run: %v", err)
