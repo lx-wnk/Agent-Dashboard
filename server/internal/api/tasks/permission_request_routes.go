@@ -318,7 +318,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 	}
 
 	var idsToResolve []string
-	var resolveErrors []string
+	resolveErrors := []string{}
 	if body.All {
 		for _, req := range pending {
 			idsToResolve = append(idsToResolve, req.ID)
