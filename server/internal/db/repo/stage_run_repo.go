@@ -31,6 +31,8 @@ type StageRunRepo interface {
 	// ROW_NUMBER() window function — correctness is exact regardless of iteration
 	// count, unlike the former Go-side heuristic limit of len(ids)*20+20.
 	GetLatestForTasks(ctx context.Context, taskIDs []string) (map[string]*ent.StageRun, error)
+	// ListInWindow returns all stage_runs whose created_at is in [from, to].
+	ListInWindow(ctx context.Context, from, to time.Time) ([]*ent.StageRun, error)
 }
 
 type CreateStageRunInput struct {
@@ -274,6 +276,20 @@ func (r *entStageRunRepo) GetLatestForTasks(ctx context.Context, taskIDs []strin
 		}
 	}
 	return result, nil
+}
+
+// ListInWindow returns all stage_runs whose created_at is in [from, to].
+func (r *entStageRunRepo) ListInWindow(ctx context.Context, from, to time.Time) ([]*ent.StageRun, error) {
+	runs, err := r.client.StageRun.Query().
+		Where(
+			stagerun.CreatedAtGTE(from),
+			stagerun.CreatedAtLTE(to),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("stagerun.ListInWindow: %w", err)
+	}
+	return runs, nil
 }
 
 // ListStageRunsByTaskIDs returns all stage_runs for the given task IDs in a
