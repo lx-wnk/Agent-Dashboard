@@ -333,6 +333,48 @@ export interface Spawner {
   updatedAt: string
 }
 
+// Eval / drift-detection types
+export type MetricKey
+  = | 'success_rate'
+    | 'mean_iterations_to_success'
+    | 'first_iter_validation_fail_rate'
+    | 'awaiting_user_rate'
+    | 'escalation_rate'
+    | 'mean_duration_seconds'
+    | 'mean_cost_cents'
+    | 'mean_tokens'
+    | 'timeout_rate'
+
+export interface EvalMetricSnapshot {
+  id: string
+  spawnerId: string
+  model: string
+  stage: string
+  metricKey: MetricKey
+  value: number
+  sampleCount: number
+  windowStart: string
+  windowEnd: string
+  recordedAt: string
+}
+
+export interface DriftAlert {
+  id: string
+  spawnerId: string
+  model: string
+  stage: string
+  metricKey: MetricKey
+  status: string
+  direction: 'up' | 'down'
+  baselineValue: number
+  recentValue: number
+  delta: number
+  threshold: number
+  sampleCount: number
+  detectedAt: string
+  acknowledgedAt: string | null
+}
+
 // MCP API Key types
 export type McpScope = 'tasks:read' | 'tasks:write' | 'pipeline:control' | 'keys:manage'
 

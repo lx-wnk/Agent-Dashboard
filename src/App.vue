@@ -43,6 +43,7 @@ import { friendlyProjectName } from './utils/friendlyProjectName'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
+const EvalView = defineAsyncComponent(() => import('./components/EvalView.vue'))
 const PipelineBoard = defineAsyncComponent(() => import('./components/PipelineBoard.vue'))
 const WorkflowsView = defineAsyncComponent(() => import('./components/WorkflowsView.vue'))
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
@@ -434,6 +435,7 @@ onMounted(fetchQuota)
           @navigate-agent="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"
         />
         <CostAnalyticsView v-else-if="activeView === 'cost'" />
+        <EvalView v-else-if="activeView === 'eval'" />
         <WorkflowsView
           v-else-if="activeView === 'workflows'"
           @navigate="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"
