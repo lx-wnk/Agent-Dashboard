@@ -53,7 +53,6 @@ package-lock.json
 # is a real `vite build` artifact and is ignored so build output never bloats or
 # dirties the repo. The SPA is unservable until `task build:all` populates dist/.
 server/frontend/dist/*
-!server/frontend/dist/.gitkeep
 server/coverage.out
 
 # Playwright per-run output
