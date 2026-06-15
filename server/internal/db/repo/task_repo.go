@@ -22,6 +22,9 @@ type TaskRepo interface {
 	ListForUser(ctx context.Context, userID string, isAdmin bool) ([]*ent.Task, error)
 	ListPickable(ctx context.Context) ([]*ent.Task, error)
 	ListByStage(ctx context.Context, stage string) ([]*ent.Task, error)
+	// ListByIDs returns all tasks matching the given IDs in a single query.
+	// Used by the eval collector to resolve task metadata (spawner_id, model) in bulk.
+	ListByIDs(ctx context.Context, ids []string) ([]*ent.Task, error)
 }
 
 type CreateTaskInput struct {
@@ -331,6 +334,17 @@ func (r *entTaskRepo) ListByStage(ctx context.Context, stage string) ([]*ent.Tas
 	tasks, err := r.client.Task.Query().Where(task.CurrentStage(stage)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("task.ListByStage: %w", err)
+	}
+	return tasks, nil
+}
+
+func (r *entTaskRepo) ListByIDs(ctx context.Context, ids []string) ([]*ent.Task, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	tasks, err := r.client.Task.Query().Where(task.IDIn(ids...)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("task.ListByIDs: %w", err)
 	}
 	return tasks, nil
 }
