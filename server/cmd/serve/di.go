@@ -302,7 +302,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		CostHandler:           costHandler,
 		VisualizationsHandler: apivisualizations.NewHandler(),
 		MCPHandler:            mcpHandler,
-		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo),
+		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo, repo.NewStageRunRepo(entClient)),
 		ChannelStageOutput:    channelStageOutputHandler,
 		PluginRegistry:        pluginRegistry,
 	}

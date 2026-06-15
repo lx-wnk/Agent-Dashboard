@@ -1,12 +1,13 @@
 package agents
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 )
@@ -72,17 +73,25 @@ func (s *ReplyStore) Since(parentPid int, since string) []Reply {
 	return out
 }
 
+// stageRunResolver maps a claude session id to its stage run. Replies are stored
+// internally by the bridge's parent PID (it never learns the session id), so the
+// session-based endpoint resolves the PID through this, mirroring /output.
+type stageRunResolver interface {
+	GetBySessionID(ctx context.Context, sessionID string) (*ent.StageRun, error)
+}
+
 // ChannelReplyHandler handles the /api/channel-reply endpoint.
 type ChannelReplyHandler struct {
-	store   *ReplyStore
-	apiKeys repo.ApiKeyRepo
+	store     *ReplyStore
+	apiKeys   repo.ApiKeyRepo
+	stageRuns stageRunResolver
 }
 
 // NewChannelReplyHandler creates a handler backed by the given store. apiKeys
 // authenticates the bridge's bearer token (the MCP api_keys token it already
 // sends on every outbound call) — the same mechanism /api/mcp uses.
-func NewChannelReplyHandler(store *ReplyStore, apiKeys repo.ApiKeyRepo) *ChannelReplyHandler {
-	return &ChannelReplyHandler{store: store, apiKeys: apiKeys}
+func NewChannelReplyHandler(store *ReplyStore, apiKeys repo.ApiKeyRepo, stageRuns stageRunResolver) *ChannelReplyHandler {
+	return &ChannelReplyHandler{store: store, apiKeys: apiKeys, stageRuns: stageRuns}
 }
 
 // Post handles POST /api/channel-reply.
@@ -121,21 +130,24 @@ func (h *ChannelReplyHandler) Post(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
-// GetReplies handles GET /api/agents/{pid}/replies.
+// GetReplies handles GET /api/agents/{sessionId}/replies. It resolves the
+// session id to the agent's parent PID (the bridge's reply key) and returns the
+// buffered replies. A missing stage run or PID (e.g. between runs) is not an
+// error — it simply means no replies yet.
 func (h *ChannelReplyHandler) GetReplies(w http.ResponseWriter, r *http.Request) {
-	pidStr := r.PathValue("pid")
-	pid, err := strconv.Atoi(pidStr)
-	if err != nil || pid <= 0 {
-		http.Error(w, `{"error":"invalid pid"}`, http.StatusBadRequest)
+	sessionID := r.PathValue("sessionId")
+	if sessionID == "" {
+		http.Error(w, `{"error":"sessionId is required"}`, http.StatusBadRequest)
 		return
 	}
-	since := r.URL.Query().Get("since")
-	replies := h.store.Since(pid, since)
-	if replies == nil {
-		replies = []Reply{}
+	replies := []Reply{}
+	if sr, err := h.stageRuns.GetBySessionID(r.Context(), sessionID); err == nil && sr != nil && sr.Pid != nil {
+		if found := h.store.Since(*sr.Pid, r.URL.Query().Get("since")); found != nil {
+			replies = found
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(replies)
+	_ = json.NewEncoder(w).Encode(map[string]any{"replies": replies})
 }
 
 func bearerToken(r *http.Request) string {
