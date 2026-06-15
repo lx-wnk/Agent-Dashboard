@@ -61,3 +61,17 @@ These are normally injected into spawned stage agents by the orchestrator — yo
 | `DASHBOARD_REMOTES` | — | Remote dashboard instances to aggregate |
 
 > Multi-machine mode requires remote instances to be network-accessible. Use a VPN or SSH tunnel — **never** bind to `0.0.0.0` on an untrusted network. The dashboard reads sensitive Claude session data.
+
+## Eval / drift detection
+
+Passive drift detection measures agent execution quality over time per `(spawner, model, stage)` from the data the pipeline already persists in `stage_run`, and flags degradation against a rolling baseline. No agents are spawned — it only reads existing rows.
+
+| Variable | Default | Description |
+|---|---|---|
+| `DASHBOARD_EVAL_SCAN_INTERVAL_MS` | `3600000` | Drift-scan interval (ms). `<= 0` runs a single boot scan only |
+| `DASHBOARD_EVAL_WINDOW_HOURS` | `168` | Length of the recent window (hours). The baseline window is the preceding window of equal length, so `2 × window` of history must accumulate before any alert can fire |
+| `DASHBOARD_EVAL_MIN_SAMPLES` | `20` | Minimum stage-run sample count on both the recent and baseline side; thinner data is suppressed |
+| `DASHBOARD_EVAL_RATE_DROP_PP` | `15` | Percentage-point worsening of a rate metric (e.g. success rate) required to raise an alert |
+| `DASHBOARD_EVAL_STDDEV_K` | `3` | Standard-deviation multiplier for continuous metrics: a recent mean above `baseline_mean + k × baseline_stddev` raises an alert |
+
+> Drift is detected by comparing the recent window against the immediately preceding baseline window. Because the baseline is built from prior metric snapshots, no alerts fire until roughly `2 × DASHBOARD_EVAL_WINDOW_HOURS` of history exists — this cold-start gap is expected. Alerts surface at `GET /api/eval/drift` and in the dashboard's Eval view.
