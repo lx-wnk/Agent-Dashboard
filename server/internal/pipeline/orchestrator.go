@@ -632,7 +632,7 @@ func (o *PipelineOrchestrator) reapAwaitingUserAgent(ctx context.Context, taskID
 	if err != nil || run == nil || run.Status != "awaiting_user" {
 		return
 	}
-	if run.Pid != nil {
+	if run.Pid != nil && IsPidAlive(*run.Pid) {
 		_ = syscallKill(*run.Pid)
 	}
 	if _, err := o.applyTransition(ctx, task, run, FailTransition{

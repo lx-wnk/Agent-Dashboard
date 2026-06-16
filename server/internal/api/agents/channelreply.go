@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -141,7 +142,11 @@ func (h *ChannelReplyHandler) GetReplies(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	replies := []Reply{}
-	if sr, err := h.stageRuns.GetBySessionID(r.Context(), sessionID); err == nil && sr != nil && sr.Pid != nil {
+	sr, err := h.stageRuns.GetBySessionID(r.Context(), sessionID)
+	if err != nil && !ent.IsNotFound(err) {
+		slog.Warn("GetReplies: resolve session failed", "sessionId", sessionID, "err", err)
+	}
+	if err == nil && sr != nil && sr.Pid != nil {
 		if found := h.store.Since(*sr.Pid, r.URL.Query().Get("since")); found != nil {
 			replies = found
 		}
