@@ -57,3 +57,22 @@ func TestPipelineConfigRepo_GetNumber_Missing(t *testing.T) {
 	val := cr.GetNumber(ctx, "nonexistent", 42.0)
 	require.Equal(t, 42.0, val)
 }
+
+func TestPipelineConfigRepo_GetString_SetAndGet(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	cr := repo.NewPipelineConfigRepo(client)
+
+	require.NoError(t, cr.Set(ctx, "extraSafeBashCommands", "gh jq"))
+	val := cr.GetString(ctx, "extraSafeBashCommands", "")
+	require.Equal(t, "gh jq", val)
+}
+
+func TestPipelineConfigRepo_GetString_Missing(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	cr := repo.NewPipelineConfigRepo(client)
+
+	val := cr.GetString(ctx, "nonexistent", "default-val")
+	require.Equal(t, "default-val", val)
+}
