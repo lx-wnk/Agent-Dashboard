@@ -1,15 +1,23 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
+import { computed } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
-import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import { useNow } from '../composables/useNow'
+import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
 import MachineBadge from './MachineBadge.vue'
 import ProviderBadge from './ProviderBadge.vue'
 import AppBadge from './ui/AppBadge.vue'
 
-defineProps<{ agent: Agent, expanded: boolean }>()
+const props = defineProps<{ agent: Agent, expanded: boolean }>()
 defineEmits<{ select: [agent: Agent], toggleSubagents: [] }>()
 
 const { getIdentity } = useAgentIdentity()
+const { nowMs } = useNow()
+
+const secSince = computed(() => secondsSince(props.agent.lastActivity, nowMs.value))
+const relActivity = computed(() => formatRelativeActivity(secSince.value))
+const stalled = computed(() => isStalled(props.agent.status, secSince.value))
+const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.agent.uptime))
 </script>
 
 <template>
@@ -19,6 +27,11 @@ const { getIdentity } = useAgentIdentity()
   >
     <td class="w-24 px-3 py-2.5 border-b border-line text-sm">
       <AppBadge :variant="agent.status" />
+      <span
+        v-if="stalled"
+        class="block mt-0.5 text-[10px] font-medium text-yellow-700 dark:text-yellow-400"
+        title="Agent is active but has produced no output for 3+ minutes"
+      >stalled</span>
     </td>
     <td class="px-3 py-2.5 border-b border-line text-sm text-fg font-medium">
       <button
@@ -54,10 +67,14 @@ const { getIdentity } = useAgentIdentity()
     </td>
     <td class="px-3 py-2.5 border-b border-line text-xs font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
       <span v-if="agent.costUnknown" class="text-fg-mute" title="Cost unknown — no pricing data for this provider/model">?</span>
-      <template v-else>{{ formatCost(agent.costEstimate) }}</template>
+      <template v-else>
+        {{ formatCost(agent.costEstimate) }}
+      </template>
+      <span v-if="burnRate !== '—'" class="block text-[10px] text-fg-mute font-mono">{{ burnRate }}</span>
     </td>
     <td class="w-20 px-3 py-2.5 border-b border-line text-xs text-fg-mute">
-      {{ formatUptime(agent.uptime) }}
+      <span class="block">{{ formatUptime(agent.uptime) }}</span>
+      <span class="block text-[10px] font-mono">{{ relActivity }}</span>
     </td>
     <td class="w-[70px] px-3 py-2.5 border-b border-line text-xs font-mono text-fg-mute">
       {{ agent.pid }}
