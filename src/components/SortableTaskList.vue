@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PipelineTask, Project } from '../types'
+import type { Agent, PipelineTask, Project } from '../types'
 import { useSortable } from '@vueuse/integrations/useSortable'
 import { ref, watch } from 'vue'
 import { reorderTask } from '../composables/useTasks'
@@ -8,9 +8,14 @@ import TaskCard from './TaskCard.vue'
 const props = defineProps<{
   tasks: PipelineTask[]
   projectById: Map<string, Project>
+  workingAgentByTask?: Map<string, Agent>
 }>()
 
-const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
+const emit = defineEmits<{
+  select: [task: PipelineTask]
+  openChat: [task: PipelineTask]
+  navigateAgent: [sessionId: string]
+}>()
 
 const listEl = ref<HTMLElement | null>(null)
 // Local mirror that Sortable mutates on drop. Kept in sync with the parent's
@@ -48,8 +53,10 @@ useSortable(listEl, list, {
       :key="task.id"
       :task="task"
       :project="projectFor(task)"
+      :working-agent="workingAgentByTask?.get(task.id) ?? null"
       @select="(t) => emit('select', t)"
       @open-chat="(t) => emit('openChat', t)"
+      @navigate-agent="(sid) => emit('navigateAgent', sid)"
     />
   </div>
 </template>
