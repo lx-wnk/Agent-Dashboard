@@ -297,25 +297,47 @@ func TestDetectCompletion_InfraAxis(t *testing.T) {
 	}
 }
 
-func TestClassifyInfra(t *testing.T) {
+func TestIsRateLimitError(t *testing.T) {
 	cases := []struct {
-		rawText string
-		errStr  string
-		want    bool
+		name string
+		e    *pipeline.APIError
+		want bool
 	}{
-		{"session limit reached", "", true},
-		{"", "overloaded_error occurred", true},
-		{"Claude was killed", "", true},
-		{"exceeded your quota", "", true},
-		{"rate_limit hit", "", true},
-		{"usage limit exceeded", "", true},
-		{"missing required field: passed", "", false},
-		{"", "missing required field: summary", false},
-		{"normal output text", "some other error", false},
+		{"nil", nil, false},
+		{"status_429", &pipeline.APIError{Status: 429, Kind: ""}, true},
+		{"status_529", &pipeline.APIError{Status: 529, Kind: ""}, true},
+		{"status_503", &pipeline.APIError{Status: 503, Kind: ""}, true},
+		{"kind_rate_limit", &pipeline.APIError{Status: 0, Kind: "rate_limit"}, true},
+		{"kind_overloaded_error", &pipeline.APIError{Status: 0, Kind: "overloaded_error"}, true},
+		{"status_500_not_rl", &pipeline.APIError{Status: 500, Kind: ""}, false},
+		{"empty_kind_not_rl", &pipeline.APIError{Status: 0, Kind: ""}, false},
+		{"unknown_kind", &pipeline.APIError{Status: 0, Kind: "internal_error"}, false},
 	}
-
 	for _, c := range cases {
-		got := pipeline.ClassifyInfraForTest(c.rawText, c.errStr)
-		require.Equal(t, c.want, got, "rawText=%q errStr=%q", c.rawText, c.errStr)
+		t.Run(c.name, func(t *testing.T) {
+			got := pipeline.IsRateLimitErrorForTest(c.e)
+			require.Equal(t, c.want, got)
+		})
 	}
+}
+
+func TestDetectCompletion_RateLimited_ReturnsRateLimitedAndInfra(t *testing.T) {
+	now := time.Now()
+	sessionID := "rl-session"
+	sr := stageRun("implementation", ptr(0), &sessionID, &now)
+	deps := pipeline.CompletionDeps{
+		IsPidAlive: func(int) bool { return false },
+		ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
+			return pipeline.StageOutputRead{
+				APIError: &pipeline.APIError{Status: 429, Kind: "rate_limit"},
+				RawText:  "You've hit your session limit · resets in 1h",
+			}, nil
+		},
+	}
+	res, err := pipeline.DetectCompletion(sr, "/tmp", deps)
+	require.NoError(t, err)
+	require.Equal(t, "failed", res.Kind)
+	require.True(t, res.RateLimited, "RateLimited must be true for 429 API error")
+	require.True(t, res.Infra, "Infra must be true for rate-limited result")
+	require.NotEmpty(t, res.Error)
 }

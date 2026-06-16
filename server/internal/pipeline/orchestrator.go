@@ -40,6 +40,10 @@ const (
 	defaultMaxAutoRetries      = 3
 	retryBackoffKey            = "retryBackoffSeconds"
 	defaultRetryBackoff        = 60
+	rateLimitBackoffKey        = "rateLimitBackoffSeconds"
+	defaultRateLimitBackoff    = 600
+	maxRateLimitRetriesKey     = "maxRateLimitRetries"
+	defaultMaxRateLimitRetries = 36
 )
 
 // httpSpawnResult carries the outcome of an asynchronous HTTP-adapter spawn.
@@ -474,7 +478,41 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			continue
 		}
 
-		// failed — three cases in priority order
+		// failed — four cases in priority order
+
+		// RateLimited implies Infra; check it first so it uses the dedicated budget and fixed backoff.
+		// RetryCount is shared with the infra-retry counter.
+		if result.RateLimited {
+			maxRL := o.getCachedConfigNumber(ctx, maxRateLimitRetriesKey, defaultMaxRateLimitRetries)
+			if fresh.RetryCount < maxRL {
+				attempt := fresh.RetryCount + 1
+				backoffSec := o.getCachedConfigNumber(ctx, rateLimitBackoffKey, defaultRateLimitBackoff)
+				nextRetryAt := time.Now().Add(time.Duration(backoffSec) * time.Second)
+				slog.Info("orchestrator: requeuing rate-limited run",
+					"runID", fresh.ID, "stage", fresh.Stage, "attempt", attempt,
+					"maxRateLimitRetries", maxRL, "backoffSec", backoffSec)
+				if _, err := o.applyTransition(ctx, task, fresh, RequeueTransition{
+					Reason:      result.Error,
+					Output:      result.Output,
+					Attempt:     attempt,
+					NextRetryAt: nextRetryAt,
+				}); err != nil {
+					slog.Error("finalizeCompletedAsyncRuns.applyTransition.rateLimitRequeue", "err", err)
+				}
+			} else {
+				slog.Warn("orchestrator: rate-limit retry budget exhausted — hard failing",
+					"runID", fresh.ID, "stage", fresh.Stage, "maxRateLimitRetries", maxRL)
+				output := make(map[string]any, len(result.Output)+1)
+				for k, v := range result.Output {
+					output[k] = v
+				}
+				output["rate_limit_retries_exhausted"] = maxRL
+				if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: output}); err != nil {
+					slog.Error("finalizeCompletedAsyncRuns.applyTransition.rateLimitHardFail", "err", err)
+				}
+			}
+			continue
+		}
 
 		if result.Infra {
 			maxRetries := o.getCachedConfigNumber(ctx, maxAutoRetriesKey, defaultMaxAutoRetries)

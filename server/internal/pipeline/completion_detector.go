@@ -3,18 +3,23 @@ package pipeline
 import (
 	"fmt"
 	"os"
-	"regexp"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
-var quotaLimitRe = regexp.MustCompile(`(?i)(usage|rate|session)[ _-]?limit|quota|exceeded your|overloaded_error|claude (was )?killed`)
-
-func classifyInfra(rawText, errStr string) bool {
-	return quotaLimitRe.MatchString(rawText) || quotaLimitRe.MatchString(errStr)
-}
-
 const agentMessageMaxChars = 2000
+
+// isRateLimitError returns true when the API error represents a rate or usage limit.
+// Matches by HTTP status (429/529/503) or by the structured error kind field.
+func isRateLimitError(e *APIError) bool {
+	if e == nil {
+		return false
+	}
+	if e.Status == 429 || e.Status == 529 || e.Status == 503 {
+		return true
+	}
+	return e.Kind == "rate_limit" || e.Kind == "overloaded_error"
+}
 
 type ValidationResult struct {
 	OK    bool
@@ -66,11 +71,12 @@ func validateFinalization(o map[string]any) ValidationResult {
 }
 
 type CompletionResult struct {
-	Kind      string
-	Output    map[string]any
-	Error     string
-	Retryable bool
-	Infra     bool
+	Kind        string
+	Output      map[string]any
+	Error       string
+	Retryable   bool
+	Infra       bool
+	RateLimited bool
 }
 
 type CompletionDeps struct {
@@ -128,6 +134,23 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 				if err != nil {
 					return CompletionResult{Kind: "failed", Error: fmt.Sprintf("synthetic session read error: %s", err), Infra: true}, nil
 				}
+				if isRateLimitError(read.APIError) {
+					out := map[string]any{}
+					if read.RawText != "" {
+						msg := read.RawText
+						if len(msg) > agentMessageMaxChars {
+							msg = msg[len(msg)-agentMessageMaxChars:]
+						}
+						out["agentMessage"] = msg
+					}
+					return CompletionResult{
+						Kind:        "failed",
+						Infra:       true,
+						RateLimited: true,
+						Error:       fmt.Sprintf("agent hit API rate/usage limit (status %d)", read.APIError.Status),
+						Output:      out,
+					}, nil
+				}
 				if read.Output == nil {
 					if read.RawText != "" {
 						trimmed := read.RawText
@@ -182,6 +205,23 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 	read, err := readOutputFn(cwd, sessionID)
 	if err != nil {
 		return CompletionResult{Kind: "failed", Error: fmt.Sprintf("session read error: %s", err), Infra: true}, nil
+	}
+	if isRateLimitError(read.APIError) {
+		out := map[string]any{}
+		if read.RawText != "" {
+			msg := read.RawText
+			if len(msg) > agentMessageMaxChars {
+				msg = msg[len(msg)-agentMessageMaxChars:]
+			}
+			out["agentMessage"] = msg
+		}
+		return CompletionResult{
+			Kind:        "failed",
+			Infra:       true,
+			RateLimited: true,
+			Error:       fmt.Sprintf("agent hit API rate/usage limit (status %d)", read.APIError.Status),
+			Output:      out,
+		}, nil
 	}
 	if read.Output == nil {
 		if read.RawText != "" {

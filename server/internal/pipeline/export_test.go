@@ -16,8 +16,8 @@ func (o *PipelineOrchestrator) DecideCompletedTransitionForTest(
 	return o.decideCompletedTransition(ctx, task, run, output)
 }
 
-// ClassifyInfraForTest exposes classifyInfra for testing.
-var ClassifyInfraForTest = classifyInfra
+// IsRateLimitErrorForTest exposes isRateLimitError for testing.
+var IsRateLimitErrorForTest = isRateLimitError
 
 // FinalizeCompletedAsyncRunsForTest exposes finalizeCompletedAsyncRuns for testing.
 func (o *PipelineOrchestrator) FinalizeCompletedAsyncRunsForTest(ctx context.Context, runs []*ent.StageRun) error {
