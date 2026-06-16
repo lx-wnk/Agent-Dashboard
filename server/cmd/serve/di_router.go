@@ -17,16 +17,18 @@ func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider,
 		slog.Warn("DASHBOARD_AUTH=github but no auth provider configured — login will fail; configure DASHBOARD_PLUGIN_DIR with an auth plugin")
 	}
 	return api.RouterConfig{
-		JWTSecret:         cfg.JWTSecret,
-		CallbackURL:       cfg.CallbackURL(),
-		IsLoopback:        cfg.IsLoopback(),
-		BypassAuth:        bypassAuth,
-		HooksSecret:       cfg.HooksSecret,
-		HooksDebounceMs:   cfg.HooksDebounceMs,
-		SpawnRateLimit:    cfg.SpawnRateLimit,
-		SpawnRateWindowMs: cfg.SpawnRateWindowMs,
-		AuthPluginSecret:  cfg.AuthPluginSecret,
-		PluginLoginURL:    pluginLoginURL,
+		JWTSecret:          cfg.JWTSecret,
+		CallbackURL:        cfg.CallbackURL(),
+		IsLoopback:         cfg.IsLoopback(),
+		BypassAuth:         bypassAuth,
+		HooksSecret:        cfg.HooksSecret,
+		HooksDebounceMs:    cfg.HooksDebounceMs,
+		SpawnRateLimit:     cfg.SpawnRateLimit,
+		SpawnRateWindowMs:  cfg.SpawnRateWindowMs,
+		InjectRateLimit:    cfg.InjectRateLimit,
+		InjectRateWindowMs: cfg.InjectRateWindowMs,
+		AuthPluginSecret:   cfg.AuthPluginSecret,
+		PluginLoginURL:     pluginLoginURL,
 	}
 }
 

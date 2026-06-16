@@ -66,15 +66,17 @@ func newAgentsAccessor(enricher merger.Enricher) func(ctx context.Context) ([]sd
 
 // RouterConfig holds configuration values for the router.
 type RouterConfig struct {
-	JWTSecret         string
-	CallbackURL       string
-	IsLoopback        bool            // true when Host is 127.0.0.1 / ::1 / localhost
-	BypassAuth        bool            // skip JWT when DASHBOARD_AUTH=none
-	Embedded          http.FileSystem // Vue SPA embed (unused until Task 14)
-	HooksSecret       string
-	HooksDebounceMs   int
-	SpawnRateLimit    int
-	SpawnRateWindowMs int
+	JWTSecret          string
+	CallbackURL        string
+	IsLoopback         bool            // true when Host is 127.0.0.1 / ::1 / localhost
+	BypassAuth         bool            // skip JWT when DASHBOARD_AUTH=none
+	Embedded           http.FileSystem // Vue SPA embed (unused until Task 14)
+	HooksSecret        string
+	HooksDebounceMs    int
+	SpawnRateLimit     int
+	SpawnRateWindowMs  int
+	InjectRateLimit    int
+	InjectRateWindowMs int
 	// AuthPluginSecret is forwarded to the auth handler to protect POST /api/auth/session.
 	AuthPluginSecret string
 	// PluginLoginURL, when non-empty, causes GET /api/auth/login to redirect to the
@@ -93,14 +95,14 @@ type RouterDeps struct {
 	// Ctx is the server-lifetime context. When cancelled (e.g. on shutdown) any
 	// background goroutines started by the router (e.g. debounced rescan) are
 	// also cancelled. If nil, context.Background() is used as a fallback.
-	Ctx               context.Context
-	Config            RouterConfig
-	AgentBroadcaster  *sse.Broadcaster
+	Ctx              context.Context
+	Config           RouterConfig
+	AgentBroadcaster *sse.Broadcaster
 	// Enricher, when non-nil, annotates each scanned agent with its linked
 	// pipeline task (read-only SQLite crossing). Applied to every request-scoped
 	// GetAgents call below via the agentsAccessor closure. May be nil (no DB →
 	// no enrichment). The broadcast loop receives the same enricher separately.
-	Enricher merger.Enricher
+	Enricher          merger.Enricher
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -133,6 +135,7 @@ type RouterDeps struct {
 	ChannelReply          *agents.ChannelReplyHandler
 	ChannelStageOutput    *agents.ChannelStageOutputHandler
 	PluginRegistry        *plugin.Registry
+	AuditEventRepo        repo.AuditEventRepo
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -337,10 +340,17 @@ func NewRouter(deps RouterDeps) http.Handler {
 		} else {
 			spawnPolicy = services.NewSpawnPolicy(nil)
 		}
-		spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs, deps.SpawnerRepo, spawnPolicy)
+		spawnMgr := agents.NewSpawnManager(
+			deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs,
+			deps.Config.InjectRateLimit, deps.Config.InjectRateWindowMs,
+			deps.SpawnerRepo, spawnPolicy,
+		)
 		spawnMgr.SetProjectFolderRepo(deps.ProjectFolderRepo)
 		go spawnMgr.StartPruner(serverCtx)
 		spawnHandler := agents.NewSpawnHandler(spawnMgr)
+		if deps.AuditEventRepo != nil {
+			spawnHandler.SetAuditRepo(deps.AuditEventRepo)
+		}
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)

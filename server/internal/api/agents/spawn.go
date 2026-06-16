@@ -3,9 +3,17 @@ package agents
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/httputil"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,13 +26,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
-	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
-	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
-	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
-	"github.com/lx-wnk/agent-dashboard/server/internal/httputil"
-	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
 const (
@@ -62,36 +63,56 @@ type SpawnStatus struct {
 
 // SpawnManager rate-limits and tracks user-initiated Claude agent spawns.
 type SpawnManager struct {
-	rateLimitMax      int
-	rateLimitWindow   time.Duration
+	// rateLimitMax and rateLimitWindow mirror spawnLimiter fields for use in
+	// 429 error message formatting in the Spawn handler.
+	rateLimitMax    int
+	rateLimitWindow time.Duration
+
 	spawnerRepo       repo.SpawnerRepo
 	spawnPolicy       services.SpawnPolicy
 	projectFolderRepo repo.ProjectFolderRepo // may be nil
 
-	mu           sync.Mutex
-	userAttempts map[string][]time.Time // per-user sliding window keyed by JWT sub (or "__global__" in bypass mode)
-	spawnStore   map[int]*SpawnStatus
+	spawnLimiter  *slidingWindowLimiter
+	injectLimiter *slidingWindowLimiter
+
+	// userAttempts aliases spawnLimiter.attempts (same underlying Go map) so
+	// existing test helpers that set state via m.userAttempts still work.
+	userAttempts map[string][]time.Time
+
+	mu         sync.Mutex // protects spawnStore only
+	spawnStore map[int]*SpawnStatus
 }
 
 // NewSpawnManager creates a SpawnManager with the given rate limit config.
 // policy controls which working directories may be used as spawn cwd; pass nil
 // to enforce only the sensitive-dir blacklist (development / bypass-auth mode).
-func NewSpawnManager(maxSpawns int, windowMs int, spawnerRepo repo.SpawnerRepo, policy services.SpawnPolicy) *SpawnManager {
-	if maxSpawns <= 0 {
-		maxSpawns = 5
-	}
-	if windowMs <= 0 {
-		windowMs = 60_000
-	}
+// injectMax / injectWindowMs configure the per-user inject rate limit.
+func NewSpawnManager(maxSpawns int, windowMs int, injectMax int, injectWindowMs int, spawnerRepo repo.SpawnerRepo, policy services.SpawnPolicy) *SpawnManager {
+	const (
+		defaultSpawnMax     = 5
+		defaultSpawnWindow  = 60_000
+		defaultInjectMax    = 30
+		defaultInjectWindow = 60_000
+	)
 	if policy == nil {
 		policy = services.NewSpawnPolicy(nil)
 	}
+	spawnLimiter := newSlidingWindowLimiter(
+		maxSpawns, time.Duration(windowMs)*time.Millisecond,
+		defaultSpawnMax, time.Duration(defaultSpawnWindow)*time.Millisecond,
+	)
+	injectLimiter := newSlidingWindowLimiter(
+		injectMax, time.Duration(injectWindowMs)*time.Millisecond,
+		defaultInjectMax, time.Duration(defaultInjectWindow)*time.Millisecond,
+	)
 	return &SpawnManager{
-		rateLimitMax:    maxSpawns,
-		rateLimitWindow: time.Duration(windowMs) * time.Millisecond,
+		rateLimitMax:    spawnLimiter.max,
+		rateLimitWindow: spawnLimiter.window,
 		spawnerRepo:     spawnerRepo,
 		spawnPolicy:     policy,
-		userAttempts:    make(map[string][]time.Time),
+		spawnLimiter:    spawnLimiter,
+		injectLimiter:   injectLimiter,
+		userAttempts:    spawnLimiter.attempts, // same underlying map — for test compat
 		spawnStore:      make(map[int]*SpawnStatus),
 	}
 }
@@ -106,27 +127,29 @@ func (m *SpawnManager) SetProjectFolderRepo(r repo.ProjectFolderRepo) {
 // IsSpawnAllowed reports whether a new spawn is allowed for the given user (sub).
 // Pass "__global__" in bypass-auth mode.
 func (m *SpawnManager) IsSpawnAllowed(sub string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.pruneAttempts(sub)
-	return len(m.userAttempts[sub]) < m.rateLimitMax
+	return m.spawnLimiter.Allow(sub)
+}
+
+// IsInjectAllowed reports whether a new live injection is allowed for sub.
+func (m *SpawnManager) IsInjectAllowed(sub string) bool {
+	return m.injectLimiter.Allow(sub)
+}
+
+// RecordInject records an inject attempt for sub.
+func (m *SpawnManager) RecordInject(sub string) {
+	m.injectLimiter.Record(sub)
 }
 
 func (m *SpawnManager) recordAttempt(sub string) {
-	m.pruneAttempts(sub)
-	m.userAttempts[sub] = append(m.userAttempts[sub], time.Now())
+	m.spawnLimiter.Record(sub)
 }
 
+// pruneAttempts prunes stale entries for sub from the spawn limiter.
+// Retained as a method for backward-compat with existing tests.
 func (m *SpawnManager) pruneAttempts(sub string) {
-	cutoff := time.Now().Add(-m.rateLimitWindow)
-	attempts := m.userAttempts[sub]
-	i := 0
-	for i < len(attempts) && attempts[i].Before(cutoff) {
-		i++
-	}
-	if i > 0 {
-		m.userAttempts[sub] = attempts[i:]
-	}
+	m.spawnLimiter.mu.Lock()
+	defer m.spawnLimiter.mu.Unlock()
+	m.spawnLimiter.prune(sub)
 }
 
 // spawnRequest carries validated fields extracted from the raw request body.
@@ -345,9 +368,7 @@ func (m *SpawnManager) watchProcess(cmd *exec.Cmd, status *SpawnStatus, stderrPi
 // Spawn validates the request, spawns a claude process, and returns the PID.
 // sub identifies the requesting user (JWT sub claim). Pass "__global__" in bypass-auth mode.
 func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
-	m.mu.Lock()
 	m.recordAttempt(sub)
-	m.mu.Unlock()
 
 	req, err := m.enforceSpawnPolicy(body)
 	if err != nil {
@@ -427,35 +448,25 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	return pid, nil
 }
 
-// StartPruner starts a background goroutine that prunes spawnStore and userAttempts
-// entries older than spawnStoreMaxAge. Returns when ctx is cancelled.
+// StartPruner starts a background goroutine that prunes spawnStore and both
+// rate limiters' stale entries. Returns when ctx is cancelled.
 func (m *SpawnManager) StartPruner(ctx context.Context) {
 	ticker := time.NewTicker(spawnStoreMaxAge / 2)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			m.mu.Lock()
 			now := time.Now()
+			m.mu.Lock()
 			for k, s := range m.spawnStore {
 				t, err := time.Parse(time.RFC3339, s.StartedAt)
 				if err == nil && now.Sub(t) > spawnStoreMaxAge {
 					delete(m.spawnStore, k)
 				}
 			}
-			cutoff := now.Add(-m.rateLimitWindow)
-			for sub, attempts := range m.userAttempts {
-				i := 0
-				for i < len(attempts) && attempts[i].Before(cutoff) {
-					i++
-				}
-				if i == len(attempts) {
-					delete(m.userAttempts, sub)
-				} else if i > 0 {
-					m.userAttempts[sub] = attempts[i:]
-				}
-			}
 			m.mu.Unlock()
+			m.spawnLimiter.pruneAll(now)
+			m.injectLimiter.pruneAll(now)
 		case <-ctx.Done():
 			return
 		}
@@ -476,9 +487,9 @@ func (m *SpawnManager) GetStatus(pid int) *SpawnStatus {
 }
 
 // SendMessageToChannel forwards a message to the running interactive Claude
-// session identified by pid. It consults two discovery files written by the
-// pty-broker and channel-bridge respectively, applying the following delivery
-// precedence so that the most reliable path is always preferred:
+// session identified by pid. It sanitizes the message before delivery and
+// consults two discovery files written by the pty-broker and channel-bridge,
+// applying the following delivery precedence:
 //
 //  1. Bridge file ({pid}.json) with a non-empty tmuxPane → tmux send-keys
 //     (most reliable; the multiplexer owns the pty).
@@ -487,11 +498,14 @@ func (m *SpawnManager) GetStatus(pid int) *SpawnStatus {
 //  3. Bridge file ({pid}.json) with a non-zero port → POST to the channel-bridge
 //     HTTP endpoint (MCP log channel; legacy / pipeline-agent path).
 //
-// If none of the files are present or usable, an error is returned.
-func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, message string) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("UserHomeDir: %w", err)
+// Returns the chosen transport ("tmux", "pty", or "bridge") and any error.
+// transport is "" when no channel is available.
+func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, message string) (transport string, err error) {
+	message = sanitizeInjectMessage(message)
+
+	home, herr := os.UserHomeDir()
+	if herr != nil {
+		return "", fmt.Errorf("UserHomeDir: %w", herr)
 	}
 	base := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid))
 
@@ -508,7 +522,7 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 		if json.Unmarshal(data, &disc) == nil {
 			if disc.TmuxPane != "" {
 				// Highest-priority path: tmux send-keys.
-				return sendKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, message)
+				return "tmux", sendKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, message)
 			}
 			bridgePort = disc.Port
 			bridgeToken = disc.Token
@@ -522,16 +536,39 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 			Token string `json:"token"`
 		}
 		if json.Unmarshal(data, &disc) == nil && disc.Port != 0 {
-			return sendHTTPMessage(ctx, disc.Port, disc.Token, message)
+			return "pty", sendHTTPMessage(ctx, disc.Port, disc.Token, message)
 		}
 	}
 
 	// Attempt 3: fall back to the bridge HTTP endpoint (legacy/MCP-log path).
 	if bridgePort != 0 {
-		return sendHTTPMessage(ctx, bridgePort, bridgeToken, message)
+		return "bridge", sendHTTPMessage(ctx, bridgePort, bridgeToken, message)
 	}
 
-	return fmt.Errorf("channel not available for PID %d", pid)
+	return "", fmt.Errorf("channel not available for PID %d", pid)
+}
+
+// sanitizeInjectMessage strips control characters that could inject premature
+// Enter/submit or produce unexpected terminal behaviour. Tab (0x09) is
+// preserved. DEL (0x7F) and all CR/LF sequences are removed.
+func sanitizeInjectMessage(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r == '\t':
+			b.WriteRune(r) // horizontal tab preserved
+		case r == '\n' || r == '\r':
+			// strip — pty appends its own \r to submit
+		case r == 0x7F:
+			// DEL stripped
+		case r < 0x20:
+			// C0 control characters stripped
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // sendHTTPMessage POSTs message to http://127.0.0.1:{port}/message authenticated
@@ -565,12 +602,18 @@ func sendHTTPMessage(ctx context.Context, port int, token, message string) error
 
 // SpawnHandler handles spawn-related HTTP endpoints.
 type SpawnHandler struct {
-	manager *SpawnManager
+	manager   *SpawnManager
+	auditRepo repo.AuditEventRepo // may be nil
 }
 
 // NewSpawnHandler creates a SpawnHandler backed by the given manager.
 func NewSpawnHandler(manager *SpawnManager) *SpawnHandler {
 	return &SpawnHandler{manager: manager}
+}
+
+// SetAuditRepo wires an audit repository into the handler for injection audit logging.
+func (h *SpawnHandler) SetAuditRepo(r repo.AuditEventRepo) {
+	h.auditRepo = r
 }
 
 // Spawn handles POST /api/agents/spawn.
@@ -637,6 +680,12 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid pid"}`, http.StatusBadRequest)
 		return
 	}
+
+	sub := "__global__"
+	if payload, ok := auth.PayloadFromContext(r.Context()); ok && payload.Sub != "" {
+		sub = payload.Sub
+	}
+
 	var body struct {
 		Message string `json:"message"`
 	}
@@ -644,14 +693,66 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"missing message"}`, http.StatusBadRequest)
 		return
 	}
-	if err := h.manager.SendMessageToChannel(r.Context(), pid, body.Message); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+
+	target := fmt.Sprintf("pid:%d", pid)
+	sanitized := sanitizeInjectMessage(body.Message)
+	msgHash := sha256hex(sanitized)
+
+	if !h.manager.IsInjectAllowed(sub) {
+		h.recordAudit(r.Context(), sub, repo.AuditActionLiveInjectRejected, target, map[string]any{
+			"outcome": "rejected",
+		})
+		http.Error(w, fmt.Sprintf(`{"error":"Too many message requests. Max %d per %ds."}`,
+			h.manager.injectLimiter.max,
+			int(h.manager.injectLimiter.window.Seconds()),
+		), http.StatusTooManyRequests)
 		return
 	}
+	h.manager.RecordInject(sub)
+
+	transport, delivErr := h.manager.SendMessageToChannel(r.Context(), pid, sanitized)
+
+	auditMeta := func(outcome string) map[string]any {
+		return map[string]any{
+			"transport": transport,
+			"msgLen":    len(sanitized),
+			"sha256":    msgHash,
+			"outcome":   outcome,
+		}
+	}
+
+	if delivErr != nil {
+		h.recordAudit(r.Context(), sub, repo.AuditActionLiveInject, target, auditMeta("error"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": delivErr.Error()})
+		return
+	}
+
+	h.recordAudit(r.Context(), sub, repo.AuditActionLiveInject, target, auditMeta("delivered"))
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+// recordAudit writes a best-effort audit row. Logs a warning on failure.
+func (h *SpawnHandler) recordAudit(ctx context.Context, sub, action, target string, meta map[string]any) {
+	if h.auditRepo == nil {
+		return
+	}
+	var userID *string
+	if sub != "__global__" {
+		userID = &sub
+	}
+	if err := h.auditRepo.RecordAudit(ctx, userID, action, target, meta); err != nil {
+		slog.Warn("inject: audit write failed", "action", action, "err", err)
+	}
+}
+
+// sha256hex returns the first 12 hex chars of sha256(s).
+func sha256hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 // resolveSpawnEnv builds the child process env per ADR-0003:
