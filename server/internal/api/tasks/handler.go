@@ -52,6 +52,7 @@ type Handler struct {
 	srRepo            repo.StageRunRepo
 	srBulkRepo        rawrepo.StageRunBulkRepo
 	permRepo          repo.PermissionRepo
+	presetRepo        repo.PermissionPresetRepo
 	auditRepo         repo.AuditEventRepo
 	auditEventRepo    repo.AuditEventRepo
 	cfgRepo           repo.PipelineConfigRepo
@@ -76,6 +77,7 @@ type Deps struct {
 	// fetch the exact latest stage_run per task regardless of iteration count.
 	SRBulkRepo        rawrepo.StageRunBulkRepo
 	PermRepo          repo.PermissionRepo
+	PresetRepo        repo.PermissionPresetRepo
 	AuditRepo         repo.AuditEventRepo
 	AuditEventRepo    repo.AuditEventRepo
 	CfgRepo           repo.PipelineConfigRepo
@@ -96,6 +98,7 @@ func NewHandler(deps Deps) *Handler {
 		srRepo:            deps.SRRepo,
 		srBulkRepo:        deps.SRBulkRepo,
 		permRepo:          deps.PermRepo,
+		presetRepo:        deps.PresetRepo,
 		auditRepo:         deps.AuditRepo,
 		auditEventRepo:    deps.AuditEventRepo,
 		cfgRepo:           deps.CfgRepo,

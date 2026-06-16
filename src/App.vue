@@ -5,6 +5,7 @@ import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import AgentTriageBand from './components/AgentTriageBand.vue'
+import AutoApprovingStrip from './components/AutoApprovingStrip.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import BacklogForm from './components/BacklogForm.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
@@ -116,6 +117,8 @@ const totalCostLabel = computed(() => formatCost(totalCost.value))
 const totalTokensLabel = computed(() => formatTokens(totalTokens.value))
 
 const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatCost(todayUsd.value)))
+
+const autoApprovingStrip = ref<InstanceType<typeof AutoApprovingStrip> | null>(null)
 
 const showSpawnDialog = ref(false)
 const activeConceptTask = ref<PipelineTask | null>(null)
@@ -350,7 +353,8 @@ onMounted(fetchQuota)
         </p>
 
         <template v-else-if="activeView === 'dashboard'">
-          <AgentTriageBand :agents="attentionAgents" :focused-session-id="focusedSessionId" @select="selectAgent" @toast="showToast" />
+          <AgentTriageBand :agents="attentionAgents" :focused-session-id="focusedSessionId" @select="selectAgent" @toast="showToast" @remembered="autoApprovingStrip?.load()" />
+          <AutoApprovingStrip ref="autoApprovingStrip" />
           <template v-if="dashboardLayout === 'list'">
             <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
             <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />
