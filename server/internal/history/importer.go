@@ -321,7 +321,6 @@ func collectJSONLFiles(projectsDir string) ([]string, error) {
 // extractCostRow reads filePath, parses JSONL, and returns an AgentCostRow.
 // Returns (nil, nil) when the file has no usable token data.
 func (imp *Importer) extractCostRow(ctx context.Context, filePath string) (*repo.AgentCostRow, error) {
-	// Full-file read (respecting the 100 MB cap).
 	info, err := os.Stat(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("stat: %w", err)

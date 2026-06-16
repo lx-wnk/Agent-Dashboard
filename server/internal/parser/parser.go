@@ -487,6 +487,9 @@ func cachedStatSessionFiles(projectDir string) ([]sessionFileCandidate, error) {
 		now.Sub(entry.cachedAt) < SessionCacheTTL &&
 		entry.dirMtime.Equal(dirMtime) &&
 		len(entry.candidates) > 0 {
+		// entry.candidates is read/written here outside candidateCacheMu; safe only
+		// because the merger serializes resolution per projectDir (one goroutine per
+		// directory group). Parallel callers for the same projectDir would race.
 		out := make([]sessionFileCandidate, len(entry.candidates))
 		copy(out, entry.candidates)
 		// Re-stat only the newest file to surface an append (dir mtime unchanged).
