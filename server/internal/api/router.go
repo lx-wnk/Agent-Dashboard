@@ -376,7 +376,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// The channel bridge posts here; auth is validated against the per-PID discovery file.
 	if deps.ChannelReply != nil {
 		r.Post("/api/channel-reply", deps.ChannelReply.Post)
-		r.Get("/api/agents/{pid}/replies", deps.ChannelReply.GetReplies)
+		r.Get("/api/agents/{sessionId}/replies", deps.ChannelReply.GetReplies)
 	}
 
 	// Channel-stage-output endpoint — bearer token auth via api_keys (MCP token),

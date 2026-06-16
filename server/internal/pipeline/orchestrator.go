@@ -608,7 +608,38 @@ func (o *PipelineOrchestrator) NotifyTaskTerminated(ctx context.Context, taskID,
 
 // ResumeFromUser re-runs progressTask after a user action (permission grant, retry).
 func (o *PipelineOrchestrator) ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error) {
+	// Permission grants reach a running agent only via kill-and-restart:
+	// ensureStageRun refuses to spawn a new iteration while the awaiting_user
+	// agent's PID is alive, so the grant would never take effect. Reap that
+	// paused agent (kill + mark failed) first so the resumed run spawns with the
+	// freshly granted permissions applied.
+	o.reapAwaitingUserAgent(ctx, taskID)
 	return o.ProgressTask(ctx, taskID, nil)
+}
+
+// reapAwaitingUserAgent kills the task's current awaiting_user stage-run agent
+// and marks the run failed, so a subsequent ProgressTask spawns a fresh
+// iteration instead of short-circuiting on the still-alive PID.
+func (o *PipelineOrchestrator) reapAwaitingUserAgent(ctx context.Context, taskID string) {
+	mu := o.getTaskMutex(taskID)
+	mu.Lock()
+	defer mu.Unlock()
+	task, err := o.opts.TaskRepo.GetByID(ctx, taskID)
+	if err != nil || task == nil {
+		return
+	}
+	run, err := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	if err != nil || run == nil || run.Status != "awaiting_user" {
+		return
+	}
+	if run.Pid != nil && IsPidAlive(*run.Pid) {
+		_ = syscallKill(*run.Pid)
+	}
+	if _, err := o.applyTransition(ctx, task, run, FailTransition{
+		Reason: "user resolved permissions — restarting stage with grants applied",
+	}); err != nil {
+		slog.Error("reapAwaitingUserAgent.applyTransition", "taskID", taskID, "err", err)
+	}
 }
 
 func strPtr(s string) *string { return &s }
