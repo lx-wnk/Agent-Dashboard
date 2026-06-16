@@ -118,10 +118,27 @@ func collectSystemInfo() SystemInfo {
 	}
 }
 
+// CPU model and core count are immutable for the process lifetime, so they are
+// resolved once via sync.Once. This keeps the per-collect cost to the usage probe
+// alone — the macOS path otherwise forks `sysctl machdep.cpu.brand_string` on
+// every cache-miss recompute for a value that never changes.
+var (
+	cpuStaticOnce  sync.Once
+	staticCPUModel string
+	staticCPUCores int
+)
+
+func cpuStatic() (string, int) {
+	cpuStaticOnce.Do(func() {
+		staticCPUModel = getCPUModel()
+		staticCPUCores = runtime.NumCPU()
+	})
+	return staticCPUModel, staticCPUCores
+}
+
 func getCPUInfo() cpuInfo {
-	model := getCPUModel()
-	usage := getCPUUsage()
-	return cpuInfo{Usage: usage, Cores: runtime.NumCPU(), Model: model}
+	model, cores := cpuStatic()
+	return cpuInfo{Usage: getCPUUsage(), Cores: cores, Model: model}
 }
 
 func getCPUModel() string {
