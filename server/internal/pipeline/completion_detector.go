@@ -134,7 +134,9 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 				if err != nil {
 					return CompletionResult{Kind: "failed", Error: fmt.Sprintf("synthetic session read error: %s", err), Infra: true}, nil
 				}
-				if isRateLimitError(read.APIError) {
+				// A recovered, parseable output supersedes an earlier transient API error;
+				// only requeue as rate-limited when no output was produced.
+				if read.Output == nil && isRateLimitError(read.APIError) {
 					out := map[string]any{}
 					if read.RawText != "" {
 						msg := read.RawText
@@ -206,7 +208,9 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 	if err != nil {
 		return CompletionResult{Kind: "failed", Error: fmt.Sprintf("session read error: %s", err), Infra: true}, nil
 	}
-	if isRateLimitError(read.APIError) {
+	// A recovered, parseable output supersedes an earlier transient API error;
+	// only requeue as rate-limited when no output was produced.
+	if read.Output == nil && isRateLimitError(read.APIError) {
 		out := map[string]any{}
 		if read.RawText != "" {
 			msg := read.RawText

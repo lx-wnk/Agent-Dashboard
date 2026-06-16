@@ -341,3 +341,23 @@ func TestDetectCompletion_RateLimited_ReturnsRateLimitedAndInfra(t *testing.T) {
 	require.True(t, res.Infra, "Infra must be true for rate-limited result")
 	require.NotEmpty(t, res.Error)
 }
+
+func TestDetectCompletion_RateLimitedThenRecovered_Completes(t *testing.T) {
+	now := time.Now()
+	sessionID := "rl-recovered"
+	sr := stageRun("implementation", ptr(0), &sessionID, &now)
+	deps := pipeline.CompletionDeps{
+		IsPidAlive: func(int) bool { return false },
+		ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
+			return pipeline.StageOutputRead{
+				APIError: &pipeline.APIError{Status: 429, Kind: "rate_limit"},
+				Output:   map[string]any{"summary": "done", "commits": []any{"abc"}, "openItems": []any{}},
+				RawText:  "```json\n{}\n```",
+			}, nil
+		},
+	}
+	res, err := pipeline.DetectCompletion(sr, "/tmp", deps)
+	require.NoError(t, err)
+	require.Equal(t, "completed", res.Kind, "a recovered output must complete despite an earlier API error")
+	require.False(t, res.RateLimited)
+}
