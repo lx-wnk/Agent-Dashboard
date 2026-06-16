@@ -42,6 +42,7 @@ type OrchestratorIface interface {
 	ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error)
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
 	InvalidateConfigCache()
+	ClearStalePendingPermissions(ctx context.Context, taskID string)
 }
 
 // Handler handles task REST endpoints.
@@ -633,6 +634,7 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 	if body.AdditionalPrompt != "" || resumeSessionID != "" {
 		opts = &pipeline.ProgressOpts{UserAdditionalPrompt: body.AdditionalPrompt, ResumeSessionID: resumeSessionID}
 	}
+	h.orchestrator.ClearStalePendingPermissions(r.Context(), id)
 	sr, err := h.orchestrator.ProgressTask(r.Context(), id, opts)
 	if err != nil {
 		return fmt.Errorf("tasks.retry: %w", err)

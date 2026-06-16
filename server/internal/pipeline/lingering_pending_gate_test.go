@@ -12,6 +12,72 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
+// TestOrchestrator_UserRetryClearsStalePending proves that ClearStalePendingPermissions
+// expires stale requests so a user-initiated retry is not blocked by the lingering-pending gate.
+func TestOrchestrator_UserRetryClearsStalePending(t *testing.T) {
+	ctx := context.Background()
+
+	bundle := openSharedBundle(t)
+	orch, taskRepo := makeOrchFromBundle(t, bundle)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	permRepo := repo.NewPermissionRepo(bundle.Client)
+
+	orch.SetHandlerOverride("implementation", &agentStubHandler{
+		stage:      "implementation",
+		transition: pipeline.FailTransition{Reason: "handler reached"},
+	})
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:                "retry-clears-stale",
+		Title:               "Retry Clears Stale Pending",
+		Cwd:                 "/tmp",
+		CurrentStage:        "implementation",
+		Priority:            "medium",
+		MaxIterations:       3,
+		StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	// Seed a prior stage_run that is failed and has one pending permission_request.
+	priorRun, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "implementation",
+		Iteration:   0,
+		SessionName: "seeded-failed-run",
+	})
+	require.NoError(t, err)
+	failed := "failed"
+	priorRun, err = srRepo.Update(ctx, priorRun.ID, repo.UpdateStageRunInput{Status: &failed})
+	require.NoError(t, err)
+	_, err = permRepo.CreatePermissionRequest(ctx, repo.CreatePermissionRequestInput{
+		StageRunID: priorRun.ID,
+		Tool:       "Bash",
+	})
+	require.NoError(t, err)
+
+	countBefore := len(listRunsForTask(t, srRepo, ctx, task.ID))
+
+	// Assert the pre-fix behavior: gate blocks ProgressTask → nil result, no new run.
+	result, err := orch.ProgressTask(ctx, task.ID, nil)
+	require.NoError(t, err)
+	require.Nil(t, result, "gate must block when stale pending requests exist")
+	require.Equal(t, countBefore, len(listRunsForTask(t, srRepo, ctx, task.ID)),
+		"no new stage_run should be created while gate is blocking")
+
+	// Simulate the user-initiated retry: clear stale requests.
+	orch.ClearStalePendingPermissions(ctx, task.ID)
+
+	pending, err := permRepo.CountForStageRun(ctx, priorRun.ID)
+	require.NoError(t, err)
+	require.Equal(t, 0, pending, "pending requests must be cleared before retry")
+
+	// ProgressTask must now succeed and create a new run.
+	_, err = orch.ProgressTask(ctx, task.ID, nil)
+	require.NoError(t, err)
+	require.Greater(t, len(listRunsForTask(t, srRepo, ctx, task.ID)), countBefore,
+		"a new stage_run must be created after stale requests are cleared")
+}
+
 // agentStubHandler is a StageHandler test double that claims RequiresAgent()==true.
 // Its Execute method returns the preset transition so tests can confirm whether
 // the handler was reached (gate did not block) or not (gate blocked).

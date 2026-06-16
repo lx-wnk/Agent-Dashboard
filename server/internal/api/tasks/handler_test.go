@@ -110,8 +110,9 @@ func (n *noopOrchestrator) ProgressTask(_ context.Context, _ string, _ *pipeline
 func (n *noopOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
-func (n *noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string) {}
-func (n *noopOrchestrator) InvalidateConfigCache()                              {}
+func (n *noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)          {}
+func (n *noopOrchestrator) InvalidateConfigCache()                                       {}
+func (n *noopOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string)    {}
 
 func TestListTasks_Empty(t *testing.T) {
 	_, r := newTestHandler(t)

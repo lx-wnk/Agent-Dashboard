@@ -160,3 +160,47 @@ func TestPermissionRepo_ListPending(t *testing.T) {
 	require.Len(t, pending, 1)
 	require.Equal(t, "Read", pending[0].Tool)
 }
+
+func TestPermissionRepo_ExpirePendingForStageRun(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+	pr := repo.NewPermissionRepo(client)
+
+	taskID := createTask(t, tr, "perm-task-7")
+	runID := createStageRun(t, sr, taskID)
+
+	// Two requests: one granted, one still pending.
+	granted, err := pr.CreatePermissionRequest(ctx, repo.CreatePermissionRequestInput{
+		StageRunID: runID, Tool: "Bash",
+	})
+	require.NoError(t, err)
+	_, err = pr.CreatePermissionRequest(ctx, repo.CreatePermissionRequestInput{
+		StageRunID: runID, Tool: "Read",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, pr.ResolvePermissionRequest(ctx, granted.ID, "granted"))
+
+	// ExpirePending should touch exactly the one remaining pending request.
+	n, err := pr.ExpirePendingForStageRun(ctx, runID)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	// The granted request must keep its original outcome.
+	g, err := pr.GetPermissionRequest(ctx, granted.ID)
+	require.NoError(t, err)
+	require.NotNil(t, g.Outcome)
+	require.Equal(t, "granted", *g.Outcome)
+
+	// No pending requests should remain.
+	count, err := pr.CountForStageRun(ctx, runID)
+	require.NoError(t, err)
+	require.Equal(t, 0, count)
+
+	// Calling again when nothing is pending is a harmless no-op (returns 0, nil).
+	n2, err := pr.ExpirePendingForStageRun(ctx, runID)
+	require.NoError(t, err)
+	require.Equal(t, 0, n2)
+}

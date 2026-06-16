@@ -606,6 +606,39 @@ func (o *PipelineOrchestrator) NotifyTaskTerminated(ctx context.Context, taskID,
 	o.handleDependentTasks(ctx, taskID, stage)
 }
 
+// ClearStalePendingPermissions expires unresolved permission_requests left on the
+// task's current-stage run once that run can no longer act on them (terminal, or
+// awaiting_user with a dead PID). Called on user-initiated retry/resume so the
+// lingering-pending gate does not block the respawn; the fresh run re-requests if needed.
+func (o *PipelineOrchestrator) ClearStalePendingPermissions(ctx context.Context, taskID string) {
+	task, err := o.opts.TaskRepo.GetByID(ctx, taskID)
+	if err != nil || task == nil {
+		return
+	}
+	run, err := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	if err != nil || run == nil {
+		return
+	}
+	pid := 0
+	if run.Pid != nil {
+		pid = *run.Pid
+	}
+	terminalOrZombie := run.Status == "failed" || run.Status == "done" ||
+		(run.Status == "awaiting_user" && !IsPidAlive(pid))
+	if !terminalOrZombie {
+		return
+	}
+	n, err := o.opts.PermissionRepo.ExpirePendingForStageRun(ctx, run.ID)
+	if err != nil {
+		slog.Error("ClearStalePendingPermissions", "taskID", taskID, "err", err)
+		return
+	}
+	if n > 0 {
+		slog.Info("orchestrator: expired stale pending permission_requests on user retry/resume",
+			"taskID", taskID, "runID", run.ID, "count", n)
+	}
+}
+
 // ResumeFromUser re-runs progressTask after a user action (permission grant, retry).
 func (o *PipelineOrchestrator) ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error) {
 	// Permission grants reach a running agent only via kill-and-restart:
@@ -614,6 +647,9 @@ func (o *PipelineOrchestrator) ResumeFromUser(ctx context.Context, taskID string
 	// paused agent (kill + mark failed) first so the resumed run spawns with the
 	// freshly granted permissions applied.
 	o.reapAwaitingUserAgent(ctx, taskID)
+	// After the reap the run is failed; expire any requests the dead agent left
+	// unresolved so the lingering-pending gate does not block the respawn.
+	o.ClearStalePendingPermissions(ctx, taskID)
 	return o.ProgressTask(ctx, taskID, nil)
 }
 
