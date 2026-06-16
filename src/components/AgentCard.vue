@@ -4,8 +4,8 @@ import { computed } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import MachineBadge from './MachineBadge.vue'
-import ProviderBadge from './ProviderBadge.vue'
 import PromptInput from './PromptInput.vue'
+import ProviderBadge from './ProviderBadge.vue'
 import AppBadge from './ui/AppBadge.vue'
 
 const props = defineProps<{ agent: Agent }>()
@@ -31,14 +31,15 @@ const healthChipClass = computed(() => {
 
 <template>
   <div
-    class="rounded-lg overflow-hidden cursor-pointer border border-line/50 bg-card transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
-    tabindex="0"
-    role="button"
-    :aria-label="`Open details for ${agent.projectName}`"
-    @click="$emit('select', agent)"
-    @keydown.enter="$emit('select', agent)"
-    @keydown.space.prevent="$emit('select', agent)"
+    class="relative rounded-lg overflow-hidden cursor-pointer border border-line/50 bg-card transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)]"
   >
+    <button
+      type="button"
+      class="absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+      :aria-label="`Open details for ${agent.projectName}`"
+      data-testid="agent-card-open"
+      @click="$emit('select', agent)"
+    />
     <div class="bg-raised px-3 py-2 flex justify-between items-center gap-2">
       <div class="flex items-center gap-2 min-w-0">
         <AppBadge :variant="agent.status" />
@@ -72,7 +73,7 @@ const healthChipClass = computed(() => {
       <span v-else class="text-fg-mute italic">No output yet</span>
       <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-slate-900 to-transparent pointer-events-none" />
     </div>
-    <div v-if="agent.lastBtw" class="border-t border-line px-3 py-2 flex flex-col gap-1 text-[12px] font-mono" @click.stop>
+    <div v-if="agent.lastBtw" class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1 text-[12px] font-mono" @click.stop>
       <div class="text-fg-mute border-l-2 border-yellow-400/60 pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
         {{ agent.lastBtw.message }}
       </div>
@@ -83,6 +84,6 @@ const healthChipClass = computed(() => {
         ...
       </div>
     </div>
-    <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" @click.stop @keydown.enter.stop @keydown.space.stop />
+    <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" class="relative z-10" @click.stop @keydown.enter.stop @keydown.space.stop />
   </div>
 </template>

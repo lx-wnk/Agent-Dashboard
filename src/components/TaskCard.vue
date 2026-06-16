@@ -2,8 +2,8 @@
 import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
 import { useIntervalFn } from '@vueuse/core'
 import { computed, ref } from 'vue'
-import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { shortId, useCopyId } from '../composables/useCopyId'
+import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
@@ -52,19 +52,20 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
 
 <template>
   <div
-    class="bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer transition-all flex flex-col gap-1.5"
+    class="relative bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer transition-all flex flex-col gap-1.5"
     :class="task.isBlocked ? 'opacity-60 hover:opacity-85' : 'hover:border-blue-500 dark:hover:border-blue-400 hover:-translate-y-px'"
-    tabindex="0"
-    role="button"
-    :aria-label="`Open task ${task.title}`"
-    @click="$emit('select', task)"
-    @keydown.enter="$emit('select', task)"
-    @keydown.space.prevent="$emit('select', task)"
   >
+    <button
+      type="button"
+      class="absolute inset-0 w-full h-full rounded-md focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+      :aria-label="`Open task ${task.title}`"
+      data-testid="task-card-open"
+      @click="$emit('select', task)"
+    />
     <div class="flex justify-between items-baseline gap-2">
       <span class="flex items-center gap-1 overflow-hidden">
         <span
-          class="task-drag-handle cursor-grab active:cursor-grabbing text-fg-mute hover:text-fg-soft select-none leading-none -ml-0.5"
+          class="task-drag-handle relative z-10 cursor-grab active:cursor-grabbing text-fg-mute hover:text-fg-soft select-none leading-none -ml-0.5"
           title="Drag to reorder"
           aria-hidden="true"
           @click.stop
@@ -72,7 +73,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
         <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
         <button
           type="button"
-          class="font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
+          class="relative z-10 font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
           :aria-label="`Copy task id ${task.id}`"
           :title="task.id"
           @click.stop.prevent="copyId()"
@@ -88,7 +89,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
     </div>
     <button
       v-if="task.currentStage === 'concept'"
-      class="self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+      class="relative z-10 self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
       @click.stop="emit('openChat', task)"
       @keydown.enter.stop
       @keydown.space.stop
@@ -99,7 +100,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
     <div v-if="project" class="flex items-center gap-1">
       <span
         class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-px rounded border border-transparent"
-        :style="project.color ? { backgroundColor: project.color + '22', color: project.color, borderColor: project.color + '55' } : {}"
+        :style="project.color ? { backgroundColor: `${project.color}22`, color: project.color, borderColor: `${project.color}55` } : {}"
         :class="!project.color ? 'bg-raised text-fg-mute border-line' : ''"
         :title="`Project: ${project.name}`"
       >
