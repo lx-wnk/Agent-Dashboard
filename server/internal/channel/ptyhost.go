@@ -62,18 +62,25 @@ func RunPTY(ctx context.Context, command []string) error {
 	// scanner sees). Mirrors the bridge discovery contract so the dashboard's
 	// existing /message delivery works — but writes to the pty, not an MCP log.
 	childPid := cmd.Process.Pid
-	httpToken, err := generateToken()
+	initialToken, err := generateToken()
 	if err != nil {
 		return fmt.Errorf("ptyhost: token: %w", err)
 	}
-	srv, port, err := startPtyHTTPServer(ptmx, httpToken)
+	token := newRotatingToken(initialToken)
+	srv, port, err := startPtyHTTPServer(ptmx, token)
 	if err != nil {
 		return fmt.Errorf("ptyhost: http: %w", err)
 	}
-	discPath, derr := writePtyDiscovery(childPid, port, httpToken)
+	discPath, derr := writePtyDiscovery(childPid, port, token.value())
 	if derr != nil {
 		slog.Warn("ptyhost: discovery write failed", "err", derr)
 	}
+
+	// Rotate the inject token periodically, re-emitting the 0600 discovery file.
+	go startTokenRotation(ctx, token, injectTokenRotateInterval(), func(newToken string) error {
+		_, werr := writePtyDiscovery(childPid, port, newToken)
+		return werr
+	})
 	defer func() {
 		if discPath != "" {
 			_ = os.Remove(discPath)
@@ -92,7 +99,7 @@ func RunPTY(ctx context.Context, command []string) error {
 
 // startPtyHTTPServer serves POST /message: the body's `message` is written to
 // the pty followed by a carriage return, i.e. injected as if typed + Enter.
-func startPtyHTTPServer(ptmx io.Writer, httpToken string) (*http.Server, int, error) {
+func startPtyHTTPServer(ptmx io.Writer, token *rotatingToken) (*http.Server, int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, 0, err
@@ -104,7 +111,7 @@ func startPtyHTTPServer(ptmx io.Writer, httpToken string) (*http.Server, int, er
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
 	})
 	mux.HandleFunc("POST /message", func(w http.ResponseWriter, r *http.Request) {
-		if !checkBearer(r, httpToken) {
+		if !token.authorize(r) {
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
