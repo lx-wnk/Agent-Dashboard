@@ -152,4 +152,3 @@ func (r *entUserRepo) Delete(ctx context.Context, id string) error {
 	}
 	return tx.Commit()
 }
-

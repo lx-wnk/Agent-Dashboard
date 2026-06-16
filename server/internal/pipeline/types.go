@@ -179,7 +179,7 @@ type OrchestratorOptions struct {
 	MCPUrl   string
 
 	// WorktreeRoot is the base directory for auto-created git worktrees.
-	// Defaults to ~/dashboard-worktrees when empty.
+	// Defaults to ~/<worktree.DefaultRootDirName> when empty (see worktree.DefaultRoot).
 	// Set via DASHBOARD_WORKTREE_ROOT.
 	WorktreeRoot string
 

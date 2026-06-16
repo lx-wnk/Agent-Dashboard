@@ -4,11 +4,11 @@
 
 A real-time monitoring dashboard for locally running Claude Code agents. Reads Claude Code's internal JSONL session logs and process metadata to display token usage, costs, tool activity, tasks, and subagents across all running agent processes.
 
-**Stack:** Go 1.26 backend (chi, ent ORM, modernc/sqlite, Wire DI) + Vue 3 TypeScript SPA (Vite, pnpm). Go workspace with `./sdk` and `./server` modules. Build via `task` (Taskfile.yml), hot-reload via `air`.
+**Stack:** Go 1.26 backend (chi, ent ORM, modernc/sqlite, manual DI in `cmd/serve/di.go`) + Vue 3 TypeScript SPA (Vite, pnpm). Go workspace with `./sdk` and `./server` modules. Build via `task` (Taskfile.yml), hot-reload via `air`.
 
 ## Backend (`server/`)
 
-Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + Wire DI).
+Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + manual DI in `cmd/serve/di.go`).
 
 ### Core packages (`server/internal/`)
 
@@ -31,6 +31,7 @@ Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + Wire DI).
 | `api/history/` | Historical session cost import SSE |
 | `pipeline/` | State machine, orchestrator, stage handlers, completion detector, agent spawner |
 | `llmadapter/` | Leaf: pluggable-spawner transport (`LLMSpawner`/`StreamingLLMSpawner`, `NewLLMSpawnerFromSpawner`, `AvailableAdapters`, Ollama/OpenAI/custom adapters). Deps: `db/ent` only. Extracted from `pipeline/` per ADR-0005 |
+| `worktree/` | Leaf: git-worktree primitives (`Runner` with `Output`/`Combined` + 15s timeout, `DefaultRoot`, `PathFor`, `CreateBranch`, `DefaultRootDirName`/`BranchPrefix`). Deps: stdlib only. Consumed by `pipeline/` (lifecycle), `services/` (inspection), `config/` (default root) per ADR-0006 |
 | `db/` | ent ORM schemas + repos (tasks, stage_runs, users, api_keys, presets, remotes, refine, cost_history, web_push subscriptions) |
 | `mcp/` | Stateless StreamableHTTP MCP server — 19 tools, 4 scope tiers |
 | `auth/` | JWT helpers, GitHub OAuth client |
@@ -93,4 +94,4 @@ Vue 3 + TypeScript SPA (unchanged structure from TypeScript-server era).
 
 Browser connects to `/api/agents/stream` (SSE) with polling fallback → Go backend scans processes (`ps`/`lsof`) → matches PIDs to `~/.claude/projects/{encoded_path}/{sessionId}.jsonl` → tail-reads JSONL + reads `~/.claude/usage-data/session-meta/{sessionId}.json` → merges, calculates cost/status → broadcasts `Agent[]` to SSE clients.
 
-**Agent status thresholds:** active < 30s, waiting < 5min, idle > 5min (since last activity).
+**Agent status thresholds:** `activeThreshold` (30s) and `waitingThreshold` (5min) in `server/internal/merger/merger.go`; idle is the default case (no const) for activity older than `waitingThreshold`.

@@ -5,5 +5,12 @@
     "status": "accepted",
     "date": "2026-04-12",
     "path": "docs/architecture/adr/0001-sqlite-for-task-pipeline.md"
+  },
+  {
+    "id": "ADR-0006",
+    "title": "Extract worktree Leaf Package",
+    "status": "accepted",
+    "date": "2026-06-12",
+    "path": "docs/architecture/adr/0006-worktree-leaf.md"
   }
 ]

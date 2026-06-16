@@ -90,6 +90,10 @@ tasks:
       - cd sdk && govulncheck ./...
       - cd server && govulncheck ./...
 
+  licenses:
+    desc: Generate THIRD_PARTY_LICENSES.md from Go and frontend dependencies
+    cmd: ./scripts/gen-licenses.sh
+
   audit:frontend:
     desc: Run pnpm audit on frontend dependencies (fails on high or critical vulnerabilities)
     cmd: pnpm audit --audit-level=high

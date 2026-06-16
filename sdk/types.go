@@ -211,12 +211,12 @@ type WorktreeStatusDTO struct {
 
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
-	PID                       int            `json:"pid"`
-	SessionID                 string         `json:"sessionId"`
-	Provider                  Provider       `json:"provider"`
-	ProjectPath               string         `json:"projectPath"`
-	ProjectName               string         `json:"projectName"`
-	CWD                       string         `json:"cwd"`
+	PID         int      `json:"pid"`
+	SessionID   string   `json:"sessionId"`
+	Provider    Provider `json:"provider"`
+	ProjectPath string   `json:"projectPath"`
+	ProjectName string   `json:"projectName"`
+	CWD         string   `json:"cwd"`
 	// ClaudeConfigDir is the value of CLAUDE_CONFIG_DIR detected in the running
 	// session's process env (empty when the session uses the default ~/.claude).
 	// Lets the dashboard resolve which config root a session's slash commands /
@@ -245,15 +245,15 @@ type Agent struct {
 	// running interactive session as real keyboard input — either via the pty
 	// broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending
 	// resumes the session as a new one (MCP log delivery does not drive it).
-	LiveInjectable            bool           `json:"liveInjectable,omitempty"`
-	LastOutput                *string        `json:"lastOutput"`
-	ConvergenceAlert          bool           `json:"convergenceAlert"`
-	ConvergenceToolName       *string        `json:"convergenceToolName"`
-	ErrorState                *ErrorState    `json:"errorState"`
-	PipelineTaskID            string         `json:"pipelineTaskId,omitempty"`
-	PipelineTaskTitle         string         `json:"pipelineTaskTitle,omitempty"`
-	Machine                   string         `json:"machine,omitempty"`
-	LastBtw                   *BtwMessage    `json:"lastBtw"`
+	LiveInjectable      bool        `json:"liveInjectable,omitempty"`
+	LastOutput          *string     `json:"lastOutput"`
+	ConvergenceAlert    bool        `json:"convergenceAlert"`
+	ConvergenceToolName *string     `json:"convergenceToolName"`
+	ErrorState          *ErrorState `json:"errorState"`
+	PipelineTaskID      string      `json:"pipelineTaskId,omitempty"`
+	PipelineTaskTitle   string      `json:"pipelineTaskTitle,omitempty"`
+	Machine             string      `json:"machine,omitempty"`
+	LastBtw             *BtwMessage `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`
