@@ -9,6 +9,7 @@ import SidebarFooter from './SidebarFooter.vue'
 
 const props = defineProps<{
   agentCount: number
+  attentionCount: number
   taskCount: number
   totalCostLabel: string
   totalTokensLabel: string
@@ -32,10 +33,14 @@ const grouped = computed(() =>
 
 function badgeFor(view: ActiveView): number | null {
   if (view === 'dashboard')
-    return props.agentCount
+    return props.attentionCount > 0 ? props.attentionCount : props.agentCount
   if (view === 'pipeline')
     return props.taskCount
   return null
+}
+
+function badgeDanger(view: ActiveView): boolean {
+  return view === 'dashboard' && props.attentionCount > 0
 }
 </script>
 
@@ -82,7 +87,12 @@ function badgeFor(view: ActiveView): number | null {
           @select="activeView = item.view"
         >
           <template v-if="badgeFor(item.view) !== null" #badge>
-            <span class="text-[9px] bg-raised text-fg-mute rounded-full px-1.5 py-0.5">{{ badgeFor(item.view) }}</span>
+            <span
+              class="text-[9px] rounded-full px-1.5 py-0.5"
+              :class="badgeDanger(item.view)
+                ? 'bg-red-500 text-white font-bold'
+                : 'bg-raised text-fg-mute'"
+            >{{ badgeFor(item.view) }}</span>
           </template>
         </NavItem>
       </div>
