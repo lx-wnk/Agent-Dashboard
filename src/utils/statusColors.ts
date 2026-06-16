@@ -23,15 +23,15 @@ export function statusLabel(status: string): string {
 export function stageChipClass(stage: PipelineStage | string): string {
   switch (stage) {
     case 'on_hold':
-      return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/60'
+      return 'bg-warning-soft text-warning-text border-warning-line'
     case 'implementation':
-      return 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700'
+      return 'bg-info-soft text-info-text border-info-line'
     case 'done':
-      return 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 border-green-300 dark:border-green-700'
+      return 'bg-success-soft text-success-text border-success-line'
     case 'cancelled':
-      return 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border-red-300 dark:border-red-700'
+      return 'bg-danger-soft text-danger-text border-danger-line'
     default:
-      return 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+      return 'bg-neutral-soft text-neutral-text border-neutral-line'
   }
 }
 
@@ -43,16 +43,16 @@ export function stageChipClass(stage: PipelineStage | string): string {
 export function runStatusChipClass(status: StageRunStatus | string): string {
   switch (status) {
     case 'running':
-      return 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-600/50'
+      return 'bg-info-soft text-info-text border-info-line'
     case 'done':
-      return 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 border-green-200 dark:border-green-700/50'
+      return 'bg-success-soft text-success-text border-success-line'
     case 'failed':
-      return 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border-red-200 dark:border-red-700/50'
+      return 'bg-danger-soft text-danger-text border-danger-line'
     case 'on_hold':
     case 'awaiting_user':
-      return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-700/50'
+      return 'bg-warning-soft text-warning-text border-warning-line'
     default:
-      return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+      return 'bg-neutral-soft text-neutral-text border-neutral-line'
   }
 }
 
@@ -63,16 +63,16 @@ export function runStatusChipClass(status: StageRunStatus | string): string {
 export function agentSessionStatusClass(status: string): string {
   switch (status) {
     case 'active':
-      return 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400'
+      return 'bg-success-soft text-success-text'
     case 'waiting':
-      return 'bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-400'
+      return 'bg-warning-soft text-warning-text'
     case 'idle':
-      return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+      return 'bg-neutral-soft text-neutral-text'
     case 'completed':
-      return 'bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-400'
+      return 'bg-success-soft text-success-text'
     case 'error':
-      return 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400'
+      return 'bg-danger-soft text-danger-text'
     default:
-      return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+      return 'bg-neutral-soft text-neutral-text'
   }
 }
