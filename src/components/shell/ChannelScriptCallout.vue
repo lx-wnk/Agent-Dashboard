@@ -24,7 +24,7 @@ async function copy() {
     <button
       type="button"
       data-testid="channel-script-path"
-      class="font-mono text-[11px] text-fg-mute bg-raised px-2 py-0.5 rounded cursor-pointer select-all transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      class="font-mono text-[11px] text-fg-mute bg-raised px-2 py-0.5 rounded cursor-pointer select-all transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
       :title="copied ? 'Copied!' : 'Click to copy'"
       :aria-label="`Copy channel command ${scriptPath}`"
       @click="copy"

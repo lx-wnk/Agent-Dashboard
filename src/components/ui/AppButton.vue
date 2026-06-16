@@ -20,7 +20,7 @@ withDefaults(defineProps<{
   <button
     :type="type"
     :disabled="disabled"
-    class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all font-sans disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-accent"
+    class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all font-sans disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-[3px] focus-visible:ring-offset-2 focus-visible:ring-accent"
     :class="[
       size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
       variant !== 'outline' && 'border-0',

@@ -84,7 +84,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
         {{ agent.lastOutput }}
       </template>
       <span v-else class="text-fg-mute italic">No output yet</span>
-      <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-slate-900 to-transparent pointer-events-none" />
+      <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
     </div>
     <div v-if="agent.lastBtw" class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1 text-[12px] font-mono" @click.stop>
       <div class="text-fg-mute border-l-2 border-yellow-400/60 pl-2 whitespace-nowrap overflow-hidden text-ellipsis">

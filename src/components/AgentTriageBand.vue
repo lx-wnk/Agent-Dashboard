@@ -200,7 +200,7 @@ watch(() => props.focusedSessionId, (id) => {
           </span>
           <button
             type="button"
-            class="ml-auto text-[11px] text-fg-mute underline-offset-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            class="ml-auto text-[11px] text-fg-mute underline-offset-2 hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
             :aria-expanded="approveAllOpen"
             @click="approveAllOpen = !approveAllOpen"
           >

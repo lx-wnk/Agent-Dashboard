@@ -58,7 +58,7 @@ function badgeDanger(view: ActiveView): boolean {
       <button
         type="button"
         data-testid="sidebar-pin"
-        class="ml-auto text-fg-faint hover:text-fg text-[14px] rounded px-1 min-h-[28px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        class="ml-auto text-fg-faint hover:text-fg text-[14px] rounded px-1 min-h-[28px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         :aria-expanded="pinned"
         :aria-label="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
         @click="togglePinned"
