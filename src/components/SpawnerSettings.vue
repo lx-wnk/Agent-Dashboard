@@ -467,7 +467,7 @@ async function handleSetDefault(id: string) {
               id="sp-name"
               v-model="form.name"
               type="text"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
               placeholder="My Spawner"
             >
           </div>
@@ -478,7 +478,7 @@ async function handleSetDefault(id: string) {
               v-model="form.slug"
               type="text"
               :readonly="editingBuiltIn"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500 read-only:opacity-60 read-only:cursor-not-allowed"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent read-only:opacity-60 read-only:cursor-not-allowed"
               placeholder="my-spawner"
             >
             <p v-if="editingBuiltIn" class="text-[10px] text-fg-mute mt-0.5">
@@ -490,7 +490,7 @@ async function handleSetDefault(id: string) {
             <select
               id="sp-adapter-type"
               v-model="form.adapterType"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
               @change="onAdapterTypeChange"
             >
               <option v-for="meta in catalog" :key="meta.name" :value="meta.name">
@@ -507,7 +507,7 @@ async function handleSetDefault(id: string) {
               id="sp-desc"
               v-model="form.description"
               type="text"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
               placeholder="Short description"
             >
           </div>
@@ -522,7 +522,7 @@ async function handleSetDefault(id: string) {
                 id="sp-command"
                 v-model="form.command"
                 type="text"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
                 :placeholder="form.adapterType === 'claude' ? 'claude' : '/usr/local/bin/my-llm'"
               >
             </div>
@@ -532,7 +532,7 @@ async function handleSetDefault(id: string) {
                 id="sp-args"
                 v-model="form.argsRaw"
                 rows="3"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500 resize-none"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent resize-none"
                 placeholder="--no-color&#10;--dangerously-skip-permissions"
               />
             </div>
@@ -542,7 +542,7 @@ async function handleSetDefault(id: string) {
                 id="sp-model"
                 v-model="form.modelOverride"
                 type="text"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
                 placeholder="claude-opus-4-5"
               >
             </div>
@@ -564,7 +564,7 @@ async function handleSetDefault(id: string) {
                 :id="`sp-cfg-${k.key}`"
                 v-model="form.adapterConfig[k.key]"
                 type="text"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
                 :placeholder="k.note || ''"
                 :required="k.required"
               >
@@ -591,7 +591,7 @@ async function handleSetDefault(id: string) {
               <input
                 v-model="row.key"
                 type="text"
-                class="flex-1 bg-card border border-line rounded px-2 py-1 text-xs font-mono text-fg focus:outline-none focus:border-blue-500"
+                class="flex-1 bg-card border border-line rounded px-2 py-1 text-xs font-mono text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
                 placeholder="KEY"
                 :aria-label="`Environment variable name ${row._k}`"
               >
@@ -599,7 +599,7 @@ async function handleSetDefault(id: string) {
               <input
                 v-model="row.value"
                 type="text"
-                class="flex-[2] bg-card border border-line rounded px-2 py-1 text-xs font-mono text-fg focus:outline-none focus:border-blue-500"
+                class="flex-[2] bg-card border border-line rounded px-2 py-1 text-xs font-mono text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
                 placeholder="value"
                 :aria-label="`Environment variable value ${row._k}`"
               >

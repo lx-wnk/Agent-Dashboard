@@ -137,7 +137,7 @@ function formatTimestamp(unixSeconds: number): string {
         v-model="searchQuery"
         type="text"
         :placeholder="`Filter ${activeTab}...`"
-        class="bg-raised border border-line rounded-md px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[260px] focus:outline-none focus:border-blue-500"
+        class="bg-raised border border-line rounded-md px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[260px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
       >
       <button
         type="button"

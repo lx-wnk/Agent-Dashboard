@@ -227,7 +227,7 @@ watch(
               :id="`task-modal-project-${task.id}`"
               :value="task.projectId ?? ''"
               :disabled="isAssigningProject"
-              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
               @change="onProjectChange"
             >
               <option value="">
@@ -254,7 +254,7 @@ watch(
               :id="`task-modal-spawner-${task.id}`"
               :value="task.spawnerId ?? ''"
               :disabled="isAssigningSpawner"
-              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
               @change="onSpawnerChange"
             >
               <option value="">

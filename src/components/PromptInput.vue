@@ -194,7 +194,7 @@ defineExpose({ focus })
       </button>
     </div>
     <div
-      class="border-t border-line flex items-end"
+      class="border-t border-line flex items-end focus-within:ring-[3px] focus-within:ring-accent"
       :class="variant === 'full' ? 'px-4 py-2.5 gap-2 flex-shrink-0' : 'px-3 py-2 gap-1.5 items-center'"
     >
       <span
@@ -212,7 +212,7 @@ defineExpose({ focus })
         :aria-expanded="showSuggestions"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
-        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono outline-none placeholder:text-fg-faint disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
+        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono focus-visible:outline-none placeholder:text-fg-faint disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
         @input="autoResize"
       />
@@ -226,7 +226,7 @@ defineExpose({ focus })
         :aria-expanded="showSuggestions"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
-        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono outline-none placeholder:text-fg-faint disabled:opacity-50"
+        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono focus-visible:outline-none placeholder:text-fg-faint disabled:opacity-50"
         @keydown="onKeydown"
       >
       <button

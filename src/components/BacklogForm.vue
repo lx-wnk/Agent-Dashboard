@@ -34,7 +34,7 @@ const folderSuggestions = ref<ProjectFolder[]>([])
 const isSubmitting = ref(false)
 const errorMsg = ref('')
 
-const fieldClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500'
+const fieldClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
 
 const sortedProjects = computed(() =>
   projects.value.slice().sort((a, b) => a.name.localeCompare(b.name)),

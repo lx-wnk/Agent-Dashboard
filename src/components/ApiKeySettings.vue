@@ -891,7 +891,7 @@ async function startImport() {
             <input
               id="key-name"
               v-model="newKeyName"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
               type="text"
               required
               placeholder="e.g. CI pipeline key"
@@ -903,7 +903,7 @@ async function startImport() {
             <select
               id="key-group"
               v-model="newKeyGroup"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             >
               <option value="viewer">
                 Viewer — tasks:read

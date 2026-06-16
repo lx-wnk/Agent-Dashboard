@@ -80,7 +80,7 @@ async function remove(id: string) {
         type="url"
         placeholder="http://192.168.1.5:13120"
         required
-        class="input-field text-sm"
+        class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
       >
       <label for="remote-name" class="sr-only">Name</label>
       <input
@@ -88,7 +88,7 @@ async function remove(id: string) {
         v-model="form.name"
         type="text"
         placeholder="Name (e.g. MacBook)"
-        class="input-field text-sm"
+        class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
       >
       <label for="remote-bearer" class="sr-only">Bearer Token</label>
       <input
@@ -96,7 +96,7 @@ async function remove(id: string) {
         v-model="form.bearerKey"
         type="password"
         placeholder="DASHBOARD_API_TOKEN (optional)"
-        class="input-field text-sm"
+        class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
       >
       <p v-if="error" class="text-xs text-red-400">
         {{ error }}

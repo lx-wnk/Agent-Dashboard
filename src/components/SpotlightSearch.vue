@@ -150,7 +150,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       <div aria-live="polite" class="sr-only">
         {{ flatResults.length }} results
       </div>
-      <div class="flex items-center gap-2 px-4 py-3 border-b border-line">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-line focus-within:ring-[3px] focus-within:ring-accent">
         <span class="text-slate-400 text-sm" aria-hidden="true">⌘K</span>
         <input
           ref="inputRef"
@@ -162,7 +162,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           aria-autocomplete="list"
           :aria-activedescendant="selectedIdx >= 0 && flatResults.length > 0 ? `spotlight-opt-${selectedIdx}` : undefined"
           placeholder="Search tasks and agents…"
-          class="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-slate-400"
+          class="flex-1 bg-transparent text-sm text-fg focus-visible:outline-none placeholder:text-slate-400"
         >
         <span v-if="loading" class="text-xs text-slate-400">Searching…</span>
       </div>

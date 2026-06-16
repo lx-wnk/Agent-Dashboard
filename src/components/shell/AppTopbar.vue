@@ -27,7 +27,7 @@ const searchPlaceholder = computed(() =>
       type="text"
       :aria-label="searchPlaceholder"
       :placeholder="searchPlaceholder"
-      class="ml-auto bg-raised border border-line rounded-lg px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[200px] focus:outline-none focus:border-accent focus:w-[260px] transition-[width,border-color] duration-200"
+      class="ml-auto bg-raised border border-line rounded-lg px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[200px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent focus-visible:w-[260px] transition-[width,border-color] duration-200"
       @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
     >
     <slot name="cta" />
