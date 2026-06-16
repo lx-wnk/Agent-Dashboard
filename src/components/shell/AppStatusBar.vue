@@ -29,7 +29,7 @@ function formatDelta(d: number | null): string {
     <button
       type="button"
       data-testid="statusbar-tab"
-      class="text-[10px] text-fg-faint hover:text-fg px-2 py-0.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      class="text-[10px] text-fg-faint hover:text-fg px-2 py-0.5 rounded focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
       aria-label="Expand status bar"
       @click="toggleCollapsed"
     >
@@ -55,7 +55,7 @@ function formatDelta(d: number | null): string {
       <button
         type="button"
         data-testid="seg-system"
-        class="flex items-center gap-3 hover:text-fg rounded px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
+        class="flex items-center gap-3 hover:text-fg rounded px-1 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
         :aria-expanded="openSegment === 'system'"
         aria-label="Toggle system metrics detail"
         @click="toggleSegment('system')"
@@ -71,7 +71,7 @@ function formatDelta(d: number | null): string {
       <button
         type="button"
         data-testid="seg-cost"
-        class="hover:text-fg rounded px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
+        class="hover:text-fg rounded px-1 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
         :aria-expanded="openSegment === 'cost'"
         aria-label="Toggle cost trend detail"
         @click="toggleSegment('cost')"
@@ -83,7 +83,7 @@ function formatDelta(d: number | null): string {
       <button
         type="button"
         data-testid="statusbar-collapse"
-        class="ml-auto text-fg-faint hover:text-fg px-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
+        class="ml-auto text-fg-faint hover:text-fg px-1 rounded focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
         aria-label="Collapse status bar"
         @click="toggleCollapsed"
       >

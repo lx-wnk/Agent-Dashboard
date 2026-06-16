@@ -17,7 +17,7 @@ defineEmits<{
       <button
         type="button"
         data-testid="layout-cards"
-        class="px-2.5 py-1 text-xs rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-raised"
+        class="px-2.5 py-1 text-xs rounded-md transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-raised"
         :class="layout === 'cards' ? 'bg-card text-fg shadow-sm' : 'text-fg-mute hover:text-fg'"
         :aria-pressed="layout === 'cards'"
         @click="$emit('update:layout', 'cards')"
@@ -27,7 +27,7 @@ defineEmits<{
       <button
         type="button"
         data-testid="layout-list"
-        class="px-2.5 py-1 text-xs rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-raised"
+        class="px-2.5 py-1 text-xs rounded-md transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-raised"
         :class="layout === 'list' ? 'bg-card text-fg shadow-sm' : 'text-fg-mute hover:text-fg'"
         :aria-pressed="layout === 'list'"
         @click="$emit('update:layout', 'list')"
@@ -38,7 +38,7 @@ defineEmits<{
     <button
       type="button"
       data-testid="claude-only"
-      class="ml-2 border border-line px-2.5 py-1 text-xs rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      class="ml-2 border border-line px-2.5 py-1 text-xs rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
       :class="hideNonClaude ? 'bg-accent text-white border-transparent' : 'text-fg-mute hover:text-fg'"
       :aria-pressed="hideNonClaude"
       @click="$emit('update:hideNonClaude', !hideNonClaude)"
