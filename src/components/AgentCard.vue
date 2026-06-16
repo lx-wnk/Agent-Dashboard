@@ -2,7 +2,8 @@
 import type { Agent } from '../types'
 import { computed } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
-import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import { useNow } from '../composables/useNow'
+import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
 import ProviderBadge from './ProviderBadge.vue'
@@ -12,6 +13,7 @@ const props = defineProps<{ agent: Agent }>()
 defineEmits<{ select: [agent: Agent] }>()
 
 const { getIdentity } = useAgentIdentity()
+const { nowMs } = useNow()
 
 const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 
@@ -27,6 +29,11 @@ const healthChipClass = computed(() => {
     return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
   return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
 })
+
+const secSince = computed(() => secondsSince(props.agent.lastActivity, nowMs.value))
+const relActivity = computed(() => formatRelativeActivity(secSince.value))
+const stalled = computed(() => isStalled(props.agent.status, secSince.value))
+const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.agent.uptime))
 </script>
 
 <template>
@@ -43,6 +50,11 @@ const healthChipClass = computed(() => {
     <div class="bg-raised px-3 py-2 flex justify-between items-center gap-2">
       <div class="flex items-center gap-2 min-w-0">
         <AppBadge :variant="agent.status" />
+        <span
+          v-if="stalled"
+          class="text-[10px] font-medium px-1 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 whitespace-nowrap"
+          title="Agent is active but has produced no output for 3+ minutes"
+        >stalled</span>
         <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
         <span class="font-semibold text-[13px] text-fg whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
         <ProviderBadge :provider="agent.provider" />
@@ -58,8 +70,10 @@ const healthChipClass = computed(() => {
         >{{ agent.healthScore }}</span>
         <MachineBadge v-if="agent.machine" :machine="agent.machine" />
       </div>
-      <div class="flex-shrink-0 flex flex-col items-end">
+      <div class="flex-shrink-0 flex flex-col items-end gap-0.5">
         <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
+        <span class="text-[10px] font-mono text-fg-mute whitespace-nowrap">{{ relActivity }}</span>
+        <span v-if="burnRate !== '—'" class="text-[10px] font-mono text-fg-mute whitespace-nowrap">{{ burnRate }}</span>
         <div v-if="hasCacheCosts" class="flex gap-2 text-[10px] text-fg-mute">
           <span title="Cache write cost">W {{ formatCost(agent.cacheCreationCostEstimate) }}</span>
           <span title="Cache read cost">R {{ formatCost(agent.cacheReadCostEstimate) }}</span>
