@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
 func (h *Handler) getPipelineConfig(w http.ResponseWriter, r *http.Request) error {
@@ -16,20 +17,23 @@ func (h *Handler) getPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 	stageTimeout := int(h.cfgRepo.GetNumber(ctx, "stageTimeoutSeconds", db.DefaultStageTimeoutSeconds))
 	maxAutoRetries := int(h.cfgRepo.GetNumber(ctx, "maxAutoRetries", 3))
 	retryBackoffSeconds := int(h.cfgRepo.GetNumber(ctx, "retryBackoffSeconds", 60))
-	return jsonReply(w, http.StatusOK, map[string]int{
+	extraSafeBashCommands := h.cfgRepo.GetString(ctx, "extraSafeBashCommands", "")
+	return jsonReply(w, http.StatusOK, map[string]any{
 		"maxParallelOrchestrators": maxParallel,
 		"stageTimeoutSeconds":      stageTimeout,
 		"maxAutoRetries":           maxAutoRetries,
 		"retryBackoffSeconds":      retryBackoffSeconds,
+		"extraSafeBashCommands":    extraSafeBashCommands,
 	})
 }
 
 func (h *Handler) putPipelineConfig(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
-		MaxParallelOrchestrators *int `json:"maxParallelOrchestrators"`
-		StageTimeoutSeconds      *int `json:"stageTimeoutSeconds"`
-		MaxAutoRetries           *int `json:"maxAutoRetries"`
-		RetryBackoffSeconds      *int `json:"retryBackoffSeconds"`
+		MaxParallelOrchestrators *int    `json:"maxParallelOrchestrators"`
+		StageTimeoutSeconds      *int    `json:"stageTimeoutSeconds"`
+		MaxAutoRetries           *int    `json:"maxAutoRetries"`
+		RetryBackoffSeconds      *int    `json:"retryBackoffSeconds"`
+		ExtraSafeBashCommands    *string `json:"extraSafeBashCommands"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return fmt.Errorf("pipeline_config.put: decode: %w", err)
@@ -67,7 +71,14 @@ func (h *Handler) putPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 			return fmt.Errorf("pipeline_config.put: %w", err)
 		}
 	}
+	if body.ExtraSafeBashCommands != nil {
+		if err := h.cfgRepo.Set(ctx, "extraSafeBashCommands", *body.ExtraSafeBashCommands); err != nil {
+			return fmt.Errorf("pipeline_config.put: %w", err)
+		}
+	}
 	h.orchestrator.InvalidateConfigCache()
+	raw := h.cfgRepo.GetString(ctx, "extraSafeBashCommands", "")
+	permissions.SetExtraSafeBashCommands(permissions.ParseExtraSafeBashCommands(raw))
 	return h.getPipelineConfig(w, r)
 }
 

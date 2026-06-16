@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -337,14 +338,32 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	resolvedCount := 0
 	for _, id := range idsToResolve {
 		if err := h.permRepo.ResolvePermissionRequest(r.Context(), id, outcome); err != nil {
 			resolveErrors = append(resolveErrors, err.Error())
+			continue
 		}
+		resolvedCount++
 	}
 
-	// If accepting, grant matching task permissions and resume the task.
+	// When granted, create task_permissions from the resolved requests so the
+	// respawned agent's allow-list includes the newly approved tools, then resume.
 	if outcome == "granted" && len(idsToResolve) > 0 {
+		resolveSet := make(map[string]bool, len(idsToResolve))
+		for _, id := range idsToResolve {
+			resolveSet[id] = true
+		}
+		var entries []repo.GrantEntry
+		for _, req := range pending {
+			if !resolveSet[req.ID] {
+				continue
+			}
+			entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern})
+		}
+		if _, errs := h.grantValidatedEntries(r.Context(), body.TaskID, entries); len(errs) > 0 {
+			resolveErrors = append(resolveErrors, errs...)
+		}
 		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID); err != nil {
 			slog.Warn("bulk_resolve: ResumeFromUser failed", "taskID", body.TaskID, "err", err)
 		}
@@ -352,7 +371,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 
 	h.broadcastEnrichedUpdate(r.Context(), body.TaskID)
 	return jsonReply(w, http.StatusOK, map[string]any{
-		"resolved": len(idsToResolve),
+		"resolved": resolvedCount,
 		"errors":   resolveErrors,
 	})
 }
@@ -376,6 +395,40 @@ func isCovered(tool string, pattern *string, perms []*ent.TaskPermission) bool {
 		}
 	}
 	return false
+}
+
+// grantValidatedEntries validates each entry with ValidateGrantEntry and persists the
+// safe ones via BulkGrantPermissions. Invalid entries are collected and returned as
+// error strings rather than aborting the call, so one bad pattern doesn't block the
+// rest.
+func (h *Handler) grantValidatedEntries(ctx context.Context, taskID string, entries []repo.GrantEntry) ([]*ent.TaskPermission, []string) {
+	var safe []repo.GrantEntry
+	var errs []string
+	for _, e := range entries {
+		pattern := ""
+		if e.Pattern != nil {
+			pattern = *e.Pattern
+		}
+		if err := permissions.ValidateGrantEntry(e.Tool, pattern); err != nil {
+			errs = append(errs, fmt.Sprintf("grant skipped (%s %s): %v", e.Tool, pattern, err))
+			continue
+		}
+		safe = append(safe, e)
+	}
+	if len(safe) == 0 {
+		return nil, errs
+	}
+	granted, err := h.permRepo.BulkGrantPermissions(ctx, taskID, safe)
+	if err != nil {
+		errs = append(errs, fmt.Sprintf("BulkGrantPermissions: %v", err))
+		return nil, errs
+	}
+	tools := make([]string, 0, len(granted))
+	for _, p := range granted {
+		tools = append(tools, p.Tool)
+	}
+	slog.Info("permission grant from resolved request", "taskID", taskID, "tools", tools)
+	return granted, errs
 }
 
 // resolveTemplate expands a named permission template to GrantEntry slice.

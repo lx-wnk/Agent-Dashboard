@@ -110,8 +110,9 @@ func (n *noopOrchestrator) ProgressTask(_ context.Context, _ string, _ *pipeline
 func (n *noopOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
-func (n *noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string) {}
-func (n *noopOrchestrator) InvalidateConfigCache()                              {}
+func (n *noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
+func (n *noopOrchestrator) InvalidateConfigCache()                                   {}
+func (n *noopOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}
 
 func TestListTasks_Empty(t *testing.T) {
 	_, r := newTestHandler(t)
@@ -171,7 +172,7 @@ func TestGetPipelineConfig_ReturnsRetryKeys(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	var result map[string]int
+	var result map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -181,11 +182,11 @@ func TestGetPipelineConfig_ReturnsRetryKeys(t *testing.T) {
 	if _, ok := result["retryBackoffSeconds"]; !ok {
 		t.Error("expected retryBackoffSeconds key in pipeline config response")
 	}
-	if result["maxAutoRetries"] != 3 {
-		t.Errorf("expected default maxAutoRetries=3, got %d", result["maxAutoRetries"])
+	if result["maxAutoRetries"] != float64(3) {
+		t.Errorf("expected default maxAutoRetries=3, got %v", result["maxAutoRetries"])
 	}
-	if result["retryBackoffSeconds"] != 60 {
-		t.Errorf("expected default retryBackoffSeconds=60, got %d", result["retryBackoffSeconds"])
+	if result["retryBackoffSeconds"] != float64(60) {
+		t.Errorf("expected default retryBackoffSeconds=60, got %v", result["retryBackoffSeconds"])
 	}
 }
 
@@ -206,15 +207,15 @@ func TestPutPipelineConfig_RetryKeys(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	var result map[string]int
+	var result map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if result["maxAutoRetries"] != 5 {
-		t.Errorf("expected maxAutoRetries=5, got %d", result["maxAutoRetries"])
+	if result["maxAutoRetries"] != float64(5) {
+		t.Errorf("expected maxAutoRetries=5, got %v", result["maxAutoRetries"])
 	}
-	if result["retryBackoffSeconds"] != 120 {
-		t.Errorf("expected retryBackoffSeconds=120, got %d", result["retryBackoffSeconds"])
+	if result["retryBackoffSeconds"] != float64(120) {
+		t.Errorf("expected retryBackoffSeconds=120, got %v", result["retryBackoffSeconds"])
 	}
 }
 

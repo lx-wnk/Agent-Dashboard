@@ -31,8 +31,9 @@ func (c *captureOrchestrator) ProgressTask(_ context.Context, taskID string, opt
 func (c *captureOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
-func (c *captureOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string) {}
-func (c *captureOrchestrator) InvalidateConfigCache()                              {}
+func (c *captureOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)          {}
+func (c *captureOrchestrator) InvalidateConfigCache()                                       {}
+func (c *captureOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string)    {}
 
 func (c *captureOrchestrator) resumeID() string {
 	if c.opts == nil {
