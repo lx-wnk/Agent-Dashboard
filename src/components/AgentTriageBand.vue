@@ -15,6 +15,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [agent: Agent]
   toast: [message: string]
+  remembered: []
 }>()
 
 const { getIdentity } = useAgentIdentity()
@@ -88,6 +89,10 @@ const resolvableAgents = computed(() =>
 const approveAllOpen = ref(false)
 // Selected agent sessionIds for the approve-all action; default all
 const selectedSessionIds = ref<Set<string>>(new Set())
+// Per-agent "don't ask again" toggle — keyed by sessionId
+const rememberPerAgent = ref<Record<string, boolean>>({})
+// Approve-all "don't ask again" toggle
+const rememberAll = ref(false)
 
 // Resolvable agents seen on a previous tick — lets us default brand-new agents
 // to selected while preserving a user's explicit deselection across SSE updates.
@@ -122,19 +127,33 @@ function toggleAgentSelection(sessionId: string) {
   selectedSessionIds.value = next
 }
 
+const distinctProjectCount = computed(() => {
+  const selected = resolvableAgents.value.filter(a => selectedSessionIds.value.has(a.sessionId))
+  return new Set(selected.map(a => a.projectName)).size
+})
+
 async function handleResolveAgent(agent: Agent, outcome: 'granted' | 'denied') {
-  const err = await resolveAgent(agent, outcome)
-  if (err)
+  const remember = rememberPerAgent.value[agent.sessionId] ?? false
+  const err = await resolveAgent(agent, outcome, remember)
+  if (err) {
     emit('toast', err)
+  }
+  else if (remember && outcome === 'granted') {
+    emit('remembered')
+  }
 }
 
 async function handleApproveAll() {
   approveAllInFlight.value = true
   const selected = resolvableAgents.value.filter(a => selectedSessionIds.value.has(a.sessionId))
-  const err = await approveAll(selected)
+  const err = await approveAll(selected, 'granted', rememberAll.value)
   approveAllInFlight.value = false
-  if (err)
+  if (err) {
     emit('toast', err)
+  }
+  else if (rememberAll.value) {
+    emit('remembered')
+  }
 }
 
 // Scroll the focused card into view when focusedSessionId changes
@@ -194,9 +213,18 @@ watch(() => props.focusedSessionId, (id) => {
           <span class="text-[12px] font-semibold text-warning-text">
             {{ resolvableAgents.length }} {{ resolvableAgents.length === 1 ? 'agent' : 'agents' }} waiting on a permission
           </span>
+          <label class="ml-auto flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-fg-faint">
+            <input
+              v-model="rememberAll"
+              type="checkbox"
+              class="accent-success"
+              aria-label="Don't ask again for all selected projects"
+            >
+            Don't ask again{{ rememberAll && distinctProjectCount > 0 ? ` (${distinctProjectCount} project${distinctProjectCount !== 1 ? 's' : ''})` : '' }}
+          </label>
           <button
             type="button"
-            class="ml-auto text-[11px] text-fg-mute underline-offset-2 hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
+            class="text-[11px] text-fg-mute underline-offset-2 hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
             :aria-expanded="approveAllOpen"
             @click="approveAllOpen = !approveAllOpen"
           >
@@ -313,12 +341,21 @@ watch(() => props.focusedSessionId, (id) => {
               >
                 Deny
               </AppButton>
+              <label class="flex items-center gap-1 cursor-pointer select-none text-[11px] text-fg-faint ml-auto">
+                <input
+                  v-model="rememberPerAgent[agent.sessionId]"
+                  type="checkbox"
+                  class="accent-success"
+                  :aria-label="`Don't ask again for ${agent.projectName}`"
+                >
+                <span class="font-mono">{{ agent.projectName }}</span>
+              </label>
             </template>
 
             <AppButton
               variant="outline"
               size="sm"
-              class="ml-auto"
+              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) ? 'ml-auto' : ''"
               :aria-label="`Open details for ${agent.projectName}`"
               @click="emit('select', agent)"
             >
