@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
@@ -73,6 +74,26 @@ var (
 	sessionCacheMu sync.Mutex
 	sessionCache   = make(map[sessionCacheKey]*sessionCacheEntry)
 )
+
+// candidateCacheEntry caches a statSessionFiles result for one project directory.
+// It is validated by the directory's own mtime: adding or removing a session file
+// bumps the directory mtime and forces a full re-stat, while a plain append to the
+// active session file does NOT change the directory mtime — so on a hit only the
+// newest candidate is re-stat'd to pick that append up.
+type candidateCacheEntry struct {
+	dirMtime   time.Time
+	candidates []sessionFileCandidate
+	cachedAt   time.Time
+}
+
+var (
+	candidateCacheMu sync.Mutex
+	candidateCache   = make(map[string]*candidateCacheEntry)
+)
+
+// statSessionFilesCalls counts full statSessionFiles directory scans. Test-only
+// observability for the candidate-cache hit path (exposed via export_test.go).
+var statSessionFilesCalls atomic.Int64
 
 // claudeConfigDir returns the Claude config base directory.
 // Respects CLAUDE_CONFIG_DIR env var; falls back to ~/.claude.
@@ -409,6 +430,7 @@ type sessionFileCandidate struct {
 // statSessionFiles lists JSONL session files in projectDir ordered by mtime desc.
 // Only os.Stat is called — no file content is read.
 func statSessionFiles(projectDir string) ([]sessionFileCandidate, error) {
+	statSessionFilesCalls.Add(1)
 	entries, err := os.ReadDir(projectDir)
 	if err != nil {
 		return nil, fmt.Errorf("readdir %s: %w", projectDir, err)
@@ -437,6 +459,63 @@ func statSessionFiles(projectDir string) ([]sessionFileCandidate, error) {
 		return out[i].mtime.After(out[j].mtime)
 	})
 	return out, nil
+}
+
+// cachedStatSessionFiles returns the JSONL candidate list for projectDir, reusing
+// a cached statSessionFiles result while the directory mtime is unchanged and the
+// entry is within SessionCacheTTL. This collapses the per-tick ~N-stat ReadDir
+// scan to a single dir stat plus one re-stat of the newest candidate.
+//
+// On a hit only the newest candidate is re-stat'd, because a content append to the
+// active session file does not bump the directory mtime but must still invalidate
+// the downstream sessionCache. Any other staleness (e.g. a resumed session whose
+// file pre-existed and is not the newest) is bounded by SessionCacheTTL: the full
+// scan re-runs at the latest one TTL after the directory last changed.
+func cachedStatSessionFiles(projectDir string) ([]sessionFileCandidate, error) {
+	di, err := os.Stat(projectDir)
+	if err != nil {
+		return nil, fmt.Errorf("stat dir %s: %w", projectDir, err)
+	}
+	dirMtime := di.ModTime()
+	now := time.Now()
+
+	candidateCacheMu.Lock()
+	entry := candidateCache[projectDir]
+	candidateCacheMu.Unlock()
+
+	if entry != nil &&
+		now.Sub(entry.cachedAt) < SessionCacheTTL &&
+		entry.dirMtime.Equal(dirMtime) &&
+		len(entry.candidates) > 0 {
+		// entry.candidates is read/written here outside candidateCacheMu; safe only
+		// because the merger serializes resolution per projectDir (one goroutine per
+		// directory group). Parallel callers for the same projectDir would race.
+		out := make([]sessionFileCandidate, len(entry.candidates))
+		copy(out, entry.candidates)
+		// Re-stat only the newest file to surface an append (dir mtime unchanged).
+		if info, statErr := os.Stat(out[0].path); statErr == nil {
+			out[0].mtime = info.ModTime()
+			out[0].inode = inodeOf(info)
+			candidateCacheMu.Lock()
+			entry.candidates[0] = out[0]
+			candidateCacheMu.Unlock()
+			return out, nil
+		}
+		// Newest file vanished — fall through to a full re-stat.
+	}
+
+	candidates, err := statSessionFiles(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	candidateCacheMu.Lock()
+	candidateCache[projectDir] = &candidateCacheEntry{
+		dirMtime:   dirMtime,
+		candidates: candidates,
+		cachedAt:   now,
+	}
+	candidateCacheMu.Unlock()
+	return candidates, nil
 }
 
 // FindSessionForProject locates the most recently active JSONL session for cwd.
@@ -472,7 +551,7 @@ func findSessionForProjectFiltered(cwd string, pid int, uptimeSeconds int64, cla
 	encoded := EncodePath(cwd)
 	projectDir := filepath.Join(baseDir, encoded)
 
-	candidates, _ := statSessionFiles(projectDir)
+	candidates, _ := cachedStatSessionFiles(projectDir)
 
 	if forcedID != "" {
 		candidates = filterToID(candidates, forcedID)
