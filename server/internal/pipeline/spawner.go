@@ -91,14 +91,19 @@ func BuildAllowList(perms []*ent.TaskPermission, enableChannel, allowGitPush boo
 		if !permissions.IsAllowedTool(p.Tool) {
 			continue
 		}
-		if !allowGitPush && p.Tool == "Bash" && p.Pattern != nil && gitPushRE.MatchString(*p.Pattern) {
-			continue
-		}
 		if p.Tool == "Bash" {
 			if p.Pattern == nil || *p.Pattern == "" {
 				continue // blanket Bash allow is forbidden
 			}
 			normalized := strings.Join(strings.Fields(*p.Pattern), " ")
+			if p.ManualOverride {
+				// Human explicitly approved this exact pattern — skip allow-list and git-push gate.
+				allow = append(allow, fmt.Sprintf("Bash(%s)", normalized))
+				continue
+			}
+			if !allowGitPush && gitPushRE.MatchString(normalized) {
+				continue
+			}
 			if ok, _ := permissions.IsSafeBashPattern(normalized); !ok {
 				continue // unsafe shell pattern — skip silently at spawn time
 			}

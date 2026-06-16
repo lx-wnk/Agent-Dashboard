@@ -397,10 +397,12 @@ func isCovered(tool string, pattern *string, perms []*ent.TaskPermission) bool {
 	return false
 }
 
-// grantValidatedEntries validates each entry with ValidateGrantEntry and persists the
-// safe ones via BulkGrantPermissions. Invalid entries are collected and returned as
-// error strings rather than aborting the call, so one bad pattern doesn't block the
-// rest.
+// grantValidatedEntries validates each entry as a human override and persists
+// the safe ones via BulkGrantPermissions. Called exclusively from human REST
+// resolve endpoints, so override=true applies: the Bash allow-list and
+// injection guard are bypassed but a non-empty pattern is still required, and
+// WebFetch still needs a domain. Invalid entries are collected and returned as
+// error strings rather than aborting the call.
 func (h *Handler) grantValidatedEntries(ctx context.Context, taskID string, entries []repo.GrantEntry) ([]*ent.TaskPermission, []string) {
 	var safe []repo.GrantEntry
 	var errs []string
@@ -409,10 +411,11 @@ func (h *Handler) grantValidatedEntries(ctx context.Context, taskID string, entr
 		if e.Pattern != nil {
 			pattern = *e.Pattern
 		}
-		if err := permissions.ValidateGrantEntry(e.Tool, pattern); err != nil {
+		if err := permissions.ValidateGrantEntryWithOverride(e.Tool, pattern, true); err != nil {
 			errs = append(errs, fmt.Sprintf("grant skipped (%s %s): %v", e.Tool, pattern, err))
 			continue
 		}
+		e.ManualOverride = true
 		safe = append(safe, e)
 	}
 	if len(safe) == 0 {

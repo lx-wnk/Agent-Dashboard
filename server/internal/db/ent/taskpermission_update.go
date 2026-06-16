@@ -90,6 +90,20 @@ func (_u *TaskPermissionUpdate) SetNillablePreApproved(v *bool) *TaskPermissionU
 	return _u
 }
 
+// SetManualOverride sets the "manual_override" field.
+func (_u *TaskPermissionUpdate) SetManualOverride(v bool) *TaskPermissionUpdate {
+	_u.mutation.SetManualOverride(v)
+	return _u
+}
+
+// SetNillableManualOverride sets the "manual_override" field if the given value is not nil.
+func (_u *TaskPermissionUpdate) SetNillableManualOverride(v *bool) *TaskPermissionUpdate {
+	if v != nil {
+		_u.SetManualOverride(*v)
+	}
+	return _u
+}
+
 // SetDecidedBy sets the "decided_by" field.
 func (_u *TaskPermissionUpdate) SetDecidedBy(v string) *TaskPermissionUpdate {
 	_u.mutation.SetDecidedBy(v)
@@ -231,6 +245,9 @@ func (_u *TaskPermissionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if value, ok := _u.mutation.PreApproved(); ok {
 		_spec.SetField(taskpermission.FieldPreApproved, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.ManualOverride(); ok {
+		_spec.SetField(taskpermission.FieldManualOverride, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.DecidedBy(); ok {
 		_spec.SetField(taskpermission.FieldDecidedBy, field.TypeString, value)
 	}
@@ -330,6 +347,20 @@ func (_u *TaskPermissionUpdateOne) SetPreApproved(v bool) *TaskPermissionUpdateO
 func (_u *TaskPermissionUpdateOne) SetNillablePreApproved(v *bool) *TaskPermissionUpdateOne {
 	if v != nil {
 		_u.SetPreApproved(*v)
+	}
+	return _u
+}
+
+// SetManualOverride sets the "manual_override" field.
+func (_u *TaskPermissionUpdateOne) SetManualOverride(v bool) *TaskPermissionUpdateOne {
+	_u.mutation.SetManualOverride(v)
+	return _u
+}
+
+// SetNillableManualOverride sets the "manual_override" field if the given value is not nil.
+func (_u *TaskPermissionUpdateOne) SetNillableManualOverride(v *bool) *TaskPermissionUpdateOne {
+	if v != nil {
+		_u.SetManualOverride(*v)
 	}
 	return _u
 }
@@ -504,6 +535,9 @@ func (_u *TaskPermissionUpdateOne) sqlSave(ctx context.Context) (_node *TaskPerm
 	}
 	if value, ok := _u.mutation.PreApproved(); ok {
 		_spec.SetField(taskpermission.FieldPreApproved, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ManualOverride(); ok {
+		_spec.SetField(taskpermission.FieldManualOverride, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.DecidedBy(); ok {
 		_spec.SetField(taskpermission.FieldDecidedBy, field.TypeString, value)

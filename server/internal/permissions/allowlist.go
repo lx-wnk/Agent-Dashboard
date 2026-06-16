@@ -202,19 +202,15 @@ func ValidateWebFetchPattern(pattern *string) error {
 	return nil
 }
 
-// ValidateGrantEntry applies all grant-time security checks for a single
-// (tool, pattern) pair.  It is the single source of truth shared by both
-// the MCP write path and the REST permission-grant endpoints.
+// ValidateGrantEntryWithOverride applies grant-time security checks for a
+// (tool, pattern) pair. When override is true (human REST resolve only), the
+// Bash command allow-list and shell-injection guard are bypassed — the human
+// consented to the exact literal pattern — but a non-empty Bash pattern is
+// still required, WebFetch still requires a domain pattern, and the tool must
+// still be in IsAllowedTool.
 //
-// Checks applied, in order:
-//  1. Tool must be in the pipeline allow-list.
-//  2. Bash grants must carry a non-empty pattern and that pattern must pass
-//     IsSafeBashPattern (allow-list semantics).
-//  3. WebFetch grants must carry a non-empty domain pattern.
-//
-// Returns a descriptive error on the first failing check; nil means the entry
-// is safe to persist.
-func ValidateGrantEntry(tool, pattern string) error {
+// Non-override paths apply the full IsSafeBashPattern guard unchanged.
+func ValidateGrantEntryWithOverride(tool, pattern string, override bool) error {
 	if !IsAllowedTool(tool) {
 		return fmt.Errorf("tool not in allow-list: %s", tool)
 	}
@@ -223,8 +219,10 @@ func ValidateGrantEntry(tool, pattern string) error {
 		if normalized == "" {
 			return errors.New("bash permission requires a non-empty pattern")
 		}
-		if ok, reason := IsSafeBashPattern(normalized); !ok {
-			return fmt.Errorf("unsafe Bash pattern: %s", reason)
+		if !override {
+			if ok, reason := IsSafeBashPattern(normalized); !ok {
+				return fmt.Errorf("unsafe Bash pattern: %s", reason)
+			}
 		}
 	}
 	if tool == "WebFetch" {
@@ -234,6 +232,13 @@ func ValidateGrantEntry(tool, pattern string) error {
 		}
 	}
 	return nil
+}
+
+// ValidateGrantEntry applies all grant-time security checks for a single
+// (tool, pattern) pair without a human override. Delegates to
+// ValidateGrantEntryWithOverride with override=false.
+func ValidateGrantEntry(tool, pattern string) error {
+	return ValidateGrantEntryWithOverride(tool, pattern, false)
 }
 
 // WriteToolNames is the canonical list of write-type tools that trigger the edit gate.
