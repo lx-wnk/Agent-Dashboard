@@ -499,14 +499,7 @@ function formatCost(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
 
-const runtime = computed(() => {
-  if (!props.task)
-    return '—'
-  const start = new Date(props.task.createdAt).getTime()
-  const end = props.task.currentStage === 'done' || props.task.currentStage === 'cancelled'
-    ? new Date(props.task.updatedAt).getTime()
-    : Date.now()
-  const ms = end - start
+function formatDuration(ms: number): string {
   const h = Math.floor(ms / 3_600_000)
   const m = Math.floor((ms % 3_600_000) / 60_000)
   const s = Math.floor((ms % 60_000) / 1_000)
@@ -515,6 +508,30 @@ const runtime = computed(() => {
   if (m > 0)
     return `${m}m ${s}s`
   return `${s}s`
+}
+
+// Wall-clock lifespan: creation → now (or → updatedAt once terminal).
+const age = computed(() => {
+  if (!props.task)
+    return '—'
+  const start = new Date(props.task.createdAt).getTime()
+  const end = props.task.currentStage === 'done' || props.task.currentStage === 'cancelled'
+    ? new Date(props.task.updatedAt).getTime()
+    : Date.now()
+  return formatDuration(end - start)
+})
+
+// Time the task was actually executing: sum of stage-run durations,
+// counting a still-running run up to now. Excludes queue/idle gaps.
+const activeRuntime = computed(() => {
+  const ms = stageRuns.value.reduce((sum, r) => {
+    if (!r.startedAt)
+      return sum
+    const start = new Date(r.startedAt).getTime()
+    const end = r.endedAt ? new Date(r.endedAt).getTime() : Date.now()
+    return sum + Math.max(0, end - start)
+  }, 0)
+  return ms === 0 ? '—' : formatDuration(ms)
 })
 
 // Refinement status panel — last assistant output for concept-stage tasks
@@ -784,9 +801,16 @@ watch(
             </div>
             <div class="contents">
               <dt class="text-fg-mute text-[11px] uppercase tracking-[0.5px]">
-                Runtime
+                Age
               </dt><dd class="text-fg font-mono text-xs">
-                {{ runtime }}
+                {{ age }}
+              </dd>
+            </div>
+            <div v-if="activeRuntime !== '—'" class="contents">
+              <dt class="text-fg-mute text-[11px] uppercase tracking-[0.5px]">
+                Active Runtime
+              </dt><dd class="text-fg font-mono text-xs">
+                {{ activeRuntime }}
               </dd>
             </div>
             <div v-if="totalTokensUsed > 0" class="contents">
