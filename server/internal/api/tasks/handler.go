@@ -766,6 +766,10 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 		return fmt.Errorf("tasks.resolvePermissionRequest.get: %w", err)
 	}
 	if body.Outcome == "granted" {
+		entries := []repo.GrantEntry{{Tool: pr.Tool, Pattern: pr.Pattern}}
+		if _, errs := h.grantValidatedEntries(r.Context(), id, entries); len(errs) > 0 {
+			slog.Warn("resolvePermissionRequest: grant failed", "taskID", id, "errs", errs)
+		}
 		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id); err != nil {
 			slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
 		}

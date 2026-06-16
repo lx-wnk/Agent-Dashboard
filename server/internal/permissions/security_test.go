@@ -110,6 +110,59 @@ func TestIsSafeBashPattern_BlockedCommands_PoC(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Bug 2 — cmd* glob patterns (IsSafeBashPattern + ValidateGrantEntry)
+// ---------------------------------------------------------------------------
+
+// TestIsSafeBashPattern_GlobSuffix verifies that a safe command followed by
+// a trailing glob wildcard (no space) is accepted.
+func TestIsSafeBashPattern_GlobSuffix(t *testing.T) {
+	cases := []string{
+		"grep*",
+		"ls*",
+		"cat*",
+		"pnpm install*",
+		"git add*",
+		"git commit*",
+	}
+	for _, pat := range cases {
+		ok, reason := permissions.IsSafeBashPattern(pat)
+		if !ok {
+			t.Errorf("IsSafeBashPattern(%q) = false (%s), want true", pat, reason)
+		}
+	}
+}
+
+// TestIsSafeBashPattern_GlobSuffix_UnknownCommand verifies that an unknown
+// command with a trailing glob is still rejected.
+func TestIsSafeBashPattern_GlobSuffix_UnknownCommand(t *testing.T) {
+	ok, reason := permissions.IsSafeBashPattern("pypy*")
+	if ok {
+		t.Errorf("IsSafeBashPattern(%q) = true, want false", "pypy*")
+	} else {
+		t.Logf("IsSafeBashPattern(%q) correctly blocked: %s", "pypy*", reason)
+	}
+}
+
+// TestIsSafeBashPattern_GlobSuffix_ExplicitlyBlocked verifies that a command
+// that is explicitly blocked in the map is still blocked when a glob is appended.
+func TestIsSafeBashPattern_GlobSuffix_ExplicitlyBlocked(t *testing.T) {
+	ok, reason := permissions.IsSafeBashPattern("curl*")
+	if ok {
+		t.Errorf("IsSafeBashPattern(%q) = true, want false", "curl*")
+	} else {
+		t.Logf("IsSafeBashPattern(%q) correctly blocked: %s", "curl*", reason)
+	}
+}
+
+// TestValidateGrantEntry_BashGlobPattern verifies that ValidateGrantEntry
+// accepts a Bash grant with a cmd* glob pattern after Bug 2 is fixed.
+func TestValidateGrantEntry_BashGlobPattern(t *testing.T) {
+	if err := permissions.ValidateGrantEntry("Bash", "grep*"); err != nil {
+		t.Errorf("ValidateGrantEntry(\"Bash\", \"grep*\") = %v, want nil", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // F-SEC-004 — WebFetch pattern enforcement (ValidateWebFetchPattern)
 // ---------------------------------------------------------------------------
 

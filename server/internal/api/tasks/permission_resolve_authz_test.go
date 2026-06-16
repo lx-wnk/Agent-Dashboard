@@ -73,6 +73,140 @@ func TestBulkResolve_RejectsForeignPermissionIDs(t *testing.T) {
 	}
 }
 
+// seedPendingPermissionWithPattern creates a task with one stage_run and a pending
+// permission request carrying the given tool and pattern.
+func seedPendingPermissionWithPattern(t *testing.T, client *ent.Client, slug, tool, pattern string) (taskID, runID, reqID string) {
+	t.Helper()
+	ctx := context.Background()
+	task, err := repo.NewTaskRepo(client).Create(ctx, repo.CreateTaskInput{
+		Slug:          slug,
+		Title:         slug,
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	run, err := repo.NewStageRunRepo(client).Create(ctx, repo.CreateStageRunInput{TaskID: task.ID, Stage: "implementation", Iteration: 0})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+	req, err := repo.NewPermissionRepo(client).CreatePermissionRequest(ctx, repo.CreatePermissionRequestInput{
+		StageRunID: run.ID,
+		Tool:       tool,
+		Pattern:    &pattern,
+	})
+	if err != nil {
+		t.Fatalf("create permission request: %v", err)
+	}
+	return task.ID, run.ID, req.ID
+}
+
+// TestBulkResolve_Granted_CreatesTaskPermission verifies that resolving a
+// permission request as "granted" creates a matching task_permission so the
+// respawned agent's allow-list actually includes the tool.
+func TestBulkResolve_Granted_CreatesTaskPermission(t *testing.T) {
+	client, r := newRetryHandler(t, &captureOrchestrator{})
+	taskID, _, reqID := seedPendingPermissionWithPattern(t, client, "grant-creates-perm", "Bash", "grep -r*")
+
+	body := `{"taskId":"` + taskID + `","outcome":"granted","permissionIds":["` + reqID + `"]}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/permission-requests/bulk-resolve", strings.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Resolved int      `json:"resolved"`
+		Errors   []string `json:"errors"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Resolved != 1 {
+		t.Fatalf("expected resolved=1, got %d", resp.Resolved)
+	}
+
+	perms, err := repo.NewPermissionRepo(client).ListEffectiveTaskPermissions(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("list permissions: %v", err)
+	}
+	if len(perms) == 0 {
+		t.Fatal("expected at least one task_permission after granted resolve, got none")
+	}
+	found := false
+	for _, p := range perms {
+		if p.Tool == "Bash" && p.Pattern != nil && *p.Pattern == "grep -r*" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("task_permission for Bash/\"grep -r*\" not found; got %+v", perms)
+	}
+}
+
+// TestBulkResolve_Denied_DoesNotCreateTaskPermission verifies that resolving a
+// request as "denied" does NOT create a task_permission.
+func TestBulkResolve_Denied_DoesNotCreateTaskPermission(t *testing.T) {
+	client, r := newRetryHandler(t, &captureOrchestrator{})
+	taskID, _, reqID := seedPendingPermissionWithPattern(t, client, "deny-no-perm", "Bash", "grep -r*")
+
+	body := `{"taskId":"` + taskID + `","outcome":"denied","permissionIds":["` + reqID + `"]}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/permission-requests/bulk-resolve", strings.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	perms, err := repo.NewPermissionRepo(client).ListEffectiveTaskPermissions(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("list permissions: %v", err)
+	}
+	if len(perms) != 0 {
+		t.Errorf("expected no task_permissions after denied resolve, got %d", len(perms))
+	}
+}
+
+// TestSingleResolve_Granted_CreatesTaskPermission verifies the single-resolve
+// path also creates a task_permission when the outcome is "granted".
+func TestSingleResolve_Granted_CreatesTaskPermission(t *testing.T) {
+	client, r := newRetryHandler(t, &captureOrchestrator{})
+	taskID, _, reqID := seedPendingPermissionWithPattern(t, client, "single-grant-perm", "Read", "")
+
+	url := "/api/tasks/" + taskID + "/permission-requests/" + reqID + "/resolve"
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, url, strings.NewReader(`{"outcome":"granted"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	perms, err := repo.NewPermissionRepo(client).ListEffectiveTaskPermissions(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("list permissions: %v", err)
+	}
+	found := false
+	for _, p := range perms {
+		if p.Tool == "Read" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("task_permission for Read not found after single granted resolve; got %+v", perms)
+	}
+}
+
 // The single-resolve route nests {reqID} under {taskId}; resolving a request
 // that belongs to a different task must 404 and leave the request pending.
 func TestSingleResolve_RejectsCrossTaskRequest(t *testing.T) {

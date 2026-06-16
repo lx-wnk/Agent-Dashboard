@@ -120,8 +120,11 @@ func IsSafeBashPattern(pattern string) (bool, string) {
 	first := filepath.Base(fields[0])
 	// Normalise to lower-case for case-insensitive comparison.
 	firstLower := strings.ToLower(first)
+	// Strip trailing glob wildcard so "grep*" resolves to "grep" for the
+	// allow-list lookup. No real command name ends in "*".
+	firstLowerNorm := strings.TrimRight(firstLower, "*")
 
-	if ok, explicit := safeBashCommands[firstLower]; explicit && !ok {
+	if ok, explicit := safeBashCommands[firstLowerNorm]; explicit && !ok {
 		// Explicitly blocked (e.g. curl is in the map with value false).
 		return false, "command explicitly blocked: " + first
 	} else if !explicit {
