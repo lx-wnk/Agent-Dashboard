@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useInjectedTaskDetails } from '../../composables/taskModalContext'
-import { runStatusChipClass } from '../../utils/statusColors'
+import { runStatusTone } from '../../utils/statusColors'
 import { formatTaskDate } from '../../utils/taskFormat'
 import StageOutputView from '../StageOutputView.vue'
+import AppChip from '../ui/AppChip.vue'
 
 const { stageRuns } = useInjectedTaskDetails()
 </script>
@@ -16,7 +17,9 @@ const { stageRuns } = useInjectedTaskDetails()
       <div class="flex items-center gap-2.5 mb-1">
         <span class="font-semibold text-xs text-fg">{{ run.stage }}</span>
         <span class="font-mono text-[11px] text-fg-mute">iter {{ run.iteration }}</span>
-        <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="runStatusChipClass(run.status)">{{ run.status }}</span>
+        <AppChip :tone="runStatusTone(run.status)" mono uppercase class="ml-auto">
+          {{ run.status }}
+        </AppChip>
       </div>
       <div v-if="run.sessionName" class="text-[11px] text-fg-mute mt-0.5">
         session: <code>{{ run.sessionName }}</code>

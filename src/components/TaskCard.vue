@@ -6,8 +6,9 @@ import { shortId, useCopyId } from '../composables/useCopyId'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
-import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
+import { runStatusTone, stageTone } from '../utils/statusColors'
 import PluginSlot from './PluginSlot.vue'
+import AppChip from './ui/AppChip.vue'
 import WorktreePill from './WorktreePill.vue'
 
 const props = defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
@@ -108,16 +109,18 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
       </span>
     </div>
     <div class="flex flex-wrap gap-1 mt-0.5">
-      <span
-        class="text-[10px] font-mono px-1.5 py-px rounded border"
-        :class="stageChipClass(task.currentStage)"
-      >{{ stageLabel(task.currentStage) }}</span>
-      <span
+      <AppChip :tone="stageTone(task.currentStage)" mono>
+        {{ stageLabel(task.currentStage) }}
+      </AppChip>
+      <AppChip
         v-if="task.latestStageRunStatus"
-        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border"
-        :class="runStatusChipClass(task.latestStageRunStatus)"
+        :tone="runStatusTone(task.latestStageRunStatus)"
+        mono
+        uppercase
         :title="`Latest stage run: ${runStatusLabel(task.latestStageRunStatus)}`"
-      >{{ runStatusLabel(task.latestStageRunStatus) }}</span>
+      >
+        {{ runStatusLabel(task.latestStageRunStatus) }}
+      </AppChip>
       <span
         v-if="isRequeued"
         class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700/60"

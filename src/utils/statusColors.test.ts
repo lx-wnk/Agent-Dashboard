@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentSessionStatusClass, runStatusChipClass, stageChipClass, statusLabel } from './statusColors'
+import { agentStatusTone, runStatusTone, stageTone, statusLabel } from './statusColors'
 
 describe('statusLabel', () => {
   it('returns human-readable labels for known statuses', () => {
@@ -18,107 +18,32 @@ describe('statusLabel', () => {
   })
 })
 
-describe('stageChipClass', () => {
-  it('returns a non-empty string for every known pipeline stage', () => {
-    const knownStages = ['on_hold', 'implementation', 'done', 'cancelled']
-    knownStages.forEach((stage) => {
-      const cls = stageChipClass(stage)
-      expect(typeof cls).toBe('string')
-      expect(cls.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('returns a non-empty fallback string for unknown stages', () => {
-    const cls = stageChipClass('some-future-stage')
-    expect(typeof cls).toBe('string')
-    expect(cls.length).toBeGreaterThan(0)
-  })
-
-  it('done stage uses success family tokens', () => {
-    expect(stageChipClass('done')).toContain('success')
-  })
-
-  it('cancelled stage uses danger family tokens', () => {
-    expect(stageChipClass('cancelled')).toContain('danger')
-  })
-
-  it('on_hold stage uses warning family tokens', () => {
-    expect(stageChipClass('on_hold')).toContain('warning')
-  })
-
-  it('implementation stage uses info family tokens', () => {
-    expect(stageChipClass('implementation')).toContain('info')
-  })
+describe('stageTone', () => {
+  it('done → success', () => expect(stageTone('done')).toBe('success'))
+  it('cancelled → danger', () => expect(stageTone('cancelled')).toBe('danger'))
+  it('on_hold → warning', () => expect(stageTone('on_hold')).toBe('warning'))
+  it('implementation → info', () => expect(stageTone('implementation')).toBe('info'))
+  it('unknown → neutral', () => expect(stageTone('some-future-stage')).toBe('neutral'))
 })
 
-describe('runStatusChipClass', () => {
-  it('returns a non-empty string for every known run status', () => {
-    const knownStatuses = ['running', 'done', 'failed', 'on_hold', 'awaiting_user']
-    knownStatuses.forEach((status) => {
-      const cls = runStatusChipClass(status)
-      expect(typeof cls).toBe('string')
-      expect(cls.length).toBeGreaterThan(0)
-    })
+describe('runStatusTone', () => {
+  it('running → info', () => expect(runStatusTone('running')).toBe('info'))
+  it('done → success', () => expect(runStatusTone('done')).toBe('success'))
+  it('failed → danger', () => expect(runStatusTone('failed')).toBe('danger'))
+  it('on_hold → warning', () => expect(runStatusTone('on_hold')).toBe('warning'))
+  it('awaiting_user → warning', () => expect(runStatusTone('awaiting_user')).toBe('warning'))
+  it('on_hold and awaiting_user return the same tone', () => {
+    expect(runStatusTone('on_hold')).toBe(runStatusTone('awaiting_user'))
   })
-
-  it('pending status returns fallback class', () => {
-    const cls = runStatusChipClass('pending')
-    expect(typeof cls).toBe('string')
-    expect(cls.length).toBeGreaterThan(0)
-  })
-
-  it('returns a non-empty fallback for truly unknown statuses', () => {
-    const cls = runStatusChipClass('truly-unknown-status')
-    expect(typeof cls).toBe('string')
-    expect(cls.length).toBeGreaterThan(0)
-  })
-
-  it('running status uses info family tokens', () => {
-    expect(runStatusChipClass('running')).toContain('info')
-  })
-
-  it('done status uses success family tokens', () => {
-    expect(runStatusChipClass('done')).toContain('success')
-  })
-
-  it('failed status uses danger family tokens', () => {
-    expect(runStatusChipClass('failed')).toContain('danger')
-  })
-
-  it('awaiting_user status uses warning family tokens', () => {
-    expect(runStatusChipClass('awaiting_user')).toContain('warning')
-  })
-
-  it('on_hold and awaiting_user return identical classes', () => {
-    expect(runStatusChipClass('on_hold')).toBe(runStatusChipClass('awaiting_user'))
-  })
+  it('pending → neutral', () => expect(runStatusTone('pending')).toBe('neutral'))
+  it('unknown → neutral', () => expect(runStatusTone('truly-unknown')).toBe('neutral'))
 })
 
-describe('agentSessionStatusClass', () => {
-  it('returns a non-empty string for every known agent status', () => {
-    const knownStatuses = ['active', 'waiting', 'idle', 'completed', 'error']
-    knownStatuses.forEach((status) => {
-      const cls = agentSessionStatusClass(status)
-      expect(typeof cls).toBe('string')
-      expect(cls.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('returns a non-empty fallback for unknown statuses', () => {
-    const cls = agentSessionStatusClass('unknown')
-    expect(typeof cls).toBe('string')
-    expect(cls.length).toBeGreaterThan(0)
-  })
-
-  it('active status uses success family tokens', () => {
-    expect(agentSessionStatusClass('active')).toContain('success')
-  })
-
-  it('waiting status uses warning family tokens', () => {
-    expect(agentSessionStatusClass('waiting')).toContain('warning')
-  })
-
-  it('error status uses danger family tokens', () => {
-    expect(agentSessionStatusClass('error')).toContain('danger')
-  })
+describe('agentStatusTone', () => {
+  it('active → success', () => expect(agentStatusTone('active')).toBe('success'))
+  it('completed → success', () => expect(agentStatusTone('completed')).toBe('success'))
+  it('waiting → warning', () => expect(agentStatusTone('waiting')).toBe('warning'))
+  it('error → danger', () => expect(agentStatusTone('error')).toBe('danger'))
+  it('idle → neutral', () => expect(agentStatusTone('idle')).toBe('neutral'))
+  it('unknown → neutral', () => expect(agentStatusTone('unknown')).toBe('neutral'))
 })

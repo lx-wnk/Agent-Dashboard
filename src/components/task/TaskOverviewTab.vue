@@ -3,13 +3,14 @@ import type { PipelineTask } from '../../types'
 import { computed, ref, watch } from 'vue'
 import { useInjectedTask, useInjectedTaskDetails } from '../../composables/taskModalContext'
 import { useTaskAssignment } from '../../composables/useTaskAssignment'
-import { runStatusChipClass } from '../../utils/statusColors'
+import { runStatusTone } from '../../utils/statusColors'
 import { activeRuntime, formatCents, formatTaskDate, taskRuntime } from '../../utils/taskFormat'
 import AgentChatStream from '../AgentChatStream.vue'
 import GitStatusPanel from '../GitStatusPanel.vue'
 import RefineStatusPanel from '../RefineStatusPanel.vue'
 import StageOutputView from '../StageOutputView.vue'
 import AppButton from '../ui/AppButton.vue'
+import AppChip from '../ui/AppChip.vue'
 import WorktreeCommandRunner from '../WorktreeCommandRunner.vue'
 import WorktreePanel from '../WorktreePanel.vue'
 import TaskPendingRequests from './TaskPendingRequests.vue'
@@ -284,7 +285,9 @@ watch(
       <div class="flex items-center gap-2 flex-wrap mb-2">
         <span class="font-mono text-[10px] uppercase bg-raised text-fg-mute px-2 py-0.5 rounded font-semibold">{{ latestStageRun.stage }}</span>
         <span class="text-[10px] text-fg-mute font-mono">iter {{ latestStageRun.iteration }}</span>
-        <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="runStatusChipClass(latestStageRun.status)">{{ latestStageRun.status }}</span>
+        <AppChip :tone="runStatusTone(latestStageRun.status)" mono uppercase class="ml-auto">
+          {{ latestStageRun.status }}
+        </AppChip>
         <span class="text-[11px] text-fg-mute ml-auto">
           {{ formatTaskDate(latestStageRun.startedAt) }}
           <template v-if="latestStageRun.endedAt"> → {{ formatTaskDate(latestStageRun.endedAt) }}</template>
