@@ -1,20 +1,21 @@
-// Types generated from sdk/types.go via tygo — do not edit these directly.
-// Run `task generate` to regenerate after changing sdk/types.go.
-import {
-  AgentStatusActive,
-  AgentStatusWaiting,
-  AgentStatusIdle,
-} from './sdk.generated'
 import type {
-  TokenUsage,
+  Agent as _AgentBase,
   SessionMeta as _SessionMetaBase,
   SubAgent as _SubAgentBase,
   TaskInfo as _TaskInfoBase,
   AgentStatus,
-  Agent as _AgentBase,
+  PendingPermission,
+  TokenUsage,
+} from './sdk.generated'
+// Types generated from sdk/types.go via tygo — do not edit these directly.
+// Run `task generate` to regenerate after changing sdk/types.go.
+import {
+  AgentStatusActive,
+  AgentStatusIdle,
+  AgentStatusWaiting,
 } from './sdk.generated'
 
-export type { TokenUsage, AgentStatus }
+export type { AgentStatus, PendingPermission, TokenUsage }
 
 export interface SessionMeta extends Omit<_SessionMetaBase, 'firstPrompt'> {
   firstPrompt: string | null
@@ -41,12 +42,10 @@ export type Agent = Omit<_AgentBase, 'tasks' | 'subagents' | 'meta'> & {
 // Derived from sdk.generated consts — automatically stays in sync with sdk/types.go.
 export const AGENT_STATUSES = [AgentStatusActive, AgentStatusWaiting, AgentStatusIdle] as const
 
-
 export interface ChannelReply {
   message: string
   timestamp: string
 }
-
 
 export interface GitStatusLastCommit {
   hash: string
@@ -66,7 +65,6 @@ export interface GitStatus {
   lastCommit: GitStatusLastCommit | null
   remoteUrl: string | null
 }
-
 
 export interface OutputMessage {
   role: 'assistant' | 'tool_call' | 'tool_result' | 'human' | 'channel_reply' | 'task' | 'subagent'

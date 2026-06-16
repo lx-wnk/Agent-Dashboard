@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import type { Agent } from '../types'
-import { computed } from 'vue'
+import type { Agent, PendingPermission } from '../types'
+import { computed, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
+import { bulkResolvePermissionRequests } from '../composables/useTasks'
 import { attentionFor } from '../utils/attention'
 import { formatErrorState, formatRelativeActivity, secondsSince, shortModel } from '../utils/format'
 
 const props = defineProps<{ agents: Agent[] }>()
-const emit = defineEmits<{ select: [agent: Agent] }>()
+const emit = defineEmits<{
+  select: [agent: Agent]
+  toast: [message: string]
+}>()
 
 const { getIdentity } = useAgentIdentity()
 const { nowMs } = useNow()
@@ -65,6 +69,112 @@ function blockedDetail(agent: Agent): string {
   // stalled
   return `Running but silent — last output ${formatRelativeActivity(secs)}`
 }
+
+function permissionLabel(p: PendingPermission): string {
+  return p.pattern ? `${p.tool}(${p.pattern})` : p.tool
+}
+
+// Agents that have resolvable pending permissions (orchestrated + has pendingPermissions)
+const resolvableAgents = computed(() =>
+  props.agents.filter(a => a.pipelineTaskId && a.pendingPermissions && a.pendingPermissions.length > 0),
+)
+
+const totalPendingCount = computed(() =>
+  resolvableAgents.value.reduce((sum, a) => sum + (a.pendingPermissions?.length ?? 0), 0),
+)
+
+// Per-card in-flight tracking: keyed by sessionId
+const resolving = ref<Record<string, boolean>>({})
+
+async function resolveAgent(agent: Agent, outcome: 'granted' | 'denied') {
+  if (!agent.pipelineTaskId || !agent.pendingPermissions?.length)
+    return
+  resolving.value = { ...resolving.value, [agent.sessionId]: true }
+  try {
+    await bulkResolvePermissionRequests(
+      agent.pipelineTaskId,
+      agent.pendingPermissions.map(p => p.id),
+      outcome,
+    )
+  }
+  catch (err) {
+    emit('toast', err instanceof Error ? err.message : 'Failed to resolve permissions')
+  }
+  finally {
+    const next = { ...resolving.value }
+    delete next[agent.sessionId]
+    resolving.value = next
+  }
+}
+
+// --- Approve-all bar ---
+const approveAllOpen = ref(false)
+// Selected agent sessionIds for the approve-all action; default all
+const selectedSessionIds = ref<Set<string>>(new Set())
+
+// Resolvable agents seen on a previous tick — lets us default brand-new agents
+// to selected while preserving a user's explicit deselection across SSE updates.
+const seenSessionIds = new Set<string>()
+
+watch(resolvableAgents, (agents) => {
+  const current = new Set(agents.map(a => a.sessionId))
+  const next = new Set(selectedSessionIds.value)
+  for (const id of current) {
+    if (!seenSessionIds.has(id))
+      next.add(id)
+  }
+  for (const id of [...next]) {
+    if (!current.has(id))
+      next.delete(id)
+  }
+  seenSessionIds.clear()
+  for (const id of current) seenSessionIds.add(id)
+  selectedSessionIds.value = next
+}, { immediate: true })
+
+const selectedCount = computed(() => selectedSessionIds.value.size)
+
+const approveAllInFlight = ref(false)
+
+function toggleAgentSelection(sessionId: string) {
+  const next = new Set(selectedSessionIds.value)
+  if (next.has(sessionId))
+    next.delete(sessionId)
+  else
+    next.add(sessionId)
+  selectedSessionIds.value = next
+}
+
+async function approveAll() {
+  approveAllInFlight.value = true
+  // Group selected agents by their pipelineTaskId to minimise API calls
+  const byTask = new Map<string, string[]>()
+  for (const agent of resolvableAgents.value) {
+    if (!selectedSessionIds.value.has(agent.sessionId))
+      continue
+    if (!agent.pipelineTaskId || !agent.pendingPermissions?.length)
+      continue
+    const ids = byTask.get(agent.pipelineTaskId) ?? []
+    ids.push(...agent.pendingPermissions.map(p => p.id))
+    byTask.set(agent.pipelineTaskId, ids)
+  }
+
+  const errors: string[] = []
+  await Promise.all(
+    Array.from(byTask.entries()).map(async ([taskId, ids]) => {
+      try {
+        await bulkResolvePermissionRequests(taskId, ids, 'granted')
+      }
+      catch (err) {
+        errors.push(err instanceof Error ? err.message : 'Unknown error')
+      }
+    }),
+  )
+
+  approveAllInFlight.value = false
+  if (errors.length)
+    emit('toast', `Approve all failed: ${errors.join('; ')}`)
+}
 </script>
 
 <template>
@@ -91,6 +201,65 @@ function blockedDetail(agent: Agent): string {
         <span v-if="breakdown" class="text-[11px] text-fg-faint">{{ breakdown }}</span>
       </div>
 
+      <!-- Approve-all bar: shown when 2+ pending permissions are resolvable -->
+      <div
+        v-if="totalPendingCount >= 2"
+        class="mb-3 rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 overflow-hidden"
+      >
+        <div class="flex items-center gap-3 px-3 py-2">
+          <span class="text-[12px] font-semibold text-yellow-800 dark:text-yellow-300">
+            {{ resolvableAgents.length }} {{ resolvableAgents.length === 1 ? 'agent' : 'agents' }} waiting on a permission
+          </span>
+          <button
+            type="button"
+            class="ml-auto text-[11px] text-fg-mute underline-offset-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            :aria-expanded="approveAllOpen"
+            @click="approveAllOpen = !approveAllOpen"
+          >
+            {{ approveAllOpen ? 'Hide review' : 'Review what\'s affected' }}
+          </button>
+          <button
+            type="button"
+            :disabled="approveAllInFlight || selectedCount === 0"
+            class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-green-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
+            @click="approveAll"
+          >
+            Approve all{{ selectedCount < resolvableAgents.length ? ` (${selectedCount})` : '' }}
+          </button>
+        </div>
+
+        <!-- Collapsible disclosure: per-agent + command list with deselect checkboxes -->
+        <div v-if="approveAllOpen" class="border-t border-yellow-200 dark:border-yellow-800 px-3 py-2 flex flex-col gap-2">
+          <div
+            v-for="agent in resolvableAgents"
+            :key="agent.sessionId"
+            class="flex items-start gap-2"
+          >
+            <input
+              :id="`approve-all-${agent.sessionId}`"
+              type="checkbox"
+              class="mt-0.5 accent-green-600"
+              :checked="selectedSessionIds.has(agent.sessionId)"
+              :aria-label="`Include ${agent.projectName} in approve-all`"
+              @change="toggleAgentSelection(agent.sessionId)"
+            >
+            <div class="flex flex-col gap-0.5 min-w-0">
+              <label :for="`approve-all-${agent.sessionId}`" class="text-[12px] font-medium text-fg cursor-pointer">
+                {{ agent.projectName }}
+              </label>
+              <div
+                v-for="p in agent.pendingPermissions"
+                :key="p.id"
+                class="font-mono text-[11px] text-fg-mute"
+              >
+                {{ permissionLabel(p) }}
+                <span v-if="p.reason" class="font-sans text-fg-faint ml-1">— {{ p.reason }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Agent cards -->
       <div class="flex flex-wrap gap-2.5">
         <div
@@ -113,14 +282,53 @@ function blockedDetail(agent: Agent): string {
             >{{ attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.label }}</span>
           </div>
 
-          <!-- Blocked-on detail -->
-          <div class="font-mono text-[12px] text-fg-mute bg-app border border-line rounded px-2.5 py-1.5 leading-snug break-words">
-            {{ blockedDetail(agent) }}
-          </div>
+          <!-- Permission list for orchestrated agents with pending requests -->
+          <template v-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
+            <ul class="m-0 p-0 list-none flex flex-col gap-1" :aria-label="`Pending permissions for ${agent.projectName}`">
+              <li
+                v-for="p in agent.pendingPermissions"
+                :key="p.id"
+                class="flex flex-col gap-0.5"
+              >
+                <span class="font-mono text-[12px] text-fg bg-app border border-line rounded px-2.5 py-1 leading-snug">{{ permissionLabel(p) }}</span>
+                <span v-if="p.reason" class="text-[11px] text-fg-faint px-0.5">{{ p.reason }}</span>
+              </li>
+            </ul>
+          </template>
+
+          <!-- Fallback blocked-on detail for non-resolvable permission agents and other kinds -->
+          <template v-else>
+            <div class="font-mono text-[12px] text-fg-mute bg-app border border-line rounded px-2.5 py-1.5 leading-snug break-words">
+              {{ blockedDetail(agent) }}
+            </div>
+          </template>
 
           <!-- Action row -->
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span class="text-[11px] text-fg-faint">{{ formatRelativeActivity(secondsSince(agent.lastActivity, nowMs)) }}</span>
+
+            <!-- Approve/Deny buttons only for resolvable agents -->
+            <template v-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
+              <button
+                type="button"
+                :disabled="resolving[agent.sessionId]"
+                class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-green-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
+                :aria-label="`Approve permissions for ${agent.projectName}`"
+                @click="resolveAgent(agent, 'granted')"
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                :disabled="resolving[agent.sessionId]"
+                class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-red-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500"
+                :aria-label="`Deny permissions for ${agent.projectName}`"
+                @click="resolveAgent(agent, 'denied')"
+              >
+                Deny
+              </button>
+            </template>
+
             <button
               type="button"
               class="ml-auto text-[12px] font-semibold px-3 py-1 rounded-md border border-line bg-raised text-fg-mute hover:text-fg hover:bg-raised/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"

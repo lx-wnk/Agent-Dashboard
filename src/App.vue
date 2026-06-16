@@ -281,7 +281,7 @@ onMounted(fetchQuota)
         </p>
 
         <template v-else-if="activeView === 'dashboard'">
-          <AgentTriageBand :agents="attentionAgents" @select="selectAgent" />
+          <AgentTriageBand :agents="attentionAgents" @select="selectAgent" @toast="showToast" />
           <template v-if="dashboardLayout === 'list'">
             <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
             <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />
