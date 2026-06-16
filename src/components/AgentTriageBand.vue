@@ -22,21 +22,21 @@ const { resolving, resolveAgent, approveAll } = usePermissionResolve()
 
 // Tone → Tailwind border + text classes
 const toneBorderClass: Record<string, string> = {
-  warning: 'border-yellow-400 dark:border-yellow-400',
-  danger: 'border-red-400 dark:border-red-400',
-  info: 'border-blue-400 dark:border-blue-400',
+  warning: 'border-warning-dot',
+  danger: 'border-danger-dot',
+  info: 'border-info-dot',
 }
 
 const toneLeftClass: Record<string, string> = {
-  warning: 'border-l-yellow-400 dark:border-l-yellow-400',
-  danger: 'border-l-red-400 dark:border-l-red-400',
-  info: 'border-l-blue-400 dark:border-l-blue-400',
+  warning: 'border-l-warning-dot',
+  danger: 'border-l-danger-dot',
+  info: 'border-l-info-dot',
 }
 
 const toneLabelClass: Record<string, string> = {
-  warning: 'text-yellow-700 dark:text-yellow-400',
-  danger: 'text-red-600 dark:text-red-400',
-  info: 'text-blue-600 dark:text-blue-400',
+  warning: 'text-warning-text',
+  danger: 'text-danger-text',
+  info: 'text-info-text',
 }
 
 // Breakdown string: "2 permissions · 1 failed run · 1 stalled · 1 idle"
@@ -161,10 +161,10 @@ watch(() => props.focusedSessionId, (id) => {
     <!-- Empty state -->
     <div
       v-if="agents.length === 0"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50"
+      class="flex items-center gap-2 px-4 py-2.5 rounded-md bg-success-soft border border-success-line"
     >
-      <span aria-hidden="true" class="text-green-600 dark:text-green-400">✓</span>
-      <span class="text-[13px] font-medium text-green-700 dark:text-green-400">All clear — no agent is waiting on you.</span>
+      <span aria-hidden="true" class="text-success-text">✓</span>
+      <span class="text-[13px] font-medium text-success-text">All clear — no agent is waiting on you.</span>
     </div>
 
     <template v-else>
@@ -191,10 +191,10 @@ watch(() => props.focusedSessionId, (id) => {
       <!-- Approve-all bar: shown when 2+ pending permissions are resolvable -->
       <div
         v-if="totalPendingCount >= 2"
-        class="mb-3 rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 overflow-hidden"
+        class="mb-3 rounded-lg border border-warning-line bg-warning-soft overflow-hidden"
       >
         <div class="flex items-center gap-3 px-3 py-2">
-          <span class="text-[12px] font-semibold text-yellow-800 dark:text-yellow-300">
+          <span class="text-[12px] font-semibold text-warning-text">
             {{ resolvableAgents.length }} {{ resolvableAgents.length === 1 ? 'agent' : 'agents' }} waiting on a permission
           </span>
           <button
@@ -208,7 +208,7 @@ watch(() => props.focusedSessionId, (id) => {
           <button
             type="button"
             :disabled="approveAllInFlight || selectedCount === 0"
-            class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-green-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
+            class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-success text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
             @click="handleApproveAll"
           >
             Approve all{{ selectedCount < resolvableAgents.length ? ` (${selectedCount})` : '' }}
@@ -216,7 +216,7 @@ watch(() => props.focusedSessionId, (id) => {
         </div>
 
         <!-- Collapsible disclosure: per-agent + command list with deselect checkboxes -->
-        <div v-if="approveAllOpen" class="border-t border-yellow-200 dark:border-yellow-800 px-3 py-2 flex flex-col gap-2">
+        <div v-if="approveAllOpen" class="border-t border-warning-line px-3 py-2 flex flex-col gap-2">
           <div
             v-for="agent in resolvableAgents"
             :key="agent.sessionId"
@@ -225,7 +225,7 @@ watch(() => props.focusedSessionId, (id) => {
             <input
               :id="`approve-all-${agent.sessionId}`"
               type="checkbox"
-              class="mt-0.5 accent-green-600"
+              class="mt-0.5 accent-success"
               :checked="selectedSessionIds.has(agent.sessionId)"
               :aria-label="`Include ${agent.projectName} in approve-all`"
               @change="toggleAgentSelection(agent.sessionId)"
@@ -301,7 +301,7 @@ watch(() => props.focusedSessionId, (id) => {
               <button
                 type="button"
                 :disabled="resolving[agent.sessionId]"
-                class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-green-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
+                class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-success text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
                 :aria-label="`Approve permissions for ${agent.projectName}`"
                 @click="handleResolveAgent(agent, 'granted')"
               >
@@ -310,7 +310,7 @@ watch(() => props.focusedSessionId, (id) => {
               <button
                 type="button"
                 :disabled="resolving[agent.sessionId]"
-                class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-red-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500"
+                class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-danger text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500"
                 :aria-label="`Deny permissions for ${agent.projectName}`"
                 @click="handleResolveAgent(agent, 'denied')"
               >

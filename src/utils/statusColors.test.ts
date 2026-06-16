@@ -34,20 +34,20 @@ describe('stageChipClass', () => {
     expect(cls.length).toBeGreaterThan(0)
   })
 
-  it('done stage contains green color classes', () => {
-    expect(stageChipClass('done')).toContain('green')
+  it('done stage uses success family tokens', () => {
+    expect(stageChipClass('done')).toContain('success')
   })
 
-  it('cancelled stage contains red color classes', () => {
-    expect(stageChipClass('cancelled')).toContain('red')
+  it('cancelled stage uses danger family tokens', () => {
+    expect(stageChipClass('cancelled')).toContain('danger')
   })
 
-  it('on_hold stage contains yellow color classes', () => {
-    expect(stageChipClass('on_hold')).toContain('yellow')
+  it('on_hold stage uses warning family tokens', () => {
+    expect(stageChipClass('on_hold')).toContain('warning')
   })
 
-  it('implementation stage contains blue color classes', () => {
-    expect(stageChipClass('implementation')).toContain('blue')
+  it('implementation stage uses info family tokens', () => {
+    expect(stageChipClass('implementation')).toContain('info')
   })
 })
 
@@ -73,20 +73,20 @@ describe('runStatusChipClass', () => {
     expect(cls.length).toBeGreaterThan(0)
   })
 
-  it('running status contains blue color classes', () => {
-    expect(runStatusChipClass('running')).toContain('blue')
+  it('running status uses info family tokens', () => {
+    expect(runStatusChipClass('running')).toContain('info')
   })
 
-  it('done status contains green color classes', () => {
-    expect(runStatusChipClass('done')).toContain('green')
+  it('done status uses success family tokens', () => {
+    expect(runStatusChipClass('done')).toContain('success')
   })
 
-  it('failed status contains red color classes', () => {
-    expect(runStatusChipClass('failed')).toContain('red')
+  it('failed status uses danger family tokens', () => {
+    expect(runStatusChipClass('failed')).toContain('danger')
   })
 
-  it('awaiting_user status contains yellow color classes', () => {
-    expect(runStatusChipClass('awaiting_user')).toContain('yellow')
+  it('awaiting_user status uses warning family tokens', () => {
+    expect(runStatusChipClass('awaiting_user')).toContain('warning')
   })
 
   it('on_hold and awaiting_user return identical classes', () => {
@@ -110,15 +110,15 @@ describe('agentSessionStatusClass', () => {
     expect(cls.length).toBeGreaterThan(0)
   })
 
-  it('active status contains green color classes', () => {
-    expect(agentSessionStatusClass('active')).toContain('green')
+  it('active status uses success family tokens', () => {
+    expect(agentSessionStatusClass('active')).toContain('success')
   })
 
-  it('waiting status contains yellow color classes', () => {
-    expect(agentSessionStatusClass('waiting')).toContain('yellow')
+  it('waiting status uses warning family tokens', () => {
+    expect(agentSessionStatusClass('waiting')).toContain('warning')
   })
 
-  it('error status contains red color classes', () => {
-    expect(agentSessionStatusClass('error')).toContain('red')
+  it('error status uses danger family tokens', () => {
+    expect(agentSessionStatusClass('error')).toContain('danger')
   })
 })
