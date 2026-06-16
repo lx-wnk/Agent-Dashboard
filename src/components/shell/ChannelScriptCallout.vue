@@ -28,7 +28,9 @@ async function copy() {
       :title="copied ? 'Copied!' : 'Click to copy'"
       :aria-label="`Copy channel command ${scriptPath}`"
       @click="copy"
-    >{{ scriptPath }}</button>
+    >
+      {{ scriptPath }}
+    </button>
     <span v-if="copied" class="text-green-600 dark:text-green-400">Copied!</span>
   </div>
 </template>

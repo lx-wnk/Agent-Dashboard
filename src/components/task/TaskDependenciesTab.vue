@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useTaskDependencies } from '../../composables/useTaskDependencies'
 import { useInjectedTask } from '../../composables/taskModalContext'
-import AppInput from '../ui/AppInput.vue'
+import { useTaskDependencies } from '../../composables/useTaskDependencies'
 import DependencyGraph from '../DependencyGraph.vue'
+import AppInput from '../ui/AppInput.vue'
 
 const emit = defineEmits<{ navigateTask: [taskId: string] }>()
 

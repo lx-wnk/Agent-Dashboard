@@ -60,7 +60,10 @@ export function useTaskDependencies(task: Ref<PipelineTask | null>) {
 
   watch(
     () => [task.value?.id, task.value?.currentStage, task.value?.currentIteration, task.value?.latestStageRunStatus] as const,
-    ([id]) => { if (id) void loadDependencies() },
+    ([id]) => {
+      if (id)
+        void loadDependencies()
+    },
     { immediate: true },
   )
 

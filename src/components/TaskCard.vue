@@ -2,8 +2,8 @@
 import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
 import { useIntervalFn } from '@vueuse/core'
 import { computed, ref } from 'vue'
-import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { shortId, useCopyId } from '../composables/useCopyId'
+import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
@@ -99,7 +99,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
     <div v-if="project" class="flex items-center gap-1">
       <span
         class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-px rounded border border-transparent"
-        :style="project.color ? { backgroundColor: project.color + '22', color: project.color, borderColor: project.color + '55' } : {}"
+        :style="project.color ? { backgroundColor: `${project.color}22`, color: project.color, borderColor: `${project.color}55` } : {}"
         :class="!project.color ? 'bg-raised text-fg-mute border-line' : ''"
         :title="`Project: ${project.name}`"
       >

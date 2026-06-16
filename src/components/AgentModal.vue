@@ -6,8 +6,6 @@ import { useRovingTabList } from '../composables/useRovingTabList'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
-// Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
-const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
 import SubAgentList from './SubAgentList.vue'
@@ -17,7 +15,11 @@ import AppBadge from './ui/AppBadge.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
+
 const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
+
+// Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
+const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
 
 const localMessages = ref<OutputMessage[]>([])
 const { activeTab: activeDetailsTab, tabAttrs, panelAttrs, onKeydown, select } = useRovingTabList(

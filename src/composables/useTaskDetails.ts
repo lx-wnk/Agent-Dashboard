@@ -118,7 +118,9 @@ export function useTaskDetails(task: Ref<PipelineTask | null>) {
       // Poll the JSONL directly so the pane shows output before the agent
       // scanner links the PID to a live stream.
       void fetchSessionText(latest)
-      runningOutputPoll = setInterval(() => { void fetchSessionText(latest) }, 5000)
+      runningOutputPoll = setInterval(() => {
+        void fetchSessionText(latest)
+      }, 5000)
     }
   }
 

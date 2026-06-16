@@ -4,8 +4,8 @@ import { computed } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import MachineBadge from './MachineBadge.vue'
-import ProviderBadge from './ProviderBadge.vue'
 import PromptInput from './PromptInput.vue'
+import ProviderBadge from './ProviderBadge.vue'
 import AppBadge from './ui/AppBadge.vue'
 
 const props = defineProps<{ agent: Agent }>()

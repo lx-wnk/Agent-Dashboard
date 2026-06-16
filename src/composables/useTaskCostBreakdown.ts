@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
-import type { PipelineTask } from '../types'
 import type { StageCostRow } from '../components/StageCostWaterfall.vue'
+import type { PipelineTask } from '../types'
 import { ref, watch } from 'vue'
 
 export function useTaskCostBreakdown(task: Ref<PipelineTask | null>) {
@@ -29,7 +29,10 @@ export function useTaskCostBreakdown(task: Ref<PipelineTask | null>) {
 
   watch(
     () => [task.value?.id, task.value?.currentStage, task.value?.currentIteration, task.value?.latestStageRunStatus] as const,
-    ([id]) => { if (id) void loadCostBreakdown(id) },
+    ([id]) => {
+      if (id)
+        void loadCostBreakdown(id)
+    },
     { immediate: true },
   )
 

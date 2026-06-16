@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useInjectedTaskDetails } from '../../composables/taskModalContext'
-import { formatTaskDate } from '../../utils/taskFormat'
 import { runStatusChipClass } from '../../utils/statusColors'
+import { formatTaskDate } from '../../utils/taskFormat'
 import StageOutputView from '../StageOutputView.vue'
 
 const { stageRuns } = useInjectedTaskDetails()

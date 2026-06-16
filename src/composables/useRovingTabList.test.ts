@@ -1,6 +1,6 @@
-import { defineComponent, nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { defineComponent, nextTick, ref } from 'vue'
 import { useRovingTabList } from './useRovingTabList'
 
 function makeHarness(tabs: string[], idPrefix?: string, initial?: string) {
@@ -157,49 +157,49 @@ describe('useRovingTabList', () => {
       activeButton.trigger('keydown', { key })
     }
 
-    it('ArrowRight moves to next tab', async () => {
+    it('arrowRight moves to next tab', async () => {
       const wrapper = mount(makeHarness(['a', 'b', 'c']))
       pressKey('ArrowRight', wrapper)
       await nextTick()
       expect(wrapper.find('[data-testid="tab-b"]').attributes('aria-selected')).toBe('true')
     })
 
-    it('ArrowRight wraps from last to first', async () => {
+    it('arrowRight wraps from last to first', async () => {
       const wrapper = mount(makeHarness(['a', 'b', 'c'], undefined, 'c'))
       pressKey('ArrowRight', wrapper)
       await nextTick()
       expect(wrapper.find('[data-testid="tab-a"]').attributes('aria-selected')).toBe('true')
     })
 
-    it('ArrowLeft moves to previous tab', async () => {
+    it('arrowLeft moves to previous tab', async () => {
       const wrapper = mount(makeHarness(['a', 'b', 'c'], undefined, 'b'))
       pressKey('ArrowLeft', wrapper)
       await nextTick()
       expect(wrapper.find('[data-testid="tab-a"]').attributes('aria-selected')).toBe('true')
     })
 
-    it('ArrowLeft wraps from first to last', async () => {
+    it('arrowLeft wraps from first to last', async () => {
       const wrapper = mount(makeHarness(['a', 'b', 'c']))
       pressKey('ArrowLeft', wrapper)
       await nextTick()
       expect(wrapper.find('[data-testid="tab-c"]').attributes('aria-selected')).toBe('true')
     })
 
-    it('Home moves to first tab', async () => {
+    it('home moves to first tab', async () => {
       const wrapper = mount(makeHarness(['a', 'b', 'c'], undefined, 'c'))
       pressKey('Home', wrapper)
       await nextTick()
       expect(wrapper.find('[data-testid="tab-a"]').attributes('aria-selected')).toBe('true')
     })
 
-    it('End moves to last tab', async () => {
+    it('end moves to last tab', async () => {
       const wrapper = mount(makeHarness(['a', 'b', 'c']))
       pressKey('End', wrapper)
       await nextTick()
       expect(wrapper.find('[data-testid="tab-c"]').attributes('aria-selected')).toBe('true')
     })
 
-    it('ArrowRight calls preventDefault', async () => {
+    it('arrowRight calls preventDefault', async () => {
       const { onKeydown } = useRovingTabList(['a', 'b'])
       const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
       const prevented: boolean[] = []

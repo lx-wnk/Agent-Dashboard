@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
-import type { PermissionRequest, PipelineTask } from '../types'
 import type { SlashCommand } from '../components/TaskSlashCommandMenu.vue'
+import type { PermissionRequest, PipelineTask } from '../types'
 import type { UseTaskDetails } from './useTaskDetails'
 import { onUnmounted, ref } from 'vue'
 import {
@@ -36,7 +36,9 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
   function onCancelClick(): void {
     if (!cancelConfirm.value) {
       cancelConfirm.value = true
-      cancelConfirmTimer = setTimeout(() => { cancelConfirm.value = false }, 5000)
+      cancelConfirmTimer = setTimeout(() => {
+        cancelConfirm.value = false
+      }, 5000)
       return
     }
     if (cancelConfirmTimer)
@@ -44,14 +46,19 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
     cancelConfirm.value = false
     void details.handleAction(() => cancelTask(task.value!.id))
   }
-  onUnmounted(() => { if (cancelConfirmTimer) clearTimeout(cancelConfirmTimer) })
+  onUnmounted(() => {
+    if (cancelConfirmTimer)
+      clearTimeout(cancelConfirmTimer)
+  })
 
   function onResolve(req: PermissionRequest, outcome: 'granted' | 'denied'): Promise<void> {
-    return details.handleAction(() => resolvePermissionRequest(req.id, outcome))
+    return details.handleAction(() => resolvePermissionRequest(task.value!.id, req.id, outcome))
   }
 
   function onResolveAll(stageRunId: string, outcome: 'granted' | 'denied'): Promise<void> {
-    return details.handleAction(() => bulkResolvePermissionRequests(stageRunId, outcome).then(() => {}))
+    const group = details.pendingByStageRun.value.find(g => g.stageRunId === stageRunId)
+    const ids = group ? group.requests.map(r => r.id) : []
+    return details.handleAction(() => bulkResolvePermissionRequests(task.value!.id, ids, outcome).then(() => {}))
   }
 
   async function onGrantPermission(tool: string, pattern: string | null): Promise<boolean> {
@@ -105,7 +112,7 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
       case '/grant':
         await details.handleAction(async () => {
           for (const group of details.pendingByStageRun.value)
-            await bulkResolvePermissionRequests(group.stageRunId, 'granted')
+            await bulkResolvePermissionRequests(task.value!.id, group.requests.map(r => r.id), 'granted')
         })
         break
       case '/cancel':

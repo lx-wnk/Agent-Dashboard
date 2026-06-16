@@ -1,13 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
+import { useServerConfig } from '../../composables/useServerConfig'
+
 import ChannelScriptCallout from './ChannelScriptCallout.vue'
 
 vi.mock('../../composables/useServerConfig', () => ({
   useServerConfig: vi.fn(),
 }))
-
-import { useServerConfig } from '../../composables/useServerConfig'
 
 function mountWithScriptPath(path: string) {
   vi.mocked(useServerConfig).mockReturnValue({
@@ -46,11 +46,7 @@ describe('channelScriptCallout', () => {
   it('copy target is a native button with a non-empty aria-label', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ scriptPath: '/q/channel.mjs', homedir: '/home/u' }),
-    }))
-    const w = mount(ChannelScriptCallout)
+    const w = mountWithScriptPath('/q/channel.mjs')
     await flushPromises()
     const btn = w.find('button[data-testid="channel-script-path"]')
     expect(btn.exists()).toBe(true)

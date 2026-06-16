@@ -1,24 +1,24 @@
-import { computed, ref, toValue, watch } from 'vue'
 import type { MaybeRefOrGetter, Ref } from 'vue'
+import { computed, ref, toValue, watch } from 'vue'
 
 export interface RovingTabAttrs {
-  role: 'tab'
-  id: string
+  'role': 'tab'
+  'id': string
   'aria-selected': 'true' | 'false'
   'aria-controls': string
-  tabindex: 0 | -1
+  'tabindex': 0 | -1
 }
 
 export interface RovingPanelAttrs {
-  role: 'tabpanel'
-  id: string
+  'role': 'tabpanel'
+  'id': string
   'aria-labelledby': string
-  tabindex: 0
+  'tabindex': 0
 }
 
 export function useRovingTabList(
   tabs: MaybeRefOrGetter<readonly string[]>,
-  options?: { idPrefix?: string; initial?: string },
+  options?: { idPrefix?: string, initial?: string },
 ): {
   activeTab: Ref<string>
   select: (tab: string) => void
@@ -60,20 +60,20 @@ export function useRovingTabList(
   function tabAttrs(tab: string): RovingTabAttrs {
     const isActive = activeTab.value === tab
     return {
-      role: 'tab',
-      id: tabId(tab),
+      'role': 'tab',
+      'id': tabId(tab),
       'aria-selected': isActive ? 'true' : 'false',
       'aria-controls': panelId(tab),
-      tabindex: isActive ? 0 : -1,
+      'tabindex': isActive ? 0 : -1,
     }
   }
 
   function panelAttrs(tab: string): RovingPanelAttrs {
     return {
-      role: 'tabpanel',
-      id: panelId(tab),
+      'role': 'tabpanel',
+      'id': panelId(tab),
       'aria-labelledby': tabId(tab),
-      tabindex: 0,
+      'tabindex': 0,
     }
   }
 

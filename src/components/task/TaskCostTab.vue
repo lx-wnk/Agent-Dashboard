@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useTaskCostBreakdown } from '../../composables/useTaskCostBreakdown'
 import { useInjectedTask } from '../../composables/taskModalContext'
+import { useTaskCostBreakdown } from '../../composables/useTaskCostBreakdown'
 import StageCostWaterfall from '../StageCostWaterfall.vue'
 
 const task = useInjectedTask()
