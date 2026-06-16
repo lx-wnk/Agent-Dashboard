@@ -8,6 +8,7 @@ import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
 import ProviderBadge from './ProviderBadge.vue'
 import AppBadge from './ui/AppBadge.vue'
+import AppCard from './ui/AppCard.vue'
 
 const props = defineProps<{ agent: Agent }>()
 defineEmits<{ select: [agent: Agent] }>()
@@ -37,9 +38,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
 </script>
 
 <template>
-  <div
-    class="relative rounded-lg overflow-hidden cursor-pointer border border-line/50 bg-card transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)]"
-  >
+  <AppCard surface="card" radius="lg" interactive class="relative overflow-hidden cursor-pointer">
     <button
       type="button"
       class="absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
@@ -99,5 +98,5 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
       </div>
     </div>
     <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" class="relative z-10" @click.stop @keydown.enter.stop @keydown.space.stop />
-  </div>
+  </AppCard>
 </template>
