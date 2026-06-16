@@ -25,6 +25,7 @@ type PermissionRepo interface {
 	ResolvePermissionRequest(ctx context.Context, id, outcome string) error
 	CountForStageRun(ctx context.Context, stageRunID string) (int, error)
 	CountForStageRunsBulk(ctx context.Context, stageRunIDs []string) (map[string]int, error)
+	ExpirePendingForStageRun(ctx context.Context, stageRunID string) (int, error)
 }
 
 // GrantEntry describes a single permission to bulk-grant.
@@ -241,4 +242,19 @@ func (r *entPermissionRepo) CountForStageRunsBulk(ctx context.Context, stageRunI
 		counts[req.StageRunID]++
 	}
 	return counts, nil
+}
+
+// ExpirePendingForStageRun sets outcome="expired" and resolvedAt=now on all
+// pending (outcome IS NULL) permission_requests for the given stage run.
+// Returns the number of rows updated; 0 with nil error means none were pending.
+func (r *entPermissionRepo) ExpirePendingForStageRun(ctx context.Context, stageRunID string) (int, error) {
+	n, err := r.client.PermissionRequest.Update().
+		Where(permissionrequest.StageRunID(stageRunID), permissionrequest.OutcomeIsNil()).
+		SetOutcome("expired").
+		SetResolvedAt(time.Now()).
+		Save(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("permission.ExpirePendingForStageRun: %w", err)
+	}
+	return n, nil
 }

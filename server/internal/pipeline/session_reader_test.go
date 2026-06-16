@@ -1,6 +1,7 @@
 package pipeline_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -119,4 +120,41 @@ func TestExtractJsonBlock_NoBlock(t *testing.T) {
 
 func TestExtractJsonBlock_InvalidJSON(t *testing.T) {
 	require.Nil(t, pipeline.ExtractJsonBlock("```json\n{invalid}\n```"))
+}
+
+func TestReadLastStageJsonOutputFromFile_RateLimitError(t *testing.T) {
+	// A JSONL with a rate-limit API error line followed by no valid assistant text.
+	jsonl := `{"type":"assistant","isApiErrorMessage":true,"apiErrorStatus":429,"error":"rate_limit","message":{"role":"assistant","content":[{"type":"text","text":"You've hit your session limit"}]}}
+`
+	f := filepath.Join(t.TempDir(), "session.jsonl")
+	require.NoError(t, os.WriteFile(f, []byte(jsonl), 0o600))
+
+	out, err := pipeline.ReadLastStageJsonOutputFromFile(f)
+	require.NoError(t, err)
+	require.NotNil(t, out.APIError, "APIError must be populated for isApiErrorMessage=true line")
+	require.Equal(t, 429, out.APIError.Status)
+	require.Equal(t, "rate_limit", out.APIError.Kind)
+}
+
+func TestReadLastStageJsonOutputFromFile_NormalSession_NoAPIError(t *testing.T) {
+	// A normal session with a JSON output block and no API error lines.
+	// Built via json.Marshal so the embedded ```json block (with newlines and
+	// quotes) is escaped into valid JSONL rather than breaking the line.
+	innerText := "```json\n{\"summary\":\"done\"}\n```"
+	entry := map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"role":    "assistant",
+			"content": []map[string]any{{"type": "text", "text": innerText}},
+		},
+	}
+	line, err := json.Marshal(entry)
+	require.NoError(t, err)
+	f := filepath.Join(t.TempDir(), "session.jsonl")
+	require.NoError(t, os.WriteFile(f, append(line, '\n'), 0o600))
+
+	out, err := pipeline.ReadLastStageJsonOutputFromFile(f)
+	require.NoError(t, err)
+	require.Nil(t, out.APIError, "normal session must have nil APIError")
+	require.NotNil(t, out.Output)
 }

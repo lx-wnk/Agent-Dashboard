@@ -43,8 +43,9 @@ func (noopOrchestrator) ProgressTask(_ context.Context, _ string, _ *pipeline.Pr
 func (noopOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
-func (noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string) {}
-func (noopOrchestrator) InvalidateConfigCache()                              {}
+func (noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)       {}
+func (noopOrchestrator) InvalidateConfigCache()                                    {}
+func (noopOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}
 
 // buildBypassRouter wires the full production router (every handler mounted) in
 // bypass-auth mode against an in-memory SQLite database. It mirrors the DI in

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { usePlugins } from '../composables/usePlugins'
+import PluginSlot from './PluginSlot.vue'
 
 const { plugins, loading, error } = usePlugins()
 
 const CAP_LABELS: Record<string, string> = {
   auth_provider: 'Auth Provider',
   route_extension: 'Route Extension',
+  ui_extension: 'UI Extension',
 }
 </script>
 
@@ -49,5 +51,6 @@ const CAP_LABELS: Record<string, string> = {
         </div>
       </div>
     </div>
+    <PluginSlot name="settings-panel" :ctx="{}" />
   </div>
 </template>

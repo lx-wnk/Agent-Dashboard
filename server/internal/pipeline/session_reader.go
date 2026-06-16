@@ -119,9 +119,16 @@ func FindNewestSessionID(cwd, afterISO string) (string, error) {
 	return bestID, nil
 }
 
+// APIError carries the structured API error from a rate/usage-limit JSONL entry.
+type APIError struct {
+	Status int
+	Kind   string
+}
+
 type StageOutputRead struct {
-	Output  map[string]any
-	RawText string
+	Output   map[string]any
+	RawText  string
+	APIError *APIError
 }
 
 func ExtractJsonBlock(text string) map[string]any {
@@ -138,8 +145,11 @@ func ExtractJsonBlock(text string) map[string]any {
 }
 
 type JsonlEntry struct {
-	Type    string `json:"type"`
-	Message *struct {
+	Type              string `json:"type"`
+	IsAPIErrorMessage bool   `json:"isApiErrorMessage"`
+	APIErrorStatus    int    `json:"apiErrorStatus"`
+	Error             string `json:"error"`
+	Message           *struct {
 		Role    string          `json:"role"`
 		Model   string          `json:"model"`
 		Content json.RawMessage `json:"content"`
@@ -150,6 +160,17 @@ type JsonlEntry struct {
 			CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 		} `json:"usage"`
 	} `json:"message"`
+}
+
+// lastAPIError scans entries from the end and returns the last API error entry, nil if none.
+func lastAPIError(entries []JsonlEntry) *APIError {
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if e.IsAPIErrorMessage {
+			return &APIError{Status: e.APIErrorStatus, Kind: e.Error}
+		}
+	}
+	return nil
 }
 
 func lastAssistantText(entries []JsonlEntry) string {
@@ -188,11 +209,12 @@ func ReadLastStageJsonOutput(cwd, sessionID string) (StageOutputRead, error) {
 		return StageOutputRead{}, nil
 	}
 	entries := parseJsonlLines(raw)
+	apiErr := lastAPIError(entries)
 	text := lastAssistantText(entries)
-	if text == "" {
+	if text == "" && apiErr == nil {
 		return StageOutputRead{}, nil
 	}
-	return StageOutputRead{Output: ExtractJsonBlock(text), RawText: text}, nil
+	return StageOutputRead{Output: ExtractJsonBlock(text), RawText: text, APIError: apiErr}, nil
 }
 
 // ReadLastStageJsonOutputFromFile reads the JSONL at the given absolute path
@@ -204,11 +226,12 @@ func ReadLastStageJsonOutputFromFile(filePath string) (StageOutputRead, error) {
 		return StageOutputRead{}, fmt.Errorf("reading synthetic session file: %w", err)
 	}
 	entries := parseJsonlLines(raw)
+	apiErr := lastAPIError(entries)
 	text := lastAssistantText(entries)
-	if text == "" {
+	if text == "" && apiErr == nil {
 		return StageOutputRead{}, nil
 	}
-	return StageOutputRead{Output: ExtractJsonBlock(text), RawText: text}, nil
+	return StageOutputRead{Output: ExtractJsonBlock(text), RawText: text, APIError: apiErr}, nil
 }
 
 type SessionTokenSummary struct {

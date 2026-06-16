@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // safeBashCommands is the canonical allow-list of command names that may appear
@@ -48,6 +49,8 @@ var safeBashCommands = map[string]bool{
 	"which":         true,
 	"type":          true,
 	"wc":            true,
+	"du":            true,
+	"gzip":          true,
 	"sort":          true,
 	"uniq":          true,
 	"diff":          true,
@@ -79,6 +82,37 @@ var safeBashCommands = map[string]bool{
 	"jq":            true,
 	"yq":            true,
 	"curl":          false, // explicitly false for documentation — never safe in this context
+}
+
+// extraBashCommands holds project-configured additional allowed command names.
+// Access is guarded by extraMu. Hardcoded blocks in safeBashCommands always win.
+var (
+	extraMu       sync.RWMutex
+	extraBashCmds map[string]bool
+)
+
+// SetExtraSafeBashCommands replaces the project-configured extra allow-list.
+// Names are lower-cased and trimmed; empty entries are dropped.
+// Call at startup and after pipeline_config writes. Safe for concurrent use.
+// Explicitly blocked commands in safeBashCommands are never overridden.
+func SetExtraSafeBashCommands(cmds []string) {
+	next := make(map[string]bool, len(cmds))
+	for _, c := range cmds {
+		if n := strings.ToLower(strings.TrimSpace(c)); n != "" {
+			next[n] = true
+		}
+	}
+	extraMu.Lock()
+	extraBashCmds = next
+	extraMu.Unlock()
+}
+
+// ParseExtraSafeBashCommands splits a space- and/or comma-separated list of
+// command names into a slice suitable for SetExtraSafeBashCommands.
+func ParseExtraSafeBashCommands(raw string) []string {
+	// Replace commas with spaces so a single Fields call handles both separators.
+	normalized := strings.ReplaceAll(raw, ",", " ")
+	return strings.Fields(normalized)
 }
 
 // shellInjectionRE matches shell constructs that are dangerous regardless of
@@ -120,13 +154,24 @@ func IsSafeBashPattern(pattern string) (bool, string) {
 	first := filepath.Base(fields[0])
 	// Normalise to lower-case for case-insensitive comparison.
 	firstLower := strings.ToLower(first)
+	// Strip trailing glob wildcard so "grep*" resolves to "grep" for the
+	// allow-list lookup. No real command name ends in "*".
+	firstLowerNorm := strings.TrimRight(firstLower, "*")
 
-	if ok, explicit := safeBashCommands[firstLower]; explicit && !ok {
-		// Explicitly blocked (e.g. curl is in the map with value false).
-		return false, "command explicitly blocked: " + first
-	} else if !explicit {
-		// Not in the allow-list at all.
-		return false, "command not in safe allow-list: " + first
+	if ok, explicit := safeBashCommands[firstLowerNorm]; explicit {
+		if !ok {
+			// Explicitly blocked (e.g. curl). Hardcoded map wins — extras cannot un-block.
+			return false, "command explicitly blocked: " + first
+		}
+		// Hardcoded allow — fall through to injection check.
+	} else {
+		// Not in the hardcoded map; check project-configured extras.
+		extraMu.RLock()
+		inExtras := extraBashCmds[firstLowerNorm]
+		extraMu.RUnlock()
+		if !inExtras {
+			return false, "command not in safe allow-list: " + first
+		}
 	}
 
 	// Secondary check: reject shell injection constructs anywhere in the pattern.

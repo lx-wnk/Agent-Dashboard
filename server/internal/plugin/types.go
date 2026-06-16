@@ -29,4 +29,7 @@ func (d Descriptor) HasCapability(capability string) bool {
 const (
 	CapAuthProvider   = "auth_provider"
 	CapRouteExtension = "route_extension"
+	// CapUIExtension marks a plugin that contributes frontend UI into named slots
+	// via a ui-manifest.json + per-slot JS modules served by the plugin proxy.
+	CapUIExtension = "ui_extension"
 )

@@ -11,6 +11,7 @@ import { useTaskDetails } from '../composables/useTaskDetails'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import AuditLogTab from './AuditLogTab.vue'
+import PluginSlot from './PluginSlot.vue'
 import TaskCostTab from './task/TaskCostTab.vue'
 import TaskDependenciesTab from './task/TaskDependenciesTab.vue'
 import TaskFooter from './task/TaskFooter.vue'
@@ -132,6 +133,7 @@ watch(() => props.task?.id, (id, prevId) => {
       </div>
 
       <TaskFooter />
+      <PluginSlot name="task-modal-footer" :ctx="{ task }" />
     </template>
   </AppModal>
 </template>

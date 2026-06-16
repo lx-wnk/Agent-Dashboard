@@ -69,6 +69,7 @@ func provideOrchestrator(
 		MCPUrl:                fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		WorktreeRoot:          cfg.WorktreeRoot,
 		ForceWorktrees:        cfg.ForceWorktrees,
+		SpawnFn:               pipeline.SpawnStageAgent,
 		ResolveSpawner:        resolveFn,
 		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the

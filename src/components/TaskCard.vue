@@ -7,6 +7,7 @@ import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
+import PluginSlot from './PluginSlot.vue'
 import WorktreePill from './WorktreePill.vue'
 
 const props = defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
@@ -140,6 +141,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
       <span v-if="task.currentStage === 'implementation'" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50">
         max iter {{ task.maxIterations }}
       </span>
+      <PluginSlot name="kanban-card-badge" :ctx="{ task }" />
     </div>
   </div>
 </template>

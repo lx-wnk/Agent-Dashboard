@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DAGData } from '../../sdk.generated'
-import * as d3 from 'd3'
+import { scaleLinear } from 'd3-scale'
+import { select } from 'd3-selection'
 import { computed, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -56,7 +57,7 @@ function render() {
     return
   }
 
-  const svg = d3.select(svgRef.value)
+  const svg = select(svgRef.value)
   svg.selectAll('*').remove()
 
   const nodes: DAGNodeFlat[] = props.data.nodes.map(n => ({ ...n }))
@@ -76,7 +77,7 @@ function render() {
 
   // Build position map: nodeId → {x, y}
   const drawWidth = svgWidth - PAD_LEFT - PAD_RIGHT
-  const xScale = d3.scaleLinear()
+  const xScale = scaleLinear()
     .domain([0, Math.max(nodes.length - 1, 1)])
     .range([PAD_LEFT, PAD_LEFT + drawWidth])
 
@@ -222,7 +223,7 @@ watch(() => props.data, render, { immediate: true, flush: 'post' })
 
 onUnmounted(() => {
   if (svgRef.value) {
-    d3.select(svgRef.value).selectAll('*').remove()
+    select(svgRef.value).selectAll('*').remove()
   }
 })
 </script>

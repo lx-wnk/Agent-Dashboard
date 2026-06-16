@@ -9,11 +9,14 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
 )
 
+// SpawnFunc launches the agent process for native (claude) stages.
+type SpawnFunc func(opts SpawnAgentOptions) (SpawnResult, error)
+
 // agentStageHandler is the generic stage handler for agent-driven stages.
 type agentStageHandler struct {
 	stage       string
 	buildPrompt func(ctx *StageContext) PromptBundle
-	spawnFn     func(opts SpawnAgentOptions) (SpawnResult, error)
+	spawnFn     SpawnFunc
 }
 
 func (h *agentStageHandler) Stage() string       { return h.stage }
@@ -116,12 +119,11 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	// Native Claude path: resolved is either nil, claude-default, or any row
 	// with AdapterType=="claude" / "". Behaviour is byte-identical to the
 	// pre-adapter-merge code path.
-	spawnFn := h.spawnFn
-	if spawnFn == nil {
-		spawnFn = SpawnStageAgent
+	if h.spawnFn == nil {
+		return nil, fmt.Errorf("agentStageHandler.Execute(%s): spawnFn not set", h.stage)
 	}
 
-	result, err := spawnFn(SpawnAgentOptions{
+	result, err := h.spawnFn(SpawnAgentOptions{
 		Task:            ctx.Task,
 		StageRun:        ctx.StageRun,
 		SystemPrompt:    bundle.SystemPrompt,
@@ -197,7 +199,7 @@ func buildAdditionalPromptSuffix(prompt string) string {
 }
 
 // createAgentStage returns an agent-driven StageHandler for the given stage.
-func createAgentStage(stage string, buildPrompt func(*StageContext) PromptBundle, spawnFn func(SpawnAgentOptions) (SpawnResult, error)) StageHandler {
+func createAgentStage(stage string, buildPrompt func(*StageContext) PromptBundle, spawnFn SpawnFunc) StageHandler {
 	return &agentStageHandler{
 		stage:       stage,
 		buildPrompt: buildPrompt,
@@ -256,14 +258,22 @@ func finalizationBuilder(ctx *StageContext) PromptBundle {
 	return FinalizationPrompt(ctx.Task, ctx.AllStageRuns)
 }
 
-// HandlersByStage is the registry of all stage handlers.
-var HandlersByStage = map[string]StageHandler{
-	"concept":        conceptHandler,
-	"backlog":        backlogHandler,
-	"implementation": createAgentStage("implementation", implementationBuilder, nil),
-	"self_review":    createAgentStage("self_review", selfReviewBuilder, nil),
-	"finalization":   createAgentStage("finalization", finalizationBuilder, nil),
+// NewStageHandlers builds a stage registry with the given spawn function wired
+// into all agent-driven stages.
+func NewStageHandlers(spawnFn SpawnFunc) map[string]StageHandler {
+	return map[string]StageHandler{
+		"concept":        conceptHandler,
+		"backlog":        backlogHandler,
+		"implementation": createAgentStage("implementation", implementationBuilder, spawnFn),
+		"self_review":    createAgentStage("self_review", selfReviewBuilder, spawnFn),
+		"finalization":   createAgentStage("finalization", finalizationBuilder, spawnFn),
+	}
 }
+
+// HandlersByStage is the default package-level registry. Agent stages use
+// syntheticSpawn so this registry is safe for any code that does not wire a
+// real orchestrator (tests, static analysis, etc.).
+var HandlersByStage = NewStageHandlers(syntheticSpawn)
 
 // GetHandlerForStage returns the handler for stage, or nil if unregistered.
 func GetHandlerForStage(stage string) StageHandler {

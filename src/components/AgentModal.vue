@@ -7,6 +7,7 @@ import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } f
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
 import MachineBadge from './MachineBadge.vue'
+import PluginSlot from './PluginSlot.vue'
 import PromptInput from './PromptInput.vue'
 import SubAgentList from './SubAgentList.vue'
 import TaskList from './TaskList.vue'
@@ -150,6 +151,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
         </details>
       </div>
       <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
+      <PluginSlot name="agent-modal-footer" :ctx="{ agent }" />
     </template>
   </AppModal>
 </template>

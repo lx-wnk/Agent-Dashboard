@@ -8,5 +8,6 @@ export async function fetchPluginList(): Promise<PluginInfo[]> {
   const res = await fetch('/api/settings/plugins', { credentials: 'same-origin' })
   if (!res.ok)
     throw new Error(`Failed to load plugins (HTTP ${res.status}: ${res.statusText})`)
-  return res.json()
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
 }

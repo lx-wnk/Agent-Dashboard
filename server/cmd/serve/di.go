@@ -38,6 +38,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
+	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
@@ -220,6 +221,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		cfgRepo := repo.NewPipelineConfigRepo(entClient)
 		analyticsRepo = rawrepo.NewAnalyticsRepo(bundle.DB)
 		analyticsHandler = apianalytics.NewHandler(analyticsRepo, bundle.DB, cfgRepo)
+		// Seed project-configured extra safe Bash commands so grants validate
+		// against the stored allow-list from first request onward.
+		raw := cfgRepo.GetString(ctx, "extraSafeBashCommands", "")
+		permissions.SetExtraSafeBashCommands(permissions.ParseExtraSafeBashCommands(raw))
 	}
 	// Cost baseline for the agent health score's cost-spike component. Nil repo
 	// (no database) yields a provider that returns 0 → no cost penalty.
