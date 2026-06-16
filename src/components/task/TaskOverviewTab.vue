@@ -4,7 +4,7 @@ import { computed, ref, watch } from 'vue'
 import { useInjectedTask, useInjectedTaskDetails } from '../../composables/taskModalContext'
 import { useTaskAssignment } from '../../composables/useTaskAssignment'
 import { runStatusChipClass } from '../../utils/statusColors'
-import { formatCents, formatTaskDate, taskRuntime } from '../../utils/taskFormat'
+import { activeRuntime, formatCents, formatTaskDate, taskRuntime } from '../../utils/taskFormat'
 import AgentChatStream from '../AgentChatStream.vue'
 import GitStatusPanel from '../GitStatusPanel.vue'
 import RefineStatusPanel from '../RefineStatusPanel.vue'
@@ -18,6 +18,7 @@ const emit = defineEmits<{ openChat: [task: PipelineTask] }>()
 
 const task = useInjectedTask()
 const {
+  stageRuns,
   pendingRequests,
   latestStageRun,
   latestRunError,
@@ -41,6 +42,7 @@ const {
 } = useTaskAssignment(task)
 
 const runtime = computed(() => (task.value ? taskRuntime(task.value) : '—'))
+const active = computed(() => activeRuntime(stageRuns.value))
 
 const lastRefineOutput = ref('')
 const completedRefinePhases = ref<string[]>([])
@@ -153,6 +155,13 @@ watch(
           Runtime
         </dt><dd class="text-fg font-mono text-xs">
           {{ runtime }}
+        </dd>
+      </div>
+      <div v-if="active !== '—'" class="contents">
+        <dt class="text-fg-mute text-[11px] uppercase tracking-[0.5px]">
+          Active Runtime
+        </dt><dd class="text-fg font-mono text-xs">
+          {{ active }}
         </dd>
       </div>
       <div v-if="totalTokensUsed > 0" class="contents">
