@@ -338,10 +338,13 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	resolvedCount := 0
 	for _, id := range idsToResolve {
 		if err := h.permRepo.ResolvePermissionRequest(r.Context(), id, outcome); err != nil {
 			resolveErrors = append(resolveErrors, err.Error())
+			continue
 		}
+		resolvedCount++
 	}
 
 	// When granted, create task_permissions from the resolved requests so the
@@ -368,7 +371,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 
 	h.broadcastEnrichedUpdate(r.Context(), body.TaskID)
 	return jsonReply(w, http.StatusOK, map[string]any{
-		"resolved": len(idsToResolve),
+		"resolved": resolvedCount,
 		"errors":   resolveErrors,
 	})
 }
@@ -397,7 +400,7 @@ func isCovered(tool string, pattern *string, perms []*ent.TaskPermission) bool {
 // grantValidatedEntries validates each entry with ValidateGrantEntry and persists the
 // safe ones via BulkGrantPermissions. Invalid entries are collected and returned as
 // error strings rather than aborting the call, so one bad pattern doesn't block the
-// rest. Logs a slog.Info audit line (no DB transaction required from this path).
+// rest.
 func (h *Handler) grantValidatedEntries(ctx context.Context, taskID string, entries []repo.GrantEntry) ([]*ent.TaskPermission, []string) {
 	var safe []repo.GrantEntry
 	var errs []string
