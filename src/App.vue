@@ -352,8 +352,10 @@ onMounted(fetchQuota)
 
         <PipelineBoard
           v-else-if="activeView === 'pipeline'"
+          :agents="agents"
           @select="selectTask"
           @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
+          @navigate-agent="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"
         />
         <CostAnalyticsView v-else-if="activeView === 'cost'" />
         <WorkflowsView

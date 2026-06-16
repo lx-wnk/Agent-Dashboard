@@ -1,19 +1,45 @@
 <script setup lang="ts">
-import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
+import type { Agent, PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
 import { useIntervalFn } from '@vueuse/core'
 import { computed, ref } from 'vue'
+import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { shortId, useCopyId } from '../composables/useCopyId'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
-import { runStatusTone, stageTone } from '../utils/statusColors'
+import { agentStatusTone, runStatusTone, stageTone } from '../utils/statusColors'
 import PluginSlot from './PluginSlot.vue'
+import AppBadge from './ui/AppBadge.vue'
 import AppCard from './ui/AppCard.vue'
 import AppChip from './ui/AppChip.vue'
 import WorktreePill from './WorktreePill.vue'
 
-const props = defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
-const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
+const props = defineProps<{
+  task: PipelineTask
+  project?: Project | null
+  spawner?: Spawner | null
+  workingAgent?: Agent | null
+}>()
+const emit = defineEmits<{
+  select: [task: PipelineTask]
+  openChat: [task: PipelineTask]
+  navigateAgent: [sessionId: string]
+}>()
+
+const { getIdentity } = useAgentIdentity()
+
+const agentIdentity = computed(() =>
+  props.workingAgent ? getIdentity(props.workingAgent.projectPath) : null,
+)
+
+const agentBadgeVariant = computed(() => {
+  const tone = agentStatusTone(props.workingAgent?.status ?? '')
+  if (tone === 'success')
+    return 'active'
+  if (tone === 'warning')
+    return 'waiting'
+  return 'idle'
+})
 
 const { copy: copyId, copied: idCopied } = useCopyId(props.task.id)
 
@@ -113,6 +139,18 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
         <span aria-hidden="true">◫</span>{{ project.name }}
       </span>
     </div>
+    <button
+      v-if="workingAgent && agentIdentity"
+      type="button"
+      data-testid="task-agent-chip"
+      class="relative z-10 self-start flex items-center gap-1.5 px-1.5 py-px rounded border border-line bg-raised hover:bg-card transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 text-left"
+      :aria-label="`Jump to agent: ${workingAgent.projectName}`"
+      @click.stop="emit('navigateAgent', workingAgent.sessionId)"
+    >
+      <span class="text-[11px] leading-none" aria-hidden="true">{{ agentIdentity.emoji }}</span>
+      <AppBadge :variant="agentBadgeVariant" />
+      <span class="font-mono text-[10px] text-fg-soft truncate max-w-[120px]">{{ workingAgent.projectName }}</span>
+    </button>
     <div class="flex flex-wrap gap-1 mt-0.5">
       <AppChip :tone="stageTone(task.currentStage)" mono>
         {{ stageLabel(task.currentStage) }}
