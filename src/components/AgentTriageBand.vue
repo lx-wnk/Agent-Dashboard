@@ -6,6 +6,7 @@ import { useNow } from '../composables/useNow'
 import { usePermissionResolve } from '../composables/usePermissionResolve'
 import { attentionFor } from '../utils/attention'
 import { formatErrorState, formatRelativeActivity, secondsSince, shortModel } from '../utils/format'
+import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
   agents: Agent[]
@@ -205,14 +206,14 @@ watch(() => props.focusedSessionId, (id) => {
           >
             {{ approveAllOpen ? 'Hide review' : 'Review what\'s affected' }}
           </button>
-          <button
-            type="button"
+          <AppButton
+            variant="success"
+            size="sm"
             :disabled="approveAllInFlight || selectedCount === 0"
-            class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-success text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
             @click="handleApproveAll"
           >
             Approve all{{ selectedCount < resolvableAgents.length ? ` (${selectedCount})` : '' }}
-          </button>
+          </AppButton>
         </div>
 
         <!-- Collapsible disclosure: per-agent + command list with deselect checkboxes -->
@@ -298,34 +299,35 @@ watch(() => props.focusedSessionId, (id) => {
 
             <!-- Approve/Deny buttons only for resolvable agents -->
             <template v-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
-              <button
-                type="button"
+              <AppButton
+                variant="success"
+                size="sm"
                 :disabled="resolving[agent.sessionId]"
-                class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-success text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
                 :aria-label="`Approve permissions for ${agent.projectName}`"
                 @click="handleResolveAgent(agent, 'granted')"
               >
                 Approve
-              </button>
-              <button
-                type="button"
+              </AppButton>
+              <AppButton
+                variant="danger"
+                size="sm"
                 :disabled="resolving[agent.sessionId]"
-                class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-danger text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500"
                 :aria-label="`Deny permissions for ${agent.projectName}`"
                 @click="handleResolveAgent(agent, 'denied')"
               >
                 Deny
-              </button>
+              </AppButton>
             </template>
 
-            <button
-              type="button"
-              class="ml-auto text-[12px] font-semibold px-3 py-1 rounded-md border border-line bg-raised text-fg-mute hover:text-fg hover:bg-raised/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            <AppButton
+              variant="outline"
+              size="sm"
+              class="ml-auto"
               :aria-label="`Open details for ${agent.projectName}`"
               @click="emit('select', agent)"
             >
               Open ↗
-            </button>
+            </AppButton>
           </div>
         </div>
       </div>
