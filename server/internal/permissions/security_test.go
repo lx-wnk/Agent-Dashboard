@@ -123,6 +123,8 @@ func TestIsSafeBashPattern_GlobSuffix(t *testing.T) {
 		"pnpm install*",
 		"git add*",
 		"git commit*",
+		"du*",
+		"gzip*",
 	}
 	for _, pat := range cases {
 		ok, reason := permissions.IsSafeBashPattern(pat)

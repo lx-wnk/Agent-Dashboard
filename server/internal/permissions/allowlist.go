@@ -48,6 +48,8 @@ var safeBashCommands = map[string]bool{
 	"which":         true,
 	"type":          true,
 	"wc":            true,
+	"du":            true,
+	"gzip":          true,
 	"sort":          true,
 	"uniq":          true,
 	"diff":          true,
