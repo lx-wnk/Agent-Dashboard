@@ -69,6 +69,16 @@ function getManifest(
   return cached
 }
 
+// A manifest-supplied module path must resolve within the plugin's own
+// /api/settings/plugins/{id}/ namespace: no traversal, absolute path, or scheme.
+function isSafeModulePath(module: string): boolean {
+  if (!module || module.startsWith('/'))
+    return false
+  if (module.includes('://') || /^[a-z][a-z0-9+.-]*:/i.test(module))
+    return false
+  return !module.split('/').includes('..')
+}
+
 function importModule(url: string, importAddon: (url: string) => Promise<SlotAddonModule>): Promise<SlotAddonModule> {
   let cached = moduleCache.get(url)
   if (!cached) {
@@ -116,6 +126,8 @@ export async function loadSlotAddons(slot: SlotName, deps: LoadDeps = {}): Promi
       if (manifest && Array.isArray(manifest.slots)) {
         for (const entry of manifest.slots) {
           if (entry.slot !== slot)
+            continue
+          if (!isSafeModulePath(entry.module))
             continue
           const mod = await importModule(`/api/settings/plugins/${p.id}/${entry.module}`, importAddon)
           if (mod.default)

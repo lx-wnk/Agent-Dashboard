@@ -87,6 +87,25 @@ describe('loadSlotAddons — UI manifest path', () => {
     expect(addons[0].slot).toBe('task-modal-footer')
   })
 
+  it('skips manifest modules that escape the plugin namespace', async () => {
+    const fetchPlugins = vi.fn().mockResolvedValue([
+      { id: 'rich', capabilities: ['ui_extension'] },
+    ])
+    const fetchManifest = vi.fn(async () => ({
+      slots: [
+        { slot: 'task-modal-footer', module: '../other/evil.js' },
+        { slot: 'task-modal-footer', module: '/etc/passwd' },
+        { slot: 'task-modal-footer', module: 'https://evil.example/x.js' },
+      ],
+    }))
+    const importAddon = vi.fn(async () => bareAddon())
+
+    const addons = await loadSlotAddons('task-modal-footer', { fetchPlugins, fetchManifest, importAddon })
+
+    expect(importAddon).not.toHaveBeenCalled()
+    expect(addons).toEqual([])
+  })
+
   it('memoizes the plugin list, manifest, and module across repeat loads', async () => {
     const fetchPlugins = vi.fn().mockResolvedValue([
       { id: 'rich', capabilities: ['ui_extension'] },

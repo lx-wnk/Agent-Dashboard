@@ -360,12 +360,19 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/hooks/pending", hooksHandler.Pending)
 		r.Post("/api/hooks/respond", hooksHandler.Respond)
 
-		// Mount route_extension plugins (if any).
+		// Mount the proxy for route_extension and ui_extension plugins. Both serve
+		// their assets (route handlers, ui-manifest + slot modules) through the same
+		// per-plugin proxy mount; All() yields each entry once, so the union is
+		// deduplicated by construction.
 		if deps.PluginRegistry != nil {
 			pluginsHandler := apiplugins.New(deps.PluginRegistry)
 			pluginsHandler.Mount(r)
-			for _, entry := range deps.PluginRegistry.AllWithCapability(plugin.CapRouteExtension) {
-				id := entry.Descriptor.ID
+			for _, entry := range deps.PluginRegistry.All() {
+				d := entry.Descriptor
+				if !d.HasCapability(plugin.CapRouteExtension) && !d.HasCapability(plugin.CapUIExtension) {
+					continue
+				}
+				id := d.ID
 				r.Mount("/api/settings/plugins/"+id, plugin.NewReverseProxy(entry, "/api/settings/plugins/"+id))
 				slog.Info("router: mounted plugin route", "id", id, "path", "/api/settings/plugins/"+id)
 			}
