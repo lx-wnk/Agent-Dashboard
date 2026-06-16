@@ -4,7 +4,7 @@ import { needsAttention, sortByTriage } from '../utils/attention'
 import { errorMessage } from '../utils/errorMessage'
 import { secondsSince, totalTokenCount } from '../utils/format'
 import { AGENTS_POLL_MS } from '../utils/sse'
-import { useNow } from './useNow'
+import { startNowTicking } from './useNow'
 import { drainPendingMessages } from './usePendingMessages'
 import { createSseResource } from './useSseResource'
 
@@ -114,7 +114,7 @@ const filteredAgents = computed(() => {
   )
 })
 
-const { nowMs } = useNow()
+const { nowMs } = startNowTicking()
 
 const attentionAgents = computed(() => {
   const secsOf = (a: Agent) => secondsSince(a.lastActivity, nowMs.value)

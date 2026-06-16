@@ -84,10 +84,6 @@ const resolvableAgents = computed(() =>
   props.agents.filter(a => a.pipelineTaskId && a.pendingPermissions && a.pendingPermissions.length > 0),
 )
 
-const totalPendingCount = computed(() =>
-  resolvableAgents.value.reduce((sum, a) => sum + (a.pendingPermissions?.length ?? 0), 0),
-)
-
 // --- Approve-all bar ---
 const approveAllOpen = ref(false)
 // Selected agent sessionIds for the approve-all action; default all
@@ -189,9 +185,9 @@ watch(() => props.focusedSessionId, (id) => {
         </span>
       </div>
 
-      <!-- Approve-all bar: shown when 2+ pending permissions are resolvable -->
+      <!-- Approve-all bar: shown when 2+ agents are blocked on a permission -->
       <div
-        v-if="totalPendingCount >= 2"
+        v-if="resolvableAgents.length >= 2"
         class="mb-3 rounded-lg border border-warning-line bg-warning-soft overflow-hidden"
       >
         <div class="flex items-center gap-3 px-3 py-2">
@@ -204,7 +200,7 @@ watch(() => props.focusedSessionId, (id) => {
             :aria-expanded="approveAllOpen"
             @click="approveAllOpen = !approveAllOpen"
           >
-            {{ approveAllOpen ? 'Hide review' : 'Review what\'s affected' }}
+            {{ approveAllOpen ? 'Hide what\'s affected' : 'Review what\'s affected' }}
           </button>
           <AppButton
             variant="success"
@@ -212,7 +208,7 @@ watch(() => props.focusedSessionId, (id) => {
             :disabled="approveAllInFlight || selectedCount === 0"
             @click="handleApproveAll"
           >
-            Approve all{{ selectedCount < resolvableAgents.length ? ` (${selectedCount})` : '' }}
+            ✓ Approve all{{ selectedCount < resolvableAgents.length ? ` (${selectedCount})` : '' }}
           </AppButton>
         </div>
 

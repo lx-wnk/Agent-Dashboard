@@ -163,6 +163,8 @@ function showToast(msg: string) {
 
 // Keyboard focus for the triage band: `n` cycles attention agents (wrapping).
 const focusedSessionId = ref<string | null>(null)
+// Guards the keyboard resolve shortcuts (a/d/⇧A) against rapid double-fire.
+const kbResolving = ref(false)
 
 function focusNextAttention() {
   const list = attentionAgents.value
@@ -173,13 +175,16 @@ function focusNextAttention() {
 }
 
 function resolveFocused(outcome: 'granted' | 'denied') {
+  if (kbResolving.value)
+    return
   const focused = attentionAgents.value.find(a => a.sessionId === focusedSessionId.value)
   if (!focused?.pipelineTaskId || !focused.pendingPermissions?.length)
     return
+  kbResolving.value = true
   void resolveAgent(focused, outcome).then((err) => {
     if (err)
       showToast(err)
-  })
+  }).finally(() => { kbResolving.value = false })
 }
 
 // Shift+D theme + Cmd/Ctrl+B sidebar are global; n/a/d/⇧A/c act on the triage
@@ -189,37 +194,44 @@ function handleKeydown(e: KeyboardEvent) {
 
   const tag = (e.target as HTMLElement)?.tagName
   const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement).isContentEditable
+  // key normalised so CapsLock doesn't break the lower-case shortcuts
+  const key = e.key.toLowerCase()
 
-  if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping) {
+  if (key === 'd' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping) {
     toggleTheme()
     return
   }
 
-  const anyOverlay = selectedAgent.value || showSettings.value || showSpawnDialog.value
+  // Any open modal/dialog (incl. Spotlight) suppresses the single-key shortcuts.
+  const overlayOpen = selectedAgent.value || showSettings.value || showSpawnDialog.value
     || showBacklogForm.value || showSessions.value || showRefinementChat.value || activeConceptTask.value
-  if (activeView.value !== 'dashboard' || anyOverlay || isTyping || e.ctrlKey || e.metaKey || e.altKey)
+    || document.querySelector('[role="dialog"], [aria-modal="true"]') !== null
+  if (activeView.value !== 'dashboard' || overlayOpen || isTyping || e.ctrlKey || e.metaKey || e.altKey)
     return
 
-  if (e.key === 'n') {
+  if (key === 'n') {
     e.preventDefault()
     focusNextAttention()
   }
-  else if (e.key === 'a' && !e.shiftKey) {
+  else if (key === 'a' && e.shiftKey) {
     e.preventDefault()
-    resolveFocused('granted')
-  }
-  else if (e.key === 'd' && !e.shiftKey) {
-    e.preventDefault()
-    resolveFocused('denied')
-  }
-  else if (e.key === 'A' && e.shiftKey) {
-    e.preventDefault()
+    if (kbResolving.value)
+      return
+    kbResolving.value = true
     void approveAll(attentionAgents.value.filter(a => a.pipelineTaskId && a.pendingPermissions?.length)).then((err) => {
       if (err)
         showToast(err)
-    })
+    }).finally(() => { kbResolving.value = false })
   }
-  else if (e.key === 'c' && !e.shiftKey) {
+  else if (key === 'a') {
+    e.preventDefault()
+    resolveFocused('granted')
+  }
+  else if (key === 'd') {
+    e.preventDefault()
+    resolveFocused('denied')
+  }
+  else if (key === 'c') {
     e.preventDefault()
     dashboardLayout.value = dashboardLayout.value === 'cards' ? 'list' : 'cards'
   }

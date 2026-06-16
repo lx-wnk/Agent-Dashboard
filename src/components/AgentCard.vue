@@ -57,7 +57,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
         <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
         <span class="font-semibold text-[13px] text-fg whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
         <ProviderBadge :provider="agent.provider" />
-        <span class="text-[11px] text-fg-mute whitespace-nowrap">
+        <span class="text-[11px] font-mono text-fg-mute whitespace-nowrap">
           {{ shortModel(agent.model ?? null) }} ·
           <span v-if="agent.costUnknown" title="Cost unknown — no pricing data for this provider/model">?</span>
           <template v-else>{{ formatCost(agent.costEstimate) }}</template>
@@ -70,10 +70,10 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
         <MachineBadge v-if="agent.machine" :machine="agent.machine" />
       </div>
       <div class="flex-shrink-0 flex flex-col items-end gap-0.5">
-        <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
+        <span class="text-[11px] font-mono text-fg-mute whitespace-nowrap">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
         <span class="text-[10px] font-mono text-fg-mute whitespace-nowrap">{{ relActivity }}</span>
         <span v-if="burnRate !== '—'" class="text-[10px] font-mono text-fg-mute whitespace-nowrap">{{ burnRate }}</span>
-        <div v-if="hasCacheCosts" class="flex gap-2 text-[10px] text-fg-mute">
+        <div v-if="hasCacheCosts" class="flex gap-2 text-[10px] font-mono text-fg-mute">
           <span title="Cache write cost">W {{ formatCost(agent.cacheCreationCostEstimate) }}</span>
           <span title="Cache read cost">R {{ formatCost(agent.cacheReadCostEstimate) }}</span>
         </div>
