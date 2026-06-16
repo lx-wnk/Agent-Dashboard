@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { TaskDependency } from '../types'
-import * as d3 from 'd3'
+import { drag } from 'd3-drag'
+import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from 'd3-force'
+import { select } from 'd3-selection'
 import { onMounted, ref, watch } from 'vue'
 import { errorMessage } from '../utils/errorMessage'
 
@@ -57,7 +59,7 @@ async function fetchAndRender() {
 }
 
 function renderGraph(deps: TaskDependency[], dependents: TaskDependency[]) {
-  const svg = d3.select(svgRef.value!)
+  const svg = select(svgRef.value!)
   svg.selectAll('*').remove()
 
   const nodeMap = new Map<string, GraphNode>()
@@ -119,11 +121,11 @@ function renderGraph(deps: TaskDependency[], dependents: TaskDependency[]) {
     .attr('d', 'M0,-5L10,0L0,5')
     .attr('fill', '#94a3b8')
 
-  const simulation = d3.forceSimulation<GraphNode>(nodes)
-    .force('link', d3.forceLink<GraphNode, GraphLink>(links).id(d => d.id).distance(110))
-    .force('charge', d3.forceManyBody<GraphNode>().strength(-320))
-    .force('center', d3.forceCenter(W / 2, H / 2))
-    .force('collision', d3.forceCollide<GraphNode>(26))
+  const simulation = forceSimulation<GraphNode>(nodes)
+    .force('link', forceLink<GraphNode, GraphLink>(links).id(d => d.id).distance(110))
+    .force('charge', forceManyBody<GraphNode>().strength(-320))
+    .force('center', forceCenter(W / 2, H / 2))
+    .force('collision', forceCollide<GraphNode>(26))
 
   const linkSel = svg.append('g')
     .selectAll<SVGLineElement, GraphLink>('line')
@@ -133,7 +135,7 @@ function renderGraph(deps: TaskDependency[], dependents: TaskDependency[]) {
     .attr('stroke-width', 1.5)
     .attr('marker-end', 'url(#dep-arrow)')
 
-  const drag = d3.drag<SVGGElement, GraphNode>()
+  const dragBehavior = drag<SVGGElement, GraphNode>()
     .on('start', (event, d) => {
       if (!event.active)
         simulation.alphaTarget(0.3).restart()
@@ -160,7 +162,7 @@ function renderGraph(deps: TaskDependency[], dependents: TaskDependency[]) {
     .attr('role', 'button')
     .attr('aria-label', d => `Navigate to task: ${d.title}`)
     .on('click', (_e, d) => emit('navigate', d.id))
-    .call(drag)
+    .call(dragBehavior)
 
   nodeSel.append('circle')
     .attr('r', 18)

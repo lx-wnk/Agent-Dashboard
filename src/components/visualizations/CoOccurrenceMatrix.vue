@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { CoOccurrenceData } from '../../sdk.generated'
-import * as d3 from 'd3'
+import { scaleDiverging } from 'd3-scale'
+import { interpolateRdBu } from 'd3-scale-chromatic'
+import { select } from 'd3-selection'
 import { computed, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -18,7 +20,7 @@ const sessionCount = computed(() => props.data?.meta.sessionCount ?? 0)
 function render() {
   if (!svgRef.value || !props.data)
     return
-  const svg = d3.select(svgRef.value)
+  const svg = select(svgRef.value)
   svg.selectAll('*').remove()
   if (props.data.tools.length === 0)
     return
@@ -49,9 +51,9 @@ function render() {
       }
     }
   }
-  // d3.scaleDiverging: domain [low, mid, high] mapped to [0, 0.5, 1] of interpolator.
+  // scaleDiverging: domain [low, mid, high] mapped to [0, 0.5, 1] of interpolator.
   // interpolateRdBu goes red → white → blue; we want blue<1, neutral=1, red>1 → reverse.
-  const colorScale = d3.scaleDiverging(d3.interpolateRdBu)
+  const colorScale = scaleDiverging(interpolateRdBu)
     .domain([maxLift, 1, 0])
 
   const DIAGONAL_COLOR = '#334155'
@@ -149,7 +151,7 @@ watch(() => props.data, render, { immediate: true, flush: 'post' })
 
 onUnmounted(() => {
   if (svgRef.value)
-    d3.select(svgRef.value).selectAll('*').remove()
+    select(svgRef.value).selectAll('*').remove()
 })
 </script>
 

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { SankeyLink } from 'd3-sankey'
 import type { SankeyData } from '../../sdk.generated'
-import * as d3 from 'd3'
+import type { Selection } from 'd3-selection'
+import { scaleOrdinal } from 'd3-scale'
+import { schemeTableau10 } from 'd3-scale-chromatic'
+import { select } from 'd3-selection'
 import { sankey as d3Sankey, sankeyLinkHorizontal } from 'd3-sankey'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { errorMessage } from '../../utils/errorMessage'
@@ -36,7 +39,7 @@ function render() {
   renderError.value = null
   if (!svgRef.value || !props.data)
     return
-  const svg = d3.select(svgRef.value)
+  const svg = select(svgRef.value)
   svg.selectAll('*').remove()
 
   if (props.data.nodes.length === 0)
@@ -51,7 +54,7 @@ function render() {
   }
 }
 
-function drawSankey(svg: d3.Selection<SVGSVGElement, unknown, null, undefined>) {
+function drawSankey(svg: Selection<SVGSVGElement, unknown, null, undefined>) {
   if (!svgRef.value || !props.data)
     return
 
@@ -72,7 +75,7 @@ function drawSankey(svg: d3.Selection<SVGSVGElement, unknown, null, undefined>) 
 
   const { nodes: laidOutNodes, links: laidOutLinks } = layout({ nodes, links })
 
-  const color = d3.scaleOrdinal<string>(d3.schemeTableau10).domain(props.data.nodes.map(n => n.name))
+  const color = scaleOrdinal<string>(schemeTableau10).domain(props.data.nodes.map(n => n.name))
 
   svg.append('g')
     .selectAll('rect')
@@ -118,7 +121,7 @@ watch(() => props.data, render, { immediate: true, flush: 'post' })
 
 onUnmounted(() => {
   if (svgRef.value)
-    d3.select(svgRef.value).selectAll('*').remove()
+    select(svgRef.value).selectAll('*').remove()
 })
 </script>
 

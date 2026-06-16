@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import * as d3 from 'd3'
+import { max } from 'd3-array'
+import { axisBottom, axisLeft } from 'd3-axis'
+import { scaleBand, scaleLinear, scaleOrdinal, scalePoint } from 'd3-scale'
+import { schemeTableau10 } from 'd3-scale-chromatic'
+import { select } from 'd3-selection'
+import { curveMonotoneX, line, stack } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
 import { formatCost, formatTokens } from '../utils/format'
@@ -134,7 +139,7 @@ function applyCustomRange() {
 
 /**
  * Reshape the flat byDay rows into one row per day with one column per model
- * — the input shape d3.stack() expects.
+ * — the input shape stack() expects.
  */
 function buildDayMatrix(): { rows: Record<string, number | string>[], models: string[] } {
   const byDay = summary.value.byDay
@@ -149,7 +154,7 @@ function buildDayMatrix(): { rows: Record<string, number | string>[], models: st
   }
   const rows = Array.from(dayMap.values()).sort((a, b) => String(a.day).localeCompare(String(b.day)))
   const models = Array.from(modelSet).sort()
-  // Ensure every row has every model key (zero-fill) so d3.stack() yields
+  // Ensure every row has every model key (zero-fill) so stack() yields
   // contiguous segments with no NaN holes.
   for (const row of rows) {
     for (const m of models) {
@@ -165,7 +170,7 @@ function renderStackedBar() {
   if (!svg)
     return
 
-  const sel = d3.select(svg)
+  const sel = select(svg)
   sel.selectAll('*').remove()
 
   const { rows, models } = buildDayMatrix()
@@ -179,25 +184,25 @@ function renderStackedBar() {
   sel.attr('height', H + margin.top + margin.bottom)
   const g = sel.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
-  const x = d3.scaleBand<string>()
+  const x = scaleBand<string>()
     .domain(rows.map(r => String(r.day)))
     .range([0, W])
     .padding(0.15)
 
-  const stack = d3.stack<Record<string, number | string>, string>()
+  const stackGen = stack<Record<string, number | string>, string>()
     .keys(models)
     .value((d, key) => (d[key] as number) ?? 0)
-  const series = stack(rows)
+  const series = stackGen(rows)
 
-  const yMax = d3.max(series, layer => d3.max(layer, d => d[1])) ?? 0
-  const y = d3.scaleLinear()
+  const yMax = max(series, layer => max(layer, d => d[1])) ?? 0
+  const y = scaleLinear()
     .domain([0, yMax * 1.05 || 1])
     .nice()
     .range([H, 0])
 
-  const color = d3.scaleOrdinal<string>()
+  const color = scaleOrdinal<string>()
     .domain(models)
-    .range(d3.schemeTableau10 as readonly string[])
+    .range(schemeTableau10 as readonly string[])
 
   // bars
   g.append('g')
@@ -223,14 +228,14 @@ function renderStackedBar() {
   const xTickEvery = Math.max(1, Math.ceil(rows.length / 10))
   g.append('g')
     .attr('transform', `translate(0,${H})`)
-    .call(d3.axisBottom(x).tickValues(rows.map((r, i) => i % xTickEvery === 0 ? String(r.day) : '').filter(Boolean)).tickFormat(d => String(d).slice(5)))
+    .call(axisBottom(x).tickValues(rows.map((r, i) => i % xTickEvery === 0 ? String(r.day) : '').filter(Boolean)).tickFormat(d => String(d).slice(5)))
     .selectAll('text')
     .attr('font-size', '10px')
     .attr('transform', 'rotate(-32)')
     .attr('text-anchor', 'end')
 
   g.append('g')
-    .call(d3.axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
+    .call(axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
     .selectAll('text')
     .attr('font-size', '10px')
 
@@ -251,7 +256,7 @@ function renderWeeklyTrend() {
   if (!svg)
     return
 
-  const sel = d3.select(svg)
+  const sel = select(svg)
   sel.selectAll('*').remove()
 
   const data = summary.value.byWeek
@@ -265,25 +270,25 @@ function renderWeeklyTrend() {
   sel.attr('height', H + margin.top + margin.bottom)
   const g = sel.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
-  const x = d3.scalePoint<string>()
+  const x = scalePoint<string>()
     .domain(data.map(d => d.week))
     .range([0, W])
     .padding(0.4)
 
-  const yMax = d3.max(data, d => d.costUsd) ?? 0
-  const y = d3.scaleLinear().domain([0, yMax * 1.1 || 1]).nice().range([H, 0])
+  const yMax = max(data, d => d.costUsd) ?? 0
+  const y = scaleLinear().domain([0, yMax * 1.1 || 1]).nice().range([H, 0])
 
-  const line = d3.line<WeekPoint>()
+  const lineGen = line<WeekPoint>()
     .x(d => x(d.week) ?? 0)
     .y(d => y(d.costUsd))
-    .curve(d3.curveMonotoneX)
+    .curve(curveMonotoneX)
 
   g.append('path')
     .datum(data)
     .attr('fill', 'none')
     .attr('stroke', '#10b981')
     .attr('stroke-width', 2)
-    .attr('d', line)
+    .attr('d', lineGen)
 
   g.append('g').selectAll('circle')
     .data(data)
@@ -298,19 +303,19 @@ function renderWeeklyTrend() {
   const tickEvery = Math.max(1, Math.ceil(data.length / 8))
   g.append('g')
     .attr('transform', `translate(0,${H})`)
-    .call(d3.axisBottom(x).tickValues(data.filter((_, i) => i % tickEvery === 0).map(d => d.week)))
+    .call(axisBottom(x).tickValues(data.filter((_, i) => i % tickEvery === 0).map(d => d.week)))
     .selectAll('text')
     .attr('font-size', '10px')
     .attr('transform', 'rotate(-24)')
     .attr('text-anchor', 'end')
 
   g.append('g')
-    .call(d3.axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
+    .call(axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
     .selectAll('text')
     .attr('font-size', '10px')
 }
 
-// Local alias to satisfy TS in the d3.line generic above.
+// Local alias to satisfy TS in the line generic above.
 interface WeekPoint { week: string, costUsd: number }
 
 onMounted(() => {

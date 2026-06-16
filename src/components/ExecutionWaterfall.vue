@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
-import * as d3 from 'd3'
+import { max, min } from 'd3-array'
+import { axisBottom } from 'd3-axis'
+import { scaleOrdinal, scaleTime } from 'd3-scale'
+import { schemeTableau10 } from 'd3-scale-chromatic'
+import { select } from 'd3-selection'
 import { nextTick, onMounted, ref, useId, watch } from 'vue'
 import { errorMessage } from '../utils/errorMessage'
 
@@ -43,7 +47,7 @@ async function fetchAndRender() {
 }
 
 function renderGantt(messages: OutputMessage[]) {
-  const svg = d3.select(svgRef.value!)
+  const svg = select(svgRef.value!)
   svg.selectAll(':not(title):not(desc)').remove()
 
   if (messages.length === 0) {
@@ -71,12 +75,12 @@ function renderGantt(messages: OutputMessage[]) {
   svg.attr('height', height + margin.top + margin.bottom)
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
-  const xMin = d3.min(events, e => e.start)!
-  const xMax = d3.max(events, e => e.end)!
-  const x = d3.scaleTime().domain([xMin, xMax]).range([0, width])
+  const xMin = min(events, e => e.start)!
+  const xMax = max(events, e => e.end)!
+  const x = scaleTime().domain([xMin, xMax]).range([0, width])
 
   const toolNames = [...new Set(events.map(e => e.toolName))]
-  const color = d3.scaleOrdinal(d3.schemeTableau10).domain(toolNames)
+  const color = scaleOrdinal(schemeTableau10).domain(toolNames)
 
   g.selectAll<SVGRectElement, ToolEvent>('rect.bar')
     .data(events)
@@ -102,7 +106,7 @@ function renderGantt(messages: OutputMessage[]) {
     .attr('fill', 'currentColor')
     .text(d => d.toolName)
 
-  const xAxis = d3.axisBottom(x).ticks(5).tickFormat((d) => {
+  const xAxis = axisBottom(x).ticks(5).tickFormat((d) => {
     const ms = (d as Date).getTime() - xMin.getTime()
     return `${(ms / 1000).toFixed(1)}s`
   })

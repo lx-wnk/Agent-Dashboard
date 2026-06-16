@@ -2,7 +2,7 @@
 import type { Agent } from '../types'
 import { computed, ref } from 'vue'
 import { STATUS_ORDER } from '@/utils/agentSort'
-import { totalTokenCount } from '../utils/format'
+import { formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentRow from './AgentRow.vue'
 import SubAgentRow from './SubAgentRow.vue'
 
@@ -120,6 +120,7 @@ function toggleSubagents(pid: number) {
         :id="`subagents-${agent.sessionId}`"
       >
         <AgentRow
+          v-memo="[agent.status, agent.projectName, agent.currentAction, agent.model, totalTokenCount(agent.tokenUsage), agent.costEstimate, agent.costUnknown, formatUptime(agent.uptime), shortModel(agent.model ?? null), agent.channelAvailable, agent.provider, agent.machine, agent.projectPath, agent.subagents.length, showSubagents]"
           :agent="agent"
           :expanded="showSubagents"
           @select="$emit('select', agent)"
