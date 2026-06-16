@@ -8,6 +8,7 @@ import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusTone, stageTone } from '../utils/statusColors'
 import PluginSlot from './PluginSlot.vue'
+import AppCard from './ui/AppCard.vue'
 import AppChip from './ui/AppChip.vue'
 import WorktreePill from './WorktreePill.vue'
 
@@ -52,9 +53,13 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
 </script>
 
 <template>
-  <div
-    class="relative bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer transition-all flex flex-col gap-1.5"
-    :class="task.isBlocked ? 'opacity-60 hover:opacity-85' : 'hover:border-blue-500 dark:hover:border-blue-400 hover:-translate-y-px'"
+  <AppCard
+    surface="app"
+    radius="md"
+    :interactive="!task.isBlocked"
+    lift
+    class="relative px-3 py-2.5 cursor-pointer flex flex-col gap-1.5"
+    :class="task.isBlocked ? 'opacity-60 hover:opacity-85' : ''"
   >
     <button
       type="button"
@@ -146,5 +151,5 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
       </span>
       <PluginSlot name="kanban-card-badge" :ctx="{ task }" />
     </div>
-  </div>
+  </AppCard>
 </template>
