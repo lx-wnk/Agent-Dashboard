@@ -54,8 +54,9 @@ type httpSpawnResult struct {
 // PipelineOrchestrator drives the task pipeline state machine.
 type PipelineOrchestrator struct {
 	opts             OrchestratorOptions
-	taskLocks        sync.Map // map[taskID string]*sync.Mutex
-	handlerOverrides sync.Map // map[stage string]StageHandler — test seam
+	handlers         map[string]StageHandler // per-orchestrator stage registry
+	taskLocks        sync.Map                // map[taskID string]*sync.Mutex
+	handlerOverrides sync.Map                // map[stage string]StageHandler — test seam
 	detectCompletion func(*ent.StageRun, string, CompletionDeps) (CompletionResult, error)
 	configCache      sync.Map // map[key string]cachedConfig
 
@@ -87,9 +88,14 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 	if opts.PollInterval <= 0 {
 		opts.PollInterval = defaultPollInterval
 	}
+	sf := opts.SpawnFn
+	if sf == nil {
+		sf = syntheticSpawn
+	}
 	poolSize := defaultMaxParallel
 	o := &PipelineOrchestrator{
 		opts:             opts,
+		handlers:         NewStageHandlers(sf),
 		detectCompletion: DetectCompletion,
 		httpPoolSem:      make(chan struct{}, poolSize),
 		httpResultCh:     make(chan httpSpawnResult, poolSize*2),
@@ -121,7 +127,7 @@ func (o *PipelineOrchestrator) resolveHandler(stage string) StageHandler {
 	if h, ok := o.handlerOverrides.Load(stage); ok {
 		return h.(StageHandler)
 	}
-	return GetHandlerForStage(stage)
+	return o.handlers[stage]
 }
 
 func (o *PipelineOrchestrator) getCachedConfigNumber(ctx context.Context, key string, fallback int) int {
