@@ -23,6 +23,7 @@ async function load() {
 
 const props = {
   agentCount: 12,
+  attentionCount: 0,
   taskCount: 5,
   totalCostLabel: '$2.34',
   todayCostLabel: '$5.00',

@@ -4,6 +4,7 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
+import AgentTriageBand from './components/AgentTriageBand.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import BacklogForm from './components/BacklogForm.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
@@ -25,8 +26,8 @@ import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
 import { useTasks } from './composables/useTasks'
-import { useTodayCost } from './composables/useTodayCost'
 import { useTheme } from './composables/useTheme'
+import { useTodayCost } from './composables/useTodayCost'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
 import { formatCost, formatTokens, totalTokenCount } from './utils/format'
@@ -80,7 +81,7 @@ onUnmounted(() => {
     clearTimeout(toastTimer)
 })
 
-const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
+const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 // Today's persisted spend — reuses the shared cost-summary logic so the footer
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
@@ -220,6 +221,7 @@ onMounted(fetchQuota)
       <template #sidebar>
         <AppSidebar
           :agent-count="filteredAgents.length"
+          :attention-count="attentionCount"
           :task-count="tasks.length"
           :total-cost-label="totalCostLabel"
           :total-tokens-label="totalTokensLabel"
@@ -279,6 +281,7 @@ onMounted(fetchQuota)
         </p>
 
         <template v-else-if="activeView === 'dashboard'">
+          <AgentTriageBand :agents="attentionAgents" @select="selectAgent" />
           <template v-if="dashboardLayout === 'list'">
             <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
             <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />

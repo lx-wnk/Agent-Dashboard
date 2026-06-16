@@ -1,8 +1,10 @@
 import type { Agent } from '../types'
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { needsAttention, sortByTriage } from '../utils/attention'
 import { errorMessage } from '../utils/errorMessage'
-import { totalTokenCount } from '../utils/format'
+import { secondsSince, totalTokenCount } from '../utils/format'
 import { AGENTS_POLL_MS } from '../utils/sse'
+import { useNow } from './useNow'
 import { drainPendingMessages } from './usePendingMessages'
 import { createSseResource } from './useSseResource'
 
@@ -112,6 +114,18 @@ const filteredAgents = computed(() => {
   )
 })
 
+const { nowMs } = useNow()
+
+const attentionAgents = computed(() => {
+  const secsOf = (a: Agent) => secondsSince(a.lastActivity, nowMs.value)
+  return sortByTriage(
+    agents.value.filter(a => needsAttention(a, secsOf(a))),
+    secsOf,
+  )
+})
+
+const attentionCount = computed(() => attentionAgents.value.length)
+
 // Debounce search query
 watch(searchQuery, (q) => {
   if (debounceTimer)
@@ -140,6 +154,8 @@ export function useAgents(options?: { autoStart?: boolean }) {
     agents,
     costTrend,
     filteredAgents,
+    attentionAgents,
+    attentionCount,
     selectedAgent,
     isLoading,
     error,

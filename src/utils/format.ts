@@ -1,6 +1,17 @@
+import type { ErrorState } from '../sdk.generated'
 import type { TokenUsage } from '../types'
 
 const MODEL_TRAILING_VERSION_RE = /-\d+$/
+
+const ERROR_STATE_LABELS: Record<ErrorState, string> = {
+  quota_exhausted: 'Quota exhausted',
+  rate_limited: 'Rate limited',
+  auth_failed: 'Authentication failed',
+}
+
+export function formatErrorState(state: ErrorState): string {
+  return ERROR_STATE_LABELS[state] ?? 'Run failed'
+}
 
 export const STALLED_THRESHOLD_SECONDS = 180
 
