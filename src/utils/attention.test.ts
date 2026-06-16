@@ -93,6 +93,22 @@ describe('attentionFor', () => {
     const att = attentionFor(agent, STALLED_SECS)
     expect(att?.kind).toBe('error')
   })
+
+  it('pendingPermissions on active agent classifies as permission', () => {
+    const agent = makeAgent({
+      status: 'active',
+      pendingPermissions: [{ id: 'r1', tool: 'Bash', pattern: 'git push', requestedAt: new Date().toISOString() }],
+    })
+    const att = attentionFor(agent, ACTIVE_SECS)
+    expect(att?.kind).toBe('permission')
+    expect(att?.weight).toBe(0)
+  })
+
+  it('waiting agent with no pendingPermissions still classifies as permission', () => {
+    const agent = makeAgent({ status: 'waiting', pendingPermissions: [] })
+    const att = attentionFor(agent, ACTIVE_SECS)
+    expect(att?.kind).toBe('permission')
+  })
 })
 
 describe('needsAttention', () => {

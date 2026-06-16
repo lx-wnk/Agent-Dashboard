@@ -209,6 +209,16 @@ type WorktreeStatusDTO struct {
 	FileCount int    `json:"fileCount"`
 }
 
+// PendingPermission is a permission request an orchestrated agent is currently
+// blocked on, surfaced on the agent so it can be resolved from the roster.
+type PendingPermission struct {
+	ID          string  `json:"id"`
+	Tool        string  `json:"tool"`
+	Pattern     *string `json:"pattern"`
+	Reason      *string `json:"reason"`
+	RequestedAt string  `json:"requestedAt"`
+}
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
 	PID         int      `json:"pid"`
@@ -250,8 +260,9 @@ type Agent struct {
 	ConvergenceAlert    bool        `json:"convergenceAlert"`
 	ConvergenceToolName *string     `json:"convergenceToolName"`
 	ErrorState          *ErrorState `json:"errorState"`
-	PipelineTaskID      string      `json:"pipelineTaskId,omitempty"`
-	PipelineTaskTitle   string      `json:"pipelineTaskTitle,omitempty"`
+	PipelineTaskID         string               `json:"pipelineTaskId,omitempty"`
+	PipelineTaskTitle      string               `json:"pipelineTaskTitle,omitempty"`
+	PendingPermissions     []PendingPermission  `json:"pendingPermissions,omitempty"`
 	Machine             string      `json:"machine,omitempty"`
 	LastBtw             *BtwMessage `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and

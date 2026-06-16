@@ -9,6 +9,9 @@ export interface Attention {
 }
 
 export function attentionFor(agent: Agent, secondsSinceActivity: number | null): Attention | null {
+  // Structural: a live permission request always wins regardless of reported status
+  if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
+    return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
   if (agent.status === 'waiting')
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
   // errorState present on any status signals a failed run (auth/quota/rate-limit)

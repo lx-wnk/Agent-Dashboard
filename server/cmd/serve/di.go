@@ -237,7 +237,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// the crossing is applied consistently.
 	var pipelineEnricher merger.Enricher
 	if entClient != nil {
-		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver)
+		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver, repo.NewPermissionRepo(entClient))
 	}
 
 	// Built here (not earlier) so it captures pipelineEnricher — admin agent
