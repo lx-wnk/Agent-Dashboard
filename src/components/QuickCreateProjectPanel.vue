@@ -156,7 +156,7 @@ async function submit(): Promise<void> {
           >
         </div>
       </div>
-      <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mb-2 leading-snug">
+      <p v-if="errorMsg" class="text-xs text-danger-text mb-2 leading-snug">
         {{ errorMsg }}
       </p>
       <div class="flex justify-end gap-2">

@@ -197,7 +197,7 @@ async function resumeSession() {
         <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
           Loading transcript...
         </div>
-        <div v-else-if="fetchError" class="text-center py-12 text-red-600 dark:text-red-400 text-sm">
+        <div v-else-if="fetchError" class="text-center py-12 text-danger-text text-sm">
           {{ fetchError }}
         </div>
         <div v-else-if="messages.length === 0" class="text-center py-12 text-fg-mute text-sm">
@@ -251,7 +251,7 @@ async function resumeSession() {
           role="status"
           aria-live="polite"
           class="text-[11px] mt-1.5"
-          :class="statusMsg ? (statusIsError ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400') : 'sr-only'"
+          :class="statusMsg ? (statusIsError ? 'text-danger-text' : 'text-green-600 dark:text-green-400') : 'sr-only'"
         >
           {{ statusMsg }}
         </p>

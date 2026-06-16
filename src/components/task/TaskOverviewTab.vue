@@ -206,7 +206,7 @@ watch(
       <h4 class="text-[11px] font-semibold uppercase tracking-[0.5px] text-fg-mute">
         Project &amp; Spawner
       </h4>
-      <p v-if="assignError" class="text-[11px] text-red-600 dark:text-red-400">
+      <p v-if="assignError" class="text-[11px] text-danger-text">
         {{ assignError }}
       </p>
       <div class="grid grid-cols-2 gap-3">

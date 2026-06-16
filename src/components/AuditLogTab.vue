@@ -68,7 +68,7 @@ watch(() => props.taskId, load)
     <div v-if="loading" class="text-fg-mute text-center py-6">
       Loading...
     </div>
-    <div v-else-if="error" class="text-red-600 dark:text-red-400">
+    <div v-else-if="error" class="text-danger-text">
       {{ error }}
     </div>
     <div v-else-if="entries.length === 0" class="text-fg-mute text-center py-6">

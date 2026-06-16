@@ -82,7 +82,7 @@ watch([trend, forecast], ([t, f]) => {
     <div v-if="loading" class="text-sm text-slate-500">
       Loading forecast…
     </div>
-    <div v-else-if="error" class="text-sm text-red-500">
+    <div v-else-if="error" class="text-sm text-danger-text">
       {{ error }}
     </div>
     <template v-else>

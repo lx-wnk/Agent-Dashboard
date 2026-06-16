@@ -361,7 +361,7 @@ defineExpose({ scrollToBottom })
         </div>
       </template>
     </template>
-    <div v-else-if="fetchError" class="text-red-600 dark:text-red-400 text-sm text-center py-12">
+    <div v-else-if="fetchError" class="text-danger-text text-sm text-center py-12">
       Failed to load session output. Reconnect or refresh.
     </div>
     <div v-else class="text-fg-mute text-center py-12">

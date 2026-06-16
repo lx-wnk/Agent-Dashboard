@@ -126,7 +126,7 @@ watch(() => props.sessionId, fetchAndRender)
     <div v-if="loading" class="text-sm text-slate-500 p-4">
       Loading timeline...
     </div>
-    <div v-else-if="error" class="text-sm text-red-500 p-4">
+    <div v-else-if="error" class="text-sm text-danger-text p-4">
       {{ error }}
     </div>
     <div v-else class="overflow-x-auto">

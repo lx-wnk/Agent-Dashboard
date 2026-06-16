@@ -12,7 +12,7 @@ const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
 
 <template>
   <footer class="px-5 py-3 border-t border-line flex-shrink-0">
-    <p v-if="actionError" class="text-red-600 dark:text-red-400 text-xs mb-2">
+    <p v-if="actionError" class="text-danger-text text-xs mb-2">
       {{ actionError }}
     </p>
     <p v-if="analysisInfo" class="text-green-600 dark:text-green-400 text-xs mb-2">

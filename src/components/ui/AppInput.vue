@@ -79,7 +79,7 @@ const resizeClass: Record<ResizeProp, string> = {
       :id="errorId"
       role="status"
       aria-live="polite"
-      class="text-red-500 text-sm mt-1"
+      class="text-danger-text text-sm mt-1"
     >
       {{ error }}
     </p>

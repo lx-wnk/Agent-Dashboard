@@ -105,7 +105,7 @@ async function handleSaveConfig() {
     <div role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-400" :class="{ 'sr-only': !loading }">
       {{ loading ? 'Loading…' : '' }}
     </div>
-    <div role="alert" aria-atomic="true" class="text-xs text-red-500" :class="{ 'sr-only': !error || loading }">
+    <div role="alert" aria-atomic="true" class="text-xs text-danger-text" :class="{ 'sr-only': !error || loading }">
       {{ !loading ? (error ?? '') : '' }}
     </div>
 

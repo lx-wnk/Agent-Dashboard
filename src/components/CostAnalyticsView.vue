@@ -400,7 +400,7 @@ watch(summary, () => {
     <p v-if="isLoading && !hasData" class="text-sm text-fg-mute">
       Loading cost summary…
     </p>
-    <p v-else-if="error" class="text-sm text-red-600 dark:text-red-400">
+    <p v-else-if="error" class="text-sm text-danger-text">
       {{ error }}
     </p>
     <div v-else-if="!hasData" class="flex flex-col gap-2">

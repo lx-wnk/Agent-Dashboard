@@ -157,7 +157,7 @@ onMounted(fetchPrompts)
       </AppButton>
     </div>
 
-    <p v-if="loadError" class="text-xs text-red-600 dark:text-red-400 mb-3">
+    <p v-if="loadError" class="text-xs text-danger-text mb-3">
       {{ loadError }}
     </p>
 
@@ -278,7 +278,7 @@ onMounted(fetchPrompts)
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent font-mono resize-y"
           />
         </div>
-        <p v-if="saveError" class="text-xs text-red-600 dark:text-red-400">
+        <p v-if="saveError" class="text-xs text-danger-text">
           {{ saveError }}
         </p>
       </form>

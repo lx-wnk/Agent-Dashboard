@@ -27,7 +27,7 @@ function cellLabel(dow: string, hourIdx: number, cost: number): string {
     <div v-if="loading" class="text-sm text-slate-500">
       Loading heatmap…
     </div>
-    <div v-else-if="error" class="text-sm text-red-500">
+    <div v-else-if="error" class="text-sm text-danger-text">
       {{ error }}
     </div>
     <div v-else class="overflow-x-auto">
