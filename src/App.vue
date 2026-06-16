@@ -22,6 +22,7 @@ import SpotlightSearch from './components/SpotlightSearch.vue'
 import AppModal from './components/ui/AppModal.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
+import { usePermissionResolve } from './composables/usePermissionResolve'
 import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
@@ -52,6 +53,7 @@ const { theme, toggleTheme } = useTheme()
 
 const { activeView, dashboardLayout } = useViewState()
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
+const { resolveAgent, approveAll } = usePermissionResolve()
 
 // F-UIUX-011: 5 s default duration; hover pause/resume keeps toast visible while pointer rests on it
 const TOAST_DURATION_MS = 5000
@@ -59,24 +61,12 @@ const toastMessage = ref<string | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 let toastPaused = false
 
-// UX-08: Shift+D toggles dark/light mode globally; Cmd/Ctrl+B toggles sidebar pin
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    const tag = (e.target as HTMLElement)?.tagName
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !(e.target as HTMLElement).isContentEditable)
-      toggleTheme()
-  }
-  handleSidebarShortcut(e)
-}
-
 onMounted(() => {
   loadUser()
   void loadServerConfig()
-  window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown)
   if (toastTimer)
     clearTimeout(toastTimer)
 })
@@ -170,6 +160,73 @@ function showToast(msg: string) {
   toastPaused = false
   startToastTimer()
 }
+
+// Keyboard focus for the triage band: `n` cycles attention agents (wrapping).
+const focusedSessionId = ref<string | null>(null)
+
+function focusNextAttention() {
+  const list = attentionAgents.value
+  if (!list.length)
+    return
+  const idx = list.findIndex(a => a.sessionId === focusedSessionId.value)
+  focusedSessionId.value = list[(idx + 1) % list.length].sessionId
+}
+
+function resolveFocused(outcome: 'granted' | 'denied') {
+  const focused = attentionAgents.value.find(a => a.sessionId === focusedSessionId.value)
+  if (!focused?.pipelineTaskId || !focused.pendingPermissions?.length)
+    return
+  void resolveAgent(focused, outcome).then((err) => {
+    if (err)
+      showToast(err)
+  })
+}
+
+// Shift+D theme + Cmd/Ctrl+B sidebar are global; n/a/d/⇧A/c act on the triage
+// band and are gated to the dashboard with no overlay open and no field focused.
+function handleKeydown(e: KeyboardEvent) {
+  handleSidebarShortcut(e)
+
+  const tag = (e.target as HTMLElement)?.tagName
+  const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement).isContentEditable
+
+  if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping) {
+    toggleTheme()
+    return
+  }
+
+  const anyOverlay = selectedAgent.value || showSettings.value || showSpawnDialog.value
+    || showBacklogForm.value || showSessions.value || showRefinementChat.value || activeConceptTask.value
+  if (activeView.value !== 'dashboard' || anyOverlay || isTyping || e.ctrlKey || e.metaKey || e.altKey)
+    return
+
+  if (e.key === 'n') {
+    e.preventDefault()
+    focusNextAttention()
+  }
+  else if (e.key === 'a' && !e.shiftKey) {
+    e.preventDefault()
+    resolveFocused('granted')
+  }
+  else if (e.key === 'd' && !e.shiftKey) {
+    e.preventDefault()
+    resolveFocused('denied')
+  }
+  else if (e.key === 'A' && e.shiftKey) {
+    e.preventDefault()
+    void approveAll(attentionAgents.value.filter(a => a.pipelineTaskId && a.pendingPermissions?.length)).then((err) => {
+      if (err)
+        showToast(err)
+    })
+  }
+  else if (e.key === 'c' && !e.shiftKey) {
+    e.preventDefault()
+    dashboardLayout.value = dashboardLayout.value === 'cards' ? 'list' : 'cards'
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
 function navigateTo(target: { agent?: Agent, taskId?: string }) {
   selectAgent(null)
@@ -281,7 +338,7 @@ onMounted(fetchQuota)
         </p>
 
         <template v-else-if="activeView === 'dashboard'">
-          <AgentTriageBand :agents="attentionAgents" @select="selectAgent" @toast="showToast" />
+          <AgentTriageBand :agents="attentionAgents" :focused-session-id="focusedSessionId" @select="selectAgent" @toast="showToast" />
           <template v-if="dashboardLayout === 'list'">
             <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
             <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />

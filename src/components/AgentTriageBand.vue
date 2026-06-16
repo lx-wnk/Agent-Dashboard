@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import type { Agent, PendingPermission } from '../types'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
-import { bulkResolvePermissionRequests } from '../composables/useTasks'
+import { usePermissionResolve } from '../composables/usePermissionResolve'
 import { attentionFor } from '../utils/attention'
 import { formatErrorState, formatRelativeActivity, secondsSince, shortModel } from '../utils/format'
 
-const props = defineProps<{ agents: Agent[] }>()
+const props = defineProps<{
+  agents: Agent[]
+  focusedSessionId?: string | null
+}>()
 const emit = defineEmits<{
   select: [agent: Agent]
   toast: [message: string]
@@ -15,6 +18,7 @@ const emit = defineEmits<{
 
 const { getIdentity } = useAgentIdentity()
 const { nowMs } = useNow()
+const { resolving, resolveAgent, approveAll } = usePermissionResolve()
 
 // Tone → Tailwind border + text classes
 const toneBorderClass: Record<string, string> = {
@@ -83,30 +87,6 @@ const totalPendingCount = computed(() =>
   resolvableAgents.value.reduce((sum, a) => sum + (a.pendingPermissions?.length ?? 0), 0),
 )
 
-// Per-card in-flight tracking: keyed by sessionId
-const resolving = ref<Record<string, boolean>>({})
-
-async function resolveAgent(agent: Agent, outcome: 'granted' | 'denied') {
-  if (!agent.pipelineTaskId || !agent.pendingPermissions?.length)
-    return
-  resolving.value = { ...resolving.value, [agent.sessionId]: true }
-  try {
-    await bulkResolvePermissionRequests(
-      agent.pipelineTaskId,
-      agent.pendingPermissions.map(p => p.id),
-      outcome,
-    )
-  }
-  catch (err) {
-    emit('toast', err instanceof Error ? err.message : 'Failed to resolve permissions')
-  }
-  finally {
-    const next = { ...resolving.value }
-    delete next[agent.sessionId]
-    resolving.value = next
-  }
-}
-
 // --- Approve-all bar ---
 const approveAllOpen = ref(false)
 // Selected agent sessionIds for the approve-all action; default all
@@ -145,36 +125,35 @@ function toggleAgentSelection(sessionId: string) {
   selectedSessionIds.value = next
 }
 
-async function approveAll() {
-  approveAllInFlight.value = true
-  // Group selected agents by their pipelineTaskId to minimise API calls
-  const byTask = new Map<string, string[]>()
-  for (const agent of resolvableAgents.value) {
-    if (!selectedSessionIds.value.has(agent.sessionId))
-      continue
-    if (!agent.pipelineTaskId || !agent.pendingPermissions?.length)
-      continue
-    const ids = byTask.get(agent.pipelineTaskId) ?? []
-    ids.push(...agent.pendingPermissions.map(p => p.id))
-    byTask.set(agent.pipelineTaskId, ids)
-  }
-
-  const errors: string[] = []
-  await Promise.all(
-    Array.from(byTask.entries()).map(async ([taskId, ids]) => {
-      try {
-        await bulkResolvePermissionRequests(taskId, ids, 'granted')
-      }
-      catch (err) {
-        errors.push(err instanceof Error ? err.message : 'Unknown error')
-      }
-    }),
-  )
-
-  approveAllInFlight.value = false
-  if (errors.length)
-    emit('toast', `Approve all failed: ${errors.join('; ')}`)
+async function handleResolveAgent(agent: Agent, outcome: 'granted' | 'denied') {
+  const err = await resolveAgent(agent, outcome)
+  if (err)
+    emit('toast', err)
 }
+
+async function handleApproveAll() {
+  approveAllInFlight.value = true
+  const selected = resolvableAgents.value.filter(a => selectedSessionIds.value.has(a.sessionId))
+  const err = await approveAll(selected)
+  approveAllInFlight.value = false
+  if (err)
+    emit('toast', err)
+}
+
+// Scroll the focused card into view when focusedSessionId changes
+const cardRefs = ref<Record<string, HTMLElement | null>>({})
+
+function setCardRef(sessionId: string, el: HTMLElement | null) {
+  cardRefs.value[sessionId] = el
+}
+
+watch(() => props.focusedSessionId, (id) => {
+  if (!id)
+    return
+  nextTick(() => {
+    cardRefs.value[id]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  })
+})
 </script>
 
 <template>
@@ -190,7 +169,7 @@ async function approveAll() {
 
     <template v-else>
       <!-- Header row -->
-      <div class="flex items-center gap-2 px-0.5 pb-2">
+      <div class="flex items-center gap-2 px-0.5 pb-2 flex-wrap">
         <h2 class="text-[10px] font-bold uppercase tracking-wider text-fg-mute m-0">
           Needs you
         </h2>
@@ -199,6 +178,14 @@ async function approveAll() {
           :aria-label="`${agents.length} agents need attention`"
         >{{ agents.length }}</span>
         <span v-if="breakdown" class="text-[11px] text-fg-faint">{{ breakdown }}</span>
+        <!-- Discoverability hint for keyboard shortcuts -->
+        <span class="ml-auto text-[10px] text-fg-faint font-mono select-none hidden sm:inline" aria-hidden="true">
+          <kbd class="not-italic">n</kbd> next ·
+          <kbd class="not-italic">a</kbd> approve ·
+          <kbd class="not-italic">d</kbd> deny ·
+          <kbd class="not-italic">⇧A</kbd> approve all ·
+          <kbd class="not-italic">c</kbd> density
+        </span>
       </div>
 
       <!-- Approve-all bar: shown when 2+ pending permissions are resolvable -->
@@ -222,7 +209,7 @@ async function approveAll() {
             type="button"
             :disabled="approveAllInFlight || selectedCount === 0"
             class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-green-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
-            @click="approveAll"
+            @click="handleApproveAll"
           >
             Approve all{{ selectedCount < resolvableAgents.length ? ` (${selectedCount})` : '' }}
           </button>
@@ -265,10 +252,12 @@ async function approveAll() {
         <div
           v-for="agent in agents"
           :key="agent.sessionId"
-          class="min-w-[280px] flex-1 basis-[280px] max-w-[420px] rounded-lg bg-card border border-l-[3px] p-3 flex flex-col gap-2"
+          :ref="(el) => setCardRef(agent.sessionId, el as HTMLElement | null)"
+          class="min-w-[280px] flex-1 basis-[280px] max-w-[420px] rounded-lg bg-card border border-l-[3px] p-3 flex flex-col gap-2 transition-shadow"
           :class="[
             toneBorderClass[attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.tone ?? 'info'],
             toneLeftClass[attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.tone ?? 'info'],
+            agent.sessionId === focusedSessionId ? 'ring-2 ring-accent shadow-md' : '',
           ]"
         >
           <!-- Card header: emoji + name + model + attention label -->
@@ -314,7 +303,7 @@ async function approveAll() {
                 :disabled="resolving[agent.sessionId]"
                 class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-green-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-500"
                 :aria-label="`Approve permissions for ${agent.projectName}`"
-                @click="resolveAgent(agent, 'granted')"
+                @click="handleResolveAgent(agent, 'granted')"
               >
                 Approve
               </button>
@@ -323,7 +312,7 @@ async function approveAll() {
                 :disabled="resolving[agent.sessionId]"
                 class="inline-flex items-center justify-center font-semibold rounded-md cursor-pointer transition-all text-xs px-2.5 py-1 bg-red-600 text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500"
                 :aria-label="`Deny permissions for ${agent.projectName}`"
-                @click="resolveAgent(agent, 'denied')"
+                @click="handleResolveAgent(agent, 'denied')"
               >
                 Deny
               </button>
