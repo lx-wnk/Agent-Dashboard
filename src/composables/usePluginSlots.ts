@@ -72,7 +72,11 @@ function getManifest(
 function importModule(url: string, importAddon: (url: string) => Promise<SlotAddonModule>): Promise<SlotAddonModule> {
   let cached = moduleCache.get(url)
   if (!cached) {
-    cached = importAddon(url)
+    // Drop the cache entry on failure so a transient import error can be retried.
+    cached = importAddon(url).catch((err) => {
+      moduleCache.delete(url)
+      throw err
+    })
     moduleCache.set(url, cached)
   }
   return cached
