@@ -21,7 +21,7 @@ function onChange(e: Event) {
     :value="modelValue"
     :aria-label="ariaLabel"
     :disabled="disabled"
-    class="bg-card border border-line rounded-md px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50 cursor-pointer"
+    class="bg-card border border-line rounded-md px-3 py-2 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent disabled:opacity-50 cursor-pointer"
     @change="onChange"
   >
     <option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option>

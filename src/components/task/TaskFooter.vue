@@ -29,7 +29,7 @@ const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
         <textarea
           v-model="additionalPrompt"
           rows="2"
-          class="w-full bg-raised border border-line rounded px-2.5 py-1.5 text-fg text-xs resize-none focus:outline-none focus:border-blue-500 placeholder:text-fg-faint"
+          class="w-full bg-raised border border-line rounded px-2.5 py-1.5 text-fg text-xs resize-none focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent placeholder:text-fg-faint"
           placeholder="Optional instruction for Resume / Retry (e.g. logic change or hint)…"
           @keydown="slashMenuRef?.onKeydown($event)"
         />

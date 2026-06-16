@@ -161,9 +161,6 @@ async function handleSaveConfig() {
                 </p>
               </th>
               <td class="px-3 py-2.5 text-center">
-                <!-- F001 — role="switch" + aria-checked + aria-label -->
-                <!-- F002 — replace focus:outline-none with focus-visible:ring-* -->
-                <!-- F003 — h-6 w-11 for adequate touch target (24×44px) -->
                 <button
                   type="button"
                   role="switch"
@@ -219,7 +216,7 @@ async function handleSaveConfig() {
               v-model="config['webhook_url']"
               type="url"
               placeholder="https://hooks.example.com/..."
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-blue-500 font-mono"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent font-mono"
             >
           </div>
           <div class="flex flex-col gap-1">
@@ -228,7 +225,7 @@ async function handleSaveConfig() {
               v-model="config['email_to']"
               type="email"
               placeholder="you@example.com"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             >
           </div>
           <div class="flex items-center gap-2">

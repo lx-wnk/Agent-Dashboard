@@ -367,7 +367,7 @@ watch(folderRows, () => {}, { deep: true })
             v-model="form.name"
             type="text"
             required
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="My Project"
           >
         </div>
@@ -378,7 +378,7 @@ watch(folderRows, () => {}, { deep: true })
             v-model="form.slug"
             type="text"
             required
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="my-project"
           >
         </div>
@@ -388,7 +388,7 @@ watch(folderRows, () => {}, { deep: true })
             id="proj-desc"
             v-model="form.description"
             type="text"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="Short description"
           >
         </div>
@@ -409,7 +409,7 @@ watch(folderRows, () => {}, { deep: true })
           <select
             id="proj-spawner"
             v-model="form.defaultSpawnerId"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
           >
             <option value="">
               None (use deployment default)
@@ -477,7 +477,7 @@ watch(folderRows, () => {}, { deep: true })
                   <input
                     v-model="row.path"
                     type="text"
-                    class="w-full bg-card border border-line rounded px-2 py-1 text-xs font-mono text-fg focus:outline-none focus:border-blue-500"
+                    class="w-full bg-card border border-line rounded px-2 py-1 text-xs font-mono text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
                     placeholder="/absolute/path"
                     @input="row.isDirty = true"
                   >
@@ -486,7 +486,7 @@ watch(folderRows, () => {}, { deep: true })
                   <input
                     v-model="row.label"
                     type="text"
-                    class="w-full bg-card border border-line rounded px-2 py-1 text-xs text-fg focus:outline-none focus:border-blue-500"
+                    class="w-full bg-card border border-line rounded px-2 py-1 text-xs text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
                     placeholder="Optional label"
                     @input="row.isDirty = true"
                   >

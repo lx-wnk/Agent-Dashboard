@@ -376,14 +376,14 @@ watch(summary, () => {
       <input
         v-model="customFrom"
         type="date"
-        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
         aria-label="From date"
       >
       <span class="text-fg-mute">–</span>
       <input
         v-model="customTo"
         type="date"
-        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
         aria-label="To date"
       >
       <button

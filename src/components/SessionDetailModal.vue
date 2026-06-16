@@ -232,7 +232,7 @@ async function resumeSession() {
         <div class="flex gap-1.5">
           <input
             v-model="resumePrompt"
-            class="flex-1 bg-raised border border-line rounded text-fg text-xs px-2 py-1.5 focus:outline-none focus:border-green-500 placeholder:text-fg-faint"
+            class="flex-1 bg-raised border border-line rounded text-fg text-xs px-2 py-1.5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent placeholder:text-fg-faint"
             type="text"
             aria-label="Follow-up prompt"
             placeholder="Follow-up prompt to resume session..."

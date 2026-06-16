@@ -248,7 +248,7 @@ onUnmounted(() => {
 
       <div class="mb-4">
         <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-project">Project</label>
-        <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
+        <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent">
           <option
             v-for="p in sortedProjects"
             :key="p.id"
@@ -290,7 +290,7 @@ onUnmounted(() => {
           id="spawn-spawner"
           v-model="dlg.spawnerId.value"
           data-testid="spawn-spawner"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
         >
           <option value="">
             {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
@@ -318,7 +318,7 @@ onUnmounted(() => {
           id="spawn-permission-mode"
           v-model="permissionMode"
           data-testid="spawn-permission-mode"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
         >
           <option value="default">
             Ask for permission (default)

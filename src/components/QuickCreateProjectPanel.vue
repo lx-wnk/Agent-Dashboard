@@ -40,7 +40,7 @@ function onSlugInput(e: Event): void {
   slugDirty.value = v.length > 0
 }
 
-const inputClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500'
+const inputClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
 
 async function submit(): Promise<void> {
   if (isSubmitting.value)
