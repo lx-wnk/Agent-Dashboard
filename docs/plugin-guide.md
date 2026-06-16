@@ -140,6 +140,71 @@ The following routes were used by the old in-core proxy flow and are retained fo
 
 Reserved for plugins that mount additional HTTP routes into the dashboard router. Not yet implemented.
 
+### `ui_extension`
+
+Lets a plugin contribute frontend UI into named slots of the dashboard SPA. The plugin
+serves a **UI manifest** plus one JS module per slot through its own reverse-proxied
+file space; the dashboard imports a module only when a host renders that slot.
+
+**1. Declare the capability** in `plugin.json`:
+
+```json
+{ "capabilities": ["ui_extension"] }
+```
+
+**2. Serve a UI manifest** at `/<plugin-root>/ui-manifest.json` (reached by the dashboard
+at `/api/settings/plugins/{id}/ui-manifest.json`):
+
+```json
+{
+  "slots": [
+    { "slot": "task-modal-footer", "module": "task-footer.js" },
+    { "slot": "kanban-card-badge", "module": "badge.js" }
+  ]
+}
+```
+
+**3. Serve each module** (e.g. `task-footer.js`) as an ES module whose `default` export is
+a `SlotAddon`:
+
+```js
+export default {
+  mount(el, ctx) {
+    // ctx shape depends on the slot (see the contract table below)
+    el.textContent = ctx.task.slug
+    return () => { /* teardown */ }
+  },
+}
+```
+
+**Available slots and their `ctx` contract** (SSOT: `src/utils/pluginSlot.ts`):
+
+| Slot name                | Host             | `ctx` (props in)                                  |
+| ------------------------ | ---------------- | ------------------------------------------------- |
+| `refinement-input-addon` | RefinementChat   | `{ insertText(text), setBusy(bool) }` (callbacks) |
+| `task-modal-footer`      | TaskModal footer | `{ task }`                                         |
+| `agent-modal-footer`     | AgentModal footer| `{ agent }`                                        |
+| `kanban-card-badge`      | TaskCard         | `{ task }`                                         |
+| `settings-panel`         | PluginSettings   | `{}` (no entity context)                          |
+
+The addon's only callback *out* is the `UnmountFn` it returns from `mount`, invoked when
+the host unmounts.
+
+**Lifecycle (v1):** `discover` (boot-static registry) → `health-check` → `load-manifest`
+→ `import module` → `mount(el, ctx)` → `unmount` when the host component unmounts. Imports
+are memoized per page load (plugin list + each manifest + each module fetched once).
+
+**Legacy fallback:** a `route_extension` plugin that ships **no** manifest but serves an
+`addon.js` whose `default.slot` matches the requested slot still works — this keeps the
+original voice-input plugins functioning unchanged.
+
+**Non-goal (v1):** hot plugin add/remove without a page reload. The plugin registry is
+boot-static; adding or removing a plugin requires a server restart and a browser reload.
+
+**Security:** modules are imported **only** from `/api/settings/plugins/{id}/*`, served by
+the registry-discovered, health-checked, SSRF-guarded plugin proxy — never an arbitrary
+URL. A plugin must be discovered and healthy before any of its UI can load.
+
 ---
 
 ## How to register a plugin

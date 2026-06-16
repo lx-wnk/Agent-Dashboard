@@ -8,6 +8,7 @@ import CrossLinkBanner from './CrossLinkBanner.vue'
 // Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
 const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
 import MachineBadge from './MachineBadge.vue'
+import PluginSlot from './PluginSlot.vue'
 import PromptInput from './PromptInput.vue'
 import SubAgentList from './SubAgentList.vue'
 import TaskList from './TaskList.vue'
@@ -144,6 +145,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
         </details>
       </div>
       <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
+      <PluginSlot name="agent-modal-footer" :ctx="{ agent }" />
     </template>
   </AppModal>
 </template>

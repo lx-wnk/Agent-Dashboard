@@ -36,6 +36,7 @@ import AgentChatStream from './AgentChatStream.vue'
 import AuditLogTab from './AuditLogTab.vue'
 import DependencyGraph from './DependencyGraph.vue'
 import GitStatusPanel from './GitStatusPanel.vue'
+import PluginSlot from './PluginSlot.vue'
 import RefineStatusPanel from './RefineStatusPanel.vue'
 import StageCostWaterfall from './StageCostWaterfall.vue'
 import StageOutputView from './StageOutputView.vue'
@@ -1324,6 +1325,7 @@ watch(
           </AppButton>
         </div>
       </footer>
+      <PluginSlot name="task-modal-footer" :ctx="{ task }" />
     </template>
   </AppModal>
 </template>
