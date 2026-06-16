@@ -58,7 +58,11 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
   function onResolveAll(stageRunId: string, outcome: 'granted' | 'denied'): Promise<void> {
     const group = details.pendingByStageRun.value.find(g => g.stageRunId === stageRunId)
     const ids = group ? group.requests.map(r => r.id) : []
-    return details.handleAction(() => bulkResolvePermissionRequests(task.value!.id, ids, outcome).then(() => {}))
+    return details.handleAction(async () => {
+      const { errors } = await bulkResolvePermissionRequests(task.value!.id, ids, outcome)
+      if (errors?.length)
+        throw new Error(`${errors.length} request(s) failed: ${errors.join('; ')}`)
+    })
   }
 
   async function onGrantPermission(tool: string, pattern: string | null): Promise<boolean> {
@@ -111,8 +115,11 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
         break
       case '/grant':
         await details.handleAction(async () => {
-          for (const group of details.pendingByStageRun.value)
-            await bulkResolvePermissionRequests(task.value!.id, group.requests.map(r => r.id), 'granted')
+          for (const group of details.pendingByStageRun.value) {
+            const { errors } = await bulkResolvePermissionRequests(task.value!.id, group.requests.map(r => r.id), 'granted')
+            if (errors?.length)
+              throw new Error(`${errors.length} request(s) failed: ${errors.join('; ')}`)
+          }
         })
         break
       case '/cancel':

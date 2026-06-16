@@ -64,7 +64,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
     <div class="flex justify-between items-baseline gap-2">
       <span class="flex items-center gap-1 overflow-hidden">
         <span
-          class="task-drag-handle cursor-grab active:cursor-grabbing text-fg-mute hover:text-fg-soft select-none leading-none -ml-0.5"
+          class="task-drag-handle relative z-10 cursor-grab active:cursor-grabbing text-fg-mute hover:text-fg-soft select-none leading-none -ml-0.5"
           title="Drag to reorder"
           aria-hidden="true"
           @click.stop
@@ -72,7 +72,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
         <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
         <button
           type="button"
-          class="font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
+          class="relative z-10 font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
           :aria-label="`Copy task id ${task.id}`"
           :title="task.id"
           @click.stop.prevent="copyId()"
