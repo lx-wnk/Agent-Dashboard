@@ -379,8 +379,8 @@ export async function fetchPendingPermissionRequests(taskId: string): Promise<Pe
   return await res.json() as PermissionRequest[]
 }
 
-export async function resolvePermissionRequest(id: string, outcome: 'granted' | 'denied'): Promise<void> {
-  const res = await fetch(`/api/permission-requests/${id}/resolve`, {
+export async function resolvePermissionRequest(taskId: string, requestId: string, outcome: 'granted' | 'denied'): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/permission-requests/${requestId}/resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ outcome }),
@@ -393,19 +393,18 @@ export async function resolvePermissionRequest(id: string, outcome: 'granted' | 
 
 export interface BulkResolveResponse {
   resolved: number
-  granted: number
-  denied: number
-  grantedTools: Array<{ tool: string, pattern: string | null }>
+  errors: string[]
 }
 
 export async function bulkResolvePermissionRequests(
-  stageRunId: string,
+  taskId: string,
+  permissionIds: string[],
   outcome: 'granted' | 'denied',
 ): Promise<BulkResolveResponse> {
   const res = await fetch(`/api/permission-requests/bulk-resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stageRunId, outcome }),
+    body: JSON.stringify({ taskId, outcome, permissionIds }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))

@@ -26,7 +26,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		bundle.SystemPrompt = custom + "\n\n---\n\n" + bundle.SystemPrompt
 	}
 	feedback := BuildFeedbackPrefix(ctx.PriorIterationOutput)
-	fullUserPrompt := feedback + bundle.UserPrompt + buildAdditionalPromptSuffix(ctx.UserAdditionalPrompt)
+	fullUserPrompt := buildStageUserPrompt(ctx, bundle, feedback)
 
 	// Resolve the effective DB spawner immediately before exec. Failure to
 	// resolve is fatal — we do NOT silently fall back to the bare `claude`
@@ -172,6 +172,21 @@ func buildAllowedToolsList(ctx *StageContext) []string {
 
 func isGitPushAllowedFromEnv() bool {
 	return os.Getenv("DASHBOARD_ALLOW_GIT_PUSH") == "true"
+}
+
+// resumeContinueInstruction replaces the full task spec on resume spawns to
+// avoid re-sending the entire spec that the session already has in context.
+const resumeContinueInstruction = "Continue your previous attempt on this task. Your earlier session context is already loaded — do not restart from scratch or re-read the full specification. Review where you left off, fix what caused the previous failure, and complete the remaining work."
+
+// buildStageUserPrompt assembles the user-facing prompt for a stage execution.
+// On resume, the full task spec (bundle.UserPrompt) is swapped for a short
+// "continue" instruction; feedback and additional-prompt suffix are preserved.
+func buildStageUserPrompt(ctx *StageContext, bundle PromptBundle, feedback string) string {
+	userPrompt := bundle.UserPrompt
+	if ctx.ResumeSessionID != "" {
+		userPrompt = resumeContinueInstruction
+	}
+	return feedback + userPrompt + buildAdditionalPromptSuffix(ctx.UserAdditionalPrompt)
 }
 
 func buildAdditionalPromptSuffix(prompt string) string {

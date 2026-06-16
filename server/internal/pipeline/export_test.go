@@ -38,3 +38,9 @@ func (o *PipelineOrchestrator) SweepOrphanRunsForTest(ctx context.Context, allRu
 func (o *PipelineOrchestrator) PickNextTasksForFreeSlots(ctx context.Context, allRunning []*ent.StageRun) {
 	o.pickNextTasksForFreeSlots(ctx, allRunning)
 }
+
+// BuildStageUserPromptForTest exposes buildStageUserPrompt for testing.
+var BuildStageUserPromptForTest = buildStageUserPrompt
+
+// ResumeContinueInstructionForTest exposes resumeContinueInstruction for testing.
+const ResumeContinueInstructionForTest = resumeContinueInstruction

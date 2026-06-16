@@ -55,13 +55,13 @@ func newTestHandler(t *testing.T) (*tasks.Handler, *chi.Mux) {
 	broadcaster := sse.NewTaskBroadcaster(sse.NewBroadcaster())
 
 	h := tasks.NewHandler(tasks.Deps{
-		TaskRepo:    taskRepo,
-		SRRepo:      srRepo,
-		PermRepo:    permRepo,
-		AuditRepo:   auditRepo,
-		CfgRepo:     cfgRepo,
+		TaskRepo:     taskRepo,
+		SRRepo:       srRepo,
+		PermRepo:     permRepo,
+		AuditRepo:    auditRepo,
+		CfgRepo:      cfgRepo,
 		Orchestrator: &noopOrchestrator{},
-		Broadcaster: broadcaster,
+		Broadcaster:  broadcaster,
 	})
 
 	r := chi.NewRouter()
@@ -111,7 +111,7 @@ func (n *noopOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.Sta
 	return nil, nil
 }
 func (n *noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string) {}
-func (n *noopOrchestrator) InvalidateConfigCache()                               {}
+func (n *noopOrchestrator) InvalidateConfigCache()                              {}
 
 func TestListTasks_Empty(t *testing.T) {
 	_, r := newTestHandler(t)

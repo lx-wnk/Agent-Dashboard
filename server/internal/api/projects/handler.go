@@ -129,16 +129,16 @@ func (h *Handler) Mount(r chi.Router) {
 
 // projectView is the JSON shape returned by all project endpoints.
 type projectView struct {
-	ID               string         `json:"id"`
-	Slug             string         `json:"slug"`
-	Name             string         `json:"name"`
-	Description      *string        `json:"description,omitempty"`
-	Color            *string        `json:"color,omitempty"`
-	DefaultSpawnerID *string        `json:"defaultSpawnerId,omitempty"`
-	FolderCount      *int           `json:"folderCount,omitempty"`
-	Folders          []folderView   `json:"folders,omitempty"`
-	CreatedAt        string         `json:"createdAt"`
-	UpdatedAt        string         `json:"updatedAt"`
+	ID               string       `json:"id"`
+	Slug             string       `json:"slug"`
+	Name             string       `json:"name"`
+	Description      *string      `json:"description,omitempty"`
+	Color            *string      `json:"color,omitempty"`
+	DefaultSpawnerID *string      `json:"defaultSpawnerId,omitempty"`
+	FolderCount      *int         `json:"folderCount,omitempty"`
+	Folders          []folderView `json:"folders,omitempty"`
+	CreatedAt        string       `json:"createdAt"`
+	UpdatedAt        string       `json:"updatedAt"`
 }
 
 type folderView struct {
@@ -258,8 +258,8 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) error {
 }
 
 type updateProjectBody struct {
-	Name             *string `json:"name"`
-	Slug             *string `json:"slug"`
+	Name             *string         `json:"name"`
+	Slug             *string         `json:"slug"`
 	Description      json.RawMessage `json:"description"`
 	Color            json.RawMessage `json:"color"`
 	DefaultSpawnerID json.RawMessage `json:"defaultSpawnerId"`
@@ -364,4 +364,3 @@ func parseNullableString(raw json.RawMessage) (*string, bool, error) {
 	}
 	return &v, false, nil
 }
-

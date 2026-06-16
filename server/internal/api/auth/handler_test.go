@@ -465,4 +465,3 @@ func TestHandler_Callback_MissingCode(t *testing.T) {
 	require.True(t, errors.As(callbackErr, &appErr))
 	require.Equal(t, http.StatusBadRequest, appErr.Status)
 }
-

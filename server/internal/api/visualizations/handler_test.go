@@ -69,7 +69,7 @@ func TestParseTimestamp_AcceptsLayouts(t *testing.T) {
 		wantErr bool
 	}{
 		{"rfc3339", "2026-05-01T00:00:00Z", false},
-		{"datetime-local", "2026-05-01T14:30", false},      // HTML datetime-local default (no seconds, no tz)
+		{"datetime-local", "2026-05-01T14:30", false}, // HTML datetime-local default (no seconds, no tz)
 		{"datetime-local-seconds", "2026-05-01T14:30:05", false},
 		{"date-only", "2026-05-01", false},
 		{"garbage", "not-a-timestamp", true},

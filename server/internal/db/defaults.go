@@ -10,4 +10,6 @@ const (
 	DefaultPriority            = "medium"
 	DefaultMaxIterations       = 20
 	DefaultStageTimeoutSeconds = 1800
+	DefaultCostBudgetCents     = 500      // $5 per-task cost guardrail
+	DefaultTokenBudget         = 15000000 // 15M tokens per-task guardrail
 )

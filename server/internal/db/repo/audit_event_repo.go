@@ -13,12 +13,12 @@ import (
 
 // AuditAction is the set of valid security-relevant action strings.
 const (
-	AuditActionSpawn             = "spawn"
-	AuditActionSpawnRejected     = "spawn_rejected"
-	AuditActionPermissionGrant   = "permission_grant"
-	AuditActionPermissionRevoke  = "permission_revoke"
-	AuditActionKeyCreate         = "key_create"
-	AuditActionKeyDelete         = "key_delete"
+	AuditActionSpawn            = "spawn"
+	AuditActionSpawnRejected    = "spawn_rejected"
+	AuditActionPermissionGrant  = "permission_grant"
+	AuditActionPermissionRevoke = "permission_revoke"
+	AuditActionKeyCreate        = "key_create"
+	AuditActionKeyDelete        = "key_delete"
 )
 
 // AuditEventRepo persists and queries security-relevant audit events.
