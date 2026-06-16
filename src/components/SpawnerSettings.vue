@@ -9,6 +9,7 @@ import {
   updateSpawner,
   useSpawners,
 } from '../composables/useSpawners'
+import { errorMessage } from '../utils/errorMessage'
 import { isAllowedSpawnerCommand } from '../utils/validation'
 import SpawnerDetailView from './SpawnerDetailView.vue'
 import AppButton from './ui/AppButton.vue'
@@ -256,7 +257,7 @@ async function handleSave() {
     closeForm()
   }
   catch (e) {
-    formError.value = (e as Error).message
+    formError.value = errorMessage(e)
   }
   finally {
     formSaving.value = false
@@ -277,7 +278,7 @@ async function handleDelete(id: string) {
       closeForm()
   }
   catch (e) {
-    deleteError.value = (e as Error).message
+    deleteError.value = errorMessage(e)
     confirmDeleteId.value = null
   }
 }
@@ -294,7 +295,7 @@ async function handleSetDefault(id: string) {
     await refetch()
   }
   catch (e) {
-    defaultError.value = (e as Error).message
+    defaultError.value = errorMessage(e)
   }
   finally {
     settingDefaultId.value = null

@@ -28,6 +28,7 @@ import {
   resumeStageTask,
   retryTask,
 } from '../composables/useTasks'
+import { errorMessage } from '../utils/errorMessage'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { runStatusChipClass } from '../utils/statusColors'
@@ -212,7 +213,7 @@ async function handleAddDependency(): Promise<void> {
     await loadDependencies()
   }
   catch (err) {
-    depError.value = (err as Error).message
+    depError.value = errorMessage(err)
   }
   finally {
     isAddingDep.value = false
@@ -227,7 +228,7 @@ async function handleRemoveDependency(depId: string): Promise<void> {
     await loadDependencies()
   }
   catch (err) {
-    depError.value = (err as Error).message
+    depError.value = errorMessage(err)
   }
 }
 
@@ -394,7 +395,7 @@ async function handleAction(action: () => Promise<void>) {
     await loadDetails()
   }
   catch (err) {
-    actionError.value = (err as Error).message
+    actionError.value = errorMessage(err)
   }
   finally {
     isActing.value = false
@@ -443,7 +444,7 @@ async function onGrantPermission() {
     permissions.value = await fetchTaskPermissions(props.task!.id)
   }
   catch (e) {
-    permError.value = (e as Error).message
+    permError.value = errorMessage(e)
   }
   finally {
     isGranting.value = false

@@ -2,6 +2,7 @@
 import type { OutputMessage } from '../types'
 import * as d3 from 'd3'
 import { nextTick, onMounted, ref, useId, watch } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 const props = defineProps<{ sessionId: string }>()
 
@@ -36,7 +37,7 @@ async function fetchAndRender() {
     renderGantt(toolCalls)
   }
   catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Failed to load timeline'
+    error.value = errorMessage(e, 'Failed to load timeline')
     loading.value = false
   }
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AuditEntry } from '../types'
 import { onMounted, ref, watch } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 const props = withDefaults(defineProps<{
   taskId?: string
@@ -35,7 +36,7 @@ async function load() {
     entries.value = await res.json()
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : 'Network error'
+    error.value = errorMessage(e, 'Network error')
   }
   finally {
     loading.value = false

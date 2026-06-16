@@ -3,6 +3,7 @@ import { ref, onBeforeUnmount } from 'vue'
 import AppButton from './ui/AppButton.vue'
 import { useNotificationConfig } from '../composables/useNotificationConfig'
 import type { NotifPref } from '../composables/useNotificationConfig'
+import { errorMessage } from '../utils/errorMessage'
 
 const KNOWN_EVENTS: { type: string; label: string; description: string }[] = [
   { type: 'on_hold', label: 'On Hold', description: 'Task paused — requires user input' },
@@ -62,7 +63,7 @@ async function handleSavePref(eventType: string, updated: NotifPref) {
     }, 1500)
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : 'Save failed'
+    error.value = errorMessage(e, 'Save failed')
   }
   finally {
     savingPref.value = null
@@ -80,7 +81,7 @@ async function handleSaveConfig() {
     configSaveOkTimer = setTimeout(() => { configSaveOk.value = false }, 2000)
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : 'Save failed'
+    error.value = errorMessage(e, 'Save failed')
   }
   finally {
     savingConfig.value = false

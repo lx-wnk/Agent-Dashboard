@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
@@ -45,7 +46,7 @@ async function fetchPrompts() {
     prompts.value = await res.json()
   }
   catch (e) {
-    loadError.value = e instanceof Error ? e.message : 'Failed to load'
+    loadError.value = errorMessage(e, 'Failed to load')
   }
   finally {
     loading.value = false
@@ -111,7 +112,7 @@ async function save() {
     await fetchPrompts()
   }
   catch (e) {
-    saveError.value = e instanceof Error ? e.message : 'Save failed'
+    saveError.value = errorMessage(e, 'Save failed')
   }
   finally {
     saving.value = false
@@ -127,7 +128,7 @@ async function deletePrompt(id: string) {
     await fetchPrompts()
   }
   catch (e) {
-    loadError.value = e instanceof Error ? e.message : 'Delete failed'
+    loadError.value = errorMessage(e, 'Delete failed')
   }
 }
 

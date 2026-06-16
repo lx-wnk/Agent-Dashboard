@@ -5,6 +5,7 @@ import { suggestFolders } from '../composables/useProjectFolders'
 import { useProjects } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
 import { createTask } from '../composables/useTasks'
+import { errorMessage } from '../utils/errorMessage'
 import { slugify } from '../utils/validation'
 import PermissionTemplatePicker from './PermissionTemplatePicker.vue'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
@@ -123,7 +124,7 @@ async function buildTask(): Promise<PipelineTask | null> {
     })
   }
   catch (err: unknown) {
-    errorMsg.value = err instanceof Error ? err.message : 'Failed to create task'
+    errorMsg.value = errorMessage(err, 'Failed to create task')
     return null
   }
   finally {

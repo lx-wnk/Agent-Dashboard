@@ -14,6 +14,7 @@ import {
   useProjects,
 } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
+import { errorMessage } from '../utils/errorMessage'
 import { isAbsolutePath } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 
@@ -103,7 +104,7 @@ async function handleSave() {
     }
   }
   catch (e) {
-    formError.value = (e as Error).message
+    formError.value = errorMessage(e)
   }
   finally {
     formSaving.value = false
@@ -124,7 +125,7 @@ async function handleDelete(id: string) {
       closeForm()
   }
   catch (e) {
-    deleteError.value = (e as Error).message
+    deleteError.value = errorMessage(e)
     confirmDeleteId.value = null
   }
 }
@@ -162,7 +163,7 @@ async function loadFolders(projectId: string) {
     }))
   }
   catch (e) {
-    folderError.value = (e as Error).message
+    folderError.value = errorMessage(e)
   }
   finally {
     folderLoading.value = false
@@ -207,7 +208,7 @@ async function saveFolderRow(row: FolderRow) {
     }
   }
   catch (e) {
-    row.saveError = (e as Error).message
+    row.saveError = errorMessage(e)
     row.saving = false
   }
 }
@@ -228,7 +229,7 @@ async function removeFolderRow(row: FolderRow) {
     folderRows.value = folderRows.value.filter(r => r._key !== row._key)
   }
   catch (e) {
-    row.saveError = (e as Error).message
+    row.saveError = errorMessage(e)
     row.saving = false
   }
 }
