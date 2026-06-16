@@ -111,7 +111,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
           @click.stop.prevent="copyId()"
         >{{ idCopied ? 'copied' : `#${shortId(task.id)}` }}</button>
       </span>
-      <span class="text-[10px] text-fg-mute">{{ shortDate(task.createdAt) }}</span>
+      <span class="text-[10px] font-mono text-fg-mute">{{ shortDate(task.createdAt) }}</span>
     </div>
     <div class="text-[13px] font-semibold text-fg leading-tight line-clamp-2">
       {{ task.title }}
