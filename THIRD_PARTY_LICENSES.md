@@ -97,7 +97,6 @@ The following third-party packages are used as transitive dependencies.
 | call-bind-apply-helpers | 1.0.2 | MIT |
 | call-bound | 1.0.4 | MIT |
 | change-case | 5.4.4 | MIT |
-| commander | 7.2.0 | MIT |
 | consola | 3.4.2 | MIT |
 | content-disposition | 1.0.1 | MIT |
 | content-type | 1.0.5 | MIT |
@@ -107,30 +106,18 @@ The following third-party packages are used as transitive dependencies.
 | cors | 2.8.6 | MIT |
 | cross-spawn | 7.0.6 | MIT |
 | csstype | 3.2.3 | MIT |
-| d3 | 7.9.0 | ISC |
 | d3-array | 2.12.1 | BSD-3-Clause |
 | d3-array | 3.2.4 | ISC |
 | d3-axis | 3.0.0 | ISC |
-| d3-brush | 3.0.0 | ISC |
-| d3-chord | 3.0.1 | ISC |
 | d3-color | 3.1.0 | ISC |
-| d3-contour | 4.0.2 | ISC |
-| d3-delaunay | 6.0.4 | ISC |
 | d3-dispatch | 3.0.1 | ISC |
 | d3-drag | 3.0.0 | ISC |
-| d3-dsv | 3.0.1 | ISC |
-| d3-ease | 3.0.1 | BSD-3-Clause |
-| d3-fetch | 3.0.1 | ISC |
 | d3-force | 3.0.0 | ISC |
 | d3-format | 3.1.2 | ISC |
-| d3-geo | 3.1.1 | ISC |
-| d3-hierarchy | 3.1.2 | ISC |
 | d3-interpolate | 3.0.1 | ISC |
 | d3-path | 1.0.9 | BSD-3-Clause |
 | d3-path | 3.1.0 | ISC |
-| d3-polygon | 3.0.1 | ISC |
 | d3-quadtree | 3.0.1 | ISC |
-| d3-random | 3.0.1 | ISC |
 | d3-sankey | 0.12.3 | BSD-3-Clause |
 | d3-scale | 4.0.2 | ISC |
 | d3-scale-chromatic | 3.1.0 | ISC |
@@ -140,10 +127,7 @@ The following third-party packages are used as transitive dependencies.
 | d3-time | 3.1.0 | ISC |
 | d3-time-format | 4.1.0 | ISC |
 | d3-timer | 3.0.1 | ISC |
-| d3-transition | 3.0.1 | ISC |
-| d3-zoom | 3.0.0 | ISC |
 | debug | 4.4.3 | MIT |
-| delaunator | 5.1.0 | ISC |
 | depd | 2.0.0 | MIT |
 | diff | 9.0.0 | BSD-3-Clause |
 | dompurify | 3.4.9 | (MPL-2.0 OR Apache-2.0) |
@@ -177,7 +161,7 @@ The following third-party packages are used as transitive dependencies.
 | http-errors | 2.0.1 | MIT |
 | http_ece | 1.2.0 | MIT |
 | https-proxy-agent | 7.0.6 | MIT |
-| iconv-lite | 0.6.3, 0.7.2 | MIT |
+| iconv-lite | 0.7.2 | MIT |
 | inherits | 2.0.4 | ISC |
 | internmap | 1.0.1, 2.0.3 | ISC |
 | ip-address | 10.2.0 | MIT |
@@ -218,9 +202,7 @@ The following third-party packages are used as transitive dependencies.
 | range-parser | 1.2.1 | MIT |
 | raw-body | 3.0.2 | MIT |
 | require-from-string | 2.0.2 | MIT |
-| robust-predicates | 3.0.3 | Unlicense |
 | router | 2.2.0 | MIT |
-| rw | 1.3.3 | BSD-3-Clause |
 | safe-buffer | 5.2.1 | MIT |
 | safer-buffer | 2.1.2 | MIT |
 | send | 1.2.1 | MIT |
