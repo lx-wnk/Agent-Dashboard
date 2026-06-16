@@ -130,7 +130,7 @@ onUnmounted(() => {
     <div v-if="loading" class="text-sm text-fg-mute p-4">
       Loading sankey…
     </div>
-    <div v-else-if="error" class="text-sm text-red-500 dark:text-red-400 p-4">
+    <div v-else-if="error" class="text-sm text-danger-text p-4">
       {{ error }}
     </div>
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">
@@ -140,7 +140,7 @@ onUnmounted(() => {
          so svgRef survives a recoverable layout error — otherwise re-rendering
          after the data changes would hit the same null-ref mount race. -->
     <template v-else>
-      <div v-if="renderError" class="text-sm text-red-500 dark:text-red-400 p-4">
+      <div v-if="renderError" class="text-sm text-danger-text p-4">
         {{ renderError }}
       </div>
       <svg ref="svgRef" class="w-full" style="min-height: 480px;" aria-label="Tool-call sankey diagram" role="img" />

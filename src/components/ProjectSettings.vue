@@ -261,10 +261,10 @@ watch(folderRows, () => {}, { deep: true })
     </div>
 
     <!-- Global error -->
-    <p v-if="error" class="text-xs text-red-600 dark:text-red-400">
+    <p v-if="error" class="text-xs text-danger-text">
       {{ error }}
     </p>
-    <p v-if="deleteError" class="text-xs text-red-600 dark:text-red-400">
+    <p v-if="deleteError" class="text-xs text-danger-text">
       {{ deleteError }}
     </p>
 
@@ -421,7 +421,7 @@ watch(folderRows, () => {}, { deep: true })
         </div>
       </div>
 
-      <p v-if="formError" class="text-xs text-red-600 dark:text-red-400">
+      <p v-if="formError" class="text-xs text-danger-text">
         {{ formError }}
       </p>
 
@@ -445,7 +445,7 @@ watch(folderRows, () => {}, { deep: true })
               + Add Folder
             </AppButton>
           </div>
-          <p v-if="folderError" class="text-xs text-red-600 dark:text-red-400 mb-2">
+          <p v-if="folderError" class="text-xs text-danger-text mb-2">
             {{ folderError }}
           </p>
           <div v-if="folderLoading" class="text-xs text-fg-mute py-3">
@@ -520,7 +520,7 @@ watch(folderRows, () => {}, { deep: true })
                       Remove
                     </button>
                   </div>
-                  <p v-if="row.saveError" class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
+                  <p v-if="row.saveError" class="text-[10px] text-danger-text mt-0.5">
                     {{ row.saveError }}
                   </p>
                 </td>

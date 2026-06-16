@@ -92,7 +92,7 @@ watch(() => props.taskId, fetchStatus)
     </div>
 
     <!-- Error state -->
-    <div v-else-if="error && !status" class="text-red-500 dark:text-red-400 text-xs">
+    <div v-else-if="error && !status" class="text-danger-text text-xs">
       {{ error }}
     </div>
 
@@ -174,7 +174,7 @@ watch(() => props.taskId, fetchStatus)
       <div v-if="actionSuccess" class="mt-2 text-[11px] text-green-600 dark:text-green-400">
         {{ actionSuccess }}
       </div>
-      <div v-if="actionError" class="mt-2 text-[11px] text-red-500 dark:text-red-400">
+      <div v-if="actionError" class="mt-2 text-[11px] text-danger-text">
         {{ actionError }}
       </div>
     </template>

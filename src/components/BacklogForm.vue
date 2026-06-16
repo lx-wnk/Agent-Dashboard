@@ -225,7 +225,7 @@ async function onCreateAndRefine(): Promise<void> {
 
     <PermissionTemplatePicker v-model="selectedTemplate" />
 
-    <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400">
+    <p v-if="errorMsg" class="text-xs text-danger-text">
       {{ errorMsg }}
     </p>
 

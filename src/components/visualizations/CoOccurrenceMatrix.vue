@@ -160,7 +160,7 @@ onUnmounted(() => {
     <div v-if="loading" class="text-sm text-fg-mute p-4">
       Loading co-occurrence matrix…
     </div>
-    <div v-else-if="error" class="text-sm text-red-500 dark:text-red-400 p-4">
+    <div v-else-if="error" class="text-sm text-danger-text p-4">
       {{ error }}
     </div>
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">

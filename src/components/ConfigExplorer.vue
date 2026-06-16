@@ -152,7 +152,7 @@ function formatTimestamp(unixSeconds: number): string {
     <p v-if="isLoading && skills.length === 0 && commands.length === 0 && memory.length === 0" class="text-fg-mute text-sm py-8 text-center">
       Loading configuration...
     </p>
-    <p v-else-if="error" class="text-red-600 dark:text-red-400 text-sm py-4 text-center">
+    <p v-else-if="error" class="text-danger-text text-sm py-4 text-center">
       Error: {{ error }}
     </p>
 

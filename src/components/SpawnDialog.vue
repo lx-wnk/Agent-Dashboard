@@ -349,14 +349,14 @@ onUnmounted(() => {
         The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
       </div>
 
-      <div v-if="bypassConfirmed" role="alert" data-testid="bypass-confirm-msg" class="text-xs text-red-600 dark:text-red-400 font-semibold mb-2">
+      <div v-if="bypassConfirmed" role="alert" data-testid="bypass-confirm-msg" class="text-xs text-danger-text font-semibold mb-2">
         Click "Spawn Agent" again to confirm.
       </div>
 
       <p v-if="spawnStatusMsg" class="text-xs text-green-600 dark:text-green-400 mt-1 leading-snug">
         {{ spawnStatusMsg }}
       </p>
-      <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mt-1 leading-snug whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto">
+      <p v-if="errorMsg" class="text-xs text-danger-text mt-1 leading-snug whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto">
         {{ errorMsg }}
       </p>
     </form>

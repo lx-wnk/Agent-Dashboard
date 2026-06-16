@@ -640,7 +640,7 @@ async function startImport() {
               + Add Key
             </AppButton>
           </div>
-          <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mb-3">
+          <p v-if="errorMsg" class="text-xs text-danger-text mb-3">
             {{ errorMsg }}
           </p>
           <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
@@ -757,7 +757,7 @@ async function startImport() {
           <div v-if="presetsLoading" class="text-center py-12 text-fg-mute text-sm">
             Loading...
           </div>
-          <p v-else-if="presetsError" class="text-xs text-red-600 dark:text-red-400 mb-3">
+          <p v-else-if="presetsError" class="text-xs text-danger-text mb-3">
             {{ presetsError }}
           </p>
           <div v-else-if="presets.length === 0" class="text-center py-8 text-fg-mute text-sm">
@@ -836,7 +836,7 @@ async function startImport() {
           <p class="text-xs text-fg-mute mb-5">
             Top 3-tool sequences discovered across all sessions.
           </p>
-          <p v-if="patternsError" class="text-xs text-red-500 mb-3">
+          <p v-if="patternsError" class="text-xs text-danger-text mb-3">
             {{ patternsError }}
           </p>
           <div v-else-if="patterns.length === 0" class="text-sm text-fg-mute">
@@ -919,7 +919,7 @@ async function startImport() {
               </option>
             </select>
           </div>
-          <p v-if="createError" class="text-xs text-red-600 dark:text-red-400 mb-2">
+          <p v-if="createError" class="text-xs text-danger-text mb-2">
             {{ createError }}
           </p>
         </form>

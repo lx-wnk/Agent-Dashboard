@@ -320,13 +320,13 @@ async function handleSetDefault(id: string) {
       </AppButton>
     </div>
 
-    <p v-if="error" class="text-xs text-red-600 dark:text-red-400">
+    <p v-if="error" class="text-xs text-danger-text">
       {{ error }}
     </p>
-    <p v-if="deleteError" class="text-xs text-red-600 dark:text-red-400">
+    <p v-if="deleteError" class="text-xs text-danger-text">
       {{ deleteError }}
     </p>
-    <p v-if="defaultError" class="text-xs text-red-600 dark:text-red-400">
+    <p v-if="defaultError" class="text-xs text-danger-text">
       {{ defaultError }}
     </p>
 
@@ -615,7 +615,7 @@ async function handleSetDefault(id: string) {
           </div>
         </div>
 
-        <p v-if="formError" class="text-xs text-red-600 dark:text-red-400">
+        <p v-if="formError" class="text-xs text-danger-text">
           {{ formError }}
         </p>
 

@@ -37,7 +37,7 @@ const {
             class="px-1.5 py-px rounded text-[10px] font-mono"
             :class="dep.dependsOnStage === dep.requiredStage
               ? 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 border border-green-300 dark:border-green-700'
-              : 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700/50'"
+              : 'bg-red-50 dark:bg-red-950/50 text-danger-text border border-red-300 dark:border-red-700/50'"
           >{{ dep.dependsOnStage }}</span>
           <span class="text-[10px] text-fg-mute font-mono">on cancel: {{ dep.onCancelAction }}</span>
           <button type="button" class="bg-transparent border-none cursor-pointer text-fg-mute px-1 py-px text-[10px] rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" title="Remove dependency" @click="handleRemoveDependency(dep.id)">
@@ -80,7 +80,7 @@ const {
           Add
         </button>
       </form>
-      <p v-if="depError" class="text-[11px] text-red-600 dark:text-red-400 mt-1">
+      <p v-if="depError" class="text-[11px] text-danger-text mt-1">
         {{ depError }}
       </p>
     </div>

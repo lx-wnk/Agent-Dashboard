@@ -345,7 +345,7 @@ onMounted(fetchQuota)
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
         </div>
-        <p v-else-if="error" class="text-center py-12 text-red-600 dark:text-red-400">
+        <p v-else-if="error" class="text-center py-12 text-danger-text">
           Error: {{ error }}
         </p>
 

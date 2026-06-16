@@ -315,7 +315,7 @@ function isPhaseMarker(idx: number): string | null {
       </div>
 
       <!-- Error -->
-      <div v-if="error" class="px-5 py-2 text-red-500 text-[0.82rem] shrink-0">
+      <div v-if="error" class="px-5 py-2 text-danger-text text-[0.82rem] shrink-0">
         {{ error }}
       </div>
 

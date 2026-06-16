@@ -32,7 +32,7 @@ defineEmits<{
       >
         <div
           class="h-full rounded-full transition-[width]"
-          :class="quotaPct >= 90 ? 'bg-red-500' : quotaPct >= 75 ? 'bg-yellow-500' : 'bg-green-500'"
+          :class="quotaPct >= 90 ? 'bg-danger' : quotaPct >= 75 ? 'bg-warning' : 'bg-success'"
           :style="{ width: `${quotaPct}%` }"
         />
       </div>

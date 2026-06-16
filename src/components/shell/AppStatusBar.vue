@@ -13,7 +13,7 @@ const resources = useSystemResources()
 const systemInfo = computed<SystemInfo | null>(() => resources.info.value)
 
 function barColor(pct: number): string {
-  return pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-yellow-500' : 'bg-green-500'
+  return pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warning' : 'bg-success'
 }
 
 function formatDelta(d: number | null): string {

@@ -18,6 +18,7 @@ import TaskFooter from './task/TaskFooter.vue'
 import TaskOverviewTab from './task/TaskOverviewTab.vue'
 import TaskPermissionsTab from './task/TaskPermissionsTab.vue'
 import TaskStagesTab from './task/TaskStagesTab.vue'
+import AppChip from './ui/AppChip.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
@@ -80,14 +81,17 @@ watch(() => props.task?.id, (id, prevId) => {
               'bg-raised text-fg-mute': !['on_hold', 'done', 'cancelled'].includes(task.currentStage ?? ''),
             }"
           >{{ task.currentStage ? (STAGE_LABELS[task.currentStage] ?? task.currentStage) : '' }}</span>
-          <span v-if="isFailedRun" class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400" title="Latest stage run failed">
+          <AppChip v-if="isFailedRun" tone="danger" mono uppercase :bordered="false" class="ml-auto" title="Latest stage run failed">
             RUN FAILED
-          </span>
-          <span
+          </AppChip>
+          <AppChip
             v-if="task.autoRetryCount != null"
-            class="text-[10px] px-1.5 py-px rounded uppercase font-mono bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400"
+            tone="info"
+            mono
+            uppercase
+            :bordered="false"
             :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${modalMaxAutoRetries})`"
-          >Retrying · {{ task.autoRetryCount }}/{{ modalMaxAutoRetries }}{{ modalRetrySecondsLeft > 0 ? ` · ${modalRetrySecondsLeft}s` : '' }}</span>
+          >Retrying · {{ task.autoRetryCount }}/{{ modalMaxAutoRetries }}{{ modalRetrySecondsLeft > 0 ? ` · ${modalRetrySecondsLeft}s` : '' }}</AppChip>
           <span class="font-mono text-xs text-blue-600 dark:text-blue-400">{{ task.slug }}</span>
           <button
             type="button"

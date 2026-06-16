@@ -292,7 +292,7 @@ defineExpose({ focus })
       class="text-[11px]"
       :class="[
         variant === 'full' ? 'px-4 pb-2' : 'px-3 pb-1.5 pt-0.5',
-        sendStatus === 'sent' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+        sendStatus === 'sent' ? 'text-green-600 dark:text-green-400' : 'text-danger-text',
       ]"
     >
       {{ sendStatus === 'sent' ? 'Sent' : sendError }}
