@@ -121,9 +121,12 @@ async function replayPendingMessages(): Promise<void> {
   }
 }
 
+// The Background Sync API's SyncEvent is absent from TS's ServiceWorkerGlobalScopeEventMap,
+// so the listener param falls back to Event — model it as ExtendableEvent plus the sync tag.
 self.addEventListener('sync', (event) => {
-  if (event.tag === BACKGROUND_SYNC_TAG) {
-    event.waitUntil(replayPendingMessages())
+  const syncEvent = event as ExtendableEvent & { readonly tag: string }
+  if (syncEvent.tag === BACKGROUND_SYNC_TAG) {
+    syncEvent.waitUntil(replayPendingMessages())
   }
 })
 
