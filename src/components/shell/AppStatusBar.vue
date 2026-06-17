@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useSystemResources } from '../../composables/useSystemResources'
 
-defineProps<{ costDelta: number | null, todayCostLabel: string }>()
+defineProps<{ costDelta: number | null, todayCostLabel: string, quotaPct: number }>()
 
 const { collapsed, openSegment, toggleSegment, toggleCollapsed } = useStatusBar()
 const resources = useSystemResources()
@@ -14,6 +14,10 @@ const systemInfo = computed<SystemInfo | null>(() => resources.info.value)
 
 function barColor(pct: number): string {
   return pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warning' : 'bg-success'
+}
+
+function quotaBarColor(pct: number): string {
+  return pct >= 90 ? 'bg-danger' : pct >= 75 ? 'bg-warning' : 'bg-success'
 }
 
 function formatDelta(d: number | null): string {
@@ -52,6 +56,14 @@ function formatDelta(d: number | null): string {
     </div>
 
     <div class="flex items-center gap-3 px-3 h-7 text-[11px] font-mono text-fg-mute">
+      <span class="flex items-center gap-1.5" data-testid="seg-quota">
+        <span class="text-fg-faint">QUOTA</span>
+        <span class="inline-block w-16 h-1.5 bg-raised rounded-full overflow-hidden align-middle">
+          <span class="block h-full rounded-full" :class="quotaBarColor(quotaPct)" :style="{ width: `${quotaPct}%` }" />
+        </span>
+        <span class="text-fg">{{ quotaPct }}%</span>
+      </span>
+      <span class="w-px h-3.5 bg-line" aria-hidden="true" />
       <button
         type="button"
         data-testid="seg-system"

@@ -407,7 +407,7 @@ onMounted(fetchQuota)
       </div>
 
       <template #statusbar>
-        <AppStatusBar :cost-delta="costDelta" :today-cost-label="todayCostLabel" />
+        <AppStatusBar :cost-delta="costDelta" :today-cost-label="todayCostLabel" :quota-pct="quotaPct" />
       </template>
     </AppShell>
 
