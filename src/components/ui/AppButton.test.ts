@@ -16,7 +16,7 @@ describe('appButton', () => {
   it('primary variant uses bg-accent', () => {
     const wrapper = mount(AppButton, { props: { variant: 'primary' } })
     expect(wrapper.classes()).toContain('bg-accent')
-    expect(wrapper.classes()).toContain('text-white')
+    expect(wrapper.classes()).toContain('text-accent-contrast')
   })
 
   it('primary variant has border-0 (not outline)', () => {

@@ -1,6 +1,6 @@
 import type { PipelineStage, StageRunStatus } from '../types'
 
-export type ChipTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
+export type ChipTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'accent'
 
 export function stageTone(stage: PipelineStage | string): ChipTone {
   switch (stage) {

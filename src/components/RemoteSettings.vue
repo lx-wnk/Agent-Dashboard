@@ -32,10 +32,10 @@ async function remove(id: string) {
 
 <template>
   <div class="flex flex-col gap-4">
-    <h3 class="text-sm font-semibold text-text-primary">
+    <h3 class="text-sm font-semibold text-fg">
       My Local Dashboard Instances
     </h3>
-    <p class="text-xs text-text-muted">
+    <p class="text-xs text-fg-mute">
       Register your local dashboard instance so your local Claude sessions show up here. The local instance must be reachable over the network.
     </p>
 
@@ -43,13 +43,13 @@ async function remove(id: string) {
       <div
         v-for="r in remotes"
         :key="r.id"
-        class="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-bg-surface text-sm"
+        class="flex items-center justify-between p-3 rounded-lg border border-line bg-card text-sm"
       >
         <div>
-          <div class="font-medium text-text-primary">
+          <div class="font-medium text-fg">
             {{ r.name ?? r.url }}
           </div>
-          <div v-if="r.name" class="text-xs text-text-muted">
+          <div v-if="r.name" class="text-xs text-fg-mute">
             {{ r.url }}
           </div>
           <span
@@ -68,7 +68,7 @@ async function remove(id: string) {
         </button>
       </div>
     </div>
-    <p v-else class="text-xs text-text-muted">
+    <p v-else class="text-xs text-fg-mute">
       No registrations.
     </p>
 

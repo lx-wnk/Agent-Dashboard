@@ -20,6 +20,7 @@ const toneClasses: Record<ChipTone, string> = {
   danger: 'bg-danger-soft text-danger-text border-danger-line',
   info: 'bg-info-soft text-info-text border-info-line',
   neutral: 'bg-neutral-soft text-neutral-text border-neutral-line',
+  accent: 'bg-accent-soft text-accent border-transparent',
 }
 </script>
 
