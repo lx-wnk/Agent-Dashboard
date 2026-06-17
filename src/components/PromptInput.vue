@@ -8,8 +8,11 @@ import { SLASH_COMMAND_DEFS, fetchDynamicCommands } from '../composables/useSlas
 const props = withDefaults(defineProps<{
   agent: Agent | null
   variant?: 'compact' | 'full'
+  /** When provided and agent has a pending permission, a green ✓ button appears. */
+  approveHandler?: (() => void) | null
 }>(), {
   variant: 'compact',
+  approveHandler: null,
 })
 
 const emit = defineEmits<{ messageSent: [msg: OutputMessage] }>()
@@ -28,8 +31,15 @@ const { promptInput, isSending, sendStatus, sendError, handleSend, resumeConfirm
 )
 
 const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
+const fileInputEl = ref<HTMLInputElement | null>(null)
 const selectedIndex = ref(0)
 const dynamicCommands = ref<SlashCommandDef[]>([])
+
+const hasPendingApproval = computed(() =>
+  !!props.approveHandler
+  && !!props.agent?.pipelineTaskId
+  && !!props.agent?.pendingPermissions?.length,
+)
 
 // Prefer sessionId so suggestions reflect the running session's actual
 // CLAUDE_CONFIG_DIR (spawner-dependent); fall back to cwd for project-local commands.
@@ -193,13 +203,30 @@ defineExpose({ focus })
         <span v-if="cmd.requiresTask && cmd.disabled" class="text-amber-600 text-[10px] ml-auto">requires linked task</span>
       </button>
     </div>
+    <input
+      v-if="variant === 'full'"
+      ref="fileInputEl"
+      type="file"
+      accept="image/*"
+      multiple
+      class="hidden"
+    >
     <div
       class="border-t border-line flex items-end focus-within:ring-[3px] focus-within:ring-accent"
       :class="variant === 'full' ? 'px-4 py-2.5 gap-2 flex-shrink-0' : 'px-3 py-2 gap-1.5 items-center'"
     >
+      <button
+        v-if="variant === 'full'"
+        type="button"
+        title="Attach"
+        aria-label="Attach file"
+        class="w-8 h-8 flex-shrink-0 rounded-full border border-line bg-raised text-fg-mute text-base cursor-pointer flex items-center justify-center hover:border-accent hover:text-accent disabled:opacity-35 disabled:cursor-default transition-colors"
+        :disabled="isSending"
+        @click="fileInputEl?.click()"
+      >+</button>
       <span
-        class="text-accent flex-shrink-0 pb-0.5"
-        :class="variant === 'full' ? 'text-[14px]' : 'text-[13px] pb-0'"
+        v-else
+        class="text-accent flex-shrink-0 pb-0.5 text-[13px]"
       >❯</span>
       <textarea
         v-if="variant === 'full'"
@@ -229,6 +256,15 @@ defineExpose({ focus })
         class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono focus-visible:outline-none placeholder:text-fg-faint disabled:opacity-50"
         @keydown="onKeydown"
       >
+      <button
+        v-if="hasPendingApproval"
+        type="button"
+        title="Approve pending permission"
+        aria-label="Approve pending permission"
+        class="w-8 h-8 flex-shrink-0 rounded-full border-none bg-success text-white text-sm font-bold cursor-pointer flex items-center justify-center hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        :disabled="isSending"
+        @click="approveHandler?.()"
+      >✓</button>
       <button
         type="button"
         :aria-label="isResumeMode ? 'Resume session with prompt (creates a new session)' : 'Send message'"

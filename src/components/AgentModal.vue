@@ -2,6 +2,7 @@
 import type { Agent, OutputMessage } from '../types'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
+import { usePermissionResolve } from '../composables/usePermissionResolve'
 import { useRovingTabList } from '../composables/useRovingTabList'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
@@ -17,7 +18,7 @@ import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
 
-const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
+const emit = defineEmits<{ close: [], navigate: [taskId: string], toast: [message: string] }>()
 
 // Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
 const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
@@ -31,8 +32,23 @@ const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
 const chatStreamRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
 
 const { getIdentity } = useAgentIdentity()
+const { resolveAgent } = usePermissionResolve()
 
 const totalTokens = computed(() => props.agent ? totalTokenCount(props.agent.tokenUsage) : 0)
+
+async function handleApprove() {
+  if (!props.agent)
+    return
+  const err = await resolveAgent(props.agent, 'granted')
+  if (err)
+    emit('toast', err)
+}
+
+const approveHandler = computed(() =>
+  props.agent?.pipelineTaskId && props.agent?.pendingPermissions?.length
+    ? handleApprove
+    : null,
+)
 
 function onMessageSent(msg: OutputMessage) {
   localMessages.value.push(msg)
@@ -150,7 +166,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
           </div>
         </details>
       </div>
-      <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
+      <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" :approve-handler="approveHandler" @message-sent="onMessageSent" />
       <PluginSlot name="agent-modal-footer" :ctx="{ agent }" />
     </template>
   </AppModal>
