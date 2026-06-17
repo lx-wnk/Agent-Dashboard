@@ -28,6 +28,7 @@ import { usePermissionResolve } from './composables/usePermissionResolve'
 import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
+import { useSpawners } from './composables/useSpawners'
 import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { useTodayCost } from './composables/useTodayCost'
@@ -38,7 +39,6 @@ import { needsAttention } from './utils/attention'
 import { groupAgents, sortAgents } from './utils/agentGroup'
 import { friendlyProjectName } from './utils/friendlyProjectName'
 import { useNow } from './composables/useNow'
-import { ProviderClaude, ProviderCodex, ProviderGemini } from './sdk.generated'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
@@ -126,11 +126,20 @@ const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatC
 
 const { nowMs } = useNow()
 
-const PROVIDER_LABELS: Record<string, string> = {
-  [ProviderClaude]: 'Claude Code',
-  [ProviderCodex]: 'Codex CLI',
-  [ProviderGemini]: 'Gemini CLI',
-}
+const { spawners } = useSpawners()
+
+// Agents have no direct spawner link; they reach a configured spawner through
+// the task they were spawned for (task.spawnerId). Map taskId → spawnerId so the
+// roster spawner filter can match. Free (un-orchestrated) agents have no task,
+// so they only appear under "All spawners".
+const taskSpawnerById = computed(() => {
+  const m = new Map<string, string>()
+  for (const t of tasks.value) {
+    if (t.spawnerId)
+      m.set(t.id, t.spawnerId)
+  }
+  return m
+})
 
 // Dashboard roster: project + spawner filter → sort → optional grouping. Project
 // options list every known project (pre-filter) so the dropdown stays stable.
@@ -139,7 +148,7 @@ const rosterAgents = computed(() => {
   if (dashboardProject.value !== 'all')
     base = base.filter(a => a.projectName === dashboardProject.value)
   if (dashboardSpawner.value !== 'all')
-    base = base.filter(a => (a.provider ?? ProviderClaude) === dashboardSpawner.value)
+    base = base.filter(a => a.pipelineTaskId != null && taskSpawnerById.value.get(a.pipelineTaskId) === dashboardSpawner.value)
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
 const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
@@ -150,16 +159,10 @@ const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
   ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),
 ])
-const spawnerOptions = computed(() => {
-  // List every known spawner type (not just providers currently running) so the
-  // filter stays stable and matches the design's full spawner set.
-  const present = agents.value.map(a => a.provider ?? ProviderClaude)
-  const providers = [...new Set([...Object.keys(PROVIDER_LABELS), ...present])].sort()
-  return [
-    { value: 'all', label: 'All spawners' },
-    ...providers.map(p => ({ value: p, label: PROVIDER_LABELS[p] ?? p.charAt(0).toUpperCase() + p.slice(1) })),
-  ]
-})
+const spawnerOptions = computed(() => [
+  { value: 'all', label: 'All spawners' },
+  ...spawners.value.map(s => ({ value: s.id, label: s.name })),
+])
 
 const autoApprovingStrip = ref<InstanceType<typeof AutoApprovingStrip> | null>(null)
 

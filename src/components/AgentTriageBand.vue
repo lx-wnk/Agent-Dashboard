@@ -6,6 +6,7 @@ import { useNow } from '../composables/useNow'
 import { usePermissionResolve } from '../composables/usePermissionResolve'
 import { attentionFor } from '../utils/attention'
 import { formatErrorState, formatRelativeActivity, secondsSince, shortModel } from '../utils/format'
+import { friendlyProjectName } from '../utils/friendlyProjectName'
 import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
@@ -274,7 +275,7 @@ watch(() => props.focusedSessionId, (id) => {
             >
             <div class="flex flex-col gap-0.5 min-w-0">
               <label :for="`approve-all-${agent.sessionId}`" class="text-[12px] font-medium text-fg cursor-pointer">
-                {{ agent.projectName }}
+                {{ friendlyProjectName(agent.projectName) }}
               </label>
               <div
                 v-for="p in agent.pendingPermissions"
@@ -320,7 +321,7 @@ watch(() => props.focusedSessionId, (id) => {
           <!-- Card header: emoji + name + model + attention label -->
           <div class="flex items-center gap-2 min-w-0">
             <span aria-hidden="true" class="text-[15px] shrink-0">{{ getIdentity(agent.projectPath).emoji }}</span>
-            <span class="font-semibold text-[13px] text-fg truncate">{{ agent.projectName }}</span>
+            <span class="font-semibold text-[13px] text-fg truncate">{{ friendlyProjectName(agent.projectName) }}</span>
             <span class="font-mono text-[11px] text-fg-faint shrink-0">{{ shortModel(agent.model ?? null) }}</span>
             <span
               class="ml-auto text-[10px] font-bold uppercase tracking-wide shrink-0"
@@ -380,7 +381,7 @@ watch(() => props.focusedSessionId, (id) => {
                   class="accent-success"
                   :aria-label="`Don't ask again for ${agent.projectName}`"
                 >
-                <span class="font-mono">{{ agent.projectName }}</span>
+                <span class="font-mono">{{ friendlyProjectName(agent.projectName) }}</span>
               </label>
             </template>
 

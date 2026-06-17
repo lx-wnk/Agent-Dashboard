@@ -35,19 +35,17 @@ const toneClass: Record<string, string> = {
   info: 'border-info-dot',
 }
 
-const toneFgClass: Record<string, string> = {
-  warning: 'text-warning-text',
-  danger: 'text-danger-text',
-  info: 'text-info-text',
-}
-
 const statusDotClass = computed(() => {
   if (props.agent.status === 'active')
     return 'bg-success-dot shadow-[0_0_0_3px_color-mix(in_oklch,var(--success)_18%,transparent)]'
   if (props.agent.status === 'waiting')
     return 'bg-warning-dot'
+  if (att.value?.tone === 'danger')
+    return 'bg-danger-dot'
   return 'bg-fg-faint'
 })
+
+const actionText = computed(() => props.agent.currentAction || att.value?.label || 'idle')
 
 const borderClass = computed(() => {
   if (att.value)
@@ -94,23 +92,9 @@ async function handleResolve(outcome: 'granted' | 'denied') {
       <!-- Model -->
       <span class="font-mono text-[11px] text-fg-faint shrink-0 w-16">{{ shortModel(agent.model ?? null) }}</span>
 
-      <!-- Current action / attention reason — flexible middle -->
-      <span
-        class="flex-1 min-w-0 text-xs overflow-hidden text-ellipsis whitespace-nowrap"
-        :class="att ? toneFgClass[att.tone] ?? 'text-fg-mute' : 'text-fg-mute'"
-      >
-        <template v-if="att">
-          <strong class="font-semibold">{{ att.label }}</strong>
-          <template v-if="att.kind === 'permission' && agent.pendingPermissions?.length">
-            <span class="font-mono"> · {{ agent.pendingPermissions[0].tool }}</span>
-          </template>
-          <template v-else-if="att.kind === 'stalled'">
-            <span> · last output {{ relActivity }}</span>
-          </template>
-        </template>
-        <template v-else>
-          {{ agent.currentAction || 'idle' }}
-        </template>
+      <!-- Current action — calm middle column; status is shown via the dot, not by recoloring -->
+      <span class="flex-1 min-w-0 text-xs text-fg-mute overflow-hidden text-ellipsis whitespace-nowrap">
+        {{ actionText }}
       </span>
 
       <!-- Inline approve/deny for resolvable permission agents -->
@@ -137,9 +121,8 @@ async function handleResolve(outcome: 'granted' | 'denied') {
         </span>
       </template>
 
-      <!-- Liveness (right rail) -->
+      <!-- Liveness (right rail) — always shown so every row carries a timestamp -->
       <span
-        v-if="!att"
         class="font-mono text-[11px] shrink-0 w-[76px] text-right"
         :class="stalled ? 'text-warning-text' : 'text-fg-faint'"
       >{{ relActivity }}</span>
