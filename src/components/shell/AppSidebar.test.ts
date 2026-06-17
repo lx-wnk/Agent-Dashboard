@@ -25,10 +25,7 @@ const props = {
   agentCount: 12,
   attentionCount: 0,
   taskCount: 5,
-  totalCostLabel: '$2.34',
-  todayCostLabel: '$5.00',
-  totalTokensLabel: '1.2M',
-  quotaPct: 73,
+  live: true,
   theme: 'dark' as const,
   canInstall: false,
 }
@@ -74,5 +71,19 @@ describe('appSidebar', () => {
     useSidebar().togglePinned()
     const w = mount(AppSidebar, { props })
     expect(w.text()).toContain('5')
+  })
+
+  it('shows the live status line under the brand when expanded', async () => {
+    const { AppSidebar, useSidebar } = await load()
+    useSidebar().togglePinned()
+    const w = mount(AppSidebar, { props })
+    expect(w.text()).toContain('Live · all systems normal')
+  })
+
+  it('shows a reconnecting state when not live', async () => {
+    const { AppSidebar, useSidebar } = await load()
+    useSidebar().togglePinned()
+    const w = mount(AppSidebar, { props: { ...props, live: false } })
+    expect(w.text()).toContain('Reconnecting')
   })
 })

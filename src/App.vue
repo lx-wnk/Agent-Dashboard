@@ -316,14 +316,10 @@ onMounted(fetchQuota)
           :agent-count="filteredAgents.length"
           :attention-count="attentionCount"
           :task-count="tasks.length"
-          :total-cost-label="totalCostLabel"
-          :total-tokens-label="totalTokensLabel"
-          :today-cost-label="todayCostLabel"
-          :quota-pct="quotaPct"
+          :live="live"
           :theme="theme"
           :can-install="canInstall"
           @open-sessions="showSessions = true"
-          @open-settings="showSettings = true"
           @toggle-theme="toggleTheme"
           @install="promptInstall"
         />
@@ -334,7 +330,6 @@ onMounted(fetchQuota)
           @open-settings="showSettings = true"
           :active-view="activeView"
           :search-query="searchQuery"
-          :live="live"
           @update:search-query="searchQuery = $event"
         >
           <template #cta>

@@ -75,12 +75,18 @@ function readStoredProject(): string {
   return ls?.getItem('agent-dashboard-project') ?? 'all'
 }
 
+function readStoredSpawner(): string {
+  const ls = typeof localStorage !== 'undefined' ? localStorage : null
+  return ls?.getItem('agent-dashboard-spawner') ?? 'all'
+}
+
 const initial = readInitial()
 const activeView = ref<ActiveView>(initial.view)
 const dashboardLayout = ref<DashboardLayout>(initial.layout)
 const dashboardSort = ref<AgentSort>(readStoredSort())
 const dashboardGroup = ref<AgentGroup>(readStoredGroup())
 const dashboardProject = ref<string>(readStoredProject())
+const dashboardSpawner = ref<string>(readStoredSpawner())
 
 watch(activeView, (v) => {
   if (typeof localStorage !== 'undefined')
@@ -102,7 +108,11 @@ watch(dashboardProject, (v) => {
   if (typeof localStorage !== 'undefined')
     localStorage.setItem('agent-dashboard-project', v)
 }, { flush: 'sync' })
+watch(dashboardSpawner, (v) => {
+  if (typeof localStorage !== 'undefined')
+    localStorage.setItem('agent-dashboard-spawner', v)
+}, { flush: 'sync' })
 
 export function useViewState() {
-  return { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject }
+  return { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject, dashboardSpawner }
 }
