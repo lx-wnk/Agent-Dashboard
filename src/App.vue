@@ -29,6 +29,7 @@ import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
 import { useSpawners } from './composables/useSpawners'
+import { usePendingPermissions } from './composables/usePendingPermissions'
 import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { useTodayCost } from './composables/useTodayCost'
@@ -80,6 +81,8 @@ onUnmounted(() => {
 
 const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
+const { items: permissionItems, approve: approvePermission, deny: denyPermission } = usePendingPermissions(tasks)
+const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length)
 // Today's persisted spend — reuses the shared cost-summary logic so the footer
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
 const { todayUsd, start: startTodayCost } = useTodayCost()
@@ -339,7 +342,7 @@ onMounted(fetchQuota)
       <template #sidebar>
         <AppSidebar
           :agent-count="filteredAgents.length"
-          :attention-count="attentionCount"
+          :attention-count="combinedAttentionCount"
           :task-count="tasks.length"
           :live="live"
           :theme="theme"
@@ -387,7 +390,16 @@ onMounted(fetchQuota)
         </p>
 
         <template v-else-if="activeView === 'dashboard'">
-          <AgentTriageBand :agents="attentionAgents" :focused-session-id="focusedSessionId" @select="selectAgent" @toast="showToast" @remembered="autoApprovingStrip?.load()" />
+          <AgentTriageBand
+            :agents="attentionAgents"
+            :permission-items="permissionItems"
+            :focused-session-id="focusedSessionId"
+            @select="selectAgent"
+            @toast="showToast"
+            @remembered="autoApprovingStrip?.load()"
+            @approve="(taskId, ids, remember) => approvePermission(taskId, ids, remember)"
+            @deny="(taskId, ids) => denyPermission(taskId, ids)"
+          />
           <AutoApprovingStrip ref="autoApprovingStrip" />
           <DashboardToolbar
             :layout="dashboardLayout"
