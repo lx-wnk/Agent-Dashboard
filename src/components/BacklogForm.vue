@@ -172,26 +172,25 @@ async function onCreateAndRefine(): Promise<void> {
 
     <div class="flex flex-col gap-1">
       <label for="details-title" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Title</label>
-      <input
+      <AppInput
         id="details-title"
         data-testid="details-title"
-        :value="title"
+        :model-value="title"
         placeholder="What should the agent do?"
-        :class="fieldClass"
         @input="onTitleInput"
-      >
+      />
     </div>
 
     <div class="flex flex-col gap-1">
       <label for="details-slug" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Slug</label>
-      <input
+      <AppInput
         id="details-slug"
         data-testid="details-slug"
-        :value="slug"
+        :model-value="slug"
         placeholder="task-slug"
-        :class="fieldClass"
+        class="font-mono"
         @input="onSlugInput"
-      >
+      />
     </div>
 
     <AppInput v-model="description" type="textarea" :rows="3" label="Description" placeholder="Additional context (optional)" />

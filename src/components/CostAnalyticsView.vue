@@ -9,6 +9,7 @@ import { useCostAnalytics } from '../composables/useCostAnalytics'
 import { formatCost, formatTokens } from '../utils/format'
 import { useTheme } from "../composables/useTheme"
 import { chartColors, chartPalette } from "../utils/chartColors"
+import AppCard from './ui/AppCard.vue'
 
 const { summary, isLoading, error, from, to, setRange, start, refresh } = useCostAnalytics()
 
@@ -427,7 +428,7 @@ watch([summary, theme], () => {
       {{ importStatus }}
     </p>
 
-    <section v-if="summary.byModel.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-if="summary.byModel.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-3 text-fg-soft">
         Spend by Model
       </h3>
@@ -447,9 +448,9 @@ watch([summary, theme], () => {
           <span class="text-fg-mute whitespace-nowrap">{{ m.sessions }} sess.</span>
         </li>
       </ul>
-    </section>
+    </AppCard>
 
-    <section v-if="summary.byProject && summary.byProject.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-if="summary.byProject && summary.byProject.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-3 text-fg-soft">
         Spend by Project
       </h3>
@@ -469,20 +470,20 @@ watch([summary, theme], () => {
           <span class="text-fg-mute whitespace-nowrap">{{ p.sessions }} sess.</span>
         </li>
       </ul>
-    </section>
+    </AppCard>
 
-    <section v-show="summary.byDay.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-show="summary.byDay.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-2 text-fg-soft">
         Cost per Day (stacked by model)
       </h3>
       <svg ref="stackedRef" class="w-full text-fg" style="min-height: 220px;" />
-    </section>
+    </AppCard>
 
-    <section v-show="summary.byWeek.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-show="summary.byWeek.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-2 text-fg-soft">
         Weekly Trend
       </h3>
       <svg ref="trendRef" class="w-full text-fg" style="min-height: 200px;" />
-    </section>
+    </AppCard>
   </div>
 </template>

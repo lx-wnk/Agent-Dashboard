@@ -71,7 +71,7 @@ const TABS: TabDescriptor[] = [
         Session
         <select
           v-model="filters.sessionId"
-          class="bg-raised border border-line rounded-md px-2 py-1 text-[12px] text-fg w-[260px] max-w-[260px] truncate"
+          class="bg-raised border border-line rounded-md px-2 py-1 text-[12px] text-fg w-[260px] max-w-[260px] truncate focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
           @change="onSessionSelect"
         >
           <option value="">
@@ -91,7 +91,7 @@ const TABS: TabDescriptor[] = [
         <input
           v-model="filters.sessionId"
           type="text"
-          class="bg-raised border border-line rounded-md px-2 py-1 text-[12px] text-fg w-[150px]"
+          class="bg-raised border border-line rounded-md px-2 py-1 text-[12px] text-fg w-[150px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
           placeholder="Session ID"
         >
       </label>
@@ -100,7 +100,7 @@ const TABS: TabDescriptor[] = [
         <input
           v-model="filters.from"
           type="datetime-local"
-          class="bg-raised border border-line rounded-md px-2 py-1 text-[12px] text-fg"
+          class="bg-raised border border-line rounded-md px-2 py-1 text-[12px] text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
         >
       </label>
       <label class="text-xs text-fg-mute flex items-center gap-1">
@@ -108,7 +108,7 @@ const TABS: TabDescriptor[] = [
         <input
           v-model="filters.to"
           type="datetime-local"
-          class="bg-raised border border-line rounded-md px-2 py-1 text-[12px] text-fg"
+          class="bg-raised border border-line rounded-md px-2 py-1 text-[12px] text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
         >
       </label>
       <button

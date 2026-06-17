@@ -275,7 +275,7 @@ onUnmounted(() => {
         <select
           id="spawn-folder"
           :value="dlg.selectedFolderId.value ?? ''"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
           @change="dlg.selectFolder(($event.target as HTMLSelectElement).value)"
         >
           <option v-for="f in dlg.folders.value" :key="f.id" :value="f.id">

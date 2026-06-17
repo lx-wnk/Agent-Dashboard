@@ -89,7 +89,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
   >
     <button
       type="button"
-      class="absolute inset-0 w-full h-full rounded-md focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+      class="absolute inset-0 w-full h-full rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-accent"
       :aria-label="`Open task ${task.title}`"
       data-testid="task-card-open"
       @click="$emit('select', task)"
@@ -102,10 +102,10 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
           aria-hidden="true"
           @click.stop
         >⠿</span>
-        <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
+        <span class="font-mono text-[11px] text-info-text font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
         <button
           type="button"
-          class="relative z-10 font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
+          class="relative z-10 font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent flex-shrink-0"
           :aria-label="`Copy task id ${task.id}`"
           :title="task.id"
           @click.stop.prevent="copyId()"
@@ -121,7 +121,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
     </div>
     <button
       v-if="task.currentStage === 'concept'"
-      class="relative z-10 self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+      class="relative z-10 self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-info-line bg-info-soft text-info-text hover:brightness-105 transition-[filter] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
       @click.stop="emit('openChat', task)"
       @keydown.enter.stop
       @keydown.space.stop
@@ -143,7 +143,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
       v-if="workingAgent && agentIdentity"
       type="button"
       data-testid="task-agent-chip"
-      class="relative z-10 self-start flex items-center gap-1.5 px-1.5 py-px rounded border border-line bg-raised hover:bg-card transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 text-left"
+      class="relative z-10 self-start flex items-center gap-1.5 px-1.5 py-px rounded border border-line bg-raised hover:bg-card transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent text-left"
       :aria-label="`Jump to agent: ${workingAgent.projectName}`"
       @click.stop="emit('navigateAgent', workingAgent.sessionId)"
     >
@@ -164,29 +164,31 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
       >
         {{ runStatusLabel(task.latestStageRunStatus) }}
       </AppChip>
-      <span
+      <AppChip
         v-if="isRequeued"
-        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700/60"
+        tone="info"
+        mono
+        uppercase
         :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${maxAutoRetries})`"
-      >Retrying · {{ task.autoRetryCount }}/{{ maxAutoRetries }}{{ retrySecondsLeft > 0 ? ` · ${retrySecondsLeft}s` : '' }}</span>
-      <span
+      >Retrying · {{ task.autoRetryCount }}/{{ maxAutoRetries }}{{ retrySecondsLeft > 0 ? ` · ${retrySecondsLeft}s` : '' }}</AppChip>
+      <AppChip
         v-if="task.needsUser && task.latestStageRunStatus === 'awaiting_user'"
-        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-yellow-100 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700/60"
+        tone="warning"
+        mono
+        uppercase
         title="Agent is paused and waiting for a permission grant"
-      >⚠ Needs Permission</span>
-      <span
+      >⚠ Needs Permission</AppChip>
+      <AppChip
         v-if="task.blockedByPendingPermissions"
-        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
+        tone="warning"
         title="Respawn blocked: previous run still has unresolved permission requests"
-      >&#9888; blocked by permissions</span>
+      >&#9888; blocked by permissions</AppChip>
       <WorktreePill v-if="task.worktreePath" :task-id="task.id" />
-      <span v-if="task.sourceBranch" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line">{{ task.sourceBranch }}</span>
-      <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line" title="Follow-up task">↳</span>
-      <span v-if="task.isUnsatisfiable" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50" title="Unsatisfiable dep">⚠ Unsatisfiable dep</span>
-      <span v-else-if="task.isBlocked" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line/50" title="Waiting for prerequisite">🔒 Blocked</span>
-      <span v-if="task.currentStage === 'implementation'" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50">
-        max iter {{ task.maxIterations }}
-      </span>
+      <AppChip v-if="task.sourceBranch" tone="neutral" mono>{{ task.sourceBranch }}</AppChip>
+      <AppChip v-if="task.parentTaskId" tone="info" mono title="Follow-up task">↳</AppChip>
+      <AppChip v-if="task.isUnsatisfiable" tone="warning" mono title="Unsatisfiable dep">⚠ Unsatisfiable dep</AppChip>
+      <AppChip v-else-if="task.isBlocked" tone="neutral" mono title="Waiting for prerequisite">🔒 Blocked</AppChip>
+      <AppChip v-if="task.currentStage === 'implementation'" tone="warning" mono>max iter {{ task.maxIterations }}</AppChip>
       <PluginSlot name="kanban-card-badge" :ctx="{ task }" />
     </div>
   </AppCard>
