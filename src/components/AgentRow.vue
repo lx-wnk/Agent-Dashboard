@@ -29,7 +29,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
       <AppBadge :variant="agent.status" />
       <span
         v-if="stalled"
-        class="block mt-0.5 text-[10px] font-medium text-yellow-700 dark:text-yellow-400"
+        class="block mt-0.5 text-[10px] font-medium text-warning-text"
         title="Agent is active but has produced no output for 3+ minutes"
       >stalled</span>
     </td>
@@ -52,7 +52,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
       <span
         v-if="agent.channelAvailable"
         title="Channel active"
-        class="inline-block ml-1.5 px-1 text-[9px] font-semibold text-green-600 dark:text-green-400 border border-green-600 dark:border-green-400 rounded align-middle tracking-wider"
+        class="inline-block ml-1.5 px-1 text-[9px] font-semibold text-success-text border border-success-text rounded align-middle tracking-wider"
       >CH</span>
       <MachineBadge v-if="agent.machine" :machine="agent.machine" />
     </td>
@@ -65,7 +65,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
     <td class="px-3 py-2.5 border-b border-line text-xs font-mono text-fg-mute whitespace-nowrap">
       {{ formatTokens(totalTokenCount(agent.tokenUsage)) }}
     </td>
-    <td class="px-3 py-2.5 border-b border-line text-xs font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
+    <td class="px-3 py-2.5 border-b border-line text-xs font-mono text-success-text whitespace-nowrap">
       <span v-if="agent.costUnknown" class="text-fg-mute" title="Cost unknown — no pricing data for this provider/model">?</span>
       <template v-else>
         {{ formatCost(agent.costEstimate) }}

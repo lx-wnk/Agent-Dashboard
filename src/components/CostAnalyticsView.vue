@@ -365,7 +365,7 @@ watch(summary, () => {
         :class="[
           'px-2.5 py-1 rounded border transition-colors',
           activePreset === preset
-            ? 'bg-blue-600 border-blue-600 text-white'
+            ? 'bg-accent border-accent text-accent-contrast'
             : 'bg-raised border-line text-fg-mute hover:text-fg hover:bg-raised/70',
         ]"
         @click="applyPreset(preset)"
@@ -411,7 +411,7 @@ watch(summary, () => {
         <button
           type="button"
           :disabled="isImporting"
-          class="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          class="text-sm px-3 py-1.5 rounded bg-accent text-accent-contrast hover:brightness-110 disabled:opacity-50 transition-colors"
           @click="startRescan"
         >
           {{ isImporting ? 'Scanning…' : 'Rescan now' }}
@@ -434,7 +434,7 @@ watch(summary, () => {
           class="flex items-center justify-between gap-2 px-3 py-2 bg-raised rounded-md"
         >
           <span class="font-mono truncate text-fg" :title="m.model">{{ m.model }}</span>
-          <span class="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
+          <span class="font-mono text-success-text whitespace-nowrap">
             {{ formatCost(m.costUsd) }}
           </span>
           <span v-if="(m.inputTokens ?? 0) + (m.outputTokens ?? 0) > 0" class="text-fg-mute whitespace-nowrap">
@@ -456,7 +456,7 @@ watch(summary, () => {
           class="flex items-center justify-between gap-2 px-3 py-2 bg-raised rounded-md"
         >
           <span class="font-mono truncate text-fg" :title="p.projectPath">{{ p.projectName }}</span>
-          <span class="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
+          <span class="font-mono text-success-text whitespace-nowrap">
             {{ formatCost(p.costUsd) }}
           </span>
           <span v-if="(p.inputTokens ?? 0) + (p.outputTokens ?? 0) > 0" class="text-fg-mute whitespace-nowrap">

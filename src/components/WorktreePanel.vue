@@ -74,9 +74,9 @@ const editorHref = computed(() => {
             no base
           </span>
           <span v-else>
-            <span class="text-green-600 dark:text-green-400">↑ {{ status.ahead ?? 0 }}</span>
+            <span class="text-success-text">↑ {{ status.ahead ?? 0 }}</span>
             <span class="mx-2 text-fg-mute">·</span>
-            <span class="text-blue-600 dark:text-blue-400">↓ {{ status.behind ?? 0 }}</span>
+            <span class="text-info-text">↓ {{ status.behind ?? 0 }}</span>
           </span>
         </dd>
       </div>
@@ -88,7 +88,7 @@ const editorHref = computed(() => {
           {{ status.fileCount }}
           <span
             v-if="status.dirty"
-            class="ml-2 inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-px rounded border bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-300/60 dark:border-amber-700/60"
+            class="ml-2 inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-px rounded border bg-warning-soft text-warning-text border-warning-line"
           >
             <span aria-hidden="true">●</span> dirty
           </span>

@@ -151,7 +151,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         {{ flatResults.length }} results
       </div>
       <div class="flex items-center gap-2 px-4 py-3 border-b border-line focus-within:ring-[3px] focus-within:ring-accent">
-        <span class="text-slate-400 text-sm" aria-hidden="true">⌘K</span>
+        <span class="text-fg-faint text-sm" aria-hidden="true">⌘K</span>
         <input
           ref="inputRef"
           v-model="query"
@@ -162,9 +162,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           aria-autocomplete="list"
           :aria-activedescendant="selectedIdx >= 0 && flatResults.length > 0 ? `spotlight-opt-${selectedIdx}` : undefined"
           placeholder="Search tasks and agents…"
-          class="flex-1 bg-transparent text-sm text-fg focus-visible:outline-none placeholder:text-slate-400"
+          class="flex-1 bg-transparent text-sm text-fg focus-visible:outline-none placeholder:text-fg-faint"
         >
-        <span v-if="loading" class="text-xs text-slate-400">Searching…</span>
+        <span v-if="loading" class="text-xs text-fg-faint">Searching…</span>
       </div>
       <div
         id="spotlight-listbox"
@@ -173,14 +173,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         class="max-h-80 overflow-y-auto"
       >
         <template v-if="flatResults.length === 0 && query">
-          <p class="px-4 py-3 text-sm text-slate-400">
+          <p class="px-4 py-3 text-sm text-fg-faint">
             No results for "{{ query }}"
           </p>
         </template>
         <template v-else>
           <!-- Tasks section -->
           <template v-if="results.tasks.length > 0">
-            <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-fg-faint">
               Tasks
             </div>
             <div
@@ -192,21 +192,21 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               :aria-selected="selectedIdx === idx"
               class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors cursor-pointer"
               :class="selectedIdx === idx
-                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                : 'text-fg-soft hover:bg-slate-50 dark:hover:bg-slate-800'"
+                ? 'bg-accent-soft text-accent'
+                : 'text-fg-soft hover:bg-raised'"
               @click="activate({ type: 'task', item: task })"
               @mouseenter="selectedIdx = idx"
             >
-              <span class="text-[10px] uppercase tracking-wide text-slate-400 w-10 flex-shrink-0">Task</span>
+              <span class="text-[10px] uppercase tracking-wide text-fg-faint w-10 flex-shrink-0">Task</span>
               <span class="truncate">{{ task.title }}</span>
-              <span class="ml-auto text-[10px] text-slate-400">{{ task.currentStage }}</span>
+              <span class="ml-auto text-[10px] text-fg-faint">{{ task.currentStage }}</span>
             </div>
           </template>
 
           <!-- Agents section -->
           <template v-if="results.agents.length > 0">
             <div
-              class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+              class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-fg-faint"
               :class="{ 'border-t border-line mt-1': results.tasks.length > 0 }"
             >
               Agents
@@ -220,19 +220,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               :aria-selected="selectedIdx === (results.tasks.length + idx)"
               class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors cursor-pointer"
               :class="selectedIdx === (results.tasks.length + idx)
-                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                : 'text-fg-soft hover:bg-slate-50 dark:hover:bg-slate-800'"
+                ? 'bg-accent-soft text-accent'
+                : 'text-fg-soft hover:bg-raised'"
               @click="activate({ type: 'agent', item: agent })"
               @mouseenter="selectedIdx = results.tasks.length + idx"
             >
-              <span class="text-[10px] uppercase tracking-wide text-slate-400 w-10 flex-shrink-0">Agent</span>
+              <span class="text-[10px] uppercase tracking-wide text-fg-faint w-10 flex-shrink-0">Agent</span>
               <span class="truncate">{{ agent.projectName }}</span>
-              <span class="ml-auto text-[10px] text-slate-400">{{ agent.status }}</span>
+              <span class="ml-auto text-[10px] text-fg-faint">{{ agent.status }}</span>
             </div>
           </template>
         </template>
       </div>
-      <div class="px-4 py-2 border-t border-line flex gap-3 text-[10px] text-slate-400">
+      <div class="px-4 py-2 border-t border-line flex gap-3 text-[10px] text-fg-faint">
         <span>↑↓ navigate</span>
         <span>↵ open</span>
         <span>Esc close</span>

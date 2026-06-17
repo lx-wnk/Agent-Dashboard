@@ -25,10 +25,10 @@ const hasCacheCosts = computed(
 const healthChipClass = computed(() => {
   const s = props.agent.healthScore
   if (s >= 75)
-    return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+    return 'bg-success-soft text-success-text'
   if (s >= 40)
-    return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-  return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+    return 'bg-warning-soft text-warning-text'
+  return 'bg-danger-soft text-danger-text'
 })
 
 const secSince = computed(() => secondsSince(props.agent.lastActivity, nowMs.value))
@@ -51,7 +51,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
         <AppBadge :variant="agent.status" />
         <span
           v-if="stalled"
-          class="text-[10px] font-medium px-1 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 whitespace-nowrap"
+          class="text-[10px] font-medium px-1 py-0.5 rounded bg-warning-soft text-warning-text whitespace-nowrap"
           title="Agent is active but has produced no output for 3+ minutes"
         >stalled</span>
         <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
@@ -87,10 +87,10 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
       <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
     </div>
     <div v-if="agent.lastBtw" class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1 text-[12px] font-mono" @click.stop>
-      <div class="text-fg-mute border-l-2 border-yellow-400/60 pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
+      <div class="text-fg-mute border-l-2 border-warning-line pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
         {{ agent.lastBtw.message }}
       </div>
-      <div v-if="agent.lastBtw.response" class="text-fg-mute border-l-2 border-yellow-400/60 pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
+      <div v-if="agent.lastBtw.response" class="text-fg-mute border-l-2 border-warning-line pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
         {{ agent.lastBtw.response }}
       </div>
       <div v-else class="text-fg-mute pl-2.5" style="animation: pulse 2s ease-in-out infinite;">
