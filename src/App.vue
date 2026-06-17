@@ -32,7 +32,10 @@ import { useTheme } from './composables/useTheme'
 import { useTodayCost } from './composables/useTodayCost'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import { formatCost, formatTokens, totalTokenCount } from './utils/format'
+import { formatCost, formatTokens, secondsSince, totalTokenCount } from './utils/format'
+import { needsAttention } from './utils/attention'
+import { groupAgents, sortAgents } from './utils/agentGroup'
+import { useNow } from './composables/useNow'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
@@ -52,7 +55,7 @@ const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
-const { activeView, dashboardLayout } = useViewState()
+const { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject } = useViewState()
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
 const { resolveAgent, approveAll } = usePermissionResolve()
 
@@ -117,6 +120,24 @@ const totalCostLabel = computed(() => formatCost(totalCost.value))
 const totalTokensLabel = computed(() => formatTokens(totalTokens.value))
 
 const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatCost(todayUsd.value)))
+
+const { nowMs } = useNow()
+// Dashboard roster: project filter → sort → optional grouping. Project options
+// list every known project (pre-filter) so the dropdown stays stable.
+const rosterAgents = computed(() => {
+  const base = dashboardProject.value === 'all'
+    ? filteredAgents.value
+    : filteredAgents.value.filter(a => a.projectName === dashboardProject.value)
+  return sortAgents(base, dashboardSort.value, nowMs.value)
+})
+const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
+const rosterAttentionCount = computed(() =>
+  rosterAgents.value.filter(a => needsAttention(a, secondsSince(a.lastActivity, nowMs.value))).length,
+)
+const projectOptions = computed(() => [
+  { value: 'all', label: 'All projects' },
+  ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: n })),
+])
 
 const autoApprovingStrip = ref<InstanceType<typeof AutoApprovingStrip> | null>(null)
 
@@ -271,9 +292,9 @@ interface QuotaInfo {
 
 const quota = ref<QuotaInfo | null>(null)
 
-const quotaPct = computed(() => {
+const quotaPct = computed<number | null>(() => {
   if (!quota.value?.limit)
-    return 0
+    return null
   return Math.min(100, Math.round(quota.value.tokensUsed / quota.value.limit * 100))
 })
 
@@ -342,8 +363,17 @@ onMounted(fetchQuota)
           v-if="activeView === 'dashboard'"
           :layout="dashboardLayout"
           :hide-non-claude="hideNonClaude"
+          :project="dashboardProject"
+          :sort-by="dashboardSort"
+          :group-by="dashboardGroup"
+          :project-options="projectOptions"
+          :count="rosterAgents.length"
+          :attention-count="rosterAttentionCount"
           @update:layout="dashboardLayout = $event"
           @update:hide-non-claude="hideNonClaude = $event"
+          @update:project="dashboardProject = $event"
+          @update:sort-by="dashboardSort = $event"
+          @update:group-by="dashboardGroup = $event"
         />
 
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -357,12 +387,12 @@ onMounted(fetchQuota)
           <AgentTriageBand :agents="attentionAgents" :focused-session-id="focusedSessionId" @select="selectAgent" @toast="showToast" @remembered="autoApprovingStrip?.load()" />
           <AutoApprovingStrip ref="autoApprovingStrip" />
           <template v-if="dashboardLayout === 'list'">
-            <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
-            <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />
+            <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
+            <AgentTable v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" />
           </template>
           <template v-else>
-            <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
-            <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
+            <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
+            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" />
           </template>
           <ChannelScriptCallout />
         </template>
@@ -382,7 +412,7 @@ onMounted(fetchQuota)
       </div>
 
       <template #statusbar>
-        <AppStatusBar :cost-delta="costDelta" :today-cost-label="todayCostLabel" />
+        <AppStatusBar :cost-delta="costDelta" :today-cost-label="todayCostLabel" :quota-pct="quotaPct" />
       </template>
     </AppShell>
 
