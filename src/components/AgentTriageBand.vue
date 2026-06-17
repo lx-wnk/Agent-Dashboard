@@ -63,6 +63,8 @@ const breakdown = computed(() => {
 })
 
 function blockedDetail(agent: Agent): string {
+  if (agent.pendingToolUse)
+    return agent.pendingToolUse.pattern ? `${agent.pendingToolUse.tool}(${agent.pendingToolUse.pattern})` : agent.pendingToolUse.tool
   const secs = secondsSince(agent.lastActivity, nowMs.value)
   const att = attentionFor(agent, secs)
   if (!att)
@@ -141,6 +143,34 @@ async function handleResolveAgent(agent: Agent, outcome: 'granted' | 'denied') {
   }
   else if (remember && outcome === 'granted') {
     emit('remembered')
+  }
+}
+
+// Free (non-orchestrated) agents can't be resolved via the orchestrator. The
+// safe path is to write a stable allow preset for the tool they're paused on —
+// this affects FUTURE runs, it does NOT answer the currently paused prompt.
+const allowing = ref<Record<string, boolean>>({})
+async function allowTool(agent: Agent) {
+  const pending = agent.pendingToolUse
+  if (!pending)
+    return
+  allowing.value[agent.sessionId] = true
+  try {
+    const res = await fetch(`/api/agents/${agent.pid}/allow-tool`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: pending.tool, pattern: pending.pattern || null }),
+    })
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    emit('toast', `Allowed ${pending.tool} for ${friendlyProjectName(agent.projectName)} — future runs won't ask (the paused run still needs your reply in its terminal)`)
+    emit('remembered')
+  }
+  catch (err) {
+    emit('toast', `Couldn't save allow rule: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  finally {
+    allowing.value[agent.sessionId] = false
   }
 }
 
@@ -385,10 +415,24 @@ watch(() => props.focusedSessionId, (id) => {
               </label>
             </template>
 
+            <!-- Free agents: allow the paused tool for future runs (stable preset; does not answer the live prompt) -->
+            <AppButton
+              v-if="agent.pendingToolUse && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
+              variant="success"
+              size="sm"
+              class="ml-auto"
+              :disabled="allowing[agent.sessionId]"
+              :title="`Allow ${blockedDetail(agent)} for this project going forward. The paused run still needs your reply in its terminal.`"
+              :aria-label="`Allow ${agent.pendingToolUse.tool} for ${friendlyProjectName(agent.projectName)} going forward`"
+              @click="allowTool(agent)"
+            >
+              Allow {{ agent.pendingToolUse.tool }}
+            </AppButton>
+
             <AppButton
               variant="outline"
               size="sm"
-              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) ? 'ml-auto' : ''"
+              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !agent.pendingToolUse ? 'ml-auto' : ''"
               :aria-label="`Open details for ${agent.projectName}`"
               @click="emit('select', agent)"
             >
