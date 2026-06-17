@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Agent, PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
+import type { Agent, PipelineStage, PipelineTask, Project, Spawner } from '../types'
 import { useIntervalFn } from '@vueuse/core'
 import { computed, ref } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
@@ -7,7 +7,7 @@ import { shortId, useCopyId } from '../composables/useCopyId'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
-import { agentStatusTone, runStatusTone, stageTone } from '../utils/statusColors'
+import { agentStatusTone, runStatusLabel, runStatusTone, stageTone } from '../utils/statusColors'
 import PluginSlot from './PluginSlot.vue'
 import AppBadge from './ui/AppBadge.vue'
 import AppCard from './ui/AppCard.vue'
@@ -45,20 +45,6 @@ const { copy: copyId, copied: idCopied } = useCopyId(props.task.id)
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-
-const RUN_STATUS_LABELS: Record<StageRunStatus, string> = {
-  pending: 'Pending',
-  running: 'Running',
-  awaiting_user: 'Waiting',
-  on_hold: 'On Hold',
-  done: 'Done',
-  failed: 'Failed',
-  requeued: 'Requeued',
-}
-
-function runStatusLabel(status: StageRunStatus): string {
-  return RUN_STATUS_LABELS[status] ?? status
 }
 
 function stageLabel(stage: PipelineStage): string {

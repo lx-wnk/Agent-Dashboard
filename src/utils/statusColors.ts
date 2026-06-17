@@ -12,6 +12,20 @@ export function stageTone(stage: PipelineStage | string): ChipTone {
   }
 }
 
+export const RUN_STATUS_LABELS: Record<StageRunStatus, string> = {
+  pending: 'Pending',
+  running: 'Running',
+  awaiting_user: 'Waiting',
+  on_hold: 'On Hold',
+  done: 'Done',
+  failed: 'Failed',
+  requeued: 'Requeued',
+}
+
+export function runStatusLabel(status: StageRunStatus): string {
+  return RUN_STATUS_LABELS[status] ?? status
+}
+
 export function runStatusTone(status: StageRunStatus | string): ChipTone {
   switch (status) {
     case 'running': return 'info'

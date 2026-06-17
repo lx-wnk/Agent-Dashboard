@@ -432,7 +432,7 @@ async function startImport() {
               :aria-current="activeSection === 'remotes' ? 'page' : undefined"
               @click="activeSection = 'remotes'"
             >
-              <span class="text-sm flex-shrink-0">⌂</span> Meine Remotes
+              <span class="text-sm flex-shrink-0">⌂</span> My Remotes
             </button>
           </li>
           <li>
