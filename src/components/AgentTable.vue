@@ -25,7 +25,7 @@ defineEmits<{
 }>()
 
 const expandedPids = ref(new Set<number>())
-const sortField = ref<SortField>('status')
+const sortField = ref<SortField | null>(null)
 const sortDir = ref<SortDir>('asc')
 
 function toggleSort(field: SortField) {
@@ -44,8 +44,9 @@ function sortIndicator(field: SortField): string {
   return sortDir.value === 'asc' ? ' ▲' : ' ▼'
 }
 
-// Compares two agents by the active column header sort. Applied in both the
-// flat and grouped paths so the header controls stay live when grouping.
+// Compares two agents by the active column header sort. Only applied once the
+// user clicks a header; until then the incoming roster sort order is preserved
+// so the table and the card grid agree.
 function compareAgents(a: Agent, b: Agent): number {
   const dir = sortDir.value === 'asc' ? 1 : -1
   let cmp = 0
@@ -78,7 +79,9 @@ function compareAgents(a: Agent, b: Agent): number {
   return cmp * dir
 }
 
-const sortedAgents = computed(() => [...props.agents].sort(compareAgents))
+const sortedAgents = computed(() =>
+  sortField.value === null ? props.agents : [...props.agents].sort(compareAgents),
+)
 
 const tableGroups = computed<TableGroup[]>(() =>
   sortedAgents.value.map(agent => ({
@@ -96,7 +99,8 @@ const useGroups = computed(() =>
 const COL_COUNT = 9
 
 function groupTableItems(groupAgents: Agent[]): TableGroup[] {
-  return [...groupAgents].sort(compareAgents).map(agent => ({
+  const ordered = sortField.value === null ? groupAgents : [...groupAgents].sort(compareAgents)
+  return ordered.map(agent => ({
     agent,
     showSubagents: expandedPids.value.has(agent.pid),
   }))
