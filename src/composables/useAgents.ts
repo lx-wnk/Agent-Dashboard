@@ -32,6 +32,11 @@ const debouncedQuery = ref('')
 const hideNonClaudeStored = typeof localStorage !== 'undefined' ? localStorage.getItem('agent-hide-non-claude') : null
 const hideNonClaude = ref<boolean>(hideNonClaudeStored === 'true')
 
+// Spawner filter — 'all' or a spawner name/id. Applied in addition to the
+// existing provider filter. Managed by useViewState (persisted); we receive
+// the value as a reactive argument in filteredBySpawner.
+const spawnerFilter = ref<string>('all')
+
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 function handleAgentData(data: Agent[], _trend?: TrendPoint[]) {
@@ -102,6 +107,8 @@ const filteredAgents = computed(() => {
   let list = agents.value
   if (hideNonClaude.value)
     list = list.filter(a => !a.provider || a.provider === 'claude')
+  if (spawnerFilter.value !== 'all')
+    list = list.filter(a => (a.provider ?? 'claude') === spawnerFilter.value)
   if (!q)
     return list
   return list.filter(a =>
@@ -161,6 +168,7 @@ export function useAgents(options?: { autoStart?: boolean }) {
     error,
     searchQuery,
     hideNonClaude,
+    spawnerFilter,
     selectAgent,
     startStream: sse.startStream,
   }

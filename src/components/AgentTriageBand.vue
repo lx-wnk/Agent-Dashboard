@@ -156,6 +156,22 @@ async function handleApproveAll() {
   }
 }
 
+// When ≥2 permission agents are present: default to cards collapsed (hasBulk starts true).
+// showCards defaults to false so the bulk bar is primary; the toggle reveals individual cards.
+const hasBulk = computed(() => resolvableAgents.value.length >= 2)
+const showCards = ref(!hasBulk.value)
+
+// When bulk mode activates or deactivates, sync the toggle default.
+watch(hasBulk, (bulk) => {
+  if (bulk)
+    showCards.value = false
+  else
+    showCards.value = true
+})
+
+// Always show cards when a card is keyboard-focused
+const cardsVisible = computed(() => showCards.value || !!props.focusedSessionId)
+
 // Scroll the focused card into view when focusedSessionId changes
 const cardRefs = ref<Record<string, HTMLElement | null>>({})
 
@@ -194,13 +210,14 @@ watch(() => props.focusedSessionId, (id) => {
           :aria-label="`${agents.length} agents need attention`"
         >{{ agents.length }}</span>
         <span v-if="breakdown" class="text-[11px] text-fg-faint">{{ breakdown }}</span>
-        <!-- Discoverability hint for keyboard shortcuts -->
+        <!-- Keyboard shortcut legend — includes ⌘K search -->
         <span class="ml-auto text-[10px] text-fg-faint font-mono select-none hidden sm:inline" aria-hidden="true">
           <kbd class="not-italic">n</kbd> next ·
           <kbd class="not-italic">a</kbd> approve ·
           <kbd class="not-italic">d</kbd> deny ·
           <kbd class="not-italic">⇧A</kbd> approve all ·
-          <kbd class="not-italic">c</kbd> density
+          <kbd class="not-italic">c</kbd> density ·
+          <kbd class="not-italic">⌘K</kbd> search
         </span>
       </div>
 
@@ -272,8 +289,23 @@ watch(() => props.focusedSessionId, (id) => {
         </div>
       </div>
 
+      <!-- Toggle: Review individually / Hide individual requests -->
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 mb-2 bg-transparent border-none cursor-pointer text-xs text-fg-mute hover:text-fg font-sans focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent rounded"
+        :aria-expanded="cardsVisible"
+        @click="showCards = !showCards"
+      >
+        <span
+          aria-hidden="true"
+          class="text-[10px] transition-transform duration-150"
+          :class="cardsVisible ? 'rotate-90' : ''"
+        >▸</span>
+        {{ cardsVisible ? 'Hide individual requests' : `Review individually (${agents.length})` }}
+      </button>
+
       <!-- Agent cards -->
-      <div class="flex flex-wrap gap-2.5">
+      <div v-if="cardsVisible" class="flex flex-wrap gap-2.5">
         <div
           v-for="agent in agents"
           :key="agent.sessionId"
