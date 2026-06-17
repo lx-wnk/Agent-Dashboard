@@ -44,41 +44,41 @@ function sortIndicator(field: SortField): string {
   return sortDir.value === 'asc' ? ' ▲' : ' ▼'
 }
 
-const sortedAgents = computed(() => {
-  const list = [...props.agents]
+// Compares two agents by the active column header sort. Applied in both the
+// flat and grouped paths so the header controls stay live when grouping.
+function compareAgents(a: Agent, b: Agent): number {
   const dir = sortDir.value === 'asc' ? 1 : -1
-  list.sort((a, b) => {
-    let cmp = 0
-    switch (sortField.value) {
-      case 'status':
-        cmp = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
-        break
-      case 'projectName':
-        cmp = a.projectName.localeCompare(b.projectName)
-        break
-      case 'currentAction':
-        cmp = (a.currentAction ?? '').localeCompare(b.currentAction ?? '')
-        break
-      case 'model':
-        cmp = (a.model ?? '').localeCompare(b.model ?? '')
-        break
-      case 'tokens':
-        cmp = totalTokenCount(a.tokenUsage) - totalTokenCount(b.tokenUsage)
-        break
-      case 'costEstimate':
-        cmp = a.costEstimate - b.costEstimate
-        break
-      case 'uptime':
-        cmp = a.uptime - b.uptime
-        break
-      case 'pid':
-        cmp = a.pid - b.pid
-        break
-    }
-    return cmp * dir
-  })
-  return list
-})
+  let cmp = 0
+  switch (sortField.value) {
+    case 'status':
+      cmp = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
+      break
+    case 'projectName':
+      cmp = a.projectName.localeCompare(b.projectName)
+      break
+    case 'currentAction':
+      cmp = (a.currentAction ?? '').localeCompare(b.currentAction ?? '')
+      break
+    case 'model':
+      cmp = (a.model ?? '').localeCompare(b.model ?? '')
+      break
+    case 'tokens':
+      cmp = totalTokenCount(a.tokenUsage) - totalTokenCount(b.tokenUsage)
+      break
+    case 'costEstimate':
+      cmp = a.costEstimate - b.costEstimate
+      break
+    case 'uptime':
+      cmp = a.uptime - b.uptime
+      break
+    case 'pid':
+      cmp = a.pid - b.pid
+      break
+  }
+  return cmp * dir
+}
+
+const sortedAgents = computed(() => [...props.agents].sort(compareAgents))
 
 const tableGroups = computed<TableGroup[]>(() =>
   sortedAgents.value.map(agent => ({
@@ -96,7 +96,7 @@ const useGroups = computed(() =>
 const COL_COUNT = 9
 
 function groupTableItems(groupAgents: Agent[]): TableGroup[] {
-  return groupAgents.map(agent => ({
+  return [...groupAgents].sort(compareAgents).map(agent => ({
     agent,
     showSubagents: expandedPids.value.has(agent.pid),
   }))

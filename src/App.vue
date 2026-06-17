@@ -32,7 +32,8 @@ import { useTheme } from './composables/useTheme'
 import { useTodayCost } from './composables/useTodayCost'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import { formatCost, formatTokens, totalTokenCount } from './utils/format'
+import { formatCost, formatTokens, secondsSince, totalTokenCount } from './utils/format'
+import { needsAttention } from './utils/attention'
 import { groupAgents, sortAgents } from './utils/agentGroup'
 import { useNow } from './composables/useNow'
 
@@ -130,6 +131,9 @@ const rosterAgents = computed(() => {
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
 const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
+const rosterAttentionCount = computed(() =>
+  rosterAgents.value.filter(a => needsAttention(a, secondsSince(a.lastActivity, nowMs.value))).length,
+)
 const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
   ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: n })),
@@ -363,7 +367,7 @@ onMounted(fetchQuota)
           :group-by="dashboardGroup"
           :project-options="projectOptions"
           :count="rosterAgents.length"
-          :attention-count="attentionCount"
+          :attention-count="rosterAttentionCount"
           @update:layout="dashboardLayout = $event"
           @update:hide-non-claude="hideNonClaude = $event"
           @update:project="dashboardProject = $event"
