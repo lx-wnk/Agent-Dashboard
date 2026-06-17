@@ -384,7 +384,7 @@ async function startImport() {
 
 <template>
   <AppModal :open="open" size="auto" @close="emit('close')">
-    <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-[975px] max-w-[calc(100vw-2rem)] h-[700px] max-h-[85vh] flex overflow-hidden">
+    <div class="bg-card rounded-xl border border-line shadow-modal w-[975px] max-w-[calc(100vw-2rem)] h-[700px] max-h-[85vh] flex overflow-hidden">
       <!-- ── Sidebar ──────────────────────────────── -->
       <nav class="w-[260px] flex-shrink-0 bg-app border-r border-line px-3 py-5 flex flex-col">
         <div class="flex items-center justify-between px-1 pb-1 mb-2">
@@ -558,7 +558,7 @@ async function startImport() {
               type="button"
               class="w-40 border-2 rounded-lg overflow-hidden cursor-pointer bg-transparent p-0 transition-all font-sans"
               :class="themePref === opt.value
-                ? 'border-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]'
+                ? 'border-accent shadow-[0_0_0_3px_var(--accent-soft)]'
                 : 'border-line hover:border-blue-400'"
               :aria-label="opt.value === 'dark' ? `${opt.label} (keyboard shortcut: Shift+D)` : opt.label"
               :aria-pressed="themePref === opt.value"
@@ -689,7 +689,7 @@ async function startImport() {
                   {{ formatDate(key.lastUsedAt) }}
                 </td>
                 <td class="px-3 py-2.5 border-b border-line">
-                  <span v-if="key.active" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400">Active</span>
+                  <span v-if="key.active" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text">Active</span>
                   <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute">Revoked</span>
                 </td>
                 <td class="px-3 py-2.5 border-b border-line">
@@ -876,7 +876,7 @@ async function startImport() {
 
     <!-- Create key dialog -->
     <AppModal :open="showCreateDialog" size="auto" :z-index="300" labelled-by="create-key-dialog-title" @close="closeCreateDialog">
-      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-modal">
         <header class="flex justify-between items-center px-5 py-4 border-b border-line">
           <h2 id="create-key-dialog-title" class="text-lg font-semibold text-fg">
             Create API Key
@@ -936,21 +936,24 @@ async function startImport() {
 
     <!-- Token reveal dialog -->
     <AppModal :open="!!revealedToken" size="auto" :z-index="300" labelled-by="token-reveal-dialog-title" @close="dismissReveal">
-      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-modal">
         <header class="flex justify-between items-center px-5 py-4 border-b border-line">
           <h2 id="token-reveal-dialog-title" class="text-lg font-semibold text-fg">
             Your new API key
           </h2>
+          <button type="button" aria-label="Close" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent rounded" @click="dismissReveal">
+            ✕
+          </button>
         </header>
         <div class="p-5">
           <p class="text-[13px] text-fg-mute mb-3">
-            Save this token now — it will <strong class="text-amber-700 dark:text-yellow-400">never be shown again</strong>.
+            Save this token now — it will <strong class="text-warning-text">never be shown again</strong>.
           </p>
-          <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
+          <div class="relative font-mono text-xs bg-success-soft text-success-text p-3 pr-10 rounded border border-success-line break-all mb-3">
             {{ tokenVisible ? revealedToken : maskToken(revealedToken ?? '') }}
             <button
               type="button"
-              class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 text-green-500 transition-colors"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:brightness-105 text-success-text transition-[filter]"
               :aria-label="tokenVisible ? 'Hide token' : 'Show token'"
               :aria-pressed="tokenVisible"
               @click="tokenVisible = !tokenVisible"
@@ -970,7 +973,7 @@ async function startImport() {
             <p class="text-[13px] text-fg-mute mb-1">
               {{ canAuthorTasks ? "Connect a Claude Code session to this dashboard's task tools:" : "Connect a Claude Code session (this key has read-only access to task tools):" }}
             </p>
-            <p v-if="!canAuthorTasks" class="text-[11px] text-amber-700 dark:text-yellow-400 mb-3">
+            <p v-if="!canAuthorTasks" class="text-[11px] text-warning-text mb-3">
               Read-only key — creating or refining tasks needs the Developer or Admin role.
             </p>
 
@@ -991,7 +994,7 @@ async function startImport() {
                   @click="copyValue(b.key, b.value)"
                 >
                   <span v-if="copiedTarget === b.key" aria-hidden="true" class="text-sm leading-none text-green-500">✓</span>
-                  <span v-else-if="errorTarget === b.key" aria-hidden="true" class="text-sm leading-none text-red-500">✕</span>
+                  <span v-else-if="errorTarget === b.key" aria-hidden="true" class="text-sm leading-none text-danger-text">✕</span>
                   <span v-else aria-hidden="true" class="text-sm leading-none">⧉</span>
                 </button>
               </div>

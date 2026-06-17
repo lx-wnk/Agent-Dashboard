@@ -10,7 +10,7 @@ const props = defineProps<{
   searchQuery: string
   live: boolean
 }>()
-defineEmits<{ 'update:searchQuery': [value: string] }>()
+defineEmits<{ 'update:searchQuery': [value: string], 'openSettings': [] }>()
 
 const title = computed(() => viewTitle(props.activeView))
 const searchPlaceholder = computed(() =>
@@ -31,6 +31,14 @@ const searchPlaceholder = computed(() =>
       @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
     >
     <slot name="cta" />
+    <button
+      type="button"
+      aria-label="Settings"
+      class="rounded-lg px-2 h-8 min-w-8 text-[15px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      @click="$emit('openSettings')"
+    >
+      <span aria-hidden="true">⚙</span>
+    </button>
     <LivePulse :live="live" />
     <OfflineBadge />
   </header>
