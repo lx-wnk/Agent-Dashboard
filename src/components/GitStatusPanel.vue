@@ -104,10 +104,10 @@ watch(() => props.taskId, fetchStatus)
           <span class="font-mono text-xs bg-raised text-fg-soft px-2 py-0.5 rounded font-semibold">
             {{ status.branch }}
           </span>
-          <span v-if="status.aheadCount > 0" class="text-[11px] text-green-600 dark:text-green-400 font-mono">
+          <span v-if="status.aheadCount > 0" class="text-[11px] text-success-text font-mono">
             ↑{{ status.aheadCount }}
           </span>
-          <span v-if="status.behindCount > 0" class="text-[11px] text-yellow-600 dark:text-yellow-400 font-mono">
+          <span v-if="status.behindCount > 0" class="text-[11px] text-warning-text font-mono">
             ↓{{ status.behindCount }}
           </span>
         </div>
@@ -116,7 +116,7 @@ watch(() => props.taskId, fetchStatus)
         <div class="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-raised transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="actionInFlight"
             @click="runAction('fetch')"
           >
@@ -124,7 +124,7 @@ watch(() => props.taskId, fetchStatus)
           </button>
           <button
             type="button"
-            class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-raised transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="actionInFlight"
             @click="runAction('pull')"
           >
@@ -146,10 +146,10 @@ watch(() => props.taskId, fetchStatus)
         v-if="status.staged.length > 0 || status.unstaged.length > 0 || status.untracked.length > 0"
         class="flex items-center gap-3 mb-2.5 flex-wrap"
       >
-        <span v-if="status.staged.length > 0" class="text-[11px] text-green-600 dark:text-green-400 font-medium">
+        <span v-if="status.staged.length > 0" class="text-[11px] text-success-text font-medium">
           {{ status.staged.length }} staged
         </span>
-        <span v-if="status.unstaged.length > 0" class="text-[11px] text-yellow-600 dark:text-yellow-400 font-medium">
+        <span v-if="status.unstaged.length > 0" class="text-[11px] text-warning-text font-medium">
           {{ status.unstaged.length }} unstaged
         </span>
         <span v-if="status.untracked.length > 0" class="text-[11px] text-fg-mute">
@@ -171,7 +171,7 @@ watch(() => props.taskId, fetchStatus)
       </div>
 
       <!-- Action feedback -->
-      <div v-if="actionSuccess" class="mt-2 text-[11px] text-green-600 dark:text-green-400">
+      <div v-if="actionSuccess" class="mt-2 text-[11px] text-success-text">
         {{ actionSuccess }}
       </div>
       <div v-if="actionError" class="mt-2 text-[11px] text-danger-text">

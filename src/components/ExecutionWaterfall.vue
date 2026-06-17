@@ -3,16 +3,18 @@ import type { OutputMessage } from '../types'
 import { max, min } from 'd3-array'
 import { axisBottom } from 'd3-axis'
 import { scaleOrdinal, scaleTime } from 'd3-scale'
-import { schemeTableau10 } from 'd3-scale-chromatic'
 import { select } from 'd3-selection'
 import { nextTick, onMounted, ref, useId, watch } from 'vue'
 import { errorMessage } from '../utils/errorMessage'
+import { useTheme } from '../composables/useTheme'
+import { chartPalette } from '../utils/chartColors'
 
 const props = defineProps<{ sessionId: string }>()
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+const { theme } = useTheme()
 
 const titleId = useId()
 const descId = useId()
@@ -80,7 +82,7 @@ function renderGantt(messages: OutputMessage[]) {
   const x = scaleTime().domain([xMin, xMax]).range([0, width])
 
   const toolNames = [...new Set(events.map(e => e.toolName))]
-  const color = scaleOrdinal(schemeTableau10).domain(toolNames)
+  const color = scaleOrdinal(chartPalette()).domain(toolNames)
 
   g.selectAll<SVGRectElement, ToolEvent>('rect.bar')
     .data(events)
@@ -119,6 +121,7 @@ function renderGantt(messages: OutputMessage[]) {
 
 onMounted(fetchAndRender)
 watch(() => props.sessionId, fetchAndRender)
+watch(theme, fetchAndRender)
 </script>
 
 <template>

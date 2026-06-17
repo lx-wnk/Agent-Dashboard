@@ -310,6 +310,7 @@ onMounted(fetchQuota)
 
       <template #topbar>
         <AppTopbar
+          @open-settings="showSettings = true"
           :active-view="activeView"
           :search-query="searchQuery"
           :live="live"

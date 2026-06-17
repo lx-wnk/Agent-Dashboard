@@ -102,7 +102,7 @@ async function handleSaveConfig() {
 
     <!-- F011 — role="status"/role="alert" rendered unconditionally so announcements
          fire when content changes (ARIA live regions must exist before content mutates). -->
-    <div role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-400" :class="{ 'sr-only': !loading }">
+    <div role="status" aria-live="polite" aria-atomic="true" class="text-xs text-fg-faint" :class="{ 'sr-only': !loading }">
       {{ loading ? 'Loading…' : '' }}
     </div>
     <div role="alert" aria-atomic="true" class="text-xs text-danger-text" :class="{ 'sr-only': !error || loading }">
@@ -166,8 +166,8 @@ async function handleSaveConfig() {
                   role="switch"
                   :aria-checked="getPref(ev.type).enabled"
                   :aria-label="`${ev.label} notifications`"
-                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
-                  :class="getPref(ev.type).enabled ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'"
+                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+                  :class="getPref(ev.type).enabled ? 'bg-accent' : 'bg-line-strong'"
                   :disabled="savingPref === ev.type"
                   @click="toggleEnabled(ev.type)"
                 >
@@ -234,7 +234,7 @@ async function handleSaveConfig() {
               {{ savingConfig ? 'Saving…' : configSaveOk ? 'Saved!' : 'Save Config' }}
             </AppButton>
             <!-- F012 — aria-live rendered unconditionally for reliable announcement -->
-            <p role="status" aria-live="polite" aria-atomic="true" class="text-xs text-green-600 dark:text-green-400" :class="{ 'sr-only': !configSaveOk }">
+            <p role="status" aria-live="polite" aria-atomic="true" class="text-xs text-success-text" :class="{ 'sr-only': !configSaveOk }">
               {{ configSaveOk ? 'Settings saved.' : '' }}
             </p>
           </div>

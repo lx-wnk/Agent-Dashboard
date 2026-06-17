@@ -2,14 +2,18 @@
 import { max } from 'd3-array'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { scaleBand, scaleLinear, scaleOrdinal, scalePoint } from 'd3-scale'
-import { schemeTableau10 } from 'd3-scale-chromatic'
 import { select } from 'd3-selection'
 import { curveMonotoneX, line, stack } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
 import { formatCost, formatTokens } from '../utils/format'
+import { useTheme } from "../composables/useTheme"
+import { chartColors, chartPalette } from "../utils/chartColors"
+import AppCard from './ui/AppCard.vue'
 
 const { summary, isLoading, error, from, to, setRange, start, refresh } = useCostAnalytics()
+
+const { theme } = useTheme()
 
 // --- Historical data rescan ---
 const importStatus = ref('')
@@ -200,9 +204,10 @@ function renderStackedBar() {
     .nice()
     .range([H, 0])
 
+  const palette = chartPalette()
   const color = scaleOrdinal<string>()
     .domain(models)
-    .range(schemeTableau10 as readonly string[])
+    .range(palette)
 
   // bars
   g.append('g')
@@ -286,7 +291,7 @@ function renderWeeklyTrend() {
   g.append('path')
     .datum(data)
     .attr('fill', 'none')
-    .attr('stroke', '#10b981')
+    .attr('stroke', chartColors().success)
     .attr('stroke-width', 2)
     .attr('d', lineGen)
 
@@ -296,7 +301,7 @@ function renderWeeklyTrend() {
     .attr('cx', d => x(d.week) ?? 0)
     .attr('cy', d => y(d.costUsd))
     .attr('r', 3)
-    .attr('fill', '#10b981')
+    .attr('fill', chartColors().success)
     .append('title')
     .text(d => `${d.week}: ${formatCost(d.costUsd)}`)
 
@@ -322,7 +327,7 @@ onMounted(() => {
   start()
 })
 
-watch(summary, () => {
+watch([summary, theme], () => {
   // d3 needs the DOM updated; render after Vue applies summary.value swap.
   queueMicrotask(() => {
     renderStackedBar()
@@ -365,7 +370,7 @@ watch(summary, () => {
         :class="[
           'px-2.5 py-1 rounded border transition-colors',
           activePreset === preset
-            ? 'bg-blue-600 border-blue-600 text-white'
+            ? 'bg-accent border-accent text-accent-contrast'
             : 'bg-raised border-line text-fg-mute hover:text-fg hover:bg-raised/70',
         ]"
         @click="applyPreset(preset)"
@@ -411,7 +416,7 @@ watch(summary, () => {
         <button
           type="button"
           :disabled="isImporting"
-          class="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          class="text-sm px-3 py-1.5 rounded bg-accent text-accent-contrast hover:brightness-110 disabled:opacity-50 transition-colors"
           @click="startRescan"
         >
           {{ isImporting ? 'Scanning…' : 'Rescan now' }}
@@ -423,7 +428,7 @@ watch(summary, () => {
       {{ importStatus }}
     </p>
 
-    <section v-if="summary.byModel.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-if="summary.byModel.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-3 text-fg-soft">
         Spend by Model
       </h3>
@@ -434,7 +439,7 @@ watch(summary, () => {
           class="flex items-center justify-between gap-2 px-3 py-2 bg-raised rounded-md"
         >
           <span class="font-mono truncate text-fg" :title="m.model">{{ m.model }}</span>
-          <span class="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
+          <span class="font-mono text-success-text whitespace-nowrap">
             {{ formatCost(m.costUsd) }}
           </span>
           <span v-if="(m.inputTokens ?? 0) + (m.outputTokens ?? 0) > 0" class="text-fg-mute whitespace-nowrap">
@@ -443,9 +448,9 @@ watch(summary, () => {
           <span class="text-fg-mute whitespace-nowrap">{{ m.sessions }} sess.</span>
         </li>
       </ul>
-    </section>
+    </AppCard>
 
-    <section v-if="summary.byProject && summary.byProject.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-if="summary.byProject && summary.byProject.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-3 text-fg-soft">
         Spend by Project
       </h3>
@@ -456,7 +461,7 @@ watch(summary, () => {
           class="flex items-center justify-between gap-2 px-3 py-2 bg-raised rounded-md"
         >
           <span class="font-mono truncate text-fg" :title="p.projectPath">{{ p.projectName }}</span>
-          <span class="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
+          <span class="font-mono text-success-text whitespace-nowrap">
             {{ formatCost(p.costUsd) }}
           </span>
           <span v-if="(p.inputTokens ?? 0) + (p.outputTokens ?? 0) > 0" class="text-fg-mute whitespace-nowrap">
@@ -465,20 +470,20 @@ watch(summary, () => {
           <span class="text-fg-mute whitespace-nowrap">{{ p.sessions }} sess.</span>
         </li>
       </ul>
-    </section>
+    </AppCard>
 
-    <section v-show="summary.byDay.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-show="summary.byDay.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-2 text-fg-soft">
         Cost per Day (stacked by model)
       </h3>
       <svg ref="stackedRef" class="w-full text-fg" style="min-height: 220px;" />
-    </section>
+    </AppCard>
 
-    <section v-show="summary.byWeek.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-show="summary.byWeek.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-2 text-fg-soft">
         Weekly Trend
       </h3>
       <svg ref="trendRef" class="w-full text-fg" style="min-height: 200px;" />
-    </section>
+    </AppCard>
   </div>
 </template>

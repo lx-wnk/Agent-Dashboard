@@ -1,6 +1,6 @@
 import type { PipelineStage, StageRunStatus } from '../types'
 
-export type ChipTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
+export type ChipTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'accent'
 
 export function stageTone(stage: PipelineStage | string): ChipTone {
   switch (stage) {
@@ -10,6 +10,20 @@ export function stageTone(stage: PipelineStage | string): ChipTone {
     case 'implementation': return 'info'
     default: return 'neutral'
   }
+}
+
+export const RUN_STATUS_LABELS: Record<StageRunStatus, string> = {
+  pending: 'Pending',
+  running: 'Running',
+  awaiting_user: 'Waiting',
+  on_hold: 'On Hold',
+  done: 'Done',
+  failed: 'Failed',
+  requeued: 'Requeued',
+}
+
+export function runStatusLabel(status: StageRunStatus): string {
+  return RUN_STATUS_LABELS[status] ?? status
 }
 
 export function runStatusTone(status: StageRunStatus | string): ChipTone {

@@ -3,11 +3,12 @@ import type { SankeyLink } from 'd3-sankey'
 import type { SankeyData } from '../../sdk.generated'
 import type { Selection } from 'd3-selection'
 import { scaleOrdinal } from 'd3-scale'
-import { schemeTableau10 } from 'd3-scale-chromatic'
 import { select } from 'd3-selection'
 import { sankey as d3Sankey, sankeyLinkHorizontal } from 'd3-sankey'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { errorMessage } from '../../utils/errorMessage'
+import { useTheme } from '../../composables/useTheme'
+import { chartColors, chartPalette } from '../../utils/chartColors'
 
 // User-defined node/link properties carried through the layout, on top of the
 // d3-sankey-computed geometry (x0/y0/width/…).
@@ -32,6 +33,7 @@ const svgRef = ref<SVGSVGElement | null>(null)
 // graph ever reaches the layout) as a visible message instead of an
 // uncaught promise rejection bubbling out of the watcher callback.
 const renderError = ref<string | null>(null)
+const { theme } = useTheme()
 
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
 
@@ -75,7 +77,8 @@ function drawSankey(svg: Selection<SVGSVGElement, unknown, null, undefined>) {
 
   const { nodes: laidOutNodes, links: laidOutLinks } = layout({ nodes, links })
 
-  const color = scaleOrdinal<string>(schemeTableau10).domain(props.data.nodes.map(n => n.name))
+  const colors = chartColors()
+  const color = scaleOrdinal<string>(chartPalette()).domain(props.data.nodes.map(n => n.name))
 
   svg.append('g')
     .selectAll('rect')
@@ -96,7 +99,7 @@ function drawSankey(svg: Selection<SVGSVGElement, unknown, null, undefined>) {
     .data(laidOutLinks)
     .join('path')
     .attr('d', sankeyLinkHorizontal())
-    .attr('stroke', '#94a3b8')
+    .attr('stroke', colors.line)
     .attr('stroke-width', d => Math.max(1, d.width ?? 1))
     .append('title')
     .text(d => `${nodeName(d.source)} → ${nodeName(d.target)}\n${d.value}`)
@@ -118,6 +121,7 @@ function drawSankey(svg: Selection<SVGSVGElement, unknown, null, undefined>) {
 // mounts once data is non-empty, so a pre-flush watcher would see a null
 // svgRef on first data arrival and bail, leaving the chart blank.
 watch(() => props.data, render, { immediate: true, flush: 'post' })
+watch(theme, render)
 
 onUnmounted(() => {
   if (svgRef.value)

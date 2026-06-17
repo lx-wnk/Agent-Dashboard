@@ -23,7 +23,7 @@ const props = withDefaults(defineProps<{
 
 // Chrome + fixed frame for the standard size. `auto` is a transparent
 // passthrough so exception modals keep their bespoke box.
-const STANDARD_CHROME = 'bg-card border border-line rounded-xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col'
+const STANDARD_CHROME = 'bg-card border border-line rounded-xl shadow-modal overflow-hidden flex flex-col'
 const panelClass = computed(() => (props.size === 'standard' ? STANDARD_CHROME : ''))
 const panelStyle = computed(() =>
   props.size === 'standard'

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import AppInput from './ui/AppInput.vue'
 import { useConfigExplorer } from '../composables/useConfigExplorer'
 
 type Tab = 'skills' | 'commands' | 'memory'
@@ -133,12 +134,11 @@ function formatTimestamp(unixSeconds: number): string {
           Memory <span class="opacity-60">({{ memory.length }})</span>
         </button>
       </div>
-      <input
+      <AppInput
         v-model="searchQuery"
-        type="text"
         :placeholder="`Filter ${activeTab}...`"
-        class="bg-raised border border-line rounded-md px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[260px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-      >
+        class="w-[260px]"
+      />
       <button
         type="button"
         class="bg-raised text-fg-mute border-none rounded-md px-3 py-1.5 text-[13px] font-sans cursor-pointer hover:text-fg-soft"

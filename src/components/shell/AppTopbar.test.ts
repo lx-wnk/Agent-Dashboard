@@ -26,4 +26,9 @@ describe('appTopbar', () => {
     const w = mount(AppTopbar, { props: { activeView: 'dashboard', searchQuery: '', live: false } })
     expect(w.text()).toContain('Reconnecting')
   })
+  it('emits openSettings when the gear button is clicked', async () => {
+    const w = mount(AppTopbar, { props: { activeView: 'dashboard', searchQuery: '', live: true } })
+    await w.get('button[aria-label="Settings"]').trigger('click')
+    expect(w.emitted('openSettings')).toBeTruthy()
+  })
 })

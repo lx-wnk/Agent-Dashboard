@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { SpawnTreeData } from '../../sdk.generated'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useTheme } from '../../composables/useTheme'
+import { paletteColor } from '../../utils/chartColors'
 
 const props = defineProps<{
   data: SpawnTreeData | null
@@ -12,19 +14,8 @@ const emit = defineEmits<{ navigate: [sessionId: string] }>()
 
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
 
-// Ordinal color palette keyed by model name.
-const MODEL_COLORS = [
-  '#3b82f6', // blue-500
-  '#10b981', // emerald-500
-  '#f59e0b', // amber-500
-  '#8b5cf6', // violet-500
-  '#ef4444', // red-500
-  '#06b6d4', // cyan-500
-  '#f97316', // orange-500
-  '#84cc16', // lime-500
-  '#ec4899', // pink-500
-  '#6366f1', // indigo-500
-]
+// Ordinal color from design-system palette for model dots.
+const { theme } = useTheme()
 
 interface SessionRow {
   id: string
@@ -45,10 +36,10 @@ let modelColorIndex = 0
 
 function colorForModel(model: string): string {
   if (!model)
-    return '#64748b'
+    return 'currentColor'
   if (modelColorCache.has(model))
     return modelColorCache.get(model)!
-  const color = MODEL_COLORS[modelColorIndex % MODEL_COLORS.length]
+  const color = paletteColor(modelColorIndex)
   modelColorIndex++
   modelColorCache.set(model, color)
   return color
@@ -59,6 +50,7 @@ function formatCost(costCents: number): string {
 }
 
 const groups = computed<ProjectGroup[]>(() => {
+  void theme.value // track theme so colors refresh on toggle
   modelColorCache.clear()
   modelColorIndex = 0
 
@@ -204,7 +196,7 @@ function onSessionKeydown(event: KeyboardEvent, id: string) {
         <!-- Project header row -->
         <button
           type="button"
-          class="w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-raised rounded transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+          class="w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-raised rounded transition-colors focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:outline-none"
           :aria-expanded="isExpanded(group.project)"
           @click="toggleProject(group.project)"
         >
@@ -223,7 +215,7 @@ function onSessionKeydown(event: KeyboardEvent, id: string) {
             v-for="session in group.sessions"
             :key="session.id"
             type="button"
-            class="w-full flex items-start gap-2 pl-6 pr-3 py-1.5 text-left hover:bg-raised rounded transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px] cursor-pointer"
+            class="w-full flex items-start gap-2 pl-6 pr-3 py-1.5 text-left hover:bg-raised rounded transition-colors focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
             @click="onSessionClick(session.id)"
             @keydown="onSessionKeydown($event, session.id)"
           >
