@@ -36,6 +36,7 @@ import { useViewState } from './composables/useViewState'
 import { formatCost, formatTokens, secondsSince, totalTokenCount } from './utils/format'
 import { needsAttention } from './utils/attention'
 import { groupAgents, sortAgents } from './utils/agentGroup'
+import { friendlyProjectName } from './utils/friendlyProjectName'
 import { useNow } from './composables/useNow'
 import { ProviderClaude, ProviderCodex, ProviderGemini } from './sdk.generated'
 
@@ -147,10 +148,13 @@ const rosterAttentionCount = computed(() =>
 )
 const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
-  ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: n })),
+  ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),
 ])
 const spawnerOptions = computed(() => {
-  const providers = [...new Set(agents.value.map(a => a.provider ?? ProviderClaude))].sort()
+  // List every known spawner type (not just providers currently running) so the
+  // filter stays stable and matches the design's full spawner set.
+  const present = agents.value.map(a => a.provider ?? ProviderClaude)
+  const providers = [...new Set([...Object.keys(PROVIDER_LABELS), ...present])].sort()
   return [
     { value: 'all', label: 'All spawners' },
     ...providers.map(p => ({ value: p, label: PROVIDER_LABELS[p] ?? p.charAt(0).toUpperCase() + p.slice(1) })),

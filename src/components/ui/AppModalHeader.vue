@@ -1,9 +1,9 @@
 <script setup lang="ts">
-defineProps<{
+withDefaults(defineProps<{
   title: string
   id?: string
   showClose?: boolean
-}>()
+}>(), { showClose: true })
 
 const emit = defineEmits<{ close: [] }>()
 </script>
@@ -16,7 +16,7 @@ const emit = defineEmits<{ close: [] }>()
     >{{ title }}</h2>
     <slot />
     <button
-      v-if="showClose !== false"
+      v-if="showClose"
       type="button"
       aria-label="Close"
       class="ml-auto bg-transparent border-0 text-fg-mute cursor-pointer text-xl leading-none p-0.5 rounded hover:text-fg transition-colors"
