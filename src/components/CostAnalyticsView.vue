@@ -3,7 +3,7 @@ import { max } from 'd3-array'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { scaleBand, scaleLinear, scaleOrdinal, scalePoint } from 'd3-scale'
 import { select } from 'd3-selection'
-import { curveMonotoneX, line, stack } from 'd3-shape'
+import { area, curveMonotoneX, line, stack } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
 import { formatCost, formatTokens } from '../utils/format'
@@ -92,6 +92,10 @@ const totalTokens = computed(() => {
   const s = summary.value
   return (s.totalInputTokens ?? 0) + (s.totalOutputTokens ?? 0)
 })
+
+const projectMaxCost = computed(() =>
+  Math.max(0, ...summary.value.byProject.map(p => p.costUsd)),
+)
 
 // --- Time-range presets ---
 type Preset = '7d' | '30d' | '90d' | 'all'
@@ -288,6 +292,19 @@ function renderWeeklyTrend() {
     .y(d => y(d.costUsd))
     .curve(curveMonotoneX)
 
+  const areaGen = area<WeekPoint>()
+    .x(d => x(d.week) ?? 0)
+    .y0(H)
+    .y1(d => y(d.costUsd))
+    .curve(curveMonotoneX)
+
+  g.append('path')
+    .datum(data)
+    .attr('fill', chartColors().success)
+    .attr('fill-opacity', 0.12)
+    .attr('stroke', 'none')
+    .attr('d', areaGen)
+
   g.append('path')
     .datum(data)
     .attr('fill', 'none')
@@ -454,20 +471,20 @@ watch([summary, theme], () => {
       <h3 class="text-sm font-semibold mb-3 text-fg-soft">
         Spend by Project
       </h3>
-      <ul class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+      <ul class="flex flex-col gap-2.5 text-xs">
         <li
           v-for="p in summary.byProject"
           :key="p.projectPath"
-          class="flex items-center justify-between gap-2 px-3 py-2 bg-raised rounded-md"
+          class="flex items-center gap-2.5"
         >
-          <span class="font-mono truncate text-fg" :title="p.projectPath">{{ p.projectName }}</span>
-          <span class="font-mono text-success-text whitespace-nowrap">
-            {{ formatCost(p.costUsd) }}
-          </span>
-          <span v-if="(p.inputTokens ?? 0) + (p.outputTokens ?? 0) > 0" class="text-fg-mute whitespace-nowrap">
-            {{ formatTokens((p.inputTokens ?? 0) + (p.outputTokens ?? 0)) }}
-          </span>
-          <span class="text-fg-mute whitespace-nowrap">{{ p.sessions }} sess.</span>
+          <span class="w-32 shrink-0 font-mono text-fg-soft truncate" :title="p.projectPath">{{ p.projectName }}</span>
+          <div class="flex-1 h-3.5 bg-raised rounded-full overflow-hidden">
+            <div
+              class="h-full rounded-full bg-accent"
+              :style="{ width: projectMaxCost > 0 ? `${(p.costUsd / projectMaxCost) * 100}%` : '0%' }"
+            />
+          </div>
+          <span class="w-14 text-right font-mono text-success-text whitespace-nowrap shrink-0">{{ formatCost(p.costUsd) }}</span>
         </li>
       </ul>
     </AppCard>
