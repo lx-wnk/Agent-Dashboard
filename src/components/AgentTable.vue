@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { AgentGrouping } from '../utils/agentGroup'
 import type { Agent } from '../types'
 import { computed, ref } from 'vue'
 import { STATUS_ORDER } from '@/utils/agentSort'
@@ -16,6 +17,7 @@ interface TableGroup {
 
 const props = defineProps<{
   agents: Agent[]
+  groups?: AgentGrouping[]
 }>()
 
 defineEmits<{
@@ -85,6 +87,21 @@ const tableGroups = computed<TableGroup[]>(() =>
   })),
 )
 
+// Groups with non-null labels trigger the grouped rendering path.
+const useGroups = computed(() =>
+  !!props.groups && props.groups.some(g => g.label !== null),
+)
+
+// Column count = data columns (8) + expand-toggle column (1)
+const COL_COUNT = 9
+
+function groupTableItems(groupAgents: Agent[]): TableGroup[] {
+  return groupAgents.map(agent => ({
+    agent,
+    showSubagents: expandedPids.value.has(agent.pid),
+  }))
+}
+
 function toggleSubagents(pid: number) {
   if (expandedPids.value.has(pid)) {
     expandedPids.value.delete(pid)
@@ -114,25 +131,65 @@ function toggleSubagents(pid: number) {
           <th class="px-3 py-2 bg-app sticky top-0 z-[1] border-b border-line" />
         </tr>
       </thead>
-      <tbody
-        v-for="{ agent, showSubagents } in tableGroups"
-        :key="agent.pid"
-        :id="`subagents-${agent.sessionId}`"
-      >
-        <AgentRow
-          v-memo="[agent.status, agent.projectName, agent.currentAction, agent.model, totalTokenCount(agent.tokenUsage), agent.costEstimate, agent.costUnknown, formatUptime(agent.uptime), shortModel(agent.model ?? null), agent.channelAvailable, agent.provider, agent.machine, agent.projectPath, agent.subagents.length, showSubagents]"
-          :agent="agent"
-          :expanded="showSubagents"
-          @select="$emit('select', agent)"
-          @toggle-subagents="toggleSubagents(agent.pid)"
-        />
-        <SubAgentRow
-          v-for="sub in agent.subagents"
-          v-show="showSubagents"
-          :key="sub.id"
-          :subagent="sub"
-        />
-      </tbody>
+
+      <!-- Grouped rendering: insert a header row before each group's agent rows -->
+      <template v-if="useGroups && groups">
+        <template v-for="group in groups" :key="group.key">
+          <tbody>
+            <tr>
+              <td
+                :colspan="COL_COUNT"
+                class="px-3 py-1.5 bg-app border-b border-line"
+              >
+                <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-fg-mute">{{ group.label }}</span>
+                <span class="ml-2 text-[11px] text-fg-faint">{{ group.agents.length }} {{ group.agents.length === 1 ? 'agent' : 'agents' }}</span>
+              </td>
+            </tr>
+          </tbody>
+          <tbody
+            v-for="{ agent, showSubagents } in groupTableItems(group.agents)"
+            :key="agent.pid"
+            :id="`subagents-${agent.sessionId}`"
+          >
+            <AgentRow
+              v-memo="[agent.status, agent.projectName, agent.currentAction, agent.model, totalTokenCount(agent.tokenUsage), agent.costEstimate, agent.costUnknown, formatUptime(agent.uptime), shortModel(agent.model ?? null), agent.channelAvailable, agent.provider, agent.machine, agent.projectPath, agent.subagents.length, showSubagents]"
+              :agent="agent"
+              :expanded="showSubagents"
+              @select="$emit('select', agent)"
+              @toggle-subagents="toggleSubagents(agent.pid)"
+            />
+            <SubAgentRow
+              v-for="sub in agent.subagents"
+              v-show="showSubagents"
+              :key="sub.id"
+              :subagent="sub"
+            />
+          </tbody>
+        </template>
+      </template>
+
+      <!-- Flat rendering: original behaviour -->
+      <template v-else>
+        <tbody
+          v-for="{ agent, showSubagents } in tableGroups"
+          :key="agent.pid"
+          :id="`subagents-${agent.sessionId}`"
+        >
+          <AgentRow
+            v-memo="[agent.status, agent.projectName, agent.currentAction, agent.model, totalTokenCount(agent.tokenUsage), agent.costEstimate, agent.costUnknown, formatUptime(agent.uptime), shortModel(agent.model ?? null), agent.channelAvailable, agent.provider, agent.machine, agent.projectPath, agent.subagents.length, showSubagents]"
+            :agent="agent"
+            :expanded="showSubagents"
+            @select="$emit('select', agent)"
+            @toggle-subagents="toggleSubagents(agent.pid)"
+          />
+          <SubAgentRow
+            v-for="sub in agent.subagents"
+            v-show="showSubagents"
+            :key="sub.id"
+            :subagent="sub"
+          />
+        </tbody>
+      </template>
     </table>
     <p v-if="agents.length === 0" class="text-center py-12 text-fg-mute text-sm">
       No running Claude agents found.

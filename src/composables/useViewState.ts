@@ -1,9 +1,12 @@
+import type { AgentGroup, AgentSort } from '../utils/agentGroup'
 import { ref, watch } from 'vue'
 
 export type ActiveView = 'dashboard' | 'workflows' | 'pipeline' | 'cost'
 export type DashboardLayout = 'cards' | 'list'
 
 const ACTIVE_VIEWS: ActiveView[] = ['dashboard', 'workflows', 'pipeline', 'cost']
+const AGENT_SORT_VALUES: AgentSort[] = ['latest', 'longest', 'expensive']
+const AGENT_GROUP_VALUES: AgentGroup[] = ['none', 'status', 'model']
 
 function readInitial(): { view: ActiveView, layout: DashboardLayout } {
   const ls = typeof localStorage !== 'undefined' ? localStorage : null
@@ -55,9 +58,29 @@ function readInitial(): { view: ActiveView, layout: DashboardLayout } {
   return { view, layout }
 }
 
+function readStoredSort(): AgentSort {
+  const ls = typeof localStorage !== 'undefined' ? localStorage : null
+  const v = ls?.getItem('agent-dashboard-sort')
+  return v && AGENT_SORT_VALUES.includes(v as AgentSort) ? (v as AgentSort) : 'latest'
+}
+
+function readStoredGroup(): AgentGroup {
+  const ls = typeof localStorage !== 'undefined' ? localStorage : null
+  const v = ls?.getItem('agent-dashboard-group')
+  return v && AGENT_GROUP_VALUES.includes(v as AgentGroup) ? (v as AgentGroup) : 'none'
+}
+
+function readStoredProject(): string {
+  const ls = typeof localStorage !== 'undefined' ? localStorage : null
+  return ls?.getItem('agent-dashboard-project') ?? 'all'
+}
+
 const initial = readInitial()
 const activeView = ref<ActiveView>(initial.view)
 const dashboardLayout = ref<DashboardLayout>(initial.layout)
+const dashboardSort = ref<AgentSort>(readStoredSort())
+const dashboardGroup = ref<AgentGroup>(readStoredGroup())
+const dashboardProject = ref<string>(readStoredProject())
 
 watch(activeView, (v) => {
   if (typeof localStorage !== 'undefined')
@@ -67,7 +90,19 @@ watch(dashboardLayout, (l) => {
   if (typeof localStorage !== 'undefined')
     localStorage.setItem('agent-dashboard-layout', l)
 }, { flush: 'sync' })
+watch(dashboardSort, (v) => {
+  if (typeof localStorage !== 'undefined')
+    localStorage.setItem('agent-dashboard-sort', v)
+}, { flush: 'sync' })
+watch(dashboardGroup, (v) => {
+  if (typeof localStorage !== 'undefined')
+    localStorage.setItem('agent-dashboard-group', v)
+}, { flush: 'sync' })
+watch(dashboardProject, (v) => {
+  if (typeof localStorage !== 'undefined')
+    localStorage.setItem('agent-dashboard-project', v)
+}, { flush: 'sync' })
 
 export function useViewState() {
-  return { activeView, dashboardLayout }
+  return { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject }
 }
