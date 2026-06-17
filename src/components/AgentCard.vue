@@ -41,7 +41,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
   <AppCard surface="card" radius="lg" interactive class="relative overflow-hidden cursor-pointer">
     <button
       type="button"
-      class="absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+      class="absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
       :aria-label="`Open details for ${agent.projectName}`"
       data-testid="agent-card-open"
       @click="$emit('select', agent)"

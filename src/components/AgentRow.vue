@@ -36,7 +36,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
     <td class="px-3 py-2.5 border-b border-line text-sm text-fg font-medium">
       <button
         type="button"
-        class="inline-flex items-center gap-1 bg-transparent border-none p-0 text-sm font-medium text-fg cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2"
+        class="inline-flex items-center gap-1 bg-transparent border-none p-0 text-sm font-medium text-fg cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
         :aria-label="`Open details for ${agent.projectName}`"
         @click.stop="$emit('select', agent)"
       >

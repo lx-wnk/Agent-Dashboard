@@ -103,7 +103,7 @@ function toggleSubagents(pid: number) {
           <th
             v-for="[field, label] in ([['status', 'Status'], ['projectName', 'Project'], ['currentAction', 'Current Action'], ['model', 'Model'], ['tokens', 'Tokens'], ['costEstimate', 'Cost'], ['uptime', 'Uptime'], ['pid', 'PID']] as const)"
             :key="field"
-            class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-fg-mute border-b border-line bg-app sticky top-0 z-[1] cursor-pointer select-none hover:text-fg transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+            class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-fg-mute border-b border-line bg-app sticky top-0 z-[1] cursor-pointer select-none hover:text-fg transition-colors focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
             tabindex="0"
             @click="toggleSort(field as SortField)"
             @keydown.enter="toggleSort(field as SortField)"

@@ -989,7 +989,7 @@ async function startImport() {
                 {{ b.value }}
                 <button
                   type="button"
-                  class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                  class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-1"
                   :aria-label="copyLabel(b.key, `Copy ${b.label}`)"
                   @click="copyValue(b.key, b.value)"
                 >
