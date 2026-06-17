@@ -6,9 +6,13 @@ import { line } from 'd3-shape'
 import { ref, watch } from 'vue'
 import { useCostForecast } from '../composables/useCostForecast'
 import type { ForecastTrendPoint, ForecastPoint } from '../composables/useCostForecast'
+import { useTheme } from '../composables/useTheme'
+import { chartColors } from '../utils/chartColors'
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const { trend, forecast, alerts, loading, error } = useCostForecast()
+
+const { theme } = useTheme()
 
 function renderChart(trendData: ForecastTrendPoint[], forecastData: ForecastPoint[]) {
   if (!svgRef.value)
@@ -37,7 +41,7 @@ function renderChart(trendData: ForecastTrendPoint[], forecastData: ForecastPoin
   g.append('path')
     .datum(trendData)
     .attr('fill', 'none')
-    .attr('stroke', '#3b82f6')
+    .attr('stroke', chartColors().info)
     .attr('stroke-width', 2)
     .attr('d', trendLine)
 
@@ -50,7 +54,7 @@ function renderChart(trendData: ForecastTrendPoint[], forecastData: ForecastPoin
   g.append('path')
     .datum(bridge)
     .attr('fill', 'none')
-    .attr('stroke', '#f59e0b')
+    .attr('stroke', chartColors().warning)
     .attr('stroke-width', 2)
     .attr('stroke-dasharray', '6 3')
     .attr('d', forecastLine)
@@ -68,7 +72,7 @@ function renderChart(trendData: ForecastTrendPoint[], forecastData: ForecastPoin
 }
 
 // Re-render chart whenever trend/forecast data changes after fetch completes
-watch([trend, forecast], ([t, f]) => {
+watch([trend, forecast, theme], ([t, f]) => {
   if (t.length > 0 || f.length > 0)
     renderChart(t, f)
 })

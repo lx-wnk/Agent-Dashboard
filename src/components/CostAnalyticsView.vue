@@ -2,14 +2,17 @@
 import { max } from 'd3-array'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { scaleBand, scaleLinear, scaleOrdinal, scalePoint } from 'd3-scale'
-import { schemeTableau10 } from 'd3-scale-chromatic'
 import { select } from 'd3-selection'
 import { curveMonotoneX, line, stack } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
 import { formatCost, formatTokens } from '../utils/format'
+import { useTheme } from "../composables/useTheme"
+import { chartColors, chartPalette } from "../utils/chartColors"
 
 const { summary, isLoading, error, from, to, setRange, start, refresh } = useCostAnalytics()
+
+const { theme } = useTheme()
 
 // --- Historical data rescan ---
 const importStatus = ref('')
@@ -200,9 +203,10 @@ function renderStackedBar() {
     .nice()
     .range([H, 0])
 
+  const palette = chartPalette()
   const color = scaleOrdinal<string>()
     .domain(models)
-    .range(schemeTableau10 as readonly string[])
+    .range(palette)
 
   // bars
   g.append('g')
@@ -286,7 +290,7 @@ function renderWeeklyTrend() {
   g.append('path')
     .datum(data)
     .attr('fill', 'none')
-    .attr('stroke', '#10b981')
+    .attr('stroke', chartColors().success)
     .attr('stroke-width', 2)
     .attr('d', lineGen)
 
@@ -296,7 +300,7 @@ function renderWeeklyTrend() {
     .attr('cx', d => x(d.week) ?? 0)
     .attr('cy', d => y(d.costUsd))
     .attr('r', 3)
-    .attr('fill', '#10b981')
+    .attr('fill', chartColors().success)
     .append('title')
     .text(d => `${d.week}: ${formatCost(d.costUsd)}`)
 
@@ -322,7 +326,7 @@ onMounted(() => {
   start()
 })
 
-watch(summary, () => {
+watch([summary, theme], () => {
   // d3 needs the DOM updated; render after Vue applies summary.value swap.
   queueMicrotask(() => {
     renderStackedBar()
