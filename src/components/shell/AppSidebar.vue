@@ -14,7 +14,7 @@ const props = defineProps<{
   totalCostLabel: string
   totalTokensLabel: string
   todayCostLabel: string
-  quotaPct: number
+  quotaPct: number | null
   theme: 'dark' | 'light'
   canInstall: boolean
 }>()

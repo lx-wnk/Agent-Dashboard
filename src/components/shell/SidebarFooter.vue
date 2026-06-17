@@ -4,7 +4,7 @@ defineProps<{
   totalCostLabel: string
   totalTokensLabel: string
   todayCostLabel: string
-  quotaPct: number
+  quotaPct: number | null
   theme: 'dark' | 'light'
   canInstall: boolean
 }>()
@@ -20,20 +20,20 @@ defineEmits<{
   <div class="mt-auto border-t border-line pt-2 px-1.5 flex flex-col gap-2">
     <div v-if="expanded" class="px-1">
       <div class="flex items-center justify-between text-[10px] text-fg-faint mb-1">
-        <span>Quota</span><span>{{ quotaPct }}%</span>
+        <span>Quota</span><span>{{ quotaPct === null ? '—' : `${quotaPct}%` }}</span>
       </div>
       <div
         class="h-1.5 bg-raised rounded-full overflow-hidden"
         role="progressbar"
-        :aria-valuenow="quotaPct"
+        :aria-valuenow="quotaPct ?? undefined"
         aria-valuemin="0"
         aria-valuemax="100"
-        :aria-label="`Monthly quota ${quotaPct}% used`"
+        :aria-label="quotaPct === null ? 'Monthly quota unknown' : `Monthly quota ${quotaPct}% used`"
       >
         <div
           class="h-full rounded-full transition-[width]"
-          :class="quotaPct >= 90 ? 'bg-danger' : quotaPct >= 75 ? 'bg-warning' : 'bg-success'"
-          :style="{ width: `${quotaPct}%` }"
+          :class="quotaPct === null ? 'bg-raised' : quotaPct >= 90 ? 'bg-danger' : quotaPct >= 75 ? 'bg-warning' : 'bg-success'"
+          :style="{ width: quotaPct === null ? '0%' : `${quotaPct}%` }"
         />
       </div>
       <div class="mt-2 text-[11px] font-mono text-fg-mute flex flex-col gap-0.5">

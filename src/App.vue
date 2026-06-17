@@ -292,9 +292,9 @@ interface QuotaInfo {
 
 const quota = ref<QuotaInfo | null>(null)
 
-const quotaPct = computed(() => {
+const quotaPct = computed<number | null>(() => {
   if (!quota.value?.limit)
-    return 0
+    return null
   return Math.min(100, Math.round(quota.value.tokensUsed / quota.value.limit * 100))
 })
 
