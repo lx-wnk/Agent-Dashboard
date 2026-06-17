@@ -372,22 +372,6 @@ onMounted(fetchQuota)
       </template>
 
       <div class="p-5 flex flex-col min-h-full">
-        <DashboardToolbar
-          v-if="activeView === 'dashboard'"
-          :layout="dashboardLayout"
-          :spawner="dashboardSpawner"
-          :project="dashboardProject"
-          :sort-by="dashboardSort"
-          :group-by="dashboardGroup"
-          :project-options="projectOptions"
-          :spawner-options="spawnerOptions"
-          @update:layout="dashboardLayout = $event"
-          @update:spawner="dashboardSpawner = $event"
-          @update:project="dashboardProject = $event"
-          @update:sort-by="dashboardSort = $event"
-          @update:group-by="dashboardGroup = $event"
-        />
-
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
         </div>
@@ -398,6 +382,20 @@ onMounted(fetchQuota)
         <template v-else-if="activeView === 'dashboard'">
           <AgentTriageBand :agents="attentionAgents" :focused-session-id="focusedSessionId" @select="selectAgent" @toast="showToast" @remembered="autoApprovingStrip?.load()" />
           <AutoApprovingStrip ref="autoApprovingStrip" />
+          <DashboardToolbar
+            :layout="dashboardLayout"
+            :spawner="dashboardSpawner"
+            :project="dashboardProject"
+            :sort-by="dashboardSort"
+            :group-by="dashboardGroup"
+            :project-options="projectOptions"
+            :spawner-options="spawnerOptions"
+            @update:layout="dashboardLayout = $event"
+            @update:spawner="dashboardSpawner = $event"
+            @update:project="dashboardProject = $event"
+            @update:sort-by="dashboardSort = $event"
+            @update:group-by="dashboardGroup = $event"
+          />
           <template v-if="dashboardLayout === 'list'">
             <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
             <AgentTable v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" />
