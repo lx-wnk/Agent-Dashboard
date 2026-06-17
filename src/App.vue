@@ -36,6 +36,7 @@ import { formatCost, formatTokens, secondsSince, totalTokenCount } from './utils
 import { needsAttention } from './utils/attention'
 import { groupAgents, sortAgents } from './utils/agentGroup'
 import { useNow } from './composables/useNow'
+import { ProviderClaude, ProviderCodex, ProviderGemini } from './sdk.generated'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
@@ -55,7 +56,7 @@ const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
-const { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject } = useViewState()
+const { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject, dashboardSpawner } = useViewState()
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
 const { resolveAgent, approveAll } = usePermissionResolve()
 
@@ -75,7 +76,7 @@ onUnmounted(() => {
     clearTimeout(toastTimer)
 })
 
-const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
+const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 // Today's persisted spend — reuses the shared cost-summary logic so the footer
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
@@ -122,12 +123,21 @@ const totalTokensLabel = computed(() => formatTokens(totalTokens.value))
 const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatCost(todayUsd.value)))
 
 const { nowMs } = useNow()
-// Dashboard roster: project filter → sort → optional grouping. Project options
-// list every known project (pre-filter) so the dropdown stays stable.
+
+const PROVIDER_LABELS: Record<string, string> = {
+  [ProviderClaude]: 'Claude Code',
+  [ProviderCodex]: 'Codex CLI',
+  [ProviderGemini]: 'Gemini CLI',
+}
+
+// Dashboard roster: project + spawner filter → sort → optional grouping. Project
+// options list every known project (pre-filter) so the dropdown stays stable.
 const rosterAgents = computed(() => {
-  const base = dashboardProject.value === 'all'
-    ? filteredAgents.value
-    : filteredAgents.value.filter(a => a.projectName === dashboardProject.value)
+  let base = filteredAgents.value
+  if (dashboardProject.value !== 'all')
+    base = base.filter(a => a.projectName === dashboardProject.value)
+  if (dashboardSpawner.value !== 'all')
+    base = base.filter(a => (a.provider ?? ProviderClaude) === dashboardSpawner.value)
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
 const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
@@ -138,6 +148,13 @@ const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
   ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: n })),
 ])
+const spawnerOptions = computed(() => {
+  const providers = [...new Set(agents.value.map(a => a.provider ?? ProviderClaude))].sort()
+  return [
+    { value: 'all', label: 'All spawners' },
+    ...providers.map(p => ({ value: p, label: PROVIDER_LABELS[p] ?? p.charAt(0).toUpperCase() + p.slice(1) })),
+  ]
+})
 
 const autoApprovingStrip = ref<InstanceType<typeof AutoApprovingStrip> | null>(null)
 
@@ -357,15 +374,14 @@ onMounted(fetchQuota)
         <DashboardToolbar
           v-if="activeView === 'dashboard'"
           :layout="dashboardLayout"
-          :hide-non-claude="hideNonClaude"
+          :spawner="dashboardSpawner"
           :project="dashboardProject"
           :sort-by="dashboardSort"
           :group-by="dashboardGroup"
           :project-options="projectOptions"
-          :count="rosterAgents.length"
-          :attention-count="rosterAttentionCount"
+          :spawner-options="spawnerOptions"
           @update:layout="dashboardLayout = $event"
-          @update:hide-non-claude="hideNonClaude = $event"
+          @update:spawner="dashboardSpawner = $event"
           @update:project="dashboardProject = $event"
           @update:sort-by="dashboardSort = $event"
           @update:group-by="dashboardGroup = $event"
