@@ -12,7 +12,7 @@ const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
 
 <template>
   <footer class="px-5 py-3 border-t border-line flex-shrink-0">
-    <p v-if="actionError" class="text-red-600 dark:text-red-400 text-xs mb-2">
+    <p v-if="actionError" class="text-danger-text text-xs mb-2">
       {{ actionError }}
     </p>
     <p v-if="analysisInfo" class="text-green-600 dark:text-green-400 text-xs mb-2">
@@ -29,7 +29,7 @@ const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
         <textarea
           v-model="additionalPrompt"
           rows="2"
-          class="w-full bg-raised border border-line rounded px-2.5 py-1.5 text-fg text-xs resize-none focus:outline-none focus:border-blue-500 placeholder:text-fg-faint"
+          class="w-full bg-raised border border-line rounded px-2.5 py-1.5 text-fg text-xs resize-none focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent placeholder:text-fg-faint"
           placeholder="Optional instruction for Resume / Retry (e.g. logic change or hint)…"
           @keydown="slashMenuRef?.onKeydown($event)"
         />

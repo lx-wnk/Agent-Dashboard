@@ -23,6 +23,7 @@ func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineO
 		SRRepo:            repo.NewStageRunRepo(client),
 		SRBulkRepo:        rawrepo.NewStageRunBulkRepo(db),
 		PermRepo:          repo.NewPermissionRepo(client),
+		PresetRepo:        repo.NewPermissionPresetRepo(client),
 		AuditRepo:         repo.NewAuditEventRepo(client),
 		AuditEventRepo:    repo.NewAuditEventRepo(client),
 		CfgRepo:           repo.NewPipelineConfigRepo(client),

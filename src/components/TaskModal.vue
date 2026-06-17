@@ -18,6 +18,8 @@ import TaskFooter from './task/TaskFooter.vue'
 import TaskOverviewTab from './task/TaskOverviewTab.vue'
 import TaskPermissionsTab from './task/TaskPermissionsTab.vue'
 import TaskStagesTab from './task/TaskStagesTab.vue'
+import { stageTone } from '../utils/statusColors'
+import AppChip from './ui/AppChip.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
@@ -71,27 +73,22 @@ watch(() => props.task?.id, (id, prevId) => {
     <template v-if="task">
       <header class="flex items-center justify-between px-5 py-4 border-b border-line">
         <div class="flex items-center gap-2.5 flex-wrap">
-          <span
-            class="text-[10px] uppercase font-mono px-2 py-[3px] rounded"
-            :class="{
-              'bg-yellow-500/20 text-yellow-500': task.currentStage === 'on_hold',
-              'bg-green-400/20 text-green-400': task.currentStage === 'done',
-              'bg-red-400/20 text-red-400': task.currentStage === 'cancelled',
-              'bg-raised text-fg-mute': !['on_hold', 'done', 'cancelled'].includes(task.currentStage ?? ''),
-            }"
-          >{{ task.currentStage ? (STAGE_LABELS[task.currentStage] ?? task.currentStage) : '' }}</span>
-          <span v-if="isFailedRun" class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400" title="Latest stage run failed">
+          <AppChip :tone="stageTone(task.currentStage ?? '')" mono uppercase>{{ task.currentStage ? (STAGE_LABELS[task.currentStage] ?? task.currentStage) : '' }}</AppChip>
+          <AppChip v-if="isFailedRun" tone="danger" mono uppercase :bordered="false" class="ml-auto" title="Latest stage run failed">
             RUN FAILED
-          </span>
-          <span
+          </AppChip>
+          <AppChip
             v-if="task.autoRetryCount != null"
-            class="text-[10px] px-1.5 py-px rounded uppercase font-mono bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400"
+            tone="info"
+            mono
+            uppercase
+            :bordered="false"
             :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${modalMaxAutoRetries})`"
-          >Retrying · {{ task.autoRetryCount }}/{{ modalMaxAutoRetries }}{{ modalRetrySecondsLeft > 0 ? ` · ${modalRetrySecondsLeft}s` : '' }}</span>
-          <span class="font-mono text-xs text-blue-600 dark:text-blue-400">{{ task.slug }}</span>
+          >Retrying · {{ task.autoRetryCount }}/{{ modalMaxAutoRetries }}{{ modalRetrySecondsLeft > 0 ? ` · ${modalRetrySecondsLeft}s` : '' }}</AppChip>
+          <span class="font-mono text-xs text-info-text">{{ task.slug }}</span>
           <button
             type="button"
-            class="font-mono text-[10px] px-1.5 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
+            class="font-mono text-[10px] px-1.5 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent flex-shrink-0"
             :aria-label="`Copy task id ${task.id}`"
             :title="modalCopiedId ? 'Copied!' : task.id"
             @click="copyTaskId"
@@ -114,7 +111,7 @@ watch(() => props.task?.id, (id, prevId) => {
           v-bind="tabAttrs(key)"
           type="button"
           class="px-4 py-2.5 text-xs font-semibold bg-transparent border-none border-b-2 border-transparent cursor-pointer hover:text-fg-soft transition-colors"
-          :class="activeTab === key ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' : 'text-fg-mute'"
+          :class="activeTab === key ? 'text-accent border-accent' : 'text-fg-mute'"
           @click="select(key)"
         >
           {{ tabLabel(key) }}

@@ -31,7 +31,7 @@ const badge = computed(() => {
   switch (props.status) {
     case 'running': return { text: 'Running…', cls: 'text-blue-600 dark:text-blue-300' }
     case 'done': return { text: 'Done', cls: 'text-green-600 dark:text-green-400' }
-    case 'failed': return { text: 'Failed', cls: 'text-red-600 dark:text-red-400' }
+    case 'failed': return { text: 'Failed', cls: 'text-danger-text' }
     default: return { text: '', cls: '' }
   }
 })
@@ -59,7 +59,7 @@ const badge = computed(() => {
         <span>{{ PHASE_LABELS[p] }}</span>
       </li>
     </ol>
-    <p v-if="status === 'failed' && error" class="mt-1.5 text-[0.8rem] text-red-500 whitespace-pre-wrap">
+    <p v-if="status === 'failed' && error" class="mt-1.5 text-[0.8rem] text-danger-text whitespace-pre-wrap">
       {{ error }}
     </p>
     <pre

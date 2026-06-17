@@ -92,7 +92,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <div class="mb-3">
           <input
             v-model="search"
-            class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 focus:outline-none focus:border-green-500 placeholder:text-fg-faint"
+            class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent placeholder:text-fg-faint"
             type="text"
             placeholder="Filter by project or prompt..."
           >

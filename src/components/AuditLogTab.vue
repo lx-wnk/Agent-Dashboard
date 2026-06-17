@@ -15,8 +15,8 @@ const error = ref<string | null>(null)
 const expandedId = ref<string | null>(null)
 
 const ACTOR_COLORS: Record<AuditEntry['actor'], string> = {
-  user: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400',
-  agent: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400',
+  user: 'bg-info-soft text-info-text',
+  agent: 'bg-success-soft text-success-text',
   orchestrator: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400',
   system: 'bg-raised text-fg-soft',
 }
@@ -68,7 +68,7 @@ watch(() => props.taskId, load)
     <div v-if="loading" class="text-fg-mute text-center py-6">
       Loading...
     </div>
-    <div v-else-if="error" class="text-red-600 dark:text-red-400">
+    <div v-else-if="error" class="text-danger-text">
       {{ error }}
     </div>
     <div v-else-if="entries.length === 0" class="text-fg-mute text-center py-6">
@@ -110,7 +110,7 @@ watch(() => props.taskId, load)
               <button
                 v-if="entry.details"
                 type="button"
-                class="text-blue-500 hover:underline"
+                class="text-accent hover:underline"
                 @click="toggleDetails(entry.id)"
               >
                 {{ expandedId === entry.id ? 'hide' : 'show' }}

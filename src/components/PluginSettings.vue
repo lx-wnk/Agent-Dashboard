@@ -22,7 +22,7 @@ const CAP_LABELS: Record<string, string> = {
     </p>
 
     <div v-if="loading" class="text-xs text-slate-400" role="status" aria-live="polite">Loading plugins…</div>
-    <div v-else-if="error" class="text-xs text-red-500" role="alert">{{ error }}</div>
+    <div v-else-if="error" class="text-xs text-danger-text" role="alert">{{ error }}</div>
     <div v-else-if="plugins.length === 0" class="text-xs text-slate-400 italic space-y-1">
       <p>No plugins loaded.</p>
       <p>

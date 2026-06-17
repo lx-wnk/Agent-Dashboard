@@ -1,36 +1,50 @@
 <script setup lang="ts">
-import type { PipelineStage, PipelineTask, Project, Spawner, StageRunStatus } from '../types'
+import type { Agent, PipelineStage, PipelineTask, Project, Spawner } from '../types'
 import { useIntervalFn } from '@vueuse/core'
 import { computed, ref } from 'vue'
+import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { shortId, useCopyId } from '../composables/useCopyId'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
-import { runStatusChipClass, stageChipClass } from '../utils/statusColors'
+import { agentStatusTone, runStatusLabel, runStatusTone, stageTone } from '../utils/statusColors'
 import PluginSlot from './PluginSlot.vue'
+import AppBadge from './ui/AppBadge.vue'
+import AppCard from './ui/AppCard.vue'
+import AppChip from './ui/AppChip.vue'
 import WorktreePill from './WorktreePill.vue'
 
-const props = defineProps<{ task: PipelineTask, project?: Project | null, spawner?: Spawner | null }>()
-const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
+const props = defineProps<{
+  task: PipelineTask
+  project?: Project | null
+  spawner?: Spawner | null
+  workingAgent?: Agent | null
+}>()
+const emit = defineEmits<{
+  select: [task: PipelineTask]
+  openChat: [task: PipelineTask]
+  navigateAgent: [sessionId: string]
+}>()
+
+const { getIdentity } = useAgentIdentity()
+
+const agentIdentity = computed(() =>
+  props.workingAgent ? getIdentity(props.workingAgent.projectPath) : null,
+)
+
+const agentBadgeVariant = computed(() => {
+  const tone = agentStatusTone(props.workingAgent?.status ?? '')
+  if (tone === 'success')
+    return 'active'
+  if (tone === 'warning')
+    return 'waiting'
+  return 'idle'
+})
 
 const { copy: copyId, copied: idCopied } = useCopyId(props.task.id)
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-
-const RUN_STATUS_LABELS: Record<StageRunStatus, string> = {
-  pending: 'Pending',
-  running: 'Running',
-  awaiting_user: 'Waiting',
-  on_hold: 'On Hold',
-  done: 'Done',
-  failed: 'Failed',
-  requeued: 'Requeued',
-}
-
-function runStatusLabel(status: StageRunStatus): string {
-  return RUN_STATUS_LABELS[status] ?? status
 }
 
 function stageLabel(stage: PipelineStage): string {
@@ -51,13 +65,17 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
 </script>
 
 <template>
-  <div
-    class="relative bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer transition-all flex flex-col gap-1.5"
-    :class="task.isBlocked ? 'opacity-60 hover:opacity-85' : 'hover:border-blue-500 dark:hover:border-blue-400 hover:-translate-y-px'"
+  <AppCard
+    surface="app"
+    radius="md"
+    :interactive="!task.isBlocked"
+    lift
+    class="relative px-3 py-2.5 cursor-pointer flex flex-col gap-1.5"
+    :class="task.isBlocked ? 'opacity-60 hover:opacity-85' : ''"
   >
     <button
       type="button"
-      class="absolute inset-0 w-full h-full rounded-md focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-[-2px]"
+      class="absolute inset-0 w-full h-full rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-accent"
       :aria-label="`Open task ${task.title}`"
       data-testid="task-card-open"
       @click="$emit('select', task)"
@@ -70,16 +88,16 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
           aria-hidden="true"
           @click.stop
         >⠿</span>
-        <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
+        <span class="font-mono text-[11px] text-info-text font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
         <button
           type="button"
-          class="relative z-10 font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 flex-shrink-0"
+          class="relative z-10 font-mono text-[10px] px-1 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent flex-shrink-0"
           :aria-label="`Copy task id ${task.id}`"
           :title="task.id"
           @click.stop.prevent="copyId()"
         >{{ idCopied ? 'copied' : `#${shortId(task.id)}` }}</button>
       </span>
-      <span class="text-[10px] text-fg-mute">{{ shortDate(task.createdAt) }}</span>
+      <span class="text-[10px] font-mono text-fg-mute">{{ shortDate(task.createdAt) }}</span>
     </div>
     <div class="text-[13px] font-semibold text-fg leading-tight line-clamp-2">
       {{ task.title }}
@@ -89,7 +107,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
     </div>
     <button
       v-if="task.currentStage === 'concept'"
-      class="relative z-10 self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-300/60 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-500 dark:hover:border-blue-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+      class="relative z-10 self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-info-line bg-info-soft text-info-text hover:brightness-105 transition-[filter] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
       @click.stop="emit('openChat', task)"
       @keydown.enter.stop
       @keydown.space.stop
@@ -107,41 +125,57 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
         <span aria-hidden="true">◫</span>{{ project.name }}
       </span>
     </div>
+    <button
+      v-if="workingAgent && agentIdentity"
+      type="button"
+      data-testid="task-agent-chip"
+      class="relative z-10 self-start flex items-center gap-1.5 px-1.5 py-px rounded border border-line bg-raised hover:bg-card transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent text-left"
+      :aria-label="`Jump to agent: ${workingAgent.projectName}`"
+      @click.stop="emit('navigateAgent', workingAgent.sessionId)"
+    >
+      <span class="text-[11px] leading-none" aria-hidden="true">{{ agentIdentity.emoji }}</span>
+      <AppBadge :variant="agentBadgeVariant" />
+      <span class="font-mono text-[10px] text-fg-soft truncate max-w-[120px]">{{ workingAgent.projectName }}</span>
+    </button>
     <div class="flex flex-wrap gap-1 mt-0.5">
-      <span
-        class="text-[10px] font-mono px-1.5 py-px rounded border"
-        :class="stageChipClass(task.currentStage)"
-      >{{ stageLabel(task.currentStage) }}</span>
-      <span
+      <AppChip :tone="stageTone(task.currentStage)" mono>
+        {{ stageLabel(task.currentStage) }}
+      </AppChip>
+      <AppChip
         v-if="task.latestStageRunStatus"
-        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border"
-        :class="runStatusChipClass(task.latestStageRunStatus)"
+        :tone="runStatusTone(task.latestStageRunStatus)"
+        mono
+        uppercase
         :title="`Latest stage run: ${runStatusLabel(task.latestStageRunStatus)}`"
-      >{{ runStatusLabel(task.latestStageRunStatus) }}</span>
-      <span
+      >
+        {{ runStatusLabel(task.latestStageRunStatus) }}
+      </AppChip>
+      <AppChip
         v-if="isRequeued"
-        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700/60"
+        tone="info"
+        mono
+        uppercase
         :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${maxAutoRetries})`"
-      >Retrying · {{ task.autoRetryCount }}/{{ maxAutoRetries }}{{ retrySecondsLeft > 0 ? ` · ${retrySecondsLeft}s` : '' }}</span>
-      <span
+      >Retrying · {{ task.autoRetryCount }}/{{ maxAutoRetries }}{{ retrySecondsLeft > 0 ? ` · ${retrySecondsLeft}s` : '' }}</AppChip>
+      <AppChip
         v-if="task.needsUser && task.latestStageRunStatus === 'awaiting_user'"
-        class="text-[10px] font-mono font-bold uppercase tracking-wide px-1.5 py-px rounded border bg-yellow-100 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700/60"
+        tone="warning"
+        mono
+        uppercase
         title="Agent is paused and waiting for a permission grant"
-      >⚠ Needs Permission</span>
-      <span
+      >⚠ Needs Permission</AppChip>
+      <AppChip
         v-if="task.blockedByPendingPermissions"
-        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
+        tone="warning"
         title="Respawn blocked: previous run still has unresolved permission requests"
-      >&#9888; blocked by permissions</span>
+      >&#9888; blocked by permissions</AppChip>
       <WorktreePill v-if="task.worktreePath" :task-id="task.id" />
-      <span v-if="task.sourceBranch" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line">{{ task.sourceBranch }}</span>
-      <span v-if="task.parentTaskId" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line" title="Follow-up task">↳</span>
-      <span v-if="task.isUnsatisfiable" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50" title="Unsatisfiable dep">⚠ Unsatisfiable dep</span>
-      <span v-else-if="task.isBlocked" class="text-[10px] font-mono px-1.5 py-px rounded border bg-raised text-fg-mute border-line/50" title="Waiting for prerequisite">🔒 Blocked</span>
-      <span v-if="task.currentStage === 'implementation'" class="text-[10px] font-mono px-1.5 py-px rounded border bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/50">
-        max iter {{ task.maxIterations }}
-      </span>
+      <AppChip v-if="task.sourceBranch" tone="neutral" mono>{{ task.sourceBranch }}</AppChip>
+      <AppChip v-if="task.parentTaskId" tone="info" mono title="Follow-up task">↳</AppChip>
+      <AppChip v-if="task.isUnsatisfiable" tone="warning" mono title="Unsatisfiable dep">⚠ Unsatisfiable dep</AppChip>
+      <AppChip v-else-if="task.isBlocked" tone="neutral" mono title="Waiting for prerequisite">🔒 Blocked</AppChip>
+      <AppChip v-if="task.currentStage === 'implementation'" tone="warning" mono>max iter {{ task.maxIterations }}</AppChip>
       <PluginSlot name="kanban-card-badge" :ctx="{ task }" />
     </div>
-  </div>
+  </AppCard>
 </template>

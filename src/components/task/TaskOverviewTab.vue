@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import type { PipelineTask } from '../../types'
+import type { PipelineStage, PipelineTask } from '../../types'
 import { computed, ref, watch } from 'vue'
 import { useInjectedTask, useInjectedTaskDetails } from '../../composables/taskModalContext'
 import { useTaskAssignment } from '../../composables/useTaskAssignment'
-import { runStatusChipClass } from '../../utils/statusColors'
+import { runStatusLabel, runStatusTone } from '../../utils/statusColors'
+import { STAGE_LABELS } from '../../utils/stageLabels'
 import { activeRuntime, formatCents, formatTaskDate, taskRuntime } from '../../utils/taskFormat'
 import AgentChatStream from '../AgentChatStream.vue'
 import GitStatusPanel from '../GitStatusPanel.vue'
 import RefineStatusPanel from '../RefineStatusPanel.vue'
 import StageOutputView from '../StageOutputView.vue'
 import AppButton from '../ui/AppButton.vue'
+import AppChip from '../ui/AppChip.vue'
 import WorktreeCommandRunner from '../WorktreeCommandRunner.vue'
 import WorktreePanel from '../WorktreePanel.vue'
 import TaskPendingRequests from './TaskPendingRequests.vue'
@@ -205,7 +207,7 @@ watch(
       <h4 class="text-[11px] font-semibold uppercase tracking-[0.5px] text-fg-mute">
         Project &amp; Spawner
       </h4>
-      <p v-if="assignError" class="text-[11px] text-red-600 dark:text-red-400">
+      <p v-if="assignError" class="text-[11px] text-danger-text">
         {{ assignError }}
       </p>
       <div class="grid grid-cols-2 gap-3">
@@ -226,7 +228,7 @@ watch(
               :id="`task-modal-project-${task.id}`"
               :value="task.projectId ?? ''"
               :disabled="isAssigningProject"
-              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
               @change="onProjectChange"
             >
               <option value="">
@@ -253,7 +255,7 @@ watch(
               :id="`task-modal-spawner-${task.id}`"
               :value="task.spawnerId ?? ''"
               :disabled="isAssigningSpawner"
-              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
               @change="onSpawnerChange"
             >
               <option value="">
@@ -282,9 +284,11 @@ watch(
         Current Output
       </div>
       <div class="flex items-center gap-2 flex-wrap mb-2">
-        <span class="font-mono text-[10px] uppercase bg-raised text-fg-mute px-2 py-0.5 rounded font-semibold">{{ latestStageRun.stage }}</span>
+        <span class="font-mono text-[10px] uppercase bg-raised text-fg-mute px-2 py-0.5 rounded font-semibold">{{ STAGE_LABELS[latestStageRun.stage as PipelineStage] ?? latestStageRun.stage }}</span>
         <span class="text-[10px] text-fg-mute font-mono">iter {{ latestStageRun.iteration }}</span>
-        <span class="text-[10px] px-1.5 py-px rounded uppercase ml-auto font-mono" :class="runStatusChipClass(latestStageRun.status)">{{ latestStageRun.status }}</span>
+        <AppChip :tone="runStatusTone(latestStageRun.status)" mono uppercase class="ml-auto">
+          {{ runStatusLabel(latestStageRun.status) }}
+        </AppChip>
         <span class="text-[11px] text-fg-mute ml-auto">
           {{ formatTaskDate(latestStageRun.startedAt) }}
           <template v-if="latestStageRun.endedAt"> → {{ formatTaskDate(latestStageRun.endedAt) }}</template>

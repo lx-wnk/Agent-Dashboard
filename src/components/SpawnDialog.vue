@@ -248,7 +248,7 @@ onUnmounted(() => {
 
       <div class="mb-4">
         <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-project">Project</label>
-        <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
+        <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent">
           <option
             v-for="p in sortedProjects"
             :key="p.id"
@@ -275,7 +275,7 @@ onUnmounted(() => {
         <select
           id="spawn-folder"
           :value="dlg.selectedFolderId.value ?? ''"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
           @change="dlg.selectFolder(($event.target as HTMLSelectElement).value)"
         >
           <option v-for="f in dlg.folders.value" :key="f.id" :value="f.id">
@@ -290,7 +290,7 @@ onUnmounted(() => {
           id="spawn-spawner"
           v-model="dlg.spawnerId.value"
           data-testid="spawn-spawner"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
         >
           <option value="">
             {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
@@ -318,7 +318,7 @@ onUnmounted(() => {
           id="spawn-permission-mode"
           v-model="permissionMode"
           data-testid="spawn-permission-mode"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
         >
           <option value="default">
             Ask for permission (default)
@@ -349,14 +349,14 @@ onUnmounted(() => {
         The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
       </div>
 
-      <div v-if="bypassConfirmed" role="alert" data-testid="bypass-confirm-msg" class="text-xs text-red-600 dark:text-red-400 font-semibold mb-2">
+      <div v-if="bypassConfirmed" role="alert" data-testid="bypass-confirm-msg" class="text-xs text-danger-text font-semibold mb-2">
         Click "Spawn Agent" again to confirm.
       </div>
 
       <p v-if="spawnStatusMsg" class="text-xs text-green-600 dark:text-green-400 mt-1 leading-snug">
         {{ spawnStatusMsg }}
       </p>
-      <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mt-1 leading-snug whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto">
+      <p v-if="errorMsg" class="text-xs text-danger-text mt-1 leading-snug whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto">
         {{ errorMsg }}
       </p>
     </form>

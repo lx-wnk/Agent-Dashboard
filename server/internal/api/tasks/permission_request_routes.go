@@ -281,6 +281,27 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		return fmt.Errorf("bulk_perm_req: list perms: %w", err)
 	}
 
+	// Load presets for this project cwd; a nil presetRepo or lookup failure is non-fatal.
+	var presets []*ent.PermissionPreset
+	if h.presetRepo != nil {
+		task, taskErr := h.taskRepo.GetByID(r.Context(), sr.TaskID)
+		if taskErr != nil {
+			slog.Warn("bulk_perm_req: preset lookup: failed to get task", "taskID", sr.TaskID, "err", taskErr)
+		} else {
+			var userID *string
+			if payload, ok := auth.PayloadFromContext(r.Context()); ok && payload.Sub != "" {
+				s := payload.Sub
+				userID = &s
+			}
+			ps, psErr := h.presetRepo.ListForCwd(r.Context(), userID, task.Cwd)
+			if psErr != nil {
+				slog.Warn("bulk_perm_req: preset lookup: ListForCwd failed", "cwd", task.Cwd, "err", psErr)
+			} else {
+				presets = ps
+			}
+		}
+	}
+
 	type result struct {
 		Tool        string  `json:"tool"`
 		Pattern     *string `json:"pattern"`
@@ -295,7 +316,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		if e.Tool == "" {
 			continue
 		}
-		if isCovered(e.Tool, e.Pattern, effectivePerms) {
+		if isCovered(e.Tool, e.Pattern, effectivePerms) || presetCovers(e.Tool, e.Pattern, presets) {
 			results = append(results, result{Tool: e.Tool, Pattern: e.Pattern, AutoGranted: true})
 			continue
 		}
@@ -332,6 +353,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		Outcome       string   `json:"outcome"`
 		PermissionIDs []string `json:"permissionIds"`
 		All           bool     `json:"all"`
+		Remember      bool     `json:"remember"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -409,6 +431,32 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID); err != nil {
 			slog.Warn("bulk_resolve: ResumeFromUser failed", "taskID", body.TaskID, "err", err)
 		}
+
+		// Persist presets so future requests for this project cwd are auto-approved.
+		if body.Remember && h.presetRepo != nil && resolvedCount > 0 {
+			task, taskErr := h.taskRepo.GetByID(r.Context(), body.TaskID)
+			if taskErr != nil {
+				slog.Warn("bulk_resolve: remember: failed to get task", "taskID", body.TaskID, "err", taskErr)
+			} else {
+				var userID *string
+				if payload, ok := auth.PayloadFromContext(r.Context()); ok && payload.Sub != "" {
+					s := payload.Sub
+					userID = &s
+				}
+				presetInputs := make([]repo.UpsertPresetInput, 0, len(entries))
+				for _, e := range entries {
+					presetInputs = append(presetInputs, repo.UpsertPresetInput{
+						UserID:     userID,
+						ProjectCwd: task.Cwd,
+						Tool:       e.Tool,
+						Pattern:    e.Pattern,
+					})
+				}
+				if err := h.presetRepo.UpsertBatch(r.Context(), presetInputs); err != nil {
+					slog.Warn("bulk_resolve: remember: UpsertBatch failed", "taskID", body.TaskID, "err", err)
+				}
+			}
+		}
 	}
 
 	h.broadcastEnrichedUpdate(r.Context(), body.TaskID)
@@ -429,6 +477,27 @@ func isCovered(tool string, pattern *string, perms []*ent.TaskPermission) bool {
 			return true
 		}
 		// Pattern required — must match exactly or perm has no pattern restriction.
+		if p.Pattern == nil {
+			return true
+		}
+		if *p.Pattern == *pattern {
+			return true
+		}
+	}
+	return false
+}
+
+// presetCovers checks whether a tool+pattern request is covered by a stored preset.
+// A preset with nil Pattern covers any request pattern for that tool (wildcard);
+// otherwise the pattern must match exactly. Mirrors isCovered's semantics.
+func presetCovers(tool string, pattern *string, presets []*ent.PermissionPreset) bool {
+	for _, p := range presets {
+		if p.Tool != tool {
+			continue
+		}
+		if pattern == nil {
+			return true
+		}
 		if p.Pattern == nil {
 			return true
 		}

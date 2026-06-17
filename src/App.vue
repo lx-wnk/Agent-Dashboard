@@ -4,6 +4,8 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
+import AgentTriageBand from './components/AgentTriageBand.vue'
+import AutoApprovingStrip from './components/AutoApprovingStrip.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import BacklogForm from './components/BacklogForm.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
@@ -21,15 +23,19 @@ import SpotlightSearch from './components/SpotlightSearch.vue'
 import AppModal from './components/ui/AppModal.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
+import { usePermissionResolve } from './composables/usePermissionResolve'
 import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
 import { useTasks } from './composables/useTasks'
-import { useTodayCost } from './composables/useTodayCost'
 import { useTheme } from './composables/useTheme'
+import { useTodayCost } from './composables/useTodayCost'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import { formatCost, formatTokens, totalTokenCount } from './utils/format'
+import { formatCost, formatTokens, secondsSince, totalTokenCount } from './utils/format'
+import { needsAttention } from './utils/attention'
+import { groupAgents, sortAgents } from './utils/agentGroup'
+import { useNow } from './composables/useNow'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
@@ -49,8 +55,9 @@ const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
-const { activeView, dashboardLayout } = useViewState()
+const { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject } = useViewState()
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
+const { resolveAgent, approveAll } = usePermissionResolve()
 
 // F-UIUX-011: 5 s default duration; hover pause/resume keeps toast visible while pointer rests on it
 const TOAST_DURATION_MS = 5000
@@ -58,29 +65,17 @@ const toastMessage = ref<string | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 let toastPaused = false
 
-// UX-08: Shift+D toggles dark/light mode globally; Cmd/Ctrl+B toggles sidebar pin
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'D' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    const tag = (e.target as HTMLElement)?.tagName
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !(e.target as HTMLElement).isContentEditable)
-      toggleTheme()
-  }
-  handleSidebarShortcut(e)
-}
-
 onMounted(() => {
   loadUser()
   void loadServerConfig()
-  window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown)
   if (toastTimer)
     clearTimeout(toastTimer)
 })
 
-const { agents, costTrend, filteredAgents, selectedAgent, isLoading, error, searchQuery, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
+const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 // Today's persisted spend — reuses the shared cost-summary logic so the footer
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
@@ -126,6 +121,26 @@ const totalTokensLabel = computed(() => formatTokens(totalTokens.value))
 
 const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatCost(todayUsd.value)))
 
+const { nowMs } = useNow()
+// Dashboard roster: project filter → sort → optional grouping. Project options
+// list every known project (pre-filter) so the dropdown stays stable.
+const rosterAgents = computed(() => {
+  const base = dashboardProject.value === 'all'
+    ? filteredAgents.value
+    : filteredAgents.value.filter(a => a.projectName === dashboardProject.value)
+  return sortAgents(base, dashboardSort.value, nowMs.value)
+})
+const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
+const rosterAttentionCount = computed(() =>
+  rosterAgents.value.filter(a => needsAttention(a, secondsSince(a.lastActivity, nowMs.value))).length,
+)
+const projectOptions = computed(() => [
+  { value: 'all', label: 'All projects' },
+  ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: n })),
+])
+
+const autoApprovingStrip = ref<InstanceType<typeof AutoApprovingStrip> | null>(null)
+
 const showSpawnDialog = ref(false)
 const activeConceptTask = ref<PipelineTask | null>(null)
 const showRefinementChat = ref(false)
@@ -170,6 +185,85 @@ function showToast(msg: string) {
   startToastTimer()
 }
 
+// Keyboard focus for the triage band: `n` cycles attention agents (wrapping).
+const focusedSessionId = ref<string | null>(null)
+// Guards the keyboard resolve shortcuts (a/d/⇧A) against rapid double-fire.
+const kbResolving = ref(false)
+
+function focusNextAttention() {
+  const list = attentionAgents.value
+  if (!list.length)
+    return
+  const idx = list.findIndex(a => a.sessionId === focusedSessionId.value)
+  focusedSessionId.value = list[(idx + 1) % list.length].sessionId
+}
+
+function resolveFocused(outcome: 'granted' | 'denied') {
+  if (kbResolving.value)
+    return
+  const focused = attentionAgents.value.find(a => a.sessionId === focusedSessionId.value)
+  if (!focused?.pipelineTaskId || !focused.pendingPermissions?.length)
+    return
+  kbResolving.value = true
+  void resolveAgent(focused, outcome).then((err) => {
+    if (err)
+      showToast(err)
+  }).finally(() => { kbResolving.value = false })
+}
+
+// Shift+D theme + Cmd/Ctrl+B sidebar are global; n/a/d/⇧A/c act on the triage
+// band and are gated to the dashboard with no overlay open and no field focused.
+function handleKeydown(e: KeyboardEvent) {
+  handleSidebarShortcut(e)
+
+  const tag = (e.target as HTMLElement)?.tagName
+  const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement).isContentEditable
+  // key normalised so CapsLock doesn't break the lower-case shortcuts
+  const key = e.key.toLowerCase()
+
+  if (key === 'd' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping) {
+    toggleTheme()
+    return
+  }
+
+  // Any open modal/dialog (incl. Spotlight) suppresses the single-key shortcuts.
+  const overlayOpen = selectedAgent.value || showSettings.value || showSpawnDialog.value
+    || showBacklogForm.value || showSessions.value || showRefinementChat.value || activeConceptTask.value
+    || document.querySelector('[role="dialog"], [aria-modal="true"]') !== null
+  if (activeView.value !== 'dashboard' || overlayOpen || isTyping || e.ctrlKey || e.metaKey || e.altKey)
+    return
+
+  if (key === 'n') {
+    e.preventDefault()
+    focusNextAttention()
+  }
+  else if (key === 'a' && e.shiftKey) {
+    e.preventDefault()
+    if (kbResolving.value)
+      return
+    kbResolving.value = true
+    void approveAll(attentionAgents.value.filter(a => a.pipelineTaskId && a.pendingPermissions?.length)).then((err) => {
+      if (err)
+        showToast(err)
+    }).finally(() => { kbResolving.value = false })
+  }
+  else if (key === 'a') {
+    e.preventDefault()
+    resolveFocused('granted')
+  }
+  else if (key === 'd') {
+    e.preventDefault()
+    resolveFocused('denied')
+  }
+  else if (key === 'c') {
+    e.preventDefault()
+    dashboardLayout.value = dashboardLayout.value === 'cards' ? 'list' : 'cards'
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
+
 function navigateTo(target: { agent?: Agent, taskId?: string }) {
   selectAgent(null)
   selectTask(null)
@@ -198,9 +292,9 @@ interface QuotaInfo {
 
 const quota = ref<QuotaInfo | null>(null)
 
-const quotaPct = computed(() => {
+const quotaPct = computed<number | null>(() => {
   if (!quota.value?.limit)
-    return 0
+    return null
   return Math.min(100, Math.round(quota.value.tokensUsed / quota.value.limit * 100))
 })
 
@@ -220,6 +314,7 @@ onMounted(fetchQuota)
       <template #sidebar>
         <AppSidebar
           :agent-count="filteredAgents.length"
+          :attention-count="attentionCount"
           :task-count="tasks.length"
           :total-cost-label="totalCostLabel"
           :total-tokens-label="totalTokensLabel"
@@ -236,6 +331,7 @@ onMounted(fetchQuota)
 
       <template #topbar>
         <AppTopbar
+          @open-settings="showSettings = true"
           :active-view="activeView"
           :search-query="searchQuery"
           :live="live"
@@ -245,7 +341,7 @@ onMounted(fetchQuota)
             <button
               v-if="activeView === 'pipeline'"
               type="button"
-              class="bg-accent text-white rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              class="bg-accent text-white rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
               @click="openNewTask"
             >
               + New Task
@@ -253,7 +349,7 @@ onMounted(fetchQuota)
             <button
               v-else-if="activeView === 'dashboard'"
               type="button"
-              class="bg-accent text-white rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              class="bg-accent text-white rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
               @click="showSpawnDialog = true"
             >
               + New Agent
@@ -267,33 +363,46 @@ onMounted(fetchQuota)
           v-if="activeView === 'dashboard'"
           :layout="dashboardLayout"
           :hide-non-claude="hideNonClaude"
+          :project="dashboardProject"
+          :sort-by="dashboardSort"
+          :group-by="dashboardGroup"
+          :project-options="projectOptions"
+          :count="rosterAgents.length"
+          :attention-count="rosterAttentionCount"
           @update:layout="dashboardLayout = $event"
           @update:hide-non-claude="hideNonClaude = $event"
+          @update:project="dashboardProject = $event"
+          @update:sort-by="dashboardSort = $event"
+          @update:group-by="dashboardGroup = $event"
         />
 
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
         </div>
-        <p v-else-if="error" class="text-center py-12 text-red-600 dark:text-red-400">
+        <p v-else-if="error" class="text-center py-12 text-danger-text">
           Error: {{ error }}
         </p>
 
         <template v-else-if="activeView === 'dashboard'">
+          <AgentTriageBand :agents="attentionAgents" :focused-session-id="focusedSessionId" @select="selectAgent" @toast="showToast" @remembered="autoApprovingStrip?.load()" />
+          <AutoApprovingStrip ref="autoApprovingStrip" />
           <template v-if="dashboardLayout === 'list'">
-            <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
-            <AgentTable v-else :agents="filteredAgents" @select="selectAgent" />
+            <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
+            <AgentTable v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" />
           </template>
           <template v-else>
-            <EmptyAgentState v-if="filteredAgents.length === 0" :search-query="searchQuery" />
-            <AgentCardGrid v-else :agents="filteredAgents" @select="selectAgent" />
+            <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
+            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" />
           </template>
           <ChannelScriptCallout />
         </template>
 
         <PipelineBoard
           v-else-if="activeView === 'pipeline'"
+          :agents="agents"
           @select="selectTask"
           @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
+          @navigate-agent="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"
         />
         <CostAnalyticsView v-else-if="activeView === 'cost'" />
         <WorkflowsView
@@ -303,7 +412,7 @@ onMounted(fetchQuota)
       </div>
 
       <template #statusbar>
-        <AppStatusBar :cost-delta="costDelta" :today-cost-label="todayCostLabel" />
+        <AppStatusBar :cost-delta="costDelta" :today-cost-label="todayCostLabel" :quota-pct="quotaPct" />
       </template>
     </AppShell>
 

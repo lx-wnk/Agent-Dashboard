@@ -4,6 +4,7 @@ package agentbroadcast
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	sdk "github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -16,14 +17,18 @@ import (
 // agent.SessionID → StageRunRepo.GetBySessionID → stageRun.TaskID →
 // TaskRepo.GetByID → task.Title.
 //
+// When perms is non-nil, it also attaches any pending permission requests for
+// the resolved stage run to PendingPermissions.
+//
 // The crossing is one-way (pipeline → agent annotation) and best-effort: nil
 // repos, a session with no stage_run (the common case for ad-hoc sessions), or
-// any query error leaves PipelineTaskID/Title empty without failing the scan.
-// This is the Go re-implementation of the former TS-era enrichWithPipelineTask.
+// any query error leaves PipelineTaskID/Title/PendingPermissions empty without
+// failing the scan. This is the Go re-implementation of the former TS-era
+// enrichWithPipelineTask.
 //
 // agentbroadcast is a peer of merger and may import db/repo, which keeps merger
 // itself free of any db dependency (Go layer direction).
-func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo) merger.Enricher {
+func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, perms repo.PermissionRepo) merger.Enricher {
 	return func(ctx context.Context, agents []sdk.Agent) {
 		if stageRuns == nil || tasks == nil {
 			return
@@ -53,6 +58,25 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo) m
 				continue
 			}
 			agents[i].PipelineTaskTitle = task.Title
+
+			if perms != nil {
+				pendingReqs, perr := perms.ListPendingForStageRun(ctx, sr.ID)
+				if perr != nil {
+					slog.Debug("pipeline enricher: pending permissions lookup failed", "stageRunId", sr.ID, "err", perr)
+				} else if len(pendingReqs) > 0 {
+					pp := make([]sdk.PendingPermission, len(pendingReqs))
+					for j, req := range pendingReqs {
+						pp[j] = sdk.PendingPermission{
+							ID:          req.ID,
+							Tool:        req.Tool,
+							Pattern:     req.Pattern,
+							Reason:      req.Reason,
+							RequestedAt: req.RequestedAt.UTC().Format(time.RFC3339),
+						}
+					}
+					agents[i].PendingPermissions = pp
+				}
+			}
 		}
 	}
 }

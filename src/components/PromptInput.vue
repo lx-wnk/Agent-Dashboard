@@ -187,18 +187,18 @@ defineExpose({ focus })
         :class="{ 'bg-raised': i === selectedIndex }"
         @mousedown.prevent="selectSuggestion(cmd)"
       >
-        <span class="text-blue-600 dark:text-blue-400 font-semibold flex-shrink-0">{{ cmd.name }}</span>
+        <span class="text-accent font-semibold flex-shrink-0">{{ cmd.name }}</span>
         <span class="text-fg-mute text-xs">{{ cmd.description }}</span>
         <span v-if="cmd.usage" class="text-fg-faint text-[10px] ml-1">{{ cmd.usage }}</span>
         <span v-if="cmd.requiresTask && cmd.disabled" class="text-amber-600 text-[10px] ml-auto">requires linked task</span>
       </button>
     </div>
     <div
-      class="border-t border-line flex items-end"
+      class="border-t border-line flex items-end focus-within:ring-[3px] focus-within:ring-accent"
       :class="variant === 'full' ? 'px-4 py-2.5 gap-2 flex-shrink-0' : 'px-3 py-2 gap-1.5 items-center'"
     >
       <span
-        class="text-blue-600 dark:text-blue-400 flex-shrink-0 pb-0.5"
+        class="text-accent flex-shrink-0 pb-0.5"
         :class="variant === 'full' ? 'text-[14px]' : 'text-[13px] pb-0'"
       >❯</span>
       <textarea
@@ -212,7 +212,7 @@ defineExpose({ focus })
         :aria-expanded="showSuggestions"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
-        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono outline-none placeholder:text-fg-faint disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
+        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono focus-visible:outline-none placeholder:text-fg-faint disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
         @input="autoResize"
       />
@@ -226,7 +226,7 @@ defineExpose({ focus })
         :aria-expanded="showSuggestions"
         :aria-describedby="hintId"
         :aria-controls="showSuggestions ? listboxId : undefined"
-        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono outline-none placeholder:text-fg-faint disabled:opacity-50"
+        class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono focus-visible:outline-none placeholder:text-fg-faint disabled:opacity-50"
         @keydown="onKeydown"
       >
       <button
@@ -236,7 +236,7 @@ defineExpose({ focus })
         class="text-white border-none rounded font-bold cursor-pointer flex-shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
         :class="[
           variant === 'full' ? 'px-3.5 py-1.5 text-[14px]' : 'px-2.5 py-1 text-[13px]',
-          isResumeMode ? 'bg-amber-600' : 'bg-blue-600',
+          isResumeMode ? 'bg-amber-600' : 'bg-accent',
         ]"
         :disabled="isSending || promptInput.trim().length === 0"
         @click="handleSend"
@@ -292,7 +292,7 @@ defineExpose({ focus })
       class="text-[11px]"
       :class="[
         variant === 'full' ? 'px-4 pb-2' : 'px-3 pb-1.5 pt-0.5',
-        sendStatus === 'sent' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+        sendStatus === 'sent' ? 'text-success-text' : 'text-danger-text',
       ]"
     >
       {{ sendStatus === 'sent' ? 'Sent' : sendError }}

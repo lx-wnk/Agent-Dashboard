@@ -157,7 +157,7 @@ onMounted(fetchPrompts)
       </AppButton>
     </div>
 
-    <p v-if="loadError" class="text-xs text-red-600 dark:text-red-400 mb-3">
+    <p v-if="loadError" class="text-xs text-danger-text mb-3">
       {{ loadError }}
     </p>
 
@@ -248,7 +248,7 @@ onMounted(fetchPrompts)
           <select
             id="sp-stage"
             v-model="form.stage"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
           >
             <option v-for="s in STAGES" :key="s" :value="s">
               {{ s === '' ? 'All stages' : s.replace(/_/g, ' ') }}
@@ -263,7 +263,7 @@ onMounted(fetchPrompts)
             id="sp-priority"
             v-model.number="form.priority"
             type="number"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
           >
         </div>
         <div class="flex flex-col gap-1">
@@ -275,10 +275,10 @@ onMounted(fetchPrompts)
             v-model="form.content"
             rows="8"
             placeholder="Enter custom system prompt text…"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500 font-mono resize-y"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent font-mono resize-y"
           />
         </div>
-        <p v-if="saveError" class="text-xs text-red-600 dark:text-red-400">
+        <p v-if="saveError" class="text-xs text-danger-text">
           {{ saveError }}
         </p>
       </form>

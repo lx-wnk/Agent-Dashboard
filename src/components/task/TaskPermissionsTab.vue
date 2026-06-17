@@ -41,7 +41,7 @@ async function submitGrant(): Promise<void> {
         <input
           id="perm-tool"
           v-model="newPermTool"
-          class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1.5 text-fg text-xs focus:outline-none focus:border-blue-500"
+          class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1.5 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
           placeholder="Tool (e.g. Bash, Write)"
           @keydown.enter="submitGrant"
         >
@@ -49,7 +49,7 @@ async function submitGrant(): Promise<void> {
         <input
           id="perm-pattern"
           v-model="newPermPattern"
-          class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1.5 text-fg text-xs focus:outline-none focus:border-blue-500"
+          class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1.5 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
           placeholder="Pattern (optional, e.g. npm run *)"
           @keydown.enter="submitGrant"
         >

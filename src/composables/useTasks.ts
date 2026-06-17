@@ -358,11 +358,12 @@ export async function bulkResolvePermissionRequests(
   taskId: string,
   permissionIds: string[],
   outcome: 'granted' | 'denied',
+  remember = false,
 ): Promise<BulkResolveResponse> {
   const res = await fetch(`/api/permission-requests/bulk-resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ taskId, outcome, permissionIds }),
+    body: JSON.stringify({ taskId, outcome, permissionIds, remember }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))

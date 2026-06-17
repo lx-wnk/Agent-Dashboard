@@ -34,7 +34,7 @@ const folderSuggestions = ref<ProjectFolder[]>([])
 const isSubmitting = ref(false)
 const errorMsg = ref('')
 
-const fieldClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500'
+const fieldClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
 
 const sortedProjects = computed(() =>
   projects.value.slice().sort((a, b) => a.name.localeCompare(b.name)),
@@ -172,26 +172,25 @@ async function onCreateAndRefine(): Promise<void> {
 
     <div class="flex flex-col gap-1">
       <label for="details-title" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Title</label>
-      <input
+      <AppInput
         id="details-title"
         data-testid="details-title"
-        :value="title"
+        :model-value="title"
         placeholder="What should the agent do?"
-        :class="fieldClass"
         @input="onTitleInput"
-      >
+      />
     </div>
 
     <div class="flex flex-col gap-1">
       <label for="details-slug" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Slug</label>
-      <input
+      <AppInput
         id="details-slug"
         data-testid="details-slug"
-        :value="slug"
+        :model-value="slug"
         placeholder="task-slug"
-        :class="fieldClass"
+        class="font-mono"
         @input="onSlugInput"
-      >
+      />
     </div>
 
     <AppInput v-model="description" type="textarea" :rows="3" label="Description" placeholder="Additional context (optional)" />
@@ -225,7 +224,7 @@ async function onCreateAndRefine(): Promise<void> {
 
     <PermissionTemplatePicker v-model="selectedTemplate" />
 
-    <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400">
+    <p v-if="errorMsg" class="text-xs text-danger-text">
       {{ errorMsg }}
     </p>
 

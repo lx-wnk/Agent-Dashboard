@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentSessionStatusClass, runStatusChipClass, stageChipClass, statusLabel } from './statusColors'
+import { agentStatusTone, runStatusTone, stageTone, statusLabel } from './statusColors'
 
 describe('statusLabel', () => {
   it('returns human-readable labels for known statuses', () => {
@@ -18,107 +18,32 @@ describe('statusLabel', () => {
   })
 })
 
-describe('stageChipClass', () => {
-  it('returns a non-empty string for every known pipeline stage', () => {
-    const knownStages = ['on_hold', 'implementation', 'done', 'cancelled']
-    knownStages.forEach((stage) => {
-      const cls = stageChipClass(stage)
-      expect(typeof cls).toBe('string')
-      expect(cls.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('returns a non-empty fallback string for unknown stages', () => {
-    const cls = stageChipClass('some-future-stage')
-    expect(typeof cls).toBe('string')
-    expect(cls.length).toBeGreaterThan(0)
-  })
-
-  it('done stage contains green color classes', () => {
-    expect(stageChipClass('done')).toContain('green')
-  })
-
-  it('cancelled stage contains red color classes', () => {
-    expect(stageChipClass('cancelled')).toContain('red')
-  })
-
-  it('on_hold stage contains yellow color classes', () => {
-    expect(stageChipClass('on_hold')).toContain('yellow')
-  })
-
-  it('implementation stage contains blue color classes', () => {
-    expect(stageChipClass('implementation')).toContain('blue')
-  })
+describe('stageTone', () => {
+  it('done → success', () => expect(stageTone('done')).toBe('success'))
+  it('cancelled → danger', () => expect(stageTone('cancelled')).toBe('danger'))
+  it('on_hold → warning', () => expect(stageTone('on_hold')).toBe('warning'))
+  it('implementation → info', () => expect(stageTone('implementation')).toBe('info'))
+  it('unknown → neutral', () => expect(stageTone('some-future-stage')).toBe('neutral'))
 })
 
-describe('runStatusChipClass', () => {
-  it('returns a non-empty string for every known run status', () => {
-    const knownStatuses = ['running', 'done', 'failed', 'on_hold', 'awaiting_user']
-    knownStatuses.forEach((status) => {
-      const cls = runStatusChipClass(status)
-      expect(typeof cls).toBe('string')
-      expect(cls.length).toBeGreaterThan(0)
-    })
+describe('runStatusTone', () => {
+  it('running → info', () => expect(runStatusTone('running')).toBe('info'))
+  it('done → success', () => expect(runStatusTone('done')).toBe('success'))
+  it('failed → danger', () => expect(runStatusTone('failed')).toBe('danger'))
+  it('on_hold → warning', () => expect(runStatusTone('on_hold')).toBe('warning'))
+  it('awaiting_user → warning', () => expect(runStatusTone('awaiting_user')).toBe('warning'))
+  it('on_hold and awaiting_user return the same tone', () => {
+    expect(runStatusTone('on_hold')).toBe(runStatusTone('awaiting_user'))
   })
-
-  it('pending status returns fallback class', () => {
-    const cls = runStatusChipClass('pending')
-    expect(typeof cls).toBe('string')
-    expect(cls.length).toBeGreaterThan(0)
-  })
-
-  it('returns a non-empty fallback for truly unknown statuses', () => {
-    const cls = runStatusChipClass('truly-unknown-status')
-    expect(typeof cls).toBe('string')
-    expect(cls.length).toBeGreaterThan(0)
-  })
-
-  it('running status contains blue color classes', () => {
-    expect(runStatusChipClass('running')).toContain('blue')
-  })
-
-  it('done status contains green color classes', () => {
-    expect(runStatusChipClass('done')).toContain('green')
-  })
-
-  it('failed status contains red color classes', () => {
-    expect(runStatusChipClass('failed')).toContain('red')
-  })
-
-  it('awaiting_user status contains yellow color classes', () => {
-    expect(runStatusChipClass('awaiting_user')).toContain('yellow')
-  })
-
-  it('on_hold and awaiting_user return identical classes', () => {
-    expect(runStatusChipClass('on_hold')).toBe(runStatusChipClass('awaiting_user'))
-  })
+  it('pending → neutral', () => expect(runStatusTone('pending')).toBe('neutral'))
+  it('unknown → neutral', () => expect(runStatusTone('truly-unknown')).toBe('neutral'))
 })
 
-describe('agentSessionStatusClass', () => {
-  it('returns a non-empty string for every known agent status', () => {
-    const knownStatuses = ['active', 'waiting', 'idle', 'completed', 'error']
-    knownStatuses.forEach((status) => {
-      const cls = agentSessionStatusClass(status)
-      expect(typeof cls).toBe('string')
-      expect(cls.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('returns a non-empty fallback for unknown statuses', () => {
-    const cls = agentSessionStatusClass('unknown')
-    expect(typeof cls).toBe('string')
-    expect(cls.length).toBeGreaterThan(0)
-  })
-
-  it('active status contains green color classes', () => {
-    expect(agentSessionStatusClass('active')).toContain('green')
-  })
-
-  it('waiting status contains yellow color classes', () => {
-    expect(agentSessionStatusClass('waiting')).toContain('yellow')
-  })
-
-  it('error status contains red color classes', () => {
-    expect(agentSessionStatusClass('error')).toContain('red')
-  })
+describe('agentStatusTone', () => {
+  it('active → success', () => expect(agentStatusTone('active')).toBe('success'))
+  it('completed → success', () => expect(agentStatusTone('completed')).toBe('success'))
+  it('waiting → warning', () => expect(agentStatusTone('waiting')).toBe('warning'))
+  it('error → danger', () => expect(agentStatusTone('error')).toBe('danger'))
+  it('idle → neutral', () => expect(agentStatusTone('idle')).toBe('neutral'))
+  it('unknown → neutral', () => expect(agentStatusTone('unknown')).toBe('neutral'))
 })

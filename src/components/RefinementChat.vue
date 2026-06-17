@@ -315,7 +315,7 @@ function isPhaseMarker(idx: number): string | null {
       </div>
 
       <!-- Error -->
-      <div v-if="error" class="px-5 py-2 text-red-500 text-[0.82rem] shrink-0">
+      <div v-if="error" class="px-5 py-2 text-danger-text text-[0.82rem] shrink-0">
         {{ error }}
       </div>
 
@@ -374,7 +374,7 @@ function isPhaseMarker(idx: number): string | null {
         <textarea
           ref="textareaEl"
           v-model="inputText"
-          class="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-fg placeholder:text-fg-faint text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 disabled:opacity-45"
+          class="flex-1 px-3 py-2 rounded-xl border border-line bg-raised text-fg placeholder:text-fg-faint text-[13px] font-mono leading-relaxed resize-none overflow-y-auto min-h-9 max-h-40 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-45"
           placeholder="Message..."
           rows="1"
           :disabled="isStreaming || slotBusy"

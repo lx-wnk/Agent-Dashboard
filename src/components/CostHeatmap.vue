@@ -1,10 +1,24 @@
 <script setup lang="ts">
 import { useCostHeatmap } from '../composables/useCostHeatmap'
+import { useTheme } from '../composables/useTheme'
+import { chartColors } from '../utils/chartColors'
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`)
 
 const { grid, loading, error } = useCostHeatmap()
+
+const { theme } = useTheme()
+
+// Derive rgba from the token each time the cell is rendered; re-evaluates on theme toggle.
+function heatmapColor(opacity: number): string {
+  void theme.value // re-evaluate when the theme toggles
+  // chartColors() returns an "rgb(r, g, b)" string — splice in the alpha.
+  const c = chartColors().info
+  const m = c.match(/^rgba?\(([^)]+?)(?:,\s*[\d.]+)?\)$/)
+  if (!m) return `rgba(59, 130, 246, ${opacity})`
+  return `rgba(${m[1]}, ${opacity})`
+}
 
 function maxCost(): number {
   return Math.max(1, ...grid.value.flatMap(row => row))
@@ -27,7 +41,7 @@ function cellLabel(dow: string, hourIdx: number, cost: number): string {
     <div v-if="loading" class="text-sm text-slate-500">
       Loading heatmap…
     </div>
-    <div v-else-if="error" class="text-sm text-red-500">
+    <div v-else-if="error" class="text-sm text-danger-text">
       {{ error }}
     </div>
     <div v-else class="overflow-x-auto">
@@ -70,7 +84,7 @@ function cellLabel(dow: string, hourIdx: number, cost: number): string {
               <div
                 class="h-5 w-full rounded-sm"
                 aria-hidden="true"
-                :style="{ backgroundColor: `rgba(59, 130, 246, ${cellOpacity(grid[dowIdx][hourIdx - 1])})` }"
+                :style="{ backgroundColor: heatmapColor(cellOpacity(grid[dowIdx][hourIdx - 1])) }"
               />
             </td>
           </tr>

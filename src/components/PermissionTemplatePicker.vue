@@ -18,7 +18,7 @@ function select(id: TemplateId) {
 
 <template>
   <div class="space-y-1">
-    <p class="text-xs text-slate-500 mb-2">
+    <p class="text-xs text-fg-mute mb-2">
       Permission Template
     </p>
     <div class="flex flex-wrap gap-2">
@@ -29,14 +29,14 @@ function select(id: TemplateId) {
         :title="t.description"
         class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors"
         :class="modelValue === t.id
-          ? 'bg-blue-600 border-blue-600 text-white'
-          : 'bg-raised border-line-strong text-fg-soft hover:border-blue-400'"
+          ? 'bg-accent border-accent text-accent-contrast'
+          : 'bg-raised border-line-strong text-fg-soft hover:border-accent'"
         @click="select(t.id)"
       >
         {{ t.label }}
       </button>
     </div>
-    <p v-if="modelValue" class="text-[11px] text-slate-400">
+    <p v-if="modelValue" class="text-[11px] text-fg-faint">
       {{ TEMPLATES.find(t => t.id === modelValue)?.description }}
     </p>
   </div>

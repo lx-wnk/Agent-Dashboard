@@ -46,9 +46,13 @@ function slotNamed(wrapper: any, name: string): any {
 // footer PluginSlot lives), so render the slot through a passthrough stub.
 const appModalPassthrough = { AppModal: { template: '<div><slot /></div>' } }
 
+// shallowMount stubs AppCard and swallows its slot; pass through so inner
+// PluginSlot components remain discoverable.
+const appCardPassthrough = { AppCard: { template: '<div><slot /></div>' } }
+
 describe('plugin slot host wiring', () => {
   it('taskCard mounts the kanban-card-badge slot with the task ctx', () => {
-    const wrapper = shallowMount(TaskCard, { props: { task } })
+    const wrapper = shallowMount(TaskCard, { props: { task }, global: { stubs: appCardPassthrough } })
     const slot = slotNamed(wrapper, 'kanban-card-badge')
     expect(slot).toBeDefined()
     expect((slot!.props('ctx') as any).task.id).toBe('t1')
