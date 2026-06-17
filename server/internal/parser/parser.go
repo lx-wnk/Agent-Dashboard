@@ -297,9 +297,22 @@ func addUsage(dst *sdk.TokenUsage, u *usageCounters) {
 
 type toolUseBlock struct {
 	Type  string          `json:"type"`
+	ID    string          `json:"id"`
 	Name  string          `json:"name"`
 	Text  string          `json:"text"`
 	Input json.RawMessage `json:"input"`
+}
+
+// toolResultBlock is the minimal shape of a tool_result entry inside a user message.
+type toolResultBlock struct {
+	Type      string `json:"type"`
+	ToolUseID string `json:"tool_use_id"`
+}
+
+// pendingToolInput extracts the human-readable pattern for Bash/Edit/Write calls.
+type pendingToolInput struct {
+	Command  string `json:"command"`   // Bash
+	FilePath string `json:"file_path"` // Edit, Write
 }
 
 // todoInput is the input shape for TodoWrite tool calls.
@@ -418,6 +431,7 @@ type SessionData struct {
 	ErrorState          sdk.ErrorState
 	Meta                *sdk.SessionMeta
 	LastBtw             *sdk.BtwMessage
+	PendingToolUse      *sdk.PendingToolUse
 }
 
 // sessionFileCandidate holds mtime + inode info gathered via os.Stat (cheap).
@@ -686,6 +700,17 @@ func ParseSessionFile(path string) (*SessionData, error) {
 
 	var recentToolNames []string
 
+	// pendingToolUses tracks assistant tool_use blocks (id → block) in order; the
+	// last one with no matching tool_result is the pending tool. Ordered slice
+	// preserves insertion order for the "last unmatched" check.
+	type trackedToolUse struct {
+		id    string
+		name  string
+		input json.RawMessage
+	}
+	var toolUseOrder []trackedToolUse
+	resolvedToolUseIDs := make(map[string]bool)
+
 	scanner := bufio.NewScanner(bytes.NewReader([]byte(content)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -704,6 +729,22 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		if isCompactBoundaryType(entry.Type, entry.Subtype) {
 			continue
 		}
+
+		// User messages carry tool_result blocks that resolve outstanding tool_use IDs.
+		if entry.Type == "user" {
+			var msg msgContent
+			if err := json.Unmarshal(entry.Message, &msg); err == nil && msg.Role == "user" {
+				var blocks []toolResultBlock
+				if err := json.Unmarshal(msg.Content, &blocks); err == nil {
+					for _, b := range blocks {
+						if b.Type == "tool_result" && b.ToolUseID != "" {
+							resolvedToolUseIDs[b.ToolUseID] = true
+						}
+					}
+				}
+			}
+		}
+
 		// Accept both the legacy "message" envelope and the current direct "assistant" type.
 		if entry.Type != "assistant" && entry.Type != "message" {
 			continue
@@ -738,6 +779,9 @@ func ParseSessionFile(path string) (*SessionData, error) {
 						data.ToolCounts[b.Name]++
 						recentToolNames = append(recentToolNames, b.Name)
 						data.CurrentAction = b.Name
+						if b.ID != "" {
+							toolUseOrder = append(toolUseOrder, trackedToolUse{id: b.ID, name: b.Name, input: b.Input})
+						}
 						if b.Name == "TodoWrite" {
 							var inp todoInput
 							if err := json.Unmarshal(b.Input, &inp); err == nil {
@@ -770,6 +814,25 @@ func ParseSessionFile(path string) (*SessionData, error) {
 				if hasToolUse && btwText != "" {
 					data.LastBtw = &sdk.BtwMessage{Message: btwText}
 				}
+			}
+		}
+	}
+
+	// Pending tool use: the agent is blocked on its most recent tool request when
+	// the last assistant tool_use has no matching tool_result yet.
+	if n := len(toolUseOrder); n > 0 {
+		tu := toolUseOrder[n-1]
+		if !resolvedToolUseIDs[tu.id] {
+			var inp pendingToolInput
+			_ = json.Unmarshal(tu.input, &inp)
+			pattern := inp.Command
+			if pattern == "" {
+				pattern = inp.FilePath
+			}
+			data.PendingToolUse = &sdk.PendingToolUse{
+				ID:      tu.id,
+				Tool:    tu.name,
+				Pattern: pattern,
 			}
 		}
 	}

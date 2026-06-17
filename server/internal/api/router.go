@@ -132,6 +132,7 @@ type RouterDeps struct {
 	MCPHandler            http.Handler
 	ChannelReply          *agents.ChannelReplyHandler
 	ChannelStageOutput    *agents.ChannelStageOutputHandler
+	PermissionPresetRepo  repo.PermissionPresetRepo
 	PluginRegistry        *plugin.Registry
 }
 
@@ -344,6 +345,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
+		if deps.PermissionPresetRepo != nil {
+			allowToolHandler := agents.NewAllowToolHandler(getAgents, deps.PermissionPresetRepo)
+			r.Post("/api/agents/{pid}/allow-tool", ErrorMiddleware(allowToolHandler.AllowTool))
+		}
 
 		// Config explorer — read-only enumeration of skills, slash commands,
 		// and memory files, scoped per spawner / live session via ?spawnerId /

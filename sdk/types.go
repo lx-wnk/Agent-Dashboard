@@ -219,6 +219,16 @@ type PendingPermission struct {
 	RequestedAt string  `json:"requestedAt"`
 }
 
+// PendingToolUse is the last assistant tool_use block that has no matching
+// tool_result yet. It indicates the agent is currently executing or blocked on
+// that tool call. Pattern is the command string (Bash), file path (Edit/Write),
+// or empty for other tools.
+type PendingToolUse struct {
+	ID      string `json:"id"`
+	Tool    string `json:"tool"`
+	Pattern string `json:"pattern"`
+}
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
 	PID         int      `json:"pid"`
@@ -263,6 +273,7 @@ type Agent struct {
 	PipelineTaskID         string               `json:"pipelineTaskId,omitempty"`
 	PipelineTaskTitle      string               `json:"pipelineTaskTitle,omitempty"`
 	PendingPermissions     []PendingPermission  `json:"pendingPermissions,omitempty"`
+	PendingToolUse         *PendingToolUse      `json:"pendingToolUse,omitempty"`
 	Machine             string      `json:"machine,omitempty"`
 	LastBtw             *BtwMessage `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
