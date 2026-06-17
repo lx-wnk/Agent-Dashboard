@@ -21,6 +21,7 @@ import SkeletonCard from './components/shell/SkeletonCard.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
 import AppModal from './components/ui/AppModal.vue'
+import AppModalHeader from './components/ui/AppModalHeader.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { usePermissionResolve } from './composables/usePermissionResolve'
@@ -479,20 +480,8 @@ onMounted(fetchQuota)
       @close="showRefinementChat = false; activeConceptTask = null"
       @confirmed="showRefinementChat = false; activeConceptTask = null"
     />
-    <AppModal :open="showBacklogForm" @close="showBacklogForm = false">
-      <header class="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
-        <h2 class="text-base font-semibold text-fg">
-          New Task
-        </h2>
-        <button
-          type="button"
-          class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg"
-          data-testid="close-backlog-form"
-          @click="showBacklogForm = false"
-        >
-          ✕
-        </button>
-      </header>
+    <AppModal :open="showBacklogForm" width="560px" @close="showBacklogForm = false">
+      <AppModalHeader title="New Task" @close="showBacklogForm = false" />
       <div class="flex-1 min-h-0 overflow-y-auto p-5">
         <BacklogForm @created-and-refine="onCreateTaskAndRefine" />
       </div>

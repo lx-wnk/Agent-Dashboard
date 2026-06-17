@@ -9,8 +9,10 @@ import { errorMessage } from '../utils/errorMessage'
 import { SPAWN_AUTOCLOSE_MS } from '../utils/timing'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 import AppButton from './ui/AppButton.vue'
+import AppFieldLabel from './ui/AppFieldLabel.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
+import AppModalHeader from './ui/AppModalHeader.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -222,19 +224,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AppModal :open="open" @close="emit('close')">
-    <header class="shrink-0 flex justify-between items-center px-5 py-4 border-b border-line">
-      <h2 class="text-lg font-semibold text-fg">
-        New Agent
-      </h2>
-      <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="emit('close')">
-        &times;
-      </button>
-    </header>
+  <AppModal :open="open" width="560px" @close="emit('close')">
+    <AppModalHeader title="New Agent" id="spawn-title" @close="emit('close')" />
 
     <form class="flex-1 min-h-0 overflow-y-auto p-5" @submit.prevent>
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-prompt">Prompt</label>
+        <AppFieldLabel for="spawn-prompt">Prompt</AppFieldLabel>
         <AppInput
           id="spawn-prompt"
           v-model="prompt"
@@ -247,7 +242,7 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-project">Project</label>
+        <AppFieldLabel for="spawn-project">Project</AppFieldLabel>
         <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent">
           <option
             v-for="p in sortedProjects"
@@ -271,7 +266,7 @@ onUnmounted(() => {
       />
 
       <div v-if="folderPickerVisible" class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-folder">Folder</label>
+        <AppFieldLabel for="spawn-folder">Folder</AppFieldLabel>
         <select
           id="spawn-folder"
           :value="dlg.selectedFolderId.value ?? ''"
@@ -285,7 +280,7 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-spawner">Spawner</label>
+        <AppFieldLabel for="spawn-spawner">Spawner</AppFieldLabel>
         <select
           id="spawn-spawner"
           v-model="dlg.spawnerId.value"
@@ -302,7 +297,7 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-system">System Prompt</label>
+        <AppFieldLabel for="spawn-system">System Prompt</AppFieldLabel>
         <AppInput
           id="spawn-system"
           v-model="systemPrompt"
@@ -313,7 +308,7 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-permission-mode">Permissions</label>
+        <AppFieldLabel for="spawn-permission-mode">Permissions</AppFieldLabel>
         <select
           id="spawn-permission-mode"
           v-model="permissionMode"
@@ -367,11 +362,11 @@ onUnmounted(() => {
       </AppButton>
       <AppButton
         data-testid="spawn-btn"
-        variant="primary"
+        :variant="dangerousMode && bypassConfirmed ? 'danger' : 'primary'"
         :disabled="isSpawning || !prompt.trim() || !dlg.cwd.value.trim()"
         @click="handleSpawn"
       >
-        {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
+        {{ isSpawning ? 'Spawning...' : (dangerousMode && bypassConfirmed ? 'Confirm Spawn' : 'Spawn Agent') }}
       </AppButton>
     </footer>
   </AppModal>

@@ -10,6 +10,7 @@ import { slugify } from '../utils/validation'
 import PermissionTemplatePicker from './PermissionTemplatePicker.vue'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 import AppButton from './ui/AppButton.vue'
+import AppFieldLabel from './ui/AppFieldLabel.vue'
 import AppInput from './ui/AppInput.vue'
 
 const emit = defineEmits<{
@@ -142,7 +143,7 @@ async function onCreateAndRefine(): Promise<void> {
 <template>
   <form data-testid="backlog-form" class="space-y-4" @submit.prevent="onCreateAndRefine">
     <div class="flex flex-col gap-1">
-      <label for="backlog-project" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Project</label>
+      <AppFieldLabel for="backlog-project">Project</AppFieldLabel>
       <select
         id="backlog-project"
         v-model="projectChoice"
@@ -171,7 +172,7 @@ async function onCreateAndRefine(): Promise<void> {
     </div>
 
     <div class="flex flex-col gap-1">
-      <label for="details-title" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Title</label>
+      <AppFieldLabel for="details-title">Title</AppFieldLabel>
       <AppInput
         id="details-title"
         data-testid="details-title"
@@ -182,7 +183,7 @@ async function onCreateAndRefine(): Promise<void> {
     </div>
 
     <div class="flex flex-col gap-1">
-      <label for="details-slug" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Slug</label>
+      <AppFieldLabel for="details-slug">Slug</AppFieldLabel>
       <AppInput
         id="details-slug"
         data-testid="details-slug"
@@ -195,31 +196,33 @@ async function onCreateAndRefine(): Promise<void> {
 
     <AppInput v-model="description" type="textarea" :rows="3" label="Description" placeholder="Additional context (optional)" />
 
-    <div class="flex flex-col gap-1">
-      <label for="details-priority" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Priority</label>
-      <select id="details-priority" v-model="priority" :class="fieldClass">
-        <option value="high">
-          High
-        </option>
-        <option value="medium">
-          Medium
-        </option>
-        <option value="low">
-          Low
-        </option>
-      </select>
-    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1">
+        <AppFieldLabel for="details-priority">Priority</AppFieldLabel>
+        <select id="details-priority" v-model="priority" :class="fieldClass">
+          <option value="high">
+            High
+          </option>
+          <option value="medium">
+            Medium
+          </option>
+          <option value="low">
+            Low
+          </option>
+        </select>
+      </div>
 
-    <div class="flex flex-col gap-1">
-      <label for="details-spawner" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Spawner</label>
-      <select id="details-spawner" v-model="selectedSpawnerId" :class="fieldClass">
-        <option value="">
-          {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
-        </option>
-        <option v-for="s in spawners" :key="s.id" :value="s.id">
-          {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
-        </option>
-      </select>
+      <div class="flex flex-col gap-1">
+        <AppFieldLabel for="details-spawner">Spawner</AppFieldLabel>
+        <select id="details-spawner" v-model="selectedSpawnerId" :class="fieldClass">
+          <option value="">
+            {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
+          </option>
+          <option v-for="s in spawners" :key="s.id" :value="s.id">
+            {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
+          </option>
+        </select>
+      </div>
     </div>
 
     <PermissionTemplatePicker v-model="selectedTemplate" />
