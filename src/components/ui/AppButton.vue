@@ -25,7 +25,7 @@ withDefaults(defineProps<{
       size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
       variant !== 'outline' && 'border-0',
       variant === 'primary' && 'bg-accent text-accent-contrast hover:brightness-110',
-      variant === 'secondary' && 'bg-raised text-fg-mute hover:brightness-110',
+      variant === 'secondary' && 'bg-raised text-fg-mute hover:brightness-95',
       variant === 'ghost' && 'bg-transparent text-fg-mute hover:text-fg-soft',
       variant === 'danger' && 'bg-danger text-white hover:brightness-110',
       variant === 'info' && 'bg-info text-white hover:brightness-110',
