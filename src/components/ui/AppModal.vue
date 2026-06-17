@@ -7,27 +7,26 @@ const props = withDefaults(defineProps<{
   labelledBy?: string
   /**
    * Panel sizing.
-   * - `standard` (default): one fixed frame shared by all content modals —
-   *   900px wide, 85vh tall, capped to the viewport. The box does NOT shrink
-   *   when there is little content; the body region scrolls instead. AppModal
-   *   supplies the chrome (bg/border/radius/shadow) and a flex column, so the
-   *   slot only provides header / body / footer sections.
+   * - `standard` (default): chrome panel with configurable width, max-h 85vh.
+   *   `width` prop controls the max panel width (px value or CSS class).
    * - `auto`: no sizing or chrome — the slot brings its own box. Used by the
    *   deliberate exceptions (command palette, settings with its own layout).
    */
   size?: 'standard' | 'auto'
+  /** Width for the standard panel (px string like "560px" or CSS class). Defaults to 900px. */
+  width?: string
 }>(), {
   zIndex: 200,
   size: 'standard',
+  width: '900px',
 })
 
-// Chrome + fixed frame for the standard size. `auto` is a transparent
-// passthrough so exception modals keep their bespoke box.
+// Chrome for the standard size. `auto` is a transparent passthrough.
 const STANDARD_CHROME = 'bg-card border border-line rounded-xl shadow-modal overflow-hidden flex flex-col'
 const panelClass = computed(() => (props.size === 'standard' ? STANDARD_CHROME : ''))
 const panelStyle = computed(() =>
   props.size === 'standard'
-    ? { width: 'min(900px, calc(100vw - 2rem))', height: 'min(85vh, 800px)' }
+    ? { width: `min(${props.width}, calc(100vw - 2rem))`, maxHeight: '85vh' }
     : undefined,
 )
 
@@ -108,7 +107,7 @@ function trapFocus(event: KeyboardEvent) {
     <Transition name="dialog">
       <div
         v-if="open"
-        class="fixed inset-0 flex items-center justify-center p-4 bg-black/55"
+        class="fixed inset-0 flex items-center justify-center p-4 bg-black/55 backdrop-blur-sm"
         :style="{ zIndex }"
         role="dialog"
         aria-modal="true"
