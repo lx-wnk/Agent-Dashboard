@@ -1,12 +1,12 @@
-import type { AgentGroup, AgentSort } from '../utils/agentGroup'
+import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS, type AgentGroup, type AgentSort } from '../utils/agentGroup'
 import { ref, watch } from 'vue'
 
 export type ActiveView = 'dashboard' | 'workflows' | 'pipeline' | 'cost'
 export type DashboardLayout = 'cards' | 'list'
 
 const ACTIVE_VIEWS: ActiveView[] = ['dashboard', 'workflows', 'pipeline', 'cost']
-const AGENT_SORT_VALUES: AgentSort[] = ['latest', 'longest', 'expensive']
-const AGENT_GROUP_VALUES: AgentGroup[] = ['none', 'status', 'model']
+const AGENT_SORT_VALUES: AgentSort[] = AGENT_SORT_OPTIONS.map(o => o.value)
+const AGENT_GROUP_VALUES: AgentGroup[] = AGENT_GROUP_OPTIONS.map(o => o.value)
 
 function readInitial(): { view: ActiveView, layout: DashboardLayout } {
   const ls = typeof localStorage !== 'undefined' ? localStorage : null
