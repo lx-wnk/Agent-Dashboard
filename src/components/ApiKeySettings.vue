@@ -559,7 +559,7 @@ async function startImport() {
               class="w-40 border-2 rounded-lg overflow-hidden cursor-pointer bg-transparent p-0 transition-all font-sans"
               :class="themePref === opt.value
                 ? 'border-accent shadow-[0_0_0_3px_var(--accent-soft)]'
-                : 'border-line hover:border-blue-400'"
+                : 'border-line hover:border-accent'"
               :aria-label="opt.value === 'dark' ? `${opt.label} (keyboard shortcut: Shift+D)` : opt.label"
               :aria-pressed="themePref === opt.value"
               @click="setTheme(opt.value)"
@@ -618,7 +618,7 @@ async function startImport() {
                 </div>
               </div>
               <div class="px-2.5 py-2 text-xs font-medium text-fg-mute border-t border-line flex items-center gap-1.5 bg-card">
-                <span class="w-3.5 text-blue-500 font-bold text-[13px]">{{ themePref === opt.value ? '✓' : '' }}</span>
+                <span class="w-3.5 text-accent font-bold text-[13px]">{{ themePref === opt.value ? '✓' : '' }}</span>
                 {{ opt.label }}
               </div>
             </button>
@@ -993,7 +993,7 @@ async function startImport() {
                   :aria-label="copyLabel(b.key, `Copy ${b.label}`)"
                   @click="copyValue(b.key, b.value)"
                 >
-                  <span v-if="copiedTarget === b.key" aria-hidden="true" class="text-sm leading-none text-green-500">✓</span>
+                  <span v-if="copiedTarget === b.key" aria-hidden="true" class="text-sm leading-none text-success-text">✓</span>
                   <span v-else-if="errorTarget === b.key" aria-hidden="true" class="text-sm leading-none text-danger-text">✕</span>
                   <span v-else aria-hidden="true" class="text-sm leading-none">⧉</span>
                 </button>

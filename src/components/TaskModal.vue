@@ -85,7 +85,7 @@ watch(() => props.task?.id, (id, prevId) => {
             :bordered="false"
             :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${modalMaxAutoRetries})`"
           >Retrying · {{ task.autoRetryCount }}/{{ modalMaxAutoRetries }}{{ modalRetrySecondsLeft > 0 ? ` · ${modalRetrySecondsLeft}s` : '' }}</AppChip>
-          <span class="font-mono text-xs text-blue-600 dark:text-blue-400">{{ task.slug }}</span>
+          <span class="font-mono text-xs text-info-text">{{ task.slug }}</span>
           <button
             type="button"
             class="font-mono text-[10px] px-1.5 py-px rounded border bg-raised text-fg-mute border-line hover:text-fg-soft hover:border-fg-mute transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent flex-shrink-0"
@@ -111,7 +111,7 @@ watch(() => props.task?.id, (id, prevId) => {
           v-bind="tabAttrs(key)"
           type="button"
           class="px-4 py-2.5 text-xs font-semibold bg-transparent border-none border-b-2 border-transparent cursor-pointer hover:text-fg-soft transition-colors"
-          :class="activeTab === key ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' : 'text-fg-mute'"
+          :class="activeTab === key ? 'text-accent border-accent' : 'text-fg-mute'"
           @click="select(key)"
         >
           {{ tabLabel(key) }}

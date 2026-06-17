@@ -8,7 +8,7 @@ import { sankey as d3Sankey, sankeyLinkHorizontal } from 'd3-sankey'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { errorMessage } from '../../utils/errorMessage'
 import { useTheme } from '../../composables/useTheme'
-import { chartPalette } from '../../utils/chartColors'
+import { chartColors, chartPalette } from '../../utils/chartColors'
 
 // User-defined node/link properties carried through the layout, on top of the
 // d3-sankey-computed geometry (x0/y0/width/…).
@@ -77,6 +77,7 @@ function drawSankey(svg: Selection<SVGSVGElement, unknown, null, undefined>) {
 
   const { nodes: laidOutNodes, links: laidOutLinks } = layout({ nodes, links })
 
+  const colors = chartColors()
   const color = scaleOrdinal<string>(chartPalette()).domain(props.data.nodes.map(n => n.name))
 
   svg.append('g')
@@ -98,7 +99,7 @@ function drawSankey(svg: Selection<SVGSVGElement, unknown, null, undefined>) {
     .data(laidOutLinks)
     .join('path')
     .attr('d', sankeyLinkHorizontal())
-    .attr('stroke', 'currentColor')
+    .attr('stroke', colors.line)
     .attr('stroke-width', d => Math.max(1, d.width ?? 1))
     .append('title')
     .text(d => `${nodeName(d.source)} → ${nodeName(d.target)}\n${d.value}`)

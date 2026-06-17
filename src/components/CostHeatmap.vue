@@ -12,6 +12,7 @@ const { theme } = useTheme()
 
 // Derive rgba from the token each time the cell is rendered; re-evaluates on theme toggle.
 function heatmapColor(opacity: number): string {
+  void theme.value // re-evaluate when the theme toggles
   // chartColors() returns an "rgb(r, g, b)" string — splice in the alpha.
   const c = chartColors().info
   const m = c.match(/^rgba?\(([^)]+?)(?:,\s*[\d.]+)?\)$/)

@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import type { PipelineTask } from '../../types'
+import type { PipelineStage, PipelineTask } from '../../types'
 import { computed, ref, watch } from 'vue'
 import { useInjectedTask, useInjectedTaskDetails } from '../../composables/taskModalContext'
 import { useTaskAssignment } from '../../composables/useTaskAssignment'
-import type { PipelineStage } from '../../types'
 import { runStatusLabel, runStatusTone } from '../../utils/statusColors'
 import { STAGE_LABELS } from '../../utils/stageLabels'
 import { activeRuntime, formatCents, formatTaskDate, taskRuntime } from '../../utils/taskFormat'
