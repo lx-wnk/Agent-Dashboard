@@ -12783,23 +12783,24 @@ func (m *TaskDependencyMutation) ResetEdge(name string) error {
 // TaskPermissionMutation represents an operation that mutates the TaskPermission nodes in the graph.
 type TaskPermissionMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *string
-	tool          *string
-	pattern       *string
-	granted       *bool
-	pre_approved  *bool
-	decided_by    *string
-	requested_at  *time.Time
-	decided_at    *time.Time
-	expires_at    *time.Time
-	clearedFields map[string]struct{}
-	task          *string
-	clearedtask   bool
-	done          bool
-	oldValue      func(context.Context) (*TaskPermission, error)
-	predicates    []predicate.TaskPermission
+	op              Op
+	typ             string
+	id              *string
+	tool            *string
+	pattern         *string
+	granted         *bool
+	pre_approved    *bool
+	manual_override *bool
+	decided_by      *string
+	requested_at    *time.Time
+	decided_at      *time.Time
+	expires_at      *time.Time
+	clearedFields   map[string]struct{}
+	task            *string
+	clearedtask     bool
+	done            bool
+	oldValue        func(context.Context) (*TaskPermission, error)
+	predicates      []predicate.TaskPermission
 }
 
 var _ ent.Mutation = (*TaskPermissionMutation)(nil)
@@ -13099,6 +13100,42 @@ func (m *TaskPermissionMutation) ResetPreApproved() {
 	m.pre_approved = nil
 }
 
+// SetManualOverride sets the "manual_override" field.
+func (m *TaskPermissionMutation) SetManualOverride(b bool) {
+	m.manual_override = &b
+}
+
+// ManualOverride returns the value of the "manual_override" field in the mutation.
+func (m *TaskPermissionMutation) ManualOverride() (r bool, exists bool) {
+	v := m.manual_override
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldManualOverride returns the old "manual_override" field's value of the TaskPermission entity.
+// If the TaskPermission object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskPermissionMutation) OldManualOverride(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldManualOverride is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldManualOverride requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldManualOverride: %w", err)
+	}
+	return oldValue.ManualOverride, nil
+}
+
+// ResetManualOverride resets all changes to the "manual_override" field.
+func (m *TaskPermissionMutation) ResetManualOverride() {
+	m.manual_override = nil
+}
+
 // SetDecidedBy sets the "decided_by" field.
 func (m *TaskPermissionMutation) SetDecidedBy(s string) {
 	m.decided_by = &s
@@ -13343,7 +13380,7 @@ func (m *TaskPermissionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskPermissionMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.task != nil {
 		fields = append(fields, taskpermission.FieldTaskID)
 	}
@@ -13358,6 +13395,9 @@ func (m *TaskPermissionMutation) Fields() []string {
 	}
 	if m.pre_approved != nil {
 		fields = append(fields, taskpermission.FieldPreApproved)
+	}
+	if m.manual_override != nil {
+		fields = append(fields, taskpermission.FieldManualOverride)
 	}
 	if m.decided_by != nil {
 		fields = append(fields, taskpermission.FieldDecidedBy)
@@ -13389,6 +13429,8 @@ func (m *TaskPermissionMutation) Field(name string) (ent.Value, bool) {
 		return m.Granted()
 	case taskpermission.FieldPreApproved:
 		return m.PreApproved()
+	case taskpermission.FieldManualOverride:
+		return m.ManualOverride()
 	case taskpermission.FieldDecidedBy:
 		return m.DecidedBy()
 	case taskpermission.FieldRequestedAt:
@@ -13416,6 +13458,8 @@ func (m *TaskPermissionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldGranted(ctx)
 	case taskpermission.FieldPreApproved:
 		return m.OldPreApproved(ctx)
+	case taskpermission.FieldManualOverride:
+		return m.OldManualOverride(ctx)
 	case taskpermission.FieldDecidedBy:
 		return m.OldDecidedBy(ctx)
 	case taskpermission.FieldRequestedAt:
@@ -13467,6 +13511,13 @@ func (m *TaskPermissionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPreApproved(v)
+		return nil
+	case taskpermission.FieldManualOverride:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetManualOverride(v)
 		return nil
 	case taskpermission.FieldDecidedBy:
 		v, ok := value.(string)
@@ -13586,6 +13637,9 @@ func (m *TaskPermissionMutation) ResetField(name string) error {
 		return nil
 	case taskpermission.FieldPreApproved:
 		m.ResetPreApproved()
+		return nil
+	case taskpermission.FieldManualOverride:
+		m.ResetManualOverride()
 		return nil
 	case taskpermission.FieldDecidedBy:
 		m.ResetDecidedBy()

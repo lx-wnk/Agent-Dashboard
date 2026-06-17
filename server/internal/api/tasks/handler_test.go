@@ -219,6 +219,87 @@ func TestPutPipelineConfig_RetryKeys(t *testing.T) {
 	}
 }
 
+func TestListPermissionRequests_OutsideSafeList(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	_, r := newTestHandlerWithBroadcaster(t, bundle.Client)
+
+	// Create a task via HTTP.
+	taskBody, _ := json.Marshal(map[string]any{"slug": "pr-test", "title": "PR Test", "cwd": "/tmp/pr"})
+	tReq := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewReader(taskBody))
+	tReq.Header.Set("Content-Type", "application/json")
+	tReq = withAuth(t, tReq)
+	tRR := httptest.NewRecorder()
+	r.ServeHTTP(tRR, tReq)
+	if tRR.Code != http.StatusCreated {
+		t.Fatalf("create task: %d %s", tRR.Code, tRR.Body.String())
+	}
+	var task map[string]any
+	_ = json.Unmarshal(tRR.Body.Bytes(), &task)
+	taskID := task["id"].(string)
+
+	// Create a stage_run and permission requests directly in the DB.
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	permRepo := repo.NewPermissionRepo(bundle.Client)
+	sr, err := srRepo.Create(testCtx(t), repo.CreateStageRunInput{
+		TaskID:    taskID,
+		Stage:     "implementation",
+		Iteration: 1,
+	})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+
+	pattern1 := "chmod 777 /tmp"
+	pattern2 := "ls /tmp"
+	pattern3 := "/tmp/file.txt"
+	for _, in := range []repo.CreatePermissionRequestInput{
+		{StageRunID: sr.ID, Tool: "Bash", Pattern: &pattern1},
+		{StageRunID: sr.ID, Tool: "Bash", Pattern: &pattern2},
+		{StageRunID: sr.ID, Tool: "Read", Pattern: &pattern3},
+	} {
+		if _, err := permRepo.CreatePermissionRequest(testCtx(t), in); err != nil {
+			t.Fatalf("create permission request: %v", err)
+		}
+	}
+
+	// List via HTTP and verify outsideSafeList.
+	listReq := httptest.NewRequest(http.MethodGet, "/api/tasks/"+taskID+"/permission-requests", nil)
+	listReq = withAuth(t, listReq)
+	listRR := httptest.NewRecorder()
+	r.ServeHTTP(listRR, listReq)
+	if listRR.Code != http.StatusOK {
+		t.Fatalf("list permission requests: %d %s", listRR.Code, listRR.Body.String())
+	}
+	var listed []map[string]any
+	if err := json.Unmarshal(listRR.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 3 {
+		t.Fatalf("expected 3 permission requests, got %d: %s", len(listed), listRR.Body.String())
+	}
+
+	byPattern := make(map[string]map[string]any)
+	for _, item := range listed {
+		if p, ok := item["pattern"].(string); ok {
+			byPattern[p] = item
+		}
+	}
+
+	if v, _ := byPattern["chmod 777 /tmp"]["outsideSafeList"].(bool); !v {
+		t.Errorf("expected outsideSafeList=true for chmod 777 /tmp, got %v", byPattern["chmod 777 /tmp"]["outsideSafeList"])
+	}
+	if v, _ := byPattern["ls /tmp"]["outsideSafeList"].(bool); v {
+		t.Errorf("expected outsideSafeList=false for ls /tmp")
+	}
+	if v, _ := byPattern["/tmp/file.txt"]["outsideSafeList"].(bool); v {
+		t.Errorf("expected outsideSafeList=false for non-Bash Read tool")
+	}
+}
+
 func TestCreateTask_DuplicateSlug(t *testing.T) {
 	_, r := newTestHandler(t)
 

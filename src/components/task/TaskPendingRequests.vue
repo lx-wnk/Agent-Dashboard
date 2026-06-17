@@ -41,6 +41,13 @@ const { onResolve, onResolveAll } = useInjectedTaskActions()
         >
           {{ req.reRequestCount }}x re-requests
         </span>
+        <span
+          v-if="req.outsideSafeList"
+          class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
+          title="Granting this approves a command outside the safe allow-list (exception, this task only)."
+        >
+          outside safe-list
+        </span>
       </div>
       <p v-if="req.reason" class="text-[11px] text-fg-mute mt-1 leading-relaxed">
         {{ req.reason }}

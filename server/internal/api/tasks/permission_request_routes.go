@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,46 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
+// permissionRequestResponse is the API response shape for a single pending permission request.
+// It extends the DB row with computed fields that are not stored in the database.
+type permissionRequestResponse struct {
+	ID             string  `json:"id"`
+	StageRunID     string  `json:"stageRunId"`
+	Tool           string  `json:"tool"`
+	Pattern        *string `json:"pattern"`
+	Reason         *string `json:"reason"`
+	Outcome        *string `json:"outcome"`
+	RequestedAt    string  `json:"requestedAt"`
+	ResolvedAt     *string `json:"resolvedAt"`
+	// OutsideSafeList is true when the request is for a Bash command not in the
+	// safe allow-list, meaning a Grant is a conscious human override.
+	OutsideSafeList bool `json:"outsideSafeList"`
+}
+
+func toPermissionRequestResponse(req *ent.PermissionRequest) permissionRequestResponse {
+	r := permissionRequestResponse{
+		ID:          req.ID,
+		StageRunID:  req.StageRunID,
+		Tool:        req.Tool,
+		Pattern:     req.Pattern,
+		Reason:      req.Reason,
+		Outcome:     req.Outcome,
+		RequestedAt: req.RequestedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+	if req.ResolvedAt != nil {
+		s := req.ResolvedAt.Format("2006-01-02T15:04:05Z07:00")
+		r.ResolvedAt = &s
+	}
+	if req.Tool == "Bash" && req.Pattern != nil {
+		normalized := strings.Join(strings.Fields(*req.Pattern), " ")
+		if normalized != "" {
+			ok, _ := permissions.IsSafeBashPattern(normalized)
+			r.OutsideSafeList = !ok
+		}
+	}
+	return r
+}
+
 // listPermissionRequests returns pending permission requests across all stage_runs for a task.
 func (h *Handler) listPermissionRequests(w http.ResponseWriter, r *http.Request) error {
 	taskID := chi.URLParam(r, "id")
@@ -24,7 +65,7 @@ func (h *Handler) listPermissionRequests(w http.ResponseWriter, r *http.Request)
 		return fmt.Errorf("permission_requests.list: %w", err)
 	}
 	if len(runs) == 0 {
-		return jsonReply(w, http.StatusOK, []*ent.PermissionRequest{})
+		return jsonReply(w, http.StatusOK, []permissionRequestResponse{})
 	}
 	ids := make([]string, len(runs))
 	for i, sr := range runs {
@@ -34,10 +75,11 @@ func (h *Handler) listPermissionRequests(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		return fmt.Errorf("permission_requests.list: %w", err)
 	}
-	if reqs == nil {
-		reqs = []*ent.PermissionRequest{}
+	resp := make([]permissionRequestResponse, len(reqs))
+	for i, req := range reqs {
+		resp[i] = toPermissionRequestResponse(req)
 	}
-	return jsonReply(w, http.StatusOK, reqs)
+	return jsonReply(w, http.StatusOK, resp)
 }
 
 // createPermissionRequest creates a single permission request and flips the stage_run to awaiting_user if running.
@@ -466,10 +508,12 @@ func presetCovers(tool string, pattern *string, presets []*ent.PermissionPreset)
 	return false
 }
 
-// grantValidatedEntries validates each entry with ValidateGrantEntry and persists the
-// safe ones via BulkGrantPermissions. Invalid entries are collected and returned as
-// error strings rather than aborting the call, so one bad pattern doesn't block the
-// rest.
+// grantValidatedEntries validates each entry as a human override and persists
+// the safe ones via BulkGrantPermissions. Called exclusively from human REST
+// resolve endpoints, so override=true applies: the Bash allow-list and
+// injection guard are bypassed but a non-empty pattern is still required, and
+// WebFetch still needs a domain. Invalid entries are collected and returned as
+// error strings rather than aborting the call.
 func (h *Handler) grantValidatedEntries(ctx context.Context, taskID string, entries []repo.GrantEntry) ([]*ent.TaskPermission, []string) {
 	var safe []repo.GrantEntry
 	var errs []string
@@ -478,10 +522,11 @@ func (h *Handler) grantValidatedEntries(ctx context.Context, taskID string, entr
 		if e.Pattern != nil {
 			pattern = *e.Pattern
 		}
-		if err := permissions.ValidateGrantEntry(e.Tool, pattern); err != nil {
+		if err := permissions.ValidateGrantEntryWithOverride(e.Tool, pattern, true); err != nil {
 			errs = append(errs, fmt.Sprintf("grant skipped (%s %s): %v", e.Tool, pattern, err))
 			continue
 		}
+		e.ManualOverride = true
 		safe = append(safe, e)
 	}
 	if len(safe) == 0 {

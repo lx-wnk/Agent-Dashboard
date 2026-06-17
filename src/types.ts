@@ -230,6 +230,8 @@ export interface PermissionRequest {
   outcome: 'granted' | 'denied' | 'timeout' | null
   /** Total requests for this (tool, pattern) across all stage_runs of this task. Computed at read time. */
   reRequestCount?: number
+  /** True when the Bash pattern is outside the server's safe allow-list; granting is a conscious human override. */
+  outsideSafeList?: boolean
 }
 
 // `FeedbackStage` is the subset of stages on which user-authored feedback
