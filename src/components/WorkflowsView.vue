@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { WorkflowsFilters, WorkflowTab } from '../composables/useWorkflows'
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useSessions } from '../composables/useSessions'
 import { defaultWorkflowsFilters, useWorkflows } from '../composables/useWorkflows'
+import { usePatterns } from '../composables/usePatterns'
 import CoOccurrenceMatrix from './visualizations/CoOccurrenceMatrix.vue'
 import SankeyChart from './visualizations/SankeyChart.vue'
 import SessionDagChart from './visualizations/SessionDagChart.vue'
 import SpawnTreeChart from './visualizations/SpawnTreeChart.vue'
+import AppCard from './ui/AppCard.vue'
 
 defineEmits<{ navigate: [sessionId: string] }>()
 
@@ -14,6 +16,7 @@ const filters = ref<WorkflowsFilters>(defaultWorkflowsFilters())
 
 const { sankey, dag, spawnTree, coOccurrence, activeTab, setActiveTab } = useWorkflows(filters)
 const { sessions, refetch: refetchSessions } = useSessions()
+const { patterns, isLoading: patternsLoading } = usePatterns()
 
 onMounted(() => {
   void refetchSessions()
@@ -62,10 +65,152 @@ const TABS: TabDescriptor[] = [
   { key: 'spawnTree', label: 'Spawn Tree' },
   { key: 'coOccurrence', label: 'Co-occurrence' },
 ]
+
+// Tool tone mapping matching the design reference.
+const TOOL_TONE: Record<string, string> = {
+  Read: 'var(--info)',
+  Edit: 'var(--accent)',
+  Bash: 'var(--warning)',
+  Grep: 'var(--success)',
+  Write: 'var(--accent)',
+  WebSearch: 'var(--fg-mute)',
+  Glob: 'var(--success)',
+}
+
+function toolColor(toolName: string): string {
+  const head = toolName.replace(/\(.*$/, '')
+  return TOOL_TONE[head] ?? 'var(--fg-mute)'
+}
+
+// Per-tool frequency derived from the pattern set (count occurrences weighted by frequency).
+const toolFrequency = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const p of patterns.value) {
+    for (const t of p.tools.split(' → ')) {
+      const head = t.replace(/\(.*$/, '').trim()
+      counts[head] = (counts[head] ?? 0) + p.frequency
+    }
+  }
+  return Object.entries(counts)
+    .map(([tool, n]) => ({ tool, n }))
+    .sort((a, b) => b.n - a.n)
+})
+
+const maxPatternFreq = computed(() => Math.max(0, ...patterns.value.map(p => p.frequency)))
+const maxToolFreq = computed(() => Math.max(0, ...toolFrequency.value.map(f => f.n)))
 </script>
 
 <template>
   <div class="workflows-view">
+    <!-- Design panels: Discovered Sequences + Tool Frequency + Recent Run Waterfalls -->
+    <div class="p-4 border-b border-line grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); align-items: start;">
+      <!-- Discovered Sequences -->
+      <AppCard class="p-4">
+        <h3 class="text-sm font-semibold text-fg-soft mb-1">
+          Discovered Sequences
+        </h3>
+        <p class="text-xs text-fg-mute mb-3">
+          Most frequent 3-tool n-grams across all sessions.
+        </p>
+        <div v-if="patternsLoading" class="text-xs text-fg-mute">
+          Loading…
+        </div>
+        <div v-else-if="patterns.length === 0" class="text-xs text-fg-mute">
+          No pattern data yet. Refresh patterns via Settings → Analytics.
+        </div>
+        <div v-else class="flex flex-col gap-2.5">
+          <div
+            v-for="p in patterns"
+            :key="p.tools"
+            class="bg-raised rounded-md px-3 py-2.5"
+          >
+            <div class="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+              <div class="flex items-center gap-2 flex-wrap">
+                <template v-for="(tool, i) in p.tools.split(' → ')" :key="i">
+                  <span class="inline-flex items-center gap-1 font-mono text-[11px] text-fg-soft">
+                    <span
+                      class="w-2 h-2 rounded-[2px] shrink-0"
+                      :style="{ background: toolColor(tool) }"
+                      aria-hidden="true"
+                    />
+                    {{ tool }}
+                  </span>
+                  <span
+                    v-if="i < p.tools.split(' → ').length - 1"
+                    class="text-fg-faint text-[11px]"
+                    aria-hidden="true"
+                  >→</span>
+                </template>
+              </div>
+              <span class="font-mono text-[11px] text-fg-faint shrink-0">×{{ p.frequency }}</span>
+            </div>
+            <div class="h-1 bg-line rounded-full overflow-hidden">
+              <div
+                class="h-full rounded-full bg-accent"
+                :style="{ width: maxPatternFreq > 0 ? `${(p.frequency / maxPatternFreq) * 100}%` : '0%' }"
+              />
+            </div>
+          </div>
+        </div>
+      </AppCard>
+
+      <!-- Tool Frequency + Recent Run Waterfalls stacked -->
+      <div class="flex flex-col gap-4">
+        <!-- Tool Frequency -->
+        <AppCard class="p-4">
+          <h3 class="text-sm font-semibold text-fg-soft mb-1">
+            Tool Frequency
+          </h3>
+          <p class="text-xs text-fg-mute mb-3">
+            Total invocations by tool, all agents.
+          </p>
+          <div v-if="patternsLoading" class="text-xs text-fg-mute">
+            Loading…
+          </div>
+          <div v-else-if="toolFrequency.length === 0" class="text-xs text-fg-mute">
+            No data yet.
+          </div>
+          <div v-else class="flex flex-col gap-2">
+            <div
+              v-for="f in toolFrequency"
+              :key="f.tool"
+              class="flex items-center gap-2.5"
+            >
+              <span class="w-20 shrink-0 inline-flex items-center gap-1 font-mono text-[11px] text-fg-soft">
+                <span
+                  class="w-2 h-2 rounded-[2px] shrink-0"
+                  :style="{ background: toolColor(f.tool) }"
+                  aria-hidden="true"
+                />
+                {{ f.tool }}
+              </span>
+              <div class="flex-1 h-3 bg-raised rounded-full overflow-hidden">
+                <div
+                  class="h-full rounded-full"
+                  :style="{ width: maxToolFreq > 0 ? `${(f.n / maxToolFreq) * 100}%` : '0%', background: toolColor(f.tool) }"
+                />
+              </div>
+              <span class="w-10 text-right font-mono text-[11px] text-fg-mute">{{ f.n }}</span>
+            </div>
+          </div>
+        </AppCard>
+
+        <!-- Recent Run Waterfalls -->
+        <AppCard class="px-4 pt-4 pb-1">
+          <h3 class="text-sm font-semibold text-fg-soft mb-1">
+            Recent Run Waterfalls
+          </h3>
+          <p class="text-xs text-fg-mute mb-3">
+            Wall-clock split by tool for the latest pipeline runs.
+          </p>
+          <p class="text-xs text-fg-mute pb-3">
+            No per-run timing data available from the current data source. Run timing is not yet exported by the backend.
+          </p>
+        </AppCard>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
     <div class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-line bg-card">
       <label class="text-xs text-fg-mute flex items-center gap-1">
         Session
@@ -120,6 +265,7 @@ const TABS: TabDescriptor[] = [
       </button>
     </div>
 
+    <!-- Tab bar -->
     <div role="tablist" class="flex gap-1 px-4 py-2 border-b border-line bg-card">
       <button
         v-for="tab in TABS"
@@ -146,6 +292,7 @@ const TABS: TabDescriptor[] = [
       </button>
     </div>
 
+    <!-- Visualization panel -->
     <div class="p-4">
       <SankeyChart
         v-show="activeTab === 'sankey'"
