@@ -30,6 +30,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/projects"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/schedules"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
@@ -120,6 +121,7 @@ type RouterDeps struct {
 	// May be nil; when nil the project handler skips the active-task check.
 	TaskProjectOps        projects.TaskProjectOps
 	TaskHandler           *tasks.Handler
+	SchedulesHandler      *schedules.Handler
 	WebPushHandler        *apiwp.Handler
 	RemotesHandler        *remotes.Handler
 	PresetsHandler        *presets.Handler
@@ -282,6 +284,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.TaskHandler != nil {
 			deps.TaskHandler.Mount(r)
+		}
+
+		if deps.SchedulesHandler != nil {
+			deps.SchedulesHandler.Mount(r)
 		}
 
 		if deps.RemotesHandler != nil {

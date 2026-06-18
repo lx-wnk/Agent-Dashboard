@@ -42,15 +42,16 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
+	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
 
-func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, func(), error) {
+func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, func(), error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 	var entClient *ent.Client
 	if bundle != nil {
@@ -96,7 +97,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 			slog.Info("auth: using plugin provider", "loginURL", loginURL)
 		},
 	}); err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
+		return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
 	cleanup := func() { pluginRegistry.Shutdown() }
 
@@ -107,7 +108,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if pluginRegistry.HasDir() &&
 		pluginRegistry.HasAttemptedCapability(plugin.CapAuthProvider) &&
 		pluginRegistry.FindByCapability(plugin.CapAuthProvider) == nil {
-		return nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf(
+		return nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf(
 			"auth_provider plugin configured but failed health-check — refusing to start with auth disabled",
 		)
 	}
@@ -139,21 +140,21 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		spawnerRepo = repo.NewSpawnerRepo(entClient)
 		if bundle != nil {
 			if err := repairSpawnerAdapterConfig(ctx, bundle.DB); err != nil {
-				return nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
+				return nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
 			}
 		}
 		if err := seedSpawners(ctx, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
+			return nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
 		}
 		if err := migrateAdapterConfigToSpawners(ctx, cfg, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
+			return nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
 		}
 		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo)
 	}
 
 	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, cleanup, err
+		return nil, nil, nil, nil, nil, nil, nil, cleanup, err
 	}
 
 	// Construct the detached refinement runner before the task handler so the
@@ -179,6 +180,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg)
 	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster)
+
+	// Scheduler: recurring task firing engine + its REST handler. Reuses the task
+	// handler's create core, so it must be built after taskHandler. nil when no DB.
+	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler
@@ -312,6 +317,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		CostHandler:           costHandler,
 		VisualizationsHandler: apivisualizations.NewHandler(),
 		MCPHandler:            mcpHandler,
+		SchedulesHandler:      schedulesHandler,
 		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo, repo.NewStageRunRepo(entClient)),
 		ChannelStageOutput:    channelStageOutputHandler,
 		PluginRegistry:        pluginRegistry,
@@ -319,5 +325,5 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
-	return server, broadcaster, orch, histImporter, baselineProvider, pipelineEnricher, cleanup, nil
+	return server, broadcaster, orch, sched, histImporter, baselineProvider, pipelineEnricher, cleanup, nil
 }
