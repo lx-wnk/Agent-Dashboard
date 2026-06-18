@@ -46,7 +46,7 @@ import WorktreeCommandRunner from './WorktreeCommandRunner.vue'
 import WorktreePanel from './WorktreePanel.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
-const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
+const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask], worktreeChanged: [] }>()
 
 const { copy: copyTaskId, copied: modalCopiedId } = useCopyId(() => props.task?.id ?? '')
 
@@ -816,10 +816,10 @@ watch(
 
           <!-- Worktree live status -->
           <WorktreePanel
-            v-if="task.worktreePath"
             :task-id="task.id"
-            :worktree-path="task.worktreePath"
+            :worktree-path="task.worktreePath ?? null"
             :active="!!task"
+            @change="emit('worktreeChanged')"
           />
 
           <!-- Project + Spawner assignment row -->

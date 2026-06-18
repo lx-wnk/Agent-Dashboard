@@ -98,39 +98,24 @@ watch(() => props.taskId, fetchStatus)
 
     <!-- Content -->
     <template v-else-if="status">
-      <!-- Branch + ahead/behind -->
-      <div class="flex items-center justify-between gap-3 mb-2.5">
-        <div class="flex items-center gap-1.5 flex-wrap">
-          <span class="font-mono text-xs bg-raised text-fg-soft px-2 py-0.5 rounded font-semibold">
-            {{ status.branch }}
-          </span>
-          <span v-if="status.aheadCount > 0" class="text-[11px] text-green-600 dark:text-green-400 font-mono">
-            ↑{{ status.aheadCount }}
-          </span>
-          <span v-if="status.behindCount > 0" class="text-[11px] text-yellow-600 dark:text-yellow-400 font-mono">
-            ↓{{ status.behindCount }}
-          </span>
-        </div>
-
-        <!-- Action buttons -->
-        <div class="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="actionInFlight"
-            @click="runAction('fetch')"
-          >
-            Fetch
-          </button>
-          <button
-            type="button"
-            class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="actionInFlight"
-            @click="runAction('pull')"
-          >
-            Pull (ff-only)
-          </button>
-        </div>
+      <!-- Action buttons -->
+      <div class="flex items-center gap-1.5 mb-2.5">
+        <button
+          type="button"
+          class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="actionInFlight"
+          @click="runAction('fetch')"
+        >
+          Fetch
+        </button>
+        <button
+          type="button"
+          class="px-2 py-1 rounded text-[11px] font-medium bg-raised text-fg-soft border border-line hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="actionInFlight"
+          @click="runAction('pull')"
+        >
+          Pull (ff-only)
+        </button>
       </div>
 
       <!-- Last commit -->
@@ -159,7 +144,7 @@ watch(() => props.taskId, fetchStatus)
 
       <!-- Clean working tree -->
       <div
-        v-else-if="status.aheadCount === 0 && status.behindCount === 0"
+        v-else
         class="text-[11px] text-fg-mute mb-2.5"
       >
         Clean working tree
