@@ -6,35 +6,52 @@ tool call rather than waiting for the next SSE poll interval (default 3 s).
 ## How it works
 
 `scripts/hooks/notify.js` is a fire-and-forget Node.js script. Claude Code runs it
-after each tool call. The script reads the event payload from stdin and sends it
-to the dashboard. The dashboard acknowledges immediately and triggers a debounced
-SSE rescan within `DASHBOARD_HOOKS_DEBOUNCE_MS` milliseconds (default 100 ms).
+for each lifecycle hook you install. The script reads the event payload from stdin
+and sends it to the dashboard. The dashboard acknowledges immediately and triggers a
+debounced SSE rescan within `DASHBOARD_HOOKS_DEBOUNCE_MS` milliseconds (default 100 ms).
+
+Everything here is **opt-in**: with no hook installed the dashboard behaves exactly
+as before (process/JSONL scan only), and SSE payloads are byte-identical.
+
+### Per-event granularity
+
+When installed, the receiver also records a small, bounded history of recent hook
+events per session (`PreToolUse`, `PostToolUse`, `Stop`, …) and surfaces them in the
+agent modal under **Hook events**. This adds per-event detail on top of the periodic
+scan. The history is in-memory only — nothing is written to disk or a database — and
+the stored payload preview is truncated to 512 bytes, so raw `tool_input` /
+`tool_response` are never persisted. The cap is `DASHBOARD_HOOK_EVENTS_PER_SESSION`
+(default 50).
 
 ## Installation
 
-### 1. Add the hook to `~/.claude/settings.json`
+### 1. Add the hooks to `~/.claude/settings.json`
 
-Open `~/.claude/settings.json` (create it if it does not exist) and add:
+Open `~/.claude/settings.json` (create it if it does not exist). The same
+`notify.js` command works for every hook type, so register the events you want.
+For full per-event granularity, install all of them:
 
 ```json
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js"
-          }
-        ]
-      }
-    ]
+    "PreToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
+    "PostToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
+    "Notification": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
+    "Stop": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
+    "SubagentStop": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
+    "UserPromptSubmit": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
+    "SessionStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }]
   }
 }
 ```
 
 Replace `/absolute/path/to/agent-dashboard` with the actual path on your machine.
+To keep it minimal, install only `PostToolUse` — you still get faster refreshes,
+just without the other event types in the Hook events list.
+
+Claude Code passes each event's payload (including `session_id` and, for tool
+hooks, `tool_name`) on stdin; `notify.js` forwards it as-is with the hook type, so
+no per-event configuration is needed.
 
 ### 2. Set environment variables
 
@@ -94,8 +111,9 @@ curl -s -o /dev/null -w "%{http_code}" -X POST \
 
 | Env var                       | Default | Effect                                                                    |
 | ----------------------------- | ------- | ------------------------------------------------------------------------- |
-| `DASHBOARD_HOOKS_DEBOUNCE_MS` | `100`   | Batches rapid hook events; lower = fresher data, higher = less CPU load   |
-| `DASHBOARD_HOOKS_SECRET`      | (none)  | Shared bearer token; highly recommended for any multi-user deployment     |
+| `DASHBOARD_HOOKS_DEBOUNCE_MS`       | `100`   | Batches rapid hook events; lower = fresher data, higher = less CPU load    |
+| `DASHBOARD_HOOKS_SECRET`            | (none)  | Shared bearer token; highly recommended for any multi-user deployment      |
+| `DASHBOARD_HOOK_EVENTS_PER_SESSION` | `50`    | Max recent hook events kept in memory per session for the Hook events view |
 
 ## Security note
 
