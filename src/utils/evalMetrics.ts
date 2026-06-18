@@ -1,6 +1,6 @@
-import type { MetricKey } from '../types'
-
-export const METRIC_KEYS: MetricKey[] = [
+// Single source of truth for metric keys, the MetricKey union, and labels.
+// Mirrors server/internal/eval/metrics.go (AllMetrics) — keep both in sync.
+export const METRIC_KEYS = [
   'success_rate',
   'mean_iterations_to_success',
   'first_iter_validation_fail_rate',
@@ -10,7 +10,9 @@ export const METRIC_KEYS: MetricKey[] = [
   'mean_cost_cents',
   'mean_tokens',
   'timeout_rate',
-]
+] as const
+
+export type MetricKey = typeof METRIC_KEYS[number]
 
 export const METRIC_LABELS: Record<MetricKey, string> = {
   success_rate: 'Success rate',

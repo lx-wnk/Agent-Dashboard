@@ -27,14 +27,14 @@ func TestDriftAlertRepo_UpsertOpen_Creates(t *testing.T) {
 	client := openTestDB(t)
 	r := repo.NewDriftAlertRepo(client)
 
-	row := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "rate_drop", 0.95, 0.70, -0.25, 0.10, 20)
+	row := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "down", 0.95, 0.70, -0.25, 0.10, 20)
 	require.NoError(t, r.UpsertOpen(t.Context(), []repo.DriftAlertRow{row}))
 
 	alerts, err := r.ListByStatus(t.Context(), "open")
 	require.NoError(t, err)
 	require.Len(t, alerts, 1)
 	require.Equal(t, "open", alerts[0].Status)
-	require.Equal(t, "rate_drop", alerts[0].Direction)
+	require.Equal(t, "down", alerts[0].Direction)
 	require.InDelta(t, 0.70, alerts[0].RecentValue, 1e-9)
 }
 
@@ -42,11 +42,11 @@ func TestDriftAlertRepo_UpsertOpen_NoDuplicate(t *testing.T) {
 	client := openTestDB(t)
 	r := repo.NewDriftAlertRepo(client)
 
-	row := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "rate_drop", 0.95, 0.70, -0.25, 0.10, 20)
+	row := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "down", 0.95, 0.70, -0.25, 0.10, 20)
 	require.NoError(t, r.UpsertOpen(t.Context(), []repo.DriftAlertRow{row}))
 
 	// Second UpsertOpen for same dimension + metric_key should update, not create a second row.
-	updated := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "rate_drop", 0.95, 0.60, -0.35, 0.10, 30)
+	updated := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "down", 0.95, 0.60, -0.35, 0.10, 30)
 	require.NoError(t, r.UpsertOpen(t.Context(), []repo.DriftAlertRow{updated}))
 
 	alerts, err := r.ListByStatus(t.Context(), "open")
@@ -68,8 +68,8 @@ func TestDriftAlertRepo_ListByStatus(t *testing.T) {
 	r := repo.NewDriftAlertRepo(client)
 
 	rows := []repo.DriftAlertRow{
-		alertRow("sp1", "m1", "concept", "metric_a", "rate_drop", 1, 0.5, -0.5, 0.1, 10),
-		alertRow("sp2", "m2", "implement", "metric_b", "continuous_increase", 1, 1.5, 0.5, 0.1, 10),
+		alertRow("sp1", "m1", "concept", "metric_a", "down", 1, 0.5, -0.5, 0.1, 10),
+		alertRow("sp2", "m2", "implement", "metric_b", "up", 1, 1.5, 0.5, 0.1, 10),
 	}
 	require.NoError(t, r.UpsertOpen(t.Context(), rows))
 
@@ -86,7 +86,7 @@ func TestDriftAlertRepo_Acknowledge(t *testing.T) {
 	client := openTestDB(t)
 	r := repo.NewDriftAlertRepo(client)
 
-	row := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "rate_drop", 0.95, 0.70, -0.25, 0.10, 20)
+	row := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "down", 0.95, 0.70, -0.25, 0.10, 20)
 	require.NoError(t, r.UpsertOpen(t.Context(), []repo.DriftAlertRow{row}))
 
 	alerts, err := r.ListByStatus(t.Context(), "open")
@@ -110,7 +110,7 @@ func TestDriftAlertRepo_NewOpenAfterAck(t *testing.T) {
 	client := openTestDB(t)
 	r := repo.NewDriftAlertRepo(client)
 
-	row := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "rate_drop", 0.95, 0.70, -0.25, 0.10, 20)
+	row := alertRow("sp1", "claude-sonnet", "concept", "success_rate", "down", 0.95, 0.70, -0.25, 0.10, 20)
 	require.NoError(t, r.UpsertOpen(t.Context(), []repo.DriftAlertRow{row}))
 
 	alerts, err := r.ListByStatus(t.Context(), "open")

@@ -3,6 +3,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,9 +12,19 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/eval"
 )
 
-const defaultLookbackHours = 336 // 14 days
+const (
+	defaultLookbackHours = 336  // 14 days
+	maxLookbackHours     = 8760 // 365 days — caps the read window
+)
+
+// validStatuses is the allow-list for the drift ?status= query param.
+var validStatuses = map[string]bool{
+	repo.DriftStatusOpen:         true,
+	repo.DriftStatusAcknowledged: true,
+}
 
 // Scanner is satisfied by *eval.Service without creating a direct dependency on it.
 type Scanner interface {
@@ -40,8 +51,6 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/api/eval/drift/{id}/ack", h.ackDrift)
 	r.Post("/api/eval/scan", h.triggerScan)
 }
-
-// ─── DTOs ─────────────────────────────────────────────────────────────────────
 
 type metricSnapshotDTO struct {
 	ID          string  `json:"id"`
@@ -73,8 +82,6 @@ type driftAlertDTO struct {
 	AcknowledgedAt *string `json:"acknowledgedAt"`
 }
 
-// ─── GET /api/eval/metrics ────────────────────────────────────────────────────
-
 func (h *Handler) getMetrics(w http.ResponseWriter, r *http.Request) {
 	hours := defaultLookbackHours
 	if v := r.URL.Query().Get("hours"); v != "" {
@@ -82,6 +89,9 @@ func (h *Handler) getMetrics(w http.ResponseWriter, r *http.Request) {
 		if err != nil || n <= 0 {
 			apierr.JSONError(w, http.StatusBadRequest, "hours must be a positive integer")
 			return
+		}
+		if n > maxLookbackHours {
+			n = maxLookbackHours
 		}
 		hours = n
 	}
@@ -113,12 +123,14 @@ func (h *Handler) getMetrics(w http.ResponseWriter, r *http.Request) {
 	apierr.WriteJSON(w, http.StatusOK, dtos)
 }
 
-// ─── GET /api/eval/drift ──────────────────────────────────────────────────────
-
 func (h *Handler) getDrift(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	if status == "" {
-		status = "open"
+		status = repo.DriftStatusOpen
+	}
+	if !validStatuses[status] {
+		apierr.JSONError(w, http.StatusBadRequest, "status must be 'open' or 'acknowledged'")
+		return
 	}
 
 	rows, err := h.alertRepo.ListByStatus(r.Context(), status)
@@ -134,8 +146,6 @@ func (h *Handler) getDrift(w http.ResponseWriter, r *http.Request) {
 	apierr.WriteJSON(w, http.StatusOK, dtos)
 }
 
-// ─── POST /api/eval/drift/{id}/ack ────────────────────────────────────────────
-
 func (h *Handler) ackDrift(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
@@ -144,6 +154,10 @@ func (h *Handler) ackDrift(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.alertRepo.Acknowledge(r.Context(), id); err != nil {
+		if ent.IsNotFound(err) {
+			apierr.JSONError(w, http.StatusNotFound, "drift alert not found")
+			return
+		}
 		apierr.JSONError(w, http.StatusInternalServerError, "failed to acknowledge drift alert")
 		return
 	}
@@ -151,17 +165,17 @@ func (h *Handler) ackDrift(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ─── POST /api/eval/scan ──────────────────────────────────────────────────────
-
 func (h *Handler) triggerScan(w http.ResponseWriter, r *http.Request) {
 	if err := h.scanner.Scan(r.Context()); err != nil {
+		if errors.Is(err, eval.ErrScanInProgress) {
+			apierr.JSONError(w, http.StatusConflict, "a scan is already in progress")
+			return
+		}
 		apierr.JSONError(w, http.StatusInternalServerError, "scan failed")
 		return
 	}
 	apierr.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
 
 func toMetricDTO(s *ent.EvalMetricSnapshot) metricSnapshotDTO {
 	return metricSnapshotDTO{

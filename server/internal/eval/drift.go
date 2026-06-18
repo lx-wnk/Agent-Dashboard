@@ -2,6 +2,14 @@ package eval
 
 import "sort"
 
+// Drift direction vocabulary — single source of truth for the value-movement
+// reported in alerts. The frontend DriftAlert.direction type and the alert
+// template MUST match these exact strings.
+const (
+	DirectionUp   = "up"   // recent metric value rose above baseline
+	DirectionDown = "down" // recent metric value fell below baseline
+)
+
 // Thresholds controls when drift is considered significant.
 type Thresholds struct {
 	RateDropPP float64 // minimum percentage-point worsening to fire a rate alert
@@ -80,16 +88,22 @@ func DetectDrift(
 
 				if worsening >= th.RateDropPP {
 					fired = true
-					direction = "rate_drop"
+					if recentPP >= baselinePP {
+						direction = DirectionUp
+					} else {
+						direction = DirectionDown
+					}
 					delta = worsening
 					threshold = th.RateDropPP
 				}
 
 			case KindContinuous:
-				// Only HigherIsWorse direction triggers alerts; improvements are silent.
-				if def.HigherIsWorse && mv.Value > bl.Mean+th.StddevK*bl.Stddev {
+				// Only HigherIsWorse continuous metrics alert, and only when a
+				// real variance band exists (Stddev>0 needs >=2 baseline snapshots).
+				// This suppresses cold-start false positives on sparse history.
+				if def.HigherIsWorse && bl.Stddev > 0 && mv.Value > bl.Mean+th.StddevK*bl.Stddev {
 					fired = true
-					direction = "continuous_increase"
+					direction = DirectionUp
 					delta = mv.Value - bl.Mean
 					threshold = th.StddevK * bl.Stddev
 				}

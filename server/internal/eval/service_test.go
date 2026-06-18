@@ -80,7 +80,8 @@ func TestService_Scan_DetectsDrift(t *testing.T) {
 	}
 
 	// (a) A snapshot was inserted for the recent window (RecordedAt == now from clock).
-	snaps, err := metricRepo.ListByMetric(ctx, MetricSuccessRate, now, now)
+	// ListByMetric uses a half-open [from, to) window; bound just past now to include it.
+	snaps, err := metricRepo.ListByMetric(ctx, MetricSuccessRate, now, now.Add(time.Nanosecond))
 	if err != nil {
 		t.Fatalf("ListByMetric: %v", err)
 	}

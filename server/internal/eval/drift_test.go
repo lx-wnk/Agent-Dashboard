@@ -24,7 +24,7 @@ func TestDetectDrift_RateDropFires(t *testing.T) {
 	if f.MetricKey != MetricSuccessRate {
 		t.Errorf("wrong metric key: %s", f.MetricKey)
 	}
-	if f.Direction != "rate_drop" {
+	if f.Direction != DirectionDown {
 		t.Errorf("wrong direction: %s", f.Direction)
 	}
 	// 0.80 - 0.60 = 0.20 → 20pp; threshold = 10pp
@@ -70,7 +70,7 @@ func TestDetectDrift_ContinuousIncreaseFires(t *testing.T) {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
 	f := findings[0]
-	if f.Direction != "continuous_increase" {
+	if f.Direction != DirectionUp {
 		t.Errorf("direction: %s", f.Direction)
 	}
 	if math.Abs(f.Delta-30.0) > 0.001 {
@@ -241,7 +241,70 @@ func TestDetectDrift_HigherIsWorseRateFires(t *testing.T) {
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
-	if findings[0].Direction != "rate_drop" {
+	if findings[0].Direction != DirectionUp {
 		t.Errorf("direction: %s", findings[0].Direction)
+	}
+}
+
+func TestDetectDrift_ContinuousImprovementSilent(t *testing.T) {
+	dim := Dimension{SpawnerID: "sp1", Model: "m", Stage: "implement"}
+	// A HigherIsWorse continuous metric falling below baseline is an improvement
+	// and must never fire. This also covers the guard that keeps non-worsening
+	// continuous movement silent.
+	recent := map[Dimension][]MetricValue{
+		dim: {{Key: MetricMeanCostCents, Value: 60, SampleCount: 20}},
+	}
+	baseline := map[Dimension]map[string]Baseline{
+		dim: {MetricMeanCostCents: {Mean: 100, Stddev: 10, SampleCount: 50}},
+	}
+	th := Thresholds{RateDropPP: 10, StddevK: 2.0, MinSamples: 5}
+
+	findings := DetectDrift(recent, baseline, th)
+	if len(findings) != 0 {
+		t.Errorf("continuous metric falling below baseline must be silent, got %d", len(findings))
+	}
+}
+
+func TestDetectDrift_ContinuousZeroStddevSilent(t *testing.T) {
+	dim := Dimension{SpawnerID: "sp1", Model: "m", Stage: "implement"}
+	// Cold start: a single baseline snapshot yields Stddev=0. Any recent value
+	// above the mean would otherwise fire (mean + k*0 = mean) — must be suppressed.
+	recent := map[Dimension][]MetricValue{
+		dim: {{Key: MetricMeanCostCents, Value: 130, SampleCount: 20}},
+	}
+	baseline := map[Dimension]map[string]Baseline{
+		dim: {MetricMeanCostCents: {Mean: 100, Stddev: 0, SampleCount: 50}},
+	}
+	th := Thresholds{RateDropPP: 10, StddevK: 2.0, MinSamples: 5}
+
+	findings := DetectDrift(recent, baseline, th)
+	if len(findings) != 0 {
+		t.Errorf("zero-stddev baseline must suppress continuous alerts, got %d", len(findings))
+	}
+}
+
+func TestDetectDrift_DeterministicOrderingByMetricKey(t *testing.T) {
+	// Same stage, two different metric keys — must sort by MetricKey as secondary key.
+	dim := Dimension{SpawnerID: "sp1", Model: "m", Stage: "review"}
+	recent := map[Dimension][]MetricValue{
+		dim: {
+			{Key: MetricTimeoutRate, Value: 0.30, SampleCount: 20},
+			{Key: MetricAwaitingUserRate, Value: 0.30, SampleCount: 20},
+		},
+	}
+	baseline := map[Dimension]map[string]Baseline{
+		dim: {
+			MetricTimeoutRate:      {Mean: 0.05, Stddev: 0.01, SampleCount: 50},
+			MetricAwaitingUserRate: {Mean: 0.05, Stddev: 0.01, SampleCount: 50},
+		},
+	}
+	th := Thresholds{RateDropPP: 10, StddevK: 2.0, MinSamples: 5}
+
+	findings := DetectDrift(recent, baseline, th)
+	if len(findings) != 2 {
+		t.Fatalf("expected 2 findings, got %d", len(findings))
+	}
+	if findings[0].MetricKey > findings[1].MetricKey {
+		t.Errorf("not sorted by metric key: %s > %s", findings[0].MetricKey, findings[1].MetricKey)
 	}
 }

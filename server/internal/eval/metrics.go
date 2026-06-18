@@ -32,16 +32,17 @@ type MetricDef struct {
 
 // AllMetrics is the authoritative slice of all tracked metrics. Drift detection
 // and snapshot insertion iterate this slice — no other file may hardcode metric keys.
+// Labels must stay identical to METRIC_LABELS in src/utils/evalMetrics.ts.
 var AllMetrics = []MetricDef{
-	{Key: MetricSuccessRate, Kind: KindRate, HigherIsWorse: false, Label: "Success Rate"},
-	{Key: MetricMeanIterations, Kind: KindContinuous, HigherIsWorse: true, Label: "Mean Iterations to Success"},
-	{Key: MetricFirstIterValidationFail, Kind: KindRate, HigherIsWorse: true, Label: "First-Iter Validation Fail Rate"},
-	{Key: MetricAwaitingUserRate, Kind: KindRate, HigherIsWorse: true, Label: "Awaiting User Rate"},
-	{Key: MetricEscalationRate, Kind: KindRate, HigherIsWorse: true, Label: "Escalation Rate"},
-	{Key: MetricMeanDurationSeconds, Kind: KindContinuous, HigherIsWorse: true, Label: "Mean Duration (s)"},
-	{Key: MetricMeanCostCents, Kind: KindContinuous, HigherIsWorse: true, Label: "Mean Cost (cents)"},
-	{Key: MetricMeanTokens, Kind: KindContinuous, HigherIsWorse: true, Label: "Mean Tokens"},
-	{Key: MetricTimeoutRate, Kind: KindRate, HigherIsWorse: true, Label: "Timeout Rate"},
+	{Key: MetricSuccessRate, Kind: KindRate, HigherIsWorse: false, Label: "Success rate"},
+	{Key: MetricMeanIterations, Kind: KindContinuous, HigherIsWorse: true, Label: "Mean iterations to success"},
+	{Key: MetricFirstIterValidationFail, Kind: KindRate, HigherIsWorse: true, Label: "First-iter validation fail rate"},
+	{Key: MetricAwaitingUserRate, Kind: KindRate, HigherIsWorse: true, Label: "Awaiting user rate"},
+	{Key: MetricEscalationRate, Kind: KindRate, HigherIsWorse: true, Label: "Escalation rate"},
+	{Key: MetricMeanDurationSeconds, Kind: KindContinuous, HigherIsWorse: true, Label: "Mean duration (s)"},
+	{Key: MetricMeanCostCents, Kind: KindContinuous, HigherIsWorse: true, Label: "Mean cost (¢)"},
+	{Key: MetricMeanTokens, Kind: KindContinuous, HigherIsWorse: true, Label: "Mean tokens"},
+	{Key: MetricTimeoutRate, Kind: KindRate, HigherIsWorse: true, Label: "Timeout rate"},
 }
 
 // metricIndex is a lookup map built once at init time for O(1) access by key.

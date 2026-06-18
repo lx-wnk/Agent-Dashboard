@@ -220,10 +220,7 @@ onUnmounted(() => {
               class="flex items-center justify-between gap-3 px-3 py-2 bg-raised rounded-md text-xs flex-wrap"
             >
               <span class="font-semibold text-fg">{{ metricLabel(alert.metricKey) }}</span>
-              <span
-                class="font-mono"
-                :class="alert.direction === 'up' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'"
-              >
+              <span class="font-mono text-red-600 dark:text-red-400">
                 {{ alert.direction === 'up' ? '▲' : '▼' }}
                 {{ alert.baselineValue.toFixed(3) }} → {{ alert.recentValue.toFixed(3) }}
                 (Δ {{ alert.delta >= 0 ? '+' : '' }}{{ alert.delta.toFixed(3) }})

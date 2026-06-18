@@ -10,6 +10,12 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 )
 
+// Drift alert status vocabulary — single source of truth.
+const (
+	DriftStatusOpen         = "open"
+	DriftStatusAcknowledged = "acknowledged"
+)
+
 // DriftAlertRow is the input type for UpsertOpen.
 type DriftAlertRow struct {
 	SpawnerID     string
@@ -60,7 +66,7 @@ func (r *entDriftAlertRepo) UpsertOpen(ctx context.Context, rows []DriftAlertRow
 				driftalert.Model(row.Model),
 				driftalert.Stage(row.Stage),
 				driftalert.MetricKey(row.MetricKey),
-				driftalert.Status("open"),
+				driftalert.Status(DriftStatusOpen),
 			).
 			Only(ctx)
 		if err != nil && !ent.IsNotFound(err) {
@@ -88,7 +94,7 @@ func (r *entDriftAlertRepo) UpsertOpen(ctx context.Context, rows []DriftAlertRow
 				SetModel(row.Model).
 				SetStage(row.Stage).
 				SetMetricKey(row.MetricKey).
-				SetStatus("open").
+				SetStatus(DriftStatusOpen).
 				SetDirection(row.Direction).
 				SetBaselineValue(row.BaselineValue).
 				SetRecentValue(row.RecentValue).
@@ -108,10 +114,14 @@ func (r *entDriftAlertRepo) UpsertOpen(ctx context.Context, rows []DriftAlertRow
 	return nil
 }
 
+// maxAlertRows caps drift-alert read queries to bound memory use.
+const maxAlertRows = 10000
+
 // ListByStatus returns all drift alerts matching any of the given statuses.
 func (r *entDriftAlertRepo) ListByStatus(ctx context.Context, statuses ...string) ([]*ent.DriftAlert, error) {
 	rows, err := r.client.DriftAlert.Query().
 		Where(driftalert.StatusIn(statuses...)).
+		Limit(maxAlertRows).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("driftalert.ListByStatus: %w", err)
@@ -119,10 +129,11 @@ func (r *entDriftAlertRepo) ListByStatus(ctx context.Context, statuses ...string
 	return rows, nil
 }
 
-// Acknowledge sets status="acknowledged" and acknowledged_at=now for the given alert ID.
+// Acknowledge sets status=acknowledged and acknowledged_at=now for the given alert ID.
+// The returned error is ent.IsNotFound when no row matches id; callers map it to 404.
 func (r *entDriftAlertRepo) Acknowledge(ctx context.Context, id string) error {
 	if err := r.client.DriftAlert.UpdateOneID(id).
-		SetStatus("acknowledged").
+		SetStatus(DriftStatusAcknowledged).
 		SetAcknowledgedAt(time.Now()).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("driftalert.Acknowledge: %w", err)

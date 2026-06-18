@@ -21,8 +21,8 @@ func TestEvalMetricRepo_Insert_And_ListByMetric(t *testing.T) {
 	}
 	require.NoError(t, r.Insert(t.Context(), rows))
 
-	// ListByMetric: only success_rate rows whose recorded_at is exactly base.
-	results, err := r.ListByMetric(t.Context(), "success_rate", base, base)
+	// ListByMetric uses a half-open [from, to) window; bound just past base to include it.
+	results, err := r.ListByMetric(t.Context(), "success_rate", base, base.Add(time.Nanosecond))
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, "success_rate", results[0].MetricKey)
@@ -59,8 +59,8 @@ func TestEvalMetricRepo_ListByTimeRange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
-	// Narrow to just base.
-	exact, err := r.ListByTimeRange(t.Context(), base, base)
+	// Narrow to just base (half-open [base, base+1ns)).
+	exact, err := r.ListByTimeRange(t.Context(), base, base.Add(time.Nanosecond))
 	require.NoError(t, err)
 	require.Len(t, exact, 1)
 	require.InDelta(t, 2.0, exact[0].Value, 1e-9)

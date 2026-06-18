@@ -7,6 +7,7 @@ import type {
   PendingPermission,
   TokenUsage,
 } from './sdk.generated'
+import type { MetricKey } from './utils/evalMetrics'
 // Types generated from sdk/types.go via tygo — do not edit these directly.
 // Run `task generate` to regenerate after changing sdk/types.go.
 import {
@@ -333,17 +334,9 @@ export interface Spawner {
   updatedAt: string
 }
 
-// Eval / drift-detection types
-export type MetricKey
-  = | 'success_rate'
-    | 'mean_iterations_to_success'
-    | 'first_iter_validation_fail_rate'
-    | 'awaiting_user_rate'
-    | 'escalation_rate'
-    | 'mean_duration_seconds'
-    | 'mean_cost_cents'
-    | 'mean_tokens'
-    | 'timeout_rate'
+// Eval / drift-detection types.
+// MetricKey is derived from the canonical key list in utils/evalMetrics.
+export type { MetricKey } from './utils/evalMetrics'
 
 export interface EvalMetricSnapshot {
   id: string

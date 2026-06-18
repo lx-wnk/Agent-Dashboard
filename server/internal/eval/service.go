@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -11,6 +12,10 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
+
+// ErrScanInProgress is returned by Scan when another scan already holds the
+// single-instance guard. Callers (ticker, HTTP endpoint) treat it as "busy".
+var ErrScanInProgress = errors.New("eval: scan already in progress")
 
 // Service orchestrates periodic metric collection, snapshot persistence, and drift detection.
 type Service struct {
@@ -71,11 +76,21 @@ func (s *Service) WithClock(fn func() time.Time) *Service {
 	}
 }
 
-// Scan collects recent metrics, persists them as snapshots, builds a baseline from
-// prior snapshot history, detects drift, and fires the onDrift callback if set.
+// Scan acquires the single-instance guard, then collects recent metrics, persists
+// them as snapshots, builds a baseline from prior snapshot history, detects drift,
+// and fires the onDrift callback if set. It returns ErrScanInProgress if another
+// scan is already running, so a manual POST /api/eval/scan can never race the ticker.
 // Baseline is derived from prior snapshots, so no alerts fire until ~2*window of
 // history exists — cold-start silence is expected behaviour, not a bug.
 func (s *Service) Scan(ctx context.Context) error {
+	if !s.tryLock() {
+		return ErrScanInProgress
+	}
+	defer s.unlock()
+	return s.scan(ctx)
+}
+
+func (s *Service) scan(ctx context.Context) error {
 	now := s.clock()
 	W := time.Duration(s.windowHours) * time.Hour
 	recentFrom := now.Add(-W)
@@ -150,7 +165,7 @@ func (s *Service) Scan(ctx context.Context) error {
 func (s *Service) RunLoop(ctx context.Context, interval time.Duration) {
 	slog.Info("eval.scheduler: starting drift-detection scanner", "interval", interval)
 
-	if err := s.runOnce(ctx); err != nil {
+	if err := s.Scan(ctx); err != nil {
 		slog.Warn("eval.scheduler: boot scan error", "err", err)
 	}
 
@@ -166,37 +181,16 @@ func (s *Service) RunLoop(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if !s.tryLock() {
-				slog.Debug("eval.scheduler: tick skipped, scan still in progress")
-				continue
-			}
 			go func() {
-				defer s.unlock()
-				if err := s.Scan(ctx); err != nil {
+				switch err := s.Scan(ctx); {
+				case errors.Is(err, ErrScanInProgress):
+					slog.Debug("eval.scheduler: tick skipped, scan still in progress")
+				case err != nil:
 					slog.Warn("eval.scheduler: scan error", "err", err)
 				}
 			}()
 		}
 	}
-}
-
-// runOnce executes Scan synchronously under the single-instance guard.
-func (s *Service) runOnce(ctx context.Context) error {
-	s.mu.Lock()
-	if s.running {
-		s.mu.Unlock()
-		return fmt.Errorf("scan already in progress")
-	}
-	s.running = true
-	s.mu.Unlock()
-
-	defer func() {
-		s.mu.Lock()
-		s.running = false
-		s.mu.Unlock()
-	}()
-
-	return s.Scan(ctx)
 }
 
 func (s *Service) tryLock() bool {

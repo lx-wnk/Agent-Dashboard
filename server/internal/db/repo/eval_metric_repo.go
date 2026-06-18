@@ -10,6 +10,10 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 )
 
+// maxSnapshotRows caps read queries so an unbounded lookback window cannot pull
+// the entire (growing) snapshot table into memory.
+const maxSnapshotRows = 50000
+
 // EvalMetricSnapshotRow is the input type for Insert.
 type EvalMetricSnapshotRow struct {
 	SpawnerID   string
@@ -69,14 +73,16 @@ func (r *entEvalMetricRepo) Insert(ctx context.Context, rows []EvalMetricSnapsho
 	return nil
 }
 
-// ListByMetric returns snapshots for a specific metric_key whose recorded_at is in [from, to].
+// ListByMetric returns snapshots for a specific metric_key whose recorded_at is
+// in the half-open range [from, to).
 func (r *entEvalMetricRepo) ListByMetric(ctx context.Context, metricKey string, from, to time.Time) ([]*ent.EvalMetricSnapshot, error) {
 	rows, err := r.client.EvalMetricSnapshot.Query().
 		Where(
 			evalmetricsnapshot.MetricKey(metricKey),
 			evalmetricsnapshot.RecordedAtGTE(from),
-			evalmetricsnapshot.RecordedAtLTE(to),
+			evalmetricsnapshot.RecordedAtLT(to),
 		).
+		Limit(maxSnapshotRows).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("evalmetric.ListByMetric: %w", err)
@@ -84,13 +90,16 @@ func (r *entEvalMetricRepo) ListByMetric(ctx context.Context, metricKey string, 
 	return rows, nil
 }
 
-// ListByTimeRange returns all snapshots whose recorded_at is in [from, to].
+// ListByTimeRange returns all snapshots whose recorded_at is in the half-open
+// range [from, to). The exclusive upper bound keeps the baseline and recent
+// windows disjoint so a boundary snapshot is never counted twice.
 func (r *entEvalMetricRepo) ListByTimeRange(ctx context.Context, from, to time.Time) ([]*ent.EvalMetricSnapshot, error) {
 	rows, err := r.client.EvalMetricSnapshot.Query().
 		Where(
 			evalmetricsnapshot.RecordedAtGTE(from),
-			evalmetricsnapshot.RecordedAtLTE(to),
+			evalmetricsnapshot.RecordedAtLT(to),
 		).
+		Limit(maxSnapshotRows).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("evalmetric.ListByTimeRange: %w", err)
