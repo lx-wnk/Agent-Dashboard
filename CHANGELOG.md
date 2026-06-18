@@ -48,6 +48,8 @@ Preparing the first public release.
 
 ### Fixed
 
+- Worktree panel now emits a `change` event after create/remove so the task view
+  can react; previously the action ran but the parent was never notified.
 - Production build now embeds the real Vue SPA. `vite build` writes to
   `server/frontend/dist` (the `go:embed` source); previously it emitted to the
   repo-root `./dist`, so `task build` silently shipped the placeholder frontend.
