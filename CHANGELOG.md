@@ -34,10 +34,28 @@ Preparing the first public release.
 - Community health files: `SECURITY.md`, `CODE_OF_CONDUCT.md`, Dependabot config,
   and `FUNDING.yml`.
 
+### Changed
+
+- Accessibility: clickable agent rows are now native `<button>` elements, and the
+  agent-modal summary uses a higher-contrast token.
+- SSE poll and retry intervals are centralized in `src/utils/sse.ts` instead of
+  being hard-coded at call sites.
+
+### Removed
+
+- Pruned unused TS-era dependencies never imported by the shipped app: `express`,
+  `nodemailer`, `web-push`, `cookie-parser`, `supertest`, and their `@types/*`.
+
 ### Fixed
 
 - Production build now embeds the real Vue SPA. `vite build` writes to
   `server/frontend/dist` (the `go:embed` source); previously it emitted to the
   repo-root `./dist`, so `task build` silently shipped the placeholder frontend.
+
+### Security
+
+- Hardened the live-injection endpoint (`POST /api/agents/{pid}/message`): rate
+  limiting, audit logging, per-session token rotation, and control-character
+  sanitization (PR #188).
 
 [Unreleased]: https://github.com/lx-wnk/Agent-Dashboard/commits/main
