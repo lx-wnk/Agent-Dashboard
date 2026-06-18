@@ -1,12 +1,13 @@
 package tasks_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
@@ -20,9 +21,15 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
-// captureOrchestrator records the ProgressOpts passed to ProgressTask so the
-// retry test can assert how the resume session id was resolved.
-type captureOrchestrator struct{ opts *pipeline.ProgressOpts }
+// captureOrchestrator records the most recent RequeueForUser call so handler
+// tests can assert which taskID and prompt were passed. ProgressTask is kept
+// for interface compliance but its opts field is no longer inspected at the
+// handler level (session derivation moved into the real orchestrator).
+type captureOrchestrator struct {
+	opts          *pipeline.ProgressOpts
+	requeueTaskID string
+	requeuePrompt string
+}
 
 func (c *captureOrchestrator) ProgressTask(_ context.Context, taskID string, opts *pipeline.ProgressOpts) (*ent.StageRun, error) {
 	c.opts = opts
@@ -31,16 +38,14 @@ func (c *captureOrchestrator) ProgressTask(_ context.Context, taskID string, opt
 func (c *captureOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
+func (c *captureOrchestrator) RequeueForUser(_ context.Context, taskID, userPrompt string) (*ent.StageRun, error) {
+	c.requeueTaskID = taskID
+	c.requeuePrompt = userPrompt
+	return &ent.StageRun{ID: taskID + "-run"}, nil
+}
 func (c *captureOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
 func (c *captureOrchestrator) InvalidateConfigCache()                                   {}
 func (c *captureOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}
-
-func (c *captureOrchestrator) resumeID() string {
-	if c.opts == nil {
-		return ""
-	}
-	return c.opts.ResumeSessionID
-}
 
 // seedFailedRun creates a task at the given stage with one failed stage_run.
 // When sessionID is non-empty it is stamped onto the run; when writeFile is
@@ -126,7 +131,11 @@ func postRetry(t *testing.T, r *chi.Mux, taskID string) *httptest.ResponseRecord
 	return w
 }
 
-func TestRetry_ResumesWhenSessionFileExists(t *testing.T) {
+// TestRetry_Returns202AndCallsRequeueForUser verifies the handler now returns
+// 202 Accepted and delegates to RequeueForUser with the correct task ID.
+// Session-resolution is no longer the handler's responsibility — those
+// assertions were moved to the orchestrator-level tests.
+func TestRetry_Returns202AndCallsRequeueForUser(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	orch := &captureOrchestrator{}
@@ -134,21 +143,17 @@ func TestRetry_ResumesWhenSessionFileExists(t *testing.T) {
 	taskID := seedFailedRun(t, client, cwd, "implementation", "sess-live", true)
 
 	w := postRetry(t, r, taskID)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted, got %d: %s", w.Code, w.Body.String())
 	}
-	if got := orch.resumeID(); got != "sess-live" {
-		t.Fatalf("expected ResumeSessionID=sess-live, got %q", got)
+	if orch.requeueTaskID != taskID {
+		t.Fatalf("expected RequeueForUser called with taskID=%q, got %q", taskID, orch.requeueTaskID)
 	}
-	// End-to-end: the resolved id must become a --resume flag in the spawn argv.
-	args := pipeline.BuildSpawnArgs(pipeline.SpawnAgentOptions{
-		Task: &ent.Task{}, StageRun: &ent.StageRun{}, Prompt: "p", ResumeSessionID: orch.resumeID(),
-	})
-	assertContains(t, args, "--resume")
-	assertContains(t, args, "sess-live")
 }
 
-func TestRetry_FreshSpawnWhenNoSessionID(t *testing.T) {
+// TestRetry_Returns202_NoSessionID confirms 202 is returned even when the
+// task has no prior session (fresh spawn path, resolved later by orchestrator).
+func TestRetry_Returns202_NoSessionID(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	orch := &captureOrchestrator{}
@@ -156,34 +161,52 @@ func TestRetry_FreshSpawnWhenNoSessionID(t *testing.T) {
 	taskID := seedFailedRun(t, client, cwd, "implementation", "", false)
 
 	w := postRetry(t, r, taskID)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted, got %d: %s", w.Code, w.Body.String())
 	}
-	if got := orch.resumeID(); got != "" {
-		t.Fatalf("expected no ResumeSessionID, got %q", got)
+	if orch.requeueTaskID != taskID {
+		t.Fatalf("expected RequeueForUser called with taskID=%q, got %q", taskID, orch.requeueTaskID)
 	}
 }
 
-func TestRetry_FreshSpawnWhenSessionFileMissing(t *testing.T) {
+// TestRetry_Returns202_SessionFileMissing confirms 202 even when the session
+// file is gone from disk (orchestrator handles derive-or-fresh at spawn time).
+func TestRetry_Returns202_SessionFileMissing(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	orch := &captureOrchestrator{}
 	client, r := newRetryHandler(t, orch)
-	// session_id recorded, but no JSONL written to disk → must fall back.
+	// session_id recorded in DB but no JSONL on disk — handler must not care.
 	taskID := seedFailedRun(t, client, cwd, "implementation", "sess-gone", false)
 
 	w := postRetry(t, r, taskID)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted, got %d: %s", w.Code, w.Body.String())
 	}
-	if got := orch.resumeID(); got != "" {
-		t.Fatalf("expected fresh spawn (empty ResumeSessionID), got %q", got)
+	if orch.requeueTaskID != taskID {
+		t.Fatalf("expected RequeueForUser called with taskID=%q, got %q", taskID, orch.requeueTaskID)
 	}
 }
 
-func assertContains(t *testing.T, args []string, want string) {
-	t.Helper()
-	if !slices.Contains(args, want) {
-		t.Fatalf("expected args to contain %q, got %v", want, args)
+// TestRetry_PassesAdditionalPrompt verifies the additional prompt from the
+// request body is forwarded to RequeueForUser unchanged.
+func TestRetry_PassesAdditionalPrompt(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	orch := &captureOrchestrator{}
+	client, r := newRetryHandler(t, orch)
+	taskID := seedFailedRun(t, client, cwd, "implementation", "", false)
+
+	b, _ := json.Marshal(map[string]any{"additionalPrompt": "please also fix the lint errors"})
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+taskID+"/retry", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+	if orch.requeuePrompt != "please also fix the lint errors" {
+		t.Fatalf("expected prompt forwarded, got %q", orch.requeuePrompt)
 	}
 }

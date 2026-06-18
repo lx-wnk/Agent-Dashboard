@@ -7663,6 +7663,7 @@ type StageRunMutation struct {
 	retry_count                *int
 	addretry_count             *int
 	next_retry_at              *time.Time
+	pending_user_prompt        *string
 	created_at                 *time.Time
 	clearedFields              map[string]struct{}
 	task                       *string
@@ -8524,6 +8525,55 @@ func (m *StageRunMutation) ResetNextRetryAt() {
 	delete(m.clearedFields, stagerun.FieldNextRetryAt)
 }
 
+// SetPendingUserPrompt sets the "pending_user_prompt" field.
+func (m *StageRunMutation) SetPendingUserPrompt(s string) {
+	m.pending_user_prompt = &s
+}
+
+// PendingUserPrompt returns the value of the "pending_user_prompt" field in the mutation.
+func (m *StageRunMutation) PendingUserPrompt() (r string, exists bool) {
+	v := m.pending_user_prompt
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPendingUserPrompt returns the old "pending_user_prompt" field's value of the StageRun entity.
+// If the StageRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *StageRunMutation) OldPendingUserPrompt(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPendingUserPrompt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPendingUserPrompt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPendingUserPrompt: %w", err)
+	}
+	return oldValue.PendingUserPrompt, nil
+}
+
+// ClearPendingUserPrompt clears the value of the "pending_user_prompt" field.
+func (m *StageRunMutation) ClearPendingUserPrompt() {
+	m.pending_user_prompt = nil
+	m.clearedFields[stagerun.FieldPendingUserPrompt] = struct{}{}
+}
+
+// PendingUserPromptCleared returns if the "pending_user_prompt" field was cleared in this mutation.
+func (m *StageRunMutation) PendingUserPromptCleared() bool {
+	_, ok := m.clearedFields[stagerun.FieldPendingUserPrompt]
+	return ok
+}
+
+// ResetPendingUserPrompt resets all changes to the "pending_user_prompt" field.
+func (m *StageRunMutation) ResetPendingUserPrompt() {
+	m.pending_user_prompt = nil
+	delete(m.clearedFields, stagerun.FieldPendingUserPrompt)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *StageRunMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -8675,7 +8725,7 @@ func (m *StageRunMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *StageRunMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 17)
 	if m.task != nil {
 		fields = append(fields, stagerun.FieldTaskID)
 	}
@@ -8721,6 +8771,9 @@ func (m *StageRunMutation) Fields() []string {
 	if m.next_retry_at != nil {
 		fields = append(fields, stagerun.FieldNextRetryAt)
 	}
+	if m.pending_user_prompt != nil {
+		fields = append(fields, stagerun.FieldPendingUserPrompt)
+	}
 	if m.created_at != nil {
 		fields = append(fields, stagerun.FieldCreatedAt)
 	}
@@ -8762,6 +8815,8 @@ func (m *StageRunMutation) Field(name string) (ent.Value, bool) {
 		return m.RetryCount()
 	case stagerun.FieldNextRetryAt:
 		return m.NextRetryAt()
+	case stagerun.FieldPendingUserPrompt:
+		return m.PendingUserPrompt()
 	case stagerun.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -8803,6 +8858,8 @@ func (m *StageRunMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldRetryCount(ctx)
 	case stagerun.FieldNextRetryAt:
 		return m.OldNextRetryAt(ctx)
+	case stagerun.FieldPendingUserPrompt:
+		return m.OldPendingUserPrompt(ctx)
 	case stagerun.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -8918,6 +8975,13 @@ func (m *StageRunMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetNextRetryAt(v)
+		return nil
+	case stagerun.FieldPendingUserPrompt:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPendingUserPrompt(v)
 		return nil
 	case stagerun.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -9043,6 +9107,9 @@ func (m *StageRunMutation) ClearedFields() []string {
 	if m.FieldCleared(stagerun.FieldNextRetryAt) {
 		fields = append(fields, stagerun.FieldNextRetryAt)
 	}
+	if m.FieldCleared(stagerun.FieldPendingUserPrompt) {
+		fields = append(fields, stagerun.FieldPendingUserPrompt)
+	}
 	return fields
 }
 
@@ -9080,6 +9147,9 @@ func (m *StageRunMutation) ClearField(name string) error {
 		return nil
 	case stagerun.FieldNextRetryAt:
 		m.ClearNextRetryAt()
+		return nil
+	case stagerun.FieldPendingUserPrompt:
+		m.ClearPendingUserPrompt()
 		return nil
 	}
 	return fmt.Errorf("unknown StageRun nullable field %s", name)
@@ -9133,6 +9203,9 @@ func (m *StageRunMutation) ResetField(name string) error {
 		return nil
 	case stagerun.FieldNextRetryAt:
 		m.ResetNextRetryAt()
+		return nil
+	case stagerun.FieldPendingUserPrompt:
+		m.ResetPendingUserPrompt()
 		return nil
 	case stagerun.FieldCreatedAt:
 		m.ResetCreatedAt()

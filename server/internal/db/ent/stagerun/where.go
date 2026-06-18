@@ -135,6 +135,11 @@ func NextRetryAt(v time.Time) predicate.StageRun {
 	return predicate.StageRun(sql.FieldEQ(FieldNextRetryAt, v))
 }
 
+// PendingUserPrompt applies equality check predicate on the "pending_user_prompt" field. It's identical to PendingUserPromptEQ.
+func PendingUserPrompt(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldEQ(FieldPendingUserPrompt, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.StageRun {
 	return predicate.StageRun(sql.FieldEQ(FieldCreatedAt, v))
@@ -903,6 +908,81 @@ func NextRetryAtIsNil() predicate.StageRun {
 // NextRetryAtNotNil applies the NotNil predicate on the "next_retry_at" field.
 func NextRetryAtNotNil() predicate.StageRun {
 	return predicate.StageRun(sql.FieldNotNull(FieldNextRetryAt))
+}
+
+// PendingUserPromptEQ applies the EQ predicate on the "pending_user_prompt" field.
+func PendingUserPromptEQ(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldEQ(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptNEQ applies the NEQ predicate on the "pending_user_prompt" field.
+func PendingUserPromptNEQ(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldNEQ(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptIn applies the In predicate on the "pending_user_prompt" field.
+func PendingUserPromptIn(vs ...string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldIn(FieldPendingUserPrompt, vs...))
+}
+
+// PendingUserPromptNotIn applies the NotIn predicate on the "pending_user_prompt" field.
+func PendingUserPromptNotIn(vs ...string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldNotIn(FieldPendingUserPrompt, vs...))
+}
+
+// PendingUserPromptGT applies the GT predicate on the "pending_user_prompt" field.
+func PendingUserPromptGT(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldGT(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptGTE applies the GTE predicate on the "pending_user_prompt" field.
+func PendingUserPromptGTE(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldGTE(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptLT applies the LT predicate on the "pending_user_prompt" field.
+func PendingUserPromptLT(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldLT(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptLTE applies the LTE predicate on the "pending_user_prompt" field.
+func PendingUserPromptLTE(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldLTE(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptContains applies the Contains predicate on the "pending_user_prompt" field.
+func PendingUserPromptContains(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldContains(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptHasPrefix applies the HasPrefix predicate on the "pending_user_prompt" field.
+func PendingUserPromptHasPrefix(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldHasPrefix(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptHasSuffix applies the HasSuffix predicate on the "pending_user_prompt" field.
+func PendingUserPromptHasSuffix(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldHasSuffix(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptIsNil applies the IsNil predicate on the "pending_user_prompt" field.
+func PendingUserPromptIsNil() predicate.StageRun {
+	return predicate.StageRun(sql.FieldIsNull(FieldPendingUserPrompt))
+}
+
+// PendingUserPromptNotNil applies the NotNil predicate on the "pending_user_prompt" field.
+func PendingUserPromptNotNil() predicate.StageRun {
+	return predicate.StageRun(sql.FieldNotNull(FieldPendingUserPrompt))
+}
+
+// PendingUserPromptEqualFold applies the EqualFold predicate on the "pending_user_prompt" field.
+func PendingUserPromptEqualFold(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldEqualFold(FieldPendingUserPrompt, v))
+}
+
+// PendingUserPromptContainsFold applies the ContainsFold predicate on the "pending_user_prompt" field.
+func PendingUserPromptContainsFold(v string) predicate.StageRun {
+	return predicate.StageRun(sql.FieldContainsFold(FieldPendingUserPrompt, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

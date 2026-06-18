@@ -4,7 +4,7 @@ import { useInjectedTaskActions, useInjectedTaskDetails } from '../../composable
 import TaskSlashCommandMenu from '../TaskSlashCommandMenu.vue'
 import AppButton from '../ui/AppButton.vue'
 
-const { isActing, actionError, latestStageRun, isFailedRun, isTerminal, isOnHoldStage, isResumableAwaitingUser } = useInjectedTaskDetails()
+const { isActing, actionError, actionSuccess, latestStageRun, isFailedRun, isTerminal, isOnHoldStage, isResumableAwaitingUser } = useInjectedTaskDetails()
 const { additionalPrompt, analysisInfo, cancelConfirm, slashCommands, onCancelClick, onAnalyze, onResume, onRetry, onProgress, onSlashSelect } = useInjectedTaskActions()
 
 const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
@@ -14,6 +14,9 @@ const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
   <footer class="px-5 py-3 border-t border-line flex-shrink-0">
     <p v-if="actionError" class="text-danger-text text-xs mb-2">
       {{ actionError }}
+    </p>
+    <p v-if="actionSuccess" class="text-info-text text-xs mb-2">
+      {{ actionSuccess }}
     </p>
     <p v-if="analysisInfo" class="text-green-600 dark:text-green-400 text-xs mb-2">
       Analysis agent spawned · PID <code>{{ analysisInfo.pid }}</code> · look for it in the agents list.

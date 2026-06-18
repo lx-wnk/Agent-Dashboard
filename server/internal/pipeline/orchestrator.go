@@ -290,12 +290,43 @@ func (o *PipelineOrchestrator) ensureStageRun(ctx context.Context, task *ent.Tas
 	if existing != nil {
 		iteration = existing.Iteration + 1
 	}
+	return o.createNextPendingRun(ctx, task, iteration, "")
+}
+
+// createNextPendingRun creates a new pending stage_run at the given iteration.
+// userPrompt is persisted as pending_user_prompt when non-empty, so the picker-driven
+// spawn can read it without opts being passed explicitly.
+func (o *PipelineOrchestrator) createNextPendingRun(ctx context.Context, task *ent.Task, iteration int, userPrompt string) (*ent.StageRun, error) {
 	return o.opts.StageRunRepo.Create(ctx, repo.CreateStageRunInput{
-		TaskID:      task.ID,
-		Stage:       task.CurrentStage,
-		Iteration:   iteration,
-		SessionName: BuildSessionName(task.Slug, task.CurrentStage, iteration),
+		TaskID:            task.ID,
+		Stage:             task.CurrentStage,
+		Iteration:         iteration,
+		SessionName:       BuildSessionName(task.Slug, task.CurrentStage, iteration),
+		PendingUserPrompt: userPrompt,
 	})
+}
+
+// resolveResumeSessionID returns the newest session JSONL still on disk for the
+// task's current stage, walking stage_runs newest-first. Returns "" when none is found.
+func (o *PipelineOrchestrator) resolveResumeSessionID(ctx context.Context, task *ent.Task) string {
+	cwd := task.Cwd
+	if task.WorktreePath != nil && *task.WorktreePath != "" {
+		cwd = *task.WorktreePath
+	}
+	runs, err := o.opts.StageRunRepo.ListForTask(ctx, task.ID)
+	if err != nil {
+		return ""
+	}
+	for i := len(runs) - 1; i >= 0; i-- {
+		run := runs[i]
+		if run.Stage != task.CurrentStage || run.SessionID == nil || *run.SessionID == "" {
+			continue
+		}
+		if SessionFileExists(cwd, *run.SessionID) {
+			return *run.SessionID
+		}
+	}
+	return ""
 }
 
 func (o *PipelineOrchestrator) getPreviousStageOutput(ctx context.Context, task *ent.Task) map[string]any {
@@ -683,18 +714,43 @@ func (o *PipelineOrchestrator) ClearStalePendingPermissions(ctx context.Context,
 	}
 }
 
-// ResumeFromUser re-runs progressTask after a user action (permission grant, retry).
+// ResumeFromUser re-queues a task after a user action (permission grant) so the
+// tick-loop picker picks it up when a slot is free.
 func (o *PipelineOrchestrator) ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error) {
-	// Permission grants reach a running agent only via kill-and-restart:
-	// ensureStageRun refuses to spawn a new iteration while the awaiting_user
-	// agent's PID is alive, so the grant would never take effect. Reap that
-	// paused agent (kill + mark failed) first so the resumed run spawns with the
-	// freshly granted permissions applied.
+	return o.RequeueForUser(ctx, taskID, "")
+}
+
+// RequeueForUser creates a new pending stage_run for taskID so the tick-loop
+// picker can spawn it when a slot is free. userPrompt is stored on the run and
+// consumed at spawn time. Never spawns immediately — even if a slot is free.
+//
+// Lock discipline mirrors ResumeFromUser: reapAwaitingUserAgent takes the
+// per-task mutex internally, so it must be called BEFORE we acquire it here.
+func (o *PipelineOrchestrator) RequeueForUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error) {
+	// Kill the awaiting_user agent (if any) and mark its run failed before
+	// creating the new pending run. reapAwaitingUserAgent acquires the mutex.
 	o.reapAwaitingUserAgent(ctx, taskID)
-	// After the reap the run is failed; expire any requests the dead agent left
-	// unresolved so the lingering-pending gate does not block the respawn.
+	// Expire stale pending permission_requests so the lingering-pending gate
+	// does not block the new run when the picker processes it.
 	o.ClearStalePendingPermissions(ctx, taskID)
-	return o.ProgressTask(ctx, taskID, nil)
+
+	mu := o.getTaskMutex(taskID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	task, err := o.opts.TaskRepo.GetByID(ctx, taskID)
+	if err != nil || IsTerminalStage(task.CurrentStage) {
+		return nil, nil
+	}
+
+	latest, _ := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	// After reap, a formerly awaiting_user run is now failed. Accept failed or requeued.
+	if latest == nil || (latest.Status != "failed" && latest.Status != "requeued") {
+		return nil, nil
+	}
+
+	iteration := latest.Iteration + 1
+	return o.createNextPendingRun(ctx, task, iteration, userPrompt)
 }
 
 // reapAwaitingUserAgent kills the task's current awaiting_user stage-run agent

@@ -34,27 +34,29 @@ type StageRunRepo interface {
 }
 
 type CreateStageRunInput struct {
-	TaskID      string
-	Stage       string
-	Iteration   int
-	SessionName string
+	TaskID            string
+	Stage             string
+	Iteration         int
+	SessionName       string
+	PendingUserPrompt string
 }
 
 type UpdateStageRunInput struct {
-	Status           *string
-	PID              *int
-	PIDClear         bool
-	SessionID        *string
-	Output           map[string]any
-	TokensUsed       *int
-	CostCents        *int
-	StartedAt        *time.Time
-	EndedAt          *time.Time
-	LastGrantAt      *time.Time
-	RetryCount       *int
-	NextRetryAt      *time.Time
-	NextRetryAtClear bool
-	StartedAtClear   bool
+	Status            *string
+	PID               *int
+	PIDClear          bool
+	SessionID         *string
+	Output            map[string]any
+	TokensUsed        *int
+	CostCents         *int
+	StartedAt         *time.Time
+	EndedAt           *time.Time
+	LastGrantAt       *time.Time
+	RetryCount        *int
+	NextRetryAt       *time.Time
+	NextRetryAtClear  bool
+	StartedAtClear    bool
+	PendingUserPrompt *string
 }
 
 type entStageRunRepo struct {
@@ -78,6 +80,9 @@ func (r *entStageRunRepo) Create(ctx context.Context, in CreateStageRunInput) (*
 		SetStatus("pending")
 	if in.SessionName != "" {
 		q = q.SetSessionName(in.SessionName)
+	}
+	if in.PendingUserPrompt != "" {
+		q = q.SetPendingUserPrompt(in.PendingUserPrompt)
 	}
 	sr, err := q.Save(ctx)
 	if err != nil {
@@ -201,6 +206,9 @@ func (r *entStageRunRepo) Update(ctx context.Context, id string, in UpdateStageR
 		q = q.ClearNextRetryAt()
 	} else if in.NextRetryAt != nil {
 		q = q.SetNextRetryAt(*in.NextRetryAt)
+	}
+	if in.PendingUserPrompt != nil {
+		q = q.SetPendingUserPrompt(*in.PendingUserPrompt)
 	}
 	sr, err := q.Save(ctx)
 	if err != nil {

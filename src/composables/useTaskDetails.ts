@@ -26,6 +26,7 @@ export function useTaskDetails(task: Ref<PipelineTask | null>) {
 
   const isActing = ref(false)
   const actionError = ref('')
+  const actionSuccess = ref('')
 
   // Match the live agent by sessionId first (set once the orchestrator attaches
   // it), then fall back to activePid so the stream works before session_id is
@@ -124,14 +125,17 @@ export function useTaskDetails(task: Ref<PipelineTask | null>) {
     }
   }
 
-  async function handleAction(action: () => Promise<void>): Promise<void> {
+  async function handleAction(action: () => Promise<void>, successMessage?: string): Promise<void> {
     if (isActing.value || !task.value)
       return
     isActing.value = true
     actionError.value = ''
+    actionSuccess.value = ''
     try {
       await action()
       await loadDetails()
+      if (successMessage)
+        actionSuccess.value = successMessage
     }
     catch (err) {
       actionError.value = (err as Error).message
@@ -174,6 +178,7 @@ export function useTaskDetails(task: Ref<PipelineTask | null>) {
     sessionAgentTextLoading,
     isActing,
     actionError,
+    actionSuccess,
     pipelineAgent,
     latestStageRun,
     latestRunAgentMessage,

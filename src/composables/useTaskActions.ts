@@ -96,10 +96,16 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
   }
 
   function onResume(): Promise<void> {
-    return details.handleAction(() => resumeStageTask(task.value!.id, additionalPrompt.value || undefined))
+    return details.handleAction(
+      () => resumeStageTask(task.value!.id, additionalPrompt.value || undefined),
+      'Stage re-queued — will run when a slot is free',
+    )
   }
   function onRetry(): Promise<void> {
-    return details.handleAction(() => retryTask(task.value!.id, additionalPrompt.value || undefined))
+    return details.handleAction(
+      () => retryTask(task.value!.id, additionalPrompt.value || undefined),
+      'Stage re-queued — will run when a slot is free',
+    )
   }
   function onProgress(): Promise<void> {
     return details.handleAction(() => progressTask(task.value!.id))

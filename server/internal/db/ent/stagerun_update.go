@@ -300,6 +300,26 @@ func (_u *StageRunUpdate) ClearNextRetryAt() *StageRunUpdate {
 	return _u
 }
 
+// SetPendingUserPrompt sets the "pending_user_prompt" field.
+func (_u *StageRunUpdate) SetPendingUserPrompt(v string) *StageRunUpdate {
+	_u.mutation.SetPendingUserPrompt(v)
+	return _u
+}
+
+// SetNillablePendingUserPrompt sets the "pending_user_prompt" field if the given value is not nil.
+func (_u *StageRunUpdate) SetNillablePendingUserPrompt(v *string) *StageRunUpdate {
+	if v != nil {
+		_u.SetPendingUserPrompt(*v)
+	}
+	return _u
+}
+
+// ClearPendingUserPrompt clears the value of the "pending_user_prompt" field.
+func (_u *StageRunUpdate) ClearPendingUserPrompt() *StageRunUpdate {
+	_u.mutation.ClearPendingUserPrompt()
+	return _u
+}
+
 // AddPermissionRequestIDs adds the "permission_requests" edge to the PermissionRequest entity by IDs.
 func (_u *StageRunUpdate) AddPermissionRequestIDs(ids ...string) *StageRunUpdate {
 	_u.mutation.AddPermissionRequestIDs(ids...)
@@ -468,6 +488,12 @@ func (_u *StageRunUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.NextRetryAtCleared() {
 		_spec.ClearField(stagerun.FieldNextRetryAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.PendingUserPrompt(); ok {
+		_spec.SetField(stagerun.FieldPendingUserPrompt, field.TypeString, value)
+	}
+	if _u.mutation.PendingUserPromptCleared() {
+		_spec.ClearField(stagerun.FieldPendingUserPrompt, field.TypeString)
 	}
 	if _u.mutation.PermissionRequestsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -805,6 +831,26 @@ func (_u *StageRunUpdateOne) ClearNextRetryAt() *StageRunUpdateOne {
 	return _u
 }
 
+// SetPendingUserPrompt sets the "pending_user_prompt" field.
+func (_u *StageRunUpdateOne) SetPendingUserPrompt(v string) *StageRunUpdateOne {
+	_u.mutation.SetPendingUserPrompt(v)
+	return _u
+}
+
+// SetNillablePendingUserPrompt sets the "pending_user_prompt" field if the given value is not nil.
+func (_u *StageRunUpdateOne) SetNillablePendingUserPrompt(v *string) *StageRunUpdateOne {
+	if v != nil {
+		_u.SetPendingUserPrompt(*v)
+	}
+	return _u
+}
+
+// ClearPendingUserPrompt clears the value of the "pending_user_prompt" field.
+func (_u *StageRunUpdateOne) ClearPendingUserPrompt() *StageRunUpdateOne {
+	_u.mutation.ClearPendingUserPrompt()
+	return _u
+}
+
 // AddPermissionRequestIDs adds the "permission_requests" edge to the PermissionRequest entity by IDs.
 func (_u *StageRunUpdateOne) AddPermissionRequestIDs(ids ...string) *StageRunUpdateOne {
 	_u.mutation.AddPermissionRequestIDs(ids...)
@@ -1003,6 +1049,12 @@ func (_u *StageRunUpdateOne) sqlSave(ctx context.Context) (_node *StageRun, err 
 	}
 	if _u.mutation.NextRetryAtCleared() {
 		_spec.ClearField(stagerun.FieldNextRetryAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.PendingUserPrompt(); ok {
+		_spec.SetField(stagerun.FieldPendingUserPrompt, field.TypeString, value)
+	}
+	if _u.mutation.PendingUserPromptCleared() {
+		_spec.ClearField(stagerun.FieldPendingUserPrompt, field.TypeString)
 	}
 	if _u.mutation.PermissionRequestsCleared() {
 		edge := &sqlgraph.EdgeSpec{
