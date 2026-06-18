@@ -750,6 +750,15 @@ func (o *PipelineOrchestrator) RequeueForUser(ctx context.Context, taskID, userP
 	}
 
 	iteration := latest.Iteration + 1
+	// A requeued latest still has its cooldown promotion pending. Mark it failed
+	// before creating the new run, else sweepRequeueableRuns later promotes it
+	// in place to pending — leaving two pending runs on the same task+stage, the
+	// older of which never spawns and is never reaped (StartedAt stays nil).
+	if latest.Status == "requeued" {
+		if _, err := o.opts.StageRunRepo.Update(ctx, latest.ID, repo.UpdateStageRunInput{Status: strPtr("failed")}); err != nil {
+			return nil, err
+		}
+	}
 	return o.createNextPendingRun(ctx, task, iteration, userPrompt)
 }
 
