@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { usePlugins } from '../composables/usePlugins'
+import PluginSlot from './PluginSlot.vue'
 
 const { plugins, loading, error } = usePlugins()
 
 const CAP_LABELS: Record<string, string> = {
   auth_provider: 'Auth Provider',
   route_extension: 'Route Extension',
+  ui_extension: 'UI Extension',
 }
 </script>
 
@@ -20,7 +22,7 @@ const CAP_LABELS: Record<string, string> = {
     </p>
 
     <div v-if="loading" class="text-xs text-slate-400" role="status" aria-live="polite">Loading plugins…</div>
-    <div v-else-if="error" class="text-xs text-red-500" role="alert">{{ error }}</div>
+    <div v-else-if="error" class="text-xs text-danger-text" role="alert">{{ error }}</div>
     <div v-else-if="plugins.length === 0" class="text-xs text-slate-400 italic space-y-1">
       <p>No plugins loaded.</p>
       <p>
@@ -49,5 +51,6 @@ const CAP_LABELS: Record<string, string> = {
         </div>
       </div>
     </div>
+    <PluginSlot name="settings-panel" :ctx="{}" />
   </div>
 </template>

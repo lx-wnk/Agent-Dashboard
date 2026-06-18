@@ -51,13 +51,37 @@ type EnrichedTask struct {
 	BlockedByPendingPermissions bool       `json:"blockedByPendingPermissions"`
 }
 
+// pidAliveMemo returns a func(int) bool that wraps pipeline.IsPidAlive and caches
+// each distinct pid's liveness for the lifetime of the returned closure. A single
+// memo is shared across one enrich pass so a pid reused by several sibling tasks
+// costs exactly one syscall. The closure is not safe for concurrent use — build
+// one per enrich call.
+func pidAliveMemo() func(int) bool {
+	return memoizeProbe(pipeline.IsPidAlive)
+}
+
+// memoizeProbe caches each distinct pid's probe result for the lifetime of the
+// returned closure. Split out from pidAliveMemo so the dedup logic is unit-testable
+// with a counting probe.
+func memoizeProbe(probe func(int) bool) func(int) bool {
+	cache := make(map[int]bool)
+	return func(pid int) bool {
+		if alive, ok := cache[pid]; ok {
+			return alive
+		}
+		alive := probe(pid)
+		cache[pid] = alive
+		return alive
+	}
+}
+
 func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) (*EnrichedTask, error) {
 	latest, _ := srRepo.GetLatestForTask(ctx, t.ID)
 	var pendingCount int
 	if latest != nil && latest.Stage == t.CurrentStage {
 		pendingCount, _ = permRepo.CountForStageRun(ctx, latest.ID)
 	}
-	return enrichOne(t, latest, pendingCount)
+	return enrichOne(t, latest, pendingCount, pidAliveMemo())
 }
 
 // EnrichTasksBulk enriches a slice of tasks with their latest stage-run status
@@ -90,6 +114,10 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo
 		return nil, err
 	}
 
+	// One memo shared across the whole slice so a pid reused by sibling tasks
+	// hits the liveness syscall once per tick.
+	isAlive := pidAliveMemo()
+
 	result := make([]*EnrichedTask, len(tasks))
 	for i, t := range tasks {
 		latest := latestMap[t.ID]
@@ -97,7 +125,7 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo
 		if latest != nil && latest.Stage == t.CurrentStage {
 			pendingCount = pendingCounts[latest.ID]
 		}
-		enriched, err := enrichOne(t, latest, pendingCount)
+		enriched, err := enrichOne(t, latest, pendingCount, isAlive)
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +134,7 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo
 	return result, nil
 }
 
-func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int) (*EnrichedTask, error) {
+func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive func(int) bool) (*EnrichedTask, error) {
 	latestBelongsToCurrent := latest != nil && latest.Stage == t.CurrentStage
 	var latestStatus *string
 	currentIteration := 0
@@ -118,7 +146,7 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int) (*Enric
 	hasPendingPermissions := latestStatus != nil && *latestStatus == "running" && pendingPermsCount > 0
 	isTerminal := latestStatus != nil && (*latestStatus == "failed" || *latestStatus == "done")
 	isZombieAwait := latestStatus != nil && *latestStatus == "awaiting_user" && latest != nil &&
-		(latest.Pid == nil || !pipeline.IsPidAlive(*latest.Pid))
+		(latest.Pid == nil || !isAlive(*latest.Pid))
 	blockedByPendingPermissions := (isTerminal || isZombieAwait) && pendingPermsCount > 0
 
 	needsUser := t.CurrentStage == "on_hold" ||

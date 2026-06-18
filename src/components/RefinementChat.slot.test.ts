@@ -6,7 +6,7 @@ import RefinementChat from './RefinementChat.vue'
 
 // A fake addon that immediately drives the slot context, simulating a finished
 // transcription writing into the refinement textarea.
-function capturingAddon(text: string): SlotAddon {
+function capturingAddon(text: string): SlotAddon<'refinement-input-addon'> {
   return {
     slot: 'refinement-input-addon',
     mount: (_el, ctx) => {
@@ -56,7 +56,7 @@ describe('RefinementChat voice slot', () => {
   })
 
   it('disables the textarea while a slot addon reports busy', async () => {
-    const busyAddon: SlotAddon = {
+    const busyAddon: SlotAddon<'refinement-input-addon'> = {
       slot: 'refinement-input-addon',
       mount: (_el, ctx) => { ctx.setBusy(true); return () => {} },
     }

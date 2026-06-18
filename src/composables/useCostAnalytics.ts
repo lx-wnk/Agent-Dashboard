@@ -1,4 +1,5 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -101,7 +102,7 @@ export function useCostAnalytics() {
     catch (e: unknown) {
       if ((e as { name?: string })?.name === 'AbortError')
         return
-      error.value = e instanceof Error ? e.message : 'Failed to load cost summary'
+      error.value = errorMessage(e, 'Failed to load cost summary')
     }
     finally {
       isLoading.value = false

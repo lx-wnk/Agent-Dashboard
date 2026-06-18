@@ -209,14 +209,34 @@ type WorktreeStatusDTO struct {
 	FileCount int    `json:"fileCount"`
 }
 
+// PendingPermission is a permission request an orchestrated agent is currently
+// blocked on, surfaced on the agent so it can be resolved from the roster.
+type PendingPermission struct {
+	ID          string  `json:"id"`
+	Tool        string  `json:"tool"`
+	Pattern     *string `json:"pattern"`
+	Reason      *string `json:"reason"`
+	RequestedAt string  `json:"requestedAt"`
+}
+
+// PendingToolUse is the last assistant tool_use block that has no matching
+// tool_result yet. It indicates the agent is currently executing or blocked on
+// that tool call. Pattern is the command string (Bash), file path (Edit/Write),
+// or empty for other tools.
+type PendingToolUse struct {
+	ID      string `json:"id"`
+	Tool    string `json:"tool"`
+	Pattern string `json:"pattern"`
+}
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
-	PID                       int            `json:"pid"`
-	SessionID                 string         `json:"sessionId"`
-	Provider                  Provider       `json:"provider"`
-	ProjectPath               string         `json:"projectPath"`
-	ProjectName               string         `json:"projectName"`
-	CWD                       string         `json:"cwd"`
+	PID         int      `json:"pid"`
+	SessionID   string   `json:"sessionId"`
+	Provider    Provider `json:"provider"`
+	ProjectPath string   `json:"projectPath"`
+	ProjectName string   `json:"projectName"`
+	CWD         string   `json:"cwd"`
 	// ClaudeConfigDir is the value of CLAUDE_CONFIG_DIR detected in the running
 	// session's process env (empty when the session uses the default ~/.claude).
 	// Lets the dashboard resolve which config root a session's slash commands /
@@ -245,15 +265,17 @@ type Agent struct {
 	// running interactive session as real keyboard input — either via the pty
 	// broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending
 	// resumes the session as a new one (MCP log delivery does not drive it).
-	LiveInjectable            bool           `json:"liveInjectable,omitempty"`
-	LastOutput                *string        `json:"lastOutput"`
-	ConvergenceAlert          bool           `json:"convergenceAlert"`
-	ConvergenceToolName       *string        `json:"convergenceToolName"`
-	ErrorState                *ErrorState    `json:"errorState"`
-	PipelineTaskID            string         `json:"pipelineTaskId,omitempty"`
-	PipelineTaskTitle         string         `json:"pipelineTaskTitle,omitempty"`
-	Machine                   string         `json:"machine,omitempty"`
-	LastBtw                   *BtwMessage    `json:"lastBtw"`
+	LiveInjectable      bool        `json:"liveInjectable,omitempty"`
+	LastOutput          *string     `json:"lastOutput"`
+	ConvergenceAlert    bool        `json:"convergenceAlert"`
+	ConvergenceToolName *string     `json:"convergenceToolName"`
+	ErrorState          *ErrorState `json:"errorState"`
+	PipelineTaskID         string               `json:"pipelineTaskId,omitempty"`
+	PipelineTaskTitle      string               `json:"pipelineTaskTitle,omitempty"`
+	PendingPermissions     []PendingPermission  `json:"pendingPermissions,omitempty"`
+	PendingToolUse         *PendingToolUse      `json:"pendingToolUse,omitempty"`
+	Machine             string      `json:"machine,omitempty"`
+	LastBtw             *BtwMessage `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`

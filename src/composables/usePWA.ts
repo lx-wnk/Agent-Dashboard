@@ -1,4 +1,5 @@
 import { onUnmounted, ref } from 'vue'
+import { SW_MSG_SKIP_WAITING } from '../utils/swConstants'
 
 /**
  * usePWA — exposes service worker update state.
@@ -25,7 +26,7 @@ export function usePWA() {
       window.location.reload()
     }, { once: true })
     // Signal the waiting SW to skip waiting and take control.
-    registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+    registration.waiting.postMessage({ type: SW_MSG_SKIP_WAITING })
   }
 
   // Watch for a new service worker entering the "waiting" state.

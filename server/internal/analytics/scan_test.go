@@ -78,7 +78,7 @@ func TestDiscoverSessions_TimeBounds(t *testing.T) {
 func TestDiscoverSessions_SessionAllowList(t *testing.T) {
 	wanted := "00000000-0000-0000-0000-0000000000cc"
 	sessions := map[string]string{
-		wanted: "single-session-linear.jsonl",
+		wanted:                                 "single-session-linear.jsonl",
 		"00000000-0000-0000-0000-0000000000dd": "two-sessions-branching.jsonl",
 	}
 	root := setupFakeClaudeDir(t, sessions)

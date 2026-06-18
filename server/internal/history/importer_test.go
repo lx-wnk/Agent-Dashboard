@@ -567,3 +567,42 @@ func TestImporter_SkipsUnchangedFiles(t *testing.T) {
 	require.Eventually(t, func() bool { return len(repoStub.all()) == 0 }, time.Second, 10*time.Millisecond,
 		"unchanged file must be skipped — no rows upserted")
 }
+
+// TestParseTokensFromReader_EquivalentToRaw verifies the streaming reader path
+// returns identical results to the string-based wrapper.
+func TestParseTokensFromReader_EquivalentToRaw(t *testing.T) {
+	ts1 := "2025-01-15T10:30:00.000Z"
+	ts2 := "2025-01-15T10:31:00.000Z"
+	raw := buildJSONLLine(100, 50, "claude-opus-4", ts1) + "\n" +
+		buildJSONLLine(200, 80, "claude-opus-4", ts2)
+
+	rawUsage, rawModel, rawActivity, rawCwd, rawErr := parseTokensFromRaw(raw)
+	rdUsage, rdModel, rdActivity, rdCwd, rdErr := parseTokensFromReader(strings.NewReader(raw))
+
+	require.NoError(t, rawErr)
+	require.NoError(t, rdErr)
+	require.Equal(t, rawUsage, rdUsage)
+	require.Equal(t, rawModel, rdModel)
+	require.True(t, rawActivity.Equal(rdActivity))
+	require.Equal(t, rawCwd, rdCwd)
+	require.Equal(t, 300, rdUsage.InputTokens)
+	require.Equal(t, 130, rdUsage.OutputTokens)
+}
+
+// TestParseTokensFromReader_LongLine exercises a single JSONL line far larger than
+// bufio.Scanner's default 64 KB token limit, proving the enlarged buffer keeps the
+// row instead of dropping it with bufio.ErrTooLong.
+func TestParseTokensFromReader_LongLine(t *testing.T) {
+	ts := "2025-01-15T10:30:00.000Z"
+	// ~512 KB of filler embedded in a valid assistant entry's text content.
+	filler := strings.Repeat("x", 512*1024)
+	line := `{"type":"assistant","timestamp":"` + ts + `","cwd":"/work/proj","message":{"role":"assistant","model":"claude-opus-4","content":[{"type":"text","text":"` +
+		filler + `"}],"usage":{"input_tokens":111,"output_tokens":22,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}`
+
+	usage, model, _, cwd, err := parseTokensFromReader(strings.NewReader(line))
+	require.NoError(t, err)
+	require.Equal(t, 111, usage.InputTokens)
+	require.Equal(t, 22, usage.OutputTokens)
+	require.Equal(t, "claude-opus-4", model)
+	require.Equal(t, "/work/proj", cwd)
+}

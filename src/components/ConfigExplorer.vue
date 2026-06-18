@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import AppInput from './ui/AppInput.vue'
 import { ConflictError, useConfigExplorer } from '../composables/useConfigExplorer'
 
 type Tab = 'skills' | 'commands' | 'memory'
@@ -218,12 +219,11 @@ function closeEditor(): void {
           Memory <span class="opacity-60">({{ memory.length }})</span>
         </button>
       </div>
-      <input
+      <AppInput
         v-model="searchQuery"
-        type="text"
         :placeholder="`Filter ${activeTab}...`"
-        class="bg-raised border border-line rounded-md px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[260px] focus:outline-none focus:border-blue-500"
-      >
+        class="w-[260px]"
+      />
       <button
         type="button"
         class="bg-raised text-fg-mute border-none rounded-md px-3 py-1.5 text-[13px] font-sans cursor-pointer hover:text-fg-soft"
@@ -237,7 +237,7 @@ function closeEditor(): void {
     <p v-if="isLoading && skills.length === 0 && commands.length === 0 && memory.length === 0" class="text-fg-mute text-sm py-8 text-center">
       Loading configuration...
     </p>
-    <p v-else-if="error" class="text-red-600 dark:text-red-400 text-sm py-4 text-center">
+    <p v-else-if="error" class="text-danger-text text-sm py-4 text-center">
       Error: {{ error }}
     </p>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PipelineStage, PipelineTask } from '../types'
+import type { Agent, PipelineStage, PipelineTask } from '../types'
 import { computed, ref } from 'vue'
 import { useProjects } from '../composables/useProjects'
 import { useTasks } from '../composables/useTasks'
@@ -7,7 +7,13 @@ import { STAGE_LABELS } from '../utils/stageLabels'
 import SortableTaskList from './SortableTaskList.vue'
 import TaskCard from './TaskCard.vue'
 
-const emit = defineEmits<{ select: [task: PipelineTask], openChat: [task: PipelineTask] }>()
+const props = withDefaults(defineProps<{ agents?: Agent[] }>(), { agents: () => [] })
+
+const emit = defineEmits<{
+  select: [task: PipelineTask]
+  openChat: [task: PipelineTask]
+  navigateAgent: [sessionId: string]
+}>()
 
 const { tasks: allTasks, tasksByStageMap } = useTasks()
 const { projects } = useProjects()
@@ -151,6 +157,19 @@ const columnsWithTasks = computed(() =>
 
 // O(1) lookup for epic membership — avoids O(N²) .some() in template
 const epicParentIds = computed(() => new Set(epics.value.map(e => e.parent.id)))
+
+// taskId → agent currently working that task; prefer active status when multiple agents map to one task
+const workingAgentByTask = computed(() => {
+  const map = new Map<string, Agent>()
+  for (const agent of props.agents) {
+    if (!agent.pipelineTaskId)
+      continue
+    const existing = map.get(agent.pipelineTaskId)
+    if (!existing || (agent.status === 'active' && existing.status !== 'active'))
+      map.set(agent.pipelineTaskId, agent)
+  }
+  return map
+})
 
 function isHighlightCol(col: ColumnDef): boolean {
   return col.group === 'needs-you'
@@ -298,8 +317,10 @@ function isHighlightCol(col: ColumnDef): boolean {
                   :key="child.id"
                   :task="child"
                   :project="child.projectId ? projectById.get(child.projectId) ?? null : null"
+                  :working-agent="workingAgentByTask.get(child.id) ?? null"
                   @select="emit('select', child)"
                   @open-chat="emit('openChat', child)"
+                  @navigate-agent="(sid) => emit('navigateAgent', sid)"
                 />
               </div>
             </div>
@@ -307,8 +328,10 @@ function isHighlightCol(col: ColumnDef): boolean {
           <SortableTaskList
             :tasks="tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId))"
             :project-by-id="projectById"
+            :working-agent-by-task="workingAgentByTask"
             @select="(t) => emit('select', t)"
             @open-chat="(t) => emit('openChat', t)"
+            @navigate-agent="(sid) => emit('navigateAgent', sid)"
           />
           <div
             v-if="tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId)).length === 0

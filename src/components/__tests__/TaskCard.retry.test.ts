@@ -10,6 +10,7 @@ vi.mock('../../composables/usePipelineConfig', () => ({
 vi.mock('@vueuse/core', () => ({
   useIntervalFn: vi.fn(),
   useSortable: vi.fn(() => ({ option: vi.fn(), destroy: vi.fn() })),
+  useClipboard: vi.fn(() => ({ copy: vi.fn(), copied: ref(false) })),
 }))
 
 beforeEach(() => {

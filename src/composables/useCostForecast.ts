@@ -1,4 +1,5 @@
 import { onMounted, ref } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 export interface ForecastTrendPoint { t: number, y: number }
 export interface ForecastPoint { t: number, projectedCost: number }
@@ -30,7 +31,7 @@ export function useCostForecast() {
       alerts.value = data.alerts
     }
     catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Failed to load forecast'
+      error.value = errorMessage(e, 'Failed to load forecast')
     }
     finally {
       loading.value = false

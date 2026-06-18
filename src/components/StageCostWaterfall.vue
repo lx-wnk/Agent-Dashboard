@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PipelineStage } from '../types'
+import { STAGE_LABELS } from '../utils/stageLabels'
 import { computed } from 'vue'
 import { formatCost, formatTokens } from '../utils/format'
 
@@ -70,10 +71,10 @@ function formatDuration(ms: number | null): string {
       <tr
         v-for="(row, i) in rows"
         :key="i"
-        class="border-b border-line hover:bg-slate-50 dark:hover:bg-slate-800/50"
+        class="border-b border-line hover:bg-raised"
       >
-        <td class="py-1 pr-2 text-fg-soft capitalize">
-          {{ row.stage.replace('_', ' ') }}
+        <td class="py-1 pr-2 text-fg-soft">
+          {{ STAGE_LABELS[row.stage as PipelineStage] ?? row.stage }}
         </td>
         <td class="py-1 text-center text-fg-mute">
           {{ row.iteration }}

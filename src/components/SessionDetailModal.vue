@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
 import { nextTick, onUnmounted, ref, watch } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 import { formatCost, shortModel } from '../utils/format'
 import AppModal from './ui/AppModal.vue'
 
@@ -83,7 +84,7 @@ async function fetchMessages(sessionId: string) {
   catch (err: unknown) {
     if (signal.aborted)
       return
-    fetchError.value = err instanceof Error ? err.message : 'Failed to load transcript'
+    fetchError.value = errorMessage(err, 'Failed to load transcript')
   }
   finally {
     if (!signal.aborted)
@@ -154,7 +155,7 @@ async function resumeSession() {
   }
   catch (err: unknown) {
     statusIsError.value = true
-    statusMsg.value = err instanceof Error ? err.message : 'Failed'
+    statusMsg.value = errorMessage(err, 'Failed')
     setTimeout(() => {
       statusMsg.value = ''
     }, 4000)
@@ -196,7 +197,7 @@ async function resumeSession() {
         <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
           Loading transcript...
         </div>
-        <div v-else-if="fetchError" class="text-center py-12 text-red-600 dark:text-red-400 text-sm">
+        <div v-else-if="fetchError" class="text-center py-12 text-danger-text text-sm">
           {{ fetchError }}
         </div>
         <div v-else-if="messages.length === 0" class="text-center py-12 text-fg-mute text-sm">
@@ -231,7 +232,7 @@ async function resumeSession() {
         <div class="flex gap-1.5">
           <input
             v-model="resumePrompt"
-            class="flex-1 bg-raised border border-line rounded text-fg text-xs px-2 py-1.5 focus:outline-none focus:border-green-500 placeholder:text-fg-faint"
+            class="flex-1 bg-raised border border-line rounded text-fg text-xs px-2 py-1.5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent placeholder:text-fg-faint"
             type="text"
             aria-label="Follow-up prompt"
             placeholder="Follow-up prompt to resume session..."
@@ -250,7 +251,7 @@ async function resumeSession() {
           role="status"
           aria-live="polite"
           class="text-[11px] mt-1.5"
-          :class="statusMsg ? (statusIsError ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400') : 'sr-only'"
+          :class="statusMsg ? (statusIsError ? 'text-danger-text' : 'text-green-600 dark:text-green-400') : 'sr-only'"
         >
           {{ statusMsg }}
         </p>

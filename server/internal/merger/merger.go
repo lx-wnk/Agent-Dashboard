@@ -260,5 +260,6 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData, baselineC
 		ErrorState:                errorStatePtr(session.ErrorState),
 		LastOutput:                strPtr(session.LastOutput),
 		LastBtw:                   session.LastBtw,
+		PendingToolUse:            session.PendingToolUse,
 	}
 }

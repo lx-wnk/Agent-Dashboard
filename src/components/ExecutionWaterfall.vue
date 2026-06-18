@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
-import * as d3 from 'd3'
+import { max, min } from 'd3-array'
+import { axisBottom } from 'd3-axis'
+import { scaleOrdinal, scaleTime } from 'd3-scale'
+import { select } from 'd3-selection'
 import { nextTick, onMounted, ref, useId, watch } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
+import { useTheme } from '../composables/useTheme'
+import { chartPalette } from '../utils/chartColors'
 
 const props = defineProps<{ sessionId: string }>()
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+const { theme } = useTheme()
 
 const titleId = useId()
 const descId = useId()
@@ -36,13 +43,13 @@ async function fetchAndRender() {
     renderGantt(toolCalls)
   }
   catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Failed to load timeline'
+    error.value = errorMessage(e, 'Failed to load timeline')
     loading.value = false
   }
 }
 
 function renderGantt(messages: OutputMessage[]) {
-  const svg = d3.select(svgRef.value!)
+  const svg = select(svgRef.value!)
   svg.selectAll(':not(title):not(desc)').remove()
 
   if (messages.length === 0) {
@@ -70,12 +77,12 @@ function renderGantt(messages: OutputMessage[]) {
   svg.attr('height', height + margin.top + margin.bottom)
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
-  const xMin = d3.min(events, e => e.start)!
-  const xMax = d3.max(events, e => e.end)!
-  const x = d3.scaleTime().domain([xMin, xMax]).range([0, width])
+  const xMin = min(events, e => e.start)!
+  const xMax = max(events, e => e.end)!
+  const x = scaleTime().domain([xMin, xMax]).range([0, width])
 
   const toolNames = [...new Set(events.map(e => e.toolName))]
-  const color = d3.scaleOrdinal(d3.schemeTableau10).domain(toolNames)
+  const color = scaleOrdinal(chartPalette()).domain(toolNames)
 
   g.selectAll<SVGRectElement, ToolEvent>('rect.bar')
     .data(events)
@@ -101,7 +108,7 @@ function renderGantt(messages: OutputMessage[]) {
     .attr('fill', 'currentColor')
     .text(d => d.toolName)
 
-  const xAxis = d3.axisBottom(x).ticks(5).tickFormat((d) => {
+  const xAxis = axisBottom(x).ticks(5).tickFormat((d) => {
     const ms = (d as Date).getTime() - xMin.getTime()
     return `${(ms / 1000).toFixed(1)}s`
   })
@@ -114,6 +121,7 @@ function renderGantt(messages: OutputMessage[]) {
 
 onMounted(fetchAndRender)
 watch(() => props.sessionId, fetchAndRender)
+watch(theme, fetchAndRender)
 </script>
 
 <template>
@@ -121,7 +129,7 @@ watch(() => props.sessionId, fetchAndRender)
     <div v-if="loading" class="text-sm text-slate-500 p-4">
       Loading timeline...
     </div>
-    <div v-else-if="error" class="text-sm text-red-500 p-4">
+    <div v-else-if="error" class="text-sm text-danger-text p-4">
       {{ error }}
     </div>
     <div v-else class="overflow-x-auto">

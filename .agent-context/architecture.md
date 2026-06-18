@@ -4,11 +4,11 @@
 
 A real-time monitoring dashboard for locally running Claude Code agents. Reads Claude Code's internal JSONL session logs and process metadata to display token usage, costs, tool activity, tasks, and subagents across all running agent processes.
 
-**Stack:** Go 1.26 backend (chi, ent ORM, modernc/sqlite, Wire DI) + Vue 3 TypeScript SPA (Vite, pnpm). Go workspace with `./sdk` and `./server` modules. Build via `task` (Taskfile.yml), hot-reload via `air`.
+**Stack:** Go 1.26 backend (chi, ent ORM, modernc/sqlite, manual DI in `cmd/serve/di.go`) + Vue 3 TypeScript SPA (Vite, pnpm). Go workspace with `./sdk` and `./server` modules. Build via `task` (Taskfile.yml), hot-reload via `air`.
 
 ## Backend (`server/`)
 
-Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + Wire DI).
+Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + manual DI in `cmd/serve/di.go`).
 
 ### Core packages (`server/internal/`)
 
@@ -33,6 +33,7 @@ Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + Wire DI).
 | `cmdscope/` | Resolves a Claude config scope (spawner/session/default) and enumerates its skills + slash commands; each entry carries `Path`+`Editable` (`IsEditableSource`) feeding the config-explorer allow-list |
 | `pipeline/` | State machine, orchestrator, stage handlers, completion detector, agent spawner |
 | `llmadapter/` | Leaf: pluggable-spawner transport (`LLMSpawner`/`StreamingLLMSpawner`, `NewLLMSpawnerFromSpawner`, `AvailableAdapters`, Ollama/OpenAI/custom adapters). Deps: `db/ent` only. Extracted from `pipeline/` per ADR-0005 |
+| `worktree/` | Leaf: git-worktree primitives (`Runner` with `Output`/`Combined` + 15s timeout, `DefaultRoot`, `PathFor`, `CreateBranch`, `DefaultRootDirName`/`BranchPrefix`). Deps: stdlib only. Consumed by `pipeline/` (lifecycle), `services/` (inspection), `config/` (default root) per ADR-0006 |
 | `db/` | ent ORM schemas + repos (tasks, stage_runs, users, api_keys, presets, remotes, refine, cost_history, web_push subscriptions) |
 | `mcp/` | Stateless StreamableHTTP MCP server — 19 tools, 4 scope tiers |
 | `auth/` | JWT helpers, GitHub OAuth client |
@@ -64,7 +65,7 @@ Vue 3 + TypeScript SPA (unchanged structure from TypeScript-server era).
 - `src/composables/useSessions.ts` — fetch resumable session list via `/api/sessions`
 - `src/composables/useSystemResources.ts` — poll CPU/memory/disk metrics via `/api/system` with visibility-aware interval
 - `src/composables/usePlugins.ts` — fetch installed plugin list via `/api/settings/plugins`
-- `src/composables/usePluginSlots.ts` — loads `addon.js` from `route_extension` plugins for a named slot; route_extension plugins (e.g. voice-whisper, voice-webspeech) contribute frontend UI this way
+- `src/composables/usePluginSlots.ts` — app-wide multi-slot addon loader: filters plugins on the `ui_extension` (or legacy `route_extension`) capability, reads each plugin's `ui-manifest.json`, and imports only the module mapped to the requested slot (memoized: plugin list + manifest + module fetched once per page load via `resetSlotCaches()`-clearable caches). Legacy fallback: `route_extension` plugins without a manifest still load via `addon.js` + `mod.default.slot`
 - `src/composables/useCostHeatmap.ts` — fetch 7×24 cost heatmap grid via `/api/analytics/heatmap`
 - `src/composables/useCostForecast.ts` — fetch cost trend, forecast points, and budget alerts via `/api/analytics/cost-forecast`
 - `src/composables/useRemotes.ts` — CRUD for remote dashboard registrations via `/api/remotes`
@@ -73,11 +74,11 @@ Vue 3 + TypeScript SPA (unchanged structure from TypeScript-server era).
 - `src/components/AgentCard.vue` — card view tile
 - `src/components/AgentModal.vue` — full session modal (transcript, ToolTimeline, TaskList, SubAgentList, prompt)
 - `src/components/KanbanBoard.vue` — task kanban across agents
-- `src/components/PluginSlot.vue` — mount host that renders plugin addons into a named slot
+- `src/components/PluginSlot.vue` — generic mount host (`<script setup generic="S extends SlotName">`) that renders plugin addons into a named slot; typed `name: SlotName` + `ctx: SlotContracts[name]`. Mounted in RefinementChat (`refinement-input-addon`), TaskModal (`task-modal-footer`), AgentModal (`agent-modal-footer`), TaskCard (`kanban-card-badge`), PluginSettings (`settings-panel`)
 - `src/types.ts` — shared TypeScript interfaces (`Agent`, `TokenUsage`, `SessionMeta`, etc.)
 - `src/utils/format.ts` — token, cost, uptime, model name formatting
 - `src/utils/plugins.ts` — `fetchPluginList`, single source for the `/api/settings/plugins` fetch shared by `usePlugins` and `usePluginSlots`
-- `src/utils/pluginSlot.ts` — generic, voice-agnostic plugin-slot contract (`SlotContext`, `SlotAddon`)
+- `src/utils/pluginSlot.ts` — SSOT for the slot framework: `SlotContracts` map (slot name → ctx shape), `SLOT_NAMES`, `SlotName`, author-facing `SlotAddon<S>` (precise ctx) + type-erased `LoadedAddon` (loader/host boundary), `PLUGIN_UI_CAPABILITY`. Per-slot ctx contract table lives in `docs/plugin-guide.md` under the `ui_extension` capability. Adding a slot = one `SlotContracts` entry + one `<PluginSlot>` mount
 
 ## Pipeline UI (`src/components/` + `src/composables/`)
 
@@ -95,4 +96,4 @@ Vue 3 + TypeScript SPA (unchanged structure from TypeScript-server era).
 
 Browser connects to `/api/agents/stream` (SSE) with polling fallback → Go backend scans processes (`ps`/`lsof`) → matches PIDs to `~/.claude/projects/{encoded_path}/{sessionId}.jsonl` → tail-reads JSONL + reads `~/.claude/usage-data/session-meta/{sessionId}.json` → merges, calculates cost/status → broadcasts `Agent[]` to SSE clients.
 
-**Agent status thresholds:** active < 30s, waiting < 5min, idle > 5min (since last activity).
+**Agent status thresholds:** `activeThreshold` (30s) and `waitingThreshold` (5min) in `server/internal/merger/merger.go`; idle is the default case (no const) for activity older than `waitingThreshold`.

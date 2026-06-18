@@ -437,6 +437,99 @@ func TestIsMember_InsecureNextLink(t *testing.T) {
 	}
 }
 
+func TestIsMember_PaginationAcrossPages(t *testing.T) {
+	t.Run("target found on page 2", func(t *testing.T) {
+		var reqCount int
+
+		fakeRT := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			reqCount++
+			var body string
+			switch req.URL.String() {
+			case "https://graph.microsoft.com/v1.0/me/memberOf?$select=id&$top=999":
+				body = `{"value":[{"id":"other-1"},{"id":"other-2"}],"@odata.nextLink":"https://graph.microsoft.com/v1.0/me/memberOf?$skiptoken=PAGE2"}`
+			case "https://graph.microsoft.com/v1.0/me/memberOf?$skiptoken=PAGE2":
+				body = `{"value":[{"id":"target-group"}]}`
+			default:
+				return &http.Response{
+					StatusCode: http.StatusNotFound,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"error":"unexpected URL"}`)),
+					Request:    req,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Request:    req,
+			}, nil
+		})
+
+		h := newO365Handler(nil, nil, nil, nil)
+		h.httpClient = &http.Client{Transport: fakeRT}
+		h.msGraphMemberURL = "https://graph.microsoft.com/v1.0/me/memberOf?$select=id&$top=999"
+
+		ok, err := h.isMember(context.Background(), "tok", "target-group")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !ok {
+			t.Error("expected member=true (target found on page 2)")
+		}
+		if reqCount != 2 {
+			t.Errorf("expected 2 requests (one per page), got %d", reqCount)
+		}
+	})
+
+	t.Run("target absent on both pages", func(t *testing.T) {
+		var reqCount int
+
+		fakeRT := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			reqCount++
+			var body string
+			switch req.URL.String() {
+			case "https://graph.microsoft.com/v1.0/me/memberOf?$select=id&$top=999":
+				body = `{"value":[{"id":"other-1"},{"id":"other-2"}],"@odata.nextLink":"https://graph.microsoft.com/v1.0/me/memberOf?$skiptoken=PAGE2"}`
+			case "https://graph.microsoft.com/v1.0/me/memberOf?$skiptoken=PAGE2":
+				body = `{"value":[{"id":"yet-another-group"}]}`
+			default:
+				return &http.Response{
+					StatusCode: http.StatusNotFound,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"error":"unexpected URL"}`)),
+					Request:    req,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Request:    req,
+			}, nil
+		})
+
+		h := newO365Handler(nil, nil, nil, nil)
+		h.httpClient = &http.Client{Transport: fakeRT}
+		h.msGraphMemberURL = "https://graph.microsoft.com/v1.0/me/memberOf?$select=id&$top=999"
+
+		ok, err := h.isMember(context.Background(), "tok", "target-group")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ok {
+			t.Error("expected member=false (target absent on both pages)")
+		}
+		if reqCount != 2 {
+			t.Errorf("expected 2 requests (one per page), got %d", reqCount)
+		}
+	})
+}
+
+// roundTripperFunc allows an inline func to implement http.RoundTripper.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
 // --- randomState ---
 
 func TestRandomState_ReturnsNonEmptyUniqueStrings(t *testing.T) {

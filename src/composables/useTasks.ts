@@ -1,21 +1,12 @@
 import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import { computed, onUnmounted, ref, shallowRef } from 'vue'
-import { SSE_RETRY_DELAY_MS } from '../utils/sse'
+import { errorMessage } from '../utils/errorMessage'
+import { createSseResource } from './useSseResource'
 
 const tasks = shallowRef<PipelineTask[]>([])
 const selectedTask = ref<PipelineTask | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
-
-let eventSource: EventSource | null = null
-let pollTimer: ReturnType<typeof setInterval> | null = null
-let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
-let subscriberCount = 0
-
-// Safety-net poll cadence. SSE is the primary live channel; this catches
-// missed events from short SSE drops (HMR restarts, network blips) and
-// any backend code path that mutates tasks without broadcasting.
-const FALLBACK_POLL_MS = 60_000
 
 export interface TaskEvent {
   type: 'task_created' | 'task_updated' | 'task_deleted' | 'stage_run_updated' | 'permission_request'
@@ -102,7 +93,7 @@ async function fetchTasks() {
     error.value = null
   }
   catch (err) {
-    error.value = (err as Error).message
+    error.value = errorMessage(err)
     isLoading.value = false
   }
 }
@@ -119,54 +110,21 @@ async function refreshTask(taskId: string): Promise<void> {
     selectedTask.value = task
 }
 
-function startSSE() {
-  if (eventSource)
-    return
-  eventSource = new EventSource('/api/tasks/stream')
-  eventSource.onmessage = (e) => {
-    try {
-      const event: TaskEvent = JSON.parse(e.data)
-      applyEvent(event)
-    }
-    catch {
-      // ignore malformed messages
-    }
+function handleSseMessage(data: string) {
+  try {
+    const event: TaskEvent = JSON.parse(data)
+    applyEvent(event)
   }
-  eventSource.onerror = () => {
-    if (eventSource?.readyState === EventSource.CLOSED) {
-      // Permanent failure — fall back to polling, retry SSE after 30s
-      stopSSE()
-      startPolling()
-      sseRetryTimer = setTimeout(() => {
-        stopPolling()
-        startSSE()
-      }, SSE_RETRY_DELAY_MS)
-    }
-    // Transient error — EventSource reconnects automatically
+  catch {
+    // ignore malformed messages
   }
 }
 
-function stopSSE() {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
-}
-
-function startPolling() {
-  if (pollTimer)
-    return
-  pollTimer = setInterval(() => {
-    void fetchTasks()
-  }, FALLBACK_POLL_MS)
-}
-
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
+const sse = createSseResource({
+  streamUrl: '/api/tasks/stream',
+  fetchInitial: fetchTasks,
+  onMessage: handleSseMessage,
+})
 
 function applyEvent(event: TaskEvent) {
   switch (event.type) {
@@ -379,8 +337,8 @@ export async function fetchPendingPermissionRequests(taskId: string): Promise<Pe
   return await res.json() as PermissionRequest[]
 }
 
-export async function resolvePermissionRequest(id: string, outcome: 'granted' | 'denied'): Promise<void> {
-  const res = await fetch(`/api/permission-requests/${id}/resolve`, {
+export async function resolvePermissionRequest(taskId: string, requestId: string, outcome: 'granted' | 'denied'): Promise<void> {
+  const res = await fetch(`/api/tasks/${taskId}/permission-requests/${requestId}/resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ outcome }),
@@ -393,19 +351,19 @@ export async function resolvePermissionRequest(id: string, outcome: 'granted' | 
 
 export interface BulkResolveResponse {
   resolved: number
-  granted: number
-  denied: number
-  grantedTools: Array<{ tool: string, pattern: string | null }>
+  errors: string[]
 }
 
 export async function bulkResolvePermissionRequests(
-  stageRunId: string,
+  taskId: string,
+  permissionIds: string[],
   outcome: 'granted' | 'denied',
+  remember = false,
 ): Promise<BulkResolveResponse> {
   const res = await fetch(`/api/permission-requests/bulk-resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stageRunId, outcome }),
+    body: JSON.stringify({ taskId, outcome, permissionIds, remember }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
@@ -450,29 +408,11 @@ export async function removeTaskDependency(taskId: string, depId: string): Promi
     throw new Error(await res.text())
 }
 
-function startStream() {
-  subscriberCount++
-  if (subscriberCount === 1) {
-    void fetchTasks()
-    startSSE()
-  }
-}
-
 export function useTasks(options?: { autoStart?: boolean }) {
   if (options?.autoStart !== false)
-    startStream()
+    sse.startStream()
 
-  onUnmounted(() => {
-    subscriberCount--
-    if (subscriberCount === 0) {
-      stopSSE()
-      stopPolling()
-      if (sseRetryTimer) {
-        clearTimeout(sseRetryTimer)
-        sseRetryTimer = null
-      }
-    }
-  })
+  onUnmounted(sse.stopStream)
 
   function selectTask(task: PipelineTask | null) {
     selectedTask.value = task
@@ -503,6 +443,6 @@ export function useTasks(options?: { autoStart?: boolean }) {
     tasksByStageMap,
     selectTask,
     refetch: fetchTasks,
-    startStream,
+    startStream: sse.startStream,
   }
 }

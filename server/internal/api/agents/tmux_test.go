@@ -41,7 +41,7 @@ func TestSendKeysToTmux_RunsTextThenEnter(t *testing.T) {
 	err := sendKeysToTmux(context.Background(), "", "%5", "run it")
 	require.NoError(t, err)
 	require.Len(t, calls, 2)
-	require.Equal(t, "-l", calls[0][3])               // literal text send
+	require.Equal(t, "-l", calls[0][3]) // literal text send
 	require.Equal(t, "run it", calls[0][len(calls[0])-1])
 	require.Equal(t, "Enter", calls[1][len(calls[1])-1]) // separate Enter
 }

@@ -258,6 +258,42 @@ func TestBuildSpawnEnv_ArbitraryVarsNotForwarded(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// BuildAllowList — ManualOverride bypass
+// ---------------------------------------------------------------------------
+
+func TestBuildAllowList_ManualOverride_BypassesAllowList(t *testing.T) {
+	pattern := "chmod +x ./x.sh"
+	perms := []*ent.TaskPermission{
+		{Tool: "Bash", Pattern: &pattern, Granted: true, ManualOverride: true},
+	}
+	allow := pipeline.BuildAllowList(perms, false, false)
+	require.Contains(t, allow, "Bash(chmod +x ./x.sh)")
+}
+
+func TestBuildAllowList_NoManualOverride_StripsBlockedPattern(t *testing.T) {
+	pattern := "chmod +x ./x.sh"
+	perms := []*ent.TaskPermission{
+		{Tool: "Bash", Pattern: &pattern, Granted: true, ManualOverride: false},
+	}
+	allow := pipeline.BuildAllowList(perms, false, false)
+	for _, a := range allow {
+		if strings.Contains(a, "chmod") {
+			t.Errorf("BuildAllowList without override must strip 'chmod' pattern, got: %s", a)
+		}
+	}
+}
+
+func TestBuildAllowList_ManualOverride_BypassesGitPushGate(t *testing.T) {
+	pattern := "git push origin HEAD"
+	perms := []*ent.TaskPermission{
+		{Tool: "Bash", Pattern: &pattern, Granted: true, ManualOverride: true},
+	}
+	// allowGitPush=false — override must still pass.
+	allow := pipeline.BuildAllowList(perms, false, false)
+	require.Contains(t, allow, "Bash(git push origin HEAD)")
+}
+
 func TestBuildSpawnEnv_ForwardsDashboardPrefix(t *testing.T) {
 	t.Setenv("DASHBOARD_MCP_URL", "http://example.com")
 	t.Setenv("DASHBOARD_JWT_SECRET", "x") // deny-list must override prefix match

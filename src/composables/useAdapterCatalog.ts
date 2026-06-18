@@ -1,5 +1,6 @@
 import type { AdapterMeta, SpawnerAdapterType } from '../types'
 import { ref, shallowRef } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 // Module-level cache: the catalog is a static server constant (see
 // server/internal/pipeline/adapter_catalog.go) — one fetch per page load
@@ -26,7 +27,7 @@ async function loadCatalog(): Promise<void> {
       catalog.value = await res.json() as AdapterMeta[]
     }
     catch (err) {
-      error.value = (err as Error).message
+      error.value = errorMessage(err)
     }
     finally {
       isLoading.value = false
