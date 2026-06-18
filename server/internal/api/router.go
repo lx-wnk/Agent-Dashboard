@@ -360,14 +360,18 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Post("/api/agents/{pid}/allow-tool", ErrorMiddleware(allowToolHandler.AllowTool))
 		}
 
-		// Config explorer — read-only enumeration of skills, slash commands,
-		// and memory files, scoped per spawner / live session via ?spawnerId /
-		// ?sessionId. The only client path accepted is ?cwd, sanitized and used
-		// solely for project-local <cwd>/.claude reads.
-		configHandler := apiconfig.NewHandler(deps.SpawnerRepo, getAgents)
+		// Config explorer — enumerate and edit skills, slash commands, and memory
+		// files, scoped per spawner / live session via ?spawnerId / ?sessionId.
+		// The only client path accepted is ?cwd; it is sanitized and confined to
+		// the spawn policy's project roots so the editable set stays bounded.
+		configHandler := apiconfig.NewHandler(deps.SpawnerRepo, getAgents, spawnPolicy)
 		r.Get("/api/config/skills", configHandler.Skills)
 		r.Get("/api/config/commands", configHandler.Commands)
 		r.Get("/api/config/memory", configHandler.Memory)
+		// Single-file read/write for editable (user/project) config files. Writes
+		// are authorized only against the scope's enumerated editable set.
+		r.Get("/api/config/file", configHandler.File)
+		r.Put("/api/config/file", configHandler.SaveFile)
 
 		// Edit-gate UI endpoints — browser-facing, session-authenticated (or bypass).
 		// Unlike /api/hooks/event and /api/hooks/pre-tool (hook-script ingress, secret

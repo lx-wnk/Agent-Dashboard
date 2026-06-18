@@ -50,7 +50,56 @@ func handlerWithConfigDir(t *testing.T, cfgDir string) *Handler {
 		Env:         map[string]string{"CLAUDE_CONFIG_DIR": cfgDir},
 		AdapterType: "claude",
 	}
-	return NewHandler(fakeSpawners{bySlug: map[string]*ent.Spawner{"claude-default": def}}, nil)
+	return NewHandler(fakeSpawners{bySlug: map[string]*ent.Spawner{"claude-default": def}}, nil, nil)
+}
+
+// fakeCwdPolicy denies every cwd unless it equals allow.
+type fakeCwdPolicy struct{ allow string }
+
+func (p fakeCwdPolicy) Allow(_ context.Context, cwd string) error {
+	if cwd == p.allow {
+		return nil
+	}
+	return errors.New("cwd outside allowed roots")
+}
+
+// memoryHasProjectFile reports whether the /api/config/memory response for the
+// given cwd lists a project-scoped file (i.e. the project layer was admitted).
+func memoryHasProjectFile(t *testing.T, h *Handler, cwd string) bool {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.Memory(rec, httptest.NewRequest(http.MethodGet, "/api/config/memory?cwd="+cwd, nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp memoryResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	for _, m := range resp.Memory {
+		if m.Scope == "project" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestResolve_CwdPolicyDropsDisallowedProjectLayer(t *testing.T) {
+	cfg := t.TempDir()
+	project := t.TempDir()
+	writeFile(t, filepath.Join(project, "CLAUDE.md"), "# project memory")
+
+	def := &ent.Spawner{
+		Slug:        "claude-default",
+		Command:     "claude",
+		Env:         map[string]string{"CLAUDE_CONFIG_DIR": cfg},
+		AdapterType: "claude",
+	}
+	spawners := fakeSpawners{bySlug: map[string]*ent.Spawner{"claude-default": def}}
+
+	denied := NewHandler(spawners, nil, fakeCwdPolicy{allow: "/some/other/root"})
+	require.False(t, memoryHasProjectFile(t, denied, project),
+		"cwd outside allowed roots must not enumerate the project layer")
+
+	allowed := NewHandler(spawners, nil, fakeCwdPolicy{allow: project})
+	require.True(t, memoryHasProjectFile(t, allowed, project),
+		"cwd under an allowed root must enumerate the project layer")
 }
 
 func TestCommandsEndpoint_ScopedToSpawnerConfigDir(t *testing.T) {

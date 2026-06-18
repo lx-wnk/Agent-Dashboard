@@ -17,12 +17,16 @@ type SlashCommand struct {
 }
 
 // CommandDetail is a slash command with its on-disk body, for the Config
-// explorer. Built-in commands carry an empty Body.
+// explorer. Built-in commands carry an empty Body and Path.
 type CommandDetail struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Source      string `json:"source"`
 	Body        string `json:"body"`
+	// Path is the absolute on-disk path of the command file. Empty for builtins.
+	Path string `json:"path,omitempty"`
+	// Editable is true only for user/project sources (see IsEditableSource).
+	Editable bool `json:"editable"`
 }
 
 // SkillEntry is one installed skill available within a Scope.
@@ -30,6 +34,17 @@ type SkillEntry struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Source      string `json:"source"` // "user" | "project" | "plugin:<plugin-id>"
+	// Path is the absolute on-disk path of the SKILL.md file.
+	Path string `json:"path,omitempty"`
+	// Editable is true only for user/project sources (see IsEditableSource).
+	Editable bool `json:"editable"`
+}
+
+// IsEditableSource reports whether a skill/command/memory source may be edited
+// in-dashboard. Only user- and project-layer files are writable; plugin and
+// builtin sources are read-only.
+func IsEditableSource(source string) bool {
+	return source == "user" || source == "project"
 }
 
 // maxCommandBodyBytes caps the on-disk command file body read into CommandDetail.
@@ -194,7 +209,7 @@ func (s Scope) Skills() []SkillEntry {
 			if name == "" {
 				continue
 			}
-			out = append(out, SkillEntry{Name: name, Description: desc, Source: source})
+			out = append(out, SkillEntry{Name: name, Description: desc, Source: source, Path: file, Editable: IsEditableSource(source)})
 		}
 	}
 
@@ -210,7 +225,7 @@ func skillsInDir(dir, source string) []SkillEntry {
 		if name == "" {
 			name = entry
 		}
-		out = append(out, SkillEntry{Name: name, Description: desc, Source: source})
+		out = append(out, SkillEntry{Name: name, Description: desc, Source: source, Path: skillPath, Editable: IsEditableSource(source)})
 	}
 	return out
 }
@@ -405,7 +420,7 @@ func readCommand(path, source string, withBody bool) (CommandDetail, bool) {
 	if base == "" {
 		return CommandDetail{}, false
 	}
-	d := CommandDetail{Name: "/" + base, Source: source}
+	d := CommandDetail{Name: "/" + base, Source: source, Path: path, Editable: IsEditableSource(source)}
 
 	if withBody {
 		body, desc := readCommandBody(path)

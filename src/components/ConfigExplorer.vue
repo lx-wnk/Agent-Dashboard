@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import AppInput from './ui/AppInput.vue'
-import { useConfigExplorer } from '../composables/useConfigExplorer'
+import { ConflictError, useConfigExplorer } from '../composables/useConfigExplorer'
 
 type Tab = 'skills' | 'commands' | 'memory'
 
@@ -22,6 +22,8 @@ const {
   error,
   refresh,
   setSpawner,
+  loadFile,
+  saveFile,
 } = useConfigExplorer()
 
 // Re-enumerate whenever the spawner under inspection changes. `immediate` so the
@@ -85,6 +87,89 @@ function formatBytes(n: number): string {
 function formatTimestamp(unixSeconds: number): string {
   const d = new Date(unixSeconds * 1000)
   return d.toLocaleString()
+}
+
+// ---- inline editor for user/project files ----
+const editorPath = ref<string | null>(null)
+const editorSource = ref('')
+const editorContent = ref('')
+const editorOriginal = ref('')
+const editorBaseMtime = ref(0)
+const editorLoading = ref(false)
+const editorSaving = ref(false)
+const editorError = ref<string | null>(null)
+const editorConflict = ref(false)
+
+const isDirty = computed(() => editorContent.value !== editorOriginal.value)
+
+async function doLoad(path: string): Promise<void> {
+  editorError.value = null
+  editorConflict.value = false
+  editorLoading.value = true
+  editorPath.value = path
+  try {
+    const f = await loadFile(path, props.spawnerId)
+    editorContent.value = f.content
+    editorOriginal.value = f.content
+    editorBaseMtime.value = f.mtime
+    editorSource.value = f.source
+  }
+  catch (e) {
+    editorError.value = (e as Error).message
+    editorPath.value = null
+  }
+  finally {
+    editorLoading.value = false
+  }
+}
+
+function confirmDiscard(): boolean {
+  // eslint-disable-next-line no-alert
+  return !isDirty.value || window.confirm('Discard unsaved changes?')
+}
+
+function openEditor(path?: string): void {
+  if (!path || editorSaving.value)
+    return
+  if (!confirmDiscard())
+    return
+  void doLoad(path)
+}
+
+function reloadEditor(): void {
+  if (editorPath.value)
+    void doLoad(editorPath.value)
+}
+
+async function saveEditor(): Promise<void> {
+  if (!editorPath.value || editorSaving.value)
+    return
+  editorSaving.value = true
+  editorError.value = null
+  editorConflict.value = false
+  try {
+    const res = await saveFile(editorPath.value, editorContent.value, editorBaseMtime.value, props.spawnerId)
+    editorBaseMtime.value = res.mtime
+    editorOriginal.value = editorContent.value
+    await refresh()
+  }
+  catch (e) {
+    if (e instanceof ConflictError)
+      editorConflict.value = true
+    else
+      editorError.value = (e as Error).message
+  }
+  finally {
+    editorSaving.value = false
+  }
+}
+
+function closeEditor(): void {
+  if (!confirmDiscard())
+    return
+  editorPath.value = null
+  editorContent.value = ''
+  editorOriginal.value = ''
 }
 </script>
 
@@ -171,6 +256,14 @@ function formatTimestamp(unixSeconds: number): string {
             {{ skill.name }}
           </h3>
           <span class="text-[11px] text-fg-mute px-1.5 py-0.5 rounded bg-raised">{{ skill.source }}</span>
+          <button
+            v-if="skill.editable && skill.path"
+            type="button"
+            class="ml-auto text-[11px] text-blue-600 dark:text-blue-400 border-none bg-transparent cursor-pointer hover:underline"
+            @click="openEditor(skill.path)"
+          >
+            Edit
+          </button>
         </header>
         <p v-if="skill.description" class="text-[12px] text-fg-mute m-0 leading-relaxed">
           {{ skill.description }}
@@ -196,7 +289,15 @@ function formatTimestamp(unixSeconds: number): string {
             {{ cmd.name }}
           </h3>
           <span class="text-[11px] text-fg-mute px-1.5 py-0.5 rounded bg-raised">{{ cmd.source }}</span>
-          <span class="ml-auto text-[11px] text-fg-faint">
+          <button
+            v-if="cmd.editable && cmd.path"
+            type="button"
+            class="ml-auto text-[11px] text-blue-600 dark:text-blue-400 border-none bg-transparent cursor-pointer hover:underline"
+            @click.stop="openEditor(cmd.path)"
+          >
+            Edit
+          </button>
+          <span class="text-[11px] text-fg-faint" :class="cmd.editable && cmd.path ? '' : 'ml-auto'">
             {{ expandedCommand === commandKey(cmd) ? '▲ hide' : '▼ show body' }}
           </span>
         </header>
@@ -223,11 +324,91 @@ function formatTimestamp(unixSeconds: number): string {
         <header class="flex items-baseline gap-2 flex-wrap">
           <span class="text-[11px] text-fg-mute px-1.5 py-0.5 rounded bg-raised">{{ mem.scope }}</span>
           <code class="text-[12px] text-fg font-mono break-all">{{ mem.path }}</code>
+          <button
+            v-if="mem.editable"
+            type="button"
+            class="ml-auto text-[11px] text-blue-600 dark:text-blue-400 border-none bg-transparent cursor-pointer hover:underline"
+            @click="openEditor(mem.path)"
+          >
+            Edit
+          </button>
         </header>
         <p class="text-[11px] text-fg-mute m-0">
           {{ formatBytes(mem.size) }} · modified {{ formatTimestamp(mem.mtime) }}
         </p>
       </article>
+    </div>
+
+    <!-- Inline editor for an editable (user/project) file -->
+    <div
+      v-if="editorPath"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      @click.self="closeEditor"
+    >
+      <div class="bg-card border border-line rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <header class="flex items-center gap-2 p-3 border-b border-line">
+          <span class="text-[11px] text-fg-mute px-1.5 py-0.5 rounded bg-raised">{{ editorSource }}</span>
+          <code class="text-[12px] text-fg font-mono break-all flex-1">{{ editorPath }}</code>
+          <span v-if="isDirty" class="text-[11px] text-amber-600 dark:text-amber-400">● unsaved</span>
+          <button
+            type="button"
+            class="text-fg-mute border-none bg-transparent cursor-pointer hover:text-fg-soft text-lg leading-none px-1"
+            title="Close"
+            @click="closeEditor"
+          >
+            ×
+          </button>
+        </header>
+
+        <div
+          v-if="editorConflict"
+          class="m-3 mb-0 px-3 py-2 rounded bg-amber-100 dark:bg-amber-900/30 text-[12px] text-amber-800 dark:text-amber-300 flex items-center gap-2"
+        >
+          <span class="flex-1">File changed on disk since you loaded it. Reload to get the latest (your edits will be lost).</span>
+          <button
+            type="button"
+            class="text-[11px] font-semibold text-amber-900 dark:text-amber-200 border border-amber-400 rounded px-2 py-0.5 cursor-pointer hover:bg-amber-200/50"
+            @click="reloadEditor"
+          >
+            Reload
+          </button>
+        </div>
+
+        <p v-if="editorError" class="m-3 mb-0 text-red-600 dark:text-red-400 text-[12px]">
+          {{ editorError }}
+        </p>
+
+        <div class="p-3 flex-1 overflow-hidden flex">
+          <textarea
+            v-if="!editorLoading"
+            v-model="editorContent"
+            spellcheck="false"
+            class="w-full h-full min-h-[320px] resize-none bg-app border border-line rounded p-2 text-[12px] text-fg-soft font-mono focus:outline-none focus:border-blue-500"
+          />
+          <p v-else class="text-fg-mute text-sm m-auto">
+            Loading file...
+          </p>
+        </div>
+
+        <footer class="flex items-center gap-2 p-3 border-t border-line">
+          <span class="text-[11px] text-fg-faint mr-auto">{{ editorContent.length }} chars</span>
+          <button
+            type="button"
+            class="bg-raised text-fg-mute border-none rounded-md px-3 py-1.5 text-[13px] cursor-pointer hover:text-fg-soft"
+            @click="closeEditor"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="bg-blue-600 text-white border-none rounded-md px-3 py-1.5 text-[13px] cursor-pointer hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="!isDirty || editorSaving || editorLoading"
+            @click="saveEditor"
+          >
+            {{ editorSaving ? 'Saving...' : 'Save' }}
+          </button>
+        </footer>
+      </div>
     </div>
   </div>
 </template>

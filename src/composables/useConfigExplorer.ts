@@ -5,6 +5,8 @@ export interface SkillEntry {
   name: string
   source: string
   description: string
+  path?: string
+  editable: boolean
 }
 
 export interface CommandEntry {
@@ -12,6 +14,8 @@ export interface CommandEntry {
   source: string
   description: string
   body: string
+  path?: string
+  editable: boolean
 }
 
 export interface MemoryEntry {
@@ -19,6 +23,30 @@ export interface MemoryEntry {
   scope: 'user' | 'project'
   size: number
   mtime: number
+  editable: boolean
+}
+
+export interface ConfigFile {
+  path: string
+  content: string
+  mtime: number
+  editable: boolean
+  source: string
+}
+
+export interface SaveResult {
+  path: string
+  mtime: number
+  size: number
+}
+
+// ConflictError signals the server rejected a save because the file changed on
+// disk since it was loaded (HTTP 409). Callers surface a reload prompt.
+export class ConflictError extends Error {
+  constructor(message = 'File was modified since it was loaded') {
+    super(message)
+    this.name = 'ConflictError'
+  }
 }
 
 interface SkillsResponse { skills: SkillEntry[], scopeSource?: string, scopeLabel?: string }
@@ -50,6 +78,29 @@ async function fetchJSON<T>(url: string): Promise<T> {
 
 function withSpawner(path: string, spawnerId?: string): string {
   return spawnerId ? `${path}?spawnerId=${encodeURIComponent(spawnerId)}` : path
+}
+
+// loadFile fetches a single editable config file's content for the active scope.
+async function loadFile(path: string, spawnerId?: string): Promise<ConfigFile> {
+  const params = new URLSearchParams({ path })
+  if (spawnerId)
+    params.set('spawnerId', spawnerId)
+  return await fetchJSON<ConfigFile>(`/api/config/file?${params.toString()}`)
+}
+
+// saveFile writes content back, passing the loaded mtime for optimistic
+// concurrency. Throws ConflictError on 409 (stale base), Error otherwise.
+async function saveFile(path: string, content: string, baseMtime: number, spawnerId?: string): Promise<SaveResult> {
+  const res = await fetch(withSpawner('/api/config/file', spawnerId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content, baseMtime }),
+  })
+  if (res.status === 409)
+    throw new ConflictError()
+  if (!res.ok)
+    throw new Error(`save: HTTP ${res.status}`)
+  return await res.json() as SaveResult
 }
 
 async function loadAll(spawnerId?: string): Promise<void> {
@@ -110,5 +161,7 @@ export function useConfigExplorer() {
     error,
     refresh,
     setSpawner,
+    loadFile,
+    saveFile,
   }
 }
