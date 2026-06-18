@@ -238,3 +238,93 @@ func TestFindSessionForProject_NoFiles(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "no session files"), "unexpected error: %v", err)
 }
+
+// rewriteSessionModel overwrites the JSONL body at path with a new model name
+// while preserving the file's inode and mtime, so the cache-validity check
+// (path + inode + mtime) still passes. This lets a test distinguish a genuine
+// cache hit (stale model returned) from an FS re-read (new model returned).
+func rewriteSessionModel(t *testing.T, path, model string, ts time.Time) {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+
+	content, err := json.Marshal(map[string]any{
+		"role":    "assistant",
+		"content": []any{map[string]any{"type": "text", "text": "rewritten"}},
+		"model":   model,
+		"usage":   map[string]any{"input_tokens": 1, "output_tokens": 1},
+	})
+	require.NoError(t, err)
+	entry, err := json.Marshal(map[string]any{
+		"type":      "assistant",
+		"timestamp": ts.UTC().Format(time.RFC3339Nano),
+		"message":   json.RawMessage(content),
+	})
+	require.NoError(t, err)
+
+	// In-place truncate+write keeps the inode; Chtimes restores the mtime the
+	// cache recorded on the first call.
+	require.NoError(t, os.WriteFile(path, append(entry, '\n'), 0o640))
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+}
+
+// TestFindSessionForProject_CacheHit_SkipsContentReread is the regression guard
+// for the cache's actual purpose: avoiding the per-tick content tail-read.
+//
+// The directory is stat'd on every call (statSessionFiles always runs), so a
+// "<=1 dir stat" assertion is not meaningful. The guarded invariant is instead
+// that a cache hit skips findSessionByContent. Proof: after warming the cache,
+// the file body is rewritten with a different model while inode and mtime are
+// restored. A cache hit returns the STALE model (read skipped); an FS re-read
+// would return the new model. Asserting the stale model proves the read was
+// skipped — and the complementary TTL=0 control below proves the re-read path
+// would otherwise pick up the change.
+func TestFindSessionForProject_CacheHit_SkipsContentReread(t *testing.T) {
+	orig := parser.SessionCacheTTL
+	parser.SessionCacheTTL = 10 * time.Minute
+	t.Cleanup(func() { parser.SessionCacheTTL = orig })
+
+	configDir := t.TempDir()
+	cwd := "/tmp/test-project-cache-hit-skip-reread"
+
+	ts := time.Now()
+	path := writeSession(t, configDir, cwd, ts)
+
+	got1, err := parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, "claude-test", got1.Model)
+
+	// Mutate the body but keep inode + mtime so the cache entry stays valid.
+	rewriteSessionModel(t, path, "claude-MUTATED", ts)
+
+	got2, err := parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, "claude-test", got2.Model,
+		"cache hit must return the stale model — proving the content read was skipped")
+}
+
+// TestFindSessionForProject_TTLZero_ForcesContentReread is the negative control
+// for the test above: with TTL=0 every call misses the cache, so the same
+// mtime-preserving body rewrite IS observed on the second call.
+func TestFindSessionForProject_TTLZero_ForcesContentReread(t *testing.T) {
+	orig := parser.SessionCacheTTL
+	parser.SessionCacheTTL = 0
+	t.Cleanup(func() { parser.SessionCacheTTL = orig })
+
+	configDir := t.TempDir()
+	cwd := "/tmp/test-project-cache-ttl0-reread"
+
+	ts := time.Now()
+	path := writeSession(t, configDir, cwd, ts)
+
+	got1, err := parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, "claude-test", got1.Model)
+
+	rewriteSessionModel(t, path, "claude-MUTATED", ts)
+
+	got2, err := parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, "claude-MUTATED", got2.Model,
+		"TTL=0 forces an FS re-read — the mutated model must be observed")
+}

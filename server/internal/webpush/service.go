@@ -18,6 +18,9 @@ const (
 	keyVAPIDSubject = "vapid_subject"
 )
 
+// sendNotification is a package-level var so tests can override the real HTTP call.
+var sendNotification = webpushlib.SendNotification
+
 // Service manages VAPID keys and push subscription delivery.
 type Service struct {
 	cfgRepo rawrepo.NotificationConfigRepo
@@ -110,7 +113,7 @@ func (s *Service) SendToAll(ctx context.Context, payload []byte) (int, error) {
 
 	errCount := 0
 	for _, sub := range subs {
-		resp, sendErr := webpushlib.SendNotification(payload, &webpushlib.Subscription{
+		resp, sendErr := sendNotification(payload, &webpushlib.Subscription{
 			Endpoint: sub.Endpoint,
 			Keys: webpushlib.Keys{
 				P256dh: sub.P256dh,
