@@ -40,6 +40,7 @@ type RefineStatusReader interface {
 type OrchestratorIface interface {
 	ProgressTask(ctx context.Context, taskID string, opts *pipeline.ProgressOpts) (*ent.StageRun, error)
 	ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error)
+	RequeueForUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error)
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
 	InvalidateConfigCache()
 	ClearStalePendingPermissions(ctx context.Context, taskID string)
@@ -637,14 +638,8 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 		AdditionalPrompt string `json:"additionalPrompt"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	resumeSessionID := h.resolveResumeSessionID(r.Context(), t)
-	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "retry_requested", "task:"+id, map[string]any{"actor": "user", "stage": latest.Stage, "iteration": latest.Iteration, "resumed": resumeSessionID != ""})
-	var opts *pipeline.ProgressOpts
-	if body.AdditionalPrompt != "" || resumeSessionID != "" {
-		opts = &pipeline.ProgressOpts{UserAdditionalPrompt: body.AdditionalPrompt, ResumeSessionID: resumeSessionID}
-	}
-	h.orchestrator.ClearStalePendingPermissions(r.Context(), id)
-	sr, err := h.orchestrator.ProgressTask(r.Context(), id, opts)
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "retry_requested", "task:"+id, map[string]any{"actor": "user", "stage": latest.Stage, "iteration": latest.Iteration})
+	sr, err := h.orchestrator.RequeueForUser(r.Context(), id, body.AdditionalPrompt)
 	if err != nil {
 		return fmt.Errorf("tasks.retry: %w", err)
 	}
@@ -652,34 +647,7 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusConflict, "task could not progress")
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusOK, sr)
-}
-
-// resolveResumeSessionID picks the session a user-triggered retry should resume:
-// the newest stage_run on the task's current stage whose recorded session JSONL
-// still exists on disk. Walking back (not just reading the single latest run)
-// keeps consecutive retries resumable even when a resumed claude continues the
-// PRIOR run's session id without stamping it onto the new run. Returns "" when
-// no resumable session is found, so the caller falls back to a fresh spawn.
-func (h *Handler) resolveResumeSessionID(ctx context.Context, t *ent.Task) string {
-	cwd := t.Cwd
-	if t.WorktreePath != nil && *t.WorktreePath != "" {
-		cwd = *t.WorktreePath
-	}
-	runs, err := h.srRepo.ListForTask(ctx, t.ID)
-	if err != nil {
-		return ""
-	}
-	for i := len(runs) - 1; i >= 0; i-- {
-		run := runs[i]
-		if run.Stage != t.CurrentStage || run.SessionID == nil || *run.SessionID == "" {
-			continue
-		}
-		if pipeline.SessionFileExists(cwd, *run.SessionID) {
-			return *run.SessionID
-		}
-	}
-	return ""
+	return jsonReply(w, http.StatusAccepted, sr)
 }
 
 func (h *Handler) listStageRuns(w http.ResponseWriter, r *http.Request) error {

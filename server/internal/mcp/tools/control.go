@@ -15,6 +15,7 @@ import (
 type ControlOrchestrator interface {
 	ProgressTask(ctx context.Context, taskID string, opts *pipeline.ProgressOpts) (*ent.StageRun, error)
 	ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error)
+	RequeueForUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error)
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
 }
 
@@ -155,15 +156,15 @@ func registerRetryTask(registry mcp.ToolRegistry, d ControlDeps) {
 			if d.Orchestrator == nil {
 				return nil, mcp.Fail("orchestrator not available")
 			}
-			stageRun, err := d.Orchestrator.ProgressTask(ctx, id, nil)
+			stageRun, err := d.Orchestrator.RequeueForUser(ctx, id, "")
 			if err != nil {
 				return nil, mcp.Fail("retry_task: " + err.Error())
 			}
 			if stageRun == nil {
-				return nil, mcp.Fail("Task could not progress (slot full, no handler, or terminal)")
+				return nil, mcp.Fail("Task could not be re-queued (terminal, missing, or no failed/requeued run)")
 			}
 			safeBroadcast(d.Broadcast, id)
-			// Refresh task after retry; ignore error — stale data is better than an error on success.
+			// Refresh task after re-queue; ignore error — stale data is better than an error on success.
 			task, _ = d.TaskRepo.GetByID(ctx, id)
 			return mcp.OK(map[string]any{"task": task, "stageRun": stageRun})
 		},

@@ -115,9 +115,18 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 	if opts != nil {
 		resumeSessionID = opts.ResumeSessionID
 	}
+	// Derive the resume session from DB when not supplied by the caller (e.g. picker-driven spawn).
+	if resumeSessionID == "" && handler.RequiresAgent() {
+		resumeSessionID = o.resolveResumeSessionID(ctx, task)
+	}
+
 	var userAdditionalPrompt string
 	if opts != nil {
 		userAdditionalPrompt = opts.UserAdditionalPrompt
+	}
+	// Fall back to the prompt persisted on the run itself (set by RequeueForUser).
+	if userAdditionalPrompt == "" && stageRun.PendingUserPrompt != nil {
+		userAdditionalPrompt = *stageRun.PendingUserPrompt
 	}
 
 	var additionalDirs []string

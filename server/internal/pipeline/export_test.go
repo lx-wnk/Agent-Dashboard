@@ -44,3 +44,7 @@ var BuildStageUserPromptForTest = buildStageUserPrompt
 
 // ResumeContinueInstructionForTest exposes resumeContinueInstruction for testing.
 const ResumeContinueInstructionForTest = resumeContinueInstruction
+
+// SyntheticSpawnPIDForTest exposes syntheticSpawnPID for use in test capture
+// spawn functions that want to return the canonical no-op PID.
+const SyntheticSpawnPIDForTest = syntheticSpawnPID

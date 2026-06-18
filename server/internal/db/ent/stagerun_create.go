@@ -211,6 +211,20 @@ func (_c *StageRunCreate) SetNillableNextRetryAt(v *time.Time) *StageRunCreate {
 	return _c
 }
 
+// SetPendingUserPrompt sets the "pending_user_prompt" field.
+func (_c *StageRunCreate) SetPendingUserPrompt(v string) *StageRunCreate {
+	_c.mutation.SetPendingUserPrompt(v)
+	return _c
+}
+
+// SetNillablePendingUserPrompt sets the "pending_user_prompt" field if the given value is not nil.
+func (_c *StageRunCreate) SetNillablePendingUserPrompt(v *string) *StageRunCreate {
+	if v != nil {
+		_c.SetPendingUserPrompt(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *StageRunCreate) SetCreatedAt(v time.Time) *StageRunCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -432,6 +446,10 @@ func (_c *StageRunCreate) createSpec() (*StageRun, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.NextRetryAt(); ok {
 		_spec.SetField(stagerun.FieldNextRetryAt, field.TypeTime, value)
 		_node.NextRetryAt = &value
+	}
+	if value, ok := _c.mutation.PendingUserPrompt(); ok {
+		_spec.SetField(stagerun.FieldPendingUserPrompt, field.TypeString, value)
+		_node.PendingUserPrompt = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(stagerun.FieldCreatedAt, field.TypeTime, value)
@@ -765,6 +783,24 @@ func (u *StageRunUpsert) UpdateNextRetryAt() *StageRunUpsert {
 // ClearNextRetryAt clears the value of the "next_retry_at" field.
 func (u *StageRunUpsert) ClearNextRetryAt() *StageRunUpsert {
 	u.SetNull(stagerun.FieldNextRetryAt)
+	return u
+}
+
+// SetPendingUserPrompt sets the "pending_user_prompt" field.
+func (u *StageRunUpsert) SetPendingUserPrompt(v string) *StageRunUpsert {
+	u.Set(stagerun.FieldPendingUserPrompt, v)
+	return u
+}
+
+// UpdatePendingUserPrompt sets the "pending_user_prompt" field to the value that was provided on create.
+func (u *StageRunUpsert) UpdatePendingUserPrompt() *StageRunUpsert {
+	u.SetExcluded(stagerun.FieldPendingUserPrompt)
+	return u
+}
+
+// ClearPendingUserPrompt clears the value of the "pending_user_prompt" field.
+func (u *StageRunUpsert) ClearPendingUserPrompt() *StageRunUpsert {
+	u.SetNull(stagerun.FieldPendingUserPrompt)
 	return u
 }
 
@@ -1106,6 +1142,27 @@ func (u *StageRunUpsertOne) UpdateNextRetryAt() *StageRunUpsertOne {
 func (u *StageRunUpsertOne) ClearNextRetryAt() *StageRunUpsertOne {
 	return u.Update(func(s *StageRunUpsert) {
 		s.ClearNextRetryAt()
+	})
+}
+
+// SetPendingUserPrompt sets the "pending_user_prompt" field.
+func (u *StageRunUpsertOne) SetPendingUserPrompt(v string) *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetPendingUserPrompt(v)
+	})
+}
+
+// UpdatePendingUserPrompt sets the "pending_user_prompt" field to the value that was provided on create.
+func (u *StageRunUpsertOne) UpdatePendingUserPrompt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdatePendingUserPrompt()
+	})
+}
+
+// ClearPendingUserPrompt clears the value of the "pending_user_prompt" field.
+func (u *StageRunUpsertOne) ClearPendingUserPrompt() *StageRunUpsertOne {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearPendingUserPrompt()
 	})
 }
 
@@ -1614,6 +1671,27 @@ func (u *StageRunUpsertBulk) UpdateNextRetryAt() *StageRunUpsertBulk {
 func (u *StageRunUpsertBulk) ClearNextRetryAt() *StageRunUpsertBulk {
 	return u.Update(func(s *StageRunUpsert) {
 		s.ClearNextRetryAt()
+	})
+}
+
+// SetPendingUserPrompt sets the "pending_user_prompt" field.
+func (u *StageRunUpsertBulk) SetPendingUserPrompt(v string) *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.SetPendingUserPrompt(v)
+	})
+}
+
+// UpdatePendingUserPrompt sets the "pending_user_prompt" field to the value that was provided on create.
+func (u *StageRunUpsertBulk) UpdatePendingUserPrompt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.UpdatePendingUserPrompt()
+	})
+}
+
+// ClearPendingUserPrompt clears the value of the "pending_user_prompt" field.
+func (u *StageRunUpsertBulk) ClearPendingUserPrompt() *StageRunUpsertBulk {
+	return u.Update(func(s *StageRunUpsert) {
+		s.ClearPendingUserPrompt()
 	})
 }
 

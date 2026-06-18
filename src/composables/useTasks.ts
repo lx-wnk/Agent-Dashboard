@@ -235,9 +235,9 @@ export async function cancelTask(taskId: string): Promise<void> {
 }
 
 /**
- * Retry the task's current stage after a failed stage_run. The backend
- * creates a fresh iteration of the same stage and lets the orchestrator
- * pick it up. Only valid when latestStageRunStatus === 'failed'.
+ * Re-queue the task's current stage after a failed stage_run. Returns 202
+ * Accepted — the stage_run is pending and will start when a runner slot is
+ * free. Only valid when latestStageRunStatus === 'failed'.
  */
 export async function retryTask(taskId: string, additionalPrompt?: string): Promise<void> {
   const res = await fetch(`/api/tasks/${taskId}/retry`, {
@@ -252,9 +252,9 @@ export async function retryTask(taskId: string, additionalPrompt?: string): Prom
 }
 
 /**
- * Resume the task's last stage_run by continuing the agent's previous Claude
- * session via `--resume`. Picks up where the agent stopped (e.g. after a
- * permission grant). Requires the latest stage_run to have a sessionId.
+ * Re-queue a resume of the task's last stage_run (continues the agent's
+ * previous Claude session via `--resume`). Returns 202 Accepted — the
+ * stage_run is pending and will start when a runner slot is free.
  */
 export async function resumeStageTask(taskId: string, additionalPrompt?: string): Promise<void> {
   const res = await fetch(`/api/tasks/${taskId}/resume-stage`, {
