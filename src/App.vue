@@ -45,6 +45,7 @@ import { friendlyProjectName } from './utils/friendlyProjectName'
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
 const PipelineBoard = defineAsyncComponent(() => import('./components/PipelineBoard.vue'))
 const WorkflowsView = defineAsyncComponent(() => import('./components/WorkflowsView.vue'))
+const SchedulesView = defineAsyncComponent(() => import('./components/SchedulesView.vue'))
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
 const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
 // Modal/panel components that drag in marked + dompurify (RefinementChat) and diff (EditGateModal) —
@@ -434,6 +435,7 @@ onMounted(fetchQuota)
           @navigate-agent="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"
         />
         <CostAnalyticsView v-else-if="activeView === 'cost'" />
+        <SchedulesView v-else-if="activeView === 'schedules'" />
         <WorkflowsView
           v-else-if="activeView === 'workflows'"
           @navigate="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"

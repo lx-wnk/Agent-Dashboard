@@ -4,7 +4,7 @@ import { NAV_GROUPS, NAV_ITEMS, viewTitle } from './navConfig'
 describe('navConfig', () => {
   it('has one item per ActiveView', () => {
     const views = NAV_ITEMS.map(i => i.view).sort()
-    expect(views).toEqual(['cost', 'dashboard', 'pipeline', 'workflows'])
+    expect(views).toEqual(['cost', 'dashboard', 'pipeline', 'schedules', 'workflows'])
   })
 
   it('groups are Monitor, Build and Insights', () => {

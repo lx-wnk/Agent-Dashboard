@@ -2,10 +2,10 @@ import type { AgentGroup, AgentSort } from '../utils/agentGroup'
 import { ref, watch } from 'vue'
 import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS } from '../utils/agentGroup'
 
-export type ActiveView = 'dashboard' | 'workflows' | 'pipeline' | 'cost'
+export type ActiveView = 'dashboard' | 'workflows' | 'pipeline' | 'cost' | 'schedules'
 export type DashboardLayout = 'cards' | 'list'
 
-const ACTIVE_VIEWS: ActiveView[] = ['dashboard', 'workflows', 'pipeline', 'cost']
+const ACTIVE_VIEWS: ActiveView[] = ['dashboard', 'workflows', 'pipeline', 'cost', 'schedules']
 const AGENT_SORT_VALUES: AgentSort[] = AGENT_SORT_OPTIONS.map(o => o.value)
 const AGENT_GROUP_VALUES: AgentGroup[] = AGENT_GROUP_OPTIONS.map(o => o.value)
 
