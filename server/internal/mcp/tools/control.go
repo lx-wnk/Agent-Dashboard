@@ -161,7 +161,7 @@ func registerRetryTask(registry mcp.ToolRegistry, d ControlDeps) {
 				return nil, mcp.Fail("retry_task: " + err.Error())
 			}
 			if stageRun == nil {
-				return nil, mcp.Fail("Task has no failed run eligible for re-queue")
+				return nil, mcp.Fail("Task could not be re-queued (terminal, missing, or no failed/requeued run)")
 			}
 			safeBroadcast(d.Broadcast, id)
 			// Refresh task after re-queue; ignore error — stale data is better than an error on success.
