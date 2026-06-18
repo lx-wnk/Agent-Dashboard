@@ -10,8 +10,6 @@ const props = defineProps<{
   active: boolean
 }>()
 
-const emit = defineEmits<{ change: [] }>()
-
 const taskIdRef = ref<string | null>(props.taskId)
 watch(() => props.taskId, (v) => {
   taskIdRef.value = v
@@ -51,22 +49,15 @@ async function handleRemove(): Promise<void> {
     confirmingRemove.value = true
     return
   }
-  if (code === 204) {
-    emit('change')
-  }
 }
 
 async function confirmRemove(): Promise<void> {
   confirmingRemove.value = false
-  const code = await remove(true)
-  if (code === 204) {
-    emit('change')
-  }
+  await remove(true)
 }
 
 async function handleCreate(): Promise<void> {
   await create()
-  emit('change')
 }
 </script>
 

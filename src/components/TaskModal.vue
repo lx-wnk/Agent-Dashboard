@@ -23,7 +23,7 @@ import AppChip from './ui/AppChip.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ task: PipelineTask | null }>()
-const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask], worktreeChanged: [] }>()
+const emit = defineEmits<{ close: [], navigate: [agent: Agent], navigateTask: [taskId: string], openChat: [task: PipelineTask] }>()
 
 const task = computed(() => props.task)
 const details = useTaskDetails(task)
@@ -119,7 +119,7 @@ watch(() => props.task?.id, (id, prevId) => {
       </nav>
 
       <div class="flex-1 min-h-0 overflow-y-auto" v-bind="panelAttrs(activeTab)">
-        <TaskOverviewTab v-if="activeTab === 'overview'" @open-chat="t => emit('openChat', t)" @worktree-changed="emit('worktreeChanged')" />
+        <TaskOverviewTab v-if="activeTab === 'overview'" @open-chat="t => emit('openChat', t)" />
         <TaskStagesTab v-else-if="activeTab === 'stages'" />
         <TaskCostTab v-else-if="activeTab === 'cost'" />
         <TaskPermissionsTab v-else-if="activeTab === 'permissions'" />

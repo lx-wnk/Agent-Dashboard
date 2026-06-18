@@ -16,7 +16,7 @@ import WorktreeCommandRunner from '../WorktreeCommandRunner.vue'
 import WorktreePanel from '../WorktreePanel.vue'
 import TaskPendingRequests from './TaskPendingRequests.vue'
 
-const emit = defineEmits<{ openChat: [task: PipelineTask], worktreeChanged: [] }>()
+const emit = defineEmits<{ openChat: [task: PipelineTask] }>()
 
 const task = useInjectedTask()
 const {
@@ -200,7 +200,6 @@ watch(
       :task-id="task.id"
       :worktree-path="task.worktreePath ?? null"
       :active="!!task"
-      @change="emit('worktreeChanged')"
     />
 
     <section class="border-t border-line pt-3 flex flex-col gap-2.5">
