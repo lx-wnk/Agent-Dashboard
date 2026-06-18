@@ -31,6 +31,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskschedule"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/user"
 )
 
@@ -71,6 +72,8 @@ type Client struct {
 	TaskDependency *TaskDependencyClient
 	// TaskPermission is the client for interacting with the TaskPermission builders.
 	TaskPermission *TaskPermissionClient
+	// TaskSchedule is the client for interacting with the TaskSchedule builders.
+	TaskSchedule *TaskScheduleClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 }
@@ -100,6 +103,7 @@ func (c *Client) init() {
 	c.Task = NewTaskClient(c.config)
 	c.TaskDependency = NewTaskDependencyClient(c.config)
 	c.TaskPermission = NewTaskPermissionClient(c.config)
+	c.TaskSchedule = NewTaskScheduleClient(c.config)
 	c.User = NewUserClient(c.config)
 }
 
@@ -209,6 +213,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Task:               NewTaskClient(cfg),
 		TaskDependency:     NewTaskDependencyClient(cfg),
 		TaskPermission:     NewTaskPermissionClient(cfg),
+		TaskSchedule:       NewTaskScheduleClient(cfg),
 		User:               NewUserClient(cfg),
 	}, nil
 }
@@ -245,6 +250,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Task:               NewTaskClient(cfg),
 		TaskDependency:     NewTaskDependencyClient(cfg),
 		TaskPermission:     NewTaskPermissionClient(cfg),
+		TaskSchedule:       NewTaskScheduleClient(cfg),
 		User:               NewUserClient(cfg),
 	}, nil
 }
@@ -278,7 +284,7 @@ func (c *Client) Use(hooks ...Hook) {
 		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.PermissionPreset,
 		c.PermissionRequest, c.PipelineConfig, c.Project, c.ProjectFolder,
 		c.RefinementTurn, c.RemoteRegistration, c.Spawner, c.StageRun, c.SystemPrompt,
-		c.Task, c.TaskDependency, c.TaskPermission, c.User,
+		c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -291,7 +297,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.PermissionPreset,
 		c.PermissionRequest, c.PipelineConfig, c.Project, c.ProjectFolder,
 		c.RefinementTurn, c.RemoteRegistration, c.Spawner, c.StageRun, c.SystemPrompt,
-		c.Task, c.TaskDependency, c.TaskPermission, c.User,
+		c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -332,6 +338,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.TaskDependency.mutate(ctx, m)
 	case *TaskPermissionMutation:
 		return c.TaskPermission.mutate(ctx, m)
+	case *TaskScheduleMutation:
+		return c.TaskSchedule.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
 	default:
@@ -2659,6 +2667,139 @@ func (c *TaskPermissionClient) mutate(ctx context.Context, m *TaskPermissionMuta
 	}
 }
 
+// TaskScheduleClient is a client for the TaskSchedule schema.
+type TaskScheduleClient struct {
+	config
+}
+
+// NewTaskScheduleClient returns a client for the TaskSchedule from the given config.
+func NewTaskScheduleClient(c config) *TaskScheduleClient {
+	return &TaskScheduleClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `taskschedule.Hooks(f(g(h())))`.
+func (c *TaskScheduleClient) Use(hooks ...Hook) {
+	c.hooks.TaskSchedule = append(c.hooks.TaskSchedule, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `taskschedule.Intercept(f(g(h())))`.
+func (c *TaskScheduleClient) Intercept(interceptors ...Interceptor) {
+	c.inters.TaskSchedule = append(c.inters.TaskSchedule, interceptors...)
+}
+
+// Create returns a builder for creating a TaskSchedule entity.
+func (c *TaskScheduleClient) Create() *TaskScheduleCreate {
+	mutation := newTaskScheduleMutation(c.config, OpCreate)
+	return &TaskScheduleCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of TaskSchedule entities.
+func (c *TaskScheduleClient) CreateBulk(builders ...*TaskScheduleCreate) *TaskScheduleCreateBulk {
+	return &TaskScheduleCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *TaskScheduleClient) MapCreateBulk(slice any, setFunc func(*TaskScheduleCreate, int)) *TaskScheduleCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &TaskScheduleCreateBulk{err: fmt.Errorf("calling to TaskScheduleClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*TaskScheduleCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &TaskScheduleCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for TaskSchedule.
+func (c *TaskScheduleClient) Update() *TaskScheduleUpdate {
+	mutation := newTaskScheduleMutation(c.config, OpUpdate)
+	return &TaskScheduleUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *TaskScheduleClient) UpdateOne(_m *TaskSchedule) *TaskScheduleUpdateOne {
+	mutation := newTaskScheduleMutation(c.config, OpUpdateOne, withTaskSchedule(_m))
+	return &TaskScheduleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *TaskScheduleClient) UpdateOneID(id string) *TaskScheduleUpdateOne {
+	mutation := newTaskScheduleMutation(c.config, OpUpdateOne, withTaskScheduleID(id))
+	return &TaskScheduleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for TaskSchedule.
+func (c *TaskScheduleClient) Delete() *TaskScheduleDelete {
+	mutation := newTaskScheduleMutation(c.config, OpDelete)
+	return &TaskScheduleDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *TaskScheduleClient) DeleteOne(_m *TaskSchedule) *TaskScheduleDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *TaskScheduleClient) DeleteOneID(id string) *TaskScheduleDeleteOne {
+	builder := c.Delete().Where(taskschedule.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &TaskScheduleDeleteOne{builder}
+}
+
+// Query returns a query builder for TaskSchedule.
+func (c *TaskScheduleClient) Query() *TaskScheduleQuery {
+	return &TaskScheduleQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeTaskSchedule},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a TaskSchedule entity by its id.
+func (c *TaskScheduleClient) Get(ctx context.Context, id string) (*TaskSchedule, error) {
+	return c.Query().Where(taskschedule.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *TaskScheduleClient) GetX(ctx context.Context, id string) *TaskSchedule {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *TaskScheduleClient) Hooks() []Hook {
+	return c.hooks.TaskSchedule
+}
+
+// Interceptors returns the client interceptors.
+func (c *TaskScheduleClient) Interceptors() []Interceptor {
+	return c.inters.TaskSchedule
+}
+
+func (c *TaskScheduleClient) mutate(ctx context.Context, m *TaskScheduleMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&TaskScheduleCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&TaskScheduleUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&TaskScheduleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&TaskScheduleDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown TaskSchedule mutation op: %q", m.Op())
+	}
+}
+
 // UserClient is a client for the User schema.
 type UserClient struct {
 	config
@@ -2798,12 +2939,12 @@ type (
 		AgentCostTrend, ApiKey, AuditEvent, PermissionPreset, PermissionRequest,
 		PipelineConfig, Project, ProjectFolder, RefinementTurn, RemoteRegistration,
 		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
-		User []ent.Hook
+		TaskSchedule, User []ent.Hook
 	}
 	inters struct {
 		AgentCostTrend, ApiKey, AuditEvent, PermissionPreset, PermissionRequest,
 		PipelineConfig, Project, ProjectFolder, RefinementTurn, RemoteRegistration,
 		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
-		User []ent.Interceptor
+		TaskSchedule, User []ent.Interceptor
 	}
 )

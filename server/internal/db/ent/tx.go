@@ -44,6 +44,8 @@ type Tx struct {
 	TaskDependency *TaskDependencyClient
 	// TaskPermission is the client for interacting with the TaskPermission builders.
 	TaskPermission *TaskPermissionClient
+	// TaskSchedule is the client for interacting with the TaskSchedule builders.
+	TaskSchedule *TaskScheduleClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 
@@ -193,6 +195,7 @@ func (tx *Tx) init() {
 	tx.Task = NewTaskClient(tx.config)
 	tx.TaskDependency = NewTaskDependencyClient(tx.config)
 	tx.TaskPermission = NewTaskPermissionClient(tx.config)
+	tx.TaskSchedule = NewTaskScheduleClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 }
 

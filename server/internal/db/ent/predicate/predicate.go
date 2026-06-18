@@ -54,5 +54,8 @@ type TaskDependency func(*sql.Selector)
 // TaskPermission is the predicate function for taskpermission builders.
 type TaskPermission func(*sql.Selector)
 
+// TaskSchedule is the predicate function for taskschedule builders.
+type TaskSchedule func(*sql.Selector)
+
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
