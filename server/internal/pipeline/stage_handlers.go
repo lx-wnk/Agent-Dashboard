@@ -154,7 +154,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 // mirroring the logic in BuildAllowList so non-Claude adapters receive the
 // same tool constraints.
 func buildAllowedToolsList(ctx *StageContext) []string {
-	raw := BuildAllowList(ctx.Permissions, false, isGitPushAllowedFromEnv())
+	raw := BuildAllowList(ctx.Task.Autonomy, ctx.Permissions, false, isGitPushAllowedFromEnv())
 	// Strip the Bash(...) wrapper — non-Claude adapters receive plain tool names.
 	tools := make([]string, 0, len(raw))
 	for _, entry := range raw {

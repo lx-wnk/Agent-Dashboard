@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
+	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 )
 
 var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
@@ -75,10 +76,16 @@ var channelAllow = []string{
 	"mcp__dashboard-channel__request_permission",
 }
 
-func BuildAllowList(perms []*ent.TaskPermission, enableChannel, allowGitPush bool) []string {
+// BuildAllowList assembles the --allowedTools slice for a spawn.
+// When autonomy is an allow-all level (spec_gated or full), the restrictive
+// per-permission loop is skipped and the permissive list is returned instead.
+func BuildAllowList(autonomy string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) []string {
 	var allow []string
 	if enableChannel {
 		allow = append(allow, channelAllow...)
+	}
+	if taskcontrol.IsAllowAll(autonomy) {
+		return append(allow, taskcontrol.PermissiveAllowList(allowGitPush)...)
 	}
 	now := time.Now()
 	for _, p := range perms {
@@ -340,8 +347,8 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	return env
 }
 
-func writeSettingsFile(cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
-	allow := BuildAllowList(perms, enableChannel, allowGitPush)
+func writeSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
+	allow := BuildAllowList(autonomy, perms, enableChannel, allowGitPush)
 	if len(allow) == 0 {
 		return "", false, false, nil
 	}
@@ -447,7 +454,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 		cwd = *opts.Task.WorktreePath
 	}
 	allowGitPush := IsGitPushAllowed(opts.Task)
-	settingsPath, wrote, isLocal, err := writeSettingsFile(cwd, opts.Permissions, opts.EnableChannel, allowGitPush)
+	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush)
 	if err != nil {
 		slog.Warn("writeSettingsFile failed — continuing without pre-approved allow-list", "err", err)
 	}
