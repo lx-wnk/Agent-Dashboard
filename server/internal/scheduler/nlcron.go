@@ -127,6 +127,10 @@ var everyNMinutesRe = regexp.MustCompile(`every\s+(\d+)\s+min`)
 var everyNHoursRe = regexp.MustCompile(`every\s+(\d+)\s+hour`)
 var atTimeRe = regexp.MustCompile(`(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`)
 
+// dayOfMonthRe matches phrases that pin a calendar day-of-month, which the
+// rule-based path cannot express (it only models day-of-week + time).
+var dayOfMonthRe = regexp.MustCompile(`(?:first|last|\d+(?:st|nd|rd|th))\s+(?:day\s+)?of\s+(?:the\s+)?month|on\s+the\s+\d+(?:st|nd|rd|th)`)
+
 // ruleBasedCron implements the offline fast-path. It returns (expr, true) when a
 // phrase matches a known pattern. Patterns are matched case-insensitively. The
 // caller still validates the returned expression.
@@ -165,6 +169,13 @@ func ruleBasedCron(phrase string) (string, bool) {
 		if step, err := strconv.Atoi(m[1]); err == nil && step > 0 && step < 24 {
 			return fmt.Sprintf("0 */%d * * *", step), true
 		}
+	}
+
+	// Day-of-month constraints (e.g. "first of the month", "on the 15th") are not
+	// modelled by the rule-based path. Decline so the LLM fallback handles them
+	// instead of silently dropping the day component.
+	if dayOfMonthRe.MatchString(p) {
+		return "", false
 	}
 
 	// Composite phrases with a time-of-day and/or a day constraint, e.g.
