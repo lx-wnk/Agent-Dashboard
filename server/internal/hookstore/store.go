@@ -19,6 +19,11 @@ import (
 // defaultPerSessionCap is used when New receives a non-positive cap.
 const defaultPerSessionCap = 50
 
+// DefaultTTL is the retention window for hook events. Events older than this are
+// pruned on access, bounding memory for sessions that go quiet. 30 minutes
+// comfortably covers the idle threshold (5 min) plus review time.
+const DefaultTTL = 30 * time.Minute
+
 // entry pairs a recorded event with its arrival time so TTL pruning does not
 // have to re-parse the RFC3339 string on every access.
 type entry struct {
