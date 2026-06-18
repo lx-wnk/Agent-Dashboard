@@ -1,6 +1,7 @@
-// Package config provides HTTP handlers for read-only enumeration of the Claude
+// Package config provides HTTP handlers for enumerating and editing the Claude
 // configuration available within a resolved scope: installed skills, slash
-// commands, and memory (CLAUDE.md / AGENTS.md) files.
+// commands, and memory (CLAUDE.md / AGENTS.md) files. Reads and writes are
+// confined to the scope's enumerated, editable members (see file.go).
 //
 // Enumeration is scoped per spawner or per live session via cmdscope, so the
 // "Config" explorer reflects the capability set a given spawner/session
