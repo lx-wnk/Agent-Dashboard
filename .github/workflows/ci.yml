@@ -169,7 +169,28 @@ jobs:
           done
 
   frontend:
-    name: Frontend Checks
+    name: Frontend (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [lint, typecheck, test]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+      - name: ${{ matrix.check }}
+        run: pnpm ${{ matrix.check }}
+
+  frontend-build:
+    name: Frontend Build & Bundle Size
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -182,12 +203,6 @@ jobs:
           cache: pnpm
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
-      - name: Lint
-        run: pnpm lint
-      - name: Typecheck
-        run: pnpm typecheck
-      - name: Unit tests
-        run: pnpm test
       - name: Build frontend
         run: pnpm build
       - name: Verify build artifacts present
@@ -201,7 +216,6 @@ jobs:
           JS_CHARTS_MAX_GZIP_KB: '400'
           CSS_MAX_GZIP_KB: '30'
         run: bash scripts/check-bundle-size.sh server/frontend/dist/assets
-
   licenses:
     name: License Attribution Freshness
     runs-on: ubuntu-latest
