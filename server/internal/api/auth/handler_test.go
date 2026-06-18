@@ -332,6 +332,12 @@ func TestHandler_Callback_HappyPath(t *testing.T) {
 			// callback handler.
 			require.Equal(t, "42", payload.Sub)
 			require.Equal(t, "alice", payload.Login)
+
+			// Direct repo assertion: the user must have been persisted via Upsert.
+			persisted, err := userRepo.GetByID(r.Context(), "42")
+			require.NoError(t, err, "GetByID must find the upserted user")
+			require.Equal(t, "42", persisted.ID)
+			require.Equal(t, "alice", persisted.ProviderLogin)
 		})
 	}
 }
