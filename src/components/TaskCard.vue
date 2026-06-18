@@ -169,7 +169,7 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
         tone="warning"
         title="Respawn blocked: previous run still has unresolved permission requests"
       >&#9888; blocked by permissions</AppChip>
-      <WorktreePill v-if="task.worktreePath" :task-id="task.id" />
+      <WorktreePill v-if="task.worktreePath" :task-id="task.id" @open="$emit('select', task)" @click.stop />
       <AppChip v-if="task.sourceBranch" tone="neutral" mono>{{ task.sourceBranch }}</AppChip>
       <AppChip v-if="task.parentTaskId" tone="info" mono title="Follow-up task">↳</AppChip>
       <AppChip v-if="task.isUnsatisfiable" tone="warning" mono title="Unsatisfiable dep">⚠ Unsatisfiable dep</AppChip>

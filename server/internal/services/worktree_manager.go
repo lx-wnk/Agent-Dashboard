@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -12,9 +14,15 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/worktree"
 )
 
-// WorktreeManager exposes read-only status queries about a task's git worktree.
-// Mutating worktree operations live in package pipeline (see
-// `pipeline/worktree.go`); this service is consumed by the HTTP/MCP layers.
+var (
+	ErrNoWorktree    = errors.New("task has no worktree")
+	ErrWorktreeDirty = errors.New("worktree has uncommitted changes")
+)
+
+// WorktreeManager exposes a task's git worktree status plus the user-initiated
+// create/remove lifecycle. Run-driven mutations live in package pipeline (see
+// `pipeline/worktree.go`); both layers share the primitives in package
+// worktree. This service is consumed by the HTTP/MCP layers.
 type WorktreeManager struct {
 	taskRepo repo.TaskRepo
 	runner   *worktree.Runner
@@ -127,4 +135,71 @@ func (m *WorktreeManager) dirtyState(ctx context.Context, cwd string) (bool, int
 	}
 	count := strings.Count(trimmed, "\n") + 1
 	return true, count
+}
+
+func (m *WorktreeManager) CreateWorktree(ctx context.Context, taskID string) (string, error) {
+	task, err := m.taskRepo.GetByID(ctx, taskID)
+	if err != nil {
+		return "", fmt.Errorf("create_worktree: task %s: %w", taskID, err)
+	}
+
+	// Idempotent: return existing path if the directory is still present.
+	if task.WorktreePath != nil && *task.WorktreePath != "" {
+		if _, statErr := os.Stat(*task.WorktreePath); statErr == nil {
+			return *task.WorktreePath, nil
+		}
+	}
+
+	branch := worktree.CreateBranch(task.SourceBranch, task.Slug)
+	root := worktree.DefaultRoot("")
+	worktreePath := worktree.PathFor("", task.Slug)
+
+	if err := os.MkdirAll(root, 0o750); err != nil {
+		return "", fmt.Errorf("create_worktree: mkdir root: %w", err)
+	}
+
+	_, gitErr := m.runner.Combined(ctx, task.Cwd, "worktree", "add", "-b", branch, worktreePath)
+	if gitErr != nil {
+		// Fallback: branch may already exist — try without -b.
+		if _, err2 := m.runner.Combined(ctx, task.Cwd, "worktree", "add", worktreePath, branch); err2 != nil {
+			return "", fmt.Errorf("create_worktree: git worktree add: %w", gitErr)
+		}
+	}
+
+	if _, err := m.taskRepo.Update(ctx, taskID, repo.UpdateTaskInput{WorktreePath: &worktreePath}); err != nil {
+		return "", fmt.Errorf("create_worktree: persist path: %w", err)
+	}
+	return worktreePath, nil
+}
+
+func (m *WorktreeManager) RemoveWorktree(ctx context.Context, taskID string, force bool) error {
+	task, err := m.taskRepo.GetByID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("remove_worktree: task %s: %w", taskID, err)
+	}
+
+	if task.WorktreePath == nil || *task.WorktreePath == "" {
+		return ErrNoWorktree
+	}
+	path := *task.WorktreePath
+
+	dirty, _ := m.dirtyState(ctx, path)
+	if dirty && !force {
+		return ErrWorktreeDirty
+	}
+
+	args := []string{"worktree", "remove"}
+	if force {
+		args = append(args, "--force")
+	}
+	args = append(args, path)
+
+	if _, err := m.runner.Combined(ctx, task.Cwd, args...); err != nil {
+		return fmt.Errorf("remove_worktree: git worktree remove: %w", err)
+	}
+
+	if _, err := m.taskRepo.Update(ctx, taskID, repo.UpdateTaskInput{ClearWorktreePath: true}); err != nil {
+		return fmt.Errorf("remove_worktree: clear path: %w", err)
+	}
+	return nil
 }

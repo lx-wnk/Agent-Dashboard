@@ -92,4 +92,13 @@ describe('WorktreePill', () => {
     expect(branch.length).toBeLessThanOrEqual(20)
     expect(branch.endsWith('…')).toBe(true)
   })
+
+  it('clicking the pill button emits open', async () => {
+    setStatus({ branch: 'feat/foo', dirty: false, fileCount: 0, ahead: 0, behind: 0 })
+    const wrapper = mount(WorktreePill, { props: { taskId: 't1' } })
+    await flushPromises()
+    await wrapper.find('[data-testid="worktree-pill"]').trigger('click')
+    expect(wrapper.emitted('open')).toBeTruthy()
+    expect(wrapper.emitted('open')!.length).toBe(1)
+  })
 })

@@ -68,6 +68,7 @@ type UpdateTaskInput struct {
 	Rank                *float64
 	ClearProjectID      bool
 	ClearSpawnerID      bool
+	ClearWorktreePath   bool
 }
 
 // rankGap is the spacing applied when a card is dropped at the top or bottom of
@@ -187,7 +188,9 @@ func (r *entTaskRepo) Update(ctx context.Context, id string, in UpdateTaskInput)
 	} else if in.Metadata != nil {
 		q = q.SetMetadata(in.Metadata)
 	}
-	if in.WorktreePath != nil {
+	if in.ClearWorktreePath {
+		q = q.ClearWorktreePath()
+	} else if in.WorktreePath != nil {
 		q = q.SetWorktreePath(*in.WorktreePath)
 	}
 	if in.SourceBranch != nil {

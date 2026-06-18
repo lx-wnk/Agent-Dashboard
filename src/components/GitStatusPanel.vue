@@ -159,7 +159,7 @@ watch(() => props.taskId, fetchStatus)
 
       <!-- Clean working tree -->
       <div
-        v-else-if="status.aheadCount === 0 && status.behindCount === 0"
+        v-else
         class="text-[11px] text-fg-mute mb-2.5"
       >
         Clean working tree

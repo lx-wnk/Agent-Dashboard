@@ -1,6 +1,6 @@
+import type { Ref } from 'vue'
 import type { WorktreeStatusDTO } from '../sdk.generated'
 import { onUnmounted, ref, watch } from 'vue'
-import type { Ref } from 'vue'
 import { errorMessage } from '../utils/errorMessage'
 
 const POLL_MS = 30_000
@@ -89,7 +89,62 @@ export function useWorktreeStatus(
     { immediate: true },
   )
 
+  /**
+   * POST /api/tasks/:id/worktree — creates the worktree. Refreshes status on success.
+   */
+  async function create(): Promise<void> {
+    if (!taskId.value)
+      return
+    const id = taskId.value
+    isLoading.value = true
+    error.value = null
+    try {
+      const res = await fetch(`/api/tasks/${id}/worktree`, { method: 'POST' })
+      if (!res.ok) {
+        error.value = `Failed to create worktree (HTTP ${res.status})`
+        return
+      }
+      await refresh()
+    }
+    catch (err) {
+      error.value = (err as Error).message
+    }
+    finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * DELETE /api/tasks/:id/worktree — removes the worktree.
+   * Returns the HTTP status (204 = ok, 409 = dirty without force, 404 = not found, 0 = network error).
+   * On 204 the status ref is refreshed (becomes null). On error sets error.value.
+   */
+  async function remove(force: boolean): Promise<number> {
+    if (!taskId.value)
+      return 0
+    const id = taskId.value
+    const url = `/api/tasks/${id}/worktree${force ? '?force=true' : ''}`
+    error.value = null
+    try {
+      const res = await fetch(url, { method: 'DELETE' })
+      if (res.status === 204) {
+        await refresh()
+        return 204
+      }
+      if (res.status === 409) {
+        error.value = 'Worktree has uncommitted changes'
+        return 409
+      }
+      error.value = `Failed to remove worktree (HTTP ${res.status})`
+      return res.status
+    }
+    catch (err) {
+      error.value = (err as Error).message
+      return 0
+    }
+  }
+
   onUnmounted(stopPolling)
 
-  return { status, isLoading, error, refresh }
+  return { status, isLoading, error, refresh, create, remove }
 }

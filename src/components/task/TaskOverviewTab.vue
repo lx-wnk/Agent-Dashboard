@@ -197,9 +197,8 @@ watch(
     </dl>
 
     <WorktreePanel
-      v-if="task.worktreePath"
       :task-id="task.id"
-      :worktree-path="task.worktreePath"
+      :worktree-path="task.worktreePath ?? null"
       :active="!!task"
     />
 
