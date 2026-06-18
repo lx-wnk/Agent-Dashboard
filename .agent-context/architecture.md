@@ -29,6 +29,8 @@ Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI + Wire DI).
 | `api/system/` | Health check, CPU/memory metrics |
 | `api/wphandler/` | Web Push subscription + send |
 | `api/history/` | Historical session cost import SSE |
+| `api/config/` | Config explorer — scope-resolved enumeration of skills/commands/memory + single-file read/write (`GET`/`PUT /api/config/file`). Writes are authorized only against the scope's enumerated editable (user/project) allow-list; path canonicalized via `Abs`+`EvalSymlinks` |
+| `cmdscope/` | Resolves a Claude config scope (spawner/session/default) and enumerates its skills + slash commands; each entry carries `Path`+`Editable` (`IsEditableSource`) feeding the config-explorer allow-list |
 | `pipeline/` | State machine, orchestrator, stage handlers, completion detector, agent spawner |
 | `llmadapter/` | Leaf: pluggable-spawner transport (`LLMSpawner`/`StreamingLLMSpawner`, `NewLLMSpawnerFromSpawner`, `AvailableAdapters`, Ollama/OpenAI/custom adapters). Deps: `db/ent` only. Extracted from `pipeline/` per ADR-0005 |
 | `db/` | ent ORM schemas + repos (tasks, stage_runs, users, api_keys, presets, remotes, refine, cost_history, web_push subscriptions) |
