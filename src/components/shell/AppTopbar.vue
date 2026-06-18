@@ -3,12 +3,10 @@ import type { ActiveView } from '../../composables/useViewState'
 import { computed } from 'vue'
 import { viewTitle } from '../../utils/navConfig'
 import OfflineBadge from '../OfflineBadge.vue'
-import LivePulse from './LivePulse.vue'
 
 const props = defineProps<{
   activeView: ActiveView
   searchQuery: string
-  live: boolean
 }>()
 defineEmits<{ 'update:searchQuery': [value: string], 'openSettings': [] }>()
 
@@ -39,7 +37,6 @@ const searchPlaceholder = computed(() =>
     >
       <span aria-hidden="true">⚙</span>
     </button>
-    <LivePulse :live="live" />
     <OfflineBadge />
   </header>
 </template>

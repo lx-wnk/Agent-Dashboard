@@ -4,13 +4,15 @@ import DashboardToolbar from './DashboardToolbar.vue'
 
 const BASE_PROPS = {
   layout: 'cards' as const,
-  hideNonClaude: false,
+  spawner: 'all',
   project: 'all',
   sortBy: 'latest' as const,
   groupBy: 'none' as const,
   projectOptions: [{ value: 'all', label: 'All projects' }],
-  count: 3,
-  attentionCount: 0,
+  spawnerOptions: [
+    { value: 'all', label: 'All spawners' },
+    { value: 'claude', label: 'Claude Code' },
+  ],
 }
 
 describe('dashboardToolbar', () => {
@@ -24,12 +26,6 @@ describe('dashboardToolbar', () => {
     const w = mount(DashboardToolbar, { props: BASE_PROPS })
     await w.get('[data-testid="layout-list"]').trigger('click')
     expect(w.emitted('update:layout')![0]).toEqual(['list'])
-  })
-
-  it('emits update:hideNonClaude when toggling the filter', async () => {
-    const w = mount(DashboardToolbar, { props: BASE_PROPS })
-    await w.get('[data-testid="claude-only"]').trigger('click')
-    expect(w.emitted('update:hideNonClaude')![0]).toEqual([true])
   })
 
   it('renders project select with provided options', () => {
@@ -52,6 +48,19 @@ describe('dashboardToolbar', () => {
     expect(w.emitted('update:project')).toBeTruthy()
   })
 
+  it('renders spawner select with provided options', () => {
+    const w = mount(DashboardToolbar, { props: BASE_PROPS })
+    const select = w.get('[data-testid="select-spawner"]')
+    expect(select.findAll('option')).toHaveLength(2)
+  })
+
+  it('emits update:spawner when spawner select changes', async () => {
+    const w = mount(DashboardToolbar, { props: BASE_PROPS })
+    const select = w.get('[data-testid="select-spawner"]')
+    await select.setValue('claude')
+    expect(w.emitted('update:spawner')).toBeTruthy()
+  })
+
   it('emits update:sortBy when sort select changes', async () => {
     const w = mount(DashboardToolbar, { props: BASE_PROPS })
     const select = w.get('[data-testid="select-sort"]')
@@ -64,20 +73,5 @@ describe('dashboardToolbar', () => {
     const select = w.get('[data-testid="select-group"]')
     await select.setValue('status')
     expect(w.emitted('update:groupBy')).toBeTruthy()
-  })
-
-  it('shows agent count', () => {
-    const w = mount(DashboardToolbar, { props: { ...BASE_PROPS, count: 5 } })
-    expect(w.text()).toContain('5 agents')
-  })
-
-  it('shows attention count when non-zero', () => {
-    const w = mount(DashboardToolbar, { props: { ...BASE_PROPS, count: 3, attentionCount: 2 } })
-    expect(w.text()).toContain('2 need you')
-  })
-
-  it('omits attention suffix when zero', () => {
-    const w = mount(DashboardToolbar, { props: BASE_PROPS })
-    expect(w.text()).not.toContain('need you')
   })
 })

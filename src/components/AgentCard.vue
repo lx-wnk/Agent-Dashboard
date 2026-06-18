@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
 import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
+import { friendlyProjectName } from '../utils/friendlyProjectName'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
 import ProviderBadge from './ProviderBadge.vue'
@@ -55,7 +56,7 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
           title="Agent is active but has produced no output for 3+ minutes"
         >stalled</span>
         <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
-        <span class="font-semibold text-[13px] text-fg whitespace-nowrap overflow-hidden text-ellipsis">{{ agent.projectName }}</span>
+        <span class="font-semibold text-[13px] text-fg whitespace-nowrap overflow-hidden text-ellipsis">{{ friendlyProjectName(agent.projectName) }}</span>
         <ProviderBadge :provider="agent.provider" />
         <span class="text-[11px] font-mono text-fg-mute whitespace-nowrap">
           {{ shortModel(agent.model ?? null) }} ·

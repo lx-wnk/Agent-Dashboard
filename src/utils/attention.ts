@@ -2,25 +2,21 @@ import type { Agent } from '../types'
 import { isStalled } from './format'
 
 export interface Attention {
-  kind: 'permission' | 'error' | 'idle' | 'stalled'
+  kind: 'permission' | 'error' | 'stalled'
   label: string
-  tone: 'warning' | 'danger' | 'info'
+  tone: 'warning' | 'danger'
   weight: number
 }
 
 export function attentionFor(agent: Agent, secondsSinceActivity: number | null): Attention | null {
-  // Structural: a live permission request always wins regardless of reported status
   if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
-  if (agent.status === 'waiting')
+  if (agent.pendingToolUse)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
-  // errorState present on any status signals a failed run (auth/quota/rate-limit)
   if (agent.errorState)
     return { kind: 'error', label: 'Run failed', tone: 'danger', weight: 1 }
   if (isStalled(agent.status, secondsSinceActivity))
     return { kind: 'stalled', label: 'No activity', tone: 'warning', weight: 2 }
-  if (agent.status === 'idle')
-    return { kind: 'idle', label: 'Idle — awaiting instruction', tone: 'info', weight: 3 }
   return null
 }
 

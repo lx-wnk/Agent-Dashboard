@@ -38,8 +38,16 @@ const ACTIVE_SECS = 10
 const STALLED_SECS = STALLED_THRESHOLD_SECONDS + 1
 
 describe('attentionFor', () => {
-  it('returns permission for waiting status', () => {
-    const agent = makeAgent({ status: 'waiting' })
+  it('returns null for idle status (idle is no longer flagged)', () => {
+    const agent = makeAgent({ status: 'idle' })
+    expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
+  })
+
+  it('returns permission when pendingToolUse is set', () => {
+    const agent = makeAgent({
+      status: 'active',
+      pendingToolUse: { tool: 'Bash', pattern: 'git push', id: 'tu_1' },
+    })
     const att = attentionFor(agent, ACTIVE_SECS)
     expect(att?.kind).toBe('permission')
     expect(att?.tone).toBe('warning')
@@ -62,14 +70,6 @@ describe('attentionFor', () => {
     expect(att?.weight).toBe(2)
   })
 
-  it('returns idle for idle status', () => {
-    const agent = makeAgent({ status: 'idle' })
-    const att = attentionFor(agent, ACTIVE_SECS)
-    expect(att?.kind).toBe('idle')
-    expect(att?.tone).toBe('info')
-    expect(att?.weight).toBe(3)
-  })
-
   it('returns null for healthy active agent', () => {
     const agent = makeAgent({ status: 'active' })
     expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
@@ -78,20 +78,6 @@ describe('attentionFor', () => {
   it('returns null when secondsSince is null for active agent', () => {
     const agent = makeAgent({ status: 'active' })
     expect(attentionFor(agent, null)).toBeNull()
-  })
-
-  it('waiting takes precedence over stalled seconds', () => {
-    // a waiting agent with many silent seconds should classify as permission, not stalled
-    const agent = makeAgent({ status: 'waiting' })
-    const att = attentionFor(agent, STALLED_SECS)
-    expect(att?.kind).toBe('permission')
-  })
-
-  it('errorState takes precedence over stalled', () => {
-    // an active agent with errorState + long silence should classify as error, not stalled
-    const agent = makeAgent({ status: 'active', errorState: 'rate_limited' })
-    const att = attentionFor(agent, STALLED_SECS)
-    expect(att?.kind).toBe('error')
   })
 
   it('pendingPermissions on active agent classifies as permission', () => {
@@ -104,16 +90,33 @@ describe('attentionFor', () => {
     expect(att?.weight).toBe(0)
   })
 
-  it('waiting agent with no pendingPermissions still classifies as permission', () => {
-    const agent = makeAgent({ status: 'waiting', pendingPermissions: [] })
+  it('pendingPermissions takes precedence over pendingToolUse', () => {
+    const agent = makeAgent({
+      status: 'active',
+      pendingPermissions: [{ id: 'r1', tool: 'Bash', pattern: 'ls', requestedAt: new Date().toISOString() }],
+      pendingToolUse: { tool: 'WebFetch', pattern: '', id: 'tu_2' },
+    })
     const att = attentionFor(agent, ACTIVE_SECS)
     expect(att?.kind).toBe('permission')
+  })
+
+  it('errorState takes precedence over stalled', () => {
+    const agent = makeAgent({ status: 'active', errorState: 'rate_limited' })
+    const att = attentionFor(agent, STALLED_SECS)
+    expect(att?.kind).toBe('error')
   })
 })
 
 describe('needsAttention', () => {
-  it('returns true for waiting agent', () => {
-    expect(needsAttention(makeAgent({ status: 'waiting' }), ACTIVE_SECS)).toBe(true)
+  it('returns true for agent with pendingToolUse', () => {
+    const agent = makeAgent({
+      pendingToolUse: { tool: 'Bash', pattern: 'rm -rf', id: 'tu_3' },
+    })
+    expect(needsAttention(agent, ACTIVE_SECS)).toBe(true)
+  })
+
+  it('returns false for idle agent', () => {
+    expect(needsAttention(makeAgent({ status: 'idle' }), ACTIVE_SECS)).toBe(false)
   })
 
   it('returns false for healthy active agent', () => {
@@ -123,32 +126,42 @@ describe('needsAttention', () => {
 
 describe('sortByTriage', () => {
   it('places attention agents before non-attention agents', () => {
-    const idle = makeAgent({ status: 'idle', sessionId: 'idle' })
+    const withError = makeAgent({ status: 'active', sessionId: 'err', errorState: 'auth_failed' })
     const active = makeAgent({ status: 'active', sessionId: 'active' })
-    const sorted = sortByTriage([active, idle], () => ACTIVE_SECS)
-    expect(sorted[0].sessionId).toBe('idle')
+    const sorted = sortByTriage([active, withError], () => ACTIVE_SECS)
+    expect(sorted[0].sessionId).toBe('err')
     expect(sorted[1].sessionId).toBe('active')
   })
 
-  it('sorts by ascending weight within attention group', () => {
-    const waiting = makeAgent({ status: 'waiting', sessionId: 'waiting' })
+  it('idle agents are placed after attention agents (not in attention group)', () => {
     const idle = makeAgent({ status: 'idle', sessionId: 'idle' })
+    const withError = makeAgent({ status: 'active', sessionId: 'err', errorState: 'quota_exhausted' })
+    const sorted = sortByTriage([idle, withError], () => ACTIVE_SECS)
+    expect(sorted[0].sessionId).toBe('err')
+    expect(sorted[1].sessionId).toBe('idle')
+  })
+
+  it('sorts by ascending weight within attention group', () => {
+    const withPermission = makeAgent({
+      status: 'active',
+      sessionId: 'perm',
+      pendingPermissions: [{ id: 'r1', tool: 'Bash', pattern: 'x', requestedAt: new Date().toISOString() }],
+    })
     const stalled = makeAgent({ status: 'active', sessionId: 'stalled' })
     const error = makeAgent({ status: 'active', sessionId: 'error', errorState: 'quota_exhausted' })
-    const sorted = sortByTriage([idle, stalled, error, waiting], a =>
+    const sorted = sortByTriage([stalled, error, withPermission], a =>
       a.sessionId === 'stalled' ? STALLED_SECS : ACTIVE_SECS)
-    expect(sorted[0].sessionId).toBe('waiting')
+    expect(sorted[0].sessionId).toBe('perm')
     expect(sorted[1].sessionId).toBe('error')
     expect(sorted[2].sessionId).toBe('stalled')
-    expect(sorted[3].sessionId).toBe('idle')
   })
 
   it('within same weight, longer-waiting comes first', () => {
-    const idle1 = makeAgent({ status: 'idle', sessionId: 'idle-short' })
-    const idle2 = makeAgent({ status: 'idle', sessionId: 'idle-long' })
-    const secsMap: Record<string, number> = { 'idle-short': 60, 'idle-long': 300 }
-    const sorted = sortByTriage([idle1, idle2], a => secsMap[a.sessionId] ?? 0)
-    expect(sorted[0].sessionId).toBe('idle-long')
+    const stalled1 = makeAgent({ status: 'active', sessionId: 'stalled-short' })
+    const stalled2 = makeAgent({ status: 'active', sessionId: 'stalled-long' })
+    const secsMap: Record<string, number> = { 'stalled-short': STALLED_SECS, 'stalled-long': STALLED_SECS + 120 }
+    const sorted = sortByTriage([stalled1, stalled2], a => secsMap[a.sessionId] ?? 0)
+    expect(sorted[0].sessionId).toBe('stalled-long')
   })
 
   it('preserves original order of non-attention agents', () => {

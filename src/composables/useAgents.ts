@@ -25,12 +25,6 @@ const isLoading = ref(true)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
 const debouncedQuery = ref('')
-// Provider filter — append-only addition to the existing search/view UI.
-// When true, only agents with provider === 'claude' (or unset, treated as
-// claude) are shown. Persisted to localStorage so the preference survives
-// page reloads.
-const hideNonClaudeStored = typeof localStorage !== 'undefined' ? localStorage.getItem('agent-hide-non-claude') : null
-const hideNonClaude = ref<boolean>(hideNonClaudeStored === 'true')
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -99,9 +93,7 @@ const sse = createSseResource({
 
 const filteredAgents = computed(() => {
   const q = debouncedQuery.value.toLowerCase().trim()
-  let list = agents.value
-  if (hideNonClaude.value)
-    list = list.filter(a => !a.provider || a.provider === 'claude')
+  const list = agents.value
   if (!q)
     return list
   return list.filter(a =>
@@ -135,12 +127,6 @@ watch(searchQuery, (q) => {
   }, 200)
 })
 
-// Persist provider filter
-watch(hideNonClaude, (v) => {
-  if (typeof localStorage !== 'undefined')
-    localStorage.setItem('agent-hide-non-claude', String(v))
-})
-
 export function useAgents(options?: { autoStart?: boolean }) {
   if (options?.autoStart !== false)
     sse.startStream()
@@ -160,7 +146,6 @@ export function useAgents(options?: { autoStart?: boolean }) {
     isLoading,
     error,
     searchQuery,
-    hideNonClaude,
     selectAgent,
     startStream: sse.startStream,
   }

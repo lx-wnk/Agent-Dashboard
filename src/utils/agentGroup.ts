@@ -1,6 +1,7 @@
 import type { Agent } from '../types'
 import { AGENT_STATUSES } from '../types'
 import { secondsSince, shortModel } from './format'
+import { friendlyProjectName } from './friendlyProjectName'
 import { STATUS_ORDER } from './agentSort'
 
 export const AGENT_SORT_OPTIONS = [
@@ -10,9 +11,10 @@ export const AGENT_SORT_OPTIONS = [
 ] as const
 
 export const AGENT_GROUP_OPTIONS = [
-  { value: 'none', label: 'None' },
-  { value: 'status', label: 'Status' },
-  { value: 'model', label: 'Model' },
+  { value: 'none', label: 'No grouping' },
+  { value: 'project', label: 'Group by project' },
+  { value: 'status', label: 'Group by status' },
+  { value: 'model', label: 'Group by model' },
 ] as const
 
 export type AgentSort = typeof AGENT_SORT_OPTIONS[number]['value']
@@ -50,6 +52,25 @@ export function sortAgents(list: Agent[], sortBy: AgentSort, nowMs: number): Age
 }
 
 export function groupAgents(list: Agent[], groupBy: AgentGroup): AgentGrouping[] {
+  if (groupBy === 'project') {
+    const seen = new Map<string, Agent[]>()
+    for (const agent of list) {
+      const key = agent.projectName
+      const bucket = seen.get(key)
+      if (bucket) {
+        bucket.push(agent)
+      }
+      else {
+        seen.set(key, [agent])
+      }
+    }
+    return Array.from(seen.entries()).map(([key, agents]) => ({
+      key,
+      label: friendlyProjectName(key),
+      agents,
+    }))
+  }
+
   if (groupBy === 'status') {
     return AGENT_STATUSES
       .slice()

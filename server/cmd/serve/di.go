@@ -266,8 +266,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		remotesHandler = remotes.NewHandler(repo.NewRemoteRegistrationRepo(entClient))
 	}
 	var presetsHandler *presets.Handler
+	var permissionPresetRepo repo.PermissionPresetRepo
 	if entClient != nil {
-		presetsHandler = presets.NewHandler(repo.NewPermissionPresetRepo(entClient))
+		permissionPresetRepo = repo.NewPermissionPresetRepo(entClient)
+		presetsHandler = presets.NewHandler(permissionPresetRepo)
 	}
 	var systemPromptsHandler *systemprompts.Handler
 	if entClient != nil {
@@ -298,6 +300,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		WebPushHandler:        webPushHandler,
 		RemotesHandler:        remotesHandler,
 		PresetsHandler:        presetsHandler,
+		PermissionPresetRepo:  permissionPresetRepo,
 		SystemPromptsHandler:  systemPromptsHandler,
 		AdapterHandler:        adapterHandler,
 		SearchHandler:         searchHandler,

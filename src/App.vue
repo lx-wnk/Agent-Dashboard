@@ -21,12 +21,15 @@ import SkeletonCard from './components/shell/SkeletonCard.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
 import AppModal from './components/ui/AppModal.vue'
+import AppModalHeader from './components/ui/AppModalHeader.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { usePermissionResolve } from './composables/usePermissionResolve'
 import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
+import { useSpawners } from './composables/useSpawners'
+import { usePendingPermissions } from './composables/usePendingPermissions'
 import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { useTodayCost } from './composables/useTodayCost'
@@ -35,6 +38,7 @@ import { useViewState } from './composables/useViewState'
 import { formatCost, formatTokens, secondsSince, totalTokenCount } from './utils/format'
 import { needsAttention } from './utils/attention'
 import { groupAgents, sortAgents } from './utils/agentGroup'
+import { friendlyProjectName } from './utils/friendlyProjectName'
 import { useNow } from './composables/useNow'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
@@ -55,7 +59,7 @@ const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
-const { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject } = useViewState()
+const { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject, dashboardSpawner } = useViewState()
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
 const { resolveAgent, approveAll } = usePermissionResolve()
 
@@ -75,8 +79,10 @@ onUnmounted(() => {
     clearTimeout(toastTimer)
 })
 
-const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, hideNonClaude, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
+const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
+const { items: permissionItems, approve: approvePermission, deny: denyPermission } = usePendingPermissions(tasks)
+const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length)
 // Today's persisted spend — reuses the shared cost-summary logic so the footer
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
 const { todayUsd, start: startTodayCost } = useTodayCost()
@@ -122,12 +128,30 @@ const totalTokensLabel = computed(() => formatTokens(totalTokens.value))
 const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatCost(todayUsd.value)))
 
 const { nowMs } = useNow()
-// Dashboard roster: project filter → sort → optional grouping. Project options
-// list every known project (pre-filter) so the dropdown stays stable.
+
+const { spawners } = useSpawners()
+
+// Agents have no direct spawner link; they reach a configured spawner through
+// the task they were spawned for (task.spawnerId). Map taskId → spawnerId so the
+// roster spawner filter can match. Free (un-orchestrated) agents have no task,
+// so they only appear under "All spawners".
+const taskSpawnerById = computed(() => {
+  const m = new Map<string, string>()
+  for (const t of tasks.value) {
+    if (t.spawnerId)
+      m.set(t.id, t.spawnerId)
+  }
+  return m
+})
+
+// Dashboard roster: project + spawner filter → sort → optional grouping. Project
+// options list every known project (pre-filter) so the dropdown stays stable.
 const rosterAgents = computed(() => {
-  const base = dashboardProject.value === 'all'
-    ? filteredAgents.value
-    : filteredAgents.value.filter(a => a.projectName === dashboardProject.value)
+  let base = filteredAgents.value
+  if (dashboardProject.value !== 'all')
+    base = base.filter(a => a.projectName === dashboardProject.value)
+  if (dashboardSpawner.value !== 'all')
+    base = base.filter(a => a.pipelineTaskId != null && taskSpawnerById.value.get(a.pipelineTaskId) === dashboardSpawner.value)
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
 const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
@@ -136,7 +160,11 @@ const rosterAttentionCount = computed(() =>
 )
 const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
-  ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: n })),
+  ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),
+])
+const spawnerOptions = computed(() => [
+  { value: 'all', label: 'All spawners' },
+  ...spawners.value.map(s => ({ value: s.id, label: s.name })),
 ])
 
 const autoApprovingStrip = ref<InstanceType<typeof AutoApprovingStrip> | null>(null)
@@ -314,16 +342,12 @@ onMounted(fetchQuota)
       <template #sidebar>
         <AppSidebar
           :agent-count="filteredAgents.length"
-          :attention-count="attentionCount"
+          :attention-count="combinedAttentionCount"
           :task-count="tasks.length"
-          :total-cost-label="totalCostLabel"
-          :total-tokens-label="totalTokensLabel"
-          :today-cost-label="todayCostLabel"
-          :quota-pct="quotaPct"
+          :live="live"
           :theme="theme"
           :can-install="canInstall"
           @open-sessions="showSessions = true"
-          @open-settings="showSettings = true"
           @toggle-theme="toggleTheme"
           @install="promptInstall"
         />
@@ -334,7 +358,6 @@ onMounted(fetchQuota)
           @open-settings="showSettings = true"
           :active-view="activeView"
           :search-query="searchQuery"
-          :live="live"
           @update:search-query="searchQuery = $event"
         >
           <template #cta>
@@ -359,23 +382,6 @@ onMounted(fetchQuota)
       </template>
 
       <div class="p-5 flex flex-col min-h-full">
-        <DashboardToolbar
-          v-if="activeView === 'dashboard'"
-          :layout="dashboardLayout"
-          :hide-non-claude="hideNonClaude"
-          :project="dashboardProject"
-          :sort-by="dashboardSort"
-          :group-by="dashboardGroup"
-          :project-options="projectOptions"
-          :count="rosterAgents.length"
-          :attention-count="rosterAttentionCount"
-          @update:layout="dashboardLayout = $event"
-          @update:hide-non-claude="hideNonClaude = $event"
-          @update:project="dashboardProject = $event"
-          @update:sort-by="dashboardSort = $event"
-          @update:group-by="dashboardGroup = $event"
-        />
-
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
         </div>
@@ -384,8 +390,31 @@ onMounted(fetchQuota)
         </p>
 
         <template v-else-if="activeView === 'dashboard'">
-          <AgentTriageBand :agents="attentionAgents" :focused-session-id="focusedSessionId" @select="selectAgent" @toast="showToast" @remembered="autoApprovingStrip?.load()" />
+          <AgentTriageBand
+            :agents="attentionAgents"
+            :permission-items="permissionItems"
+            :focused-session-id="focusedSessionId"
+            @select="selectAgent"
+            @toast="showToast"
+            @remembered="autoApprovingStrip?.load()"
+            @approve="(taskId, ids, remember) => approvePermission(taskId, ids, remember)"
+            @deny="(taskId, ids) => denyPermission(taskId, ids)"
+          />
           <AutoApprovingStrip ref="autoApprovingStrip" />
+          <DashboardToolbar
+            :layout="dashboardLayout"
+            :spawner="dashboardSpawner"
+            :project="dashboardProject"
+            :sort-by="dashboardSort"
+            :group-by="dashboardGroup"
+            :project-options="projectOptions"
+            :spawner-options="spawnerOptions"
+            @update:layout="dashboardLayout = $event"
+            @update:spawner="dashboardSpawner = $event"
+            @update:project="dashboardProject = $event"
+            @update:sort-by="dashboardSort = $event"
+            @update:group-by="dashboardGroup = $event"
+          />
           <template v-if="dashboardLayout === 'list'">
             <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
             <AgentTable v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" />
@@ -468,20 +497,8 @@ onMounted(fetchQuota)
       @close="showRefinementChat = false; activeConceptTask = null"
       @confirmed="showRefinementChat = false; activeConceptTask = null"
     />
-    <AppModal :open="showBacklogForm" @close="showBacklogForm = false">
-      <header class="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
-        <h2 class="text-base font-semibold text-fg">
-          New Task
-        </h2>
-        <button
-          type="button"
-          class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg"
-          data-testid="close-backlog-form"
-          @click="showBacklogForm = false"
-        >
-          ✕
-        </button>
-      </header>
+    <AppModal :open="showBacklogForm" width="560px" @close="showBacklogForm = false">
+      <AppModalHeader title="New Task" @close="showBacklogForm = false" />
       <div class="flex-1 min-h-0 overflow-y-auto p-5">
         <BacklogForm @created-and-refine="onCreateTaskAndRefine" />
       </div>

@@ -21,11 +21,16 @@ const radiusClasses = {
   md: 'rounded-md',
   lg: 'rounded-lg',
 } as const
+
+const slots = defineSlots<{
+  default?: () => unknown
+  header?: () => unknown
+}>()
 </script>
 
 <template>
   <div
-    class="border border-line"
+    class="border border-line overflow-hidden"
     :class="[
       surfaceClasses[surface],
       radiusClasses[radius],
@@ -34,6 +39,9 @@ const radiusClasses = {
       interactive && !lift && 'hover:shadow-card-hover',
     ]"
   >
+    <div v-if="slots.header" class="flex items-center justify-between gap-2 px-3 py-2 bg-raised border-b border-line">
+      <slot name="header" />
+    </div>
     <slot />
   </div>
 </template>

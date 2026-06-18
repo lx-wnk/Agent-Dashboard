@@ -11,16 +11,12 @@ const props = defineProps<{
   agentCount: number
   attentionCount: number
   taskCount: number
-  totalCostLabel: string
-  totalTokensLabel: string
-  todayCostLabel: string
-  quotaPct: number | null
+  live: boolean
   theme: 'dark' | 'light'
   canInstall: boolean
 }>()
 const emit = defineEmits<{
   openSessions: []
-  openSettings: []
   toggleTheme: []
   install: []
 }>()
@@ -54,7 +50,17 @@ function badgeDanger(view: ActiveView): boolean {
   >
     <div class="flex items-center gap-2 px-1.5 pb-3 mb-2 border-b border-line">
       <div class="w-7 h-7 rounded-lg bg-accent shrink-0" aria-hidden="true" />
-      <span v-if="expanded" class="text-[13px] font-semibold text-fg truncate">Agent Overview</span>
+      <div v-if="expanded" class="min-w-0 flex flex-col">
+        <span class="text-[13px] font-semibold text-fg truncate leading-tight">Agent Overview</span>
+        <span class="flex items-center gap-1 text-[10px] text-fg-faint" role="status">
+          <span
+            class="w-1.5 h-1.5 rounded-full shrink-0"
+            :class="live ? 'bg-success motion-safe:animate-pulse' : 'bg-warning'"
+            aria-hidden="true"
+          />
+          {{ live ? 'Live · all systems normal' : 'Reconnecting…' }}
+        </span>
+      </div>
       <button
         type="button"
         data-testid="sidebar-pin"
@@ -100,14 +106,9 @@ function badgeDanger(view: ActiveView): boolean {
 
     <SidebarFooter
       :expanded="expanded"
-      :total-cost-label="totalCostLabel"
-      :total-tokens-label="totalTokensLabel"
-      :today-cost-label="todayCostLabel"
-      :quota-pct="quotaPct"
       :theme="theme"
       :can-install="canInstall"
       @open-sessions="emit('openSessions')"
-      @open-settings="emit('openSettings')"
       @toggle-theme="emit('toggleTheme')"
       @install="emit('install')"
     />

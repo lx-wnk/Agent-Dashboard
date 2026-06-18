@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { formatCost, shortModel } from '../utils/format'
 import AppModal from './ui/AppModal.vue'
+import AppModalHeader from './ui/AppModalHeader.vue'
 import SessionDetailModal from './SessionDetailModal.vue'
 import { useSessions } from '../composables/useSessions'
 import type { SessionInfo } from '../composables/useSessions'
@@ -78,15 +79,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <AppModal :open="open" @close="emit('close')">
-    <header class="flex justify-between items-center px-5 py-4 border-b border-line shrink-0">
-      <h2 class="text-lg font-semibold text-fg">
-        Past Sessions
-      </h2>
-      <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="emit('close')">
-        &times;
-      </button>
-    </header>
+  <AppModal :open="open" width="600px" @close="emit('close')">
+    <AppModalHeader title="Past Sessions" @close="emit('close')" />
 
     <div class="flex-1 min-h-0 overflow-y-auto p-5">
         <div class="mb-3">
@@ -112,19 +106,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             class="bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer hover:border-slate-400 dark:hover:border-slate-600 transition-colors"
             @click="selectedSession = s"
           >
-            <!-- Title: firstPrompt prominent -->
             <p v-if="s.firstPrompt" class="text-sm font-semibold text-fg line-clamp-2 mb-1 leading-snug">
               {{ s.firstPrompt }}
             </p>
             <span v-else class="text-sm font-semibold text-fg mb-1 block">{{ s.projectName }}</span>
 
-            <!-- Path -->
             <code class="font-mono text-xs text-fg-mute truncate block mb-1.5">{{ shortenPath(s.projectPath) }}</code>
 
-            <!-- Last response snippet -->
             <pre v-if="s.lastResponse" class="text-[11px] font-mono text-fg-mute bg-card border-l-2 border-line px-2 py-1.5 mb-2 rounded-r leading-relaxed whitespace-pre-wrap break-words max-h-[5.5lh] overflow-y-auto">{{ s.lastResponse }}</pre>
 
-            <!-- Metadata badges -->
             <div class="flex flex-wrap gap-1.5 items-center">
               <span v-if="s.model" class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute uppercase tracking-wide font-mono">{{ shortModel(s.model) }}</span>
               <span v-if="s.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-raised text-green-600 dark:text-green-400 font-mono">{{ formatCost(s.costEstimate) }}</span>
