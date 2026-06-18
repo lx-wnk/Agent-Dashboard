@@ -18,8 +18,17 @@ func TestLoad_ValidDefaultConfig(t *testing.T) {
 	assert.Equal(t, 60000, cfg.SpawnRateWindowMs)
 	assert.Equal(t, 3000, cfg.SSEIntervalMs)
 	assert.Equal(t, 100, cfg.HooksDebounceMs)
+	assert.Equal(t, 50, cfg.HookEventsPerSession)
 	// Auto-generated JWT secret must be 64 hex chars (32 bytes).
 	assert.Len(t, cfg.JWTSecret, 64)
+}
+
+func TestLoad_HookEventsPerSessionMustBePositive(t *testing.T) {
+	t.Setenv("DASHBOARD_HOOK_EVENTS_PER_SESSION", "0")
+
+	_, err := Load("")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "DASHBOARD_HOOK_EVENTS_PER_SESSION must be positive")
 }
 
 func TestLoad_DefaultsAppliedWhenEnvAbsent(t *testing.T) {

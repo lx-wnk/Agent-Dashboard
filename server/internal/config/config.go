@@ -32,6 +32,9 @@ type Config struct {
 	AllowGitPush           bool    `koanf:"allow_git_push"`
 	HooksSecret            string  `koanf:"hooks_secret"`
 	HooksDebounceMs        int     `koanf:"hooks_debounce_ms"`
+	// HookEventsPerSession caps how many recent lifecycle-hook events the
+	// in-memory receiver retains per session. Set via DASHBOARD_HOOK_EVENTS_PER_SESSION.
+	HookEventsPerSession   int     `koanf:"hook_events_per_session"`
 	SpawnRateLimit         int     `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int     `koanf:"spawn_rate_window_ms"`
 	InjectRateLimit        int     `koanf:"inject_rate_limit"`
@@ -77,6 +80,7 @@ func Defaults() Config {
 		EvalStddevK:            3,
 		ShutdownTimeoutSeconds: 10,
 		HooksDebounceMs:        100,
+		HookEventsPerSession:   50,
 		SpawnRateLimit:         5,
 		SpawnRateWindowMs:      60000,
 		InjectRateLimit:        30,
@@ -105,6 +109,7 @@ func Load(cfgFile string) (Config, error) {
 		"eval_stddev_k":            cfg.EvalStddevK,
 		"shutdown_timeout_seconds": cfg.ShutdownTimeoutSeconds,
 		"hooks_debounce_ms":        cfg.HooksDebounceMs,
+		"hook_events_per_session":  cfg.HookEventsPerSession,
 		"spawn_rate_limit":         cfg.SpawnRateLimit,
 		"spawn_rate_window_ms":     cfg.SpawnRateWindowMs,
 		"inject_rate_limit":        cfg.InjectRateLimit,
@@ -154,6 +159,12 @@ func Load(cfgFile string) (Config, error) {
 	}
 	if cfg.EvalStddevK < 0 {
 		return Config{}, fmt.Errorf("config: DASHBOARD_EVAL_STDDEV_K must be >= 0, got %g", cfg.EvalStddevK)
+	}
+
+	// Reject a non-positive per-session hook cap — a zero or negative ring would
+	// drop every event or behave unpredictably.
+	if cfg.HookEventsPerSession < 1 {
+		return Config{}, fmt.Errorf("config: DASHBOARD_HOOK_EVENTS_PER_SESSION must be positive, got %d", cfg.HookEventsPerSession)
 	}
 
 	// Reject operator-set JWT secrets that are too short (< 32 chars).
