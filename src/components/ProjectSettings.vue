@@ -40,6 +40,8 @@ const formVisible = ref(false)
 const formSaving = ref(false)
 const formError = ref<string | null>(null)
 const form = ref<ProjectFormState>({ slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '' })
+const folderRows = ref<FolderRow[]>([])
+const folderError = ref<string | null>(null)
 
 function openCreate() {
   editingProject.value = null
@@ -142,8 +144,6 @@ interface FolderRow extends Partial<ProjectFolder> {
   saveError: string | null
 }
 
-const folderRows = ref<FolderRow[]>([])
-const folderError = ref<string | null>(null)
 const folderLoading = ref(false)
 let _rowKey = 0
 

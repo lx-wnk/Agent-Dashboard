@@ -2,6 +2,6 @@
 
 Drop README/documentation images here.
 
-- `hero.png` — main dashboard overview screenshot referenced by the root README hero (currently a commented-out placeholder). Add the file, then uncomment the `<img>` block in [`../../README.md`](../../README.md).
+- `hero.png` — main dashboard overview screenshot displayed in the root README hero block.
 
 Recommended hero width: ~900px, light **and** dark variants optional.

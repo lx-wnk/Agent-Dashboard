@@ -3,6 +3,8 @@ import { useCostHeatmap } from '../composables/useCostHeatmap'
 import { useTheme } from '../composables/useTheme'
 import { chartColors } from '../utils/chartColors'
 
+const RGB_CHANNELS_RE = /^rgba?\(([^)]+?)(?:,\s*[\d.]+)?\)$/
+
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`)
 
@@ -15,8 +17,9 @@ function heatmapColor(opacity: number): string {
   void theme.value // re-evaluate when the theme toggles
   // chartColors() returns an "rgb(r, g, b)" string — splice in the alpha.
   const c = chartColors().info
-  const m = c.match(/^rgba?\(([^)]+?)(?:,\s*[\d.]+)?\)$/)
-  if (!m) return `rgba(59, 130, 246, ${opacity})`
+  const m = c.match(RGB_CHANNELS_RE)
+  if (!m)
+    return `rgba(59, 130, 246, ${opacity})`
   return `rgba(${m[1]}, ${opacity})`
 }
 

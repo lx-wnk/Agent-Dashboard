@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import AppInput from './ui/AppInput.vue'
 import { ConflictError, useConfigExplorer } from '../composables/useConfigExplorer'
+import AppInput from './ui/AppInput.vue'
 
 type Tab = 'skills' | 'commands' | 'memory'
 

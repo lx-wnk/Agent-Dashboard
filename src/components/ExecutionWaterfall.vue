@@ -5,9 +5,9 @@ import { axisBottom } from 'd3-axis'
 import { scaleOrdinal, scaleTime } from 'd3-scale'
 import { select } from 'd3-selection'
 import { nextTick, onMounted, ref, useId, watch } from 'vue'
-import { errorMessage } from '../utils/errorMessage'
 import { useTheme } from '../composables/useTheme'
 import { chartPalette } from '../utils/chartColors'
+import { errorMessage } from '../utils/errorMessage'
 
 const props = defineProps<{ sessionId: string }>()
 

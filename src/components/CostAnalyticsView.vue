@@ -6,9 +6,9 @@ import { select } from 'd3-selection'
 import { area, curveMonotoneX, line, stack } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
+import { useTheme } from '../composables/useTheme'
+import { chartColors, chartPalette } from '../utils/chartColors'
 import { formatCost, formatTokens } from '../utils/format'
-import { useTheme } from "../composables/useTheme"
-import { chartColors, chartPalette } from "../utils/chartColors"
 import AppCard from './ui/AppCard.vue'
 
 const { summary, isLoading, error, from, to, setRange, start, refresh } = useCostAnalytics()
@@ -312,15 +312,7 @@ function renderWeeklyTrend() {
     .attr('stroke-width', 2)
     .attr('d', lineGen)
 
-  g.append('g').selectAll('circle')
-    .data(data)
-    .join('circle')
-    .attr('cx', d => x(d.week) ?? 0)
-    .attr('cy', d => y(d.costUsd))
-    .attr('r', 3)
-    .attr('fill', chartColors().success)
-    .append('title')
-    .text(d => `${d.week}: ${formatCost(d.costUsd)}`)
+  g.append('g').selectAll('circle').data(data).join('circle').attr('cx', d => x(d.week) ?? 0).attr('cy', d => y(d.costUsd)).attr('r', 3).attr('fill', chartColors().success).append('title').text(d => `${d.week}: ${formatCost(d.costUsd)}`)
 
   const tickEvery = Math.max(1, Math.ceil(data.length / 8))
   g.append('g')
@@ -384,8 +376,7 @@ watch([summary, theme], () => {
         v-for="preset in (['7d', '30d', '90d', 'all'] as const)"
         :key="preset"
         type="button"
-        :class="[
-          'px-2.5 py-1 rounded border transition-colors',
+        class="px-2.5 py-1 rounded border transition-colors" :class="[
           activePreset === preset
             ? 'bg-accent border-accent text-accent-contrast'
             : 'bg-raised border-line text-fg-mute hover:text-fg hover:bg-raised/70',

@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import type { ForecastPoint, ForecastTrendPoint } from '../composables/useCostForecast'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { scaleLinear, scaleTime } from 'd3-scale'
 import { select } from 'd3-selection'
 import { line } from 'd3-shape'
 import { ref, watch } from 'vue'
 import { useCostForecast } from '../composables/useCostForecast'
-import type { ForecastTrendPoint, ForecastPoint } from '../composables/useCostForecast'
 import { useTheme } from '../composables/useTheme'
 import { chartColors } from '../utils/chartColors'
 

@@ -39,7 +39,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('RefinementChat voice slot', () => {
+describe('refinementChat voice slot', () => {
   it('inserts addon text into the refinement textarea', async () => {
     const wrapper = mount(RefinementChat, {
       props: {
@@ -58,7 +58,10 @@ describe('RefinementChat voice slot', () => {
   it('disables the textarea while a slot addon reports busy', async () => {
     const busyAddon: SlotAddon<'refinement-input-addon'> = {
       slot: 'refinement-input-addon',
-      mount: (_el, ctx) => { ctx.setBusy(true); return () => {} },
+      mount: (_el, ctx) => {
+        ctx.setBusy(true)
+        return () => {}
+      },
     }
     const wrapper = mount(RefinementChat, {
       props: {

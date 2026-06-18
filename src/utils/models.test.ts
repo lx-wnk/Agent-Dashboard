@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { AVAILABLE_MODELS } from './models'
 
-describe('AVAILABLE_MODELS', () => {
+describe('aVAILABLE_MODELS', () => {
   it('is non-empty', () => {
     expect(AVAILABLE_MODELS.length).toBeGreaterThan(0)
   })

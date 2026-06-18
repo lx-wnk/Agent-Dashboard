@@ -1,16 +1,21 @@
+const SERVER_NAME_RE = /^[a-z0-9][a-z0-9-]*$/i
+const ENDPOINT_RE = /^\/[\w/-]*$/
+const TRAILING_SLASH_RE = /\/+$/
+const ORIGIN_RE = /^https?:\/\/[\w.\-]+(?::\d+)?$/i
+
 function validateServerName(serverName: string): void {
-  if (!/^[a-z0-9][a-z0-9-]*$/i.test(serverName))
+  if (!SERVER_NAME_RE.test(serverName))
     throw new Error('Unexpected server name')
 }
 
 function validateEndpoint(endpoint: string): void {
-  if (!/^\/[a-z0-9/_-]*$/i.test(endpoint))
+  if (!ENDPOINT_RE.test(endpoint))
     throw new Error('Unexpected endpoint path')
 }
 
 function mcpUrl(origin: string, endpoint: string): string {
-  const trimmed = origin.replace(/\/+$/, '')
-  if (!/^https?:\/\/[a-z0-9.\-_]+(:\d+)?$/i.test(trimmed))
+  const trimmed = origin.replace(TRAILING_SLASH_RE, '')
+  if (!ORIGIN_RE.test(trimmed))
     throw new Error(`Unexpected origin format: ${trimmed}`)
   return `${trimmed}${endpoint}`
 }

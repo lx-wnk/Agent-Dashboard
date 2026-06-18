@@ -2,9 +2,9 @@
 import type { DAGData } from '../../sdk.generated'
 import { scaleLinear } from 'd3-scale'
 import { select } from 'd3-selection'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../../composables/useTheme'
 import { chartColors } from '../../utils/chartColors'
-import { computed, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{
   data: DAGData | null

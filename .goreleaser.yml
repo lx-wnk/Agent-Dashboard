@@ -32,7 +32,7 @@ builds:
 
 archives:
   - id: default
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     formats:
       - tar.gz
     files:
@@ -42,23 +42,23 @@ archives:
       - THIRD_PARTY_LICENSES.md
 
 checksum:
-  name_template: "checksums.txt"
+  name_template: checksums.txt
 
 snapshot:
-  version_template: "{{ incpatch .Version }}-snapshot"
+  version_template: '{{ incpatch .Version }}-snapshot'
 
 changelog:
   use: github
   sort: asc
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
-      - "^ci:"
-      - "^refactor:"
-      - "Merge pull request"
-      - "Merge branch"
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - '^refactor:'
+      - Merge pull request
+      - Merge branch
   groups:
     - title: Features
       regexp: '^.*?feat(\(.+\))??!?:.+$'

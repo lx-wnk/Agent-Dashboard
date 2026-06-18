@@ -66,15 +66,12 @@ async function handleResolve(outcome: 'granted' | 'denied') {
     :class="borderClass"
   >
     <!-- Dense single-line row -->
-    <div
-      role="button"
-      tabindex="0"
-      class="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer min-h-[40px] hover:bg-app focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-inset"
+    <button
+      type="button"
+      class="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer min-h-[40px] w-full text-left hover:bg-app focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-inset"
       :aria-expanded="expanded"
       :aria-label="`${projectTitle} — ${agent.status}`"
       @click="expanded = !expanded"
-      @keydown.enter.prevent="expanded = !expanded"
-      @keydown.space.prevent="expanded = !expanded"
     >
       <!-- Status dot -->
       <span
@@ -139,7 +136,7 @@ async function handleResolve(outcome: 'granted' | 'denied') {
         class="text-fg-faint text-[11px] shrink-0 transition-transform duration-150"
         :class="expanded ? 'rotate-90' : ''"
       >▸</span>
-    </div>
+    </button>
 
     <!-- Expanded detail panel -->
     <div
@@ -163,7 +160,9 @@ async function handleResolve(outcome: 'granted' | 'denied') {
         v-if="agent.lastOutput"
         class="m-0 font-mono text-xs text-fg-mute leading-relaxed whitespace-pre-wrap bg-card border border-line rounded-sm p-2.5"
       >{{ agent.lastOutput }}</pre>
-      <p v-else class="text-xs text-fg-faint italic m-0">No output yet</p>
+      <p v-else class="text-xs text-fg-faint italic m-0">
+        No output yet
+      </p>
 
       <div class="flex gap-1.5 mt-2.5">
         <AppButton

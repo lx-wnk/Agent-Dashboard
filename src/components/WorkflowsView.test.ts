@@ -15,7 +15,7 @@ function makeFetchMock(sessions: unknown[] = []) {
   })
 }
 
-describe('WorkflowsView', () => {
+describe('workflowsView', () => {
   it('renders the three static tab buttons (no Session DAG initially)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,

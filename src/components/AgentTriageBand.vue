@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { Agent, PendingPermission, PermissionRequest } from '../types'
 import type { PermissionItem } from '../composables/usePendingPermissions'
+import type { Agent, PendingPermission, PermissionRequest } from '../types'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
@@ -25,7 +25,7 @@ const emit = defineEmits<{
 
 const { getIdentity } = useAgentIdentity()
 const { nowMs } = useNow()
-const { resolving, resolveAgent, approveAll } = usePermissionResolve()
+const { resolveAgent } = usePermissionResolve()
 
 // Tone → Tailwind border + text classes
 const toneBorderClass: Record<string, string> = {

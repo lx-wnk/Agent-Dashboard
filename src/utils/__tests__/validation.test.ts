@@ -7,7 +7,7 @@ import {
   slugify,
 } from '../validation'
 
-describe('SLUG_RE', () => {
+describe('sLUG_RE', () => {
   it('accepts valid slugs', () => {
     expect(SLUG_RE.test('a')).toBe(true)
     expect(SLUG_RE.test('alpha-beta-1')).toBe(true)

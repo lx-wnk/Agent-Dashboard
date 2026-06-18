@@ -13,7 +13,9 @@ const CAP_LABELS: Record<string, string> = {
 
 <template>
   <div class="space-y-4">
-    <h3 class="text-sm font-semibold text-fg-soft">Loaded Plugins</h3>
+    <h3 class="text-sm font-semibold text-fg-soft">
+      Loaded Plugins
+    </h3>
     <p class="text-xs text-fg-mute">
       Sidecar plugins loaded from
       <code class="font-mono bg-raised px-1 rounded text-[11px]">plugin_dir</code>. Add plugins by placing a
@@ -21,8 +23,12 @@ const CAP_LABELS: Record<string, string> = {
       Set <code class="font-mono bg-raised px-1 rounded text-[11px]">DASHBOARD_PLUGIN_DIR</code> to enable.
     </p>
 
-    <div v-if="loading" class="text-xs text-slate-400" role="status" aria-live="polite">Loading plugins…</div>
-    <div v-else-if="error" class="text-xs text-danger-text" role="alert">{{ error }}</div>
+    <div v-if="loading" class="text-xs text-slate-400" role="status" aria-live="polite">
+      Loading plugins…
+    </div>
+    <div v-else-if="error" class="text-xs text-danger-text" role="alert">
+      {{ error }}
+    </div>
     <div v-else-if="plugins.length === 0" class="text-xs text-slate-400 italic space-y-1">
       <p>No plugins loaded.</p>
       <p>
@@ -38,7 +44,9 @@ const CAP_LABELS: Record<string, string> = {
         class="bg-raised/50 rounded p-3 text-xs flex items-start justify-between gap-4"
       >
         <div class="space-y-1">
-          <p class="font-mono font-medium text-fg">{{ p.id }}</p>
+          <p class="font-mono font-medium text-fg">
+            {{ p.id }}
+          </p>
         </div>
         <div class="flex flex-wrap gap-1">
           <span

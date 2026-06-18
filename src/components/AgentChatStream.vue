@@ -1,15 +1,18 @@
-<script lang="ts">
-// Multi-root template (transcript + sr-only live region) disables attr
-// fallthrough; bind $attrs explicitly to the transcript so layout classes apply.
-export default {
-  inheritAttrs: false,
-}
-</script>
-
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { renderMarkdown } from '../utils/markdown'
+import { CHAT_REFRESH_MS } from '../utils/sse'
+
+// Multi-root template (transcript + sr-only live region) disables attr
+// fallthrough; bind $attrs explicitly to the transcript so layout classes apply.
+defineOptions({ inheritAttrs: false })
+
+const props = defineProps<{
+  agent: Agent | null
+  localMessages?: OutputMessage[]
+  refreshIntervalMs?: number
+}>()
 
 interface ToolGroup {
   kind: 'tool_group'
@@ -22,12 +25,6 @@ interface TaskGroup {
 }
 
 type ChatEntry = { kind: 'message', msg: OutputMessage } | ToolGroup | TaskGroup
-
-const props = defineProps<{
-  agent: Agent | null
-  localMessages?: OutputMessage[]
-  refreshIntervalMs?: number
-}>()
 
 const sessionMessages = ref<OutputMessage[]>([])
 const isLoadingOutput = ref(false)
@@ -224,7 +221,7 @@ async function refreshOutput() {
 function startRefresh() {
   stopRefresh()
   if (props.agent && props.agent.status !== 'idle')
-    refreshInterval = setInterval(refreshOutput, props.refreshIntervalMs ?? 5000)
+    refreshInterval = setInterval(refreshOutput, props.refreshIntervalMs ?? CHAT_REFRESH_MS)
 }
 
 function stopRefresh() {

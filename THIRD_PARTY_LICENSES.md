@@ -86,13 +86,9 @@ The following third-party packages are used as transitive dependencies.
 | @vueuse/metadata | 14.3.0 | MIT |
 | @vueuse/shared | 14.3.0 | MIT |
 | accepts | 2.0.0 | MIT |
-| agent-base | 7.1.4 | MIT |
 | ajv | 8.18.0 | MIT |
 | ajv-formats | 3.0.1 | MIT |
-| asn1.js | 5.4.1 | MIT |
-| bn.js | 4.12.3 | MIT |
 | body-parser | 2.2.2 | MIT |
-| buffer-equal-constant-time | 1.0.1 | BSD-3-Clause |
 | bytes | 3.1.2 | MIT |
 | call-bind-apply-helpers | 1.0.2 | MIT |
 | call-bound | 1.0.4 | MIT |
@@ -101,8 +97,7 @@ The following third-party packages are used as transitive dependencies.
 | content-disposition | 1.0.1 | MIT |
 | content-type | 1.0.5 | MIT |
 | cookie | 0.7.2 | MIT |
-| cookie-parser | 1.4.7 | MIT |
-| cookie-signature | 1.0.6, 1.2.2 | MIT |
+| cookie-signature | 1.2.2 | MIT |
 | cors | 2.8.6 | MIT |
 | cross-spawn | 7.0.6 | MIT |
 | csstype | 3.2.3 | MIT |
@@ -130,9 +125,8 @@ The following third-party packages are used as transitive dependencies.
 | debug | 4.4.3 | MIT |
 | depd | 2.0.0 | MIT |
 | diff | 9.0.0 | BSD-3-Clause |
-| dompurify | 3.4.9 | (MPL-2.0 OR Apache-2.0) |
+| dompurify | 3.4.11 | (MPL-2.0 OR Apache-2.0) |
 | dunder-proto | 1.0.1 | MIT |
-| ecdsa-sig-formatter | 1.0.11 | Apache-2.0 |
 | ee-first | 1.1.1 | MIT |
 | encodeurl | 2.0.0 | MIT |
 | entities | 7.0.1 | BSD-2-Clause |
@@ -159,8 +153,6 @@ The following third-party packages are used as transitive dependencies.
 | hasown | 2.0.2 | MIT |
 | hono | 4.12.25 | MIT |
 | http-errors | 2.0.1 | MIT |
-| http_ece | 1.2.0 | MIT |
-| https-proxy-agent | 7.0.6 | MIT |
 | iconv-lite | 0.7.2 | MIT |
 | inherits | 2.0.4 | ISC |
 | internmap | 1.0.1, 2.0.3 | ISC |
@@ -172,8 +164,6 @@ The following third-party packages are used as transitive dependencies.
 | json-schema-traverse | 1.0.0 | MIT |
 | json-schema-typed | 8.0.2 | BSD-2-Clause |
 | jsonrepair | 3.14.0 | ISC |
-| jwa | 2.0.1 | MIT |
-| jws | 4.0.1 | MIT |
 | magic-string | 0.30.21 | MIT |
 | marked | 18.0.4 | MIT |
 | math-intrinsics | 1.1.0 | MIT |
@@ -181,12 +171,9 @@ The following third-party packages are used as transitive dependencies.
 | merge-descriptors | 2.0.0 | MIT |
 | mime-db | 1.54.0 | MIT |
 | mime-types | 3.0.2 | MIT |
-| minimalistic-assert | 1.0.1 | ISC |
-| minimist | 1.2.8 | MIT |
 | ms | 2.1.3 | MIT |
 | nanoid | 3.3.12 | MIT |
 | negotiator | 1.0.0 | MIT |
-| nodemailer | 8.0.5 | MIT-0 |
 | object-assign | 4.1.1 | MIT |
 | object-inspect | 1.13.4 | MIT |
 | on-finished | 2.4.1 | MIT |
@@ -203,7 +190,6 @@ The following third-party packages are used as transitive dependencies.
 | raw-body | 3.0.2 | MIT |
 | require-from-string | 2.0.2 | MIT |
 | router | 2.2.0 | MIT |
-| safe-buffer | 5.2.1 | MIT |
 | safer-buffer | 2.1.2 | MIT |
 | send | 1.2.1 | MIT |
 | serve-static | 2.2.1 | MIT |
@@ -223,7 +209,6 @@ The following third-party packages are used as transitive dependencies.
 | unpipe | 1.0.0 | MIT |
 | vary | 1.1.2 | MIT |
 | vue | 3.5.32 | MIT |
-| web-push | 3.6.7 | MPL-2.0 |
 | which | 2.0.2 | ISC |
 | wrappy | 1.0.2 | ISC |
 | zod | 4.3.6 | MIT |

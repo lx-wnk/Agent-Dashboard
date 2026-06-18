@@ -2,11 +2,11 @@ import type { Agent } from '../types'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
+import AgentModal from './AgentModal.vue'
+
 vi.mock('../composables/useAgentIdentity', () => ({
   useAgentIdentity: () => ({ getIdentity: () => ({ emoji: '🤖' }) }),
 }))
-
-import AgentModal from './AgentModal.vue'
 
 const baseAgent: Agent = {
   pid: 1234,
@@ -51,7 +51,7 @@ function mountModal() {
   return mount(AgentModal, { props: { agent: baseAgent }, global: { stubs } })
 }
 
-describe('AgentModal details tablist a11y', () => {
+describe('agentModal details tablist a11y', () => {
   it('renders a role=tablist with two role=tab buttons', () => {
     const wrapper = mountModal()
     expect(wrapper.find('[role="tablist"]').exists()).toBe(true)
@@ -76,7 +76,7 @@ describe('AgentModal details tablist a11y', () => {
     expect(panel.attributes('aria-labelledby')).toBe(tabs[1].attributes('id'))
   })
 
-  it('ArrowRight on the tablist moves selection to the next tab', async () => {
+  it('arrowRight on the tablist moves selection to the next tab', async () => {
     const wrapper = mountModal()
     await wrapper.find('[role="tablist"]').trigger('keydown', { key: 'ArrowRight' })
     const tabs = wrapper.findAll('[role="tab"]')

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { Agent, OutputMessage } from '../types'
 import type { SlashCommandDef } from '../composables/useSlashCommands'
+import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
-import { SLASH_COMMAND_DEFS, fetchDynamicCommands } from '../composables/useSlashCommands'
+import { fetchDynamicCommands, SLASH_COMMAND_DEFS } from '../composables/useSlashCommands'
 
 const props = withDefaults(defineProps<{
   agent: Agent | null
@@ -223,7 +223,9 @@ defineExpose({ focus })
         class="w-8 h-8 flex-shrink-0 rounded-full border border-line bg-raised text-fg-mute text-base cursor-pointer flex items-center justify-center hover:border-accent hover:text-accent disabled:opacity-35 disabled:cursor-default transition-colors"
         :disabled="isSending"
         @click="fileInputEl?.click()"
-      >+</button>
+      >
+        +
+      </button>
       <span
         v-else
         class="text-accent flex-shrink-0 pb-0.5 text-[13px]"
@@ -264,7 +266,9 @@ defineExpose({ focus })
         class="w-8 h-8 flex-shrink-0 rounded-full border-none bg-success text-white text-sm font-bold cursor-pointer flex items-center justify-center hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
         :disabled="isSending"
         @click="approveHandler?.()"
-      >✓</button>
+      >
+        ✓
+      </button>
       <button
         type="button"
         :aria-label="isResumeMode ? 'Resume session with prompt (creates a new session)' : 'Send message'"

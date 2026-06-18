@@ -1,8 +1,9 @@
 /// <reference lib="webworker" />
-import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
-import { BACKGROUND_SYNC_TAG, SW_MSG_MESSAGES_REPLAYED, SW_MSG_SKIP_WAITING } from './utils/swConstants'
-import { DB_NAME, DB_VERSION, STORE } from './utils/pendingMessages'
+
 import type { PendingMessage } from './utils/pendingMessages'
+import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
+import { DB_NAME, DB_VERSION, STORE } from './utils/pendingMessages'
+import { BACKGROUND_SYNC_TAG, SW_MSG_MESSAGES_REPLAYED, SW_MSG_SKIP_WAITING } from './utils/swConstants'
 
 declare const self: ServiceWorkerGlobalScope
 

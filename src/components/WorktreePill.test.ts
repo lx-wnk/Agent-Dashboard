@@ -3,6 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
+import WorktreePill from './WorktreePill.vue'
+
 // Mock the composable so we drive the pill from a plain ref the test owns.
 const statusRef = ref<WorktreeStatusDTO | null>(null)
 const errorRef = ref<string | null>(null)
@@ -18,8 +20,6 @@ vi.mock('../composables/useWorktreeStatus', () => ({
   }),
 }))
 
-import WorktreePill from './WorktreePill.vue'
-
 function setStatus(dto: WorktreeStatusDTO | null) {
   statusRef.value = dto
 }
@@ -34,7 +34,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('WorktreePill', () => {
+describe('worktreePill', () => {
   it('renders nothing when status is null (no worktree / not yet loaded)', () => {
     const wrapper = mount(WorktreePill, { props: { taskId: 't1' } })
     expect(wrapper.find('[data-testid="worktree-pill"]').exists()).toBe(false)

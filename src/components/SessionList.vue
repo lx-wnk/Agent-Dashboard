@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import type { SessionInfo } from '../composables/useSessions'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useSessions } from '../composables/useSessions'
 import { formatCost, shortModel } from '../utils/format'
+import SessionDetailModal from './SessionDetailModal.vue'
 import AppModal from './ui/AppModal.vue'
 import AppModalHeader from './ui/AppModalHeader.vue'
-import SessionDetailModal from './SessionDetailModal.vue'
-import { useSessions } from '../composables/useSessions'
-import type { SessionInfo } from '../composables/useSessions'
 
 const props = defineProps<{ open: boolean, homeDir: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -83,46 +83,46 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <AppModalHeader title="Past Sessions" @close="emit('close')" />
 
     <div class="flex-1 min-h-0 overflow-y-auto p-5">
-        <div class="mb-3">
-          <input
-            v-model="search"
-            class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent placeholder:text-fg-faint"
-            type="text"
-            placeholder="Filter by project or prompt..."
-          >
-        </div>
+      <div class="mb-3">
+        <input
+          v-model="search"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent placeholder:text-fg-faint"
+          type="text"
+          placeholder="Filter by project or prompt..."
+        >
+      </div>
 
-        <p v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
-          Loading sessions...
-        </p>
-        <p v-else-if="filtered.length === 0" class="text-center py-12 text-fg-mute text-sm">
-          No sessions found.
-        </p>
+      <p v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
+        Loading sessions...
+      </p>
+      <p v-else-if="filtered.length === 0" class="text-center py-12 text-fg-mute text-sm">
+        No sessions found.
+      </p>
 
-        <div v-else class="flex flex-col gap-2">
-          <div
-            v-for="s in filtered"
-            :key="s.sessionId"
-            class="bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer hover:border-slate-400 dark:hover:border-slate-600 transition-colors"
-            @click="selectedSession = s"
-          >
-            <p v-if="s.firstPrompt" class="text-sm font-semibold text-fg line-clamp-2 mb-1 leading-snug">
-              {{ s.firstPrompt }}
-            </p>
-            <span v-else class="text-sm font-semibold text-fg mb-1 block">{{ s.projectName }}</span>
+      <div v-else class="flex flex-col gap-2">
+        <div
+          v-for="s in filtered"
+          :key="s.sessionId"
+          class="bg-app border border-line rounded-md px-3 py-2.5 cursor-pointer hover:border-slate-400 dark:hover:border-slate-600 transition-colors"
+          @click="selectedSession = s"
+        >
+          <p v-if="s.firstPrompt" class="text-sm font-semibold text-fg line-clamp-2 mb-1 leading-snug">
+            {{ s.firstPrompt }}
+          </p>
+          <span v-else class="text-sm font-semibold text-fg mb-1 block">{{ s.projectName }}</span>
 
-            <code class="font-mono text-xs text-fg-mute truncate block mb-1.5">{{ shortenPath(s.projectPath) }}</code>
+          <code class="font-mono text-xs text-fg-mute truncate block mb-1.5">{{ shortenPath(s.projectPath) }}</code>
 
-            <pre v-if="s.lastResponse" class="text-[11px] font-mono text-fg-mute bg-card border-l-2 border-line px-2 py-1.5 mb-2 rounded-r leading-relaxed whitespace-pre-wrap break-words max-h-[5.5lh] overflow-y-auto">{{ s.lastResponse }}</pre>
+          <pre v-if="s.lastResponse" class="text-[11px] font-mono text-fg-mute bg-card border-l-2 border-line px-2 py-1.5 mb-2 rounded-r leading-relaxed whitespace-pre-wrap break-words max-h-[5.5lh] overflow-y-auto">{{ s.lastResponse }}</pre>
 
-            <div class="flex flex-wrap gap-1.5 items-center">
-              <span v-if="s.model" class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute uppercase tracking-wide font-mono">{{ shortModel(s.model) }}</span>
-              <span v-if="s.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-raised text-green-600 dark:text-green-400 font-mono">{{ formatCost(s.costEstimate) }}</span>
-              <span class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute font-mono" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
-              <span class="ml-auto text-[10px] text-fg-mute">{{ formatDate(s.lastModified) }}</span>
-            </div>
+          <div class="flex flex-wrap gap-1.5 items-center">
+            <span v-if="s.model" class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute uppercase tracking-wide font-mono">{{ shortModel(s.model) }}</span>
+            <span v-if="s.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-raised text-green-600 dark:text-green-400 font-mono">{{ formatCost(s.costEstimate) }}</span>
+            <span class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute font-mono" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
+            <span class="ml-auto text-[10px] text-fg-mute">{{ formatDate(s.lastModified) }}</span>
           </div>
         </div>
+      </div>
     </div>
   </AppModal>
 

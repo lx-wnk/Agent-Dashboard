@@ -6,6 +6,7 @@ import { useProjects } from '../composables/useProjects'
 import { useSpawnDialog } from '../composables/useSpawnDialog'
 import { useSpawners } from '../composables/useSpawners'
 import { errorMessage } from '../utils/errorMessage'
+import { SPAWN_STATUS_POLL_MS } from '../utils/sse'
 import { SPAWN_AUTOCLOSE_MS } from '../utils/timing'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 import AppButton from './ui/AppButton.vue'
@@ -121,7 +122,7 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
     const data = await res.json()
     if (data.status === 'running') {
       spawnStatusMsg.value = `Agent PID ${pid} running...`
-      statusPollTimer = setTimeout(pollSpawnStatus, 2000, pid, attempts + 1)
+      statusPollTimer = setTimeout(pollSpawnStatus, SPAWN_STATUS_POLL_MS, pid, attempts + 1)
     }
     else if (data.status === 'exited' && data.exitCode !== 0) {
       const stderr = data.stderr?.trim()
@@ -140,7 +141,7 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
     }
   }
   catch {
-    statusPollTimer = setTimeout(pollSpawnStatus, 2000, pid, attempts + 1)
+    statusPollTimer = setTimeout(pollSpawnStatus, SPAWN_STATUS_POLL_MS, pid, attempts + 1)
   }
 }
 
@@ -225,11 +226,13 @@ onUnmounted(() => {
 
 <template>
   <AppModal :open="open" width="560px" @close="emit('close')">
-    <AppModalHeader title="New Agent" id="spawn-title" @close="emit('close')" />
+    <AppModalHeader id="spawn-title" title="New Agent" @close="emit('close')" />
 
     <form class="flex-1 min-h-0 overflow-y-auto p-5" @submit.prevent>
       <div class="mb-4">
-        <AppFieldLabel for="spawn-prompt">Prompt</AppFieldLabel>
+        <AppFieldLabel for="spawn-prompt">
+          Prompt
+        </AppFieldLabel>
         <AppInput
           id="spawn-prompt"
           v-model="prompt"
@@ -242,7 +245,9 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <AppFieldLabel for="spawn-project">Project</AppFieldLabel>
+        <AppFieldLabel for="spawn-project">
+          Project
+        </AppFieldLabel>
         <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent">
           <option
             v-for="p in sortedProjects"
@@ -266,7 +271,9 @@ onUnmounted(() => {
       />
 
       <div v-if="folderPickerVisible" class="mb-4">
-        <AppFieldLabel for="spawn-folder">Folder</AppFieldLabel>
+        <AppFieldLabel for="spawn-folder">
+          Folder
+        </AppFieldLabel>
         <select
           id="spawn-folder"
           :value="dlg.selectedFolderId.value ?? ''"
@@ -280,7 +287,9 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <AppFieldLabel for="spawn-spawner">Spawner</AppFieldLabel>
+        <AppFieldLabel for="spawn-spawner">
+          Spawner
+        </AppFieldLabel>
         <select
           id="spawn-spawner"
           v-model="dlg.spawnerId.value"
@@ -297,7 +306,9 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <AppFieldLabel for="spawn-system">System Prompt</AppFieldLabel>
+        <AppFieldLabel for="spawn-system">
+          System Prompt
+        </AppFieldLabel>
         <AppInput
           id="spawn-system"
           v-model="systemPrompt"
@@ -308,7 +319,9 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <AppFieldLabel for="spawn-permission-mode">Permissions</AppFieldLabel>
+        <AppFieldLabel for="spawn-permission-mode">
+          Permissions
+        </AppFieldLabel>
         <select
           id="spawn-permission-mode"
           v-model="permissionMode"

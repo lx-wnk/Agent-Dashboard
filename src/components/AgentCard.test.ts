@@ -2,13 +2,13 @@ import type { Agent } from '../types'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
+import AgentCard from './AgentCard.vue'
+
 vi.mock('../composables/useAgentIdentity', () => ({
   useAgentIdentity: () => ({
     getIdentity: () => ({ emoji: '🤖' }),
   }),
 }))
-
-import AgentCard from './AgentCard.vue'
 
 const baseAgent: Agent = {
   pid: 1234,
@@ -43,7 +43,7 @@ const stubs = {
   PromptInput: true,
 }
 
-describe('AgentCard', () => {
+describe('agentCard', () => {
   it('renders a real button with data-testid="agent-card-open"', () => {
     const wrapper = mount(AgentCard, {
       props: { agent: baseAgent },

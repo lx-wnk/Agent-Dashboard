@@ -1,6 +1,6 @@
+import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
 
 let useCostHeatmap: typeof import('../useCostHeatmap').useCostHeatmap
 
@@ -18,8 +18,7 @@ function withSetup<T>(composable: () => T) {
 }
 
 const mockGrid = Array.from({ length: 7 }, (_, d) =>
-  Array.from({ length: 24 }, (_, h) => d * 24 + h),
-)
+  Array.from({ length: 24 }, (_, h) => d * 24 + h))
 
 beforeEach(async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -50,7 +49,7 @@ describe('useCostHeatmap', () => {
     const { result } = withSetup(() => useCostHeatmap())
     await vi.waitUntil(() => !result.loading.value)
 
-    const zeroGrid = Array.from({ length: 7 }, () => new Array(24).fill(0))
+    const zeroGrid = Array.from({ length: 7 }, () => Array.from({ length: 24 }).fill(0))
     vi.mocked(globalThis.fetch).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ grid: zeroGrid }),

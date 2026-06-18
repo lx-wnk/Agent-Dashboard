@@ -1,6 +1,6 @@
+import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
 
 let useSessions: typeof import('../useSessions').useSessions
 

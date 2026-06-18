@@ -21,7 +21,7 @@ export function isAbsolutePath(p: string): boolean {
   if (!p.startsWith('/'))
     return false
   // Reject any ".." path segment
-  return !p.split('/').some(segment => segment === '..')
+  return !p.split('/').includes('..')
 }
 
 /**

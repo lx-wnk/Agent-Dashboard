@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import {
+  BRANCH_MAX,
+  DEFAULT_EDITOR_SCHEME,
+  editorHref,
+  loadEditorScheme,
+  saveEditorScheme,
+  truncateBranch,
+} from './worktree'
+
 const store: Record<string, string> = {}
 globalThis.localStorage = {
   getItem: (k: string) => store[k] ?? null,
@@ -9,15 +18,6 @@ globalThis.localStorage = {
   length: 0,
   key: () => null,
 }
-
-import {
-  BRANCH_MAX,
-  DEFAULT_EDITOR_SCHEME,
-  editorHref,
-  loadEditorScheme,
-  saveEditorScheme,
-  truncateBranch,
-} from './worktree'
 
 describe('truncateBranch', () => {
   it('leaves short branches unchanged', () => {

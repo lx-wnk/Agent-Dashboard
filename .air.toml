@@ -3,21 +3,34 @@ root = "."
 tmp_dir = ".air-tmp"
 
 [build]
-  cmd = "cd server && go build -o ../.air-tmp/agent-dashboard ./cmd/serve/..."
-  bin = ".air-tmp/agent-dashboard"
-  full_bin = ".air-tmp/agent-dashboard serve"
-  include_ext = ["go"]
-  exclude_dir = ["server/frontend", "server/internal/db/ent", "node_modules", "dist", "channel/node_modules", ".air-tmp", "bin", "docs", "e2e", "public", "scripts", "src"]
-  delay = 500
+cmd = "cd server && go build -o ../.air-tmp/agent-dashboard ./cmd/serve/..."
+bin = ".air-tmp/agent-dashboard"
+full_bin = ".air-tmp/agent-dashboard serve"
+include_ext = [ "go" ]
+exclude_dir = [
+  "server/frontend",
+  "server/internal/db/ent",
+  "node_modules",
+  "dist",
+  "channel/node_modules",
+  ".air-tmp",
+  "bin",
+  "docs",
+  "e2e",
+  "public",
+  "scripts",
+  "src"
+]
+delay = 500
 
 [log]
-  time = true
+time = true
 
 [color]
-  main = "yellow"
-  watcher = "cyan"
-  build = "green"
-  runner = "magenta"
+main = "yellow"
+watcher = "cyan"
+build = "green"
+runner = "magenta"
 
 [misc]
-  clean_on_exit = true
+clean_on_exit = true

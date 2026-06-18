@@ -70,7 +70,7 @@ Frontend path alias: `@/*` maps to `./src/*`.
 
 ## Pull Request Process
 
-1. Branch from `main` for general work, or `upcoming` if an active rework is in progress.
+1. Branch from `main`.
 2. Use feature branch naming: `feat/<short-description>`.
 3. Before submitting, verify:
    - `task test` passes (race detector included)

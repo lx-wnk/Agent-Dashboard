@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_DESCRIPTION_CHARS, SLUG_PATTERN_MESSAGE, SLUG_RE, slugify } from './validation'
 
-describe('SLUG_RE', () => {
+describe('sLUG_RE', () => {
   it('accepts valid lowercase slugs', () => {
     expect(SLUG_RE.test('my-slug')).toBe(true)
     expect(SLUG_RE.test('a')).toBe(true)
@@ -34,9 +34,9 @@ describe('SLUG_RE', () => {
 
   it('rejects slugs longer than 64 characters', () => {
     // Pattern: ^[a-z0-9][a-z0-9-]{0,63}$ — total max length is 64 chars.
-    const maxValid = 'a' + 'b'.repeat(63) // 64 chars
+    const maxValid = `a${'b'.repeat(63)}` // 64 chars
     expect(SLUG_RE.test(maxValid)).toBe(true)
-    const tooLong = 'a' + 'b'.repeat(64) // 65 chars
+    const tooLong = `a${'b'.repeat(64)}` // 65 chars
     expect(SLUG_RE.test(tooLong)).toBe(false)
   })
 
@@ -46,7 +46,7 @@ describe('SLUG_RE', () => {
   })
 })
 
-describe('SLUG_PATTERN_MESSAGE', () => {
+describe('sLUG_PATTERN_MESSAGE', () => {
   it('is a non-empty string', () => {
     expect(typeof SLUG_PATTERN_MESSAGE).toBe('string')
     expect(SLUG_PATTERN_MESSAGE.length).toBeGreaterThan(0)
@@ -96,7 +96,7 @@ describe('slugify', () => {
   })
 })
 
-describe('MAX_DESCRIPTION_CHARS', () => {
+describe('mAX_DESCRIPTION_CHARS', () => {
   it('is a positive integer', () => {
     expect(MAX_DESCRIPTION_CHARS).toBeGreaterThan(0)
     expect(Number.isInteger(MAX_DESCRIPTION_CHARS)).toBe(true)

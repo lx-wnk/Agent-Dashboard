@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
+import BacklogForm from './BacklogForm.vue'
+
 vi.mock('../composables/useProjects', () => ({
   useProjects: () => ({
     projects: ref([
@@ -30,9 +32,7 @@ vi.mock('../composables/useProjectFolders', () => ({
   createFolder: vi.fn(),
 }))
 
-import BacklogForm from './BacklogForm.vue'
-
-describe('BacklogForm single-screen', () => {
+describe('backlogForm single-screen', () => {
   it('renders the form fields and a project dropdown on one screen', () => {
     const wrapper = mount(BacklogForm)
     expect(wrapper.find('[data-testid="backlog-project-select"]').exists()).toBe(true)

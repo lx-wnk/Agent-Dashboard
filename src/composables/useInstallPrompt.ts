@@ -62,6 +62,6 @@ export function useInstallPrompt() {
  * declare it here so the file is self-contained.
  */
 interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>
+  prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }

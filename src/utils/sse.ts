@@ -8,3 +8,6 @@ export const SSE_FALLBACK_POLL_MS = 60_000
 // Agent stream poll cadence — agents update frequently, so the fallback polls
 // faster than the generic resource cadence.
 export const AGENTS_POLL_MS = 3_000
+
+export const SPAWN_STATUS_POLL_MS = 2_000
+export const CHAT_REFRESH_MS = 5_000

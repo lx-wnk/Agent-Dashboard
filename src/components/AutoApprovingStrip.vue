@@ -43,7 +43,9 @@ function projectName(cwd: string): string {
         class="ml-1 text-[10px] text-success-text opacity-60 hover:opacity-100 focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-success-text rounded"
         :aria-label="`Stop auto-approving ${projectName(preset.projectCwd)}`"
         @click="handleRevoke(preset.projectCwd)"
-      >&#x2715;</button>
+      >
+        &#x2715;
+      </button>
     </AppChip>
   </div>
 </template>

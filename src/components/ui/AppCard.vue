@@ -11,6 +11,11 @@ withDefaults(defineProps<{
   lift: false,
 })
 
+const slots = defineSlots<{
+  default?: () => unknown
+  header?: () => unknown
+}>()
+
 // Literal class strings so Tailwind v4 can statically extract all utilities.
 const surfaceClasses = {
   card: 'bg-card',
@@ -21,11 +26,6 @@ const radiusClasses = {
   md: 'rounded-md',
   lg: 'rounded-lg',
 } as const
-
-const slots = defineSlots<{
-  default?: () => unknown
-  header?: () => unknown
-}>()
 </script>
 
 <template>

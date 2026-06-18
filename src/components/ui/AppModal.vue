@@ -21,6 +21,7 @@ const props = withDefaults(defineProps<{
   width: '900px',
 })
 
+const emit = defineEmits<{ close: [] }>()
 // Chrome for the standard size. `auto` is a transparent passthrough.
 const STANDARD_CHROME = 'bg-card border border-line rounded-xl shadow-modal overflow-hidden flex flex-col'
 const panelClass = computed(() => (props.size === 'standard' ? STANDARD_CHROME : ''))
@@ -29,8 +30,6 @@ const panelStyle = computed(() =>
     ? { width: `min(${props.width}, calc(100vw - 2rem))`, maxHeight: '85vh' }
     : undefined,
 )
-
-const emit = defineEmits<{ close: [] }>()
 
 const modalPanelRef = ref<HTMLElement | null>(null)
 const previouslyFocused = ref<HTMLElement | null>(null)
@@ -46,7 +45,10 @@ watch(() => props.open, (isOpen) => {
     // Capture currently focused element so it can be restored on close
     previouslyFocused.value = document.activeElement as HTMLElement | null
     // Focus the modal panel so keyboard events are captured immediately
-    nextTick(() => { if (modalPanelRef.value) modalPanelRef.value.focus() })
+    nextTick(() => {
+      if (modalPanelRef.value)
+        modalPanelRef.value.focus()
+    })
   }
   else {
     document.body.style.overflow = ''
@@ -69,7 +71,8 @@ function restoreFocus() {
 }
 
 function trapFocus(event: KeyboardEvent) {
-  if (event.key !== 'Tab') return
+  if (event.key !== 'Tab')
+    return
   const FOCUSABLE_SELECTOR = [
     'a[href]',
     'button:not([disabled])',
@@ -84,7 +87,8 @@ function trapFocus(event: KeyboardEvent) {
   ].join(',')
   const all = Array.from(modalPanelRef.value?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [])
   const focusable = all.filter(el => el.offsetParent !== null || el === document.activeElement)
-  if (focusable.length === 0) return
+  if (focusable.length === 0)
+    return
   const first = focusable[0]
   const last = focusable[focusable.length - 1]
   if (event.shiftKey) {

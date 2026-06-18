@@ -1,15 +1,9 @@
-<script lang="ts">
-export default {
-  inheritAttrs: false,
-}
-</script>
-
 <script setup lang="ts">
 import { useId } from 'vue'
 
-type ResizeProp = 'none' | 'y' | 'both' | 'x'
+defineOptions({ inheritAttrs: false })
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   type?: 'input' | 'textarea'
   modelValue?: string
   placeholder?: string
@@ -29,6 +23,8 @@ const props = withDefaults(defineProps<{
 defineEmits<{
   'update:modelValue': [value: string]
 }>()
+
+type ResizeProp = 'none' | 'y' | 'both' | 'x'
 
 const inputId = useId()
 const errorId = `${inputId}-error`

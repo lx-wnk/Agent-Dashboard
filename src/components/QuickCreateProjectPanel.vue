@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { Project, Spawner } from '../types'
 import { computed, ref, watch } from 'vue'
-import { createProject, deleteProject } from '../composables/useProjects'
 import { createFolder } from '../composables/useProjectFolders'
+import { createProject, deleteProject } from '../composables/useProjects'
 import { errorMessage } from '../utils/errorMessage'
 import { slugify } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'

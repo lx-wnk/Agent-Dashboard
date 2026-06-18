@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { Provider } from '../sdk.generated'
+import { computed } from 'vue'
 import { ProviderClaude, ProviderCodex, ProviderGemini } from '../sdk.generated'
 
 const props = defineProps<{ provider?: Provider | null }>()

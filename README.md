@@ -14,10 +14,9 @@ See every running agent at a glance — tokens, cost, status, tools, tasks, and 
 
 </div>
 
-<!--
-  TODO: hero screenshot — add docs/assets/hero.png and uncomment:
-  <p align="center"><img src="docs/assets/hero.png" alt="Agent Dashboard overview" width="900"></p>
--->
+<p align="center">
+  <img src="docs/assets/hero.png" alt="Agent Dashboard — live agent roster with permission triage band, per-agent cost, and system footer" width="900">
+</p>
 
 ## Why Agent Dashboard
 
@@ -33,26 +32,13 @@ Most agent monitors require you to wire hooks or wrappers into every project. Th
 
 ## Features
 
-**Monitoring**
-- Real-time agent view over SSE (list, card, and kanban layouts) with status, model, tokens, cost, and uptime
-- Chat-style session transcript with markdown rendering, collapsible tool groups, inline task checklists, and subagent badges
-- FTS5 spotlight search (`Cmd+K`) across tasks and agents
-- N-gram pattern discovery surfacing common tool-use sequences
-- Historical session cost import with streaming progress
+**Monitor** — real-time agent roster over SSE (list, card, kanban) with tokens, cost, status, and uptime; chat-style transcript with collapsible tool groups and subagent badges; `Cmd+K` spotlight search and n-gram pattern discovery.
 
-**Control**
-- Send follow-up instructions and `/btw` interrupts to running agents via MCP channels
-- Spawn new agents with custom prompts, models, and system prompts from the UI
-- Multi-stage task pipeline (`concept → implementation → review → done`) with per-stage permission gates and parallel execution
-- Refinement chat to shape a concept before it enters implementation
-- Authenticated MCP endpoint (19 tools, 4 scopes) + scoped API key management
+**Build & control** — multi-stage task pipeline (`concept → implementation → review → done`) running in isolated git worktrees behind per-stage permission gates; spawn agents and send follow-ups or `/btw` interrupts via MCP channels; refinement chat to shape a concept first.
 
-**Integrations**
-- Web Push, webhook, email, and system notifications with per-event routing
-- Pluggable LLM adapters and sidecar plugins
-- Remote registrations to aggregate agents across machines
-- Memory browser for Claude agent memory files
-- Shell statusline (`scripts/statusline.py`), dark/light theme, PWA support
+**Extend** — authenticated MCP control plane with scoped tokens; in-dashboard `~/.claude` config explorer and git-worktree panel; frontend plugin slots and pluggable LLM adapters; Web Push, webhook, and email notifications.
+
+See [`docs/`](docs/README.md) for the full feature reference.
 
 ## Quickstart
 

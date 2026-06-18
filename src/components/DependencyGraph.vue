@@ -4,9 +4,9 @@ import { drag } from 'd3-drag'
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from 'd3-force'
 import { select } from 'd3-selection'
 import { onMounted, ref, watch } from 'vue'
-import { errorMessage } from '../utils/errorMessage'
 import { useTheme } from '../composables/useTheme'
 import { chartColors, paletteColor } from '../utils/chartColors'
+import { errorMessage } from '../utils/errorMessage'
 
 const props = defineProps<{ taskId: string }>()
 const emit = defineEmits<{ navigate: [taskId: string] }>()

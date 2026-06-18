@@ -16,7 +16,10 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleRetry() {
   if (retryTimer)
     return
-  retryTimer = setTimeout(() => { retryTimer = null; loadUser() }, 2000)
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    loadUser()
+  }, 2000)
 }
 
 async function loadUser(): Promise<void> {
