@@ -14,10 +14,9 @@ See every running agent at a glance — tokens, cost, status, tools, tasks, and 
 
 </div>
 
-<!--
-  TODO: hero screenshot — add docs/assets/hero.png and uncomment:
-  <p align="center"><img src="docs/assets/hero.png" alt="Agent Dashboard overview" width="900"></p>
--->
+<p align="center">
+  <img src="docs/assets/hero.png" alt="Agent Dashboard — live agent roster with permission triage band, per-agent cost, and system footer" width="900">
+</p>
 
 ## Why Agent Dashboard
 
@@ -51,6 +50,9 @@ Most agent monitors require you to wire hooks or wrappers into every project. Th
 - Web Push, webhook, email, and system notifications with per-event routing
 - Pluggable LLM adapters and sidecar plugins
 - Remote registrations to aggregate agents across machines
+- In-dashboard `~/.claude` config explorer — browse, edit, and save skills, slash commands, and memory files
+- Git worktree panel — create and remove worktrees for pipeline tasks directly from the UI
+- Frontend plugin slot framework — mount custom UI into named extension points (refinement, settings, and more)
 - Memory browser for Claude agent memory files
 - Shell statusline (`scripts/statusline.py`), dark/light theme, PWA support
 

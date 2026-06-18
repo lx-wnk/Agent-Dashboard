@@ -14,6 +14,15 @@ Preparing the first public release.
 
 ### Added
 
+- In-dashboard `~/.claude` config explorer — browse and edit skills, slash commands,
+  and memory files from the UI without leaving the dashboard (PR #190).
+- Git worktree panel — create and remove worktrees for pipeline tasks directly from
+  the task UI (PR #193).
+- Opt-in HTTP hook receiver (`/api/hooks/event`, `/api/hooks/pre-tool`) for
+  per-event agent rescans, gated by an auto-generated shared secret — keeps the
+  no-hooks default intact.
+- Frontend plugin slot framework — named extension points (`refinement`, `settings`,
+  and others) that sidecar plugins can mount custom UI into (PR #168).
 - Lean, front-door `README.md` and a structured `docs/` tree (configuration, MCP,
   agent control, security, statusline, architecture overview).
 - Release tooling: GoReleaser config + `release` workflow producing cross-compiled
