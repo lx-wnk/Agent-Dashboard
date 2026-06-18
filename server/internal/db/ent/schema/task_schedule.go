@@ -21,10 +21,10 @@ func (TaskSchedule) Fields() []ent.Field {
 		field.Bool("enabled").Default(true),
 
 		// Schedule definition.
-		field.String("nl_text").Optional().Nillable(),     // original natural-language phrase
-		field.String("cron_expr"),                          // validated 5-field cron
-		field.String("timezone").Default("UTC"),            // IANA tz name
-		field.String("catchup").Default("none"),            // none | once (post-downtime policy)
+		field.String("nl_text").Optional().Nillable(), // original natural-language phrase
+		field.String("cron_expr"),                     // validated 5-field cron
+		field.String("timezone").Default("UTC"),       // IANA tz name
+		field.String("catchup").Default("none"),       // none | once (post-downtime policy)
 
 		// Task template (mirrors repo.CreateTaskInput). The materializer derives a
 		// unique slug per fire from slug_prefix.

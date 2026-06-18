@@ -10,20 +10,20 @@ import (
 func TestTranslate_RuleBased(t *testing.T) {
 	n := NewNLCron(nil)
 	cases := map[string]string{
-		"every day at 9am":         "0 9 * * *",
-		"daily at 18:00":           "0 18 * * *",
-		"every weekday at 9am":     "0 9 * * 1-5",
-		"every monday at 8:30":     "30 8 * * 1",
-		"every hour":               "0 * * * *",
-		"hourly":                   "0 * * * *",
-		"every 15 minutes":         "*/15 * * * *",
-		"every 2 hours":            "0 */2 * * *",
-		"at midnight":              "0 0 * * *",
-		"at noon":                  "0 12 * * *",
-		"weekdays":                 "0 0 * * 1-5",
-		"every weekend":            "0 0 * * 0,6",
-		"every sunday at 11pm":     "0 23 * * 0",
-		"0 9 * * 1-5":              "0 9 * * 1-5", // raw cron passthrough
+		"every day at 9am":     "0 9 * * *",
+		"daily at 18:00":       "0 18 * * *",
+		"every weekday at 9am": "0 9 * * 1-5",
+		"every monday at 8:30": "30 8 * * 1",
+		"every hour":           "0 * * * *",
+		"hourly":               "0 * * * *",
+		"every 15 minutes":     "*/15 * * * *",
+		"every 2 hours":        "0 */2 * * *",
+		"at midnight":          "0 0 * * *",
+		"at noon":              "0 12 * * *",
+		"weekdays":             "0 0 * * 1-5",
+		"every weekend":        "0 0 * * 0,6",
+		"every sunday at 11pm": "0 23 * * 0",
+		"0 9 * * 1-5":          "0 9 * * 1-5", // raw cron passthrough
 	}
 	for phrase, want := range cases {
 		got, err := n.Translate(context.Background(), phrase)

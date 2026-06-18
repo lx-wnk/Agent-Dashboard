@@ -25,59 +25,59 @@ type TaskScheduleRepo interface {
 
 // CreateTaskScheduleInput carries the schedule definition plus its task template.
 type CreateTaskScheduleInput struct {
-	Name               string
-	Enabled            *bool
-	NLText             *string
-	CronExpr           string
-	Timezone           string
-	Catchup            string
-	SlugPrefix         string
-	Title              string
-	Description        *string
-	Cwd                string
-	SourceBranch       *string
-	TargetBranch       *string
-	Priority           string
-	CurrentStage       string
-	MaxIterations      int
-	TokenBudget        *int
-	CostBudgetCents    *int
+	Name                string
+	Enabled             *bool
+	NLText              *string
+	CronExpr            string
+	Timezone            string
+	Catchup             string
+	SlugPrefix          string
+	Title               string
+	Description         *string
+	Cwd                 string
+	SourceBranch        *string
+	TargetBranch        *string
+	Priority            string
+	CurrentStage        string
+	MaxIterations       int
+	TokenBudget         *int
+	CostBudgetCents     *int
 	StageTimeoutSeconds int
-	SilverBullet       bool
-	ProjectID          *string
-	SpawnerID          *string
-	PermissionTemplate *string
-	Metadata           map[string]any
-	UserID             *string
-	NextRunAt          *time.Time
+	SilverBullet        bool
+	ProjectID           *string
+	SpawnerID           *string
+	PermissionTemplate  *string
+	Metadata            map[string]any
+	UserID              *string
+	NextRunAt           *time.Time
 }
 
 // UpdateTaskScheduleInput patches schedule fields. Nil pointers leave a field
 // unchanged. Template fields and the cron definition can all be edited.
 type UpdateTaskScheduleInput struct {
-	Name               *string
-	Enabled            *bool
-	NLText             *string
-	CronExpr           *string
-	Timezone           *string
-	Catchup            *string
-	SlugPrefix         *string
-	Title              *string
-	Description        *string
-	Cwd                *string
-	SourceBranch       *string
-	TargetBranch       *string
-	Priority           *string
-	MaxIterations      *int
-	TokenBudget        *int
-	CostBudgetCents    *int
+	Name                *string
+	Enabled             *bool
+	NLText              *string
+	CronExpr            *string
+	Timezone            *string
+	Catchup             *string
+	SlugPrefix          *string
+	Title               *string
+	Description         *string
+	Cwd                 *string
+	SourceBranch        *string
+	TargetBranch        *string
+	Priority            *string
+	MaxIterations       *int
+	TokenBudget         *int
+	CostBudgetCents     *int
 	StageTimeoutSeconds *int
-	SilverBullet       *bool
-	ProjectID          *string
-	SpawnerID          *string
-	PermissionTemplate *string
-	Metadata           map[string]any
-	NextRunAt          *time.Time
+	SilverBullet        *bool
+	ProjectID           *string
+	SpawnerID           *string
+	PermissionTemplate  *string
+	Metadata            map[string]any
+	NextRunAt           *time.Time
 }
 
 // FireStateInput records the result of a fire: the spawned task and the next
