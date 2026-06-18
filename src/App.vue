@@ -55,6 +55,12 @@ const EditGateModal = defineAsyncComponent(() => import('./components/EditGateMo
 const { user, authEnabled, loaded, loadUser } = useUser()
 const { homedir, loadServerConfig } = useServerConfig()
 const showLogin = computed(() => authEnabled.value && !user.value)
+const loginPageRef = ref<InstanceType<typeof LoginPage> | null>(null)
+// Move focus to the login control when the auth gate appears (SC 2.4.3)
+watch(showLogin, (visible) => {
+  if (visible)
+    nextTick(() => loginPageRef.value?.focusLogin())
+})
 const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
@@ -336,7 +342,7 @@ onMounted(fetchQuota)
 </script>
 
 <template>
-  <LoginPage v-if="loaded && showLogin" />
+  <LoginPage v-if="loaded && showLogin" ref="loginPageRef" />
   <div v-else-if="loaded">
     <AppShell>
       <template #sidebar>
