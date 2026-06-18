@@ -2,12 +2,13 @@
 import type { Agent, OutputMessage } from '../types'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
+import { usePermissionResolve } from '../composables/usePermissionResolve'
+import { useRovingTabList } from '../composables/useRovingTabList'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
-// Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
-const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
 import MachineBadge from './MachineBadge.vue'
+import PluginSlot from './PluginSlot.vue'
 import PromptInput from './PromptInput.vue'
 import SubAgentList from './SubAgentList.vue'
 import TaskList from './TaskList.vue'
@@ -15,19 +16,39 @@ import ToolTimeline from './ToolTimeline.vue'
 import AppBadge from './ui/AppBadge.vue'
 import AppModal from './ui/AppModal.vue'
 
-type DetailsTab = 'details' | 'waterfall'
-
 const props = defineProps<{ agent: Agent | null }>()
-const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
+
+const emit = defineEmits<{ close: [], navigate: [taskId: string], toast: [message: string] }>()
+
+// Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
+const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
 
 const localMessages = ref<OutputMessage[]>([])
-const activeDetailsTab = ref<DetailsTab>('details')
+const { activeTab: activeDetailsTab, tabAttrs, panelAttrs, onKeydown, select } = useRovingTabList(
+  ['details', 'waterfall'],
+  { idPrefix: 'agent-details' },
+)
 const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
 const chatStreamRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
 
 const { getIdentity } = useAgentIdentity()
+const { resolveAgent } = usePermissionResolve()
 
 const totalTokens = computed(() => props.agent ? totalTokenCount(props.agent.tokenUsage) : 0)
+
+async function handleApprove() {
+  if (!props.agent)
+    return
+  const err = await resolveAgent(props.agent, 'granted')
+  if (err)
+    emit('toast', err)
+}
+
+const approveHandler = computed(() =>
+  props.agent?.pipelineTaskId && props.agent?.pendingPermissions?.length
+    ? handleApprove
+    : null,
+)
 
 function onMessageSent(msg: OutputMessage) {
   localMessages.value.push(msg)
@@ -53,7 +74,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
           <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
           <span :id="`agent-modal-title-${agent.pid}`" class="font-semibold text-sm text-fg">{{ agent.projectName }}</span>
           <MachineBadge v-if="agent.machine" :machine="agent.machine" />
-          <span class="text-[11px] text-fg-mute whitespace-nowrap">{{ shortModel(agent.model ?? null) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
+          <span class="text-[11px] font-mono text-fg-mute whitespace-nowrap">{{ shortModel(agent.model ?? null) }} · {{ formatCost(agent.costEstimate) }} · {{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
         </div>
         <button type="button" aria-label="Close" class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg" @click="emit('close')">
           ✕
@@ -77,29 +98,31 @@ watch(() => props.agent?.sessionId, (sessionId) => {
           <summary class="px-4 py-2 text-xs text-fg-mute cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400">
             Agent Details (Tasks, Tools, Subagents)
           </summary>
-          <div class="flex gap-0 px-4 pt-2 border-b border-line">
+          <div role="tablist" aria-label="Agent details" class="flex gap-0 px-4 pt-2 border-b border-line" @keydown="onKeydown">
             <button
+              v-bind="tabAttrs('details')"
               type="button"
               class="px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors"
               :class="activeDetailsTab === 'details'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-fg-mute hover:text-fg-soft'"
-              @click="activeDetailsTab = 'details'"
+              @click="select('details')"
             >
               Details
             </button>
             <button
+              v-bind="tabAttrs('waterfall')"
               type="button"
               class="px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors"
               :class="activeDetailsTab === 'waterfall'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-fg-mute hover:text-fg-soft'"
-              @click="activeDetailsTab = 'waterfall'"
+              @click="select('waterfall')"
             >
               Waterfall
             </button>
           </div>
-          <div v-if="activeDetailsTab === 'details'" class="px-4 pb-3 pt-2 flex flex-col gap-3 max-h-[200px] overflow-y-auto">
+          <div v-if="activeDetailsTab === 'details'" v-bind="panelAttrs('details')" class="px-4 pb-3 pt-2 flex flex-col gap-3 max-h-[200px] overflow-y-auto">
             <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
             <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
             <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
@@ -138,12 +161,13 @@ watch(() => props.agent?.sessionId, (sessionId) => {
               </dd>
             </dl>
           </div>
-          <div v-if="activeDetailsTab === 'waterfall'" class="max-h-[300px] overflow-y-auto">
+          <div v-if="activeDetailsTab === 'waterfall'" v-bind="panelAttrs('waterfall')" class="max-h-[300px] overflow-y-auto">
             <ExecutionWaterfall :session-id="agent.sessionId" />
           </div>
         </details>
       </div>
-      <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" @message-sent="onMessageSent" />
+      <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" :approve-handler="approveHandler" @message-sent="onMessageSent" />
+      <PluginSlot name="agent-modal-footer" :ctx="{ agent }" />
     </template>
   </AppModal>
 </template>

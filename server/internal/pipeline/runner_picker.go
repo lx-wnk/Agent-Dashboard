@@ -135,4 +135,3 @@ func shouldSwap(a, b *ent.Task, priorityRank map[string]int, stageIdx func(strin
 	}
 	return a.CreatedAt.After(b.CreatedAt) // b is older — b should come first
 }
-

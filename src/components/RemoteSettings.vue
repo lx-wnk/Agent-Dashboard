@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRemotes } from '../composables/useRemotes'
+import { errorMessage } from '../utils/errorMessage'
 
 const { remotes, error, addRemote, removeRemote } = useRemotes()
 
@@ -17,7 +18,7 @@ async function add() {
     form.value = { url: '', name: '', bearerKey: '' }
   }
   catch (e) {
-    error.value = (e as Error).message
+    error.value = errorMessage(e)
   }
   finally {
     saving.value = false
@@ -31,10 +32,10 @@ async function remove(id: string) {
 
 <template>
   <div class="flex flex-col gap-4">
-    <h3 class="text-sm font-semibold text-text-primary">
+    <h3 class="text-sm font-semibold text-fg">
       My Local Dashboard Instances
     </h3>
-    <p class="text-xs text-text-muted">
+    <p class="text-xs text-fg-mute">
       Register your local dashboard instance so your local Claude sessions show up here. The local instance must be reachable over the network.
     </p>
 
@@ -42,13 +43,13 @@ async function remove(id: string) {
       <div
         v-for="r in remotes"
         :key="r.id"
-        class="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-bg-surface text-sm"
+        class="flex items-center justify-between p-3 rounded-lg border border-line bg-card text-sm"
       >
         <div>
-          <div class="font-medium text-text-primary">
+          <div class="font-medium text-fg">
             {{ r.name ?? r.url }}
           </div>
-          <div v-if="r.name" class="text-xs text-text-muted">
+          <div v-if="r.name" class="text-xs text-fg-mute">
             {{ r.url }}
           </div>
           <span
@@ -67,7 +68,7 @@ async function remove(id: string) {
         </button>
       </div>
     </div>
-    <p v-else class="text-xs text-text-muted">
+    <p v-else class="text-xs text-fg-mute">
       No registrations.
     </p>
 
@@ -79,7 +80,7 @@ async function remove(id: string) {
         type="url"
         placeholder="http://192.168.1.5:13120"
         required
-        class="input-field text-sm"
+        class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
       >
       <label for="remote-name" class="sr-only">Name</label>
       <input
@@ -87,7 +88,7 @@ async function remove(id: string) {
         v-model="form.name"
         type="text"
         placeholder="Name (e.g. MacBook)"
-        class="input-field text-sm"
+        class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
       >
       <label for="remote-bearer" class="sr-only">Bearer Token</label>
       <input
@@ -95,7 +96,7 @@ async function remove(id: string) {
         v-model="form.bearerKey"
         type="password"
         placeholder="DASHBOARD_API_TOKEN (optional)"
-        class="input-field text-sm"
+        class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
       >
       <p v-if="error" class="text-xs text-red-400">
         {{ error }}

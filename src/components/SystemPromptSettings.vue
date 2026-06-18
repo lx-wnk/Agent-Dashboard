@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
@@ -45,7 +46,7 @@ async function fetchPrompts() {
     prompts.value = await res.json()
   }
   catch (e) {
-    loadError.value = e instanceof Error ? e.message : 'Failed to load'
+    loadError.value = errorMessage(e, 'Failed to load')
   }
   finally {
     loading.value = false
@@ -111,7 +112,7 @@ async function save() {
     await fetchPrompts()
   }
   catch (e) {
-    saveError.value = e instanceof Error ? e.message : 'Save failed'
+    saveError.value = errorMessage(e, 'Save failed')
   }
   finally {
     saving.value = false
@@ -127,7 +128,7 @@ async function deletePrompt(id: string) {
     await fetchPrompts()
   }
   catch (e) {
-    loadError.value = e instanceof Error ? e.message : 'Delete failed'
+    loadError.value = errorMessage(e, 'Delete failed')
   }
 }
 
@@ -156,7 +157,7 @@ onMounted(fetchPrompts)
       </AppButton>
     </div>
 
-    <p v-if="loadError" class="text-xs text-red-600 dark:text-red-400 mb-3">
+    <p v-if="loadError" class="text-xs text-danger-text mb-3">
       {{ loadError }}
     </p>
 
@@ -247,7 +248,7 @@ onMounted(fetchPrompts)
           <select
             id="sp-stage"
             v-model="form.stage"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
           >
             <option v-for="s in STAGES" :key="s" :value="s">
               {{ s === '' ? 'All stages' : s.replace(/_/g, ' ') }}
@@ -262,7 +263,7 @@ onMounted(fetchPrompts)
             id="sp-priority"
             v-model.number="form.priority"
             type="number"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
           >
         </div>
         <div class="flex flex-col gap-1">
@@ -274,10 +275,10 @@ onMounted(fetchPrompts)
             v-model="form.content"
             rows="8"
             placeholder="Enter custom system prompt text…"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500 font-mono resize-y"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent font-mono resize-y"
           />
         </div>
-        <p v-if="saveError" class="text-xs text-red-600 dark:text-red-400">
+        <p v-if="saveError" class="text-xs text-danger-text">
           {{ saveError }}
         </p>
       </form>

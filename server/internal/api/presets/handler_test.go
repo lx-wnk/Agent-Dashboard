@@ -154,4 +154,3 @@ func setupBypassAuthHandler(t *testing.T) (*presets.Handler, *chi.Mux) {
 	h.Mount(mux)
 	return h, mux
 }
-

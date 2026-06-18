@@ -78,6 +78,20 @@ func (_c *TaskPermissionCreate) SetNillablePreApproved(v *bool) *TaskPermissionC
 	return _c
 }
 
+// SetManualOverride sets the "manual_override" field.
+func (_c *TaskPermissionCreate) SetManualOverride(v bool) *TaskPermissionCreate {
+	_c.mutation.SetManualOverride(v)
+	return _c
+}
+
+// SetNillableManualOverride sets the "manual_override" field if the given value is not nil.
+func (_c *TaskPermissionCreate) SetNillableManualOverride(v *bool) *TaskPermissionCreate {
+	if v != nil {
+		_c.SetManualOverride(*v)
+	}
+	return _c
+}
+
 // SetDecidedBy sets the "decided_by" field.
 func (_c *TaskPermissionCreate) SetDecidedBy(v string) *TaskPermissionCreate {
 	_c.mutation.SetDecidedBy(v)
@@ -188,6 +202,10 @@ func (_c *TaskPermissionCreate) defaults() {
 		v := taskpermission.DefaultPreApproved
 		_c.mutation.SetPreApproved(v)
 	}
+	if _, ok := _c.mutation.ManualOverride(); !ok {
+		v := taskpermission.DefaultManualOverride
+		_c.mutation.SetManualOverride(v)
+	}
 	if _, ok := _c.mutation.RequestedAt(); !ok {
 		v := taskpermission.DefaultRequestedAt()
 		_c.mutation.SetRequestedAt(v)
@@ -207,6 +225,9 @@ func (_c *TaskPermissionCreate) check() error {
 	}
 	if _, ok := _c.mutation.PreApproved(); !ok {
 		return &ValidationError{Name: "pre_approved", err: errors.New(`ent: missing required field "TaskPermission.pre_approved"`)}
+	}
+	if _, ok := _c.mutation.ManualOverride(); !ok {
+		return &ValidationError{Name: "manual_override", err: errors.New(`ent: missing required field "TaskPermission.manual_override"`)}
 	}
 	if _, ok := _c.mutation.RequestedAt(); !ok {
 		return &ValidationError{Name: "requested_at", err: errors.New(`ent: missing required field "TaskPermission.requested_at"`)}
@@ -265,6 +286,10 @@ func (_c *TaskPermissionCreate) createSpec() (*TaskPermission, *sqlgraph.CreateS
 	if value, ok := _c.mutation.PreApproved(); ok {
 		_spec.SetField(taskpermission.FieldPreApproved, field.TypeBool, value)
 		_node.PreApproved = value
+	}
+	if value, ok := _c.mutation.ManualOverride(); ok {
+		_spec.SetField(taskpermission.FieldManualOverride, field.TypeBool, value)
+		_node.ManualOverride = value
 	}
 	if value, ok := _c.mutation.DecidedBy(); ok {
 		_spec.SetField(taskpermission.FieldDecidedBy, field.TypeString, value)
@@ -402,6 +427,18 @@ func (u *TaskPermissionUpsert) SetPreApproved(v bool) *TaskPermissionUpsert {
 // UpdatePreApproved sets the "pre_approved" field to the value that was provided on create.
 func (u *TaskPermissionUpsert) UpdatePreApproved() *TaskPermissionUpsert {
 	u.SetExcluded(taskpermission.FieldPreApproved)
+	return u
+}
+
+// SetManualOverride sets the "manual_override" field.
+func (u *TaskPermissionUpsert) SetManualOverride(v bool) *TaskPermissionUpsert {
+	u.Set(taskpermission.FieldManualOverride, v)
+	return u
+}
+
+// UpdateManualOverride sets the "manual_override" field to the value that was provided on create.
+func (u *TaskPermissionUpsert) UpdateManualOverride() *TaskPermissionUpsert {
+	u.SetExcluded(taskpermission.FieldManualOverride)
 	return u
 }
 
@@ -582,6 +619,20 @@ func (u *TaskPermissionUpsertOne) SetPreApproved(v bool) *TaskPermissionUpsertOn
 func (u *TaskPermissionUpsertOne) UpdatePreApproved() *TaskPermissionUpsertOne {
 	return u.Update(func(s *TaskPermissionUpsert) {
 		s.UpdatePreApproved()
+	})
+}
+
+// SetManualOverride sets the "manual_override" field.
+func (u *TaskPermissionUpsertOne) SetManualOverride(v bool) *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetManualOverride(v)
+	})
+}
+
+// UpdateManualOverride sets the "manual_override" field to the value that was provided on create.
+func (u *TaskPermissionUpsertOne) UpdateManualOverride() *TaskPermissionUpsertOne {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateManualOverride()
 	})
 }
 
@@ -940,6 +991,20 @@ func (u *TaskPermissionUpsertBulk) SetPreApproved(v bool) *TaskPermissionUpsertB
 func (u *TaskPermissionUpsertBulk) UpdatePreApproved() *TaskPermissionUpsertBulk {
 	return u.Update(func(s *TaskPermissionUpsert) {
 		s.UpdatePreApproved()
+	})
+}
+
+// SetManualOverride sets the "manual_override" field.
+func (u *TaskPermissionUpsertBulk) SetManualOverride(v bool) *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.SetManualOverride(v)
+	})
+}
+
+// UpdateManualOverride sets the "manual_override" field to the value that was provided on create.
+func (u *TaskPermissionUpsertBulk) UpdateManualOverride() *TaskPermissionUpsertBulk {
+	return u.Update(func(s *TaskPermissionUpsert) {
+		s.UpdateManualOverride()
 	})
 }
 

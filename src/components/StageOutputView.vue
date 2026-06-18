@@ -115,7 +115,7 @@ function shortPath(full: string): string {
               class="font-mono text-[10px] px-1.5 py-px rounded font-semibold"
               :class="pretty.passed
                 ? 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400'
-                : 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400'"
+                : 'bg-red-50 dark:bg-red-950/50 text-danger-text'"
             >
               {{ pretty.passed ? '✓ PASSED' : '✗ FAILED' }}
             </code>
@@ -190,7 +190,7 @@ function shortPath(full: string): string {
     <template v-else>
       <!-- Error banner -->
       <div v-if="outputError" class="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 px-3 py-2.5 mb-2">
-        <div class="text-[10px] font-semibold uppercase tracking-wider text-red-500 dark:text-red-400 mb-1">
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-danger-text mb-1">
           Stage error
         </div>
         <p class="text-xs text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">

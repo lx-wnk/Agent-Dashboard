@@ -47,9 +47,39 @@ type diskInfo struct {
 	Mount        string  `json:"mount"`
 }
 
+// sysInfoCacheTTL bounds how long a collected SystemInfo snapshot is reused.
+// Rapid /api/system polls (multiple tabs, short intervals) within this window are
+// served from cache instead of re-forking ~7 subprocesses each time.
+const sysInfoCacheTTL = 2 * time.Second
+
+var (
+	siMu       sync.Mutex
+	siCache    SystemInfo
+	siCachedAt time.Time
+	siHasCache bool
+	// Injectable for tests.
+	siCollect = collectSystemInfo
+	siNow     = time.Now
+)
+
+// cachedSystemInfo returns a recent SystemInfo, recomputing only when the cache is
+// empty or older than sysInfoCacheTTL.
+func cachedSystemInfo() SystemInfo {
+	siMu.Lock()
+	defer siMu.Unlock()
+	now := siNow()
+	if siHasCache && now.Sub(siCachedAt) < sysInfoCacheTTL {
+		return siCache
+	}
+	siCache = siCollect()
+	siCachedAt = now
+	siHasCache = true
+	return siCache
+}
+
 // System handles GET /api/system/system.
 func System(w http.ResponseWriter, r *http.Request) {
-	info := collectSystemInfo()
+	info := cachedSystemInfo()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(info)
 }
@@ -88,10 +118,27 @@ func collectSystemInfo() SystemInfo {
 	}
 }
 
+// CPU model and core count are immutable for the process lifetime, so they are
+// resolved once via sync.Once. This keeps the per-collect cost to the usage probe
+// alone — the macOS path otherwise forks `sysctl machdep.cpu.brand_string` on
+// every cache-miss recompute for a value that never changes.
+var (
+	cpuStaticOnce  sync.Once
+	staticCPUModel string
+	staticCPUCores int
+)
+
+func cpuStatic() (string, int) {
+	cpuStaticOnce.Do(func() {
+		staticCPUModel = getCPUModel()
+		staticCPUCores = runtime.NumCPU()
+	})
+	return staticCPUModel, staticCPUCores
+}
+
 func getCPUInfo() cpuInfo {
-	model := getCPUModel()
-	usage := getCPUUsage()
-	return cpuInfo{Usage: usage, Cores: runtime.NumCPU(), Model: model}
+	model, cores := cpuStatic()
+	return cpuInfo{Usage: getCPUUsage(), Cores: cores, Model: model}
 }
 
 func getCPUModel() string {

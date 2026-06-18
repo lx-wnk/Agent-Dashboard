@@ -71,11 +71,10 @@ describe('useAgents', () => {
     wrapper.unmount()
   })
 
-  it('exposes filteredAgents, searchQuery and hideNonClaude refs', async () => {
+  it('exposes filteredAgents and searchQuery refs', async () => {
     const { result, wrapper } = withSetup(() => useAgents.useAgents({ autoStart: false }))
     expect(result.filteredAgents).toBeDefined()
     expect(result.searchQuery).toBeDefined()
-    expect(result.hideNonClaude).toBeDefined()
     wrapper.unmount()
   })
 

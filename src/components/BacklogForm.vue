@@ -5,10 +5,12 @@ import { suggestFolders } from '../composables/useProjectFolders'
 import { useProjects } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
 import { createTask } from '../composables/useTasks'
+import { errorMessage } from '../utils/errorMessage'
 import { slugify } from '../utils/validation'
 import PermissionTemplatePicker from './PermissionTemplatePicker.vue'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 import AppButton from './ui/AppButton.vue'
+import AppFieldLabel from './ui/AppFieldLabel.vue'
 import AppInput from './ui/AppInput.vue'
 
 const emit = defineEmits<{
@@ -33,7 +35,7 @@ const folderSuggestions = ref<ProjectFolder[]>([])
 const isSubmitting = ref(false)
 const errorMsg = ref('')
 
-const fieldClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-blue-500'
+const fieldClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
 
 const sortedProjects = computed(() =>
   projects.value.slice().sort((a, b) => a.name.localeCompare(b.name)),
@@ -123,7 +125,7 @@ async function buildTask(): Promise<PipelineTask | null> {
     })
   }
   catch (err: unknown) {
-    errorMsg.value = err instanceof Error ? err.message : 'Failed to create task'
+    errorMsg.value = errorMessage(err, 'Failed to create task')
     return null
   }
   finally {
@@ -141,7 +143,7 @@ async function onCreateAndRefine(): Promise<void> {
 <template>
   <form data-testid="backlog-form" class="space-y-4" @submit.prevent="onCreateAndRefine">
     <div class="flex flex-col gap-1">
-      <label for="backlog-project" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Project</label>
+      <AppFieldLabel for="backlog-project">Project</AppFieldLabel>
       <select
         id="backlog-project"
         v-model="projectChoice"
@@ -170,61 +172,62 @@ async function onCreateAndRefine(): Promise<void> {
     </div>
 
     <div class="flex flex-col gap-1">
-      <label for="details-title" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Title</label>
-      <input
+      <AppFieldLabel for="details-title">Title</AppFieldLabel>
+      <AppInput
         id="details-title"
         data-testid="details-title"
-        :value="title"
+        :model-value="title"
         placeholder="What should the agent do?"
-        :class="fieldClass"
         @input="onTitleInput"
-      >
+      />
     </div>
 
     <div class="flex flex-col gap-1">
-      <label for="details-slug" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Slug</label>
-      <input
+      <AppFieldLabel for="details-slug">Slug</AppFieldLabel>
+      <AppInput
         id="details-slug"
         data-testid="details-slug"
-        :value="slug"
+        :model-value="slug"
         placeholder="task-slug"
-        :class="fieldClass"
+        class="font-mono"
         @input="onSlugInput"
-      >
+      />
     </div>
 
     <AppInput v-model="description" type="textarea" :rows="3" label="Description" placeholder="Additional context (optional)" />
 
-    <div class="flex flex-col gap-1">
-      <label for="details-priority" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Priority</label>
-      <select id="details-priority" v-model="priority" :class="fieldClass">
-        <option value="high">
-          High
-        </option>
-        <option value="medium">
-          Medium
-        </option>
-        <option value="low">
-          Low
-        </option>
-      </select>
-    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1">
+        <AppFieldLabel for="details-priority">Priority</AppFieldLabel>
+        <select id="details-priority" v-model="priority" :class="fieldClass">
+          <option value="high">
+            High
+          </option>
+          <option value="medium">
+            Medium
+          </option>
+          <option value="low">
+            Low
+          </option>
+        </select>
+      </div>
 
-    <div class="flex flex-col gap-1">
-      <label for="details-spawner" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Spawner</label>
-      <select id="details-spawner" v-model="selectedSpawnerId" :class="fieldClass">
-        <option value="">
-          {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
-        </option>
-        <option v-for="s in spawners" :key="s.id" :value="s.id">
-          {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
-        </option>
-      </select>
+      <div class="flex flex-col gap-1">
+        <AppFieldLabel for="details-spawner">Spawner</AppFieldLabel>
+        <select id="details-spawner" v-model="selectedSpawnerId" :class="fieldClass">
+          <option value="">
+            {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
+          </option>
+          <option v-for="s in spawners" :key="s.id" :value="s.id">
+            {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
+          </option>
+        </select>
+      </div>
     </div>
 
     <PermissionTemplatePicker v-model="selectedTemplate" />
 
-    <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400">
+    <p v-if="errorMsg" class="text-xs text-danger-text">
       {{ errorMsg }}
     </p>
 

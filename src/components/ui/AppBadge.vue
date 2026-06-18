@@ -4,24 +4,24 @@ import { statusLabel } from '../../utils/statusColors'
 
 type Variant = 'active' | 'waiting' | 'idle' | 'completed' | 'error' | 'info'
 
-const props = defineProps<{ variant: Variant; label?: string }>()
+const props = defineProps<{ variant: Variant, label?: string }>()
 
 const dotClass: Record<Variant, string> = {
-  active: 'bg-green-400 dark:bg-green-400',
-  waiting: 'bg-yellow-600 dark:bg-yellow-400',
+  active: 'bg-success-dot',
+  waiting: 'bg-warning-dot',
   idle: 'bg-slate-400 dark:bg-slate-500',
   completed: 'bg-slate-400 dark:bg-slate-500',
-  error: 'bg-red-400 dark:bg-red-400',
-  info: 'bg-blue-400 dark:bg-blue-400',
+  error: 'bg-danger-dot',
+  info: 'bg-info-dot',
 }
 
 const labelClass: Record<Variant, string> = {
-  active: 'text-green-600 dark:text-green-400',
-  waiting: 'text-yellow-700 dark:text-yellow-400',
+  active: 'text-success-text',
+  waiting: 'text-warning-text',
   idle: 'text-fg-mute',
   completed: 'text-fg-mute',
-  error: 'text-red-600 dark:text-red-400',
-  info: 'text-blue-600 dark:text-blue-400',
+  error: 'text-danger-text',
+  info: 'text-info-text',
 }
 
 const displayLabel = computed(() => props.label ?? statusLabel(props.variant))

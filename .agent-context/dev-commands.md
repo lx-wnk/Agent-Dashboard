@@ -9,9 +9,8 @@ task dev:frontend  # Vite dev server only (HMR on :5173)
 task build         # Compile binary → bin/agent-dashboard
 task test          # Run all tests (sdk + server, race detector)
 task lint          # golangci-lint (sdk + server)
-task generate      # Regenerate Wire DI + ent schemas
+task generate      # Regenerate ent schemas + tygo TS types (no DI codegen — DI is hand-written in cmd/serve/di.go)
 task fmt           # gofmt all Go code
-task wire          # Regenerate Wire DI only
 task vuln          # govulncheck
 ```
 

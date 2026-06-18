@@ -3,6 +3,7 @@ import type { ApiKey, McpScope } from '../types'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
+import { errorMessage } from '../utils/errorMessage'
 import { useServerConfig } from '../composables/useServerConfig'
 import { maskToken } from '../utils/format'
 import { buildMcpAddCommand, buildMcpJsonConfig } from '../utils/mcpCommand'
@@ -88,7 +89,7 @@ async function loadKeys() {
     keys.value = await res.json()
   }
   catch (e) {
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
   }
   finally {
     isLoading.value = false
@@ -111,7 +112,7 @@ async function loadPresets() {
     presets.value = await res.json()
   }
   catch (e) {
-    presetsError.value = e instanceof Error ? e.message : 'Failed to load'
+    presetsError.value = errorMessage(e, 'Failed to load')
   }
   finally {
     presetsLoading.value = false
@@ -131,7 +132,7 @@ async function resetPresets(cwd: string) {
     await loadPresets()
   }
   catch (e) {
-    presetsError.value = e instanceof Error ? e.message : 'Failed to reset'
+    presetsError.value = errorMessage(e, 'Failed to reset')
   }
 }
 
@@ -159,7 +160,7 @@ async function loadPatterns() {
     patterns.value = data.patterns
   }
   catch (e) {
-    patternsError.value = e instanceof Error ? e.message : 'Failed to load'
+    patternsError.value = errorMessage(e, 'Failed to load')
   }
 }
 
@@ -173,7 +174,7 @@ async function refreshPatterns() {
     await loadPatterns()
   }
   catch (e) {
-    patternsError.value = e instanceof Error ? e.message : 'Failed to refresh'
+    patternsError.value = errorMessage(e, 'Failed to refresh')
   }
   finally {
     patternsLoading.value = false
@@ -217,7 +218,7 @@ async function revokeKey(key: ApiKey) {
   }
   catch (e) {
     key.active = true
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
   }
 }
 
@@ -241,7 +242,7 @@ async function regenerateKey(key: ApiKey) {
     revealedScopes.value = data.key.scopes
   }
   catch (e) {
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
   }
   finally {
     isRegenerating.value = false
@@ -291,7 +292,7 @@ async function handleCreate() {
     closeCreateDialog()
   }
   catch (e) {
-    createError.value = (e as Error).message
+    createError.value = errorMessage(e)
   }
   finally {
     isCreating.value = false
@@ -383,7 +384,7 @@ async function startImport() {
 
 <template>
   <AppModal :open="open" size="auto" @close="emit('close')">
-    <div class="bg-card rounded-xl border border-line shadow-[0_8px_40px_rgba(0,0,0,0.5)] w-[975px] max-w-[calc(100vw-2rem)] h-[700px] max-h-[85vh] flex overflow-hidden">
+    <div class="bg-card rounded-xl border border-line shadow-modal w-[975px] max-w-[calc(100vw-2rem)] h-[700px] max-h-[85vh] flex overflow-hidden">
       <!-- ── Sidebar ──────────────────────────────── -->
       <nav class="w-[260px] flex-shrink-0 bg-app border-r border-line px-3 py-5 flex flex-col">
         <div class="flex items-center justify-between px-1 pb-1 mb-2">
@@ -431,7 +432,7 @@ async function startImport() {
               :aria-current="activeSection === 'remotes' ? 'page' : undefined"
               @click="activeSection = 'remotes'"
             >
-              <span class="text-sm flex-shrink-0">⌂</span> Meine Remotes
+              <span class="text-sm flex-shrink-0">⌂</span> My Remotes
             </button>
           </li>
           <li>
@@ -557,8 +558,8 @@ async function startImport() {
               type="button"
               class="w-40 border-2 rounded-lg overflow-hidden cursor-pointer bg-transparent p-0 transition-all font-sans"
               :class="themePref === opt.value
-                ? 'border-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]'
-                : 'border-line hover:border-blue-400'"
+                ? 'border-accent shadow-[0_0_0_3px_var(--accent-soft)]'
+                : 'border-line hover:border-accent'"
               :aria-label="opt.value === 'dark' ? `${opt.label} (keyboard shortcut: Shift+D)` : opt.label"
               :aria-pressed="themePref === opt.value"
               @click="setTheme(opt.value)"
@@ -617,7 +618,7 @@ async function startImport() {
                 </div>
               </div>
               <div class="px-2.5 py-2 text-xs font-medium text-fg-mute border-t border-line flex items-center gap-1.5 bg-card">
-                <span class="w-3.5 text-blue-500 font-bold text-[13px]">{{ themePref === opt.value ? '✓' : '' }}</span>
+                <span class="w-3.5 text-accent font-bold text-[13px]">{{ themePref === opt.value ? '✓' : '' }}</span>
                 {{ opt.label }}
               </div>
             </button>
@@ -639,7 +640,7 @@ async function startImport() {
               + Add Key
             </AppButton>
           </div>
-          <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mb-3">
+          <p v-if="errorMsg" class="text-xs text-danger-text mb-3">
             {{ errorMsg }}
           </p>
           <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
@@ -688,7 +689,7 @@ async function startImport() {
                   {{ formatDate(key.lastUsedAt) }}
                 </td>
                 <td class="px-3 py-2.5 border-b border-line">
-                  <span v-if="key.active" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400">Active</span>
+                  <span v-if="key.active" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text">Active</span>
                   <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute">Revoked</span>
                 </td>
                 <td class="px-3 py-2.5 border-b border-line">
@@ -756,7 +757,7 @@ async function startImport() {
           <div v-if="presetsLoading" class="text-center py-12 text-fg-mute text-sm">
             Loading...
           </div>
-          <p v-else-if="presetsError" class="text-xs text-red-600 dark:text-red-400 mb-3">
+          <p v-else-if="presetsError" class="text-xs text-danger-text mb-3">
             {{ presetsError }}
           </p>
           <div v-else-if="presets.length === 0" class="text-center py-8 text-fg-mute text-sm">
@@ -835,7 +836,7 @@ async function startImport() {
           <p class="text-xs text-fg-mute mb-5">
             Top 3-tool sequences discovered across all sessions.
           </p>
-          <p v-if="patternsError" class="text-xs text-red-500 mb-3">
+          <p v-if="patternsError" class="text-xs text-danger-text mb-3">
             {{ patternsError }}
           </p>
           <div v-else-if="patterns.length === 0" class="text-sm text-fg-mute">
@@ -875,7 +876,7 @@ async function startImport() {
 
     <!-- Create key dialog -->
     <AppModal :open="showCreateDialog" size="auto" :z-index="300" labelled-by="create-key-dialog-title" @close="closeCreateDialog">
-      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-modal">
         <header class="flex justify-between items-center px-5 py-4 border-b border-line">
           <h2 id="create-key-dialog-title" class="text-lg font-semibold text-fg">
             Create API Key
@@ -890,7 +891,7 @@ async function startImport() {
             <input
               id="key-name"
               v-model="newKeyName"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
               type="text"
               required
               placeholder="e.g. CI pipeline key"
@@ -902,7 +903,7 @@ async function startImport() {
             <select
               id="key-group"
               v-model="newKeyGroup"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             >
               <option value="viewer">
                 Viewer — tasks:read
@@ -918,7 +919,7 @@ async function startImport() {
               </option>
             </select>
           </div>
-          <p v-if="createError" class="text-xs text-red-600 dark:text-red-400 mb-2">
+          <p v-if="createError" class="text-xs text-danger-text mb-2">
             {{ createError }}
           </p>
         </form>
@@ -935,33 +936,29 @@ async function startImport() {
 
     <!-- Token reveal dialog -->
     <AppModal :open="!!revealedToken" size="auto" :z-index="300" labelled-by="token-reveal-dialog-title" @close="dismissReveal">
-      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+      <div class="bg-card border border-line rounded-xl w-full max-w-[480px] max-h-[90vh] overflow-y-auto shadow-modal">
         <header class="flex justify-between items-center px-5 py-4 border-b border-line">
           <h2 id="token-reveal-dialog-title" class="text-lg font-semibold text-fg">
             Your new API key
           </h2>
+          <button type="button" aria-label="Close" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent rounded" @click="dismissReveal">
+            ✕
+          </button>
         </header>
         <div class="p-5">
           <p class="text-[13px] text-fg-mute mb-3">
-            Save this token now — it will <strong class="text-amber-700 dark:text-yellow-400">never be shown again</strong>.
+            Save this token now — it will <strong class="text-warning-text">never be shown again</strong>.
           </p>
-          <div class="relative font-mono text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 p-3 pr-10 rounded border border-green-200 dark:border-green-800/50 break-all mb-3">
+          <div class="relative font-mono text-xs bg-success-soft text-success-text p-3 pr-10 rounded border border-success-line break-all mb-3">
             {{ tokenVisible ? revealedToken : maskToken(revealedToken ?? '') }}
             <button
               type="button"
-              class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 text-green-500 transition-colors"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:brightness-105 text-success-text transition-[filter]"
               :aria-label="tokenVisible ? 'Hide token' : 'Show token'"
               :aria-pressed="tokenVisible"
               @click="tokenVisible = !tokenVisible"
             >
-              <svg v-if="tokenVisible" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                <line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
+              <span aria-hidden="true" class="text-sm leading-none">{{ tokenVisible ? 'Hide' : 'Show' }}</span>
             </button>
           </div>
           <div class="flex justify-end">
@@ -976,7 +973,7 @@ async function startImport() {
             <p class="text-[13px] text-fg-mute mb-1">
               {{ canAuthorTasks ? "Connect a Claude Code session to this dashboard's task tools:" : "Connect a Claude Code session (this key has read-only access to task tools):" }}
             </p>
-            <p v-if="!canAuthorTasks" class="text-[11px] text-amber-700 dark:text-yellow-400 mb-3">
+            <p v-if="!canAuthorTasks" class="text-[11px] text-warning-text mb-3">
               Read-only key — creating or refining tasks needs the Developer or Admin role.
             </p>
 
@@ -992,19 +989,13 @@ async function startImport() {
                 {{ b.value }}
                 <button
                   type="button"
-                  class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                  class="absolute right-1.5 top-1.5 p-1.5 rounded hover:bg-app text-fg-mute hover:text-fg transition-colors focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-1"
                   :aria-label="copyLabel(b.key, `Copy ${b.label}`)"
                   @click="copyValue(b.key, b.value)"
                 >
-                  <svg v-if="copiedTarget === b.key" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                  <svg v-else-if="errorTarget === b.key" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                  </svg>
+                  <span v-if="copiedTarget === b.key" aria-hidden="true" class="text-sm leading-none text-success-text">✓</span>
+                  <span v-else-if="errorTarget === b.key" aria-hidden="true" class="text-sm leading-none text-danger-text">✕</span>
+                  <span v-else aria-hidden="true" class="text-sm leading-none">⧉</span>
                 </button>
               </div>
             </template>

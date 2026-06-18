@@ -1,6 +1,7 @@
 import type { Ref } from 'vue'
 import type { CoOccurrenceData, DAGData, SankeyData, SpawnTreeData } from '../sdk.generated'
 import { getCurrentScope, onScopeDispose, reactive, shallowRef, watch } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 export interface WorkflowsFilters {
   sessionId?: string
@@ -144,7 +145,7 @@ export function useWorkflows(filters: Ref<WorkflowsFilters>): UseWorkflowsReturn
     catch (err) {
       if ((err as Error).name === 'AbortError')
         return
-      slot.error = (err as Error).message
+      slot.error = errorMessage(err)
     }
     finally {
       // Only clear loading if this controller is still the active one for the tab.

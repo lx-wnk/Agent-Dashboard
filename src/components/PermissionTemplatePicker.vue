@@ -17,27 +17,27 @@ function select(id: TemplateId) {
 </script>
 
 <template>
-  <div class="space-y-1">
-    <p class="text-xs text-slate-500 mb-2">
+  <div>
+    <p class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-2">
       Permission Template
     </p>
-    <div class="flex flex-wrap gap-2">
+    <div class="grid grid-cols-2 gap-2">
       <button
         v-for="t in TEMPLATES"
         :key="t.id"
         type="button"
-        :title="t.description"
-        class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors"
+        class="text-left px-3 py-2.5 rounded-md border transition-colors flex flex-col gap-0.5"
         :class="modelValue === t.id
-          ? 'bg-blue-600 border-blue-600 text-white'
-          : 'bg-raised border-line-strong text-fg-soft hover:border-blue-400'"
+          ? 'border-accent bg-accent-soft'
+          : 'border-line bg-app hover:border-accent'"
         @click="select(t.id)"
       >
-        {{ t.label }}
+        <span class="flex items-center gap-1.5 text-[13px] font-semibold" :class="modelValue === t.id ? 'text-accent' : 'text-fg'">
+          <span aria-hidden="true">{{ modelValue === t.id ? '◉' : '○' }}</span>
+          {{ t.label }}
+        </span>
+        <span class="text-[11px] text-fg-mute leading-snug pl-[18px]">{{ t.description }}</span>
       </button>
     </div>
-    <p v-if="modelValue" class="text-[11px] text-slate-400">
-      {{ TEMPLATES.find(t => t.id === modelValue)?.description }}
-    </p>
   </div>
 </template>

@@ -1,4 +1,5 @@
 import { onMounted, ref } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 export interface NotifPref {
   eventType: string
@@ -32,7 +33,7 @@ export function useNotificationConfig() {
       config.value = await cfgRes.json()
     }
     catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load notifications'
+      error.value = errorMessage(e, 'Failed to load notifications')
     }
     finally {
       loading.value = false

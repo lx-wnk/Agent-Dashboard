@@ -1,4 +1,5 @@
 import { ref, shallowRef } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 export interface SkillEntry {
   name: string
@@ -74,7 +75,7 @@ async function loadAll(spawnerId?: string): Promise<void> {
   }
   catch (err) {
     if (token === loadToken)
-      error.value = (err as Error).message
+      error.value = errorMessage(err)
   }
   finally {
     if (token === loadToken)

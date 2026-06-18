@@ -35,14 +35,14 @@ describe('appStatusBar', () => {
 
   it('renders compact CPU/MEM values in the strip', async () => {
     const StatusBar = await load()
-    const w = mount(StatusBar, { props: { costDelta: 0.42, todayCostLabel: '$5.00' } })
+    const w = mount(StatusBar, { props: { costDelta: 0.42, todayCostLabel: '$5.00', quotaPct: 68 } })
     expect(w.text()).toContain('34%')
     expect(w.text()).toContain('62%')
   })
 
   it('expands the system segment on click (aria-expanded)', async () => {
     const StatusBar = await load()
-    const w = mount(StatusBar, { props: { costDelta: 0.42, todayCostLabel: '$5.00' } })
+    const w = mount(StatusBar, { props: { costDelta: 0.42, todayCostLabel: '$5.00', quotaPct: 68 } })
     const seg = w.get('[data-testid="seg-system"]')
     expect(seg.attributes('aria-expanded')).toBe('false')
     await seg.trigger('click')
@@ -56,14 +56,14 @@ describe('appStatusBar', () => {
 
   it('collapses to a corner tab', async () => {
     const StatusBar = await load()
-    const w = mount(StatusBar, { props: { costDelta: 0.42, todayCostLabel: '$5.00' } })
+    const w = mount(StatusBar, { props: { costDelta: 0.42, todayCostLabel: '$5.00', quotaPct: 68 } })
     await w.get('[data-testid="statusbar-collapse"]').trigger('click')
     expect(w.find('[data-testid="statusbar-tab"]').exists()).toBe(true)
   })
 
   it('expands the cost segment on click', async () => {
     const StatusBar = await load()
-    const w = mount(StatusBar, { props: { costDelta: 0.42, todayCostLabel: '$5.00' } })
+    const w = mount(StatusBar, { props: { costDelta: 0.42, todayCostLabel: '$5.00', quotaPct: 68 } })
     const seg = w.get('[data-testid="seg-cost"]')
     expect(seg.attributes('aria-expanded')).toBe('false')
     await seg.trigger('click')
@@ -73,7 +73,14 @@ describe('appStatusBar', () => {
 
   it('renders an em-dash when costDelta is null', async () => {
     const StatusBar = await load()
-    const w = mount(StatusBar, { props: { costDelta: null, todayCostLabel: '$5.00' } })
+    const w = mount(StatusBar, { props: { costDelta: null, todayCostLabel: '$5.00', quotaPct: 68 } })
     expect(w.text()).toContain('—')
+  })
+  it('renders the QUOTA segment with the percentage', async () => {
+    const StatusBar = await load()
+    const w = mount(StatusBar, { props: { costDelta: 0.42, todayCostLabel: '$5.00', quotaPct: 68 } })
+    const seg = w.get('[data-testid="seg-quota"]')
+    expect(seg.text()).toContain('QUOTA')
+    expect(seg.text()).toContain('68%')
   })
 })

@@ -38,6 +38,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
+	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
@@ -220,6 +221,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		cfgRepo := repo.NewPipelineConfigRepo(entClient)
 		analyticsRepo = rawrepo.NewAnalyticsRepo(bundle.DB)
 		analyticsHandler = apianalytics.NewHandler(analyticsRepo, bundle.DB, cfgRepo)
+		// Seed project-configured extra safe Bash commands so grants validate
+		// against the stored allow-list from first request onward.
+		raw := cfgRepo.GetString(ctx, "extraSafeBashCommands", "")
+		permissions.SetExtraSafeBashCommands(permissions.ParseExtraSafeBashCommands(raw))
 	}
 	// Cost baseline for the agent health score's cost-spike component. Nil repo
 	// (no database) yields a provider that returns 0 → no cost penalty.
@@ -232,7 +237,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// the crossing is applied consistently.
 	var pipelineEnricher merger.Enricher
 	if entClient != nil {
-		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver)
+		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver, repo.NewPermissionRepo(entClient))
 	}
 
 	// Built here (not earlier) so it captures pipelineEnricher — admin agent
@@ -261,8 +266,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		remotesHandler = remotes.NewHandler(repo.NewRemoteRegistrationRepo(entClient))
 	}
 	var presetsHandler *presets.Handler
+	var permissionPresetRepo repo.PermissionPresetRepo
 	if entClient != nil {
-		presetsHandler = presets.NewHandler(repo.NewPermissionPresetRepo(entClient))
+		permissionPresetRepo = repo.NewPermissionPresetRepo(entClient)
+		presetsHandler = presets.NewHandler(permissionPresetRepo)
 	}
 	var systemPromptsHandler *systemprompts.Handler
 	if entClient != nil {
@@ -295,6 +302,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		WebPushHandler:        webPushHandler,
 		RemotesHandler:        remotesHandler,
 		PresetsHandler:        presetsHandler,
+		PermissionPresetRepo:  permissionPresetRepo,
 		SystemPromptsHandler:  systemPromptsHandler,
 		AdapterHandler:        adapterHandler,
 		SearchHandler:         searchHandler,
@@ -304,7 +312,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		CostHandler:           costHandler,
 		VisualizationsHandler: apivisualizations.NewHandler(),
 		MCPHandler:            mcpHandler,
-		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo),
+		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo, repo.NewStageRunRepo(entClient)),
 		ChannelStageOutput:    channelStageOutputHandler,
 		PluginRegistry:        pluginRegistry,
 		AuditEventRepo:        auditEventRepo,

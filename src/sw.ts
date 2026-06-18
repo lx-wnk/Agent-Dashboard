@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
-import { BACKGROUND_SYNC_TAG, SW_MSG_MESSAGES_REPLAYED } from './utils/swConstants'
+import { BACKGROUND_SYNC_TAG, SW_MSG_MESSAGES_REPLAYED, SW_MSG_SKIP_WAITING } from './utils/swConstants'
 import { DB_NAME, DB_VERSION, STORE } from './utils/pendingMessages'
 import type { PendingMessage } from './utils/pendingMessages'
 
@@ -121,8 +121,19 @@ async function replayPendingMessages(): Promise<void> {
   }
 }
 
+// The Background Sync API's SyncEvent is absent from TS's ServiceWorkerGlobalScopeEventMap,
+// so the listener param falls back to Event — model it as ExtendableEvent plus the sync tag.
 self.addEventListener('sync', (event) => {
-  if (event.tag === BACKGROUND_SYNC_TAG) {
-    event.waitUntil(replayPendingMessages())
+  const syncEvent = event as ExtendableEvent & { readonly tag: string }
+  if (syncEvent.tag === BACKGROUND_SYNC_TAG) {
+    syncEvent.waitUntil(replayPendingMessages())
   }
+})
+
+// Activate a freshly installed SW when the page (usePWA.updateSW) requests it.
+// Without this handler the waiting worker never takes control and prompt-mode
+// updates can never apply — the stale precached bundle is served indefinitely.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === SW_MSG_SKIP_WAITING)
+    self.skipWaiting()
 })

@@ -58,7 +58,7 @@ const resizeClass: Record<ResizeProp, string> = {
       :rows="rows"
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="error ? errorId : undefined"
-      class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50 font-sans"
+      class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50 font-sans"
       :class="resizeClass[resize]"
       @input="$emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
     />
@@ -71,7 +71,7 @@ const resizeClass: Record<ResizeProp, string> = {
       :disabled="disabled"
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="error ? errorId : undefined"
-      class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50 font-sans"
+      class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50 font-sans"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     >
     <p
@@ -79,7 +79,7 @@ const resizeClass: Record<ResizeProp, string> = {
       :id="errorId"
       role="status"
       aria-live="polite"
-      class="text-red-500 text-sm mt-1"
+      class="text-danger-text text-sm mt-1"
     >
       {{ error }}
     </p>

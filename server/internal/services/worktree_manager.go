@@ -3,14 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/worktree"
 )
 
 // WorktreeManager exposes read-only status queries about a task's git worktree.
@@ -18,20 +17,14 @@ import (
 // `pipeline/worktree.go`); this service is consumed by the HTTP/MCP layers.
 type WorktreeManager struct {
 	taskRepo repo.TaskRepo
-	gitBin   string
-	timeout  time.Duration
+	runner   *worktree.Runner
 }
 
 // NewWorktreeManager returns a WorktreeManager backed by the given task repo.
 func NewWorktreeManager(taskRepo repo.TaskRepo) *WorktreeManager {
-	bin, err := exec.LookPath("git")
-	if err != nil || bin == "" {
-		bin = "git"
-	}
 	return &WorktreeManager{
 		taskRepo: taskRepo,
-		gitBin:   bin,
-		timeout:  15 * time.Second,
+		runner:   worktree.NewRunner(),
 	}
 }
 
@@ -94,17 +87,8 @@ func (m *WorktreeManager) WorktreeStatus(ctx context.Context, taskID string) (*s
 	return dto, nil
 }
 
-func (m *WorktreeManager) runGit(ctx context.Context, cwd string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, m.timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, m.gitBin, args...)
-	cmd.Dir = cwd
-	out, err := cmd.Output()
-	return string(out), err
-}
-
 func (m *WorktreeManager) currentBranch(ctx context.Context, cwd string) string {
-	out, err := m.runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
+	out, err := m.runner.Output(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return ""
 	}
@@ -112,7 +96,7 @@ func (m *WorktreeManager) currentBranch(ctx context.Context, cwd string) string 
 }
 
 func (m *WorktreeManager) remoteRefExists(ctx context.Context, cwd, base string) bool {
-	_, err := m.runGit(ctx, cwd, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+base)
+	_, err := m.runner.Output(ctx, cwd, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+base)
 	return err == nil
 }
 
@@ -120,7 +104,7 @@ func (m *WorktreeManager) remoteRefExists(ctx context.Context, cwd, base string)
 // or nil if the command failed (e.g. ambiguous ref). Pointer return lets the
 // API expose JSON null when the count is genuinely unknown.
 func (m *WorktreeManager) revListCount(ctx context.Context, cwd, rng string) *int {
-	out, err := m.runGit(ctx, cwd, "rev-list", "--count", rng)
+	out, err := m.runner.Output(ctx, cwd, "rev-list", "--count", rng)
 	if err != nil {
 		return nil
 	}
@@ -133,7 +117,7 @@ func (m *WorktreeManager) revListCount(ctx context.Context, cwd, rng string) *in
 }
 
 func (m *WorktreeManager) dirtyState(ctx context.Context, cwd string) (bool, int) {
-	out, err := m.runGit(ctx, cwd, "status", "--porcelain")
+	out, err := m.runner.Output(ctx, cwd, "status", "--porcelain")
 	if err != nil {
 		return false, 0
 	}

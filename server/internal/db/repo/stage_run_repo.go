@@ -26,6 +26,7 @@ type StageRunRepo interface {
 	ListPending(ctx context.Context) ([]*ent.StageRun, error)
 	Update(ctx context.Context, id string, input UpdateStageRunInput) (*ent.StageRun, error)
 	SumCompletedCostCents(ctx context.Context, taskID string) (int64, error)
+	SumCompletedTokens(ctx context.Context, taskID string) (int64, error)
 	// GetLatestForTasks returns the most-recent stage_run per task using a
 	// ROW_NUMBER() window function — correctness is exact regardless of iteration
 	// count, unlike the former Go-side heuristic limit of len(ids)*20+20.
@@ -40,16 +41,16 @@ type CreateStageRunInput struct {
 }
 
 type UpdateStageRunInput struct {
-	Status          *string
-	PID             *int
-	PIDClear        bool
-	SessionID       *string
-	Output          map[string]any
-	TokensUsed      *int
-	CostCents       *int
-	StartedAt       *time.Time
-	EndedAt         *time.Time
-	LastGrantAt     *time.Time
+	Status           *string
+	PID              *int
+	PIDClear         bool
+	SessionID        *string
+	Output           map[string]any
+	TokensUsed       *int
+	CostCents        *int
+	StartedAt        *time.Time
+	EndedAt          *time.Time
+	LastGrantAt      *time.Time
 	RetryCount       *int
 	NextRetryAt      *time.Time
 	NextRetryAtClear bool
@@ -219,6 +220,24 @@ func (r *entStageRunRepo) SumCompletedCostCents(ctx context.Context, taskID stri
 		Scan(ctx, &result)
 	if err != nil {
 		return 0, fmt.Errorf("stagerun.SumCompletedCostCents: %w", err)
+	}
+	if len(result) == 0 {
+		return 0, nil
+	}
+	return int64(result[0].Sum), nil
+}
+
+func (r *entStageRunRepo) SumCompletedTokens(ctx context.Context, taskID string) (int64, error) {
+	type aggResult struct {
+		Sum int `json:"sum"`
+	}
+	var result []aggResult
+	err := r.client.StageRun.Query().
+		Where(stagerun.TaskID(taskID), stagerun.StatusIn("done", "failed")).
+		Aggregate(ent.Sum(stagerun.FieldTokensUsed)).
+		Scan(ctx, &result)
+	if err != nil {
+		return 0, fmt.Errorf("stagerun.SumCompletedTokens: %w", err)
 	}
 	if len(result) == 0 {
 		return 0, nil

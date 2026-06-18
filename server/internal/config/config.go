@@ -15,6 +15,8 @@ import (
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/worktree"
 )
 
 // Config holds all server configuration. Keys match environment variable
@@ -60,7 +62,7 @@ func Defaults() Config {
 		Host:                   "127.0.0.1",
 		Port:                   13120,
 		DBPath:                 home + "/.claude/dashboard-tasks.db",
-		WorktreeRoot:           home + "/dashboard-worktrees",
+		WorktreeRoot:           home + "/" + worktree.DefaultRootDirName,
 		SSEIntervalMs:          3000,
 		CostScanIntervalMs:     300000,
 		ShutdownTimeoutSeconds: 10,

@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useSystemResources } from '../../composables/useSystemResources'
 
-defineProps<{ costDelta: number | null, todayCostLabel: string }>()
+defineProps<{ costDelta: number | null, todayCostLabel: string, quotaPct: number | null }>()
 
 const { collapsed, openSegment, toggleSegment, toggleCollapsed } = useStatusBar()
 const resources = useSystemResources()
@@ -13,7 +13,13 @@ const resources = useSystemResources()
 const systemInfo = computed<SystemInfo | null>(() => resources.info.value)
 
 function barColor(pct: number): string {
-  return pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-yellow-500' : 'bg-green-500'
+  return pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warning' : 'bg-success'
+}
+
+function quotaBarColor(pct: number | null): string {
+  if (pct === null)
+    return 'bg-raised'
+  return pct >= 90 ? 'bg-danger' : pct >= 75 ? 'bg-warning' : 'bg-success'
 }
 
 function formatDelta(d: number | null): string {
@@ -29,7 +35,7 @@ function formatDelta(d: number | null): string {
     <button
       type="button"
       data-testid="statusbar-tab"
-      class="text-[10px] text-fg-faint hover:text-fg px-2 py-0.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      class="text-[10px] text-fg-faint hover:text-fg px-2 py-0.5 rounded focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
       aria-label="Expand status bar"
       @click="toggleCollapsed"
     >
@@ -52,10 +58,18 @@ function formatDelta(d: number | null): string {
     </div>
 
     <div class="flex items-center gap-3 px-3 h-7 text-[11px] font-mono text-fg-mute">
+      <span class="flex items-center gap-1.5" data-testid="seg-quota">
+        <span class="text-fg-faint">QUOTA</span>
+        <span class="inline-block w-16 h-1.5 bg-raised rounded-full overflow-hidden align-middle">
+          <span class="block h-full rounded-full" :class="quotaBarColor(quotaPct)" :style="{ width: quotaPct === null ? '0%' : `${quotaPct}%` }" />
+        </span>
+        <span class="text-fg">{{ quotaPct === null ? '—' : `${quotaPct}%` }}</span>
+      </span>
+      <span class="w-px h-3.5 bg-line" aria-hidden="true" />
       <button
         type="button"
         data-testid="seg-system"
-        class="flex items-center gap-3 hover:text-fg rounded px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
+        class="flex items-center gap-3 hover:text-fg rounded px-1 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
         :aria-expanded="openSegment === 'system'"
         aria-label="Toggle system metrics detail"
         @click="toggleSegment('system')"
@@ -71,7 +85,7 @@ function formatDelta(d: number | null): string {
       <button
         type="button"
         data-testid="seg-cost"
-        class="hover:text-fg rounded px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
+        class="hover:text-fg rounded px-1 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
         :aria-expanded="openSegment === 'cost'"
         aria-label="Toggle cost trend detail"
         @click="toggleSegment('cost')"
@@ -83,7 +97,7 @@ function formatDelta(d: number | null): string {
       <button
         type="button"
         data-testid="statusbar-collapse"
-        class="ml-auto text-fg-faint hover:text-fg px-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
+        class="ml-auto text-fg-faint hover:text-fg px-1 rounded focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
         aria-label="Collapse status bar"
         @click="toggleCollapsed"
       >

@@ -19,6 +19,7 @@ func (TaskPermission) Fields() []ent.Field {
 		field.String("pattern").Optional().Nillable(),
 		field.Bool("granted").Default(false),
 		field.Bool("pre_approved").Default(false),
+		field.Bool("manual_override").Default(false),
 		field.String("decided_by").Optional().Nillable(),
 		field.Time("requested_at").Default(time.Now),
 		field.Time("decided_at").Optional().Nillable(),

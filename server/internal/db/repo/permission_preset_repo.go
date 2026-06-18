@@ -19,6 +19,10 @@ type PermissionPresetRepo interface {
 	// ListSummaries returns all presets grouped by projectCwd for the given userID.
 	// userID == nil matches rows where user_id IS NULL.
 	ListSummaries(ctx context.Context, userID *string) ([]PresetProjectSummary, error)
+	// ListForCwd returns all presets that apply to projectCwd for the given userID.
+	// Follows the same scoping as ListSummaries: nil userID returns only global
+	// (user_id IS NULL) presets; non-nil userID returns global + user-scoped rows.
+	ListForCwd(ctx context.Context, userID *string, projectCwd string) ([]*ent.PermissionPreset, error)
 	// DeleteForProject removes all presets for the given cwd scoped to userID.
 	DeleteForProject(ctx context.Context, userID *string, projectCwd string) error
 }
@@ -142,6 +146,26 @@ func (r *entPermissionPresetRepo) ListSummaries(ctx context.Context, userID *str
 		return summaries[i].ProjectCwd < summaries[j].ProjectCwd
 	})
 	return summaries, nil
+}
+
+func (r *entPermissionPresetRepo) ListForCwd(ctx context.Context, userID *string, projectCwd string) ([]*ent.PermissionPreset, error) {
+	q := r.client.PermissionPreset.Query().
+		Where(permissionpreset.ProjectCwd(projectCwd))
+	if userID == nil {
+		q = q.Where(permissionpreset.UserIDIsNil())
+	} else {
+		q = q.Where(
+			permissionpreset.Or(
+				permissionpreset.UserIDIsNil(),
+				permissionpreset.UserIDEQ(*userID),
+			),
+		)
+	}
+	rows, err := q.All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("permissionPreset.ListForCwd: %w", err)
+	}
+	return rows, nil
 }
 
 func (r *entPermissionPresetRepo) DeleteForProject(ctx context.Context, userID *string, projectCwd string) error {

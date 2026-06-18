@@ -219,6 +219,28 @@ export interface WorktreeStatusDTO {
   fileCount: number /* int */;
 }
 /**
+ * PendingPermission is a permission request an orchestrated agent is currently
+ * blocked on, surfaced on the agent so it can be resolved from the roster.
+ */
+export interface PendingPermission {
+  id: string;
+  tool: string;
+  pattern?: string;
+  reason?: string;
+  requestedAt: string;
+}
+/**
+ * PendingToolUse is the last assistant tool_use block that has no matching
+ * tool_result yet. It indicates the agent is currently executing or blocked on
+ * that tool call. Pattern is the command string (Bash), file path (Edit/Write),
+ * or empty for other tools.
+ */
+export interface PendingToolUse {
+  id: string;
+  tool: string;
+  pattern: string;
+}
+/**
  * Agent is the unified view of a running Claude Code process.
  */
 export interface Agent {
@@ -267,6 +289,8 @@ export interface Agent {
   errorState?: ErrorState;
   pipelineTaskId?: string;
   pipelineTaskTitle?: string;
+  pendingPermissions?: PendingPermission[];
+  pendingToolUse?: PendingToolUse;
   machine?: string;
   lastBtw?: BtwMessage;
   /**

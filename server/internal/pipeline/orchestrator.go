@@ -2,11 +2,11 @@
 //
 // File layout (all in package pipeline):
 //
-//   orchestrator.go     — PipelineOrchestrator struct, Run/tick entry, helpers
-//   runner_picker.go    — pickNextTasksForFreeSlots, sort helpers (F-PERF-007, F-PERF-010)
-//   sweeps.go           — sweepAwaitingUserRuns, sweepOrphanRuns
-//   progress_guards.go  — runProgressTaskLocked (Re-entry Guard + Lingering-Pending Gate)
-//   transitions.go      — applyTransition, applyTransitionWrites, decideCompletedTransition
+//	orchestrator.go     — PipelineOrchestrator struct, Run/tick entry, helpers
+//	runner_picker.go    — pickNextTasksForFreeSlots, sort helpers (F-PERF-007, F-PERF-010)
+//	sweeps.go           — sweepAwaitingUserRuns, sweepOrphanRuns
+//	progress_guards.go  — runProgressTaskLocked (Re-entry Guard + Lingering-Pending Gate)
+//	transitions.go      — applyTransition, applyTransitionWrites, decideCompletedTransition
 package pipeline
 
 import (
@@ -40,6 +40,10 @@ const (
 	defaultMaxAutoRetries      = 3
 	retryBackoffKey            = "retryBackoffSeconds"
 	defaultRetryBackoff        = 60
+	rateLimitBackoffKey        = "rateLimitBackoffSeconds"
+	defaultRateLimitBackoff    = 600
+	maxRateLimitRetriesKey     = "maxRateLimitRetries"
+	defaultMaxRateLimitRetries = 36
 )
 
 // httpSpawnResult carries the outcome of an asynchronous HTTP-adapter spawn.
@@ -54,8 +58,9 @@ type httpSpawnResult struct {
 // PipelineOrchestrator drives the task pipeline state machine.
 type PipelineOrchestrator struct {
 	opts             OrchestratorOptions
-	taskLocks        sync.Map // map[taskID string]*sync.Mutex
-	handlerOverrides sync.Map // map[stage string]StageHandler — test seam
+	handlers         map[string]StageHandler // per-orchestrator stage registry
+	taskLocks        sync.Map                // map[taskID string]*sync.Mutex
+	handlerOverrides sync.Map                // map[stage string]StageHandler — test seam
 	detectCompletion func(*ent.StageRun, string, CompletionDeps) (CompletionResult, error)
 	configCache      sync.Map // map[key string]cachedConfig
 
@@ -87,9 +92,14 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 	if opts.PollInterval <= 0 {
 		opts.PollInterval = defaultPollInterval
 	}
+	sf := opts.SpawnFn
+	if sf == nil {
+		sf = syntheticSpawn
+	}
 	poolSize := defaultMaxParallel
 	o := &PipelineOrchestrator{
 		opts:             opts,
+		handlers:         NewStageHandlers(sf),
 		detectCompletion: DetectCompletion,
 		httpPoolSem:      make(chan struct{}, poolSize),
 		httpResultCh:     make(chan httpSpawnResult, poolSize*2),
@@ -121,7 +131,7 @@ func (o *PipelineOrchestrator) resolveHandler(stage string) StageHandler {
 	if h, ok := o.handlerOverrides.Load(stage); ok {
 		return h.(StageHandler)
 	}
-	return GetHandlerForStage(stage)
+	return o.handlers[stage]
 }
 
 func (o *PipelineOrchestrator) getCachedConfigNumber(ctx context.Context, key string, fallback int) int {
@@ -387,7 +397,11 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			}
 			// Cost budget enforcement (subprocess runs only — HTTP runs finalize atomically)
 			if run.Pid != nil && task.CostBudgetCents != nil && *task.CostBudgetCents > 0 {
-				spent, _ := o.opts.StageRunRepo.SumCompletedCostCents(ctx, task.ID)
+				spent, err := o.opts.StageRunRepo.SumCompletedCostCents(ctx, task.ID)
+				if err != nil {
+					slog.Warn("orchestrator: cost budget sum failed — skipping enforcement this tick",
+						"taskID", task.ID, "err", err)
+				}
 				if spent > int64(*task.CostBudgetCents) {
 					slog.Warn("orchestrator: task exceeded cost budget — killing agent",
 						"taskID", task.ID, "spent", spent, "budget", *task.CostBudgetCents)
@@ -398,6 +412,28 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 							Reason: fmt.Sprintf("cost budget exceeded: %d cents spent, limit %d cents", spent, *task.CostBudgetCents),
 						}); err != nil {
 							slog.Error("finalizeCompletedAsyncRuns.costBudget", "err", err)
+						}
+					}
+					continue
+				}
+			}
+			// Token budget enforcement (subprocess runs only — HTTP runs finalize atomically)
+			if run.Pid != nil && task.TokenBudget != nil && *task.TokenBudget > 0 {
+				spent, err := o.opts.StageRunRepo.SumCompletedTokens(ctx, task.ID)
+				if err != nil {
+					slog.Warn("orchestrator: token budget sum failed — skipping enforcement this tick",
+						"taskID", task.ID, "err", err)
+				}
+				if spent > int64(*task.TokenBudget) {
+					slog.Warn("orchestrator: task exceeded token budget — killing agent",
+						"taskID", task.ID, "spent", spent, "budget", *task.TokenBudget)
+					_ = syscallKill(*run.Pid)
+					fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
+					if fresh != nil && fresh.Status == "running" {
+						if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
+							Reason: fmt.Sprintf("token budget exceeded: %d tokens used, limit %d tokens", spent, *task.TokenBudget),
+						}); err != nil {
+							slog.Error("finalizeCompletedAsyncRuns.tokenBudget", "err", err)
 						}
 					}
 					continue
@@ -442,7 +478,41 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			continue
 		}
 
-		// failed — three cases in priority order
+		// failed — four cases in priority order
+
+		// RateLimited implies Infra; check it first so it uses the dedicated budget and fixed backoff.
+		// RetryCount is shared with the infra-retry counter.
+		if result.RateLimited {
+			maxRL := o.getCachedConfigNumber(ctx, maxRateLimitRetriesKey, defaultMaxRateLimitRetries)
+			if fresh.RetryCount < maxRL {
+				attempt := fresh.RetryCount + 1
+				backoffSec := o.getCachedConfigNumber(ctx, rateLimitBackoffKey, defaultRateLimitBackoff)
+				nextRetryAt := time.Now().Add(time.Duration(backoffSec) * time.Second)
+				slog.Info("orchestrator: requeuing rate-limited run",
+					"runID", fresh.ID, "stage", fresh.Stage, "attempt", attempt,
+					"maxRateLimitRetries", maxRL, "backoffSec", backoffSec)
+				if _, err := o.applyTransition(ctx, task, fresh, RequeueTransition{
+					Reason:      result.Error,
+					Output:      result.Output,
+					Attempt:     attempt,
+					NextRetryAt: nextRetryAt,
+				}); err != nil {
+					slog.Error("finalizeCompletedAsyncRuns.applyTransition.rateLimitRequeue", "err", err)
+				}
+			} else {
+				slog.Warn("orchestrator: rate-limit retry budget exhausted — hard failing",
+					"runID", fresh.ID, "stage", fresh.Stage, "maxRateLimitRetries", maxRL)
+				output := make(map[string]any, len(result.Output)+1)
+				for k, v := range result.Output {
+					output[k] = v
+				}
+				output["rate_limit_retries_exhausted"] = maxRL
+				if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: output}); err != nil {
+					slog.Error("finalizeCompletedAsyncRuns.applyTransition.rateLimitHardFail", "err", err)
+				}
+			}
+			continue
+		}
 
 		if result.Infra {
 			maxRetries := o.getCachedConfigNumber(ctx, maxAutoRetriesKey, defaultMaxAutoRetries)
@@ -580,9 +650,76 @@ func (o *PipelineOrchestrator) NotifyTaskTerminated(ctx context.Context, taskID,
 	o.handleDependentTasks(ctx, taskID, stage)
 }
 
+// ClearStalePendingPermissions expires unresolved permission_requests left on the
+// task's current-stage run once that run can no longer act on them (terminal, or
+// awaiting_user with a dead PID). Called on user-initiated retry/resume so the
+// lingering-pending gate does not block the respawn; the fresh run re-requests if needed.
+func (o *PipelineOrchestrator) ClearStalePendingPermissions(ctx context.Context, taskID string) {
+	task, err := o.opts.TaskRepo.GetByID(ctx, taskID)
+	if err != nil || task == nil {
+		return
+	}
+	run, err := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	if err != nil || run == nil {
+		return
+	}
+	pid := 0
+	if run.Pid != nil {
+		pid = *run.Pid
+	}
+	terminalOrZombie := run.Status == "failed" || run.Status == "done" ||
+		(run.Status == "awaiting_user" && !IsPidAlive(pid))
+	if !terminalOrZombie {
+		return
+	}
+	n, err := o.opts.PermissionRepo.ExpirePendingForStageRun(ctx, run.ID)
+	if err != nil {
+		slog.Error("ClearStalePendingPermissions", "taskID", taskID, "err", err)
+		return
+	}
+	if n > 0 {
+		slog.Info("orchestrator: expired stale pending permission_requests on user retry/resume",
+			"taskID", taskID, "runID", run.ID, "count", n)
+	}
+}
+
 // ResumeFromUser re-runs progressTask after a user action (permission grant, retry).
 func (o *PipelineOrchestrator) ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error) {
+	// Permission grants reach a running agent only via kill-and-restart:
+	// ensureStageRun refuses to spawn a new iteration while the awaiting_user
+	// agent's PID is alive, so the grant would never take effect. Reap that
+	// paused agent (kill + mark failed) first so the resumed run spawns with the
+	// freshly granted permissions applied.
+	o.reapAwaitingUserAgent(ctx, taskID)
+	// After the reap the run is failed; expire any requests the dead agent left
+	// unresolved so the lingering-pending gate does not block the respawn.
+	o.ClearStalePendingPermissions(ctx, taskID)
 	return o.ProgressTask(ctx, taskID, nil)
+}
+
+// reapAwaitingUserAgent kills the task's current awaiting_user stage-run agent
+// and marks the run failed, so a subsequent ProgressTask spawns a fresh
+// iteration instead of short-circuiting on the still-alive PID.
+func (o *PipelineOrchestrator) reapAwaitingUserAgent(ctx context.Context, taskID string) {
+	mu := o.getTaskMutex(taskID)
+	mu.Lock()
+	defer mu.Unlock()
+	task, err := o.opts.TaskRepo.GetByID(ctx, taskID)
+	if err != nil || task == nil {
+		return
+	}
+	run, err := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	if err != nil || run == nil || run.Status != "awaiting_user" {
+		return
+	}
+	if run.Pid != nil && IsPidAlive(*run.Pid) {
+		_ = syscallKill(*run.Pid)
+	}
+	if _, err := o.applyTransition(ctx, task, run, FailTransition{
+		Reason: "user resolved permissions — restarting stage with grants applied",
+	}); err != nil {
+		slog.Error("reapAwaitingUserAgent.applyTransition", "taskID", taskID, "err", err)
+	}
 }
 
 func strPtr(s string) *string { return &s }

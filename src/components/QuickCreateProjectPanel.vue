@@ -3,6 +3,7 @@ import type { Project, Spawner } from '../types'
 import { computed, ref, watch } from 'vue'
 import { createProject, deleteProject } from '../composables/useProjects'
 import { createFolder } from '../composables/useProjectFolders'
+import { errorMessage } from '../utils/errorMessage'
 import { slugify } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 
@@ -39,7 +40,7 @@ function onSlugInput(e: Event): void {
   slugDirty.value = v.length > 0
 }
 
-const inputClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500'
+const inputClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
 
 async function submit(): Promise<void> {
   if (isSubmitting.value)
@@ -64,7 +65,7 @@ async function submit(): Promise<void> {
     project = await createProject(projectInput)
   }
   catch (e) {
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
     isSubmitting.value = false
     return
   }
@@ -74,7 +75,7 @@ async function submit(): Promise<void> {
     emit('created', { ...project, folders: [folder] })
   }
   catch (e) {
-    errorMsg.value = (e as Error).message
+    errorMsg.value = errorMessage(e)
     await deleteProject(project.id).catch(() => {})
   }
   finally {
@@ -155,7 +156,7 @@ async function submit(): Promise<void> {
           >
         </div>
       </div>
-      <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mb-2 leading-snug">
+      <p v-if="errorMsg" class="text-xs text-danger-text mb-2 leading-snug">
         {{ errorMsg }}
       </p>
       <div class="flex justify-end gap-2">

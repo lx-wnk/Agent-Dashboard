@@ -1,5 +1,6 @@
 import type { ProjectFolder } from '../types'
 import { ref } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 export interface CreateFolderInput {
   path: string
@@ -73,7 +74,7 @@ export function useProjectFolders(projectId: string) {
       folders.value = await fetchProjectFolders(projectId)
     }
     catch (e) {
-      error.value = (e as Error).message
+      error.value = errorMessage(e)
     }
     finally {
       isLoading.value = false

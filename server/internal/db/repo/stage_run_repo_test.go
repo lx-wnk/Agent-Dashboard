@@ -204,3 +204,35 @@ func TestStageRunRepo_Update_RetryFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, reloaded2.NextRetryAt)
 }
+
+func TestStageRunRepo_SumCompletedTokens(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-task-tokens")
+
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 2})
+	require.NoError(t, err)
+	run3, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 3})
+	require.NoError(t, err)
+
+	doneTok := 1000
+	status := "done"
+	_, err = sr.Update(ctx, run1.ID, repo.UpdateStageRunInput{Status: &status, TokensUsed: &doneTok})
+	require.NoError(t, err)
+	failTok := 1000
+	failStatus := "failed"
+	_, err = sr.Update(ctx, run2.ID, repo.UpdateStageRunInput{Status: &failStatus, TokensUsed: &failTok})
+	require.NoError(t, err)
+	pendingTok := 500
+	_, err = sr.Update(ctx, run3.ID, repo.UpdateStageRunInput{TokensUsed: &pendingTok})
+	require.NoError(t, err)
+
+	sum, err := sr.SumCompletedTokens(ctx, taskID)
+	require.NoError(t, err)
+	require.Equal(t, int64(2000), sum)
+}

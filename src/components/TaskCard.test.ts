@@ -1,0 +1,166 @@
+import type { Agent, PipelineTask } from '../types'
+import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import TaskCard from './TaskCard.vue'
+
+vi.mock('../composables/useAgentIdentity', () => ({
+  useAgentIdentity: () => ({
+    getIdentity: () => ({ emoji: '🤖' }),
+  }),
+}))
+
+const baseTask: PipelineTask = {
+  id: 'task-1',
+  slug: 'my-task',
+  title: 'My Task Title',
+  description: null,
+  cwd: '/tmp',
+  worktreePath: null,
+  sourceBranch: null,
+  targetBranch: null,
+  currentStage: 'backlog',
+  parentTaskId: null,
+  maxIterations: 3,
+  tokenBudget: null,
+  costBudgetCents: null,
+  stageTimeoutSeconds: 1800,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  metadata: null,
+  silverBullet: false,
+  priority: 'medium',
+  userId: null,
+}
+
+const stubs = {
+  WorktreePill: true,
+}
+
+const baseAgent: Agent = {
+  pid: 1234,
+  sessionId: 'sess-abc',
+  provider: 'claude' as any,
+  projectPath: '/projects/my-app',
+  projectName: 'my-app',
+  cwd: '/projects/my-app',
+  entrypoint: 'cli' as any,
+  status: 'active',
+  uptime: 0,
+  lastActivity: new Date().toISOString(),
+  lastTools: [],
+  tasks: [],
+  subagents: [],
+  tokenUsage: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
+  costEstimate: 0,
+  cacheCreationCostEstimate: 0,
+  cacheReadCostEstimate: 0,
+  healthScore: 100,
+  conversationTurns: 0,
+  toolCounts: {},
+  channelAvailable: false,
+  convergenceAlert: false,
+  pipelineTaskId: 'task-1',
+  meta: null,
+}
+
+describe('TaskCard', () => {
+  it('renders a real button with data-testid="task-card-open"', () => {
+    const wrapper = mount(TaskCard, {
+      props: { task: baseTask },
+      global: { stubs },
+    })
+    expect(wrapper.find('button[data-testid="task-card-open"]').exists()).toBe(true)
+  })
+
+  it('aria-label on the open button contains the task title', () => {
+    const wrapper = mount(TaskCard, {
+      props: { task: baseTask },
+      global: { stubs },
+    })
+    const btn = wrapper.find('button[data-testid="task-card-open"]')
+    expect(btn.attributes('aria-label')).toContain('My Task Title')
+  })
+
+  it('clicking the open button emits select with the task', async () => {
+    const wrapper = mount(TaskCard, {
+      props: { task: baseTask },
+      global: { stubs },
+    })
+    await wrapper.find('button[data-testid="task-card-open"]').trigger('click')
+    expect(wrapper.emitted('select')).toBeTruthy()
+    expect(wrapper.emitted('select')![0]).toEqual([baseTask])
+  })
+
+  it('shows Continue Chat button when currentStage is concept', () => {
+    const task = { ...baseTask, currentStage: 'concept' as const }
+    const wrapper = mount(TaskCard, {
+      props: { task },
+      global: { stubs },
+    })
+    expect(wrapper.find('button[data-testid="task-card-open"]').exists()).toBe(true)
+    const buttons = wrapper.findAll('button')
+    const continueChat = buttons.find(b => b.text().includes('Continue Chat'))
+    expect(continueChat).toBeTruthy()
+  })
+
+  it('Continue Chat emits openChat and NOT select (click.stop)', async () => {
+    const task = { ...baseTask, currentStage: 'concept' as const }
+    const wrapper = mount(TaskCard, {
+      props: { task },
+      global: { stubs },
+    })
+    const buttons = wrapper.findAll('button')
+    const continueChat = buttons.find(b => b.text().includes('Continue Chat'))!
+    await continueChat.trigger('click')
+    expect(wrapper.emitted('openChat')).toBeTruthy()
+    expect(wrapper.emitted('openChat')![0]).toEqual([task])
+    expect(wrapper.emitted('select')).toBeFalsy()
+  })
+})
+
+describe('TaskCard — agent chip', () => {
+  it('renders the agent chip when workingAgent is provided', () => {
+    const wrapper = mount(TaskCard, {
+      props: { task: baseTask, workingAgent: baseAgent },
+      global: { stubs },
+    })
+    expect(wrapper.find('button[data-testid="task-agent-chip"]').exists()).toBe(true)
+  })
+
+  it('does not render the agent chip when workingAgent is null', () => {
+    const wrapper = mount(TaskCard, {
+      props: { task: baseTask, workingAgent: null },
+      global: { stubs },
+    })
+    expect(wrapper.find('button[data-testid="task-agent-chip"]').exists()).toBe(false)
+  })
+
+  it('does not render the agent chip when workingAgent is absent', () => {
+    const wrapper = mount(TaskCard, {
+      props: { task: baseTask },
+      global: { stubs },
+    })
+    expect(wrapper.find('button[data-testid="task-agent-chip"]').exists()).toBe(false)
+  })
+
+  it('clicking the chip emits navigateAgent with the sessionId and does NOT emit select', async () => {
+    const wrapper = mount(TaskCard, {
+      props: { task: baseTask, workingAgent: baseAgent },
+      global: { stubs },
+    })
+    const chip = wrapper.find('button[data-testid="task-agent-chip"]')
+    await chip.trigger('click')
+    expect(wrapper.emitted('navigateAgent')).toBeTruthy()
+    expect(wrapper.emitted('navigateAgent')![0]).toEqual(['sess-abc'])
+    expect(wrapper.emitted('select')).toBeFalsy()
+  })
+
+  it('chip aria-label references the agent projectName', () => {
+    const wrapper = mount(TaskCard, {
+      props: { task: baseTask, workingAgent: baseAgent },
+      global: { stubs },
+    })
+    const chip = wrapper.find('button[data-testid="task-agent-chip"]')
+    expect(chip.attributes('aria-label')).toContain('my-app')
+  })
+})
