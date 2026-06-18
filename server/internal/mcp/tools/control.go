@@ -29,13 +29,14 @@ type ControlDeps struct {
 	Broadcast    func(taskID string)
 }
 
-// RegisterControlTools registers all 5 control tools into the given registry.
+// RegisterControlTools registers all 6 control tools into the given registry.
 func RegisterControlTools(registry mcp.ToolRegistry, d ControlDeps) {
 	registerProgressTask(registry, d)
 	registerCancelTask(registry, d)
 	registerRetryTask(registry, d)
 	registerGrantPermission(registry, d)
 	registerResolvePermissionRequest(registry, d)
+	registerApproveAllPending(registry, d)
 }
 
 func registerProgressTask(registry mcp.ToolRegistry, d ControlDeps) {
@@ -298,6 +299,68 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 			}
 
 			return mcp.OK(map[string]any{"resolved": req, "resumed": resumed})
+		},
+	})
+}
+
+func registerApproveAllPending(registry mcp.ToolRegistry, d ControlDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name:        "approve_all_pending",
+		Description: "Approve all pending permission requests for a task in one call, then re-queue it when awaiting user input.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id": map[string]any{"type": "string", "description": "Task ID"},
+			},
+			"required": []string{"task_id"},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
+			taskID, err := mcp.StringArg(args, "task_id")
+			if err != nil {
+				return nil, err
+			}
+			task, err := d.TaskRepo.GetByID(ctx, taskID)
+			if err != nil {
+				return nil, mcp.Fail("Task not found: " + taskID)
+			}
+
+			runs, err := d.SRRepo.ListForTask(ctx, taskID)
+			if err != nil {
+				return nil, mcp.Fail("approve_all_pending: list runs: " + err.Error())
+			}
+			runIDs := make([]string, len(runs))
+			for i, sr := range runs {
+				runIDs[i] = sr.ID
+			}
+
+			pending, err := d.PermRepo.ListPendingForTask(ctx, taskID, runIDs)
+			if err != nil {
+				return nil, mcp.Fail("approve_all_pending: list pending: " + err.Error())
+			}
+
+			for _, req := range pending {
+				if err := d.PermRepo.ResolvePermissionRequest(ctx, req.ID, "approved"); err != nil {
+					return nil, mcp.Fail("approve_all_pending: resolve " + req.ID + ": " + err.Error())
+				}
+			}
+
+			_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "permissions_bulk_approved", "task:"+taskID, map[string]any{
+				"actor": "user",
+				"count": len(pending),
+			})
+
+			var requeued bool
+			if d.Orchestrator != nil {
+				latest, srErr := d.SRRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+				if srErr == nil && latest != nil && latest.Status == "awaiting_user" {
+					if sr, reqErr := d.Orchestrator.RequeueForUser(ctx, taskID, ""); reqErr == nil && sr != nil {
+						requeued = true
+					}
+				}
+			}
+
+			safeBroadcast(d.Broadcast, taskID)
+			return mcp.OK(map[string]any{"approved": len(pending), "requeued": requeued})
 		},
 	})
 }

@@ -512,6 +512,70 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 	})
 }
 
+// approveAllPending resolves every pending permission_request for a task as
+// "approved", then re-queues the task when its latest stage run is awaiting_user.
+func (h *Handler) approveAllPending(w http.ResponseWriter, r *http.Request) error {
+	taskID := chi.URLParam(r, "id")
+
+	if _, err := h.taskRepo.GetByID(r.Context(), taskID); err != nil {
+		return apierr.ErrNotFound
+	}
+
+	runs, err := h.srRepo.ListForTask(r.Context(), taskID)
+	if err != nil {
+		return fmt.Errorf("approve_all_pending: list runs: %w", err)
+	}
+	runIDs := make([]string, len(runs))
+	for i, sr := range runs {
+		runIDs[i] = sr.ID
+	}
+
+	pending, err := h.permRepo.ListPendingForTask(r.Context(), taskID, runIDs)
+	if err != nil {
+		return fmt.Errorf("approve_all_pending: list pending: %w", err)
+	}
+
+	for _, req := range pending {
+		if err := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "approved"); err != nil {
+			return fmt.Errorf("approve_all_pending: resolve %s: %w", req.ID, err)
+		}
+	}
+
+	var entries []repo.GrantEntry
+	for _, req := range pending {
+		entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern})
+	}
+	if len(entries) > 0 {
+		if _, errs := h.grantValidatedEntries(r.Context(), taskID, entries); len(errs) > 0 {
+			slog.Warn("approve_all_pending: grant failed", "taskID", taskID, "errs", errs)
+		}
+	}
+
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), taskID, nil, "permissions_bulk_approved", "task:"+taskID, map[string]any{
+		"actor":   "user",
+		"count":   len(pending),
+	})
+
+	// Re-queue only when we actually cleared a pending request and the latest
+	// stage run is awaiting_user — nothing to unblock otherwise.
+	var requeued bool
+	t, taskErr := h.taskRepo.GetByID(r.Context(), taskID)
+	if taskErr == nil && len(pending) > 0 {
+		latest, srErr := h.srRepo.GetLatestByTaskAndStage(r.Context(), taskID, t.CurrentStage)
+		if srErr == nil && latest != nil && latest.Status == "awaiting_user" {
+			if sr, reqErr := h.orchestrator.RequeueForUser(r.Context(), taskID, ""); reqErr == nil && sr != nil {
+				requeued = true
+			}
+		}
+	}
+
+	h.broadcastEnrichedUpdate(r.Context(), taskID)
+	return jsonReply(w, http.StatusOK, map[string]any{
+		"approved": len(pending),
+		"requeued": requeued,
+	})
+}
+
 // isCovered checks whether a tool+pattern request is already satisfied by effective permissions.
 func isCovered(tool string, pattern *string, perms []*ent.TaskPermission) bool {
 	for _, p := range perms {

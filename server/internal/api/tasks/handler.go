@@ -131,6 +131,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/api/tasks/{id}/progress", apierr.ErrorMiddleware(h.progress))
 	r.Post("/api/tasks/{id}/cancel", apierr.ErrorMiddleware(h.cancel))
 	r.Post("/api/tasks/{id}/retry", apierr.ErrorMiddleware(h.retry))
+	r.Post("/api/tasks/{id}/approve-all-pending", apierr.ErrorMiddleware(h.approveAllPending))
 	r.Post("/api/tasks/{id}/permissions", apierr.ErrorMiddleware(h.grantPermission))
 	r.Delete("/api/tasks/{id}/permissions/{permID}", apierr.ErrorMiddleware(h.revokePermission))
 	r.Post("/api/tasks/{id}/permission-requests/{reqID}/resolve", apierr.ErrorMiddleware(h.resolvePermissionRequest))
