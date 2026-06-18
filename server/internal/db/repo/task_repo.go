@@ -42,6 +42,7 @@ type CreateTaskInput struct {
 	SilverBullet        bool
 	Priority            string
 	CurrentStage        string
+	Autonomy            *string
 	Metadata            map[string]any
 	ProjectID           *string
 	SpawnerID           *string
