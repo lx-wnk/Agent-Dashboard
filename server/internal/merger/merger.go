@@ -136,6 +136,31 @@ func EstimateCostForProvider(provider sdk.Provider, usage sdk.TokenUsage, model 
 // the BaselineProvider injection.
 type Enricher func(ctx context.Context, agents []sdk.Agent)
 
+// ChainEnrichers composes enrichers into one that applies each in order. Nil
+// elements are skipped; if none remain it returns nil, preserving the
+// "nil Enricher disables enrichment" contract so the no-crossing path stays
+// byte-identical. A single active enricher is returned directly (no wrapper).
+func ChainEnrichers(enrichers ...Enricher) Enricher {
+	active := make([]Enricher, 0, len(enrichers))
+	for _, e := range enrichers {
+		if e != nil {
+			active = append(active, e)
+		}
+	}
+	switch len(active) {
+	case 0:
+		return nil
+	case 1:
+		return active[0]
+	default:
+		return func(ctx context.Context, agents []sdk.Agent) {
+			for _, e := range active {
+				e(ctx, agents)
+			}
+		}
+	}
+}
+
 // GetAgentsOpts carries optional settings for a single GetAgents call.
 type GetAgentsOpts struct {
 	// BaselinePerSessionCostUSD is the average per-session cost over the past 7 days,
