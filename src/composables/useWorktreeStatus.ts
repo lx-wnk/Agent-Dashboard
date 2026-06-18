@@ -1,6 +1,7 @@
 import type { Ref } from 'vue'
 import type { WorktreeStatusDTO } from '../sdk.generated'
 import { onUnmounted, ref, watch } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 const POLL_MS = 30_000
 
@@ -43,7 +44,7 @@ export function useWorktreeStatus(
     catch (err) {
       if (activeFetchId !== id)
         return
-      error.value = (err as Error).message
+      error.value = errorMessage(err)
       status.value = null
     }
     finally {

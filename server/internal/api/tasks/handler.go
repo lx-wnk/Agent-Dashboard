@@ -42,6 +42,7 @@ type OrchestratorIface interface {
 	ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error)
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
 	InvalidateConfigCache()
+	ClearStalePendingPermissions(ctx context.Context, taskID string)
 }
 
 // Handler handles task REST endpoints.
@@ -51,6 +52,7 @@ type Handler struct {
 	srRepo            repo.StageRunRepo
 	srBulkRepo        rawrepo.StageRunBulkRepo
 	permRepo          repo.PermissionRepo
+	presetRepo        repo.PermissionPresetRepo
 	auditRepo         repo.AuditEventRepo
 	auditEventRepo    repo.AuditEventRepo
 	cfgRepo           repo.PipelineConfigRepo
@@ -75,6 +77,7 @@ type Deps struct {
 	// fetch the exact latest stage_run per task regardless of iteration count.
 	SRBulkRepo        rawrepo.StageRunBulkRepo
 	PermRepo          repo.PermissionRepo
+	PresetRepo        repo.PermissionPresetRepo
 	AuditRepo         repo.AuditEventRepo
 	AuditEventRepo    repo.AuditEventRepo
 	CfgRepo           repo.PipelineConfigRepo
@@ -95,6 +98,7 @@ func NewHandler(deps Deps) *Handler {
 		srRepo:            deps.SRRepo,
 		srBulkRepo:        deps.SRBulkRepo,
 		permRepo:          deps.PermRepo,
+		presetRepo:        deps.PresetRepo,
 		auditRepo:         deps.AuditRepo,
 		auditEventRepo:    deps.AuditEventRepo,
 		cfgRepo:           deps.CfgRepo,
@@ -269,18 +273,29 @@ func (h *Handler) getOne(w http.ResponseWriter, r *http.Request) error {
 	return jsonReply(w, http.StatusOK, enriched)
 }
 
+// clampNegativeBudget collapses a negative budget to 0 (disabled). 0 already
+// means "no budget"; a negative value is nonsensical and would be silently
+// treated as disabled by the enforcement guard anyway.
+func clampNegativeBudget(p *int) {
+	if p != nil && *p < 0 {
+		*p = 0
+	}
+}
+
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
-		Slug          string  `json:"slug"`
-		Title         string  `json:"title"`
-		Description   *string `json:"description"`
-		Cwd           string  `json:"cwd"`
-		Priority      string  `json:"priority"`
-		Stage         string  `json:"stage"`
-		SilverBullet  bool    `json:"silverBullet"`
-		MaxIterations int     `json:"maxIterations"`
-		ProjectID     string  `json:"projectId"`
-		SpawnerID     string  `json:"spawnerId"`
+		Slug            string  `json:"slug"`
+		Title           string  `json:"title"`
+		Description     *string `json:"description"`
+		Cwd             string  `json:"cwd"`
+		Priority        string  `json:"priority"`
+		Stage           string  `json:"stage"`
+		SilverBullet    bool    `json:"silverBullet"`
+		MaxIterations   int     `json:"maxIterations"`
+		CostBudgetCents *int    `json:"costBudgetCents"`
+		TokenBudget     *int    `json:"tokenBudget"`
+		ProjectID       string  `json:"projectId"`
+		SpawnerID       string  `json:"spawnerId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -339,6 +354,18 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if maxIter <= 0 {
 		maxIter = db.DefaultMaxIterations
 	}
+	costBudget := body.CostBudgetCents
+	if costBudget == nil {
+		v := db.DefaultCostBudgetCents
+		costBudget = &v
+	}
+	clampNegativeBudget(costBudget)
+	tokenBudget := body.TokenBudget
+	if tokenBudget == nil {
+		v := db.DefaultTokenBudget
+		tokenBudget = &v
+	}
+	clampNegativeBudget(tokenBudget)
 	payload, _ := auth.PayloadFromContext(r.Context())
 	userID := payload.Sub
 	task, err := h.taskRepo.Create(r.Context(), repo.CreateTaskInput{
@@ -352,6 +379,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		SilverBullet:        body.SilverBullet,
 		MaxIterations:       maxIter,
 		StageTimeoutSeconds: db.DefaultStageTimeoutSeconds,
+		CostBudgetCents:     costBudget,
+		TokenBudget:         tokenBudget,
 		ProjectID:           projectIDPtr,
 		SpawnerID:           spawnerIDPtr,
 	})
@@ -403,15 +432,17 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		return apierr.ErrNotFound
 	}
 	var body struct {
-		Title         *string         `json:"title"`
-		Description   *string         `json:"description"`
-		Priority      *string         `json:"priority"`
-		SilverBullet  *bool           `json:"silverBullet"`
-		MaxIterations *int            `json:"maxIterations"`
-		CurrentStage  *string         `json:"currentStage"`
-		Cwd           *string         `json:"cwd"`
-		ProjectID     json.RawMessage `json:"projectId"`
-		SpawnerID     json.RawMessage `json:"spawnerId"`
+		Title           *string         `json:"title"`
+		Description     *string         `json:"description"`
+		Priority        *string         `json:"priority"`
+		SilverBullet    *bool           `json:"silverBullet"`
+		MaxIterations   *int            `json:"maxIterations"`
+		CostBudgetCents *int            `json:"costBudgetCents"`
+		TokenBudget     *int            `json:"tokenBudget"`
+		CurrentStage    *string         `json:"currentStage"`
+		Cwd             *string         `json:"cwd"`
+		ProjectID       json.RawMessage `json:"projectId"`
+		SpawnerID       json.RawMessage `json:"spawnerId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -453,16 +484,20 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	clampNegativeBudget(body.CostBudgetCents)
+	clampNegativeBudget(body.TokenBudget)
 	updated, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{
-		Title:          body.Title,
-		Description:    body.Description,
-		Priority:       body.Priority,
-		SilverBullet:   body.SilverBullet,
-		MaxIterations:  body.MaxIterations,
-		ProjectID:      projectIDPtr,
-		SpawnerID:      spawnerIDPtr,
-		ClearProjectID: clearProject,
-		ClearSpawnerID: clearSpawner,
+		Title:           body.Title,
+		Description:     body.Description,
+		Priority:        body.Priority,
+		SilverBullet:    body.SilverBullet,
+		MaxIterations:   body.MaxIterations,
+		CostBudgetCents: body.CostBudgetCents,
+		TokenBudget:     body.TokenBudget,
+		ProjectID:       projectIDPtr,
+		SpawnerID:       spawnerIDPtr,
+		ClearProjectID:  clearProject,
+		ClearSpawnerID:  clearSpawner,
 	})
 	if err != nil {
 		return fmt.Errorf("tasks.update: %w", err)
@@ -604,6 +639,7 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 	if body.AdditionalPrompt != "" || resumeSessionID != "" {
 		opts = &pipeline.ProgressOpts{UserAdditionalPrompt: body.AdditionalPrompt, ResumeSessionID: resumeSessionID}
 	}
+	h.orchestrator.ClearStalePendingPermissions(r.Context(), id)
 	sr, err := h.orchestrator.ProgressTask(r.Context(), id, opts)
 	if err != nil {
 		return fmt.Errorf("tasks.retry: %w", err)
@@ -714,6 +750,19 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 	if body.Outcome != "granted" && body.Outcome != "denied" {
 		return apierr.NewAppError(http.StatusBadRequest, "outcome must be granted or denied")
 	}
+	// Object-level authz: the request must belong to the task in the URL,
+	// otherwise the nested {taskId}/{reqID} path is not an enforced scope.
+	pr, err := h.permRepo.GetPermissionRequest(r.Context(), reqID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return apierr.ErrNotFound
+		}
+		return fmt.Errorf("tasks.resolvePermissionRequest.get: %w", err)
+	}
+	sr, err := h.srRepo.GetByID(r.Context(), pr.StageRunID)
+	if err != nil || sr.TaskID != id {
+		return apierr.ErrNotFound
+	}
 	if err := h.permRepo.ResolvePermissionRequest(r.Context(), reqID, body.Outcome); err != nil {
 		return fmt.Errorf("tasks.resolvePermissionRequest: %w", err)
 	}
@@ -722,6 +771,10 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 		return fmt.Errorf("tasks.resolvePermissionRequest.get: %w", err)
 	}
 	if body.Outcome == "granted" {
+		entries := []repo.GrantEntry{{Tool: pr.Tool, Pattern: pr.Pattern}}
+		if _, errs := h.grantValidatedEntries(r.Context(), id, entries); len(errs) > 0 {
+			slog.Warn("resolvePermissionRequest: grant failed", "taskID", id, "errs", errs)
+		}
 		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id); err != nil {
 			slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
 		}

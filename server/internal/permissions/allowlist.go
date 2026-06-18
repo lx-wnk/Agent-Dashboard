@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // safeBashCommands is the canonical allow-list of command names that may appear
@@ -18,67 +19,100 @@ import (
 // must be consciously accepted here, not accidentally permitted by a missed
 // block-list entry.
 var safeBashCommands = map[string]bool{
-	"pnpm":    true,
-	"npm":     true,
-	"npx":     true,
-	"yarn":    true,
-	"git":     true,
-	"task":    true,
-	"go":      true,
-	"cargo":   true,
-	"python":  true,
-	"python3": true,
-	"pip":     true,
-	"pip3":    true,
-	"ls":      true,
-	"cat":     true,
-	"head":    true,
-	"tail":    true,
-	"grep":    true,
-	"rg":      true,
-	"find":    true,
-	"mkdir":   true,
-	"touch":   true,
-	"cp":      true,
-	"mv":      true,
-	"echo":    true,
-	"pwd":     true,
-	"env":     true,
-	"printenv": true,
-	"which":   true,
-	"type":    true,
-	"wc":      true,
-	"sort":    true,
-	"uniq":    true,
-	"diff":    true,
-	"patch":   true,
-	"make":    true,
-	"rake":    true,
-	"bundle":  true,
-	"composer": true,
-	"mvn":     true,
-	"gradle":  true,
-	"dotnet":  true,
-	"rustup":  true,
-	"node":    true,
-	"deno":    true,
-	"bun":     true,
-	"tsc":     true,
-	"eslint":  true,
-	"prettier": true,
+	"pnpm":          true,
+	"npm":           true,
+	"npx":           true,
+	"yarn":          true,
+	"git":           true,
+	"task":          true,
+	"go":            true,
+	"cargo":         true,
+	"python":        true,
+	"python3":       true,
+	"pip":           true,
+	"pip3":          true,
+	"ls":            true,
+	"cat":           true,
+	"head":          true,
+	"tail":          true,
+	"grep":          true,
+	"rg":            true,
+	"find":          true,
+	"mkdir":         true,
+	"touch":         true,
+	"cp":            true,
+	"mv":            true,
+	"echo":          true,
+	"pwd":           true,
+	"env":           true,
+	"printenv":      true,
+	"which":         true,
+	"type":          true,
+	"wc":            true,
+	"du":            true,
+	"gzip":          true,
+	"sort":          true,
+	"uniq":          true,
+	"diff":          true,
+	"patch":         true,
+	"make":          true,
+	"rake":          true,
+	"bundle":        true,
+	"composer":      true,
+	"mvn":           true,
+	"gradle":        true,
+	"dotnet":        true,
+	"rustup":        true,
+	"node":          true,
+	"deno":          true,
+	"bun":           true,
+	"tsc":           true,
+	"eslint":        true,
+	"prettier":      true,
 	"golangci-lint": true,
-	"gofmt":   true,
-	"govet":   true,
-	"air":     true,
-	"wire":    true,
-	"protoc":  true,
-	"docker":  true,
-	"kubectl": true,
-	"helm":    true,
-	"terraform": true,
-	"jq":      true,
-	"yq":      true,
-	"curl":    false, // explicitly false for documentation — never safe in this context
+	"gofmt":         true,
+	"govet":         true,
+	"air":           true,
+	"wire":          true,
+	"protoc":        true,
+	"docker":        true,
+	"kubectl":       true,
+	"helm":          true,
+	"terraform":     true,
+	"jq":            true,
+	"yq":            true,
+	"curl":          false, // explicitly false for documentation — never safe in this context
+}
+
+// extraBashCommands holds project-configured additional allowed command names.
+// Access is guarded by extraMu. Hardcoded blocks in safeBashCommands always win.
+var (
+	extraMu       sync.RWMutex
+	extraBashCmds map[string]bool
+)
+
+// SetExtraSafeBashCommands replaces the project-configured extra allow-list.
+// Names are lower-cased and trimmed; empty entries are dropped.
+// Call at startup and after pipeline_config writes. Safe for concurrent use.
+// Explicitly blocked commands in safeBashCommands are never overridden.
+func SetExtraSafeBashCommands(cmds []string) {
+	next := make(map[string]bool, len(cmds))
+	for _, c := range cmds {
+		if n := strings.ToLower(strings.TrimSpace(c)); n != "" {
+			next[n] = true
+		}
+	}
+	extraMu.Lock()
+	extraBashCmds = next
+	extraMu.Unlock()
+}
+
+// ParseExtraSafeBashCommands splits a space- and/or comma-separated list of
+// command names into a slice suitable for SetExtraSafeBashCommands.
+func ParseExtraSafeBashCommands(raw string) []string {
+	// Replace commas with spaces so a single Fields call handles both separators.
+	normalized := strings.ReplaceAll(raw, ",", " ")
+	return strings.Fields(normalized)
 }
 
 // shellInjectionRE matches shell constructs that are dangerous regardless of
@@ -120,13 +154,24 @@ func IsSafeBashPattern(pattern string) (bool, string) {
 	first := filepath.Base(fields[0])
 	// Normalise to lower-case for case-insensitive comparison.
 	firstLower := strings.ToLower(first)
+	// Strip trailing glob wildcard so "grep*" resolves to "grep" for the
+	// allow-list lookup. No real command name ends in "*".
+	firstLowerNorm := strings.TrimRight(firstLower, "*")
 
-	if ok, explicit := safeBashCommands[firstLower]; explicit && !ok {
-		// Explicitly blocked (e.g. curl is in the map with value false).
-		return false, "command explicitly blocked: " + first
-	} else if !explicit {
-		// Not in the allow-list at all.
-		return false, "command not in safe allow-list: " + first
+	if ok, explicit := safeBashCommands[firstLowerNorm]; explicit {
+		if !ok {
+			// Explicitly blocked (e.g. curl). Hardcoded map wins — extras cannot un-block.
+			return false, "command explicitly blocked: " + first
+		}
+		// Hardcoded allow — fall through to injection check.
+	} else {
+		// Not in the hardcoded map; check project-configured extras.
+		extraMu.RLock()
+		inExtras := extraBashCmds[firstLowerNorm]
+		extraMu.RUnlock()
+		if !inExtras {
+			return false, "command not in safe allow-list: " + first
+		}
 	}
 
 	// Secondary check: reject shell injection constructs anywhere in the pattern.
@@ -157,19 +202,15 @@ func ValidateWebFetchPattern(pattern *string) error {
 	return nil
 }
 
-// ValidateGrantEntry applies all grant-time security checks for a single
-// (tool, pattern) pair.  It is the single source of truth shared by both
-// the MCP write path and the REST permission-grant endpoints.
+// ValidateGrantEntryWithOverride applies grant-time security checks for a
+// (tool, pattern) pair. When override is true (human REST resolve only), the
+// Bash command allow-list and shell-injection guard are bypassed — the human
+// consented to the exact literal pattern — but a non-empty Bash pattern is
+// still required, WebFetch still requires a domain pattern, and the tool must
+// still be in IsAllowedTool.
 //
-// Checks applied, in order:
-//  1. Tool must be in the pipeline allow-list.
-//  2. Bash grants must carry a non-empty pattern and that pattern must pass
-//     IsSafeBashPattern (allow-list semantics).
-//  3. WebFetch grants must carry a non-empty domain pattern.
-//
-// Returns a descriptive error on the first failing check; nil means the entry
-// is safe to persist.
-func ValidateGrantEntry(tool, pattern string) error {
+// Non-override paths apply the full IsSafeBashPattern guard unchanged.
+func ValidateGrantEntryWithOverride(tool, pattern string, override bool) error {
 	if !IsAllowedTool(tool) {
 		return fmt.Errorf("tool not in allow-list: %s", tool)
 	}
@@ -178,8 +219,10 @@ func ValidateGrantEntry(tool, pattern string) error {
 		if normalized == "" {
 			return errors.New("bash permission requires a non-empty pattern")
 		}
-		if ok, reason := IsSafeBashPattern(normalized); !ok {
-			return fmt.Errorf("unsafe Bash pattern: %s", reason)
+		if !override {
+			if ok, reason := IsSafeBashPattern(normalized); !ok {
+				return fmt.Errorf("unsafe Bash pattern: %s", reason)
+			}
 		}
 	}
 	if tool == "WebFetch" {
@@ -189,6 +232,13 @@ func ValidateGrantEntry(tool, pattern string) error {
 		}
 	}
 	return nil
+}
+
+// ValidateGrantEntry applies all grant-time security checks for a single
+// (tool, pattern) pair without a human override. Delegates to
+// ValidateGrantEntryWithOverride with override=false.
+func ValidateGrantEntry(tool, pattern string) error {
+	return ValidateGrantEntryWithOverride(tool, pattern, false)
 }
 
 // WriteToolNames is the canonical list of write-type tools that trigger the edit gate.

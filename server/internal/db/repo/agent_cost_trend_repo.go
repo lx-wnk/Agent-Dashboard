@@ -19,10 +19,10 @@ type AgentCostRow struct {
 	CostUSD      float64
 	RecordedAt   time.Time
 	// New v2 fields — project grouping, cwd, and skip-unchanged support.
-	Cwd          string
-	ProjectPath  string
-	ProjectName  string
-	SourceMtime  int64
+	Cwd         string
+	ProjectPath string
+	ProjectName string
+	SourceMtime int64
 }
 
 // AgentCostTrendRepo defines read/write operations for the agent_cost_trend table.

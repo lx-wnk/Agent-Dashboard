@@ -75,7 +75,6 @@ type UpdateTaskInput struct {
 // a column (no neighbor on one side). Between two neighbors the midpoint is used.
 const rankGap = 1 << 20
 
-
 type entTaskRepo struct{ client *ent.Client }
 
 func NewTaskRepo(client *ent.Client) TaskRepo {

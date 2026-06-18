@@ -90,6 +90,11 @@ func PreApproved(v bool) predicate.TaskPermission {
 	return predicate.TaskPermission(sql.FieldEQ(FieldPreApproved, v))
 }
 
+// ManualOverride applies equality check predicate on the "manual_override" field. It's identical to ManualOverrideEQ.
+func ManualOverride(v bool) predicate.TaskPermission {
+	return predicate.TaskPermission(sql.FieldEQ(FieldManualOverride, v))
+}
+
 // DecidedBy applies equality check predicate on the "decided_by" field. It's identical to DecidedByEQ.
 func DecidedBy(v string) predicate.TaskPermission {
 	return predicate.TaskPermission(sql.FieldEQ(FieldDecidedBy, v))
@@ -333,6 +338,16 @@ func PreApprovedEQ(v bool) predicate.TaskPermission {
 // PreApprovedNEQ applies the NEQ predicate on the "pre_approved" field.
 func PreApprovedNEQ(v bool) predicate.TaskPermission {
 	return predicate.TaskPermission(sql.FieldNEQ(FieldPreApproved, v))
+}
+
+// ManualOverrideEQ applies the EQ predicate on the "manual_override" field.
+func ManualOverrideEQ(v bool) predicate.TaskPermission {
+	return predicate.TaskPermission(sql.FieldEQ(FieldManualOverride, v))
+}
+
+// ManualOverrideNEQ applies the NEQ predicate on the "manual_override" field.
+func ManualOverrideNEQ(v bool) predicate.TaskPermission {
+	return predicate.TaskPermission(sql.FieldNEQ(FieldManualOverride, v))
 }
 
 // DecidedByEQ applies the EQ predicate on the "decided_by" field.

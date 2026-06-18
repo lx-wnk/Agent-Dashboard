@@ -135,9 +135,9 @@ func TestTaskRepo_ListPickable(t *testing.T) {
 	ctx := context.Background()
 
 	stages := []struct {
-		slug      string
-		stage     string
-		pickable  bool
+		slug     string
+		stage    string
+		pickable bool
 	}{
 		{"t-implementation", "implementation", true},
 		{"t-done", "done", false},

@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import type { TaskDependency } from '../types'
-import * as d3 from 'd3'
+import { drag } from 'd3-drag'
+import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from 'd3-force'
+import { select } from 'd3-selection'
 import { onMounted, ref, watch } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
+import { useTheme } from '../composables/useTheme'
+import { chartColors, paletteColor } from '../utils/chartColors'
 
 const props = defineProps<{ taskId: string }>()
 const emit = defineEmits<{ navigate: [taskId: string] }>()
+const { theme } = useTheme()
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const loading = ref(false)
@@ -24,17 +30,21 @@ interface GraphLink {
   target: string | GraphNode
 }
 
-const STAGE_COLORS: Record<string, string> = {
-  concept: '#6366f1',
-  backlog: '#8b5cf6',
-  implementation: '#3b82f6',
-  self_review: '#0ea5e9',
-  finalization: '#10b981',
-  done: '#22c55e',
-  on_hold: '#f59e0b',
-  cancelled: '#ef4444',
-  failed: '#f97316',
-  unknown: '#64748b',
+function stageColor(stage: string): string {
+  const c = chartColors()
+  const map: Record<string, string> = {
+    concept: c.accent,
+    backlog: paletteColor(1),
+    implementation: c.info,
+    self_review: paletteColor(0),
+    finalization: c.success,
+    done: c.success,
+    on_hold: c.warning,
+    cancelled: c.danger,
+    failed: c.danger,
+    unknown: c.fgMute,
+  }
+  return map[stage] ?? c.fgMute
 }
 
 async function fetchAndRender() {
@@ -48,7 +58,7 @@ async function fetchAndRender() {
     renderGraph(data.dependencies, data.dependents)
   }
   catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Failed to load graph'
+    error.value = errorMessage(e, 'Failed to load graph')
   }
   finally {
     loading.value = false
@@ -56,7 +66,7 @@ async function fetchAndRender() {
 }
 
 function renderGraph(deps: TaskDependency[], dependents: TaskDependency[]) {
-  const svg = d3.select(svgRef.value!)
+  const svg = select(svgRef.value!)
   svg.selectAll('*').remove()
 
   const nodeMap = new Map<string, GraphNode>()
@@ -92,7 +102,7 @@ function renderGraph(deps: TaskDependency[], dependents: TaskDependency[]) {
       .attr('y', '50%')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
-      .attr('fill', '#64748b')
+      .attr('fill', chartColors().fgMute)
       .attr('font-size', '13px')
       .text('No dependencies or dependents for this task.')
     return
@@ -116,23 +126,23 @@ function renderGraph(deps: TaskDependency[], dependents: TaskDependency[]) {
   marker
     .append('path')
     .attr('d', 'M0,-5L10,0L0,5')
-    .attr('fill', '#94a3b8')
+    .attr('fill', chartColors().fgFaint)
 
-  const simulation = d3.forceSimulation<GraphNode>(nodes)
-    .force('link', d3.forceLink<GraphNode, GraphLink>(links).id(d => d.id).distance(110))
-    .force('charge', d3.forceManyBody<GraphNode>().strength(-320))
-    .force('center', d3.forceCenter(W / 2, H / 2))
-    .force('collision', d3.forceCollide<GraphNode>(26))
+  const simulation = forceSimulation<GraphNode>(nodes)
+    .force('link', forceLink<GraphNode, GraphLink>(links).id(d => d.id).distance(110))
+    .force('charge', forceManyBody<GraphNode>().strength(-320))
+    .force('center', forceCenter(W / 2, H / 2))
+    .force('collision', forceCollide<GraphNode>(26))
 
   const linkSel = svg.append('g')
     .selectAll<SVGLineElement, GraphLink>('line')
     .data(links)
     .join('line')
-    .attr('stroke', '#94a3b8')
+    .attr('stroke', chartColors().line)
     .attr('stroke-width', 1.5)
     .attr('marker-end', 'url(#dep-arrow)')
 
-  const drag = d3.drag<SVGGElement, GraphNode>()
+  const dragBehavior = drag<SVGGElement, GraphNode>()
     .on('start', (event, d) => {
       if (!event.active)
         simulation.alphaTarget(0.3).restart()
@@ -159,12 +169,12 @@ function renderGraph(deps: TaskDependency[], dependents: TaskDependency[]) {
     .attr('role', 'button')
     .attr('aria-label', d => `Navigate to task: ${d.title}`)
     .on('click', (_e, d) => emit('navigate', d.id))
-    .call(drag)
+    .call(dragBehavior)
 
   nodeSel.append('circle')
     .attr('r', 18)
-    .attr('fill', d => STAGE_COLORS[d.stage] ?? '#64748b')
-    .attr('stroke', d => d.id === props.taskId ? '#f59e0b' : 'transparent')
+    .attr('fill', d => stageColor(d.stage))
+    .attr('stroke', d => d.id === props.taskId ? chartColors().warning : 'transparent')
     .attr('stroke-width', 3)
 
   nodeSel.append('text')
@@ -189,6 +199,7 @@ function renderGraph(deps: TaskDependency[], dependents: TaskDependency[]) {
 
 onMounted(fetchAndRender)
 watch(() => props.taskId, fetchAndRender)
+watch(theme, fetchAndRender)
 </script>
 
 <template>
@@ -196,7 +207,7 @@ watch(() => props.taskId, fetchAndRender)
     <div v-if="loading" class="text-sm text-fg-mute p-4">
       Loading dependency graph…
     </div>
-    <div v-else-if="error" class="text-sm text-red-500 dark:text-red-400 p-4">
+    <div v-else-if="error" class="text-sm text-danger-text p-4">
       {{ error }}
     </div>
     <div v-else>

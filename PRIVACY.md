@@ -43,6 +43,19 @@ Set via the `DASHBOARD_HOOKS_SECRET` environment variable. The secret is **alway
 
 The VAPID private key used for Web-Push is stored in the SQLite database under a configuration key. It never leaves your machine unless you explicitly copy it. Treat database access as equivalent to key access.
 
+### Retention & deletion
+
+There is **no automatic expiry** for any persisted data — rows live until you delete them. Concrete deletion paths:
+
+| Data | How to delete |
+|---|---|
+| `users` (account record) | `DELETE /api/me` — permanently removes the authenticated user's account (GDPR right-to-erasure; `server/internal/api/auth/handler.go`, `DeleteMe`). |
+| `tasks` + their `stage_runs`, `permission_requests` | `DELETE /api/tasks/{id}` — deletes the task and cascades its stage history. |
+| `web_push_subscriptions` | Unsubscribe in the browser, or delete the row. |
+| `audit_events`, `agent_cost_trends` | **No API delete path.** Prune manually with a SQLite client (e.g. `DELETE FROM audit_events;`) or delete the entire database file at `DASHBOARD_DB_PATH` (default `~/.claude/dashboard-tasks.db`). |
+
+To erase everything at once, stop the dashboard and delete the database file at `DASHBOARD_DB_PATH`. Filesystem-derived monitoring data (the JSONL session logs under `~/.claude/projects/`) is never written by the dashboard — delete those files directly if needed.
+
 ---
 
 ## 3. Data That Leaves the Machine (Opt-In Only)

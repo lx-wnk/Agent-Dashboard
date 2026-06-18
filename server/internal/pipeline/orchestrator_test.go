@@ -155,7 +155,6 @@ func TestOrchestrator_RequeueTransition(t *testing.T) {
 	require.False(t, onStageFailed, "OnStageFailed must not be called for requeue")
 }
 
-
 // --- sortPickCandidates tests ---
 
 func TestSortPickCandidates_SilverBulletFirst(t *testing.T) {
@@ -562,6 +561,61 @@ func makePickerTask(t *testing.T, ctx context.Context, taskRepo repo.TaskRepo, s
 	return task
 }
 
+func TestFinalizeCompletedAsyncRuns_RateLimited_Requeues(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	_, run := makeRunningStageRun(t, ctx, taskRepo, srRepo, 0)
+
+	orch.SetCompletionDetector(func(_ *ent.StageRun, _ string, _ pipeline.CompletionDeps) (pipeline.CompletionResult, error) {
+		return pipeline.CompletionResult{
+			Kind:        "failed",
+			Error:       "agent hit API rate/usage limit (status 429)",
+			Infra:       true,
+			RateLimited: true,
+		}, nil
+	})
+
+	before := time.Now()
+	err := orch.FinalizeCompletedAsyncRunsForTest(ctx, []*ent.StageRun{run})
+	require.NoError(t, err)
+
+	updated, err := srRepo.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, "requeued", updated.Status)
+	require.Equal(t, 1, updated.RetryCount)
+	require.NotNil(t, updated.NextRetryAt)
+	// Rate-limit backoff is 600s (defaultRateLimitBackoff), much larger than infra backoff.
+	require.True(t, updated.NextRetryAt.After(before.Add(500*time.Second)),
+		"rate-limit requeue NextRetryAt must be ~600s out")
+}
+
+func TestFinalizeCompletedAsyncRuns_RateLimited_ExhaustedBudget_HardFails(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
+
+	// defaultMaxRateLimitRetries is 36; start with retryCount == 36 → exhausted.
+	_, run := makeRunningStageRun(t, ctx, taskRepo, srRepo, 36)
+
+	orch.SetCompletionDetector(func(_ *ent.StageRun, _ string, _ pipeline.CompletionDeps) (pipeline.CompletionResult, error) {
+		return pipeline.CompletionResult{
+			Kind:        "failed",
+			Error:       "agent hit API rate/usage limit (status 429)",
+			Infra:       true,
+			RateLimited: true,
+		}, nil
+	})
+
+	err := orch.FinalizeCompletedAsyncRunsForTest(ctx, []*ent.StageRun{run})
+	require.NoError(t, err)
+
+	updated, err := srRepo.GetByID(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, "failed", updated.Status)
+	require.NotNil(t, updated.Output["rate_limit_retries_exhausted"], "output must contain rate_limit_retries_exhausted key")
+	require.EqualValues(t, 36, updated.Output["rate_limit_retries_exhausted"])
+}
+
 func TestPicker_RequeuedRun_NotPicked(t *testing.T) {
 	ctx := context.Background()
 	orch, taskRepo, srRepo := makeOrchestratorWithSRRepo(t)
@@ -619,9 +673,9 @@ func TestPicker_AfterSweepFlipsToPending_TaskIsPicked(t *testing.T) {
 
 	// Simulate sweep: flip the run to pending (as sweepRequeueableRuns would do).
 	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
-		Status:          strPtr("pending"),
-		PIDClear:        true,
-		StartedAtClear:  true,
+		Status:           strPtr("pending"),
+		PIDClear:         true,
+		StartedAtClear:   true,
 		NextRetryAtClear: true,
 	})
 	require.NoError(t, err)
@@ -664,9 +718,9 @@ func TestPicker_UniqueRunningInvariant_AtMostOneRunning(t *testing.T) {
 
 	// Simulate sweep: promote to pending.
 	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
-		Status:          strPtr("pending"),
-		PIDClear:        true,
-		StartedAtClear:  true,
+		Status:           strPtr("pending"),
+		PIDClear:         true,
+		StartedAtClear:   true,
 		NextRetryAtClear: true,
 	})
 	require.NoError(t, err)

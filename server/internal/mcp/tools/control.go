@@ -258,10 +258,11 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 			if runErr == nil && run != nil {
 				if outcome == "granted" {
 					in := repo.CreateTaskPermissionInput{
-						TaskID:      run.TaskID,
-						Tool:        req.Tool,
-						Granted:     true,
-						PreApproved: false,
+						TaskID:         run.TaskID,
+						Tool:           req.Tool,
+						Granted:        true,
+						PreApproved:    false,
+						ManualOverride: false, // agent/MCP path never gets override
 					}
 					if req.Pattern != nil {
 						in.Pattern = req.Pattern

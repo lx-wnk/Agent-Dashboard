@@ -9,17 +9,14 @@ import SidebarFooter from './SidebarFooter.vue'
 
 const props = defineProps<{
   agentCount: number
+  attentionCount: number
   taskCount: number
-  totalCostLabel: string
-  totalTokensLabel: string
-  todayCostLabel: string
-  quotaPct: number
+  live: boolean
   theme: 'dark' | 'light'
   canInstall: boolean
 }>()
 const emit = defineEmits<{
   openSessions: []
-  openSettings: []
   toggleTheme: []
   install: []
 }>()
@@ -32,10 +29,14 @@ const grouped = computed(() =>
 
 function badgeFor(view: ActiveView): number | null {
   if (view === 'dashboard')
-    return props.agentCount
+    return props.attentionCount > 0 ? props.attentionCount : props.agentCount
   if (view === 'pipeline')
     return props.taskCount
   return null
+}
+
+function badgeDanger(view: ActiveView): boolean {
+  return view === 'dashboard' && props.attentionCount > 0
 }
 </script>
 
@@ -49,11 +50,21 @@ function badgeFor(view: ActiveView): number | null {
   >
     <div class="flex items-center gap-2 px-1.5 pb-3 mb-2 border-b border-line">
       <div class="w-7 h-7 rounded-lg bg-accent shrink-0" aria-hidden="true" />
-      <span v-if="expanded" class="text-[13px] font-semibold text-fg truncate">Agent Overview</span>
+      <div v-if="expanded" class="min-w-0 flex flex-col">
+        <span class="text-[13px] font-semibold text-fg truncate leading-tight">Agent Overview</span>
+        <span class="flex items-center gap-1 text-[10px] text-fg-faint" role="status">
+          <span
+            class="w-1.5 h-1.5 rounded-full shrink-0"
+            :class="live ? 'bg-success motion-safe:animate-pulse' : 'bg-warning'"
+            aria-hidden="true"
+          />
+          {{ live ? 'Live · all systems normal' : 'Reconnecting…' }}
+        </span>
+      </div>
       <button
         type="button"
         data-testid="sidebar-pin"
-        class="ml-auto text-fg-faint hover:text-fg text-[14px] rounded px-1 min-h-[28px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        class="ml-auto text-fg-faint hover:text-fg text-[14px] rounded px-1 min-h-[28px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         :aria-expanded="pinned"
         :aria-label="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
         @click="togglePinned"
@@ -82,7 +93,12 @@ function badgeFor(view: ActiveView): number | null {
           @select="activeView = item.view"
         >
           <template v-if="badgeFor(item.view) !== null" #badge>
-            <span class="text-[9px] bg-raised text-fg-mute rounded-full px-1.5 py-0.5">{{ badgeFor(item.view) }}</span>
+            <span
+              class="text-[9px] rounded-full px-1.5 py-0.5"
+              :class="badgeDanger(item.view)
+                ? 'bg-red-500 text-white font-bold'
+                : 'bg-raised text-fg-mute'"
+            >{{ badgeFor(item.view) }}</span>
           </template>
         </NavItem>
       </div>
@@ -90,14 +106,9 @@ function badgeFor(view: ActiveView): number | null {
 
     <SidebarFooter
       :expanded="expanded"
-      :total-cost-label="totalCostLabel"
-      :total-tokens-label="totalTokensLabel"
-      :today-cost-label="todayCostLabel"
-      :quota-pct="quotaPct"
       :theme="theme"
       :can-install="canInstall"
       @open-sessions="emit('openSessions')"
-      @open-settings="emit('openSettings')"
       @toggle-theme="emit('toggleTheme')"
       @install="emit('install')"
     />

@@ -1,8 +1,12 @@
 import type { Agent } from '../types'
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { totalTokenCount } from '../utils/format'
-import { SSE_RETRY_DELAY_MS } from '../utils/sse'
+import { needsAttention, sortByTriage } from '../utils/attention'
+import { errorMessage } from '../utils/errorMessage'
+import { secondsSince, totalTokenCount } from '../utils/format'
+import { AGENTS_POLL_MS } from '../utils/sse'
+import { startNowTicking } from './useNow'
 import { drainPendingMessages } from './usePendingMessages'
+import { createSseResource } from './useSseResource'
 
 export interface TrendPoint {
   t: number
@@ -21,19 +25,8 @@ const isLoading = ref(true)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
 const debouncedQuery = ref('')
-// Provider filter — append-only addition to the existing search/view UI.
-// When true, only agents with provider === 'claude' (or unset, treated as
-// claude) are shown. Persisted to localStorage so the preference survives
-// page reloads.
-const hideNonClaudeStored = typeof localStorage !== 'undefined' ? localStorage.getItem('agent-hide-non-claude') : null
-const hideNonClaude = ref<boolean>(hideNonClaudeStored === 'true')
 
-let eventSource: EventSource | null = null
-let intervalId: ReturnType<typeof setInterval> | null = null
-let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
-let subscriberCount = 0
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
-let visibilityListenerAttached = false
 
 function handleAgentData(data: Agent[], _trend?: TrendPoint[]) {
   agents.value = data
@@ -70,75 +63,37 @@ async function fetchAgents() {
     handleAgentData(await res.json())
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : 'Unknown error'
+    error.value = errorMessage(e)
     isLoading.value = false
   }
 }
 
-function handleVisibilityChange() {
-  if (document.hidden) {
-    stopSSE()
-    stopPolling()
-    if (sseRetryTimer) {
-      clearTimeout(sseRetryTimer)
-      sseRetryTimer = null
-    }
+// SSE frame carries { agents, trend }; handleAgentData rebuilds the cost trend
+// client-side so the streamed trend is intentionally ignored.
+function handleSseMessage(data: string) {
+  try {
+    const payload = JSON.parse(data)
+    handleAgentData(payload.agents, payload.trend)
   }
-  else {
-    startSSE()
-  }
+  catch { /* ignore parse errors */ }
 }
 
-function startSSE() {
-  if (subscriberCount <= 0)
-    return
-  if (typeof document !== 'undefined' && document.hidden)
-    return
-  if (eventSource) stopSSE()
-  eventSource = new EventSource('/api/agents/stream')
-
-  let drainedOnReconnect = false
-  eventSource.onmessage = (event) => {
-    try {
-      const payload = JSON.parse(event.data)
-      handleAgentData(payload.agents, payload.trend)
-    }
-    catch { /* ignore parse errors */ }
-
-    // On the first SSE message after (re)connecting, drain any queued offline messages.
-    // This is the fallback for browsers that do not support the Background Sync API.
-    if (!drainedOnReconnect) {
-      drainedOnReconnect = true
-      void drainPendingMessages()
-    }
-  }
-
-  eventSource.onerror = () => {
-    if (eventSource?.readyState === EventSource.CLOSED) {
-      // Permanent failure — fall back to polling, retry SSE after 30s
-      stopSSE()
-      startPolling()
-      sseRetryTimer = setTimeout(() => {
-        stopPolling()
-        startSSE()
-      }, SSE_RETRY_DELAY_MS)
-    }
-    // Transient error — EventSource reconnects automatically
-  }
-}
-
-function stopSSE() {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
-}
+// Agents update frequently → faster fallback cadence + leading poll. The tab is
+// paused while hidden, and the first frame after each (re)connect drains any
+// offline-queued messages (Background Sync fallback).
+const sse = createSseResource({
+  streamUrl: '/api/agents/stream',
+  fetchInitial: fetchAgents,
+  onMessage: handleSseMessage,
+  fallbackPollMs: AGENTS_POLL_MS,
+  pauseWhenHidden: true,
+  pollLeading: true,
+  onConnected: () => void drainPendingMessages(),
+})
 
 const filteredAgents = computed(() => {
   const q = debouncedQuery.value.toLowerCase().trim()
-  let list = agents.value
-  if (hideNonClaude.value)
-    list = list.filter(a => !a.provider || a.provider === 'claude')
+  const list = agents.value
   if (!q)
     return list
   return list.filter(a =>
@@ -151,6 +106,18 @@ const filteredAgents = computed(() => {
   )
 })
 
+const { nowMs } = startNowTicking()
+
+const attentionAgents = computed(() => {
+  const secsOf = (a: Agent) => secondsSince(a.lastActivity, nowMs.value)
+  return sortByTriage(
+    agents.value.filter(a => needsAttention(a, secsOf(a))),
+    secsOf,
+  )
+})
+
+const attentionCount = computed(() => attentionAgents.value.length)
+
 // Debounce search query
 watch(searchQuery, (q) => {
   if (debounceTimer)
@@ -160,61 +127,10 @@ watch(searchQuery, (q) => {
   }, 200)
 })
 
-// Persist provider filter
-watch(hideNonClaude, (v) => {
-  if (typeof localStorage !== 'undefined')
-    localStorage.setItem('agent-hide-non-claude', String(v))
-})
-
-function startPolling() {
-  if (intervalId)
-    return
-  fetchAgents()
-  intervalId = setInterval(fetchAgents, 3000)
-}
-
-function stopPolling() {
-  if (intervalId) {
-    clearInterval(intervalId)
-    intervalId = null
-  }
-}
-
-function startDataStream() {
-  subscriberCount++
-  if (subscriberCount > 1)
-    return
-
-  fetchAgents()
-  startSSE()
-
-  if (!visibilityListenerAttached && typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    visibilityListenerAttached = true
-  }
-}
-
-function stopDataStream() {
-  subscriberCount--
-  if (subscriberCount <= 0) {
-    stopSSE()
-    stopPolling()
-    if (sseRetryTimer) {
-      clearTimeout(sseRetryTimer)
-      sseRetryTimer = null
-    }
-    if (visibilityListenerAttached && typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      visibilityListenerAttached = false
-    }
-    subscriberCount = 0
-  }
-}
-
 export function useAgents(options?: { autoStart?: boolean }) {
   if (options?.autoStart !== false)
-    startDataStream()
-  onUnmounted(stopDataStream)
+    sse.startStream()
+  onUnmounted(sse.stopStream)
 
   function selectAgent(agent: Agent | null) {
     selectedAgent.value = agent
@@ -224,12 +140,13 @@ export function useAgents(options?: { autoStart?: boolean }) {
     agents,
     costTrend,
     filteredAgents,
+    attentionAgents,
+    attentionCount,
     selectedAgent,
     isLoading,
     error,
     searchQuery,
-    hideNonClaude,
     selectAgent,
-    startStream: startDataStream,
+    startStream: sse.startStream,
   }
 }

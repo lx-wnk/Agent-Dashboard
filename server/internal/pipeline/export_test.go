@@ -16,8 +16,8 @@ func (o *PipelineOrchestrator) DecideCompletedTransitionForTest(
 	return o.decideCompletedTransition(ctx, task, run, output)
 }
 
-// ClassifyInfraForTest exposes classifyInfra for testing.
-var ClassifyInfraForTest = classifyInfra
+// IsRateLimitErrorForTest exposes isRateLimitError for testing.
+var IsRateLimitErrorForTest = isRateLimitError
 
 // FinalizeCompletedAsyncRunsForTest exposes finalizeCompletedAsyncRuns for testing.
 func (o *PipelineOrchestrator) FinalizeCompletedAsyncRunsForTest(ctx context.Context, runs []*ent.StageRun) error {
@@ -38,3 +38,9 @@ func (o *PipelineOrchestrator) SweepOrphanRunsForTest(ctx context.Context, allRu
 func (o *PipelineOrchestrator) PickNextTasksForFreeSlots(ctx context.Context, allRunning []*ent.StageRun) {
 	o.pickNextTasksForFreeSlots(ctx, allRunning)
 }
+
+// BuildStageUserPromptForTest exposes buildStageUserPrompt for testing.
+var BuildStageUserPromptForTest = buildStageUserPrompt
+
+// ResumeContinueInstructionForTest exposes resumeContinueInstruction for testing.
+const ResumeContinueInstructionForTest = resumeContinueInstruction

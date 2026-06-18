@@ -12,6 +12,7 @@ import (
 
 type PipelineConfigRepo interface {
 	GetNumber(ctx context.Context, key string, fallback float64) float64
+	GetString(ctx context.Context, key, fallback string) string
 	Set(ctx context.Context, key, value string) error
 	GetAll(ctx context.Context) (map[string]string, error)
 }
@@ -36,6 +37,17 @@ func (r *entPipelineConfigRepo) GetNumber(ctx context.Context, key string, fallb
 		return fallback
 	}
 	return n
+}
+
+func (r *entPipelineConfigRepo) GetString(ctx context.Context, key, fallback string) string {
+	cfg, err := r.client.PipelineConfig.Query().Where(pipelineconfig.ID(key)).Only(ctx)
+	if err != nil {
+		if !ent.IsNotFound(err) {
+			slog.Error("pipeline_config: db lookup", "key", key, "err", err)
+		}
+		return fallback
+	}
+	return cfg.Value
 }
 
 func (r *entPipelineConfigRepo) Set(ctx context.Context, key, value string) error {

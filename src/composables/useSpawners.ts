@@ -1,17 +1,11 @@
 import type { Spawner, SpawnerAdapterType } from '../types'
 import { onUnmounted, ref, shallowRef } from 'vue'
-import { SSE_RETRY_DELAY_MS } from '../utils/sse'
+import { errorMessage } from '../utils/errorMessage'
+import { createSseResource } from './useSseResource'
 
 const spawners = shallowRef<Spawner[]>([])
 const isLoading = ref(true)
 const error = ref<string | null>(null)
-
-let eventSource: EventSource | null = null
-let pollTimer: ReturnType<typeof setInterval> | null = null
-let sseRetryTimer: ReturnType<typeof setTimeout> | null = null
-let subscriberCount = 0
-
-const FALLBACK_POLL_MS = 60_000
 
 export interface SpawnerEvent {
   type: 'spawner_created' | 'spawner_updated' | 'spawner_deleted'
@@ -29,7 +23,7 @@ async function fetchSpawners(): Promise<void> {
     error.value = null
   }
   catch (err) {
-    error.value = (err as Error).message
+    error.value = errorMessage(err)
     isLoading.value = false
   }
 }
@@ -55,53 +49,23 @@ function applyEvent(event: SpawnerEvent): void {
   }
 }
 
-function startSSE(): void {
-  if (eventSource)
-    return
-  // NOTE: /api/spawners/stream SSE endpoint pending — polling fallback active by design.
-  eventSource = new EventSource('/api/spawners/stream')
-  eventSource.onmessage = (e) => {
-    try {
-      const event: SpawnerEvent = JSON.parse(e.data)
-      applyEvent(event)
-    }
-    catch {
-      // ignore malformed messages
-    }
+function handleSseMessage(data: string): void {
+  try {
+    const event: SpawnerEvent = JSON.parse(data)
+    applyEvent(event)
   }
-  eventSource.onerror = () => {
-    if (eventSource?.readyState === EventSource.CLOSED) {
-      stopSSE()
-      startPolling()
-      sseRetryTimer = setTimeout(() => {
-        stopPolling()
-        startSSE()
-      }, SSE_RETRY_DELAY_MS)
-    }
+  catch {
+    // ignore malformed messages
   }
 }
 
-function stopSSE(): void {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
-}
-
-function startPolling(): void {
-  if (pollTimer)
-    return
-  pollTimer = setInterval(() => {
-    void fetchSpawners()
-  }, FALLBACK_POLL_MS)
-}
-
-function stopPolling(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
+// NOTE: /api/spawners/stream SSE endpoint pending — the CLOSED→poll fallback
+// keeps the list fresh until the backend stream ships.
+const sse = createSseResource({
+  streamUrl: '/api/spawners/stream',
+  fetchInitial: fetchSpawners,
+  onMessage: handleSseMessage,
+})
 
 export interface CreateSpawnerInput {
   name: string
@@ -163,35 +127,17 @@ export async function setDefaultSpawner(id: string): Promise<Spawner> {
   return res.json() as Promise<Spawner>
 }
 
-function startStream(): void {
-  subscriberCount++
-  if (subscriberCount === 1) {
-    void fetchSpawners()
-    startSSE()
-  }
-}
-
 export function useSpawners(options?: { autoStart?: boolean }) {
   if (options?.autoStart !== false)
-    startStream()
+    sse.startStream()
 
-  onUnmounted(() => {
-    subscriberCount--
-    if (subscriberCount === 0) {
-      stopSSE()
-      stopPolling()
-      if (sseRetryTimer) {
-        clearTimeout(sseRetryTimer)
-        sseRetryTimer = null
-      }
-    }
-  })
+  onUnmounted(sse.stopStream)
 
   return {
     spawners,
     isLoading,
     error,
     refetch: fetchSpawners,
-    startStream,
+    startStream: sse.startStream,
   }
 }

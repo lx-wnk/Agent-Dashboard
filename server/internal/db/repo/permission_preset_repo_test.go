@@ -85,4 +85,41 @@ func TestPermissionPresetRepo_UpsertWithPattern(t *testing.T) {
 		"Upsert with non-nil Pattern must deduplicate: expected 1 row, got %d", found)
 }
 
+// TestPermissionPresetRepo_ListForCwd_GlobalUserScoping verifies that ListForCwd
+// returns global presets (user_id IS NULL) for both nil and non-nil callers, and
+// returns user-scoped presets only when the matching userID is provided.
+func TestPermissionPresetRepo_ListForCwd_GlobalUserScoping(t *testing.T) {
+	ctx := context.Background()
+	client := openTestDB(t)
+	r := repo.NewPermissionPresetRepo(client)
+
+	cwd := "/projects/scoping"
+	userID := "user-abc"
+	otherUser := "user-xyz"
+
+	// Global preset (no user_id).
+	require.NoError(t, r.Upsert(ctx, repo.UpsertPresetInput{ProjectCwd: cwd, Tool: "Read"}))
+	// User-scoped preset.
+	require.NoError(t, r.Upsert(ctx, repo.UpsertPresetInput{UserID: &userID, ProjectCwd: cwd, Tool: "Bash", Pattern: strPtr("git *")}))
+	// Preset for a different cwd — must not appear.
+	require.NoError(t, r.Upsert(ctx, repo.UpsertPresetInput{ProjectCwd: "/other", Tool: "Write"}))
+
+	// nil userID: only global preset.
+	rows, err := r.ListForCwd(ctx, nil, cwd)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "Read", rows[0].Tool)
+
+	// matching userID: global + user-scoped.
+	rows, err = r.ListForCwd(ctx, &userID, cwd)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+
+	// different userID: only global.
+	rows, err = r.ListForCwd(ctx, &otherUser, cwd)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "Read", rows[0].Tool)
+}
+
 func strPtr(s string) *string { return &s }

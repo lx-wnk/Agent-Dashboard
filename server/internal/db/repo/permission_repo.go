@@ -25,22 +25,25 @@ type PermissionRepo interface {
 	ResolvePermissionRequest(ctx context.Context, id, outcome string) error
 	CountForStageRun(ctx context.Context, stageRunID string) (int, error)
 	CountForStageRunsBulk(ctx context.Context, stageRunIDs []string) (map[string]int, error)
+	ExpirePendingForStageRun(ctx context.Context, stageRunID string) (int, error)
 }
 
 // GrantEntry describes a single permission to bulk-grant.
 type GrantEntry struct {
-	Tool      string
-	Pattern   *string
-	ExpiresAt *time.Time
+	Tool           string
+	Pattern        *string
+	ExpiresAt      *time.Time
+	ManualOverride bool
 }
 
 type CreateTaskPermissionInput struct {
-	TaskID      string
-	Tool        string
-	Pattern     *string
-	Granted     bool
-	PreApproved bool
-	ExpiresAt   *time.Time
+	TaskID         string
+	Tool           string
+	Pattern        *string
+	Granted        bool
+	PreApproved    bool
+	ManualOverride bool
+	ExpiresAt      *time.Time
 }
 
 type CreatePermissionRequestInput struct {
@@ -62,7 +65,8 @@ func (r *entPermissionRepo) CreateTaskPermission(ctx context.Context, in CreateT
 		SetTaskID(in.TaskID).
 		SetTool(in.Tool).
 		SetGranted(in.Granted).
-		SetPreApproved(in.PreApproved)
+		SetPreApproved(in.PreApproved).
+		SetManualOverride(in.ManualOverride)
 	if in.Pattern != nil {
 		q = q.SetPattern(*in.Pattern)
 	}
@@ -93,12 +97,13 @@ func (r *entPermissionRepo) BulkGrantPermissions(ctx context.Context, taskID str
 	results := make([]*ent.TaskPermission, 0, len(entries))
 	for _, e := range entries {
 		p, err := r.CreateTaskPermission(ctx, CreateTaskPermissionInput{
-			TaskID:      taskID,
-			Tool:        e.Tool,
-			Pattern:     e.Pattern,
-			Granted:     true,
-			PreApproved: true,
-			ExpiresAt:   e.ExpiresAt,
+			TaskID:         taskID,
+			Tool:           e.Tool,
+			Pattern:        e.Pattern,
+			Granted:        true,
+			PreApproved:    true,
+			ManualOverride: e.ManualOverride,
+			ExpiresAt:      e.ExpiresAt,
 		})
 		if err != nil {
 			return results, fmt.Errorf("permission.BulkGrantPermissions: %w", err)
@@ -133,6 +138,9 @@ func (r *entPermissionRepo) InheritPermissionsFromParent(ctx context.Context, ta
 	}
 	entries := make([]GrantEntry, 0, len(parentPerms))
 	for _, p := range parentPerms {
+		// ManualOverride is deliberately not inherited: a human's allow-list
+		// override is consent for the parent's scope only, so the child is
+		// re-gated and must obtain its own override approval.
 		entries = append(entries, GrantEntry{
 			Tool:      p.Tool,
 			Pattern:   p.Pattern,
@@ -241,4 +249,19 @@ func (r *entPermissionRepo) CountForStageRunsBulk(ctx context.Context, stageRunI
 		counts[req.StageRunID]++
 	}
 	return counts, nil
+}
+
+// ExpirePendingForStageRun sets outcome="expired" and resolvedAt=now on all
+// pending (outcome IS NULL) permission_requests for the given stage run.
+// Returns the number of rows updated; 0 with nil error means none were pending.
+func (r *entPermissionRepo) ExpirePendingForStageRun(ctx context.Context, stageRunID string) (int, error) {
+	n, err := r.client.PermissionRequest.Update().
+		Where(permissionrequest.StageRunID(stageRunID), permissionrequest.OutcomeIsNil()).
+		SetOutcome("expired").
+		SetResolvedAt(time.Now()).
+		Save(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("permission.ExpirePendingForStageRun: %w", err)
+	}
+	return n, nil
 }

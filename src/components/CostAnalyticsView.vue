@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import * as d3 from 'd3'
+import { max } from 'd3-array'
+import { axisBottom, axisLeft } from 'd3-axis'
+import { scaleBand, scaleLinear, scaleOrdinal, scalePoint } from 'd3-scale'
+import { select } from 'd3-selection'
+import { area, curveMonotoneX, line, stack } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
 import { formatCost, formatTokens } from '../utils/format'
+import { useTheme } from "../composables/useTheme"
+import { chartColors, chartPalette } from "../utils/chartColors"
+import AppCard from './ui/AppCard.vue'
 
 const { summary, isLoading, error, from, to, setRange, start, refresh } = useCostAnalytics()
+
+const { theme } = useTheme()
 
 // --- Historical data rescan ---
 const importStatus = ref('')
@@ -84,6 +93,10 @@ const totalTokens = computed(() => {
   return (s.totalInputTokens ?? 0) + (s.totalOutputTokens ?? 0)
 })
 
+const projectMaxCost = computed(() =>
+  Math.max(0, ...summary.value.byProject.map(p => p.costUsd)),
+)
+
 // --- Time-range presets ---
 type Preset = '7d' | '30d' | '90d' | 'all'
 
@@ -134,7 +147,7 @@ function applyCustomRange() {
 
 /**
  * Reshape the flat byDay rows into one row per day with one column per model
- * — the input shape d3.stack() expects.
+ * — the input shape stack() expects.
  */
 function buildDayMatrix(): { rows: Record<string, number | string>[], models: string[] } {
   const byDay = summary.value.byDay
@@ -149,7 +162,7 @@ function buildDayMatrix(): { rows: Record<string, number | string>[], models: st
   }
   const rows = Array.from(dayMap.values()).sort((a, b) => String(a.day).localeCompare(String(b.day)))
   const models = Array.from(modelSet).sort()
-  // Ensure every row has every model key (zero-fill) so d3.stack() yields
+  // Ensure every row has every model key (zero-fill) so stack() yields
   // contiguous segments with no NaN holes.
   for (const row of rows) {
     for (const m of models) {
@@ -165,7 +178,7 @@ function renderStackedBar() {
   if (!svg)
     return
 
-  const sel = d3.select(svg)
+  const sel = select(svg)
   sel.selectAll('*').remove()
 
   const { rows, models } = buildDayMatrix()
@@ -179,25 +192,26 @@ function renderStackedBar() {
   sel.attr('height', H + margin.top + margin.bottom)
   const g = sel.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
-  const x = d3.scaleBand<string>()
+  const x = scaleBand<string>()
     .domain(rows.map(r => String(r.day)))
     .range([0, W])
     .padding(0.15)
 
-  const stack = d3.stack<Record<string, number | string>, string>()
+  const stackGen = stack<Record<string, number | string>, string>()
     .keys(models)
     .value((d, key) => (d[key] as number) ?? 0)
-  const series = stack(rows)
+  const series = stackGen(rows)
 
-  const yMax = d3.max(series, layer => d3.max(layer, d => d[1])) ?? 0
-  const y = d3.scaleLinear()
+  const yMax = max(series, layer => max(layer, d => d[1])) ?? 0
+  const y = scaleLinear()
     .domain([0, yMax * 1.05 || 1])
     .nice()
     .range([H, 0])
 
-  const color = d3.scaleOrdinal<string>()
+  const palette = chartPalette()
+  const color = scaleOrdinal<string>()
     .domain(models)
-    .range(d3.schemeTableau10 as readonly string[])
+    .range(palette)
 
   // bars
   g.append('g')
@@ -223,14 +237,14 @@ function renderStackedBar() {
   const xTickEvery = Math.max(1, Math.ceil(rows.length / 10))
   g.append('g')
     .attr('transform', `translate(0,${H})`)
-    .call(d3.axisBottom(x).tickValues(rows.map((r, i) => i % xTickEvery === 0 ? String(r.day) : '').filter(Boolean)).tickFormat(d => String(d).slice(5)))
+    .call(axisBottom(x).tickValues(rows.map((r, i) => i % xTickEvery === 0 ? String(r.day) : '').filter(Boolean)).tickFormat(d => String(d).slice(5)))
     .selectAll('text')
     .attr('font-size', '10px')
     .attr('transform', 'rotate(-32)')
     .attr('text-anchor', 'end')
 
   g.append('g')
-    .call(d3.axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
+    .call(axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
     .selectAll('text')
     .attr('font-size', '10px')
 
@@ -251,7 +265,7 @@ function renderWeeklyTrend() {
   if (!svg)
     return
 
-  const sel = d3.select(svg)
+  const sel = select(svg)
   sel.selectAll('*').remove()
 
   const data = summary.value.byWeek
@@ -265,25 +279,38 @@ function renderWeeklyTrend() {
   sel.attr('height', H + margin.top + margin.bottom)
   const g = sel.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
-  const x = d3.scalePoint<string>()
+  const x = scalePoint<string>()
     .domain(data.map(d => d.week))
     .range([0, W])
     .padding(0.4)
 
-  const yMax = d3.max(data, d => d.costUsd) ?? 0
-  const y = d3.scaleLinear().domain([0, yMax * 1.1 || 1]).nice().range([H, 0])
+  const yMax = max(data, d => d.costUsd) ?? 0
+  const y = scaleLinear().domain([0, yMax * 1.1 || 1]).nice().range([H, 0])
 
-  const line = d3.line<WeekPoint>()
+  const lineGen = line<WeekPoint>()
     .x(d => x(d.week) ?? 0)
     .y(d => y(d.costUsd))
-    .curve(d3.curveMonotoneX)
+    .curve(curveMonotoneX)
+
+  const areaGen = area<WeekPoint>()
+    .x(d => x(d.week) ?? 0)
+    .y0(H)
+    .y1(d => y(d.costUsd))
+    .curve(curveMonotoneX)
+
+  g.append('path')
+    .datum(data)
+    .attr('fill', chartColors().success)
+    .attr('fill-opacity', 0.12)
+    .attr('stroke', 'none')
+    .attr('d', areaGen)
 
   g.append('path')
     .datum(data)
     .attr('fill', 'none')
-    .attr('stroke', '#10b981')
+    .attr('stroke', chartColors().success)
     .attr('stroke-width', 2)
-    .attr('d', line)
+    .attr('d', lineGen)
 
   g.append('g').selectAll('circle')
     .data(data)
@@ -291,33 +318,33 @@ function renderWeeklyTrend() {
     .attr('cx', d => x(d.week) ?? 0)
     .attr('cy', d => y(d.costUsd))
     .attr('r', 3)
-    .attr('fill', '#10b981')
+    .attr('fill', chartColors().success)
     .append('title')
     .text(d => `${d.week}: ${formatCost(d.costUsd)}`)
 
   const tickEvery = Math.max(1, Math.ceil(data.length / 8))
   g.append('g')
     .attr('transform', `translate(0,${H})`)
-    .call(d3.axisBottom(x).tickValues(data.filter((_, i) => i % tickEvery === 0).map(d => d.week)))
+    .call(axisBottom(x).tickValues(data.filter((_, i) => i % tickEvery === 0).map(d => d.week)))
     .selectAll('text')
     .attr('font-size', '10px')
     .attr('transform', 'rotate(-24)')
     .attr('text-anchor', 'end')
 
   g.append('g')
-    .call(d3.axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
+    .call(axisLeft(y).ticks(5).tickFormat(d => `$${Number(d).toFixed(2)}`))
     .selectAll('text')
     .attr('font-size', '10px')
 }
 
-// Local alias to satisfy TS in the d3.line generic above.
+// Local alias to satisfy TS in the line generic above.
 interface WeekPoint { week: string, costUsd: number }
 
 onMounted(() => {
   start()
 })
 
-watch(summary, () => {
+watch([summary, theme], () => {
   // d3 needs the DOM updated; render after Vue applies summary.value swap.
   queueMicrotask(() => {
     renderStackedBar()
@@ -360,7 +387,7 @@ watch(summary, () => {
         :class="[
           'px-2.5 py-1 rounded border transition-colors',
           activePreset === preset
-            ? 'bg-blue-600 border-blue-600 text-white'
+            ? 'bg-accent border-accent text-accent-contrast'
             : 'bg-raised border-line text-fg-mute hover:text-fg hover:bg-raised/70',
         ]"
         @click="applyPreset(preset)"
@@ -371,14 +398,14 @@ watch(summary, () => {
       <input
         v-model="customFrom"
         type="date"
-        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
         aria-label="From date"
       >
       <span class="text-fg-mute">–</span>
       <input
         v-model="customTo"
         type="date"
-        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+        class="px-2 py-1 rounded border border-line bg-raised text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
         aria-label="To date"
       >
       <button
@@ -395,7 +422,7 @@ watch(summary, () => {
     <p v-if="isLoading && !hasData" class="text-sm text-fg-mute">
       Loading cost summary…
     </p>
-    <p v-else-if="error" class="text-sm text-red-600 dark:text-red-400">
+    <p v-else-if="error" class="text-sm text-danger-text">
       {{ error }}
     </p>
     <div v-else-if="!hasData" class="flex flex-col gap-2">
@@ -406,7 +433,7 @@ watch(summary, () => {
         <button
           type="button"
           :disabled="isImporting"
-          class="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          class="text-sm px-3 py-1.5 rounded bg-accent text-accent-contrast hover:brightness-110 disabled:opacity-50 transition-colors"
           @click="startRescan"
         >
           {{ isImporting ? 'Scanning…' : 'Rescan now' }}
@@ -418,7 +445,7 @@ watch(summary, () => {
       {{ importStatus }}
     </p>
 
-    <section v-if="summary.byModel.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-if="summary.byModel.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-3 text-fg-soft">
         Spend by Model
       </h3>
@@ -429,7 +456,7 @@ watch(summary, () => {
           class="flex items-center justify-between gap-2 px-3 py-2 bg-raised rounded-md"
         >
           <span class="font-mono truncate text-fg" :title="m.model">{{ m.model }}</span>
-          <span class="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
+          <span class="font-mono text-success-text whitespace-nowrap">
             {{ formatCost(m.costUsd) }}
           </span>
           <span v-if="(m.inputTokens ?? 0) + (m.outputTokens ?? 0) > 0" class="text-fg-mute whitespace-nowrap">
@@ -438,42 +465,42 @@ watch(summary, () => {
           <span class="text-fg-mute whitespace-nowrap">{{ m.sessions }} sess.</span>
         </li>
       </ul>
-    </section>
+    </AppCard>
 
-    <section v-if="summary.byProject && summary.byProject.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-if="summary.byProject && summary.byProject.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-3 text-fg-soft">
         Spend by Project
       </h3>
-      <ul class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+      <ul class="flex flex-col gap-2.5 text-xs">
         <li
           v-for="p in summary.byProject"
           :key="p.projectPath"
-          class="flex items-center justify-between gap-2 px-3 py-2 bg-raised rounded-md"
+          class="flex items-center gap-2.5"
         >
-          <span class="font-mono truncate text-fg" :title="p.projectPath">{{ p.projectName }}</span>
-          <span class="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
-            {{ formatCost(p.costUsd) }}
-          </span>
-          <span v-if="(p.inputTokens ?? 0) + (p.outputTokens ?? 0) > 0" class="text-fg-mute whitespace-nowrap">
-            {{ formatTokens((p.inputTokens ?? 0) + (p.outputTokens ?? 0)) }}
-          </span>
-          <span class="text-fg-mute whitespace-nowrap">{{ p.sessions }} sess.</span>
+          <span class="w-32 shrink-0 font-mono text-fg-soft truncate" :title="p.projectPath">{{ p.projectName }}</span>
+          <div class="flex-1 h-3.5 bg-raised rounded-full overflow-hidden">
+            <div
+              class="h-full rounded-full bg-accent"
+              :style="{ width: projectMaxCost > 0 ? `${(p.costUsd / projectMaxCost) * 100}%` : '0%' }"
+            />
+          </div>
+          <span class="w-14 text-right font-mono text-success-text whitespace-nowrap shrink-0">{{ formatCost(p.costUsd) }}</span>
         </li>
       </ul>
-    </section>
+    </AppCard>
 
-    <section v-show="summary.byDay.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-show="summary.byDay.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-2 text-fg-soft">
         Cost per Day (stacked by model)
       </h3>
       <svg ref="stackedRef" class="w-full text-fg" style="min-height: 220px;" />
-    </section>
+    </AppCard>
 
-    <section v-show="summary.byWeek.length > 0" class="bg-card border border-line rounded-md p-4">
+    <AppCard v-show="summary.byWeek.length > 0" class="p-4">
       <h3 class="text-sm font-semibold mb-2 text-fg-soft">
         Weekly Trend
       </h3>
       <svg ref="trendRef" class="w-full text-fg" style="min-height: 200px;" />
-    </section>
+    </AppCard>
   </div>
 </template>

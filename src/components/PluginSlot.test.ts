@@ -1,5 +1,5 @@
 // src/components/PluginSlot.test.ts
-import type { SlotAddon, SlotContext, UnmountFn } from '../utils/pluginSlot'
+import type { LoadedAddon, SlotContext, UnmountFn } from '../utils/pluginSlot'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import PluginSlot from './PluginSlot.vue'
@@ -15,7 +15,7 @@ describe('PluginSlot', () => {
       el.textContent = 'mic'
       return unmount
     })
-    const addon: SlotAddon = { slot: 'refinement-input-addon', mount: mountFn }
+    const addon: LoadedAddon = { slot: 'refinement-input-addon', mount: mountFn }
     const loader = vi.fn().mockResolvedValue([addon])
 
     const ctx = fakeCtx()
@@ -45,8 +45,8 @@ describe('PluginSlot', () => {
   })
 
   it('does not mount addons if unmounted before the loader resolves', async () => {
-    let resolveLoader!: (a: SlotAddon[]) => void
-    const pending = new Promise<SlotAddon[]>((r) => { resolveLoader = r })
+    let resolveLoader!: (a: LoadedAddon[]) => void
+    const pending = new Promise<LoadedAddon[]>((r) => { resolveLoader = r })
     const mountFn = vi.fn(() => () => {})
     const loader = vi.fn().mockReturnValue(pending)
 

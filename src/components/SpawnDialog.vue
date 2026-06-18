@@ -5,10 +5,14 @@ import { fetchProjectFolders } from '../composables/useProjectFolders'
 import { useProjects } from '../composables/useProjects'
 import { useSpawnDialog } from '../composables/useSpawnDialog'
 import { useSpawners } from '../composables/useSpawners'
+import { errorMessage } from '../utils/errorMessage'
+import { SPAWN_AUTOCLOSE_MS } from '../utils/timing'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 import AppButton from './ui/AppButton.vue'
+import AppFieldLabel from './ui/AppFieldLabel.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
+import AppModalHeader from './ui/AppModalHeader.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -185,10 +189,10 @@ async function handleSpawn() {
         resetForm()
         emit('close')
       }
-    }, 3000)
+    }, SPAWN_AUTOCLOSE_MS)
   }
   catch (err: unknown) {
-    errorMsg.value = err instanceof Error ? err.message : 'Failed to spawn agent'
+    errorMsg.value = errorMessage(err, 'Failed to spawn agent')
     isSpawning.value = false
   }
 }
@@ -220,19 +224,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AppModal :open="open" @close="emit('close')">
-    <header class="shrink-0 flex justify-between items-center px-5 py-4 border-b border-line">
-      <h2 class="text-lg font-semibold text-fg">
-        New Agent
-      </h2>
-      <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" @click="emit('close')">
-        &times;
-      </button>
-    </header>
+  <AppModal :open="open" width="560px" @close="emit('close')">
+    <AppModalHeader title="New Agent" id="spawn-title" @close="emit('close')" />
 
     <form class="flex-1 min-h-0 overflow-y-auto p-5" @submit.prevent>
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-prompt">Prompt</label>
+        <AppFieldLabel for="spawn-prompt">Prompt</AppFieldLabel>
         <AppInput
           id="spawn-prompt"
           v-model="prompt"
@@ -245,8 +242,8 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-project">Project</label>
-        <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500">
+        <AppFieldLabel for="spawn-project">Project</AppFieldLabel>
+        <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent">
           <option
             v-for="p in sortedProjects"
             :key="p.id"
@@ -269,11 +266,11 @@ onUnmounted(() => {
       />
 
       <div v-if="folderPickerVisible" class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-folder">Folder</label>
+        <AppFieldLabel for="spawn-folder">Folder</AppFieldLabel>
         <select
           id="spawn-folder"
           :value="dlg.selectedFolderId.value ?? ''"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
           @change="dlg.selectFolder(($event.target as HTMLSelectElement).value)"
         >
           <option v-for="f in dlg.folders.value" :key="f.id" :value="f.id">
@@ -283,12 +280,12 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-spawner">Spawner</label>
+        <AppFieldLabel for="spawn-spawner">Spawner</AppFieldLabel>
         <select
           id="spawn-spawner"
           v-model="dlg.spawnerId.value"
           data-testid="spawn-spawner"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
         >
           <option value="">
             {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
@@ -300,7 +297,7 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-system">System Prompt</label>
+        <AppFieldLabel for="spawn-system">System Prompt</AppFieldLabel>
         <AppInput
           id="spawn-system"
           v-model="systemPrompt"
@@ -311,12 +308,12 @@ onUnmounted(() => {
       </div>
 
       <div class="mb-4">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1.5" for="spawn-permission-mode">Permissions</label>
+        <AppFieldLabel for="spawn-permission-mode">Permissions</AppFieldLabel>
         <select
           id="spawn-permission-mode"
           v-model="permissionMode"
           data-testid="spawn-permission-mode"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus:outline-none focus:border-green-500"
+          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
         >
           <option value="default">
             Ask for permission (default)
@@ -347,14 +344,14 @@ onUnmounted(() => {
         The agent will execute all tool calls without asking for confirmation. This includes file writes, deletions, git operations, and shell commands. Only use this in isolated environments or with trusted prompts.
       </div>
 
-      <div v-if="bypassConfirmed" role="alert" data-testid="bypass-confirm-msg" class="text-xs text-red-600 dark:text-red-400 font-semibold mb-2">
+      <div v-if="bypassConfirmed" role="alert" data-testid="bypass-confirm-msg" class="text-xs text-danger-text font-semibold mb-2">
         Click "Spawn Agent" again to confirm.
       </div>
 
       <p v-if="spawnStatusMsg" class="text-xs text-green-600 dark:text-green-400 mt-1 leading-snug">
         {{ spawnStatusMsg }}
       </p>
-      <p v-if="errorMsg" class="text-xs text-red-600 dark:text-red-400 mt-1 leading-snug whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto">
+      <p v-if="errorMsg" class="text-xs text-danger-text mt-1 leading-snug whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto">
         {{ errorMsg }}
       </p>
     </form>
@@ -365,11 +362,11 @@ onUnmounted(() => {
       </AppButton>
       <AppButton
         data-testid="spawn-btn"
-        variant="primary"
+        :variant="dangerousMode && bypassConfirmed ? 'danger' : 'primary'"
         :disabled="isSpawning || !prompt.trim() || !dlg.cwd.value.trim()"
         @click="handleSpawn"
       >
-        {{ isSpawning ? 'Spawning...' : 'Spawn Agent' }}
+        {{ isSpawning ? 'Spawning...' : (dangerousMode && bypassConfirmed ? 'Confirm Spawn' : 'Spawn Agent') }}
       </AppButton>
     </footer>
   </AppModal>

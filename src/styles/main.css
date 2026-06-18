@@ -1,10 +1,41 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/firacode@6.2.0/distr/woff2/FiraCode-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/firacode@6.2.0/distr/woff2/FiraCode-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/firacode@6.2.0/distr/woff2/FiraCode-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/firacode@6.2.0/distr/woff2/FiraCode-Bold.woff2') format('woff2');
+}
+
 /* Dark mode activated by class="dark" on <html> */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
+  --font-mono: 'Fira Code', 'SF Mono', 'Cascadia Code', 'Menlo', monospace;
+  --shadow-card-hover: var(--card-hover-shadow);
+  --shadow-modal: var(--modal-shadow);
 }
 
 /*
@@ -26,9 +57,37 @@
   --color-fg-faint: var(--fg-faint);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-ring: var(--ring);
+  /* Status families: success / warning / danger / info / neutral */
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-text: var(--success-text);
+  --color-success-dot: var(--success-dot);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-text: var(--warning-text);
+  --color-warning-dot: var(--warning-dot);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-text: var(--danger-text);
+  --color-danger-dot: var(--danger-dot);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-text: var(--info-text);
+  --color-info-dot: var(--info-dot);
+  --color-success-line: var(--success-line);
+  --color-warning-line: var(--warning-line);
+  --color-danger-line: var(--danger-line);
+  --color-info-line: var(--info-line);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-neutral-text: var(--neutral-text);
+  --color-neutral-line: var(--neutral-line);
 }
 
 :root {
+  --card-hover-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  --modal-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
   /* Surfaces — calm light: soft, low-contrast chrome */
   --app: var(--color-slate-50);
   --card: #ffffff;
@@ -44,9 +103,36 @@
   /* Accent — indigo */
   --accent: var(--color-indigo-600);
   --accent-soft: var(--color-indigo-100);
+  --accent-contrast: #ffffff;
+  --ring: var(--color-blue-500);
+  /* Status tokens — light values reproduce existing hardcoded Tailwind steps */
+  --success: var(--color-green-600);
+  --success-soft: #dcfce7;
+  --success-text: var(--color-green-600);
+  --success-dot: var(--color-green-400);
+  --success-line: var(--color-green-200);
+  --warning: var(--color-yellow-500);
+  --warning-soft: #fef9c3;
+  --warning-text: var(--color-yellow-700);
+  --warning-dot: var(--color-yellow-600);
+  --warning-line: var(--color-yellow-200);
+  --danger: var(--color-red-600);
+  --danger-soft: #fee2e2;
+  --danger-text: var(--color-red-600);
+  --danger-dot: var(--color-red-400);
+  --danger-line: var(--color-red-200);
+  --info: var(--color-blue-600);
+  --info-soft: #dbeafe;
+  --info-text: var(--color-blue-600);
+  --info-dot: var(--color-blue-400);
+  --info-line: var(--color-blue-300);
+  --neutral-soft: var(--color-slate-100);
+  --neutral-text: var(--color-slate-600);
+  --neutral-line: var(--color-slate-200);
 }
 
 .dark {
+  --card-hover-shadow: 0 2px 12px rgba(0,0,0,0.3);
   /* Calm dark: deeper background so content lifts via subtle surfaces, not hard borders */
   --app: #0b0e14;
   --card: #12151c;
@@ -61,6 +147,26 @@
   --accent: var(--color-indigo-400);
   --accent-soft: rgba(129, 140, 248, 0.14);
   --accent-soft: color-mix(in oklch, var(--color-indigo-400) 14%, transparent);
+  /* Status tokens — dark values reproduce existing hardcoded dark: steps */
+  --success-soft: color-mix(in oklch, var(--color-green-400) 16%, transparent);
+  --success-text: var(--color-green-400);
+  --success-dot: var(--color-green-400);
+  --success-line: var(--color-green-700);
+  --warning-soft: color-mix(in oklch, var(--color-yellow-400) 16%, transparent);
+  --warning-text: var(--color-yellow-400);
+  --warning-dot: var(--color-yellow-400);
+  --warning-line: var(--color-yellow-700);
+  --danger-soft: color-mix(in oklch, var(--color-red-400) 16%, transparent);
+  --danger-text: var(--color-red-400);
+  --danger-dot: var(--color-red-400);
+  --danger-line: var(--color-red-700);
+  --info-soft: color-mix(in oklch, var(--color-blue-400) 16%, transparent);
+  --info-text: var(--color-blue-400);
+  --info-dot: var(--color-blue-400);
+  --info-line: var(--color-blue-700);
+  --neutral-soft: var(--color-slate-800);
+  --neutral-text: var(--color-slate-400);
+  --neutral-line: var(--color-slate-700);
 }
 
 /*

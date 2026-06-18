@@ -1,7 +1,9 @@
 import type { Agent, OutputMessage } from '../types'
 import { onUnmounted, ref } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 import { addPending } from '../utils/pendingMessages'
 import { BACKGROUND_SYNC_TAG } from '../utils/swConstants'
+import { SEND_STATUS_RESET_MS } from '../utils/timing'
 import { dispatchSlashCommand, parseSlashCommand, SLASH_COMMAND_DEFS } from './useSlashCommands'
 
 export type OnMessageSent = (msg: OutputMessage) => void
@@ -16,7 +18,8 @@ async function registerBackgroundSync(): Promise<void> {
     return
   try {
     const registration = await navigator.serviceWorker.ready
-    // @ts-expect-error — SyncManager is not yet in all TypeScript lib versions
+    // @ts-expect-error — SyncManager is not yet in all TypeScript lib versions.
+    // Remove this directive once the DOM lib ships ServiceWorkerRegistration.sync.
     await registration.sync.register(BACKGROUND_SYNC_TAG)
   }
   catch {
@@ -103,7 +106,7 @@ export function useAgentPrompt(
       }
       else {
         sendStatus.value = 'error'
-        sendError.value = err instanceof Error ? err.message : 'Failed'
+        sendError.value = errorMessage(err, 'Failed')
       }
     }
     finally {
@@ -111,7 +114,7 @@ export function useAgentPrompt(
       if (sendStatus.value !== 'queued') {
         setTimeout(() => {
           sendStatus.value = null
-        }, 3000)
+        }, SEND_STATUS_RESET_MS)
       }
     }
   }
@@ -147,7 +150,7 @@ export function useAgentPrompt(
           isSending.value = false
           setTimeout(() => {
             sendStatus.value = null
-          }, 3000)
+          }, SEND_STATUS_RESET_MS)
         }
         return
       }

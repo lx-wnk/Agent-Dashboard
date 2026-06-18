@@ -1,6 +1,6 @@
 import type { TokenUsage } from '../types'
 import { describe, expect, it } from 'vitest'
-import { maskToken, formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from './format'
+import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, isStalled, maskToken, secondsSince, shortModel, STALLED_THRESHOLD_SECONDS, totalTokenCount } from './format'
 
 describe('totalTokenCount', () => {
   it('sums all four token fields', () => {
@@ -178,18 +178,126 @@ describe('maskToken', () => {
   })
 
   it('handles a realistic 40-char MCP token', () => {
-    const token = 'mcp_' + 'a'.repeat(36)
+    const token = `mcp_${'a'.repeat(36)}`
     // length=40: first 8 = 'mcp_aaaa', last 4 = 'aaaa', middle = 28 bullets
-    expect(maskToken(token)).toBe('mcp_aaaa' + '•'.repeat(28) + 'aaaa')
+    expect(maskToken(token)).toBe(`mcp_aaaa${'•'.repeat(28)}aaaa`)
   })
 
   it('never reveals more than first 8 + last 4 chars', () => {
-    const token = 'mcp_' + 'x'.repeat(100)
+    const token = `mcp_${'x'.repeat(100)}`
     const masked = maskToken(token)
     expect(masked.startsWith('mcp_')).toBe(true)
     expect(masked.endsWith('xxxx')).toBe(true)
     expect(masked).toContain('•')
     const visible = masked.replace(/•/g, '')
     expect(visible).toBe(token.slice(0, 8) + token.slice(-4))
+  })
+})
+
+describe('secondsSince', () => {
+  it('returns null for null input', () => {
+    expect(secondsSince(null)).toBeNull()
+  })
+
+  it('returns null for unparseable input', () => {
+    expect(secondsSince('not-a-date')).toBeNull()
+  })
+
+  it('returns correct seconds for a valid ISO timestamp', () => {
+    const nowMs = 1_700_000_000_000
+    const iso = new Date(nowMs - 45_000).toISOString()
+    expect(secondsSince(iso, nowMs)).toBe(45)
+  })
+
+  it('returns 0 when timestamp is now', () => {
+    const nowMs = 1_700_000_000_000
+    const iso = new Date(nowMs).toISOString()
+    expect(secondsSince(iso, nowMs)).toBe(0)
+  })
+
+  it('clamps to 0 for future timestamps', () => {
+    const nowMs = 1_700_000_000_000
+    const iso = new Date(nowMs + 10_000).toISOString()
+    expect(secondsSince(iso, nowMs)).toBe(0)
+  })
+})
+
+describe('formatRelativeActivity', () => {
+  it('returns em-dash for null', () => {
+    expect(formatRelativeActivity(null)).toBe('—')
+  })
+
+  it('formats seconds under 60 as Ns ago', () => {
+    expect(formatRelativeActivity(0)).toBe('0s ago')
+    expect(formatRelativeActivity(12)).toBe('12s ago')
+    expect(formatRelativeActivity(59)).toBe('59s ago')
+  })
+
+  it('formats minutes under 60 as Nm ago', () => {
+    expect(formatRelativeActivity(60)).toBe('1m ago')
+    expect(formatRelativeActivity(90)).toBe('1m ago')
+    expect(formatRelativeActivity(3599)).toBe('59m ago')
+  })
+
+  it('formats hours and minutes as Nh Mm ago', () => {
+    expect(formatRelativeActivity(3600)).toBe('1h 0m ago')
+    expect(formatRelativeActivity(3660)).toBe('1h 1m ago')
+    expect(formatRelativeActivity(7384)).toBe('2h 3m ago')
+  })
+
+  it('boundary: 59s shows seconds, 60s shows minutes', () => {
+    expect(formatRelativeActivity(59)).toBe('59s ago')
+    expect(formatRelativeActivity(60)).toBe('1m ago')
+  })
+})
+
+describe('formatBurnRate', () => {
+  it('returns em-dash when cost is 0', () => {
+    expect(formatBurnRate(0, 120)).toBe('—')
+  })
+
+  it('returns em-dash when uptime is 0', () => {
+    expect(formatBurnRate(0.5, 0)).toBe('—')
+  })
+
+  it('calculates rate as cost / (uptime / 60)', () => {
+    // $0.12 over 60s = $0.12/min
+    expect(formatBurnRate(0.12, 60)).toBe('$0.12/min')
+  })
+
+  it('uses Math.max(1, uptime/60) so uptime < 60s is treated as 1 minute', () => {
+    // $0.05 over 30s → denominator = max(1, 0.5) = 1 → $0.05/min
+    expect(formatBurnRate(0.05, 30)).toBe('$0.05/min')
+  })
+
+  it('formats to two decimal places', () => {
+    // $1 over 120s = $1 / 2 = $0.50/min
+    expect(formatBurnRate(1, 120)).toBe('$0.50/min')
+  })
+})
+
+describe('isStalled', () => {
+  it('returns false when status is not active', () => {
+    expect(isStalled('waiting', 300)).toBe(false)
+    expect(isStalled('idle', 300)).toBe(false)
+    expect(isStalled('error', 300)).toBe(false)
+  })
+
+  it('returns false when secondsSinceActivity is null', () => {
+    expect(isStalled('active', null)).toBe(false)
+  })
+
+  it('returns false when seconds are at or below threshold', () => {
+    expect(isStalled('active', STALLED_THRESHOLD_SECONDS)).toBe(false)
+    expect(isStalled('active', STALLED_THRESHOLD_SECONDS - 1)).toBe(false)
+  })
+
+  it('returns true when active and seconds exceed threshold', () => {
+    expect(isStalled('active', STALLED_THRESHOLD_SECONDS + 1)).toBe(true)
+    expect(isStalled('active', 500)).toBe(true)
+  })
+
+  it('sTALLED_THRESHOLD_SECONDS is 180', () => {
+    expect(STALLED_THRESHOLD_SECONDS).toBe(180)
   })
 })

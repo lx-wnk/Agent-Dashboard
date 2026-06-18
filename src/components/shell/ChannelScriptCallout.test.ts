@@ -1,13 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
+import { useServerConfig } from '../../composables/useServerConfig'
+
 import ChannelScriptCallout from './ChannelScriptCallout.vue'
 
 vi.mock('../../composables/useServerConfig', () => ({
   useServerConfig: vi.fn(),
 }))
-
-import { useServerConfig } from '../../composables/useServerConfig'
 
 function mountWithScriptPath(path: string) {
   vi.mocked(useServerConfig).mockReturnValue({
@@ -41,5 +41,18 @@ describe('channelScriptCallout', () => {
     await flushPromises()
     await w.get('[data-testid="channel-script-path"]').trigger('click')
     expect(writeText).toHaveBeenCalledWith('/p/channel.mjs')
+  })
+
+  it('copy target is a native button with a non-empty aria-label', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const w = mountWithScriptPath('/q/channel.mjs')
+    await flushPromises()
+    const btn = w.find('button[data-testid="channel-script-path"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.attributes('aria-label')).toBeTruthy()
+    expect(btn.attributes('aria-label')).toContain('/q/channel.mjs')
+    await btn.trigger('click')
+    expect(writeText).toHaveBeenCalledWith('/q/channel.mjs')
   })
 })

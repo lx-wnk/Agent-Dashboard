@@ -1,3 +1,11 @@
+<script lang="ts">
+// Multi-root template (transcript + sr-only live region) disables attr
+// fallthrough; bind $attrs explicitly to the transcript so layout classes apply.
+export default {
+  inheritAttrs: false,
+}
+</script>
+
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
@@ -260,7 +268,7 @@ defineExpose({ scrollToBottom })
 </script>
 
 <template>
-  <div ref="outputEl" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed" aria-label="Chat transcript">
+  <div ref="outputEl" v-bind="$attrs" class="flex flex-col gap-1.5 overflow-y-auto font-mono text-[13px] leading-relaxed" aria-label="Chat transcript">
     <div v-if="agent?.machine" class="text-fg-mute text-center py-12">
       Session output is not available for remote agents.
     </div>
@@ -361,7 +369,7 @@ defineExpose({ scrollToBottom })
         </div>
       </template>
     </template>
-    <div v-else-if="fetchError" class="text-red-600 dark:text-red-400 text-sm text-center py-12">
+    <div v-else-if="fetchError" class="text-danger-text text-sm text-center py-12">
       Failed to load session output. Reconnect or refresh.
     </div>
     <div v-else class="text-fg-mute text-center py-12">

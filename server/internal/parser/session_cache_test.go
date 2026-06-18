@@ -137,6 +137,93 @@ func TestFindSessionForProject_CacheMissOnTTLExpiry(t *testing.T) {
 	require.Equal(t, got1.SessionID, got2.SessionID)
 }
 
+// TestCandidateCache_ReuseOnSecondCall verifies that a second call within the TTL
+// reuses the cached candidate list instead of re-scanning the directory.
+func TestCandidateCache_ReuseOnSecondCall(t *testing.T) {
+	orig := parser.SessionCacheTTL
+	parser.SessionCacheTTL = 10 * time.Minute
+	t.Cleanup(func() { parser.SessionCacheTTL = orig })
+	parser.ResetStatSessionFilesCalls()
+
+	configDir := t.TempDir()
+	cwd := "/tmp/test-candidate-reuse"
+	writeSession(t, configDir, cwd, time.Now())
+
+	_, err := parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), parser.StatSessionFilesCalls(), "first call should run one full scan")
+
+	_, err = parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), parser.StatSessionFilesCalls(), "second call should reuse the cached candidate list (no extra full scan)")
+}
+
+// TestCandidateCache_InvalidatedByNewFile verifies that adding a session file
+// bumps the directory mtime and forces a fresh full scan.
+func TestCandidateCache_InvalidatedByNewFile(t *testing.T) {
+	orig := parser.SessionCacheTTL
+	parser.SessionCacheTTL = 10 * time.Minute
+	t.Cleanup(func() { parser.SessionCacheTTL = orig })
+	parser.ResetStatSessionFilesCalls()
+
+	configDir := t.TempDir()
+	cwd := "/tmp/test-candidate-newfile"
+	writeSession(t, configDir, cwd, time.Now().Add(-2*time.Second))
+
+	_, err := parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), parser.StatSessionFilesCalls())
+
+	// Add a second, newer session file — directory mtime changes.
+	encoded := parser.EncodePath(cwd)
+	dir := filepath.Join(configDir, "projects", encoded)
+	now := time.Now()
+	writeSession(t, configDir, cwd, now)
+	require.NoError(t, os.Chtimes(dir, now, now))
+
+	_, err = parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), parser.StatSessionFilesCalls(), "new file should invalidate the candidate cache")
+}
+
+// TestCandidateCache_AppendSurfacesFreshData verifies that overwriting the active
+// session file (which leaves the directory mtime untouched) is still detected via
+// the newest-candidate re-stat, so fresh data is returned.
+func TestCandidateCache_AppendSurfacesFreshData(t *testing.T) {
+	orig := parser.SessionCacheTTL
+	parser.SessionCacheTTL = 10 * time.Minute
+	t.Cleanup(func() { parser.SessionCacheTTL = orig })
+	parser.ResetStatSessionFilesCalls()
+
+	configDir := t.TempDir()
+	cwd := "/tmp/test-candidate-append"
+	path := writeSession(t, configDir, cwd, time.Now())
+
+	got1, err := parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, "claude-test", got1.Model)
+
+	// Overwrite the existing file (same path → directory mtime unchanged).
+	newTs := time.Now().Add(time.Second)
+	content, _ := json.Marshal(map[string]any{
+		"role":    "assistant",
+		"content": []any{map[string]any{"type": "text", "text": "updated"}},
+		"model":   "claude-appended",
+		"usage":   map[string]any{"input_tokens": 3, "output_tokens": 3},
+	})
+	entry, _ := json.Marshal(map[string]any{
+		"type":      "assistant",
+		"timestamp": newTs.UTC().Format(time.RFC3339Nano),
+		"message":   json.RawMessage(content),
+	})
+	require.NoError(t, os.WriteFile(path, append(entry, '\n'), 0o640))
+	require.NoError(t, os.Chtimes(path, newTs, newTs))
+
+	got2, err := parser.FindSessionForProject(cwd, 0, configDir)
+	require.NoError(t, err)
+	require.Equal(t, "claude-appended", got2.Model, "overwrite of active file must surface fresh data despite candidate cache")
+}
+
 // TestFindSessionForProject_NoFiles verifies that an error is returned when no
 // JSONL session files are present.
 func TestFindSessionForProject_NoFiles(t *testing.T) {

@@ -179,7 +179,7 @@ type OrchestratorOptions struct {
 	MCPUrl   string
 
 	// WorktreeRoot is the base directory for auto-created git worktrees.
-	// Defaults to ~/dashboard-worktrees when empty.
+	// Defaults to ~/<worktree.DefaultRootDirName> when empty (see worktree.DefaultRoot).
 	// Set via DASHBOARD_WORKTREE_ROOT.
 	WorktreeRoot string
 
@@ -187,6 +187,11 @@ type OrchestratorOptions struct {
 	// even when task.SourceBranch is not set. The branch is derived as "feat/<slug>".
 	// Set via DASHBOARD_FORCE_WORKTREES=true.
 	ForceWorktrees bool
+
+	// SpawnFn launches the agent process for native (claude) stages. Production
+	// wires pipeline.SpawnStageAgent at the DI root; when nil the orchestrator
+	// defaults to syntheticSpawn so tests can never launch a real agent.
+	SpawnFn SpawnFunc
 
 	// ResolveSpawner returns the effective DB spawner row for a task right
 	// before the native Claude path is taken. When nil, stage handlers spawn

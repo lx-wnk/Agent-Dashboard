@@ -93,11 +93,11 @@ func buildIngressRouter(t *testing.T, rawToken string) http.Handler {
 			rawrepo.NewNotificationConfigRepo(rawDB),
 			rawrepo.NewPushSubscriptionRepo(rawDB),
 		)),
-		RemotesHandler:        remotes.NewHandler(repo.NewRemoteRegistrationRepo(c)),
-		PresetsHandler:        presets.NewHandler(repo.NewPermissionPresetRepo(c)),
-		SystemPromptsHandler:  systemprompts.NewHandler(repo.NewSystemPromptRepo(c)),
-		SearchHandler:         search.NewHandler(rawrepo.NewSearchRepo(rawDB), nil),
-		HistoryHandler:        apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
+		RemotesHandler:       remotes.NewHandler(repo.NewRemoteRegistrationRepo(c)),
+		PresetsHandler:       presets.NewHandler(repo.NewPermissionPresetRepo(c)),
+		SystemPromptsHandler: systemprompts.NewHandler(repo.NewSystemPromptRepo(c)),
+		SearchHandler:        search.NewHandler(rawrepo.NewSearchRepo(rawDB), nil),
+		HistoryHandler:       apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
 		RefineHandler: refineapi.NewHandler(refineapi.Deps{
 			Turns:     repo.NewRefinementTurnRepo(c),
 			Tasks:     repo.NewTaskRepo(c),
@@ -181,7 +181,7 @@ func TestPermissionIngress_ResolutionStaysProtected(t *testing.T) {
 	const rawToken = "mcp_test_ingress_token_valid_9012"
 	router := buildIngressRouter(t, rawToken)
 
-	body := `{"taskId":"t-x","decision":"deny","all":true}`
+	body := `{"taskId":"t-x","outcome":"denied","all":true}`
 	code := driveIngressRequest(router, "/api/permission-requests/bulk-resolve", "Bearer "+rawToken, body)
 
 	if code != http.StatusForbidden {

@@ -73,9 +73,11 @@ export default defineConfig(({ mode }) => ({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['vue'],
-          charts: ['d3'],
+        manualChunks(id) {
+          if (/node_modules\/d3-/.test(id))
+            return 'charts'
+          if (/node_modules\/(?:@vue|vue)\//.test(id))
+            return 'vendor'
         },
       },
     },

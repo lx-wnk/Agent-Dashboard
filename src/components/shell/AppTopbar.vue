@@ -3,14 +3,12 @@ import type { ActiveView } from '../../composables/useViewState'
 import { computed } from 'vue'
 import { viewTitle } from '../../utils/navConfig'
 import OfflineBadge from '../OfflineBadge.vue'
-import LivePulse from './LivePulse.vue'
 
 const props = defineProps<{
   activeView: ActiveView
   searchQuery: string
-  live: boolean
 }>()
-defineEmits<{ 'update:searchQuery': [value: string] }>()
+defineEmits<{ 'update:searchQuery': [value: string], 'openSettings': [] }>()
 
 const title = computed(() => viewTitle(props.activeView))
 const searchPlaceholder = computed(() =>
@@ -27,11 +25,18 @@ const searchPlaceholder = computed(() =>
       type="text"
       :aria-label="searchPlaceholder"
       :placeholder="searchPlaceholder"
-      class="ml-auto bg-raised border border-line rounded-lg px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[200px] focus:outline-none focus:border-accent focus:w-[260px] transition-[width,border-color] duration-200"
+      class="ml-auto bg-raised border border-line rounded-lg px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-faint w-[200px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent focus-visible:w-[260px] transition-[width,border-color] duration-200"
       @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
     >
     <slot name="cta" />
-    <LivePulse :live="live" />
+    <button
+      type="button"
+      aria-label="Settings"
+      class="rounded-lg px-2 h-8 min-w-8 text-[15px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      @click="$emit('openSettings')"
+    >
+      <span aria-hidden="true">⚙</span>
+    </button>
     <OfflineBadge />
   </header>
 </template>

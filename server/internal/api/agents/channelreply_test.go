@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -47,7 +48,7 @@ func TestChannelReplyPost_ValidToken_Stores(t *testing.T) {
 		seenHash = h
 		return &ent.ApiKey{}, nil
 	}}
-	h := NewChannelReplyHandler(store, keys)
+	h := NewChannelReplyHandler(store, keys, nil)
 
 	rec := httptest.NewRecorder()
 	h.Post(rec, postReplyReq(t, "Bearer "+raw))
@@ -62,7 +63,7 @@ func TestChannelReplyPost_BadToken_401(t *testing.T) {
 	keys := &fakeApiKeyRepo{getByHash: func(string) (*ent.ApiKey, error) {
 		return nil, errors.New("not found")
 	}}
-	h := NewChannelReplyHandler(store, keys)
+	h := NewChannelReplyHandler(store, keys, nil)
 
 	rec := httptest.NewRecorder()
 	h.Post(rec, postReplyReq(t, "Bearer wrong"))
@@ -76,7 +77,7 @@ func TestChannelReplyPost_NoBearer_401(t *testing.T) {
 	keys := &fakeApiKeyRepo{getByHash: func(string) (*ent.ApiKey, error) {
 		return nil, errors.New("not found")
 	}}
-	h := NewChannelReplyHandler(store, keys)
+	h := NewChannelReplyHandler(store, keys, nil)
 
 	rec := httptest.NewRecorder()
 	h.Post(rec, postReplyReq(t, ""))
@@ -86,7 +87,7 @@ func TestChannelReplyPost_NoBearer_401(t *testing.T) {
 
 func TestChannelReplyPost_NilRepo_401(t *testing.T) {
 	store := NewReplyStore()
-	h := NewChannelReplyHandler(store, nil)
+	h := NewChannelReplyHandler(store, nil, nil)
 
 	rec := httptest.NewRecorder()
 	h.Post(rec, postReplyReq(t, "Bearer anything"))
@@ -212,4 +213,55 @@ func TestReplyStore_ConcurrentWritesSafe(t *testing.T) {
 	// Expect at most maxRepliesPerPID entries; all goroutines wrote successfully.
 	assert.LessOrEqual(t, len(replies), maxRepliesPerPID)
 	assert.Greater(t, len(replies), 0)
+}
+
+type fakeStageRuns struct {
+	pid *int
+	err error
+}
+
+func (f fakeStageRuns) GetBySessionID(_ context.Context, _ string) (*ent.StageRun, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &ent.StageRun{Pid: f.pid}, nil
+}
+
+func TestGetReplies_ResolvesSessionIDToPID(t *testing.T) {
+	store := NewReplyStore()
+	pid := 4242
+	store.Add(pid, "hello from agent", time.Now().UTC().Format(time.RFC3339))
+
+	h := NewChannelReplyHandler(store, nil, fakeStageRuns{pid: &pid})
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/agents/{sessionId}/replies", h.GetReplies)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/agents/sess-abc-123/replies", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		Replies []Reply `json:"replies"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.Replies, 1)
+	require.Equal(t, "hello from agent", body.Replies[0].Message)
+}
+
+func TestGetReplies_NoStageRunPID_ReturnsEmpty(t *testing.T) {
+	h := NewChannelReplyHandler(NewReplyStore(), nil, fakeStageRuns{pid: nil})
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/agents/{sessionId}/replies", h.GetReplies)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/agents/unknown/replies", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		Replies []Reply `json:"replies"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Empty(t, body.Replies)
 }

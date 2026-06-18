@@ -3,6 +3,7 @@ import { ref, onBeforeUnmount } from 'vue'
 import AppButton from './ui/AppButton.vue'
 import { useNotificationConfig } from '../composables/useNotificationConfig'
 import type { NotifPref } from '../composables/useNotificationConfig'
+import { errorMessage } from '../utils/errorMessage'
 
 const KNOWN_EVENTS: { type: string; label: string; description: string }[] = [
   { type: 'on_hold', label: 'On Hold', description: 'Task paused — requires user input' },
@@ -62,7 +63,7 @@ async function handleSavePref(eventType: string, updated: NotifPref) {
     }, 1500)
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : 'Save failed'
+    error.value = errorMessage(e, 'Save failed')
   }
   finally {
     savingPref.value = null
@@ -80,7 +81,7 @@ async function handleSaveConfig() {
     configSaveOkTimer = setTimeout(() => { configSaveOk.value = false }, 2000)
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : 'Save failed'
+    error.value = errorMessage(e, 'Save failed')
   }
   finally {
     savingConfig.value = false
@@ -101,10 +102,10 @@ async function handleSaveConfig() {
 
     <!-- F011 — role="status"/role="alert" rendered unconditionally so announcements
          fire when content changes (ARIA live regions must exist before content mutates). -->
-    <div role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-400" :class="{ 'sr-only': !loading }">
+    <div role="status" aria-live="polite" aria-atomic="true" class="text-xs text-fg-faint" :class="{ 'sr-only': !loading }">
       {{ loading ? 'Loading…' : '' }}
     </div>
-    <div role="alert" aria-atomic="true" class="text-xs text-red-500" :class="{ 'sr-only': !error || loading }">
+    <div role="alert" aria-atomic="true" class="text-xs text-danger-text" :class="{ 'sr-only': !error || loading }">
       {{ !loading ? (error ?? '') : '' }}
     </div>
 
@@ -160,16 +161,13 @@ async function handleSaveConfig() {
                 </p>
               </th>
               <td class="px-3 py-2.5 text-center">
-                <!-- F001 — role="switch" + aria-checked + aria-label -->
-                <!-- F002 — replace focus:outline-none with focus-visible:ring-* -->
-                <!-- F003 — h-6 w-11 for adequate touch target (24×44px) -->
                 <button
                   type="button"
                   role="switch"
                   :aria-checked="getPref(ev.type).enabled"
                   :aria-label="`${ev.label} notifications`"
-                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
-                  :class="getPref(ev.type).enabled ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'"
+                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+                  :class="getPref(ev.type).enabled ? 'bg-accent' : 'bg-line-strong'"
                   :disabled="savingPref === ev.type"
                   @click="toggleEnabled(ev.type)"
                 >
@@ -218,7 +216,7 @@ async function handleSaveConfig() {
               v-model="config['webhook_url']"
               type="url"
               placeholder="https://hooks.example.com/..."
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-blue-500 font-mono"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent font-mono"
             >
           </div>
           <div class="flex flex-col gap-1">
@@ -227,7 +225,7 @@ async function handleSaveConfig() {
               v-model="config['email_to']"
               type="email"
               placeholder="you@example.com"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-blue-500"
+              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             >
           </div>
           <div class="flex items-center gap-2">
@@ -236,7 +234,7 @@ async function handleSaveConfig() {
               {{ savingConfig ? 'Saving…' : configSaveOk ? 'Saved!' : 'Save Config' }}
             </AppButton>
             <!-- F012 — aria-live rendered unconditionally for reliable announcement -->
-            <p role="status" aria-live="polite" aria-atomic="true" class="text-xs text-green-600 dark:text-green-400" :class="{ 'sr-only': !configSaveOk }">
+            <p role="status" aria-live="polite" aria-atomic="true" class="text-xs text-success-text" :class="{ 'sr-only': !configSaveOk }">
               {{ configSaveOk ? 'Settings saved.' : '' }}
             </p>
           </div>

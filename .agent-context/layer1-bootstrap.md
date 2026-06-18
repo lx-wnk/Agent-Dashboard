@@ -6,7 +6,7 @@
 
 **claude-agent-overview** — Real-time monitoring dashboard for locally running Claude Code agents. Reads JSONL session logs and process metadata to display token usage, costs, tool activity, tasks, and subagents.
 
-**Stack:** Go 1.26 backend (chi, ent ORM, modernc/sqlite, Wire DI, cobra CLI) + Vue 3 TypeScript SPA (Vite, pnpm). Go workspace: `./sdk` + `./server`. Build: Taskfile.yml (`task`). Hot-reload: `air`.
+**Stack:** Go 1.26 backend (chi, ent ORM, modernc/sqlite, manual DI in `cmd/serve/di.go`, cobra CLI) + Vue 3 TypeScript SPA (Vite, pnpm). Go workspace: `./sdk` + `./server`. Build: Taskfile.yml (`task`). Hot-reload: `air`.
 
 ## Platform
 

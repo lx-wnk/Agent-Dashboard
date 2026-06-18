@@ -41,10 +41,10 @@ const tokenDelta = computed(() => {
   <div v-if="sparkData.length >= 2" class="flex flex-col gap-1 px-6 py-1.5 bg-card border-b border-line">
     <div class="flex items-center gap-2">
       <span class="text-[11px] text-fg-mute">Cost trend (3min)</span>
-      <span v-if="costDelta !== null" class="text-[11px] font-mono" :class="costDelta > 0 ? 'text-red-600 dark:text-red-400' : 'text-fg-mute'">
+      <span v-if="costDelta !== null" class="text-[11px] font-mono" :class="costDelta > 0 ? 'text-danger-text' : 'text-fg-mute'">
         {{ costDelta > 0 ? '+' : '' }}${{ costDelta.toFixed(2) }}
       </span>
-      <span v-if="tokenDelta !== null && tokenDelta > 0" class="text-[11px] font-mono text-blue-600 dark:text-blue-400">
+      <span v-if="tokenDelta !== null && tokenDelta > 0" class="text-[11px] font-mono text-info-text">
         +{{ formatTokens(tokenDelta) }} tok
       </span>
     </div>
@@ -52,7 +52,7 @@ const tokenDelta = computed(() => {
       <div
         v-for="(point, i) in sparkData"
         :key="i"
-        class="flex-1 min-w-0.5 bg-green-600 dark:bg-green-400 rounded-t-px transition-opacity"
+        class="flex-1 min-w-0.5 bg-success rounded-t-px transition-opacity"
         :style="{ height: `${Math.max(2, (point.cost / maxCost) * 100)}%` }"
         :title="`$${point.cost.toFixed(2)}`"
         :class="i === sparkData.length - 1 ? 'opacity-100' : 'opacity-70 hover:opacity-100'"

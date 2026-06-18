@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { CoOccurrenceData } from '../../sdk.generated'
-import * as d3 from 'd3'
+import { scaleDiverging } from 'd3-scale'
+import { interpolateRdBu } from 'd3-scale-chromatic'
+import { select } from 'd3-selection'
+import { useTheme } from '../../composables/useTheme'
+import { chartColors } from '../../utils/chartColors'
 import { computed, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -10,6 +14,7 @@ const props = defineProps<{
 }>()
 
 const svgRef = ref<SVGSVGElement | null>(null)
+const { theme } = useTheme()
 
 const isEmpty = computed(() => !props.data || props.data.tools.length === 0)
 const truncated = computed(() => props.data?.meta.truncated ?? false)
@@ -18,7 +23,7 @@ const sessionCount = computed(() => props.data?.meta.sessionCount ?? 0)
 function render() {
   if (!svgRef.value || !props.data)
     return
-  const svg = d3.select(svgRef.value)
+  const svg = select(svgRef.value)
   svg.selectAll('*').remove()
   if (props.data.tools.length === 0)
     return
@@ -49,12 +54,12 @@ function render() {
       }
     }
   }
-  // d3.scaleDiverging: domain [low, mid, high] mapped to [0, 0.5, 1] of interpolator.
+  // scaleDiverging: domain [low, mid, high] mapped to [0, 0.5, 1] of interpolator.
   // interpolateRdBu goes red → white → blue; we want blue<1, neutral=1, red>1 → reverse.
-  const colorScale = d3.scaleDiverging(d3.interpolateRdBu)
+  const colorScale = scaleDiverging(interpolateRdBu)
     .domain([maxLift, 1, 0])
 
-  const DIAGONAL_COLOR = '#334155'
+  const DIAGONAL_COLOR = chartColors().lineStrong
 
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
@@ -79,7 +84,7 @@ function render() {
         .attr('width', cell - 1)
         .attr('height', cell - 1)
         .attr('fill', fill)
-        .attr('stroke', '#e2e8f0')
+        .attr('stroke', chartColors().line)
         .attr('stroke-width', 0.5)
         .append('title')
         .text(isDiag
@@ -130,7 +135,7 @@ function render() {
       .attr('width', 10)
       .attr('height', 10)
       .attr('fill', item.color)
-      .attr('stroke', '#e2e8f0')
+      .attr('stroke', chartColors().line)
       .attr('stroke-width', 0.5)
     legendG.append('text')
       .attr('x', xOffset + 13)
@@ -146,10 +151,11 @@ function render() {
 // a v-else that only mounts once data is non-empty, so a pre-flush watcher
 // would see a null svgRef on first data arrival and bail, leaving it blank.
 watch(() => props.data, render, { immediate: true, flush: 'post' })
+watch(theme, render)
 
 onUnmounted(() => {
   if (svgRef.value)
-    d3.select(svgRef.value).selectAll('*').remove()
+    select(svgRef.value).selectAll('*').remove()
 })
 </script>
 
@@ -158,7 +164,7 @@ onUnmounted(() => {
     <div v-if="loading" class="text-sm text-fg-mute p-4">
       Loading co-occurrence matrix…
     </div>
-    <div v-else-if="error" class="text-sm text-red-500 dark:text-red-400 p-4">
+    <div v-else-if="error" class="text-sm text-danger-text p-4">
       {{ error }}
     </div>
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">

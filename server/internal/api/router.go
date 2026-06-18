@@ -93,14 +93,14 @@ type RouterDeps struct {
 	// Ctx is the server-lifetime context. When cancelled (e.g. on shutdown) any
 	// background goroutines started by the router (e.g. debounced rescan) are
 	// also cancelled. If nil, context.Background() is used as a fallback.
-	Ctx               context.Context
-	Config            RouterConfig
-	AgentBroadcaster  *sse.Broadcaster
+	Ctx              context.Context
+	Config           RouterConfig
+	AgentBroadcaster *sse.Broadcaster
 	// Enricher, when non-nil, annotates each scanned agent with its linked
 	// pipeline task (read-only SQLite crossing). Applied to every request-scoped
 	// GetAgents call below via the agentsAccessor closure. May be nil (no DB →
 	// no enrichment). The broadcast loop receives the same enricher separately.
-	Enricher merger.Enricher
+	Enricher          merger.Enricher
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -132,6 +132,7 @@ type RouterDeps struct {
 	MCPHandler            http.Handler
 	ChannelReply          *agents.ChannelReplyHandler
 	ChannelStageOutput    *agents.ChannelStageOutputHandler
+	PermissionPresetRepo  repo.PermissionPresetRepo
 	PluginRegistry        *plugin.Registry
 }
 
@@ -344,6 +345,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
+		if deps.PermissionPresetRepo != nil {
+			allowToolHandler := agents.NewAllowToolHandler(getAgents, deps.PermissionPresetRepo)
+			r.Post("/api/agents/{pid}/allow-tool", ErrorMiddleware(allowToolHandler.AllowTool))
+		}
 
 		// Config explorer — read-only enumeration of skills, slash commands,
 		// and memory files, scoped per spawner / live session via ?spawnerId /
@@ -360,12 +365,19 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/hooks/pending", hooksHandler.Pending)
 		r.Post("/api/hooks/respond", hooksHandler.Respond)
 
-		// Mount route_extension plugins (if any).
+		// Mount the proxy for route_extension and ui_extension plugins. Both serve
+		// their assets (route handlers, ui-manifest + slot modules) through the same
+		// per-plugin proxy mount; All() yields each entry once, so the union is
+		// deduplicated by construction.
 		if deps.PluginRegistry != nil {
 			pluginsHandler := apiplugins.New(deps.PluginRegistry)
 			pluginsHandler.Mount(r)
-			for _, entry := range deps.PluginRegistry.AllWithCapability(plugin.CapRouteExtension) {
-				id := entry.Descriptor.ID
+			for _, entry := range deps.PluginRegistry.All() {
+				d := entry.Descriptor
+				if !d.HasCapability(plugin.CapRouteExtension) && !d.HasCapability(plugin.CapUIExtension) {
+					continue
+				}
+				id := d.ID
 				r.Mount("/api/settings/plugins/"+id, plugin.NewReverseProxy(entry, "/api/settings/plugins/"+id))
 				slog.Info("router: mounted plugin route", "id", id, "path", "/api/settings/plugins/"+id)
 			}
@@ -376,7 +388,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// The channel bridge posts here; auth is validated against the per-PID discovery file.
 	if deps.ChannelReply != nil {
 		r.Post("/api/channel-reply", deps.ChannelReply.Post)
-		r.Get("/api/agents/{pid}/replies", deps.ChannelReply.GetReplies)
+		r.Get("/api/agents/{sessionId}/replies", deps.ChannelReply.GetReplies)
 	}
 
 	// Channel-stage-output endpoint — bearer token auth via api_keys (MCP token),

@@ -39,6 +39,9 @@ func initGitRepo(t *testing.T, dir string) {
 
 func newWTManager(t *testing.T) (*services.WorktreeManager, repo.TaskRepo) {
 	t.Helper()
+	// Redirect the worktree root (derived from $HOME) into a temp dir so created
+	// worktrees auto-clean and never collide with a developer's real ~/dashboard-worktrees.
+	t.Setenv("HOME", t.TempDir())
 	bundle, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)

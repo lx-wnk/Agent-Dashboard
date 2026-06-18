@@ -1,4 +1,5 @@
 import { onMounted, ref } from 'vue'
+import { errorMessage } from '../utils/errorMessage'
 
 export interface HeatmapData {
   grid: number[][]
@@ -20,7 +21,7 @@ export function useCostHeatmap() {
       grid.value = data.grid
     }
     catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Failed to load heatmap'
+      error.value = errorMessage(e, 'Failed to load heatmap')
     }
     finally {
       loading.value = false
