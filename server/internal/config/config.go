@@ -34,6 +34,8 @@ type Config struct {
 	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
 	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
 	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
+	InjectRateLimit        int    `koanf:"inject_rate_limit"`
+	InjectRateWindowMs     int    `koanf:"inject_rate_window_ms"`
 	CostScanIntervalMs     int    `koanf:"cost_scan_interval_ms"`
 	MCPToken               string `koanf:"mcp_token"`
 	WorktreeRoot           string `koanf:"worktree_root"`
@@ -67,6 +69,8 @@ func Defaults() Config {
 		HooksDebounceMs:        100,
 		SpawnRateLimit:         5,
 		SpawnRateWindowMs:      60000,
+		InjectRateLimit:        30,
+		InjectRateWindowMs:     60000,
 		Auth:                   "none",
 	}
 }
@@ -88,6 +92,8 @@ func Load(cfgFile string) (Config, error) {
 		"hooks_debounce_ms":        cfg.HooksDebounceMs,
 		"spawn_rate_limit":         cfg.SpawnRateLimit,
 		"spawn_rate_window_ms":     cfg.SpawnRateWindowMs,
+		"inject_rate_limit":        cfg.InjectRateLimit,
+		"inject_rate_window_ms":    cfg.InjectRateWindowMs,
 	}
 	if err := k.Load(confmap.Provider(defaults, "."), nil); err != nil {
 		return Config{}, fmt.Errorf("config defaults: %w", err)

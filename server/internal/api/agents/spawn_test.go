@@ -127,21 +127,21 @@ func (f *fakeSpawnerRepo) Delete(_ context.Context, _ string) error {
 
 func TestNewSpawnManager_DefaultsWhenInvalidArgs(t *testing.T) {
 	// maxSpawns <= 0 and windowMs <= 0 should be clamped to safe defaults.
-	m := NewSpawnManager(0, 0, nil, nil)
+	m := NewSpawnManager(0, 0, 30, 60000, nil, nil)
 	require.NotNil(t, m)
 	assert.Equal(t, 5, m.rateLimitMax)
 	assert.Equal(t, 60*time.Second, m.rateLimitWindow)
 }
 
 func TestNewSpawnManager_NegativeArgsClamped(t *testing.T) {
-	m := NewSpawnManager(-1, -1, nil, nil)
+	m := NewSpawnManager(-1, -1, 30, 60000, nil, nil)
 	require.NotNil(t, m)
 	assert.Equal(t, 5, m.rateLimitMax)
 	assert.Equal(t, 60*time.Second, m.rateLimitWindow)
 }
 
 func TestNewSpawnManager_AcceptsNilRepo(t *testing.T) {
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	if m == nil {
 		t.Fatal("expected non-nil manager")
 	}
@@ -153,13 +153,13 @@ func TestNewSpawnManager_AcceptsNilRepo(t *testing.T) {
 const testSub = "user-123"
 
 func TestIsSpawnAllowed_FirstSpawnWithinLimit(t *testing.T) {
-	m := NewSpawnManager(3, 60000, nil, nil)
+	m := NewSpawnManager(3, 60000, 30, 60000, nil, nil)
 	assert.True(t, m.IsSpawnAllowed(testSub), "first spawn should be allowed when no attempts recorded")
 }
 
 func TestIsSpawnAllowed_UpToLimitAllowed(t *testing.T) {
 	limit := 3
-	m := NewSpawnManager(limit, 60000, nil, nil)
+	m := NewSpawnManager(limit, 60000, 30, 60000, nil, nil)
 
 	// Record limit-1 attempts manually so the next check is the last allowed one.
 	m.mu.Lock()
@@ -174,7 +174,7 @@ func TestIsSpawnAllowed_UpToLimitAllowed(t *testing.T) {
 
 func TestIsSpawnAllowed_OverLimitRejected(t *testing.T) {
 	limit := 3
-	m := NewSpawnManager(limit, 60000, nil, nil)
+	m := NewSpawnManager(limit, 60000, 30, 60000, nil, nil)
 
 	// Record exactly `limit` attempts so the next is over the limit.
 	m.mu.Lock()
@@ -190,7 +190,7 @@ func TestIsSpawnAllowed_AfterWindowExpires_AllowedAgain(t *testing.T) {
 	// Use a very short window so we can expire attempts quickly.
 	windowMs := 50
 	limit := 2
-	m := NewSpawnManager(limit, windowMs, nil, nil)
+	m := NewSpawnManager(limit, windowMs, 30, 60000, nil, nil)
 
 	// Fill the window.
 	m.mu.Lock()
@@ -209,7 +209,7 @@ func TestIsSpawnAllowed_AfterWindowExpires_AllowedAgain(t *testing.T) {
 
 func TestIsSpawnAllowed_PerUser_Isolated(t *testing.T) {
 	limit := 2
-	m := NewSpawnManager(limit, 60000, nil, nil)
+	m := NewSpawnManager(limit, 60000, 30, 60000, nil, nil)
 
 	// Fill the limit for user-A.
 	m.mu.Lock()
@@ -226,7 +226,7 @@ func TestIsSpawnAllowed_PerUser_Isolated(t *testing.T) {
 // context causes SendMessageToChannel to return promptly rather than blocking.
 // The function must not hang even if a network call is involved.
 func TestSendMessageToChannel_RespectsContextCancellation(t *testing.T) {
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately before the call
@@ -234,7 +234,7 @@ func TestSendMessageToChannel_RespectsContextCancellation(t *testing.T) {
 	// PID 99999 almost certainly doesn't exist; the function will fail while
 	// trying to read the discovery file — but the important contract is that it
 	// returns an error promptly (not block) when the context is already cancelled.
-	err := m.SendMessageToChannel(ctx, 99999, "ping")
+	_, err := m.SendMessageToChannel(ctx, 99999, "ping")
 	require.Error(t, err, "SendMessageToChannel must return an error for an unknown PID")
 
 	// Ensure the call did not block: if we got here at all, the test passes.
@@ -246,13 +246,13 @@ func TestSendMessageToChannel_RespectsContextCancellation(t *testing.T) {
 	defer cancel2()
 	cancel2() // cancel immediately
 
-	err2 := m.SendMessageToChannel(ctx2, 99999, "ping")
+	_, err2 := m.SendMessageToChannel(ctx2, 99999, "ping")
 	require.Error(t, err2, "SendMessageToChannel must return an error with a cancelled deadline context")
 }
 
 func TestPruneAttempts_RemovesOldEntries(t *testing.T) {
 	windowMs := 50
-	m := NewSpawnManager(10, windowMs, nil, nil)
+	m := NewSpawnManager(10, windowMs, 30, 60000, nil, nil)
 
 	// Add one old attempt (pre-window) and one fresh one.
 	old := time.Now().Add(-200 * time.Millisecond)
@@ -275,7 +275,7 @@ func TestPruneAttempts_RemovesOldEntries(t *testing.T) {
 func TestSpawn_UnknownSpawnerID_Returns400(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":    "do thing",
 		"cwd":       tmp,
@@ -290,7 +290,7 @@ func TestSpawn_OllamaAdapter_Rejected(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
 	row := &ent.Spawner{ID: "spwn_o", AdapterType: "ollama", Command: "claude"}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_o": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_o": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":    "do thing",
 		"cwd":       tmp,
@@ -305,7 +305,7 @@ func TestSpawn_OpenAIAdapter_Rejected(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
 	row := &ent.Spawner{ID: "spwn_x", AdapterType: "openai", Command: "claude"}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_x": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_x": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":    "do thing",
 		"cwd":       tmp,
@@ -327,7 +327,7 @@ func TestSpawn_ClaudeAdapter_HydratesModelFromOverride(t *testing.T) {
 		Command:       "claude",
 		ModelOverride: strPtr("claude-opus-4-7"),
 	}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_claude": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_claude": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
 		"cwd":           tmp,
@@ -355,7 +355,7 @@ func TestSpawn_BodyModelOverridesSpawnerModelOverride(t *testing.T) {
 		Command:       "claude",
 		ModelOverride: strPtr("claude-opus-4-7"),
 	}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_claude": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_claude": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
 		"cwd":           tmp,
@@ -388,7 +388,7 @@ func TestSpawn_CustomAdapter_UsesSpawnerCommand(t *testing.T) {
 		Command:     "npx",
 		Args:        []string{"--", "claude-clone"},
 	}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_custom": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_custom": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
 		"cwd":           tmp,
@@ -418,7 +418,7 @@ func TestSpawn_CustomAdapter_DisallowedCommandRejected(t *testing.T) {
 		AdapterType: "custom",
 		Command:     "rm",
 	}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_bad": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_bad": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
 		"cwd":           tmp,
@@ -446,7 +446,7 @@ func TestSpawn_EnvMerge_DashboardWins(t *testing.T) {
 			"MY_CUSTOM":           "hello",
 		},
 	}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_env": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_env": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
 		"cwd":           tmp,
@@ -487,7 +487,7 @@ func TestSpawn_CustomAdapter_ReservedFlagRejected(t *testing.T) {
 		Args: []string{"--model", "anything"}, // reserved
 	}
 	repo := &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_bad": row}}
-	m := NewSpawnManager(5, 60000, repo, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, repo, nil)
 
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
@@ -508,7 +508,7 @@ func TestSpawn_CustomAdapter_ChannelArgOverride(t *testing.T) {
 		AdapterConfig: map[string]string{"channel_arg": "--config"},
 	}
 	repo := &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_arg": row}}
-	m := NewSpawnManager(5, 60000, repo, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, repo, nil)
 
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
@@ -573,7 +573,7 @@ func TestSpawnHandler_CwdOutsideAllowlist_Returns403(t *testing.T) {
 		return []string{allowedRoot}, nil
 	})
 
-	manager := NewSpawnManager(5, 60000, nil, policy)
+	manager := NewSpawnManager(5, 60000, 30, 60000, nil, policy)
 	handler := NewSpawnHandler(manager)
 
 	body, _ := json.Marshal(map[string]any{
@@ -666,7 +666,7 @@ func TestSpawn_AdditionalDirs_InjectedForMultiFolderProject(t *testing.T) {
 		},
 	}
 
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	m.SetProjectFolderRepo(folderRepo)
 
 	_, err := m.Spawn("u1", map[string]any{
@@ -705,7 +705,7 @@ func TestSpawn_AdditionalDirs_NotInjectedWithoutProjectId(t *testing.T) {
 		},
 	}
 
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	m.SetProjectFolderRepo(folderRepo)
 
 	_, err := m.Spawn("u1", map[string]any{
@@ -731,7 +731,7 @@ func TestSpawn_AdditionalDirs_NotInjectedWithNilRepo(t *testing.T) {
 	capturedPtr := captureExec(t)
 
 	// SpawnManager without SetProjectFolderRepo → repo is nil
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
@@ -760,7 +760,7 @@ func TestSpawn_AdditionalDirs_RepoErrorSkipped(t *testing.T) {
 		listErr: errors.New("db unavailable"),
 	}
 
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	m.SetProjectFolderRepo(folderRepo)
 
 	_, err := m.Spawn("u1", map[string]any{
@@ -796,7 +796,7 @@ func TestSpawn_PermissionMode_ExplicitAcceptEdits(t *testing.T) {
 	t.Setenv("HOME", base)
 	capturedPtr := captureExec(t)
 
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":         "do thing",
 		"cwd":            cwd,
@@ -817,7 +817,7 @@ func TestSpawn_PermissionMode_AbsentDefaultsToDefault(t *testing.T) {
 	t.Setenv("HOME", base)
 	capturedPtr := captureExec(t)
 
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
 		"cwd":           cwd,
@@ -838,7 +838,7 @@ func TestSpawn_PermissionMode_BypassPermissions(t *testing.T) {
 	t.Setenv("HOME", base)
 	capturedPtr := captureExec(t)
 
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":         "do thing",
 		"cwd":            cwd,
@@ -861,7 +861,7 @@ func TestSpawn_PermissionMode_AutoAndDontAsk(t *testing.T) {
 			t.Setenv("HOME", base)
 			capturedPtr := captureExec(t)
 
-			m := NewSpawnManager(5, 60000, nil, nil)
+			m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 			_, err := m.Spawn("u1", map[string]any{
 				"prompt":         "do thing",
 				"cwd":            cwd,
@@ -884,7 +884,7 @@ func TestSpawn_PermissionMode_InvalidReturnsError(t *testing.T) {
 	t.Setenv("HOME", base)
 	capturedPtr := captureExec(t)
 
-	m := NewSpawnManager(5, 60000, nil, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":         "do thing",
 		"cwd":            cwd,
@@ -911,7 +911,7 @@ func TestSpawn_PermissionMode_SpawnerOwnsPermissionMode_NotDoubled(t *testing.T)
 		Command:     "claude",
 		Args:        []string{"--permission-mode", "acceptEdits"},
 	}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_pm": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_pm": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
 		"cwd":           cwd,
@@ -943,7 +943,7 @@ func TestSpawn_PermissionMode_SpawnerDangerouslySkip_NotDoubled(t *testing.T) {
 		Command:     "claude",
 		Args:        []string{"--dangerously-skip-permissions"},
 	}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_skip": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_skip": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
 		"cwd":           cwd,
@@ -970,7 +970,7 @@ func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {
 		AdapterType: "claude",
 		Command:     "claude",
 	}
-	m := NewSpawnManager(5, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_sec": row}}, nil)
+	m := NewSpawnManager(5, 60000, 30, 60000, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"spwn_sec": row}}, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":        "do thing",
 		"cwd":           tmp,
@@ -1033,8 +1033,8 @@ func TestSendMessageToChannel_PtyFileTakesPrecedenceOverBridgeHTTP(t *testing.T)
 		"ptyInject": true,
 	})
 
-	m := NewSpawnManager(5, 60000, nil, nil)
-	err := m.SendMessageToChannel(context.Background(), pid, "hello pty")
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
+	_, err := m.SendMessageToChannel(context.Background(), pid, "hello pty")
 	require.NoError(t, err, "SendMessageToChannel with only pty file must succeed")
 	assert.Equal(t, "pty-secret", gotToken, "must use pty file token")
 	assert.Equal(t, "hello pty", gotMessage, "must send correct message body")
@@ -1086,8 +1086,8 @@ func TestSendMessageToChannel_TmuxTakesPrecedenceOverPty(t *testing.T) {
 		return nil
 	}
 
-	m := NewSpawnManager(5, 60000, nil, nil)
-	err := m.SendMessageToChannel(context.Background(), pid, "via tmux")
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
+	_, err := m.SendMessageToChannel(context.Background(), pid, "via tmux")
 	require.NoError(t, err)
 	assert.True(t, tmuxCalled, "tmux send-keys must be used when bridge file has tmuxPane")
 	assert.False(t, ptyHit, "pty HTTP server must NOT be called when tmux path is taken")
@@ -1126,8 +1126,8 @@ func TestSendMessageToChannel_FallsBackToBridgeHTTPWhenNoPty(t *testing.T) {
 		"token": "bridge-token",
 	})
 
-	m := NewSpawnManager(5, 60000, nil, nil)
-	err := m.SendMessageToChannel(context.Background(), pid, "bridge msg")
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
+	_, err := m.SendMessageToChannel(context.Background(), pid, "bridge msg")
 	require.NoError(t, err, "must succeed with bridge file only")
 	assert.Equal(t, "bridge msg", gotMessage)
 }

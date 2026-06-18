@@ -278,8 +278,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	adapterHandler := adapters.NewHandler()
 	replyStore := agents.NewReplyStore()
 	var channelStageOutputHandler *agents.ChannelStageOutputHandler
+	var auditEventRepo repo.AuditEventRepo
 	if entClient != nil {
 		channelStageOutputHandler = agents.NewChannelStageOutputHandler(repo.NewStageRunRepo(entClient), apiKeyRepo)
+		auditEventRepo = repo.NewAuditEventRepo(entClient)
 	}
 
 	routerDeps := api.RouterDeps{
@@ -313,6 +315,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo, repo.NewStageRunRepo(entClient)),
 		ChannelStageOutput:    channelStageOutputHandler,
 		PluginRegistry:        pluginRegistry,
+		AuditEventRepo:        auditEventRepo,
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)

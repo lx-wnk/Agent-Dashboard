@@ -35,6 +35,9 @@
 | `DASHBOARD_COST_SCAN_INTERVAL_MS` | Interval ms for the server-side cost-history scan that fills `agent_cost_trends` (read by the Cost Analytics view). Default `300000` (5 min). A scan also always runs once at boot. Set `<= 0` for boot-scan-only (no periodic loop) — note this does NOT fully disable scanning. The scan reads session JSONL across all `DASHBOARD_CLAUDE_CONFIG_DIRS` and providers; it never has agents write cost data. |
 | `DASHBOARD_SPAWN_RATE_LIMIT`     | Max user-initiated spawns per window, default `5`; must be positive integer                                   |
 | `DASHBOARD_SPAWN_RATE_WINDOW_MS` | Spawn rate-limit window ms, default `60000`; must be positive integer                                         |
+| `DASHBOARD_INJECT_RATE_LIMIT`    | Max live message injections (`POST /api/agents/{pid}/message`) per user per window, default `30`; exceeding returns `429`. Non-positive falls back to default |
+| `DASHBOARD_INJECT_RATE_WINDOW_MS` | Inject rate-limit window ms, default `60000`; non-positive falls back to default |
+| `DASHBOARD_INJECT_TOKEN_ROTATE_MS` | Rotation interval ms for the pty-broker / channel-bridge discovery bearer token, default `300000` (5 min). Set `<= 0` to disable rotation. The previous token stays valid for one interval (grace window) so in-flight deliveries are not dropped |
 | `DASHBOARD_ALLOW_GIT_PUSH`       | `true` or `false`, default `false`; when `true`, removes the global `git push` filter from spawned-agent allow-lists. Per-task override: `metadata.allowGitPush=true`. |
 | `DASHBOARD_HOOKS_SECRET`         | Shared bearer token for all `/api/hooks/*` endpoints; always required — if unset, `config.Load` auto-generates and persists a secret to `~/.claude/dashboard-hooks-secret`. Set explicitly via env var or config file to keep the secret stable across restarts. |
 | `DASHBOARD_HOOKS_DEBOUNCE_MS`    | Debounce window before SSE rescan after a hook event, default `100`ms |

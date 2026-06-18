@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -56,20 +55,21 @@ func Run(ctx context.Context) error {
 	}
 	mcpToken := os.Getenv("DASHBOARD_MCP_TOKEN")
 	stageRunID := os.Getenv("DASHBOARD_STAGE_RUN_ID")
-	httpToken, err := generateToken()
+	initialToken, err := generateToken()
 	if err != nil {
 		return fmt.Errorf("channel: generateToken: %w", err)
 	}
+	token := newRotatingToken(initialToken)
 	parentPid := os.Getppid()
 
 	var sessionPtr atomic.Pointer[mcp.ServerSession]
 
-	httpSrv, httpPort, err := startHTTPServer(dashboardURL, httpToken, &sessionPtr)
+	httpSrv, httpPort, err := startHTTPServer(dashboardURL, token, &sessionPtr)
 	if err != nil {
 		return fmt.Errorf("channel: HTTP server: %w", err)
 	}
 
-	discPath, err := writeDiscovery(parentPid, httpPort, httpToken)
+	discPath, err := writeDiscovery(parentPid, httpPort, token.value())
 	if err != nil {
 		slog.Warn("channel: discovery file write failed", "err", err)
 	}
@@ -90,6 +90,14 @@ func Run(ctx context.Context) error {
 	// Cancel context on OS signals so server.Run returns cleanly and deferred cleanup fires.
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+
+	// Rotate the discovery token periodically, re-emitting the 0600 discovery file
+	// each time. The dashboard re-reads the file per delivery, so no coordination
+	// is needed; a one-rotation grace window covers in-flight deliveries.
+	go startTokenRotation(ctx, token, injectTokenRotateInterval(), func(newToken string) error {
+		_, werr := writeDiscovery(parentPid, httpPort, newToken)
+		return werr
+	})
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "dashboard-channel", Version: "0.1.0"}, &mcp.ServerOptions{
 		Instructions: channelInstructions,
@@ -200,7 +208,8 @@ func registerTools(server *mcp.Server, dashboardURL, mcpToken, stageRunID string
 // ─── HTTP server ──────────────────────────────────────────────────────────────
 
 func startHTTPServer(
-	dashboardURL, httpToken string,
+	dashboardURL string,
+	token *rotatingToken,
 	sess *atomic.Pointer[mcp.ServerSession],
 ) (*http.Server, int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -221,7 +230,7 @@ func startHTTPServer(
 	})
 
 	mux.HandleFunc("POST /message", func(w http.ResponseWriter, r *http.Request) {
-		if !checkBearer(r, httpToken) {
+		if !token.authorize(r) {
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
@@ -272,11 +281,6 @@ func startHTTPServer(
 		}
 	}()
 	return srv, port, nil
-}
-
-func checkBearer(r *http.Request, expected string) bool {
-	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	return subtle.ConstantTimeCompare([]byte(got), []byte(expected)) == 1
 }
 
 func corsOrigin(r *http.Request, dashboardURL string) string {

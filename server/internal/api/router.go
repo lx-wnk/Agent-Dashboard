@@ -66,15 +66,17 @@ func newAgentsAccessor(enricher merger.Enricher) func(ctx context.Context) ([]sd
 
 // RouterConfig holds configuration values for the router.
 type RouterConfig struct {
-	JWTSecret         string
-	CallbackURL       string
-	IsLoopback        bool            // true when Host is 127.0.0.1 / ::1 / localhost
-	BypassAuth        bool            // skip JWT when DASHBOARD_AUTH=none
-	Embedded          http.FileSystem // Vue SPA embed (unused until Task 14)
-	HooksSecret       string
-	HooksDebounceMs   int
-	SpawnRateLimit    int
-	SpawnRateWindowMs int
+	JWTSecret          string
+	CallbackURL        string
+	IsLoopback         bool            // true when Host is 127.0.0.1 / ::1 / localhost
+	BypassAuth         bool            // skip JWT when DASHBOARD_AUTH=none
+	Embedded           http.FileSystem // Vue SPA embed (unused until Task 14)
+	HooksSecret        string
+	HooksDebounceMs    int
+	SpawnRateLimit     int
+	SpawnRateWindowMs  int
+	InjectRateLimit    int
+	InjectRateWindowMs int
 	// AuthPluginSecret is forwarded to the auth handler to protect POST /api/auth/session.
 	AuthPluginSecret string
 	// PluginLoginURL, when non-empty, causes GET /api/auth/login to redirect to the
@@ -134,6 +136,7 @@ type RouterDeps struct {
 	ChannelStageOutput    *agents.ChannelStageOutputHandler
 	PermissionPresetRepo  repo.PermissionPresetRepo
 	PluginRegistry        *plugin.Registry
+	AuditEventRepo        repo.AuditEventRepo
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -338,10 +341,17 @@ func NewRouter(deps RouterDeps) http.Handler {
 		} else {
 			spawnPolicy = services.NewSpawnPolicy(nil)
 		}
-		spawnMgr := agents.NewSpawnManager(deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs, deps.SpawnerRepo, spawnPolicy)
+		spawnMgr := agents.NewSpawnManager(
+			deps.Config.SpawnRateLimit, deps.Config.SpawnRateWindowMs,
+			deps.Config.InjectRateLimit, deps.Config.InjectRateWindowMs,
+			deps.SpawnerRepo, spawnPolicy,
+		)
 		spawnMgr.SetProjectFolderRepo(deps.ProjectFolderRepo)
 		go spawnMgr.StartPruner(serverCtx)
 		spawnHandler := agents.NewSpawnHandler(spawnMgr)
+		if deps.AuditEventRepo != nil {
+			spawnHandler.SetAuditRepo(deps.AuditEventRepo)
+		}
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
