@@ -22,10 +22,12 @@ var ToolScopeMap = map[string]string{
 	"list_permission_requests": "tasks:read",
 	"list_projects":            "tasks:read",
 	"list_spawners":            "tasks:read",
+	"list_schedules":           "tasks:read",
 	// tasks:write
 	"create_task": "tasks:write", "update_task": "tasks:write",
 	"delete_task": "tasks:write", "manage_task": "tasks:write",
 	"add_dependency": "tasks:write", "remove_dependency": "tasks:write",
+	"manage_schedule": "tasks:write",
 	// pipeline:control
 	"progress_task": "pipeline:control", "cancel_task": "pipeline:control",
 	"retry_task": "pipeline:control", "grant_permission": "pipeline:control",

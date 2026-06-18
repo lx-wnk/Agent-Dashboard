@@ -8,10 +8,11 @@ import (
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	mcptools "github.com/lx-wnk/agent-dashboard/server/internal/mcp/tools"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
-func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster) http.Handler {
+func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, sched *scheduler.Scheduler, tb *sse.TaskBroadcaster) http.Handler {
 	if client == nil || orch == nil {
 		return nil
 	}
@@ -61,6 +62,12 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	})
 	mcptools.RegisterKeyTools(registry, mcptools.KeyDeps{
 		ApiKeyRepo: apiKeyRepo,
+	})
+	mcptools.RegisterScheduleTools(registry, mcptools.ScheduleDeps{
+		Repo:       repo.NewTaskScheduleRepo(client),
+		Translator: scheduler.NewNLCron(nil),
+		Runner:     sched,
+		Broadcast:  broadcast,
 	})
 	return mcp.MCPHandler(registry)
 }

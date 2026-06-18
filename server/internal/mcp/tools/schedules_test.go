@@ -1,0 +1,89 @@
+package tools
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
+)
+
+func newScheduleRegistry(t *testing.T) (mcp.ToolRegistry, repo.TaskScheduleRepo) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	r := repo.NewTaskScheduleRepo(bundle.Client)
+	registry := mcp.ToolRegistry{}
+	RegisterScheduleTools(registry, ScheduleDeps{
+		Repo:       r,
+		Translator: scheduler.NewNLCron(nil),
+	})
+	return registry, r
+}
+
+func TestRegisterScheduleTools_Present(t *testing.T) {
+	registry, _ := newScheduleRegistry(t)
+	for _, name := range []string{"manage_schedule", "list_schedules"} {
+		if _, ok := registry[name]; !ok {
+			t.Errorf("expected tool %q registered", name)
+		}
+	}
+}
+
+func TestManageSchedule_CreateAndList(t *testing.T) {
+	registry, _ := newScheduleRegistry(t)
+	ctx := context.Background()
+
+	_, err := registry["manage_schedule"].Handler(ctx, map[string]any{
+		"action":     "create",
+		"name":       "nightly",
+		"nlText":     "every day at 3am",
+		"slugPrefix": "nightly",
+		"title":      "Nightly",
+		"cwd":        "/tmp",
+	})
+	require.NoError(t, err)
+
+	res, err := registry["list_schedules"].Handler(ctx, map[string]any{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+}
+
+func TestManageSchedule_InvalidPhraseFails(t *testing.T) {
+	registry, _ := newScheduleRegistry(t)
+	_, err := registry["manage_schedule"].Handler(context.Background(), map[string]any{
+		"action":     "create",
+		"name":       "bad",
+		"nlText":     "no idea when",
+		"slugPrefix": "bad",
+		"title":      "Bad",
+		"cwd":        "/tmp",
+	})
+	require.Error(t, err)
+}
+
+func TestManageSchedule_EnableDisableDelete(t *testing.T) {
+	registry, r := newScheduleRegistry(t)
+	ctx := context.Background()
+
+	s, err := r.Create(ctx, repo.CreateTaskScheduleInput{
+		Name: "s", CronExpr: "0 9 * * *", SlugPrefix: "s", Title: "S", Cwd: "/tmp",
+		MaxIterations: 20, StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	_, err = registry["manage_schedule"].Handler(ctx, map[string]any{"action": "disable", "id": s.ID})
+	require.NoError(t, err)
+	got, _ := r.GetByID(ctx, s.ID)
+	require.False(t, got.Enabled)
+
+	_, err = registry["manage_schedule"].Handler(ctx, map[string]any{"action": "delete", "id": s.ID})
+	require.NoError(t, err)
+	_, err = r.GetByID(ctx, s.ID)
+	require.Error(t, err)
+}

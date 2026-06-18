@@ -179,11 +179,12 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		rawDB = bundle.DB
 	}
 	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg)
-	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster)
 
 	// Scheduler: recurring task firing engine + its REST handler. Reuses the task
 	// handler's create core, so it must be built after taskHandler. nil when no DB.
 	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster)
+
+	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler
