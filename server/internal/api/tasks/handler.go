@@ -162,6 +162,8 @@ func (h *Handler) Mount(r chi.Router) {
 
 	// Worktree status (branch, ahead/behind vs origin/<base>, dirty flag).
 	r.Get("/api/tasks/{id}/worktree", apierr.ErrorMiddleware(h.getWorktreeStatusHandler))
+	r.Post("/api/tasks/{id}/worktree", apierr.ErrorMiddleware(h.createWorktreeHandler))
+	r.Delete("/api/tasks/{id}/worktree", apierr.ErrorMiddleware(h.removeWorktreeHandler))
 
 	// Notification preferences + config.
 	r.Get("/api/notifications/preferences", apierr.ErrorMiddleware(h.listNotificationPreferences))
