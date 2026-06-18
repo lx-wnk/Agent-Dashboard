@@ -3,6 +3,7 @@ import type { PipelineStage, PipelineTask } from '../../types'
 import { computed, ref, watch } from 'vue'
 import { useInjectedTask, useInjectedTaskDetails } from '../../composables/taskModalContext'
 import { useTaskAssignment } from '../../composables/useTaskAssignment'
+import { refreshTask } from '../../composables/useTasks'
 import { STAGE_LABELS } from '../../utils/stageLabels'
 import { runStatusLabel, runStatusTone } from '../../utils/statusColors'
 import { activeRuntime, formatCents, formatTaskDate, taskRuntime } from '../../utils/taskFormat'
@@ -19,6 +20,14 @@ import TaskPendingRequests from './TaskPendingRequests.vue'
 const emit = defineEmits<{ openChat: [task: PipelineTask] }>()
 
 const task = useInjectedTask()
+
+// Worktree create/remove changes task.worktreePath; refetch so the panel and
+// editor link reflect it immediately instead of waiting for the next SSE push.
+async function onWorktreeChange(): Promise<void> {
+  if (task.value)
+    await refreshTask(task.value.id)
+}
+
 const {
   stageRuns,
   pendingRequests,
@@ -200,6 +209,7 @@ watch(
       :task-id="task.id"
       :worktree-path="task.worktreePath ?? null"
       :active="!!task"
+      @change="onWorktreeChange"
     />
 
     <section class="border-t border-line pt-3 flex flex-col gap-2.5">

@@ -98,7 +98,7 @@ async function fetchTasks() {
   }
 }
 
-async function refreshTask(taskId: string): Promise<void> {
+export async function refreshTask(taskId: string): Promise<void> {
   const res = await fetch(`/api/tasks/${taskId}`)
   if (!res.ok)
     return
