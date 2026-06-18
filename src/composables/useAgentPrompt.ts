@@ -18,8 +18,7 @@ async function registerBackgroundSync(): Promise<void> {
     return
   try {
     const registration = await navigator.serviceWorker.ready
-    // @ts-expect-error — SyncManager is not yet in all TypeScript lib versions.
-    // Remove this directive once the DOM lib ships ServiceWorkerRegistration.sync.
+    // @ts-expect-error: Remove when lib.dom.d.ts ships ServiceWorkerRegistration.sync (Background Sync API)
     await registration.sync.register(BACKGROUND_SYNC_TAG)
   }
   catch {

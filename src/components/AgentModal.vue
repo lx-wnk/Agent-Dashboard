@@ -95,7 +95,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
       />
       <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="border-t border-line flex-shrink-0">
         <details>
-          <summary class="px-4 py-2 text-xs text-fg-mute cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-400">
+          <summary class="px-4 py-2 text-xs text-fg-soft cursor-pointer select-none hover:text-fg dark:hover:text-fg">
             Agent Details (Tasks, Tools, Subagents)
           </summary>
           <div role="tablist" aria-label="Agent details" class="flex gap-0 px-4 pt-2 border-b border-line" @keydown="onKeydown">

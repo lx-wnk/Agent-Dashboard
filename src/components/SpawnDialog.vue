@@ -7,6 +7,7 @@ import { useSpawnDialog } from '../composables/useSpawnDialog'
 import { useSpawners } from '../composables/useSpawners'
 import { errorMessage } from '../utils/errorMessage'
 import { SPAWN_AUTOCLOSE_MS } from '../utils/timing'
+import { SPAWN_STATUS_POLL_MS } from '../utils/sse'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 import AppButton from './ui/AppButton.vue'
 import AppFieldLabel from './ui/AppFieldLabel.vue'
@@ -121,7 +122,7 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
     const data = await res.json()
     if (data.status === 'running') {
       spawnStatusMsg.value = `Agent PID ${pid} running...`
-      statusPollTimer = setTimeout(pollSpawnStatus, 2000, pid, attempts + 1)
+      statusPollTimer = setTimeout(pollSpawnStatus, SPAWN_STATUS_POLL_MS, pid, attempts + 1)
     }
     else if (data.status === 'exited' && data.exitCode !== 0) {
       const stderr = data.stderr?.trim()
@@ -140,7 +141,7 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
     }
   }
   catch {
-    statusPollTimer = setTimeout(pollSpawnStatus, 2000, pid, attempts + 1)
+    statusPollTimer = setTimeout(pollSpawnStatus, SPAWN_STATUS_POLL_MS, pid, attempts + 1)
   }
 }
 

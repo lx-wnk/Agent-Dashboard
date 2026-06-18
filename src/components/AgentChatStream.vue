@@ -10,6 +10,7 @@ export default {
 import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { renderMarkdown } from '../utils/markdown'
+import { CHAT_REFRESH_MS } from '../utils/sse'
 
 interface ToolGroup {
   kind: 'tool_group'
@@ -224,7 +225,7 @@ async function refreshOutput() {
 function startRefresh() {
   stopRefresh()
   if (props.agent && props.agent.status !== 'idle')
-    refreshInterval = setInterval(refreshOutput, props.refreshIntervalMs ?? 5000)
+    refreshInterval = setInterval(refreshOutput, props.refreshIntervalMs ?? CHAT_REFRESH_MS)
 }
 
 function stopRefresh() {
