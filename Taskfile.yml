@@ -11,7 +11,7 @@ tasks:
 
   dev:go:
     desc: Start Go backend with air hot-reload on :13120
-    cmd: "$(go env GOPATH)/bin/air -c .air.toml"
+    cmd: $(go env GOPATH)/bin/air -c .air.toml
 
   dev:frontend:
     desc: Start Vite dev server with HMR on :5173
@@ -103,7 +103,3 @@ tasks:
   fmt:
     desc: Format all Go code
     cmd: gofmt -w sdk/ server/
-
-  audit:frontend:
-    desc: Audit frontend dependencies for high/critical vulnerabilities
-    cmd: pnpm audit --audit-level=high

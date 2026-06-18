@@ -7,6 +7,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 const DASHBOARD_PORT = process.env.DASHBOARD_PORT || '13120'
 
+const D3_MODULE_RE = /node_modules\/d3-/
+const VUE_MODULE_RE = /node_modules\/(?:@vue|vue)\//
+
 export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
@@ -74,9 +77,9 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (/node_modules\/d3-/.test(id))
+          if (D3_MODULE_RE.test(id))
             return 'charts'
-          if (/node_modules\/(?:@vue|vue)\//.test(id))
+          if (VUE_MODULE_RE.test(id))
             return 'vendor'
         },
       },
@@ -101,7 +104,8 @@ export default defineConfig(({ mode }) => ({
         headers: { origin: `http://127.0.0.1:${DASHBOARD_PORT}` },
         configure: (proxy) => {
           proxy.on('error', (err) => {
-            if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED') return
+            if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED')
+              return
             console.error('[vite proxy]', err)
           })
         },
@@ -112,7 +116,8 @@ export default defineConfig(({ mode }) => ({
         headers: { origin: `http://127.0.0.1:${DASHBOARD_PORT}` },
         configure: (proxy) => {
           proxy.on('error', (err) => {
-            if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED') return
+            if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED')
+              return
             console.error('[vite proxy]', err)
           })
         },

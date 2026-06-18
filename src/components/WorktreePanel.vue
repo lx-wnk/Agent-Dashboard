@@ -47,7 +47,6 @@ async function handleRemove(): Promise<void> {
   const code = await remove(false)
   if (code === 409) {
     confirmingRemove.value = true
-    return
   }
 }
 

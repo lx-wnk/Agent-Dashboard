@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import type { WorkflowsFilters, WorkflowTab } from '../composables/useWorkflows'
 import { computed, onMounted, ref, watch } from 'vue'
+import { usePatterns } from '../composables/usePatterns'
 import { useSessions } from '../composables/useSessions'
 import { defaultWorkflowsFilters, useWorkflows } from '../composables/useWorkflows'
-import { usePatterns } from '../composables/usePatterns'
+import AppCard from './ui/AppCard.vue'
 import CoOccurrenceMatrix from './visualizations/CoOccurrenceMatrix.vue'
 import SankeyChart from './visualizations/SankeyChart.vue'
 import SessionDagChart from './visualizations/SessionDagChart.vue'
 import SpawnTreeChart from './visualizations/SpawnTreeChart.vue'
-import AppCard from './ui/AppCard.vue'
 
 defineEmits<{ navigate: [sessionId: string] }>()
+const TOOL_ARGS_RE = /\(.*$/
+const TOOL_SPLIT_RE = / → /
 
 const filters = ref<WorkflowsFilters>(defaultWorkflowsFilters())
 
@@ -78,7 +80,7 @@ const TOOL_TONE: Record<string, string> = {
 }
 
 function toolColor(toolName: string): string {
-  const head = toolName.replace(/\(.*$/, '')
+  const head = toolName.replace(TOOL_ARGS_RE, '')
   return TOOL_TONE[head] ?? 'var(--fg-mute)'
 }
 
@@ -86,8 +88,8 @@ function toolColor(toolName: string): string {
 const toolFrequency = computed(() => {
   const counts: Record<string, number> = {}
   for (const p of patterns.value) {
-    for (const t of p.tools.split(' → ')) {
-      const head = t.replace(/\(.*$/, '').trim()
+    for (const t of p.tools.split(TOOL_SPLIT_RE)) {
+      const head = t.replace(TOOL_ARGS_RE, '').trim()
       counts[head] = (counts[head] ?? 0) + p.frequency
     }
   }

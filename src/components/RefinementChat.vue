@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { ImageAttachment } from '../composables/useRefinementChat'
 import type { PipelineTask } from '../types'
+import type { LoadedAddon, SlotContext } from '../utils/pluginSlot'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
 import PluginSlot from './PluginSlot.vue'
-import type { LoadedAddon, SlotContext } from '../utils/pluginSlot'
 
 const props = defineProps<{
   open: boolean

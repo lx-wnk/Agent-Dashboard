@@ -3,9 +3,9 @@ import type { CoOccurrenceData } from '../../sdk.generated'
 import { scaleDiverging } from 'd3-scale'
 import { interpolateRdBu } from 'd3-scale-chromatic'
 import { select } from 'd3-selection'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../../composables/useTheme'
 import { chartColors } from '../../utils/chartColors'
-import { computed, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{
   data: CoOccurrenceData | null

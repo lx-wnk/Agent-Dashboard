@@ -1,8 +1,8 @@
-import { AGENT_STATUSES } from '../types'
 import { describe, expect, it } from 'vitest'
+import { AGENT_STATUSES } from '../types'
 import { STATUS_ORDER } from './agentSort'
 
-describe('STATUS_ORDER', () => {
+describe('sTATUS_ORDER', () => {
   it('is a record of every AgentStatus mapped to its index', () => {
     AGENT_STATUSES.forEach((status, index) => {
       expect(STATUS_ORDER[status]).toBe(index)

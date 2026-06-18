@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const props = defineProps<{
   modelValue: string | number
-  options: Array<{ value: string | number; label: string }>
+  options: Array<{ value: string | number, label: string }>
   id?: string
   ariaLabel?: string
   disabled?: boolean
@@ -24,6 +24,8 @@ function onChange(e: Event) {
     class="bg-card border border-line rounded-md px-3 py-2 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent disabled:opacity-50 cursor-pointer"
     @change="onChange"
   >
-    <option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option>
+    <option v-for="o in options" :key="o.value" :value="o.value">
+      {{ o.label }}
+    </option>
   </select>
 </template>

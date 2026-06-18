@@ -13,7 +13,9 @@ const emit = defineEmits<{ close: [] }>()
     <h2
       :id="id"
       class="text-xl font-semibold text-fg m-0 whitespace-nowrap"
-    >{{ title }}</h2>
+    >
+      {{ title }}
+    </h2>
     <slot />
     <button
       v-if="showClose"
@@ -21,6 +23,8 @@ const emit = defineEmits<{ close: [] }>()
       aria-label="Close"
       class="ml-auto bg-transparent border-0 text-fg-mute cursor-pointer text-xl leading-none p-0.5 rounded hover:text-fg transition-colors"
       @click="emit('close')"
-    >&#x2715;</button>
+    >
+      &#x2715;
+    </button>
   </header>
 </template>

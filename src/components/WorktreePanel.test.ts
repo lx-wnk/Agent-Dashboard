@@ -3,6 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
+import WorktreePanel from './WorktreePanel.vue'
+
 const statusRef = ref<WorktreeStatusDTO | null>(null)
 const isLoadingRef = ref(false)
 const errorRef = ref<string | null>(null)
@@ -27,8 +29,6 @@ vi.stubGlobal('localStorage', {
   setItem: vi.fn(),
 })
 
-import WorktreePanel from './WorktreePanel.vue'
-
 function setStatus(dto: WorktreeStatusDTO | null) {
   statusRef.value = dto
 }
@@ -48,7 +48,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('WorktreePanel', () => {
+describe('worktreePanel', () => {
   describe('copy-path', () => {
     it('clicking Copy path calls navigator.clipboard.writeText with the path', async () => {
       setStatus({ branch: 'feat/foo', dirty: false, fileCount: 2, ahead: 0, behind: 0 })

@@ -156,25 +156,41 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
         mono
         uppercase
         :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${maxAutoRetries})`"
-      >Retrying · {{ task.autoRetryCount }}/{{ maxAutoRetries }}{{ retrySecondsLeft > 0 ? ` · ${retrySecondsLeft}s` : '' }}</AppChip>
+      >
+        Retrying · {{ task.autoRetryCount }}/{{ maxAutoRetries }}{{ retrySecondsLeft > 0 ? ` · ${retrySecondsLeft}s` : '' }}
+      </AppChip>
       <AppChip
         v-if="task.needsUser && task.latestStageRunStatus === 'awaiting_user'"
         tone="warning"
         mono
         uppercase
         title="Agent is paused and waiting for a permission grant"
-      >⚠ Needs Permission</AppChip>
+      >
+        ⚠ Needs Permission
+      </AppChip>
       <AppChip
         v-if="task.blockedByPendingPermissions"
         tone="warning"
         title="Respawn blocked: previous run still has unresolved permission requests"
-      >&#9888; blocked by permissions</AppChip>
+      >
+        &#9888; blocked by permissions
+      </AppChip>
       <WorktreePill v-if="task.worktreePath" :task-id="task.id" @open="$emit('select', task)" @click.stop />
-      <AppChip v-if="task.sourceBranch" tone="neutral" mono>{{ task.sourceBranch }}</AppChip>
-      <AppChip v-if="task.parentTaskId" tone="info" mono title="Follow-up task">↳</AppChip>
-      <AppChip v-if="task.isUnsatisfiable" tone="warning" mono title="Unsatisfiable dep">⚠ Unsatisfiable dep</AppChip>
-      <AppChip v-else-if="task.isBlocked" tone="neutral" mono title="Waiting for prerequisite">🔒 Blocked</AppChip>
-      <AppChip v-if="task.currentStage === 'implementation'" tone="warning" mono>max iter {{ task.maxIterations }}</AppChip>
+      <AppChip v-if="task.sourceBranch" tone="neutral" mono>
+        {{ task.sourceBranch }}
+      </AppChip>
+      <AppChip v-if="task.parentTaskId" tone="info" mono title="Follow-up task">
+        ↳
+      </AppChip>
+      <AppChip v-if="task.isUnsatisfiable" tone="warning" mono title="Unsatisfiable dep">
+        ⚠ Unsatisfiable dep
+      </AppChip>
+      <AppChip v-else-if="task.isBlocked" tone="neutral" mono title="Waiting for prerequisite">
+        🔒 Blocked
+      </AppChip>
+      <AppChip v-if="task.currentStage === 'implementation'" tone="warning" mono>
+        max iter {{ task.maxIterations }}
+      </AppChip>
       <PluginSlot name="kanban-card-badge" :ctx="{ task }" />
     </div>
   </AppCard>

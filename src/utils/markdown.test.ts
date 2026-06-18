@@ -59,13 +59,11 @@ describe('renderMarkdown', () => {
     })
 
     it('strips javascript: URLs from markdown links', () => {
-      // eslint-disable-next-line no-script-url
       const html = renderMarkdown('[click](javascript:alert(1))')
       expect(html.toLowerCase()).not.toContain('javascript:')
     })
 
     it('strips javascript: URLs from raw anchor tags', () => {
-      // eslint-disable-next-line no-script-url
       const html = renderMarkdown('<a href="javascript:alert(1)">x</a>')
       expect(html.toLowerCase()).not.toContain('javascript:')
     })

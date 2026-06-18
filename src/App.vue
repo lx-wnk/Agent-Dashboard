@@ -5,8 +5,8 @@ import AgentCardGrid from './components/AgentCardGrid.vue'
 import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import AgentTriageBand from './components/AgentTriageBand.vue'
-import AutoApprovingStrip from './components/AutoApprovingStrip.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
+import AutoApprovingStrip from './components/AutoApprovingStrip.vue'
 import BacklogForm from './components/BacklogForm.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import LoginPage from './components/LoginPage.vue'
@@ -24,22 +24,22 @@ import AppModal from './components/ui/AppModal.vue'
 import AppModalHeader from './components/ui/AppModalHeader.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
+import { useNow } from './composables/useNow'
+import { usePendingPermissions } from './composables/usePendingPermissions'
 import { usePermissionResolve } from './composables/usePermissionResolve'
 import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
 import { useSpawners } from './composables/useSpawners'
-import { usePendingPermissions } from './composables/usePendingPermissions'
 import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { useTodayCost } from './composables/useTodayCost'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import { formatCost, formatTokens, secondsSince, totalTokenCount } from './utils/format'
-import { needsAttention } from './utils/attention'
 import { groupAgents, sortAgents } from './utils/agentGroup'
+import { needsAttention } from './utils/attention'
+import { formatCost, formatTokens, secondsSince, totalTokenCount } from './utils/format'
 import { friendlyProjectName } from './utils/friendlyProjectName'
-import { useNow } from './composables/useNow'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
@@ -122,8 +122,8 @@ const costDelta = computed(() => {
 
 const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
 const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
-const totalCostLabel = computed(() => formatCost(totalCost.value))
-const totalTokensLabel = computed(() => formatTokens(totalTokens.value))
+const _totalCostLabel = computed(() => formatCost(totalCost.value))
+const _totalTokensLabel = computed(() => formatTokens(totalTokens.value))
 
 const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatCost(todayUsd.value)))
 
@@ -155,7 +155,7 @@ const rosterAgents = computed(() => {
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
 const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
-const rosterAttentionCount = computed(() =>
+const _rosterAttentionCount = computed(() =>
   rosterAgents.value.filter(a => needsAttention(a, secondsSince(a.lastActivity, nowMs.value))).length,
 )
 const projectOptions = computed(() => [
@@ -355,9 +355,9 @@ onMounted(fetchQuota)
 
       <template #topbar>
         <AppTopbar
-          @open-settings="showSettings = true"
           :active-view="activeView"
           :search-query="searchQuery"
+          @open-settings="showSettings = true"
           @update:search-query="searchQuery = $event"
         >
           <template #cta>

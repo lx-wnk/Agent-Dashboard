@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onBeforeUnmount } from 'vue'
-import AppButton from './ui/AppButton.vue'
-import { useNotificationConfig } from '../composables/useNotificationConfig'
 import type { NotifPref } from '../composables/useNotificationConfig'
+import { onBeforeUnmount, ref } from 'vue'
+import { useNotificationConfig } from '../composables/useNotificationConfig'
 import { errorMessage } from '../utils/errorMessage'
+import AppButton from './ui/AppButton.vue'
 
-const KNOWN_EVENTS: { type: string; label: string; description: string }[] = [
+const KNOWN_EVENTS: { type: string, label: string, description: string }[] = [
   { type: 'on_hold', label: 'On Hold', description: 'Task paused — requires user input' },
   { type: 'approval_needed', label: 'Approval Needed', description: 'Stage agent requesting tool permission' },
   { type: 'completed', label: 'Completed', description: 'Task finished successfully' },
@@ -29,8 +29,10 @@ let prefSaveOkTimer: ReturnType<typeof setTimeout> | null = null
 let configSaveOkTimer: ReturnType<typeof setTimeout> | null = null
 
 onBeforeUnmount(() => {
-  if (prefSaveOkTimer) clearTimeout(prefSaveOkTimer)
-  if (configSaveOkTimer) clearTimeout(configSaveOkTimer)
+  if (prefSaveOkTimer)
+    clearTimeout(prefSaveOkTimer)
+  if (configSaveOkTimer)
+    clearTimeout(configSaveOkTimer)
 })
 
 function getPref(eventType: string): NotifPref {
@@ -59,7 +61,8 @@ async function handleSavePref(eventType: string, updated: NotifPref) {
     prefSaveOk.value = eventType
     // F054 — store timer ID for cleanup
     prefSaveOkTimer = setTimeout(() => {
-      if (prefSaveOk.value === eventType) prefSaveOk.value = null
+      if (prefSaveOk.value === eventType)
+        prefSaveOk.value = null
     }, 1500)
   }
   catch (e) {
@@ -78,7 +81,9 @@ async function handleSaveConfig() {
     await saveConfig(config.value)
     configSaveOk.value = true
     // F054 — store timer ID for cleanup
-    configSaveOkTimer = setTimeout(() => { configSaveOk.value = false }, 2000)
+    configSaveOkTimer = setTimeout(() => {
+      configSaveOk.value = false
+    }, 2000)
   }
   catch (e) {
     error.value = errorMessage(e, 'Save failed')
@@ -213,7 +218,7 @@ async function handleSaveConfig() {
           <div class="flex flex-col gap-1">
             <label class="text-xs text-fg-mute">Webhook URL</label>
             <input
-              v-model="config['webhook_url']"
+              v-model="config.webhook_url"
               type="url"
               placeholder="https://hooks.example.com/..."
               class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent font-mono"
@@ -222,7 +227,7 @@ async function handleSaveConfig() {
           <div class="flex flex-col gap-1">
             <label class="text-xs text-fg-mute">Email recipient</label>
             <input
-              v-model="config['email_to']"
+              v-model="config.email_to"
               type="email"
               placeholder="you@example.com"
               class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-xs text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"

@@ -1,5 +1,6 @@
-import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS, type AgentGroup, type AgentSort } from '../utils/agentGroup'
+import type { AgentGroup, AgentSort } from '../utils/agentGroup'
 import { ref, watch } from 'vue'
+import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS } from '../utils/agentGroup'
 
 export type ActiveView = 'dashboard' | 'workflows' | 'pipeline' | 'cost'
 export type DashboardLayout = 'cards' | 'list'

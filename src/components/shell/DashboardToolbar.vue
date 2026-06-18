@@ -10,8 +10,8 @@ defineProps<{
   project: string
   sortBy: AgentSort
   groupBy: AgentGroup
-  projectOptions: Array<{ value: string; label: string }>
-  spawnerOptions: Array<{ value: string; label: string }>
+  projectOptions: Array<{ value: string, label: string }>
+  spawnerOptions: Array<{ value: string, label: string }>
 }>()
 
 defineEmits<{

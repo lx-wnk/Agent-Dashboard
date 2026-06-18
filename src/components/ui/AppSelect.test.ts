@@ -8,7 +8,7 @@ const options = [
   { value: 'c', label: 'Option C' },
 ]
 
-describe('AppSelect', () => {
+describe('appSelect', () => {
   it('renders all options', () => {
     const wrapper = mount(AppSelect, {
       props: { modelValue: 'a', options },

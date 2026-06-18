@@ -160,7 +160,9 @@ async function handleResolve(outcome: 'granted' | 'denied') {
         v-if="agent.lastOutput"
         class="m-0 font-mono text-xs text-fg-mute leading-relaxed whitespace-pre-wrap bg-card border border-line rounded-sm p-2.5"
       >{{ agent.lastOutput }}</pre>
-      <p v-else class="text-xs text-fg-faint italic m-0">No output yet</p>
+      <p v-else class="text-xs text-fg-faint italic m-0">
+        No output yet
+      </p>
 
       <div class="flex gap-1.5 mt-2.5">
         <AppButton

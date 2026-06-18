@@ -1,4 +1,4 @@
-version: "2"
+version: '2'
 
 linters:
   settings:
@@ -15,9 +15,9 @@ linters:
         - (github.com/lx-wnk/agent-dashboard/server/internal/db/ent.Client).Close
   exclusions:
     rules:
-      - path: ".*_test\\.go$"
+      - path: '.*_test\.go$'
         linters: [errcheck]
-      - path: "internal/db/ent/"
+      - path: internal/db/ent/
         linters: [staticcheck, govet, revive, errcheck]
       - linters: [revive]
-        text: "stutters"
+        text: stutters

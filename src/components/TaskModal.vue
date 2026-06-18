@@ -10,6 +10,7 @@ import { useTaskActions } from '../composables/useTaskActions'
 import { useTaskDetails } from '../composables/useTaskDetails'
 import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
+import { stageTone } from '../utils/statusColors'
 import AuditLogTab from './AuditLogTab.vue'
 import PluginSlot from './PluginSlot.vue'
 import TaskCostTab from './task/TaskCostTab.vue'
@@ -18,7 +19,6 @@ import TaskFooter from './task/TaskFooter.vue'
 import TaskOverviewTab from './task/TaskOverviewTab.vue'
 import TaskPermissionsTab from './task/TaskPermissionsTab.vue'
 import TaskStagesTab from './task/TaskStagesTab.vue'
-import { stageTone } from '../utils/statusColors'
 import AppChip from './ui/AppChip.vue'
 import AppModal from './ui/AppModal.vue'
 
@@ -73,7 +73,9 @@ watch(() => props.task?.id, (id, prevId) => {
     <template v-if="task">
       <header class="flex items-center justify-between px-5 py-4 border-b border-line">
         <div class="flex items-center gap-2.5 flex-wrap">
-          <AppChip :tone="stageTone(task.currentStage ?? '')" mono uppercase>{{ task.currentStage ? (STAGE_LABELS[task.currentStage] ?? task.currentStage) : '' }}</AppChip>
+          <AppChip :tone="stageTone(task.currentStage ?? '')" mono uppercase>
+            {{ task.currentStage ? (STAGE_LABELS[task.currentStage] ?? task.currentStage) : '' }}
+          </AppChip>
           <AppChip v-if="isFailedRun" tone="danger" mono uppercase :bordered="false" class="ml-auto" title="Latest stage run failed">
             RUN FAILED
           </AppChip>
@@ -84,7 +86,9 @@ watch(() => props.task?.id, (id, prevId) => {
             uppercase
             :bordered="false"
             :title="`Auto-retry queued (attempt ${task.autoRetryCount} of ${modalMaxAutoRetries})`"
-          >Retrying · {{ task.autoRetryCount }}/{{ modalMaxAutoRetries }}{{ modalRetrySecondsLeft > 0 ? ` · ${modalRetrySecondsLeft}s` : '' }}</AppChip>
+          >
+            Retrying · {{ task.autoRetryCount }}/{{ modalMaxAutoRetries }}{{ modalRetrySecondsLeft > 0 ? ` · ${modalRetrySecondsLeft}s` : '' }}
+          </AppChip>
           <span class="font-mono text-xs text-info-text">{{ task.slug }}</span>
           <button
             type="button"

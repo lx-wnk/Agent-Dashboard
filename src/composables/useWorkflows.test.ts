@@ -1,6 +1,7 @@
+import type { WorkflowsFilters } from './useWorkflows'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
-import { defaultWorkflowsFilters, useWorkflows, type WorkflowsFilters } from './useWorkflows'
+import { defaultWorkflowsFilters, useWorkflows } from './useWorkflows'
 
 interface JsonInit {
   body?: unknown

@@ -143,7 +143,9 @@ async function onCreateAndRefine(): Promise<void> {
 <template>
   <form data-testid="backlog-form" class="space-y-4" @submit.prevent="onCreateAndRefine">
     <div class="flex flex-col gap-1">
-      <AppFieldLabel for="backlog-project">Project</AppFieldLabel>
+      <AppFieldLabel for="backlog-project">
+        Project
+      </AppFieldLabel>
       <select
         id="backlog-project"
         v-model="projectChoice"
@@ -172,7 +174,9 @@ async function onCreateAndRefine(): Promise<void> {
     </div>
 
     <div class="flex flex-col gap-1">
-      <AppFieldLabel for="details-title">Title</AppFieldLabel>
+      <AppFieldLabel for="details-title">
+        Title
+      </AppFieldLabel>
       <AppInput
         id="details-title"
         data-testid="details-title"
@@ -183,7 +187,9 @@ async function onCreateAndRefine(): Promise<void> {
     </div>
 
     <div class="flex flex-col gap-1">
-      <AppFieldLabel for="details-slug">Slug</AppFieldLabel>
+      <AppFieldLabel for="details-slug">
+        Slug
+      </AppFieldLabel>
       <AppInput
         id="details-slug"
         data-testid="details-slug"
@@ -198,7 +204,9 @@ async function onCreateAndRefine(): Promise<void> {
 
     <div class="grid grid-cols-2 gap-3">
       <div class="flex flex-col gap-1">
-        <AppFieldLabel for="details-priority">Priority</AppFieldLabel>
+        <AppFieldLabel for="details-priority">
+          Priority
+        </AppFieldLabel>
         <select id="details-priority" v-model="priority" :class="fieldClass">
           <option value="high">
             High
@@ -213,7 +221,9 @@ async function onCreateAndRefine(): Promise<void> {
       </div>
 
       <div class="flex flex-col gap-1">
-        <AppFieldLabel for="details-spawner">Spawner</AppFieldLabel>
+        <AppFieldLabel for="details-spawner">
+          Spawner
+        </AppFieldLabel>
         <select id="details-spawner" v-model="selectedSpawnerId" :class="fieldClass">
           <option value="">
             {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}

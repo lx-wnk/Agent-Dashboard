@@ -32,10 +32,8 @@ export function useTodayCost() {
       const data = await res.json() as { totalUsd?: number }
       todayUsd.value = data.totalUsd ?? 0
     }
-    catch (e: unknown) {
-      if ((e as { name?: string })?.name === 'AbortError')
-        return
-      // Leave the last known value in place on transient failure.
+    catch {
+      // AbortError and transient failures: leave the last known value in place.
     }
   }
 

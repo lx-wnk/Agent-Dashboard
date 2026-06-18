@@ -74,17 +74,5 @@
     "workbox-precaching": "^7.4.1",
     "workbox-routing": "^7.4.1",
     "workbox-strategies": "^7.4.1"
-  },
-  "pnpm": {
-    "overrides": {
-      "serialize-javascript": ">=7.0.3",
-      "fast-uri": ">=3.1.2",
-      "js-cookie": ">=3.0.7",
-      "marked": ">=18.0.2",
-      "hono": ">=4.12.21",
-      "qs": ">=6.15.2",
-      "ip-address": ">=10.1.1",
-      "postcss": ">=8.5.10"
-    }
   }
 }

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { PipelineStage } from '../types'
-import { STAGE_LABELS } from '../utils/stageLabels'
 import { computed } from 'vue'
 import { formatCost, formatTokens } from '../utils/format'
+import { STAGE_LABELS } from '../utils/stageLabels'
 
 export interface StageCostRow {
   stage: PipelineStage

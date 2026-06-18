@@ -63,7 +63,7 @@ const baseAgent: Agent = {
   meta: null,
 }
 
-describe('TaskCard', () => {
+describe('taskCard', () => {
   it('renders a real button with data-testid="task-card-open"', () => {
     const wrapper = mount(TaskCard, {
       props: { task: baseTask },
@@ -103,7 +103,7 @@ describe('TaskCard', () => {
     expect(continueChat).toBeTruthy()
   })
 
-  it('Continue Chat emits openChat and NOT select (click.stop)', async () => {
+  it('continue Chat emits openChat and NOT select (click.stop)', async () => {
     const task = { ...baseTask, currentStage: 'concept' as const }
     const wrapper = mount(TaskCard, {
       props: { task },
@@ -118,7 +118,7 @@ describe('TaskCard', () => {
   })
 })
 
-describe('TaskCard — agent chip', () => {
+describe('taskCard — agent chip', () => {
   it('renders the agent chip when workingAgent is provided', () => {
     const wrapper = mount(TaskCard, {
       props: { task: baseTask, workingAgent: baseAgent },

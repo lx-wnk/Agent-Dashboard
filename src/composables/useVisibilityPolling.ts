@@ -4,12 +4,16 @@ export function useVisibilityPolling(fn: () => void | Promise<void>, intervalMs:
   let handle: ReturnType<typeof setInterval> | null = null
 
   function start() {
-    if (handle) return
+    if (handle)
+      return
     handle = setInterval(fn, intervalMs)
   }
 
   function stop() {
-    if (handle) { clearInterval(handle); handle = null }
+    if (handle) {
+      clearInterval(handle)
+      handle = null
+    }
   }
 
   function onVisibilityChange() {

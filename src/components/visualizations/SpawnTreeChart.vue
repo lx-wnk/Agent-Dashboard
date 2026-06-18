@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SpawnTreeData } from '../../sdk.generated'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useTheme } from '../../composables/useTheme'
 import { paletteColor } from '../../utils/chartColors'
 

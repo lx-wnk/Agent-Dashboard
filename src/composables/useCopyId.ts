@@ -1,6 +1,6 @@
 import type { MaybeRefOrGetter } from 'vue'
-import { toValue } from 'vue'
 import { useClipboard } from '@vueuse/core'
+import { toValue } from 'vue'
 
 export function shortId(id: string): string {
   return id.slice(0, 8)

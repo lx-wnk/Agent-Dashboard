@@ -8,7 +8,7 @@ function fakeCtx(): SlotContext {
   return { insertText: vi.fn(), setBusy: vi.fn() }
 }
 
-describe('PluginSlot', () => {
+describe('pluginSlot', () => {
   it('mounts each addon into its own host element and unmounts on teardown', async () => {
     const unmount = vi.fn()
     const mountFn = vi.fn<(el: HTMLElement, ctx: SlotContext) => UnmountFn>((el) => {
@@ -46,7 +46,9 @@ describe('PluginSlot', () => {
 
   it('does not mount addons if unmounted before the loader resolves', async () => {
     let resolveLoader!: (a: LoadedAddon[]) => void
-    const pending = new Promise<LoadedAddon[]>((r) => { resolveLoader = r })
+    const pending = new Promise<LoadedAddon[]>((r) => {
+      resolveLoader = r
+    })
     const mountFn = vi.fn(() => () => {})
     const loader = vi.fn().mockReturnValue(pending)
 

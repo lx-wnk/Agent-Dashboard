@@ -1,6 +1,6 @@
+import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
 
 let useNotificationConfig: typeof import('../useNotificationConfig').useNotificationConfig
 
@@ -46,7 +46,7 @@ describe('useNotificationConfig', () => {
     const { result } = withSetup(() => useNotificationConfig())
     await vi.waitUntil(() => !result.loading.value)
 
-    expect(result.prefs.value['on_hold']).toMatchObject({ enabled: true, channels: ['webhook'] })
+    expect(result.prefs.value.on_hold).toMatchObject({ enabled: true, channels: ['webhook'] })
     expect(result.config.value).toMatchObject({ webhook_url: 'https://example.com' })
   })
 
@@ -65,7 +65,7 @@ describe('useNotificationConfig', () => {
     } as Response)
 
     await result.refetch()
-    expect(result.prefs.value['completed']).toMatchObject({ enabled: false })
+    expect(result.prefs.value.completed).toMatchObject({ enabled: false })
   })
 
   it('sets error when fetch fails', async () => {

@@ -1,24 +1,24 @@
 <script setup lang="ts">
 import type { ApiKey, McpScope } from '../types'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useServerConfig } from '../composables/useServerConfig'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
 import { errorMessage } from '../utils/errorMessage'
-import { useServerConfig } from '../composables/useServerConfig'
 import { maskToken } from '../utils/format'
 import { buildMcpAddCommand, buildMcpJsonConfig } from '../utils/mcpCommand'
-const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
-const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
-import RemoteSettings from './RemoteSettings.vue'
-import SystemPromptSettings from './SystemPromptSettings.vue'
-import ProjectSettings from './ProjectSettings.vue'
-import SpawnerSettings from './SpawnerSettings.vue'
 import AuditLogTab from './AuditLogTab.vue'
+import ProjectSettings from './ProjectSettings.vue'
+import RemoteSettings from './RemoteSettings.vue'
+import SpawnerSettings from './SpawnerSettings.vue'
+import SystemPromptSettings from './SystemPromptSettings.vue'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
+const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
+const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()

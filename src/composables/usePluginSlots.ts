@@ -3,6 +3,8 @@ import type { LoadedAddon, SlotAddonModule, SlotName } from '../utils/pluginSlot
 import { fetchPluginList } from '../utils/plugins'
 import { PLUGIN_UI_CAPABILITY } from '../utils/pluginSlot'
 
+const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i
+
 /** Per-plugin UI manifest served at `/api/settings/plugins/{id}/ui-manifest.json`. */
 export interface UiManifest {
   slots: { slot: string, module: string }[]
@@ -74,7 +76,7 @@ function getManifest(
 function isSafeModulePath(module: string): boolean {
   if (!module || module.startsWith('/'))
     return false
-  if (module.includes('://') || /^[a-z][a-z0-9+.-]*:/i.test(module))
+  if (module.includes('://') || SCHEME_RE.test(module))
     return false
   return !module.split('/').includes('..')
 }

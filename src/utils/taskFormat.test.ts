@@ -2,8 +2,9 @@ import type { StageRun } from '../types'
 import { describe, expect, it } from 'vitest'
 import { activeRuntime, formatDuration } from './taskFormat'
 
-const run = (startedAt: string | null, endedAt: string | null): StageRun =>
-  ({ startedAt, endedAt } as StageRun)
+function run(startedAt: string | null, endedAt: string | null): StageRun {
+  return { startedAt, endedAt } as StageRun
+}
 
 describe('formatDuration', () => {
   it('formats hours and minutes', () => {

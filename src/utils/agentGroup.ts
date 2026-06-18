@@ -1,8 +1,8 @@
 import type { Agent } from '../types'
 import { AGENT_STATUSES } from '../types'
+import { STATUS_ORDER } from './agentSort'
 import { secondsSince, shortModel } from './format'
 import { friendlyProjectName } from './friendlyProjectName'
-import { STATUS_ORDER } from './agentSort'
 
 export const AGENT_SORT_OPTIONS = [
   { value: 'latest', label: 'Latest active' },
