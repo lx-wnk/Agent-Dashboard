@@ -9,6 +9,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // enrichForTest is a thin wrapper so tests don't repeat the nil permRepo wiring.
@@ -126,4 +128,85 @@ func TestEnrichOne_RetryCountZero_AutoRetryCountNil(t *testing.T) {
 	if enriched.AutoRetryCount != nil {
 		t.Errorf("expected autoRetryCount=nil for retry_count=0, got %v", *enriched.AutoRetryCount)
 	}
+}
+
+// TestEnrichOne_AvailableActions_FailedImplementation verifies that the enriched
+// task carries a non-nil AvailableActions slice and that "retry" is the primary
+// action for a failed implementation run.
+func TestEnrichOne_AvailableActions_FailedImplementation(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	permRepo := repo.NewPermissionRepo(bundle.Client)
+	ctx := context.Background()
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:         "enrich-actions-failed",
+		Title:        "Actions Failed",
+		Cwd:          "/tmp/enrich-actions-failed",
+		CurrentStage: "implementation",
+		Priority:     "medium",
+	})
+	require.NoError(t, err)
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 1,
+	})
+	require.NoError(t, err)
+
+	status := "failed"
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{Status: &status})
+	require.NoError(t, err)
+
+	enriched := enrichForTest(ctx, t, task, srRepo, permRepo)
+
+	require.NotNil(t, enriched.AvailableActions, "AvailableActions must not be nil")
+	require.NotEmpty(t, enriched.AvailableActions, "AvailableActions must not be empty")
+
+	var primary string
+	for _, a := range enriched.AvailableActions {
+		if a.Primary {
+			primary = a.Action
+		}
+	}
+	assert.Equal(t, "retry", primary, "primary action for failed implementation must be retry")
+}
+
+// TestEnrichOne_AvailableActions_ConceptNoRun verifies that a concept task with
+// no stage run returns "approve_spec" as the primary action.
+func TestEnrichOne_AvailableActions_ConceptNoRun(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	permRepo := repo.NewPermissionRepo(bundle.Client)
+	ctx := context.Background()
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:         "enrich-actions-concept",
+		Title:        "Actions Concept",
+		Cwd:          "/tmp/enrich-actions-concept",
+		CurrentStage: "concept",
+		Priority:     "medium",
+	})
+	require.NoError(t, err)
+
+	enriched := enrichForTest(ctx, t, task, srRepo, permRepo)
+
+	require.NotNil(t, enriched.AvailableActions, "AvailableActions must not be nil")
+
+	var primary string
+	for _, a := range enriched.AvailableActions {
+		if a.Primary {
+			primary = a.Action
+		}
+	}
+	assert.Equal(t, "approve_spec", primary, "primary action for concept with no run must be approve_spec")
 }

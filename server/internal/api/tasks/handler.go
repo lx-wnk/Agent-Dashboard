@@ -204,7 +204,8 @@ func (h *Handler) BroadcastTaskUpdate(taskID string) {
 	h.broadcastEnrichedUpdate(context.Background(), taskID)
 }
 
-// applyRefineStatus fills RefineStatus/RefineError from the injected reader.
+// applyRefineStatus fills RefineStatus/RefineError from the injected reader and
+// recomputes AvailableActions so the concept-stage refining case is reflected.
 func (h *Handler) applyRefineStatus(e *EnrichedTask, taskID string) {
 	if h.refineReader == nil || e == nil {
 		return
@@ -214,6 +215,8 @@ func (h *Handler) applyRefineStatus(e *EnrichedTask, taskID string) {
 	if errMsg != "" {
 		e.RefineError = &errMsg
 	}
+	// Refine status can change which action is primary for concept-stage tasks.
+	e.RecomputeAvailableActions()
 }
 
 // broadcastEnrichedEvent fetches and enriches the task, then broadcasts it with the given event type.
