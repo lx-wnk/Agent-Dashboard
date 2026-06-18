@@ -11,6 +11,7 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -20,16 +21,26 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/cmdscope"
 )
 
-// Handler enumerates skills/commands/memory for a resolved scope.
-type Handler struct {
-	spawners cmdscope.SpawnerGetter
-	agents   cmdscope.AgentsFn
+// CwdPolicy gates the client-supplied project cwd to the same roots the spawn
+// path permits, so the editable set cannot be widened to an arbitrary directory
+// on disk. Allow returns nil when cwd is permitted. A nil policy disables the
+// check (dev/bypass-auth with no project roots).
+type CwdPolicy interface {
+	Allow(ctx context.Context, cwd string) error
 }
 
-// NewHandler constructs the config explorer handler. Either dep may be nil;
-// scope resolution then falls back to the process-default scope.
-func NewHandler(spawners cmdscope.SpawnerGetter, agents cmdscope.AgentsFn) *Handler {
-	return &Handler{spawners: spawners, agents: agents}
+// Handler enumerates skills/commands/memory for a resolved scope.
+type Handler struct {
+	spawners  cmdscope.SpawnerGetter
+	agents    cmdscope.AgentsFn
+	cwdPolicy CwdPolicy
+}
+
+// NewHandler constructs the config explorer handler. Any dep may be nil; scope
+// resolution then falls back to the process-default scope, and a nil cwdPolicy
+// leaves the client cwd ungated.
+func NewHandler(spawners cmdscope.SpawnerGetter, agents cmdscope.AgentsFn, cwdPolicy CwdPolicy) *Handler {
+	return &Handler{spawners: spawners, agents: agents, cwdPolicy: cwdPolicy}
 }
 
 // MemoryEntry describes a single memory file (CLAUDE.md / AGENTS.md).
@@ -64,6 +75,13 @@ type memoryResponse struct {
 func (h *Handler) resolve(r *http.Request) cmdscope.Scope {
 	q := r.URL.Query()
 	cwd := cmdscope.SanitizeProjectCwd(q.Get("cwd"))
+	// Confine the project layer to roots the spawn path allows; a cwd outside
+	// them is dropped so the editable set never reaches arbitrary directories.
+	if cwd != "" && h.cwdPolicy != nil {
+		if err := h.cwdPolicy.Allow(r.Context(), cwd); err != nil {
+			cwd = ""
+		}
+	}
 	return cmdscope.ResolveRequestScope(r.Context(), q.Get("sessionId"), q.Get("spawnerId"), cwd, h.spawners, h.agents)
 }
 
