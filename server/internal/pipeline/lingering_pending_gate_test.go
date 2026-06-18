@@ -2,6 +2,7 @@ package pipeline_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -171,6 +172,115 @@ func TestOrchestrator_LingeringPendingGate(t *testing.T) {
 				// Gate did not fire: handler ran → FailTransition → a new run was created and marked failed.
 				require.Greater(t, countAfter, countBefore,
 					"gate should not block when there are no pending permission_requests")
+			}
+		})
+	}
+}
+
+// TestOrchestrator_LingeringPendingGate_ThreeCases covers the three scenarios
+// specified in the task brief:
+//  1. Gate-positive TERMINAL: failed run + unresolved perm row → blocked.
+//  2. Gate-positive ZOMBIE-AWAIT: awaiting_user + dead PID + unresolved perm row → blocked.
+//  3. Gate-negative RESOLVED: failed run + resolved perm row → new run created.
+//     This proves that the OutcomeIsNil filter (not mere row presence) is the gate condition.
+func TestOrchestrator_LingeringPendingGate_ThreeCases(t *testing.T) {
+	tests := []struct {
+		name         string
+		latestStatus string
+		pid          *int
+		resolvedPerm bool // true = resolve the perm row before calling ProgressTask
+		wantBlocked  bool
+	}{
+		{
+			name:         "terminal-failed with unresolved perm blocks respawn",
+			latestStatus: "failed",
+			wantBlocked:  true,
+		},
+		{
+			name:         "zombie-awaiting with dead PID and unresolved perm blocks respawn",
+			latestStatus: "awaiting_user",
+			pid:          ptr(999999999),
+			wantBlocked:  true,
+		},
+		{
+			name:         "resolved perm row on failed run allows respawn",
+			latestStatus: "failed",
+			resolvedPerm: true,
+			wantBlocked:  false,
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			bundle := openSharedBundle(t)
+			orch, taskRepo := makeOrchFromBundle(t, bundle)
+			srRepo := repo.NewStageRunRepo(bundle.Client)
+			permRepo := repo.NewPermissionRepo(bundle.Client)
+
+			orch.SetHandlerOverride("implementation", &agentStubHandler{
+				stage:      "implementation",
+				transition: pipeline.FailTransition{Reason: "handler reached — gate did not block"},
+			})
+
+			task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+				Slug:                fmt.Sprintf("three-cases-%d", i),
+				Title:               "ThreeCases Gate Test",
+				Cwd:                 "/tmp",
+				CurrentStage:        "implementation",
+				Priority:            "medium",
+				MaxIterations:       3,
+				StageTimeoutSeconds: 1800,
+			})
+			require.NoError(t, err)
+
+			priorRun, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+				TaskID:      task.ID,
+				Stage:       "implementation",
+				Iteration:   0,
+				SessionName: "seeded-three-cases",
+			})
+			require.NoError(t, err)
+
+			updateIn := repo.UpdateStageRunInput{Status: &tc.latestStatus}
+			if tc.pid != nil {
+				updateIn.PID = tc.pid
+			}
+			priorRun, err = srRepo.Update(ctx, priorRun.ID, updateIn)
+			require.NoError(t, err)
+
+			// Always seed one permission_request row; resolve it only for the control case.
+			req, err := permRepo.CreatePermissionRequest(ctx, repo.CreatePermissionRequestInput{
+				StageRunID: priorRun.ID,
+				Tool:       "Bash",
+			})
+			require.NoError(t, err)
+
+			if tc.resolvedPerm {
+				err = permRepo.ResolvePermissionRequest(ctx, req.ID, "allow")
+				require.NoError(t, err)
+			}
+
+			runsBefore := listRunsForTask(t, srRepo, ctx, task.ID)
+			countBefore := len(runsBefore)
+
+			result, err := orch.ProgressTask(ctx, task.ID, nil)
+			require.NoError(t, err)
+
+			runsAfter := listRunsForTask(t, srRepo, ctx, task.ID)
+			countAfter := len(runsAfter)
+
+			if tc.wantBlocked {
+				require.Nil(t, result,
+					"gate should return nil when latest run is terminal/zombie with unresolved permission_requests")
+				require.Equal(t, countBefore, countAfter,
+					"no new stage_run should be created when gate blocks; before=%d after=%d",
+					countBefore, countAfter)
+			} else {
+				require.Greater(t, countAfter, countBefore,
+					"gate should not block when the only perm row is resolved; before=%d after=%d",
+					countBefore, countAfter)
 			}
 		})
 	}
