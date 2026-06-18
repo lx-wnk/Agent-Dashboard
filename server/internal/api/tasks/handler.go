@@ -289,6 +289,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if body.Title == "" || len(body.Title) > maxTitleChars {
 		return apierr.NewAppError(http.StatusBadRequest, "title is required and must be <= 200 characters")
 	}
+	if body.Description != nil && len(*body.Description) > maxDescriptionChars {
+		return apierr.NewAppError(http.StatusBadRequest, "description must be <= 10000 characters")
+	}
 	if body.Cwd == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "cwd is required")
 	}
@@ -416,6 +419,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	}
 	if body.CurrentStage != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "currentStage cannot be set via PATCH — use /progress, /cancel, or /retry")
+	}
+	if body.Description != nil && len(*body.Description) > maxDescriptionChars {
+		return apierr.NewAppError(http.StatusBadRequest, "description must be <= 10000 characters")
 	}
 
 	// Parse nullable projectId / spawnerId: absent = leave, null = clear, string = set.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -13,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	rawrepo "github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -247,5 +249,232 @@ func TestCreateTask_DuplicateSlug(t *testing.T) {
 	r.ServeHTTP(rr2, req2)
 	if rr2.Code != http.StatusConflict {
 		t.Fatalf("duplicate create: expected 409, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+}
+
+// newTestHandlerWithRepos wires ProjectRepo, SpawnerRepo, and SRBulkRepo in
+// addition to the repos from newTestHandler. Returns the ent.Client so tests
+// can seed data, and the configured router.
+func newTestHandlerWithRepos(t *testing.T) (*ent.Client, *chi.Mux) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	client := bundle.Client
+	t.Cleanup(func() { _ = client.Close() })
+
+	taskRepo := repo.NewTaskRepo(client)
+	srRepo := repo.NewStageRunRepo(client)
+	srBulkRepo := rawrepo.NewStageRunBulkRepo(bundle.DB)
+	permRepo := repo.NewPermissionRepo(client)
+	auditRepo := repo.NewAuditEventRepo(client)
+	cfgRepo := repo.NewPipelineConfigRepo(client)
+	projectRepo := repo.NewProjectRepo(client)
+	spawnerRepo := repo.NewSpawnerRepo(client)
+
+	broadcaster := sse.NewTaskBroadcaster(sse.NewBroadcaster())
+
+	h := tasks.NewHandler(tasks.Deps{
+		Client:      client,
+		TaskRepo:    taskRepo,
+		SRRepo:      srRepo,
+		SRBulkRepo:  srBulkRepo,
+		PermRepo:    permRepo,
+		AuditRepo:   auditRepo,
+		CfgRepo:     cfgRepo,
+		ProjectRepo: projectRepo,
+		SpawnerRepo: spawnerRepo,
+		Orchestrator: &noopOrchestrator{},
+		Broadcaster: broadcaster,
+	})
+
+	r := chi.NewRouter()
+	r.Use(auth.RequireAuth(testJWTSecret))
+	h.Mount(r)
+	return client, r
+}
+
+// TestCreateTask_ValidationRejections covers all 400-returning branches in create().
+func TestCreateTask_ValidationRejections(t *testing.T) {
+	longDesc := strings.Repeat("a", 10001)
+
+	cases := []struct {
+		name     string
+		body     map[string]any
+		wantBody string // substring the 400 response must contain (proves which branch fired)
+	}{
+		{
+			name: "bad_slug",
+			body: map[string]any{"slug": "Bad Slug!", "title": "T", "cwd": "/tmp"},
+		},
+		{
+			name: "empty_title",
+			body: map[string]any{"slug": "valid-slug", "title": "", "cwd": "/tmp"},
+		},
+		{
+			name:     "title_too_long",
+			body:     map[string]any{"slug": "valid-slug", "title": strings.Repeat("x", 201), "cwd": "/tmp"},
+			wantBody: "title is required",
+		},
+		{
+			name:     "description_too_long",
+			body:     map[string]any{"slug": "valid-slug", "title": "T", "description": longDesc, "cwd": "/tmp"},
+			wantBody: "description must be",
+		},
+		{
+			name: "missing_cwd",
+			body: map[string]any{"slug": "valid-slug", "title": "T", "cwd": ""},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, r := newTestHandler(t)
+			b, _ := json.Marshal(tc.body)
+			req := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewReader(b))
+			req.Header.Set("Content-Type", "application/json")
+			req = withAuth(t, req)
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+			}
+			if tc.wantBody != "" && !strings.Contains(rr.Body.String(), tc.wantBody) {
+				t.Fatalf("expected body to contain %q, got: %s", tc.wantBody, rr.Body.String())
+			}
+		})
+	}
+}
+
+// TestCreateTask_DescriptionAtLimit_Accepted guards the boundary: a description
+// of exactly maxDescriptionChars (10000) must NOT be rejected, so the check
+// stays a strict `>` and never regresses to `>=`.
+func TestCreateTask_DescriptionAtLimit_Accepted(t *testing.T) {
+	_, r := newTestHandler(t)
+	body := map[string]any{
+		"slug":        "desc-at-limit",
+		"title":       "T",
+		"cwd":         "/tmp/dal",
+		"description": strings.Repeat("a", 10000),
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req = withAuth(t, req)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for description at limit, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestUpdateTask_ValidationRejections covers 400-returning branches in update().
+func TestUpdateTask_ValidationRejections(t *testing.T) {
+	_, r := newTestHandler(t)
+
+	// Seed a valid task to PATCH.
+	createBody := map[string]any{"slug": "patch-target", "title": "Patch Target", "cwd": "/tmp/pt"}
+	b, _ := json.Marshal(createBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req = withAuth(t, req)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("seed task: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var created map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &created)
+	taskID := created["id"].(string)
+
+	longDesc := strings.Repeat("a", 10001)
+	stage := "implementation"
+
+	cases := []struct {
+		name     string
+		body     map[string]any
+		wantBody string // substring the 400 response must contain (proves which branch fired)
+	}{
+		{
+			name:     "currentStage_rejected",
+			body:     map[string]any{"currentStage": &stage},
+			wantBody: "currentStage cannot be set",
+		},
+		{
+			name:     "description_too_long",
+			body:     map[string]any{"description": longDesc},
+			wantBody: "description must be",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b, _ := json.Marshal(tc.body)
+			req := httptest.NewRequest(http.MethodPatch, "/api/tasks/"+taskID, bytes.NewReader(b))
+			req.Header.Set("Content-Type", "application/json")
+			req = withAuth(t, req)
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+			}
+			if tc.wantBody != "" && !strings.Contains(rr.Body.String(), tc.wantBody) {
+				t.Fatalf("expected body to contain %q, got: %s", tc.wantBody, rr.Body.String())
+			}
+		})
+	}
+
+	// Boundary: a description of exactly maxDescriptionChars must be accepted.
+	atLimit, _ := json.Marshal(map[string]any{"description": strings.Repeat("a", 10000)})
+	req = httptest.NewRequest(http.MethodPatch, "/api/tasks/"+taskID, bytes.NewReader(atLimit))
+	req.Header.Set("Content-Type", "application/json")
+	req = withAuth(t, req)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for description at limit, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestCreateTask_ProjectNotFound expects 404 when projectId does not exist.
+func TestCreateTask_ProjectNotFound(t *testing.T) {
+	_, r := newTestHandlerWithRepos(t)
+
+	body := map[string]any{
+		"slug":      "proj-miss",
+		"title":     "T",
+		"cwd":       "/tmp/proj",
+		"projectId": "nonexistent-id",
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req = withAuth(t, req)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestCreateTask_SpawnerNotFound expects 404 when spawnerId does not exist.
+func TestCreateTask_SpawnerNotFound(t *testing.T) {
+	_, r := newTestHandlerWithRepos(t)
+
+	body := map[string]any{
+		"slug":      "spawner-miss",
+		"title":     "T",
+		"cwd":       "/tmp/spawner",
+		"spawnerId": "nonexistent-id",
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req = withAuth(t, req)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
