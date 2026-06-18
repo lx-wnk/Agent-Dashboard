@@ -56,6 +56,10 @@ Preparing the first public release.
 
 ### Security
 
+- Resolve all `pnpm audit` advisories: bump `dompurify` to `>=3.4.11` (the only
+  production-reachable one) and `vite` to `>=6.4.3`; pin transitive `undici`
+  (`^7.28.0`), `esbuild`, `@babel/core`, and `brace-expansion` via workspace
+  overrides. `pnpm audit` reports no known vulnerabilities.
 - Hardened the live-injection endpoint (`POST /api/agents/{pid}/message`): rate
   limiting, audit logging, per-session token rotation, and control-character
   sanitization (PR #188).
