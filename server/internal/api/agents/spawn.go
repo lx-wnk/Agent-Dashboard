@@ -140,6 +140,13 @@ func (m *SpawnManager) RecordInject(sub string) {
 	m.injectLimiter.Record(sub)
 }
 
+// InjectAllowAndRecord atomically gates and records a live-injection attempt,
+// closing the check-then-record race. Returns false without recording when sub
+// is at the limit.
+func (m *SpawnManager) InjectAllowAndRecord(sub string) bool {
+	return m.injectLimiter.AllowAndRecord(sub)
+}
+
 func (m *SpawnManager) recordAttempt(sub string) {
 	m.spawnLimiter.Record(sub)
 }
@@ -698,7 +705,7 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 	sanitized := sanitizeInjectMessage(body.Message)
 	msgHash := sha256hex(sanitized)
 
-	if !h.manager.IsInjectAllowed(sub) {
+	if !h.manager.InjectAllowAndRecord(sub) {
 		h.recordAudit(r.Context(), sub, repo.AuditActionLiveInjectRejected, target, map[string]any{
 			"outcome": "rejected",
 		})
@@ -708,7 +715,6 @@ func (h *SpawnHandler) Message(w http.ResponseWriter, r *http.Request) {
 		), http.StatusTooManyRequests)
 		return
 	}
-	h.manager.RecordInject(sub)
 
 	transport, delivErr := h.manager.SendMessageToChannel(r.Context(), pid, sanitized)
 

@@ -48,6 +48,21 @@ func (l *slidingWindowLimiter) Record(key string) {
 	l.attempts[key] = append(l.attempts[key], time.Now())
 }
 
+// AllowAndRecord atomically checks the limit and records an attempt under a
+// single lock hold. It records (and returns true) only when the attempt is
+// permitted, closing the check-then-record race that lets concurrent callers
+// exceed max. Returns false without recording when the key is at the limit.
+func (l *slidingWindowLimiter) AllowAndRecord(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.prune(key)
+	if len(l.attempts[key]) >= l.max {
+		return false
+	}
+	l.attempts[key] = append(l.attempts[key], time.Now())
+	return true
+}
+
 // prune removes attempts older than the window. Caller must hold l.mu.
 func (l *slidingWindowLimiter) prune(key string) {
 	cutoff := time.Now().Add(-l.window)
