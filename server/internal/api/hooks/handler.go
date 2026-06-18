@@ -11,15 +11,21 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
 const (
 	editGateTimeout = 30 * time.Second
+	// maxSummaryBytes bounds the secret-safe payload preview stored per event.
+	// Raw tool_input / tool_response are never stored in full.
+	maxSummaryBytes = 512
 )
 
 // OnEventFn is called when an authenticated hook event is received.
@@ -41,6 +47,9 @@ type PendingEdit struct {
 type Handler struct {
 	secret  string
 	onEvent OnEventFn
+	// store records per-event hook granularity for the merger to read. May be
+	// nil — Event then skips recording and behaves exactly as before.
+	store *hookstore.Store
 
 	mu      sync.Mutex
 	pending map[string]*pendingEntry
@@ -56,28 +65,99 @@ type pendingEntry struct {
 // tokens are rejected with 401. Config.Load always provides a non-empty
 // secret (auto-generated on first boot when DASHBOARD_HOOKS_SECRET is not set).
 // Panics if secret is empty — callers must always supply a secret.
-func New(secret string, onEvent OnEventFn) *Handler {
+//
+// store may be nil (per-event recording disabled); when non-nil, Event records a
+// truncated, secret-safe HookEvent per received payload.
+func New(secret string, store *hookstore.Store, onEvent OnEventFn) *Handler {
 	if secret == "" {
 		panic("hooks.Handler requires a non-empty secret")
 	}
 	return &Handler{
 		secret:  secret,
+		store:   store,
 		onEvent: onEvent,
 		pending: make(map[string]*pendingEntry),
 	}
 }
 
 // Event handles POST /api/hooks/event.
-// Validates the bearer secret and acknowledges 204 on success.
-// A missing or incorrect secret always returns 401.
+// Validates the bearer secret, records a truncated hook event (when a store is
+// configured), and acknowledges 204. A missing or incorrect secret always
+// returns 401. A malformed or empty body is tolerated — the rescan still fires
+// and the response is still 204, so a payload-blind hook script keeps working.
 func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 	if !h.requireSecret(w, r) {
 		return
 	}
+	h.recordEvent(r)
 	w.WriteHeader(http.StatusNoContent)
 	if h.onEvent != nil {
 		go h.onEvent()
 	}
+}
+
+// hookPayload mirrors the Claude Code hook event written to stdin by the hook
+// script. Both camelCase and snake_case keys are accepted so the receiver
+// tolerates the raw Claude payload (session_id/tool_name) and any normalized
+// variant (sessionId/toolName).
+type hookPayload struct {
+	HookType     string          `json:"hookType"`
+	SessionID    string          `json:"sessionId"`
+	SessionIDSnk string          `json:"session_id"`
+	ToolName     string          `json:"toolName"`
+	ToolNameSnk  string          `json:"tool_name"`
+	ToolInput    json.RawMessage `json:"tool_input"`
+	ToolResponse json.RawMessage `json:"tool_response"`
+}
+
+// recordEvent decodes the hook payload and stores a truncated HookEvent. Any
+// decode error is swallowed — recording is best-effort and must never change the
+// 204 contract. A nil store or empty session is a no-op (store.Record guards the
+// empty session).
+func (h *Handler) recordEvent(r *http.Request) {
+	if h.store == nil {
+		return
+	}
+	var p hookPayload
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		return
+	}
+	sessionID := firstNonEmpty(p.SessionID, p.SessionIDSnk)
+	if sessionID == "" {
+		return
+	}
+	h.store.Record(sessionID, sdk.HookEvent{
+		Type:    p.HookType,
+		Tool:    firstNonEmpty(p.ToolName, p.ToolNameSnk),
+		At:      time.Now().Format(time.RFC3339),
+		Summary: summarize(p.ToolResponse, p.ToolInput),
+	})
+}
+
+// summarize returns a truncated, secret-safe preview of the first non-empty raw
+// payload field, capped at maxSummaryBytes and kept valid UTF-8. The full
+// tool_input / tool_response is never stored or logged.
+func summarize(raws ...json.RawMessage) string {
+	for _, raw := range raws {
+		if len(raw) == 0 {
+			continue
+		}
+		s := strings.TrimSpace(string(raw))
+		if len(s) > maxSummaryBytes {
+			s = strings.ToValidUTF8(s[:maxSummaryBytes], "")
+		}
+		return s
+	}
+	return ""
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // requireSecret validates the bearer secret on every request.

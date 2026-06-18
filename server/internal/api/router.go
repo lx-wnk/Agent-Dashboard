@@ -42,6 +42,7 @@ import (
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
@@ -104,7 +105,11 @@ type RouterDeps struct {
 	// pipeline task (read-only SQLite crossing). Applied to every request-scoped
 	// GetAgents call below via the agentsAccessor closure. May be nil (no DB →
 	// no enrichment). The broadcast loop receives the same enricher separately.
-	Enricher          merger.Enricher
+	Enricher merger.Enricher
+	// HookStore records per-event hook granularity. The same instance is read by
+	// the Enricher (via the agentbroadcast hook enricher) so events POSTed to
+	// /api/hooks/event surface on the matching agent. May be nil (recording off).
+	HookStore *hookstore.Store
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -187,7 +192,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if debounceMs <= 0 {
 		debounceMs = 100
 	}
-	hooksHandler := hooks.New(deps.Config.HooksSecret, newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents))
+	hooksHandler := hooks.New(deps.Config.HooksSecret, deps.HookStore, newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents))
 	r.Post("/api/hooks/event", hooksHandler.Event)
 	r.Post("/api/hooks/pre-tool", hooksHandler.PreTool)
 	// NOTE: /api/hooks/respond and /api/hooks/pending are browser-facing (the edit
