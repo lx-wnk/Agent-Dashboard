@@ -70,6 +70,7 @@ type UpdateTaskInput struct {
 	ClearProjectID      bool
 	ClearSpawnerID      bool
 	ClearWorktreePath   bool
+	Autonomy            *string
 }
 
 // rankGap is the spacing applied when a card is dropped at the top or bottom of
@@ -124,7 +125,7 @@ func (r *entTaskRepo) Create(ctx context.Context, in CreateTaskInput) (*ent.Task
 	if in.Metadata != nil {
 		q = q.SetMetadata(in.Metadata)
 	}
-	q = q.SetNillableProjectID(in.ProjectID).SetNillableSpawnerID(in.SpawnerID)
+	q = q.SetNillableProjectID(in.ProjectID).SetNillableSpawnerID(in.SpawnerID).SetNillableAutonomy(in.Autonomy)
 	if in.Rank != nil {
 		q = q.SetRank(*in.Rank)
 	} else {
@@ -209,6 +210,9 @@ func (r *entTaskRepo) Update(ctx context.Context, id string, in UpdateTaskInput)
 		q = q.ClearSpawnerID()
 	} else if in.SpawnerID != nil {
 		q = q.SetSpawnerID(*in.SpawnerID)
+	}
+	if in.Autonomy != nil {
+		q = q.SetAutonomy(*in.Autonomy)
 	}
 	if in.Rank != nil {
 		q = q.SetRank(*in.Rank)

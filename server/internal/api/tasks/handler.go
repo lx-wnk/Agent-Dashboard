@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
+	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
@@ -300,6 +301,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		TokenBudget     *int    `json:"tokenBudget"`
 		ProjectID       string  `json:"projectId"`
 		SpawnerID       string  `json:"spawnerId"`
+		Autonomy        *string `json:"autonomy"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -318,6 +320,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	}
 	if _, err := h.taskRepo.GetBySlug(r.Context(), body.Slug); err == nil {
 		return apierr.NewAppError(http.StatusConflict, "slug already exists")
+	}
+	if body.Autonomy != nil {
+		if _, ok := taskcontrol.ValidAutonomyValues[*body.Autonomy]; !ok {
+			return apierr.NewAppError(http.StatusBadRequest, "invalid autonomy")
+		}
 	}
 
 	// Resolve optional project + spawner. Empty string = unset.
@@ -390,6 +397,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		TokenBudget:         tokenBudget,
 		ProjectID:           projectIDPtr,
 		SpawnerID:           spawnerIDPtr,
+		Autonomy:            body.Autonomy,
 	})
 	if err != nil {
 		return fmt.Errorf("tasks.create: %w", err)
@@ -450,6 +458,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		Cwd             *string         `json:"cwd"`
 		ProjectID       json.RawMessage `json:"projectId"`
 		SpawnerID       json.RawMessage `json:"spawnerId"`
+		Autonomy        *string         `json:"autonomy"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -459,6 +468,11 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	}
 	if body.Description != nil && len(*body.Description) > maxDescriptionChars {
 		return apierr.NewAppError(http.StatusBadRequest, "description must be <= 10000 characters")
+	}
+	if body.Autonomy != nil {
+		if _, ok := taskcontrol.ValidAutonomyValues[*body.Autonomy]; !ok {
+			return apierr.NewAppError(http.StatusBadRequest, "invalid autonomy")
+		}
 	}
 
 	// Parse nullable projectId / spawnerId: absent = leave, null = clear, string = set.
@@ -508,6 +522,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		SpawnerID:       spawnerIDPtr,
 		ClearProjectID:  clearProject,
 		ClearSpawnerID:  clearSpawner,
+		Autonomy:        body.Autonomy,
 	})
 	if err != nil {
 		return fmt.Errorf("tasks.update: %w", err)

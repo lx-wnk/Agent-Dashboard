@@ -26,6 +26,7 @@ type EnrichedTask struct {
 	TargetBranch        *string                `json:"targetBranch"`
 	CurrentStage        string                 `json:"currentStage"`
 	Priority            string                 `json:"priority"`
+	Autonomy            string                 `json:"autonomy"`
 	UserID              *string                `json:"userId"`
 	ParentTaskID        *string                `json:"parentTaskId"`
 	ProjectID           *string                `json:"projectId"`
@@ -184,6 +185,7 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 		TargetBranch:                t.TargetBranch,
 		CurrentStage:                t.CurrentStage,
 		Priority:                    t.Priority,
+		Autonomy:                    t.Autonomy,
 		UserID:                      t.UserID,
 		ParentTaskID:                t.ParentTaskID,
 		ProjectID:                   t.ProjectID,
