@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -20,9 +19,10 @@ var (
 	ErrWorktreeDirty = errors.New("worktree has uncommitted changes")
 )
 
-// WorktreeManager exposes read-only status queries about a task's git worktree.
-// Mutating worktree operations live in package pipeline (see
-// `pipeline/worktree.go`); this service is consumed by the HTTP/MCP layers.
+// WorktreeManager exposes a task's git worktree status plus the user-initiated
+// create/remove lifecycle. Run-driven mutations live in package pipeline (see
+// `pipeline/worktree.go`); both layers share the primitives in package
+// worktree. This service is consumed by the HTTP/MCP layers.
 type WorktreeManager struct {
 	taskRepo repo.TaskRepo
 	runner   *worktree.Runner
@@ -150,26 +150,18 @@ func (m *WorktreeManager) CreateWorktree(ctx context.Context, taskID string) (st
 		}
 	}
 
-	branch := "feat/" + task.Slug
-	if task.SourceBranch != nil && *task.SourceBranch != "" {
-		branch = *task.SourceBranch
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("create_worktree: homedir: %w", err)
-	}
-	root := filepath.Join(home, "dashboard-worktrees")
-	worktreePath := filepath.Join(root, task.Slug)
+	branch := worktree.CreateBranch(task.SourceBranch, task.Slug)
+	root := worktree.DefaultRoot("")
+	worktreePath := worktree.PathFor("", task.Slug)
 
 	if err := os.MkdirAll(root, 0o750); err != nil {
 		return "", fmt.Errorf("create_worktree: mkdir root: %w", err)
 	}
 
-	_, gitErr := m.runner.Output(ctx, task.Cwd, "worktree", "add", "-b", branch, worktreePath)
+	_, gitErr := m.runner.Combined(ctx, task.Cwd, "worktree", "add", "-b", branch, worktreePath)
 	if gitErr != nil {
 		// Fallback: branch may already exist — try without -b.
-		if _, err2 := m.runner.Output(ctx, task.Cwd, "worktree", "add", worktreePath, branch); err2 != nil {
+		if _, err2 := m.runner.Combined(ctx, task.Cwd, "worktree", "add", worktreePath, branch); err2 != nil {
 			return "", fmt.Errorf("create_worktree: git worktree add: %w", gitErr)
 		}
 	}
@@ -202,7 +194,7 @@ func (m *WorktreeManager) RemoveWorktree(ctx context.Context, taskID string, for
 	}
 	args = append(args, path)
 
-	if _, err := m.runner.Output(ctx, task.Cwd, args...); err != nil {
+	if _, err := m.runner.Combined(ctx, task.Cwd, args...); err != nil {
 		return fmt.Errorf("remove_worktree: git worktree remove: %w", err)
 	}
 
