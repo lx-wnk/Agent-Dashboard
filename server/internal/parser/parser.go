@@ -362,51 +362,44 @@ type fullScanUsage struct {
 // It reuses addUsage so the per-message usage extraction can never diverge from
 // the tail parse in ParseSessionFile.
 func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
-	f, err := os.Open(path)
+	rc, err := OpenJSONLReader(path, 0)
 	if err != nil {
 		return fullScanUsage{}, fmt.Errorf("open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer rc.Close()
 
 	var total fullScanUsage
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 256*1024), 4*1024*1024)
-
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
+	err = ScanJSONLLines(rc, func(line []byte) error {
 		// Cheap pre-filter: a line matters only if it carries token usage or is a
 		// compaction marker. Skipping the JSON unmarshal for everything else (user
 		// turns, tool results, meta) cuts ~all per-line allocations on large files.
 		isMarkerLine := bytes.Contains(line, compactBoundaryMarker)
 		if !isMarkerLine && !bytes.Contains(line, usageMarker) {
-			continue
+			return nil
 		}
 		// Single unmarshal into a lean envelope that captures the discriminants
 		// plus the nested message.usage in one pass — avoids the two-stage
 		// RawMessage decode the tail parser uses (it needs far more per line).
 		var entry scanEntry
 		if err := json.Unmarshal(line, &entry); err != nil {
-			continue
+			return nil
 		}
 		if isCompactBoundaryType(entry.Type, entry.Subtype) {
 			// Record that compaction happened (diagnostics only). The token total
 			// is the whole-file sum and is unaffected by the boundary — per-message
 			// usage does not reset, only the context-window cumulative size does.
 			total.hasCompaction = true
-			continue
+			return nil
 		}
 		if entry.Type != "assistant" && entry.Type != "message" {
-			continue
+			return nil
 		}
 		if entry.Message.Role == "assistant" {
 			addUsage(&total.TokenUsage, entry.Message.Usage)
 		}
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return fullScanUsage{}, fmt.Errorf("scan %s: %w", path, err)
 	}
 	return total, nil

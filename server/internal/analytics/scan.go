@@ -1,10 +1,8 @@
 package analytics
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -133,36 +131,24 @@ func readToolCallsFromFile(path, sessionID string, from, to time.Time) ([]ToolCa
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Open(path)
+	if info.Size() > maxFileSize {
+		slog.Warn("analytics: session file exceeds cap, tailing", "path", path, "size", info.Size())
+	}
+
+	rc, err := parser.OpenJSONLReader(path, maxFileSize)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close() //nolint:errcheck
-
-	var reader io.Reader = f
-	if info.Size() > maxFileSize {
-		slog.Warn("analytics: session file exceeds cap, tailing", "path", path, "size", info.Size())
-		if _, err := f.Seek(info.Size()-maxFileSize, io.SeekStart); err != nil {
-			return nil, err
-		}
-		reader = io.LimitReader(f, maxFileSize)
-	}
+	defer rc.Close() //nolint:errcheck
 
 	var calls []ToolCall
-	scanner := bufio.NewScanner(reader)
-	// Increase max token size to handle long lines (tool outputs can be large).
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
+	err = parser.ScanJSONLLines(rc, func(line []byte) error {
 		var env scanEntry
-		if err := json.Unmarshal([]byte(line), &env); err != nil {
-			continue
+		if err := json.Unmarshal(line, &env); err != nil {
+			return nil
 		}
 		if env.Type != "assistant" && env.Type != "message" {
-			continue
+			return nil
 		}
 		var ts time.Time
 		if env.Timestamp != "" {
@@ -172,18 +158,18 @@ func readToolCallsFromFile(path, sessionID string, from, to time.Time) ([]ToolCa
 		}
 		if !ts.IsZero() {
 			if !from.IsZero() && ts.Before(from) {
-				continue
+				return nil
 			}
 			if !to.IsZero() && ts.After(to) {
-				continue
+				return nil
 			}
 		}
 		var msg scanMessage
 		if err := json.Unmarshal(env.Message, &msg); err != nil {
-			continue
+			return nil
 		}
 		if msg.Role != "assistant" {
-			continue
+			return nil
 		}
 		for _, raw := range msg.Content {
 			var block scanBlock
@@ -200,6 +186,10 @@ func readToolCallsFromFile(path, sessionID string, from, to time.Time) ([]ToolCa
 				Timestamp: ts,
 			})
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return calls, nil
 }
