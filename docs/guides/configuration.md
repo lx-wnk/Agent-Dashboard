@@ -53,6 +53,15 @@ These are normally injected into spawned stage agents by the orchestrator — yo
 | `DASHBOARD_HOOKS_SECRET` | auto-generated & persisted | Shared bearer token for `/api/hooks/*`. Persisted to `~/.claude/dashboard-hooks-secret` if unset |
 | `DASHBOARD_HOOKS_DEBOUNCE_MS` | `100` | Debounce before SSE rescan after a hook event |
 
+## Scheduler (pipeline DB config keys)
+
+These keys live in the `pipeline_config` table, not in environment variables. Write them with a direct SQL update or via `PUT /api/config`.
+
+| Key | Default | Description |
+|---|---|---|
+| `scheduleTickIntervalMs` | `30000` | How often the scheduler checks for due schedules (ms). Minimum enforced: 1000 ms |
+| `scheduleCatchup` | `none` | Global fallback catchup policy after downtime. `none` = skip missed windows; `once` = fire a single catch-up run. Overridable per schedule via its `catchup` field |
+
 ## Multi-machine (advanced)
 
 | Variable | Default | Description |

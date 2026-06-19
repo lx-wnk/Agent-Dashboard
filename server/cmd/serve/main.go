@@ -45,7 +45,7 @@ func main() {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			srv, broadcaster, orch, histImporter, baselineProvider, enricher, evalService, cleanup, err := initializeServer(ctx, cfg, cfgFile)
+			srv, broadcaster, orch, sched, histImporter, baselineProvider, enricher, evalService, cleanup, err := initializeServer(ctx, cfg, cfgFile)
 			if err != nil {
 				return err
 			}
@@ -66,6 +66,12 @@ func main() {
 			g.Go(func() error {
 				return orch.Run(ctx)
 			})
+
+			if sched != nil {
+				g.Go(func() error {
+					return sched.Run(ctx)
+				})
+			}
 
 			if histImporter != nil {
 				g.Go(func() error {

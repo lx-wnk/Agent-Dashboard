@@ -12,5 +12,12 @@
     "status": "accepted",
     "date": "2026-06-12",
     "path": "docs/architecture/adr/0006-worktree-leaf.md"
+  },
+  {
+    "id": "ADR-0007",
+    "title": "Cron Scheduling Engine",
+    "status": "accepted",
+    "date": "2026-06-18",
+    "path": "docs/architecture/adr/0007-cron-scheduling-engine.md"
   }
 ]

@@ -30,6 +30,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskschedule"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/user"
 )
 
@@ -109,6 +110,7 @@ func checkColumn(t, c string) error {
 			task.Table:               task.ValidColumn,
 			taskdependency.Table:     taskdependency.ValidColumn,
 			taskpermission.Table:     taskpermission.ValidColumn,
+			taskschedule.Table:       taskschedule.ValidColumn,
 			user.Table:               user.ValidColumn,
 		})
 	})

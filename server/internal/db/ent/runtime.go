@@ -22,6 +22,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskschedule"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/user"
 )
 
@@ -281,6 +282,66 @@ func init() {
 	taskpermissionDescRequestedAt := taskpermissionFields[8].Descriptor()
 	// taskpermission.DefaultRequestedAt holds the default value on creation for the requested_at field.
 	taskpermission.DefaultRequestedAt = taskpermissionDescRequestedAt.Default.(func() time.Time)
+	taskscheduleFields := schema.TaskSchedule{}.Fields()
+	_ = taskscheduleFields
+	// taskscheduleDescName is the schema descriptor for name field.
+	taskscheduleDescName := taskscheduleFields[1].Descriptor()
+	// taskschedule.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	taskschedule.NameValidator = taskscheduleDescName.Validators[0].(func(string) error)
+	// taskscheduleDescEnabled is the schema descriptor for enabled field.
+	taskscheduleDescEnabled := taskscheduleFields[2].Descriptor()
+	// taskschedule.DefaultEnabled holds the default value on creation for the enabled field.
+	taskschedule.DefaultEnabled = taskscheduleDescEnabled.Default.(bool)
+	// taskscheduleDescTimezone is the schema descriptor for timezone field.
+	taskscheduleDescTimezone := taskscheduleFields[5].Descriptor()
+	// taskschedule.DefaultTimezone holds the default value on creation for the timezone field.
+	taskschedule.DefaultTimezone = taskscheduleDescTimezone.Default.(string)
+	// taskscheduleDescCatchup is the schema descriptor for catchup field.
+	taskscheduleDescCatchup := taskscheduleFields[6].Descriptor()
+	// taskschedule.DefaultCatchup holds the default value on creation for the catchup field.
+	taskschedule.DefaultCatchup = taskscheduleDescCatchup.Default.(string)
+	// taskscheduleDescSlugPrefix is the schema descriptor for slug_prefix field.
+	taskscheduleDescSlugPrefix := taskscheduleFields[7].Descriptor()
+	// taskschedule.SlugPrefixValidator is a validator for the "slug_prefix" field. It is called by the builders before save.
+	taskschedule.SlugPrefixValidator = taskscheduleDescSlugPrefix.Validators[0].(func(string) error)
+	// taskscheduleDescTitle is the schema descriptor for title field.
+	taskscheduleDescTitle := taskscheduleFields[8].Descriptor()
+	// taskschedule.TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	taskschedule.TitleValidator = taskscheduleDescTitle.Validators[0].(func(string) error)
+	// taskscheduleDescCwd is the schema descriptor for cwd field.
+	taskscheduleDescCwd := taskscheduleFields[10].Descriptor()
+	// taskschedule.CwdValidator is a validator for the "cwd" field. It is called by the builders before save.
+	taskschedule.CwdValidator = taskscheduleDescCwd.Validators[0].(func(string) error)
+	// taskscheduleDescPriority is the schema descriptor for priority field.
+	taskscheduleDescPriority := taskscheduleFields[13].Descriptor()
+	// taskschedule.DefaultPriority holds the default value on creation for the priority field.
+	taskschedule.DefaultPriority = taskscheduleDescPriority.Default.(string)
+	// taskscheduleDescCurrentStage is the schema descriptor for current_stage field.
+	taskscheduleDescCurrentStage := taskscheduleFields[14].Descriptor()
+	// taskschedule.DefaultCurrentStage holds the default value on creation for the current_stage field.
+	taskschedule.DefaultCurrentStage = taskscheduleDescCurrentStage.Default.(string)
+	// taskscheduleDescMaxIterations is the schema descriptor for max_iterations field.
+	taskscheduleDescMaxIterations := taskscheduleFields[15].Descriptor()
+	// taskschedule.DefaultMaxIterations holds the default value on creation for the max_iterations field.
+	taskschedule.DefaultMaxIterations = taskscheduleDescMaxIterations.Default.(int)
+	// taskscheduleDescStageTimeoutSeconds is the schema descriptor for stage_timeout_seconds field.
+	taskscheduleDescStageTimeoutSeconds := taskscheduleFields[18].Descriptor()
+	// taskschedule.DefaultStageTimeoutSeconds holds the default value on creation for the stage_timeout_seconds field.
+	taskschedule.DefaultStageTimeoutSeconds = taskscheduleDescStageTimeoutSeconds.Default.(int)
+	// taskscheduleDescSilverBullet is the schema descriptor for silver_bullet field.
+	taskscheduleDescSilverBullet := taskscheduleFields[19].Descriptor()
+	// taskschedule.DefaultSilverBullet holds the default value on creation for the silver_bullet field.
+	taskschedule.DefaultSilverBullet = taskscheduleDescSilverBullet.Default.(bool)
+	// taskscheduleDescCreatedAt is the schema descriptor for created_at field.
+	taskscheduleDescCreatedAt := taskscheduleFields[28].Descriptor()
+	// taskschedule.DefaultCreatedAt holds the default value on creation for the created_at field.
+	taskschedule.DefaultCreatedAt = taskscheduleDescCreatedAt.Default.(func() time.Time)
+	// taskscheduleDescUpdatedAt is the schema descriptor for updated_at field.
+	taskscheduleDescUpdatedAt := taskscheduleFields[29].Descriptor()
+	// taskschedule.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	taskschedule.DefaultUpdatedAt = taskscheduleDescUpdatedAt.Default.(func() time.Time)
+	// taskschedule.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	taskschedule.UpdateDefaultUpdatedAt = taskscheduleDescUpdatedAt.UpdateDefault.(func() time.Time)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescIsAdmin is the schema descriptor for is_admin field.

@@ -225,6 +225,18 @@ func (f TaskPermissionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TaskPermissionMutation", m)
 }
 
+// The TaskScheduleFunc type is an adapter to allow the use of ordinary
+// function as TaskSchedule mutator.
+type TaskScheduleFunc func(context.Context, *ent.TaskScheduleMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f TaskScheduleFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.TaskScheduleMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TaskScheduleMutation", m)
+}
+
 // The UserFunc type is an adapter to allow the use of ordinary
 // function as User mutator.
 type UserFunc func(context.Context, *ent.UserMutation) (ent.Value, error)

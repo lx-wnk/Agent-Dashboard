@@ -18,6 +18,7 @@ require (
 	github.com/knadh/koanf/v2 v2.3.5
 	github.com/lx-wnk/agent-dashboard/sdk v0.0.0-00010101000000-000000000000
 	github.com/modelcontextprotocol/go-sdk v1.6.1
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.21.0

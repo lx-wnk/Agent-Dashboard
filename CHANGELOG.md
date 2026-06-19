@@ -14,6 +14,10 @@ Preparing the first public release.
 
 ### Added
 
+- Natural-language cron scheduling for pipeline tasks — describe a cadence in plain
+  English ("every weekday at 9am") and the dashboard stores it as a cron expression,
+  firing offline and deterministically. New REST endpoints under `/api/schedules`
+  and MCP tools `list_schedules` / `manage_schedule` (PR #197).
 - Multi-provider session resolution — Codex and Gemini agents resolve their JSONL
   session logs under each provider's own config dir, so foreign CLI agents can surface
   in the roster (cost reported as unknown until a real foreign session schema lands)
