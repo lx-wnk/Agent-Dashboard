@@ -184,3 +184,51 @@ func TestRefineTask_StoresUserTurnAndRunsRefinement(t *testing.T) {
 	require.GreaterOrEqual(t, userCount, 1, "expected at least one user turn")
 	require.GreaterOrEqual(t, assistantCount, 1, "expected at least one assistant turn")
 }
+
+func TestInjectConcept_DraftReadyThenApproveSpecPersistsMetadata(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	ctx := context.Background()
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	turnsRepo := repo.NewRefinementTurnRepo(bundle.Client)
+	runner := refine.NewRunner(turnsRepo, nil)
+
+	task := seedConceptTask(t, ctx, taskRepo, srRepo)
+
+	registry := mcp.ToolRegistry{}
+	RegisterRefineTools(registry, RefineDeps{
+		Turns:     turnsRepo,
+		Tasks:     taskRepo,
+		StageRuns: srRepo,
+		Runner:    runner,
+		Advance:   func(_ context.Context, _ string) error { return nil },
+	})
+
+	inject := registry["inject_concept"]
+	require.NotNil(t, inject)
+	res, err := inject.Handler(ctx, map[string]any{
+		"task_id": task.ID,
+		"concept": map[string]any{
+			"spec":         "Add a foo endpoint",
+			"plan":         "1. handler 2. test",
+			"refinedTitle": "Foo endpoint",
+		},
+	})
+	require.NoError(t, err)
+	var injectResp map[string]any
+	require.NoError(t, json.Unmarshal([]byte(res.Content[0].Text), &injectResp))
+	require.Equal(t, "draft_ready", injectResp["status"])
+	status, _ := runner.State(task.ID)
+	require.Equal(t, "draft_ready", status)
+
+	approve := registry["approve_spec"]
+	_, err = approve.Handler(ctx, map[string]any{"task_id": task.ID})
+	require.NoError(t, err)
+
+	updated, err := taskRepo.GetByID(ctx, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Add a foo endpoint", updated.Metadata["spec"], "injected spec must reach task metadata, not empty {}")
+}

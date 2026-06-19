@@ -20,11 +20,58 @@ type RefineDeps struct {
 	Advance   func(ctx context.Context, taskID string) error
 }
 
-// RegisterRefineTools registers the three refinement MCP tools into the registry.
+// RegisterRefineTools registers the refinement MCP tools into the registry.
 func RegisterRefineTools(registry mcp.ToolRegistry, d RefineDeps) {
 	registerGetRefineStatus(registry, d)
 	registerApproveSpec(registry, d)
 	registerRefineTask(registry, d)
+	registerInjectConcept(registry, d)
+}
+
+// registerInjectConcept exposes the direct concept-inject path: an agent hands a
+// finished concept to a task in one call (no refine-agent round-trip), landing it
+// draft_ready so approve_spec can freeze it onto the task.
+func registerInjectConcept(registry mcp.ToolRegistry, d RefineDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name:        "inject_concept",
+		Description: "Inject a finished concept (spec, plan, toolRequests, optional refinedTitle/sourceBranch/targetBranch) onto a task without spawning a refine agent. Marks the task draft_ready; follow with approve_spec to advance it.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id": map[string]any{"type": "string", "description": "Task ID"},
+				"concept": map[string]any{"type": "object", "description": "The finished concept as a JSON object (spec, plan, toolRequests, and optional refinedTitle/sourceBranch/targetBranch routing keys)"},
+			},
+			"required": []string{"task_id", "concept"},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
+			taskID, err := mcp.StringArg(args, "task_id")
+			if err != nil {
+				return nil, err
+			}
+			raw, ok := args["concept"].(map[string]any)
+			if !ok || len(raw) == 0 {
+				return nil, mcp.Fail("concept must be a non-empty object")
+			}
+			concept := refine.Concept{Raw: raw}
+			if s, ok := raw["refinedTitle"].(string); ok {
+				concept.RefinedTitle = s
+			}
+			if s, ok := raw["sourceBranch"].(string); ok {
+				concept.SourceBranch = s
+			}
+			if s, ok := raw["targetBranch"].(string); ok {
+				concept.TargetBranch = s
+			}
+			if d.Runner == nil {
+				return nil, mcp.Fail("refinement runner not available")
+			}
+			if err := refineapi.InjectConcept(ctx, refineapi.InjectDeps{Turns: d.Turns, Runner: d.Runner}, taskID, concept); err != nil {
+				return nil, mcp.Fail("inject_concept: " + err.Error())
+			}
+			status, _ := d.Runner.State(taskID)
+			return mcp.OK(map[string]any{"status": status})
+		},
+	})
 }
 
 func registerGetRefineStatus(registry mcp.ToolRegistry, d RefineDeps) {
