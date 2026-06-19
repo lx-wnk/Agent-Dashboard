@@ -147,10 +147,14 @@ type GetAgentsOpts struct {
 	Enricher Enricher
 }
 
+// scanProcessesFn is the process scanner used by GetAgents. It is a package
+// var so tests can inject a synthetic process list without spawning real CLIs.
+var scanProcessesFn = scanner.ScanProcesses
+
 // GetAgents scans running Claude processes and merges them with session data.
 // Processes with no matching active session are silently skipped.
 func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
-	processes, err := scanner.ScanProcesses(ctx)
+	processes, err := scanProcessesFn(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -185,13 +189,7 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 			claimed := make(map[string]bool)
 			for _, i := range idxs {
 				proc := processes[i]
-				session, err := parser.ResolveSessionForProcess(parser.SessionRequest{
-					CWD:             proc.CWD,
-					PID:             proc.PID,
-					Command:         proc.Command,
-					UptimeSeconds:   proc.Uptime,
-					ClaudeConfigDir: proc.ClaudeConfigDir,
-				}, claimed)
+				session, err := resolveSession(proc, claimed)
 				if err != nil {
 					continue // no matching session; zero value left at agents[i]
 				}
@@ -214,6 +212,22 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 		opts.Enricher(ctx, result)
 	}
 	return result, nil
+}
+
+// resolveSession dispatches session resolution by provider. Claude (and the
+// empty default) use the pid-session-aware path; other providers resolve their
+// own config-dir JSONL via the parser's non-Claude path.
+func resolveSession(proc scanner.ProcessInfo, claimed map[string]bool) (*parser.SessionData, error) {
+	if proc.Provider == "" || proc.Provider == sdk.ProviderClaude {
+		return parser.ResolveSessionForProcess(parser.SessionRequest{
+			CWD:             proc.CWD,
+			PID:             proc.PID,
+			Command:         proc.Command,
+			UptimeSeconds:   proc.Uptime,
+			ClaudeConfigDir: proc.ClaudeConfigDir,
+		}, claimed)
+	}
+	return parser.ResolveNonClaudeSession(proc.Provider, proc.CWD, claimed)
 }
 
 // buildAgent assembles an sdk.Agent from a scanned process and its resolved

@@ -14,6 +14,10 @@ Preparing the first public release.
 
 ### Added
 
+- Multi-provider session resolution — Codex and Gemini agents resolve their JSONL
+  session logs under each provider's own config dir, so foreign CLI agents can surface
+  in the roster (cost reported as unknown until a real foreign session schema lands)
+  (PR #199).
 - In-dashboard `~/.claude` config explorer — browse and edit skills, slash commands,
   and memory files from the UI without leaving the dashboard (PR #190).
 - Git worktree panel — create and remove worktrees for pipeline tasks directly from
