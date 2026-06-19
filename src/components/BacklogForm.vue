@@ -31,6 +31,7 @@ const cwd = ref('')
 const priority = ref<'high' | 'medium' | 'low'>('medium')
 const selectedTemplate = ref<PermissionTemplateId | null>('feature_implementation')
 const selectedSpawnerId = ref<string>('')
+const autonomy = ref<'manual' | 'spec_gated' | 'full'>('spec_gated')
 const folderSuggestions = ref<ProjectFolder[]>([])
 const isSubmitting = ref(false)
 const errorMsg = ref('')
@@ -121,6 +122,7 @@ async function buildTask(): Promise<PipelineTask | null> {
       priority: priority.value,
       template: selectedTemplate.value ?? undefined,
       projectId,
+      autonomy: autonomy.value,
       ...(selectedSpawnerId.value ? { spawnerId: selectedSpawnerId.value } : {}),
     })
   }
@@ -233,6 +235,28 @@ async function onCreateAndRefine(): Promise<void> {
           </option>
         </select>
       </div>
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <AppFieldLabel for="details-autonomy">
+        Autonomy
+      </AppFieldLabel>
+      <select
+        id="details-autonomy"
+        v-model="autonomy"
+        data-testid="details-autonomy"
+        :class="fieldClass"
+      >
+        <option value="manual">
+          Manual — approve every stage
+        </option>
+        <option value="spec_gated">
+          Spec-gated — approve the spec, then autonomous
+        </option>
+        <option value="full">
+          Full — fully autonomous
+        </option>
+      </select>
     </div>
 
     <PermissionTemplatePicker v-model="selectedTemplate" />

@@ -186,6 +186,7 @@ export interface CreateTaskInput {
   template?: string
   projectId?: string
   spawnerId?: string
+  autonomy?: 'manual' | 'spec_gated' | 'full'
 }
 
 export async function createTask(input: CreateTaskInput): Promise<PipelineTask> {
@@ -209,6 +210,7 @@ export async function createTask(input: CreateTaskInput): Promise<PipelineTask> 
       template: input.template,
       projectId: input.projectId,
       spawnerId: input.spawnerId,
+      autonomy: input.autonomy,
     }),
   })
   if (!res.ok) {
