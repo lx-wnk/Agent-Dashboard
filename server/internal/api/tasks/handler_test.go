@@ -109,7 +109,7 @@ type noopOrchestrator struct{}
 func (n *noopOrchestrator) ProgressTask(_ context.Context, _ string, _ *pipeline.ProgressOpts) (*ent.StageRun, error) {
 	return nil, nil
 }
-func (n *noopOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
+func (n *noopOrchestrator) ResumeFromUser(_ context.Context, _ string, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
 func (n *noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}

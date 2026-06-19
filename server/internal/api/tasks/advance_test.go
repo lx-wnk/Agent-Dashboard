@@ -23,7 +23,7 @@ func (a *advanceOrchestrator) RequeueForUser(_ context.Context, _ string, _ stri
 	a.requeueCalled = true
 	return &ent.StageRun{ID: "requeued"}, nil
 }
-func (a *advanceOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
+func (a *advanceOrchestrator) ResumeFromUser(_ context.Context, _ string, _ string) (*ent.StageRun, error) {
 	a.resumeCalled = true
 	return &ent.StageRun{ID: "resumed"}, nil
 }
@@ -223,5 +223,32 @@ func TestAdvance_TerminalTask_NoDispatch(t *testing.T) {
 				t.Error("no orchestrator method must be called for terminal stage")
 			}
 		})
+	}
+}
+
+// stubRefineReader feeds a fixed refine status into Advance.
+type stubRefineReader struct{ status string }
+
+func (s stubRefineReader) State(_ string) (string, string) { return s.status, "" }
+
+// TestAdvance_ConceptRefining_Dispatches verifies that when the refine runner
+// reports "refining" on a concept task, Advance computes primary=advance (and
+// dispatches ProgressTask) rather than the approve_spec no-op.
+func TestAdvance_ConceptRefining_Dispatches(t *testing.T) {
+	client := openAdvanceDB(t)
+	orch := &advanceOrchestrator{}
+	taskID := seedTaskWithRun(t, client, "concept", "")
+	deps := advanceDeps(t, client, orch)
+	deps.RefineReader = stubRefineReader{status: "refining"}
+
+	res, err := tasks.Advance(context.Background(), deps, taskID)
+	if err != nil {
+		t.Fatalf("Advance: %v", err)
+	}
+	if res.Primary != "advance" || !res.Dispatched {
+		t.Errorf("expected refining concept to dispatch advance, got primary=%q dispatched=%v", res.Primary, res.Dispatched)
+	}
+	if !orch.progressCalled {
+		t.Error("expected ProgressTask to be called")
 	}
 }

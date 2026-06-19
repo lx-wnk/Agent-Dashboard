@@ -479,7 +479,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		if _, errs := h.grantValidatedEntries(r.Context(), body.TaskID, entries); len(errs) > 0 {
 			resolveErrors = append(resolveErrors, errs...)
 		}
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID); err != nil {
+		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID, ""); err != nil {
 			slog.Warn("bulk_resolve: ResumeFromUser failed", "taskID", body.TaskID, "err", err)
 		}
 

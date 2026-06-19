@@ -16,7 +16,7 @@ import (
 // satisfies both this interface and tasks.OrchestratorIface.
 type ControlOrchestrator interface {
 	ProgressTask(ctx context.Context, taskID string, opts *pipeline.ProgressOpts) (*ent.StageRun, error)
-	ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error)
+	ResumeFromUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error)
 	RequeueForUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error)
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
 	InvalidateConfigCache()
@@ -30,6 +30,7 @@ type ControlDeps struct {
 	PermRepo     repo.PermissionRepo
 	AuditRepo    repo.AuditEventRepo
 	Orchestrator ControlOrchestrator // may be nil in tests
+	RefineReader tasksapi.RefineStatusReader // may be nil; lets advance_task see refine status
 	Broadcast    func(taskID string)
 }
 
@@ -69,9 +70,13 @@ func registerAdvanceTask(registry mcp.ToolRegistry, d ControlDeps) {
 				PermRepo:     d.PermRepo,
 				AuditRepo:    d.AuditRepo,
 				Orchestrator: d.Orchestrator,
+				RefineReader: d.RefineReader,
 			}, id)
 			if err != nil {
 				return nil, mcp.Fail("advance_task: " + err.Error())
+			}
+			if d.AuditRepo != nil {
+				_ = d.AuditRepo.RecordTaskAudit(ctx, id, nil, "task_advanced", "task:"+id, map[string]any{"actor": "mcp", "primary": res.Primary, "dispatched": res.Dispatched})
 			}
 			safeBroadcast(d.Broadcast, id)
 			return mcp.OK(res)
@@ -107,6 +112,9 @@ func registerHoldTask(registry mcp.ToolRegistry, d ControlDeps) {
 			if err != nil {
 				return nil, mcp.Fail("hold_task: " + err.Error())
 			}
+			if d.AuditRepo != nil {
+				_ = d.AuditRepo.RecordTaskAudit(ctx, id, nil, "task_held", "task:"+id, map[string]any{"actor": "mcp", "fromStage": task.CurrentStage})
+			}
 			safeBroadcast(d.Broadcast, id)
 			return mcp.OK(map[string]any{"task": updated})
 		},
@@ -120,7 +128,8 @@ func registerResumeTask(registry mcp.ToolRegistry, d ControlDeps) {
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"id": map[string]any{"type": "string", "description": "Task ID"},
+				"id":                map[string]any{"type": "string", "description": "Task ID"},
+				"additional_prompt": map[string]any{"type": "string", "description": "Optional instruction carried into the resumed run"},
 			},
 			"required": []string{"id"},
 		},
@@ -129,6 +138,7 @@ func registerResumeTask(registry mcp.ToolRegistry, d ControlDeps) {
 			if err != nil {
 				return nil, err
 			}
+			additionalPrompt, _ := args["additional_prompt"].(string)
 			task, err := d.TaskRepo.GetByID(ctx, id)
 			if err != nil {
 				return nil, mcp.Fail("Task not found: " + id)
@@ -143,12 +153,15 @@ func registerResumeTask(registry mcp.ToolRegistry, d ControlDeps) {
 			if d.Orchestrator == nil {
 				return nil, mcp.Fail("orchestrator not available")
 			}
-			sr, err := d.Orchestrator.ResumeFromUser(ctx, id)
+			sr, err := d.Orchestrator.ResumeFromUser(ctx, id, additionalPrompt)
 			if err != nil {
 				return nil, mcp.Fail("resume_task: " + err.Error())
 			}
 			if sr == nil {
 				return nil, mcp.Fail("Task cannot be resumed (terminal or missing)")
+			}
+			if d.AuditRepo != nil {
+				_ = d.AuditRepo.RecordTaskAudit(ctx, id, nil, "task_resumed", "task:"+id, map[string]any{"actor": "mcp", "hadPrompt": additionalPrompt != ""})
 			}
 			safeBroadcast(d.Broadcast, id)
 			task, _ = d.TaskRepo.GetByID(ctx, id)
@@ -396,7 +409,7 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 					}
 				}
 				if d.Orchestrator != nil {
-					if _, resumeErr := d.Orchestrator.ResumeFromUser(ctx, run.TaskID); resumeErr != nil {
+					if _, resumeErr := d.Orchestrator.ResumeFromUser(ctx, run.TaskID, ""); resumeErr != nil {
 						// Resume failed — surface as warning so caller knows agent was not re-signalled.
 						return mcp.OK(map[string]any{
 							"resolved": req,

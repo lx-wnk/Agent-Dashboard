@@ -26,7 +26,7 @@ type requeueCapture struct {
 func (c *requeueCapture) ProgressTask(_ context.Context, _ string, _ *pipeline.ProgressOpts) (*ent.StageRun, error) {
 	return nil, nil
 }
-func (c *requeueCapture) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
+func (c *requeueCapture) ResumeFromUser(_ context.Context, _ string, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
 func (c *requeueCapture) RequeueForUser(_ context.Context, taskID, _ string) (*ent.StageRun, error) {

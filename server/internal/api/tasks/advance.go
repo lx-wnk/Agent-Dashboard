@@ -15,6 +15,9 @@ type AdvanceDeps struct {
 	PermRepo     repo.PermissionRepo
 	AuditRepo    repo.AuditEventRepo
 	Orchestrator OrchestratorIface
+	// RefineReader lets Advance compute the same primary the enrich layer shows
+	// (refine status discriminates concept-stage actions). May be nil.
+	RefineReader RefineStatusReader
 }
 
 // AdvanceResult is the response shape returned by Advance.
@@ -55,7 +58,12 @@ func Advance(ctx context.Context, d AdvanceDeps, taskID string) (AdvanceResult, 
 		pendingPerms, _ = d.PermRepo.CountForStageRun(ctx, latest.ID)
 	}
 
-	state := taskcontrol.FromFields(task.CurrentStage, runStatus, "", pendingPerms, false)
+	var refineStatus string
+	if d.RefineReader != nil {
+		refineStatus, _ = d.RefineReader.State(taskID)
+	}
+
+	state := taskcontrol.FromFields(task.CurrentStage, runStatus, refineStatus, pendingPerms, false)
 	actions := taskcontrol.ComputeActions(state)
 
 	primary := ""
@@ -95,7 +103,7 @@ func Advance(ctx context.Context, d AdvanceDeps, taskID string) (AdvanceResult, 
 		return AdvanceResult{Dispatched: true, Primary: primary, Result: sr}, nil
 
 	case taskcontrol.ActionResume:
-		sr, err := d.Orchestrator.ResumeFromUser(ctx, taskID)
+		sr, err := d.Orchestrator.ResumeFromUser(ctx, taskID, "")
 		if err != nil {
 			return AdvanceResult{}, fmt.Errorf("advance(resume): %w", err)
 		}

@@ -40,7 +40,7 @@ type RefineStatusReader interface {
 // OrchestratorIface is the subset of PipelineOrchestrator consumed by the handler.
 type OrchestratorIface interface {
 	ProgressTask(ctx context.Context, taskID string, opts *pipeline.ProgressOpts) (*ent.StageRun, error)
-	ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error)
+	ResumeFromUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error)
 	RequeueForUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error)
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
 	InvalidateConfigCache()
@@ -683,10 +683,12 @@ func (h *Handler) advance(w http.ResponseWriter, r *http.Request) error {
 		PermRepo:     h.permRepo,
 		AuditRepo:    h.auditRepo,
 		Orchestrator: h.orchestrator,
+		RefineReader: h.refineReader,
 	}, id)
 	if err != nil {
 		return fmt.Errorf("tasks.advance: %w", err)
 	}
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_advanced", "task:"+id, map[string]any{"actor": "user", "primary": res.Primary, "dispatched": res.Dispatched})
 	h.broadcastEnrichedUpdate(r.Context(), id)
 	return jsonReply(w, http.StatusOK, res)
 }
@@ -705,6 +707,7 @@ func (h *Handler) hold(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("tasks.hold: %w", err)
 	}
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_held", "task:"+id, map[string]any{"actor": "user", "fromStage": t.CurrentStage})
 	h.broadcastEnrichedUpdate(r.Context(), id)
 	return jsonReply(w, http.StatusOK, updated)
 }
@@ -715,6 +718,10 @@ func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apierr.ErrNotFound
 	}
+	var body struct {
+		AdditionalPrompt string `json:"additionalPrompt"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
 	// When on_hold: move back to implementation before re-queuing.
 	if t.CurrentStage == "on_hold" {
 		impl := "implementation"
@@ -722,13 +729,14 @@ func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
 			return fmt.Errorf("tasks.resume.unstage: %w", err)
 		}
 	}
-	sr, err := h.orchestrator.ResumeFromUser(r.Context(), id)
+	sr, err := h.orchestrator.ResumeFromUser(r.Context(), id, body.AdditionalPrompt)
 	if err != nil {
 		return fmt.Errorf("tasks.resume: %w", err)
 	}
 	if sr == nil {
 		return apierr.NewAppError(http.StatusConflict, "task cannot be resumed (terminal or missing)")
 	}
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_resumed", "task:"+id, map[string]any{"actor": "user", "hadPrompt": body.AdditionalPrompt != ""})
 	h.broadcastEnrichedUpdate(r.Context(), id)
 	return jsonReply(w, http.StatusAccepted, sr)
 }
@@ -830,7 +838,7 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 		if _, errs := h.grantValidatedEntries(r.Context(), id, entries); len(errs) > 0 {
 			slog.Warn("resolvePermissionRequest: grant failed", "taskID", id, "errs", errs)
 		}
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id); err != nil {
+		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, ""); err != nil {
 			slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
 		}
 	}

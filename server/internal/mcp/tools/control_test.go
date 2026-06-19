@@ -124,7 +124,7 @@ type stubOrchestrator struct {
 func (s *stubOrchestrator) ProgressTask(_ context.Context, _ string, _ *pipeline.ProgressOpts) (*ent.StageRun, error) {
 	return nil, nil
 }
-func (s *stubOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
+func (s *stubOrchestrator) ResumeFromUser(_ context.Context, _ string, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
 func (s *stubOrchestrator) RequeueForUser(_ context.Context, taskID, _ string) (*ent.StageRun, error) {

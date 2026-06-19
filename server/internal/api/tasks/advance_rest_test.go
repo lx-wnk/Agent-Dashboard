@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -19,9 +20,10 @@ import (
 
 // lifecycleOrchestrator tracks which lifecycle methods were called.
 type lifecycleOrchestrator struct {
-	requeueCalled  bool
-	resumeCalled   bool
-	progressCalled bool
+	requeueCalled   bool
+	resumeCalled    bool
+	resumePrompt    string
+	progressCalled  bool
 	terminateCalled bool
 }
 
@@ -29,8 +31,9 @@ func (o *lifecycleOrchestrator) RequeueForUser(_ context.Context, _ string, _ st
 	o.requeueCalled = true
 	return &ent.StageRun{ID: "requeued"}, nil
 }
-func (o *lifecycleOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
+func (o *lifecycleOrchestrator) ResumeFromUser(_ context.Context, _ string, userPrompt string) (*ent.StageRun, error) {
 	o.resumeCalled = true
+	o.resumePrompt = userPrompt
 	return &ent.StageRun{ID: "resumed"}, nil
 }
 func (o *lifecycleOrchestrator) ProgressTask(_ context.Context, _ string, _ *pipeline.ProgressOpts) (*ent.StageRun, error) {
@@ -207,5 +210,27 @@ func TestResumeREST_OnHoldTask_Returns202AndCallsResume(t *testing.T) {
 	}
 	if task.CurrentStage == "on_hold" {
 		t.Errorf("expected stage to leave on_hold after resume, got %q", task.CurrentStage)
+	}
+}
+
+// TestResumeREST_PassesAdditionalPrompt verifies POST /resume forwards the
+// user's additionalPrompt to ResumeFromUser (it was previously dropped).
+func TestResumeREST_PassesAdditionalPrompt(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	orch := &lifecycleOrchestrator{}
+	client, r := newLifecycleHandler(t, orch)
+	taskID := seedTaskWithRun(t, client, "implementation", "awaiting_user")
+
+	body := strings.NewReader(`{"additionalPrompt":"focus on the parser"}`)
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+taskID+"/resume", body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+	if orch.resumePrompt != "focus on the parser" {
+		t.Errorf("expected resume prompt forwarded, got %q", orch.resumePrompt)
 	}
 }

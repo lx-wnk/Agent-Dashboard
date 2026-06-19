@@ -65,6 +65,7 @@ func provideMCPHandler(
 		PermRepo:     permRepo,
 		AuditRepo:    auditRepo,
 		Orchestrator: orch,
+		RefineReader: refineRunner,
 		Broadcast:    broadcast,
 	})
 	mcptools.RegisterKeyTools(registry, mcptools.KeyDeps{
