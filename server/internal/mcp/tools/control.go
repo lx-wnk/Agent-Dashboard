@@ -11,13 +11,16 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
-// ControlOrchestrator is a minimal interface for the orchestrator operations needed by control tools.
-// Defined here to avoid a direct runtime import of the pipeline orchestrator from mcp/tools.
+// ControlOrchestrator is the orchestrator interface needed by control tools.
+// It is a superset of the pipeline operations so that a real orchestrator
+// satisfies both this interface and tasks.OrchestratorIface.
 type ControlOrchestrator interface {
 	ProgressTask(ctx context.Context, taskID string, opts *pipeline.ProgressOpts) (*ent.StageRun, error)
 	ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error)
 	RequeueForUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error)
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
+	InvalidateConfigCache()
+	ClearStalePendingPermissions(ctx context.Context, taskID string)
 }
 
 // ControlDeps holds dependencies required by the pipeline control tools.
@@ -30,14 +33,128 @@ type ControlDeps struct {
 	Broadcast    func(taskID string)
 }
 
-// RegisterControlTools registers all 6 control tools into the given registry.
+// RegisterControlTools registers all control tools into the given registry.
 func RegisterControlTools(registry mcp.ToolRegistry, d ControlDeps) {
+	registerAdvanceTask(registry, d)
+	registerHoldTask(registry, d)
+	registerResumeTask(registry, d)
+	// NOTE: progress_task is kept for compatibility; advance_task is the preferred entry point.
 	registerProgressTask(registry, d)
 	registerCancelTask(registry, d)
 	registerRetryTask(registry, d)
 	registerGrantPermission(registry, d)
 	registerResolvePermissionRequest(registry, d)
 	registerApproveAllPending(registry, d)
+}
+
+func registerAdvanceTask(registry mcp.ToolRegistry, d ControlDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name:        "advance_task",
+		Description: "Execute the primary action for a task (retry, approve permissions, progress, or resume). Spec approval is intentionally excluded — use approve_spec for that.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"id": map[string]any{"type": "string", "description": "Task ID"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
+			id, err := mcp.StringArg(args, "id")
+			if err != nil {
+				return nil, err
+			}
+			res, err := tasksapi.Advance(ctx, tasksapi.AdvanceDeps{
+				TaskRepo:     d.TaskRepo,
+				SRRepo:       d.SRRepo,
+				PermRepo:     d.PermRepo,
+				AuditRepo:    d.AuditRepo,
+				Orchestrator: d.Orchestrator,
+			}, id)
+			if err != nil {
+				return nil, mcp.Fail("advance_task: " + err.Error())
+			}
+			safeBroadcast(d.Broadcast, id)
+			return mcp.OK(res)
+		},
+	})
+}
+
+func registerHoldTask(registry mcp.ToolRegistry, d ControlDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name:        "hold_task",
+		Description: "Park a task at on_hold without terminating it. Use resume_task to unpark.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"id": map[string]any{"type": "string", "description": "Task ID"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
+			id, err := mcp.StringArg(args, "id")
+			if err != nil {
+				return nil, err
+			}
+			task, err := d.TaskRepo.GetByID(ctx, id)
+			if err != nil {
+				return nil, mcp.Fail("Task not found: " + id)
+			}
+			if task.CurrentStage == "done" || task.CurrentStage == "cancelled" || task.CurrentStage == "on_hold" {
+				return nil, mcp.Fail("Task is already " + task.CurrentStage)
+			}
+			onHold := "on_hold"
+			updated, err := d.TaskRepo.Update(ctx, id, repo.UpdateTaskInput{CurrentStage: &onHold})
+			if err != nil {
+				return nil, mcp.Fail("hold_task: " + err.Error())
+			}
+			safeBroadcast(d.Broadcast, id)
+			return mcp.OK(map[string]any{"task": updated})
+		},
+	})
+}
+
+func registerResumeTask(registry mcp.ToolRegistry, d ControlDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name:        "resume_task",
+		Description: "Resume an on_hold or awaiting_user task by calling ResumeFromUser on the orchestrator.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"id": map[string]any{"type": "string", "description": "Task ID"},
+			},
+			"required": []string{"id"},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
+			id, err := mcp.StringArg(args, "id")
+			if err != nil {
+				return nil, err
+			}
+			task, err := d.TaskRepo.GetByID(ctx, id)
+			if err != nil {
+				return nil, mcp.Fail("Task not found: " + id)
+			}
+			// When on_hold: move back to implementation before re-queuing.
+			if task.CurrentStage == "on_hold" {
+				impl := "implementation"
+				if _, err := d.TaskRepo.Update(ctx, id, repo.UpdateTaskInput{CurrentStage: &impl}); err != nil {
+					return nil, mcp.Fail("resume_task: unstage failed: " + err.Error())
+				}
+			}
+			if d.Orchestrator == nil {
+				return nil, mcp.Fail("orchestrator not available")
+			}
+			sr, err := d.Orchestrator.ResumeFromUser(ctx, id)
+			if err != nil {
+				return nil, mcp.Fail("resume_task: " + err.Error())
+			}
+			if sr == nil {
+				return nil, mcp.Fail("Task cannot be resumed (terminal or missing)")
+			}
+			safeBroadcast(d.Broadcast, id)
+			task, _ = d.TaskRepo.GetByID(ctx, id)
+			return mcp.OK(map[string]any{"task": task, "stageRun": sr})
+		},
+	})
 }
 
 func registerProgressTask(registry mcp.ToolRegistry, d ControlDeps) {

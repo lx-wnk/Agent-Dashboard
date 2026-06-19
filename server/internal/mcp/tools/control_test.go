@@ -133,4 +133,6 @@ func (s *stubOrchestrator) RequeueForUser(_ context.Context, taskID, _ string) (
 	}
 	return &ent.StageRun{ID: taskID + "-stub"}, nil
 }
-func (s *stubOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string) {}
+func (s *stubOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
+func (s *stubOrchestrator) InvalidateConfigCache()                                   {}
+func (s *stubOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}
