@@ -128,9 +128,13 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Patch("/api/tasks/{id}", apierr.ErrorMiddleware(h.update))
 	r.Post("/api/tasks/{id}/rank", apierr.ErrorMiddleware(h.rankTask))
 	r.Delete("/api/tasks/{id}", apierr.ErrorMiddleware(h.delete))
+	r.Post("/api/tasks/{id}/advance", apierr.ErrorMiddleware(h.advance))
+	// NOTE: advance is the preferred entry point; progress is kept for compatibility.
 	r.Post("/api/tasks/{id}/progress", apierr.ErrorMiddleware(h.progress))
 	r.Post("/api/tasks/{id}/cancel", apierr.ErrorMiddleware(h.cancel))
 	r.Post("/api/tasks/{id}/retry", apierr.ErrorMiddleware(h.retry))
+	r.Post("/api/tasks/{id}/hold", apierr.ErrorMiddleware(h.hold))
+	r.Post("/api/tasks/{id}/resume", apierr.ErrorMiddleware(h.resume))
 	r.Post("/api/tasks/{id}/approve-all-pending", apierr.ErrorMiddleware(h.approveAllPending))
 	r.Post("/api/tasks/{id}/permissions", apierr.ErrorMiddleware(h.grantPermission))
 	r.Delete("/api/tasks/{id}/permissions/{permID}", apierr.ErrorMiddleware(h.revokePermission))
@@ -666,6 +670,64 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 	}
 	if sr == nil {
 		return apierr.NewAppError(http.StatusConflict, "task could not progress")
+	}
+	h.broadcastEnrichedUpdate(r.Context(), id)
+	return jsonReply(w, http.StatusAccepted, sr)
+}
+
+func (h *Handler) advance(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	res, err := Advance(r.Context(), AdvanceDeps{
+		TaskRepo:     h.taskRepo,
+		SRRepo:       h.srRepo,
+		PermRepo:     h.permRepo,
+		AuditRepo:    h.auditRepo,
+		Orchestrator: h.orchestrator,
+	}, id)
+	if err != nil {
+		return fmt.Errorf("tasks.advance: %w", err)
+	}
+	h.broadcastEnrichedUpdate(r.Context(), id)
+	return jsonReply(w, http.StatusOK, res)
+}
+
+func (h *Handler) hold(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	t, err := h.taskRepo.GetByID(r.Context(), id)
+	if err != nil {
+		return apierr.ErrNotFound
+	}
+	if t.CurrentStage == "done" || t.CurrentStage == "cancelled" || t.CurrentStage == "on_hold" {
+		return apierr.NewAppError(http.StatusBadRequest, "task is already "+t.CurrentStage)
+	}
+	onHold := "on_hold"
+	updated, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{CurrentStage: &onHold})
+	if err != nil {
+		return fmt.Errorf("tasks.hold: %w", err)
+	}
+	h.broadcastEnrichedUpdate(r.Context(), id)
+	return jsonReply(w, http.StatusOK, updated)
+}
+
+func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	t, err := h.taskRepo.GetByID(r.Context(), id)
+	if err != nil {
+		return apierr.ErrNotFound
+	}
+	// When on_hold: move back to implementation before re-queuing.
+	if t.CurrentStage == "on_hold" {
+		impl := "implementation"
+		if _, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{CurrentStage: &impl}); err != nil {
+			return fmt.Errorf("tasks.resume.unstage: %w", err)
+		}
+	}
+	sr, err := h.orchestrator.ResumeFromUser(r.Context(), id)
+	if err != nil {
+		return fmt.Errorf("tasks.resume: %w", err)
+	}
+	if sr == nil {
+		return apierr.NewAppError(http.StatusConflict, "task cannot be resumed (terminal or missing)")
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
 	return jsonReply(w, http.StatusAccepted, sr)
