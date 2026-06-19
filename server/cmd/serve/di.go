@@ -178,7 +178,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		rawDB = bundle.DB
 	}
 	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg)
-	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster)
+	mcpHandler := provideMCPHandler(entClient, orch, taskBroadcaster, refineRunner)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler

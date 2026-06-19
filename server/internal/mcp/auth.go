@@ -31,6 +31,8 @@ var ToolScopeMap = map[string]string{
 	"retry_task": "pipeline:control", "grant_permission": "pipeline:control",
 	"resolve_permission_request": "pipeline:control",
 	"approve_all_pending":        "pipeline:control",
+	"get_refine_status": "pipeline:control", "approve_spec": "pipeline:control",
+	"refine_task": "pipeline:control",
 	// keys:manage
 	"list_api_keys": "keys:manage", "create_api_key": "keys:manage",
 	"revoke_api_key": "keys:manage",

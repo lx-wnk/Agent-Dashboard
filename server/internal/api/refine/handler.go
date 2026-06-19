@@ -235,63 +235,12 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 	// Auth enforced by RequireAuth middleware (skipped in bypass mode) — see listTurns.
 	taskID := chi.URLParam(r, "taskId")
 
-	// Bridge the finalized concept from the refinement turns onto the task BEFORE
-	// advancing. Without this the concept lived only in refinement_turns and the
-	// implementation stage (which reads spec/plan/toolRequests from task.Metadata)
-	// saw an empty {} block. Routing fields (title, branch) land on task columns;
-	// setting SourceBranch also triggers the orchestrator's auto-worktree.
-	backlog := "backlog"
-	update := repo.UpdateTaskInput{CurrentStage: &backlog}
-	if h.deps.Turns != nil {
-		if turns, err := h.deps.Turns.ListForTask(r.Context(), taskID, 0); err == nil {
-			if concept, ok := refine.ExtractConcept(turns); ok {
-				if meta := concept.Metadata(); len(meta) > 0 {
-					update.Metadata = meta
-				}
-				if concept.RefinedTitle != "" {
-					update.Title = &concept.RefinedTitle
-				}
-				if concept.SourceBranch != "" {
-					update.SourceBranch = &concept.SourceBranch
-				}
-				if concept.TargetBranch != "" {
-					update.TargetBranch = &concept.TargetBranch
-				}
-			}
-		}
-	}
-
-	phase := "confirmed"
-	if _, err := h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
-		TaskID:  taskID,
-		Role:    "assistant",
-		Content: "confirmed",
-		Phase:   &phase,
-	}); err != nil {
-		jsonError(w, "failed to store confirmation turn", http.StatusInternalServerError)
-		return
-	}
-
-	// Mark the concept stage run done and advance the task to backlog so the
-	// pipeline orchestrator can immediately pick it up for implementation.
-	if h.deps.StageRuns != nil {
-		now := time.Now()
-		done := "done"
-		if sr, err := h.deps.StageRuns.GetLatestByTaskAndStage(r.Context(), taskID, "concept"); err == nil && sr != nil {
-			_, _ = h.deps.StageRuns.Update(r.Context(), sr.ID, repo.UpdateStageRunInput{
-				Status:  &done,
-				EndedAt: &now,
-			})
-		}
-	}
-	if h.deps.Tasks != nil {
-		_, _ = h.deps.Tasks.Update(r.Context(), taskID, update)
-	}
-	if h.deps.Advance != nil {
-		_ = h.deps.Advance(r.Context(), taskID)
-	}
-
-	task, err := h.deps.Tasks.GetByID(r.Context(), taskID)
+	task, err := Confirm(r.Context(), ConfirmDeps{
+		Turns:     h.deps.Turns,
+		Tasks:     h.deps.Tasks,
+		StageRuns: h.deps.StageRuns,
+		Advance:   h.deps.Advance,
+	}, taskID)
 	if err != nil {
 		jsonError(w, "confirmed but could not fetch updated task", http.StatusInternalServerError)
 		return

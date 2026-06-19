@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -8,10 +9,16 @@ import (
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	mcptools "github.com/lx-wnk/agent-dashboard/server/internal/mcp/tools"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
-func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster) http.Handler {
+func provideMCPHandler(
+	client *ent.Client,
+	orch *pipeline.PipelineOrchestrator,
+	tb *sse.TaskBroadcaster,
+	refineRunner *refine.Runner,
+) http.Handler {
 	if client == nil || orch == nil {
 		return nil
 	}
@@ -24,6 +31,7 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	apiKeyRepo := repo.NewApiKeyRepo(client)
 	projectRepo := repo.NewProjectRepo(client)
 	spawnerRepo := repo.NewSpawnerRepo(client)
+	turnsRepo := repo.NewRefinementTurnRepo(client)
 
 	broadcast := func(taskID string) {
 		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: taskID, Payload: map[string]string{}})
@@ -61,6 +69,16 @@ func provideMCPHandler(client *ent.Client, orch *pipeline.PipelineOrchestrator, 
 	})
 	mcptools.RegisterKeyTools(registry, mcptools.KeyDeps{
 		ApiKeyRepo: apiKeyRepo,
+	})
+	mcptools.RegisterRefineTools(registry, mcptools.RefineDeps{
+		Turns:     turnsRepo,
+		Tasks:     taskRepo,
+		StageRuns: srRepo,
+		Runner:    refineRunner,
+		Advance: func(ctx context.Context, taskID string) error {
+			_, err := orch.ProgressTask(ctx, taskID, nil)
+			return err
+		},
 	})
 	return mcp.MCPHandler(registry)
 }
