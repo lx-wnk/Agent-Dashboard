@@ -43,6 +43,7 @@ import { friendlyProjectName } from './utils/friendlyProjectName'
 
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
+const EvalView = defineAsyncComponent(() => import('./components/EvalView.vue'))
 const PipelineBoard = defineAsyncComponent(() => import('./components/PipelineBoard.vue'))
 const WorkflowsView = defineAsyncComponent(() => import('./components/WorkflowsView.vue'))
 const SchedulesView = defineAsyncComponent(() => import('./components/SchedulesView.vue'))
@@ -56,6 +57,12 @@ const EditGateModal = defineAsyncComponent(() => import('./components/EditGateMo
 const { user, authEnabled, loaded, loadUser } = useUser()
 const { homedir, loadServerConfig } = useServerConfig()
 const showLogin = computed(() => authEnabled.value && !user.value)
+const loginPageRef = ref<InstanceType<typeof LoginPage> | null>(null)
+// Move focus to the login control when the auth gate appears (SC 2.4.3)
+watch(showLogin, (visible) => {
+  if (visible)
+    nextTick(() => loginPageRef.value?.focusLogin())
+})
 const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
@@ -337,7 +344,7 @@ onMounted(fetchQuota)
 </script>
 
 <template>
-  <LoginPage v-if="loaded && showLogin" />
+  <LoginPage v-if="loaded && showLogin" ref="loginPageRef" />
   <div v-else-if="loaded">
     <AppShell>
       <template #sidebar>
@@ -436,6 +443,7 @@ onMounted(fetchQuota)
         />
         <CostAnalyticsView v-else-if="activeView === 'cost'" />
         <SchedulesView v-else-if="activeView === 'schedules'" />
+        <EvalView v-else-if="activeView === 'eval'" />
         <WorkflowsView
           v-else-if="activeView === 'workflows'"
           @navigate="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"

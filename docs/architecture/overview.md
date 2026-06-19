@@ -44,6 +44,7 @@ A real-time monitoring and control dashboard for locally running Claude Code age
 | `channel/` | channel discovery + proxy to per-agent MCP stdio server |
 | `refine/` | refinement chat repo + spawner |
 | `history/` | cost-history importer service |
+| `eval/` | passive drift detection over `stage_run` (leaf: `db/repo`, `db/ent`, `sdk`, `config`, `parser` only — never `pipeline`/`notifications`/`sse`/routes). See [ADR-0006](adr/0006-eval-drift-detection-leaf.md) |
 | `webpush/` | Web Push VAPID service |
 | `scheduler/` | cron scheduling leaf — fires recurring pipeline tasks on a configurable tick |
 

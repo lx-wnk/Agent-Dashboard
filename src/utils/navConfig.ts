@@ -17,6 +17,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   { view: 'schedules', label: 'Schedules', icon: '⏱', group: 'Build' },
   { view: 'workflows', label: 'Workflows', icon: '⤳', group: 'Insights' },
   { view: 'cost', label: 'Cost', icon: '◷', group: 'Insights' },
+  { view: 'eval', label: 'Eval', icon: '⬡', group: 'Insights' },
 ]
 
 export function viewTitle(view: ActiveView): string {

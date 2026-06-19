@@ -8,6 +8,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
@@ -70,6 +72,22 @@ func init() {
 	auditeventDescTs := auditeventFields[1].Descriptor()
 	// auditevent.DefaultTs holds the default value on creation for the ts field.
 	auditevent.DefaultTs = auditeventDescTs.Default.(func() time.Time)
+	driftalertFields := schema.DriftAlert{}.Fields()
+	_ = driftalertFields
+	// driftalertDescStatus is the schema descriptor for status field.
+	driftalertDescStatus := driftalertFields[5].Descriptor()
+	// driftalert.DefaultStatus holds the default value on creation for the status field.
+	driftalert.DefaultStatus = driftalertDescStatus.Default.(string)
+	// driftalertDescDetectedAt is the schema descriptor for detected_at field.
+	driftalertDescDetectedAt := driftalertFields[12].Descriptor()
+	// driftalert.DefaultDetectedAt holds the default value on creation for the detected_at field.
+	driftalert.DefaultDetectedAt = driftalertDescDetectedAt.Default.(func() time.Time)
+	evalmetricsnapshotFields := schema.EvalMetricSnapshot{}.Fields()
+	_ = evalmetricsnapshotFields
+	// evalmetricsnapshotDescRecordedAt is the schema descriptor for recorded_at field.
+	evalmetricsnapshotDescRecordedAt := evalmetricsnapshotFields[9].Descriptor()
+	// evalmetricsnapshot.DefaultRecordedAt holds the default value on creation for the recorded_at field.
+	evalmetricsnapshot.DefaultRecordedAt = evalmetricsnapshotDescRecordedAt.Default.(func() time.Time)
 	permissionrequestFields := schema.PermissionRequest{}.Fields()
 	_ = permissionrequestFields
 	// permissionrequestDescRequestedAt is the schema descriptor for requested_at field.

@@ -151,3 +151,25 @@ func TestLoad_HooksSecretFromEnv_UsedAsIs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, secret, cfg.HooksSecret)
 }
+
+// -------------------------------------------------------------------
+// Eval config defaults and validation
+// -------------------------------------------------------------------
+
+func TestLoad_EvalDefaults(t *testing.T) {
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, 3600000, cfg.EvalScanIntervalMs)
+	assert.Equal(t, 168, cfg.EvalWindowHours)
+	assert.Equal(t, 20, cfg.EvalMinSamples)
+	assert.InDelta(t, 15.0, cfg.EvalRateDropPP, 1e-9)
+	assert.InDelta(t, 3.0, cfg.EvalStddevK, 1e-9)
+}
+
+func TestLoad_EvalWindowHoursZero_ReturnsError(t *testing.T) {
+	t.Setenv("DASHBOARD_EVAL_WINDOW_HOURS", "0")
+
+	_, err := Load("")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "DASHBOARD_EVAL_WINDOW_HOURS must be > 0")
+}
