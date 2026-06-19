@@ -37,6 +37,7 @@ func (f *fakeTurnRepo) Create(_ context.Context, inp repo.CreateTurnInput) (*ent
 	t := &ent.RefinementTurn{
 		ID:        fmt.Sprintf("turn-%d", n), // F055: monotonic counter avoids content-based ID collisions
 		TaskID:    inp.TaskID,
+		Role:      refinementturn.Role(inp.Role),
 		Content:   inp.Content,
 		Phase:     inp.Phase,
 		CreatedAt: time.Now(),

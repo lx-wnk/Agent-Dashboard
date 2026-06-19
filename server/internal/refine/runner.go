@@ -18,10 +18,11 @@ const runTimeout = 5 * time.Minute
 
 // Run status values surfaced to the UI via the enriched task.
 const (
-	StatusIdle    = "idle"
-	StatusRunning = "running"
-	StatusDone    = "done"
-	StatusFailed  = "failed"
+	StatusIdle       = "idle"
+	StatusRunning    = "running"
+	StatusDone       = "done"
+	StatusFailed     = "failed"
+	StatusDraftReady = "draft_ready" // concept injected directly, ready for approve_spec
 )
 
 // SpawnFunc spawns a refinement turn and returns a line stream. Matches
@@ -150,4 +151,10 @@ func (r *Runner) setState(taskID, status, errMsg string) {
 	if r.onRunChange != nil {
 		r.onRunChange(taskID)
 	}
+}
+
+// MarkDraftReady sets the task's refine status to StatusDraftReady without
+// spawning an agent. Called by InjectConcept after persisting the concept turn.
+func (r *Runner) MarkDraftReady(taskID string) {
+	r.setState(taskID, StatusDraftReady, "")
 }
