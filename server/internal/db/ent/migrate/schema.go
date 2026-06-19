@@ -486,6 +486,7 @@ var (
 		{Name: "cost_budget_cents", Type: field.TypeInt, Nullable: true},
 		{Name: "stage_timeout_seconds", Type: field.TypeInt, Default: 1800},
 		{Name: "silver_bullet", Type: field.TypeBool, Default: false},
+		{Name: "autonomy", Type: field.TypeString, Default: "spec_gated"},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
 		{Name: "project_id", Type: field.TypeString, Nullable: true},
 		{Name: "spawner_id", Type: field.TypeString, Nullable: true},
@@ -512,12 +513,12 @@ var (
 			{
 				Name:    "task_project_id",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[18]},
+				Columns: []*schema.Column{TasksColumns[19]},
 			},
 			{
 				Name:    "task_silver_bullet_priority_rank_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[20], TasksColumns[21]},
+				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[21], TasksColumns[22]},
 			},
 		},
 	}

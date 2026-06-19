@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CostHeatmap from './CostHeatmap.vue'
 
 const mockGrid = Array.from(
@@ -7,10 +7,18 @@ const mockGrid = Array.from(
   (_, d) => Array.from({ length: 24 }, (_h, h) => (d === 1 && h === 9 ? 0.5 : 0)),
 )
 
-vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-  ok: true,
-  json: async () => ({ grid: mockGrid }),
-}))
+// Stub fetch per-test and unstub afterwards so a global fetch stub leaked by an
+// earlier test file in the same worker cannot pollute this one (and vice-versa).
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ grid: mockGrid }),
+  }))
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('costHeatmap', () => {
   it('renders 7 day-rows', async () => {

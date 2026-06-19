@@ -29,9 +29,14 @@ var ToolScopeMap = map[string]string{
 	"add_dependency": "tasks:write", "remove_dependency": "tasks:write",
 	"manage_schedule": "tasks:write",
 	// pipeline:control
+	"advance_task": "pipeline:control", "hold_task": "pipeline:control",
+	"resume_task": "pipeline:control",
 	"progress_task": "pipeline:control", "cancel_task": "pipeline:control",
 	"retry_task": "pipeline:control", "grant_permission": "pipeline:control",
 	"resolve_permission_request": "pipeline:control",
+	"approve_all_pending":        "pipeline:control",
+	"get_refine_status": "pipeline:control", "approve_spec": "pipeline:control",
+	"refine_task": "pipeline:control", "inject_concept": "pipeline:control",
 	// keys:manage
 	"list_api_keys": "keys:manage", "create_api_key": "keys:manage",
 	"revoke_api_key": "keys:manage",

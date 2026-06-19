@@ -331,6 +331,20 @@ func (_u *TaskUpdate) SetNillableSilverBullet(v *bool) *TaskUpdate {
 	return _u
 }
 
+// SetAutonomy sets the "autonomy" field.
+func (_u *TaskUpdate) SetAutonomy(v string) *TaskUpdate {
+	_u.mutation.SetAutonomy(v)
+	return _u
+}
+
+// SetNillableAutonomy sets the "autonomy" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableAutonomy(v *string) *TaskUpdate {
+	if v != nil {
+		_u.SetAutonomy(*v)
+	}
+	return _u
+}
+
 // SetMetadata sets the "metadata" field.
 func (_u *TaskUpdate) SetMetadata(v map[string]interface{}) *TaskUpdate {
 	_u.mutation.SetMetadata(v)
@@ -711,6 +725,9 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.SilverBullet(); ok {
 		_spec.SetField(task.FieldSilverBullet, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Autonomy(); ok {
+		_spec.SetField(task.FieldAutonomy, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Metadata(); ok {
 		_spec.SetField(task.FieldMetadata, field.TypeJSON, value)
@@ -1242,6 +1259,20 @@ func (_u *TaskUpdateOne) SetNillableSilverBullet(v *bool) *TaskUpdateOne {
 	return _u
 }
 
+// SetAutonomy sets the "autonomy" field.
+func (_u *TaskUpdateOne) SetAutonomy(v string) *TaskUpdateOne {
+	_u.mutation.SetAutonomy(v)
+	return _u
+}
+
+// SetNillableAutonomy sets the "autonomy" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableAutonomy(v *string) *TaskUpdateOne {
+	if v != nil {
+		_u.SetAutonomy(*v)
+	}
+	return _u
+}
+
 // SetMetadata sets the "metadata" field.
 func (_u *TaskUpdateOne) SetMetadata(v map[string]interface{}) *TaskUpdateOne {
 	_u.mutation.SetMetadata(v)
@@ -1652,6 +1683,9 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if value, ok := _u.mutation.SilverBullet(); ok {
 		_spec.SetField(task.FieldSilverBullet, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Autonomy(); ok {
+		_spec.SetField(task.FieldAutonomy, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Metadata(); ok {
 		_spec.SetField(task.FieldMetadata, field.TypeJSON, value)

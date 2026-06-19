@@ -145,6 +145,11 @@ func SilverBullet(v bool) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldSilverBullet, v))
 }
 
+// Autonomy applies equality check predicate on the "autonomy" field. It's identical to AutonomyEQ.
+func Autonomy(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldAutonomy, v))
+}
+
 // ProjectID applies equality check predicate on the "project_id" field. It's identical to ProjectIDEQ.
 func ProjectID(v string) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldProjectID, v))
@@ -1133,6 +1138,71 @@ func SilverBulletEQ(v bool) predicate.Task {
 // SilverBulletNEQ applies the NEQ predicate on the "silver_bullet" field.
 func SilverBulletNEQ(v bool) predicate.Task {
 	return predicate.Task(sql.FieldNEQ(FieldSilverBullet, v))
+}
+
+// AutonomyEQ applies the EQ predicate on the "autonomy" field.
+func AutonomyEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldAutonomy, v))
+}
+
+// AutonomyNEQ applies the NEQ predicate on the "autonomy" field.
+func AutonomyNEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldAutonomy, v))
+}
+
+// AutonomyIn applies the In predicate on the "autonomy" field.
+func AutonomyIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldAutonomy, vs...))
+}
+
+// AutonomyNotIn applies the NotIn predicate on the "autonomy" field.
+func AutonomyNotIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldAutonomy, vs...))
+}
+
+// AutonomyGT applies the GT predicate on the "autonomy" field.
+func AutonomyGT(v string) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldAutonomy, v))
+}
+
+// AutonomyGTE applies the GTE predicate on the "autonomy" field.
+func AutonomyGTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldAutonomy, v))
+}
+
+// AutonomyLT applies the LT predicate on the "autonomy" field.
+func AutonomyLT(v string) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldAutonomy, v))
+}
+
+// AutonomyLTE applies the LTE predicate on the "autonomy" field.
+func AutonomyLTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldAutonomy, v))
+}
+
+// AutonomyContains applies the Contains predicate on the "autonomy" field.
+func AutonomyContains(v string) predicate.Task {
+	return predicate.Task(sql.FieldContains(FieldAutonomy, v))
+}
+
+// AutonomyHasPrefix applies the HasPrefix predicate on the "autonomy" field.
+func AutonomyHasPrefix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasPrefix(FieldAutonomy, v))
+}
+
+// AutonomyHasSuffix applies the HasSuffix predicate on the "autonomy" field.
+func AutonomyHasSuffix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasSuffix(FieldAutonomy, v))
+}
+
+// AutonomyEqualFold applies the EqualFold predicate on the "autonomy" field.
+func AutonomyEqualFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldEqualFold(FieldAutonomy, v))
+}
+
+// AutonomyContainsFold applies the ContainsFold predicate on the "autonomy" field.
+func AutonomyContainsFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldContainsFold(FieldAutonomy, v))
 }
 
 // MetadataIsNil applies the IsNil predicate on the "metadata" field.

@@ -46,6 +46,8 @@ const (
 	FieldStageTimeoutSeconds = "stage_timeout_seconds"
 	// FieldSilverBullet holds the string denoting the silver_bullet field in the database.
 	FieldSilverBullet = "silver_bullet"
+	// FieldAutonomy holds the string denoting the autonomy field in the database.
+	FieldAutonomy = "autonomy"
 	// FieldMetadata holds the string denoting the metadata field in the database.
 	FieldMetadata = "metadata"
 	// FieldProjectID holds the string denoting the project_id field in the database.
@@ -117,6 +119,7 @@ var Columns = []string{
 	FieldCostBudgetCents,
 	FieldStageTimeoutSeconds,
 	FieldSilverBullet,
+	FieldAutonomy,
 	FieldMetadata,
 	FieldProjectID,
 	FieldSpawnerID,
@@ -150,6 +153,8 @@ var (
 	DefaultStageTimeoutSeconds int
 	// DefaultSilverBullet holds the default value on creation for the "silver_bullet" field.
 	DefaultSilverBullet bool
+	// DefaultAutonomy holds the default value on creation for the "autonomy" field.
+	DefaultAutonomy string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -244,6 +249,11 @@ func ByStageTimeoutSeconds(opts ...sql.OrderTermOption) OrderOption {
 // BySilverBullet orders the results by the silver_bullet field.
 func BySilverBullet(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSilverBullet, opts...).ToFunc()
+}
+
+// ByAutonomy orders the results by the autonomy field.
+func ByAutonomy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAutonomy, opts...).ToFunc()
 }
 
 // ByProjectID orders the results by the project_id field.

@@ -15,6 +15,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
+	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 )
 
 // permissionRequestResponse is the API response shape for a single pending permission request.
@@ -83,6 +84,7 @@ func (h *Handler) listPermissionRequests(w http.ResponseWriter, r *http.Request)
 }
 
 // createPermissionRequest creates a single permission request and flips the stage_run to awaiting_user if running.
+// For allow-all tasks (autonomy spec_gated or full), the request is created already approved.
 func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
 		StageRunID string  `json:"stageRunId"`
@@ -107,14 +109,42 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 		return fmt.Errorf("permission_request.create: %w", err)
 	}
 
-	// Flip stage_run to awaiting_user if it is currently running.
-	sr, err := h.srRepo.GetByID(r.Context(), body.StageRunID)
-	if err == nil && sr.Status == "running" {
-		awaitingUser := "awaiting_user"
-		if _, err2 := h.srRepo.Update(r.Context(), body.StageRunID, repo.UpdateStageRunInput{Status: &awaitingUser}); err2 != nil {
-			slog.Warn("createPermissionRequest: flip to awaiting_user failed", "stageRunID", body.StageRunID, "err", err2)
+	// Resolve the owning task to check autonomy level.
+	sr, srErr := h.srRepo.GetByID(r.Context(), body.StageRunID)
+	if srErr == nil {
+		task, taskErr := h.taskRepo.GetByID(r.Context(), sr.TaskID)
+		if taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy) {
+			// Auto-approve: task operates in allow-all mode — no human gating needed.
+			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "approved"); resolveErr != nil {
+				slog.Warn("createPermissionRequest: auto-approve failed", "reqID", req.ID, "err", resolveErr)
+			} else {
+				_ = h.auditRepo.RecordTaskAudit(r.Context(), sr.TaskID, nil, "permission_auto_approved", "task:"+sr.TaskID, map[string]any{
+					"requestId": req.ID,
+					"tool":      body.Tool,
+					"autonomy":  task.Autonomy,
+				})
+				// Re-fetch to return the resolved row.
+				if resolved, fetchErr := h.permRepo.GetPermissionRequest(r.Context(), req.ID); fetchErr == nil {
+					req = resolved
+				}
+			}
+			h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
+			return jsonReply(w, http.StatusCreated, req)
 		}
-		h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
+
+		// Gated path: flip stage_run to awaiting_user if it is currently running.
+		if sr.Status == "running" {
+			awaitingUser := "awaiting_user"
+			if _, err2 := h.srRepo.Update(r.Context(), body.StageRunID, repo.UpdateStageRunInput{Status: &awaitingUser}); err2 != nil {
+				slog.Warn("createPermissionRequest: flip to awaiting_user failed", "stageRunID", body.StageRunID, "err", err2)
+			}
+			h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
+		}
+	} else {
+		// Stage-run lookup failed: the request was created but can be neither
+		// auto-approved nor surfaced via the awaiting_user gate. Log so a dropped
+		// gating is observable rather than silent.
+		slog.Warn("createPermissionRequest: stage-run lookup failed; request not gated", "stageRunID", body.StageRunID, "reqID", req.ID, "err", srErr)
 	}
 
 	return jsonReply(w, http.StatusCreated, req)
@@ -312,6 +342,9 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 	results := make([]result, 0, len(body.Entries))
 	hasNewRequests := false
 
+	task, taskErr := h.taskRepo.GetByID(r.Context(), sr.TaskID)
+	taskIsAllowAll := taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy)
+
 	for _, e := range body.Entries {
 		if e.Tool == "" {
 			continue
@@ -329,6 +362,20 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		if err2 != nil {
 			return fmt.Errorf("bulk_perm_req: create: %w", err2)
 		}
+		if taskIsAllowAll {
+			// Auto-approve: task operates in allow-all mode.
+			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "approved"); resolveErr != nil {
+				slog.Warn("bulkCreatePermissionRequests: auto-approve failed", "reqID", req.ID, "err", resolveErr)
+			} else {
+				_ = h.auditRepo.RecordTaskAudit(r.Context(), sr.TaskID, nil, "permission_auto_approved", "task:"+sr.TaskID, map[string]any{
+					"requestId": req.ID,
+					"tool":      e.Tool,
+					"autonomy":  task.Autonomy,
+				})
+			}
+			results = append(results, result{Tool: e.Tool, Pattern: e.Pattern, AutoGranted: true})
+			continue
+		}
 		hasNewRequests = true
 		id := req.ID
 		results = append(results, result{Tool: e.Tool, Pattern: e.Pattern, AutoGranted: false, RequestID: &id})
@@ -340,6 +387,10 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		if _, err2 := h.srRepo.Update(r.Context(), body.StageRunID, repo.UpdateStageRunInput{Status: &awaitingUser}); err2 != nil {
 			slog.Warn("bulkCreatePermissionRequests: flip to awaiting_user failed", "stageRunID", body.StageRunID, "err", err2)
 		}
+	}
+	// Broadcast for all paths: gated (new requests → awaiting_user flip) and
+	// allow-all (auto-approved → client refreshes the task state).
+	if hasNewRequests || taskIsAllowAll {
 		h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
 	}
 
@@ -428,7 +479,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		if _, errs := h.grantValidatedEntries(r.Context(), body.TaskID, entries); len(errs) > 0 {
 			resolveErrors = append(resolveErrors, errs...)
 		}
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID); err != nil {
+		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID, ""); err != nil {
 			slog.Warn("bulk_resolve: ResumeFromUser failed", "taskID", body.TaskID, "err", err)
 		}
 
@@ -463,6 +514,33 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 	return jsonReply(w, http.StatusOK, map[string]any{
 		"resolved": resolvedCount,
 		"errors":   resolveErrors,
+	})
+}
+
+// approveAllPending resolves every pending permission_request for a task as
+// "approved", then re-queues the task when its latest stage run is awaiting_user.
+func (h *Handler) approveAllPending(w http.ResponseWriter, r *http.Request) error {
+	taskID := chi.URLParam(r, "id")
+
+	if _, err := h.taskRepo.GetByID(r.Context(), taskID); err != nil {
+		return apierr.ErrNotFound
+	}
+
+	res, err := ApproveAllPending(r.Context(), ApproveAllPendingDeps{
+		TaskRepo:     h.taskRepo,
+		SRRepo:       h.srRepo,
+		PermRepo:     h.permRepo,
+		AuditRepo:    h.auditRepo,
+		Orchestrator: h.orchestrator,
+	}, taskID)
+	if err != nil {
+		return fmt.Errorf("approve_all_pending: %w", err)
+	}
+
+	h.broadcastEnrichedUpdate(r.Context(), taskID)
+	return jsonReply(w, http.StatusOK, map[string]any{
+		"approved": res.Approved,
+		"requeued": res.Requeued,
 	})
 }
 
@@ -508,41 +586,10 @@ func presetCovers(tool string, pattern *string, presets []*ent.PermissionPreset)
 	return false
 }
 
-// grantValidatedEntries validates each entry as a human override and persists
-// the safe ones via BulkGrantPermissions. Called exclusively from human REST
-// resolve endpoints, so override=true applies: the Bash allow-list and
-// injection guard are bypassed but a non-empty pattern is still required, and
-// WebFetch still needs a domain. Invalid entries are collected and returned as
-// error strings rather than aborting the call.
+// grantValidatedEntries persists human-override grants for the handler's repo.
+// Logic lives in grantOverrideEntries, shared with the approve-all-pending service.
 func (h *Handler) grantValidatedEntries(ctx context.Context, taskID string, entries []repo.GrantEntry) ([]*ent.TaskPermission, []string) {
-	var safe []repo.GrantEntry
-	var errs []string
-	for _, e := range entries {
-		pattern := ""
-		if e.Pattern != nil {
-			pattern = *e.Pattern
-		}
-		if err := permissions.ValidateGrantEntryWithOverride(e.Tool, pattern, true); err != nil {
-			errs = append(errs, fmt.Sprintf("grant skipped (%s %s): %v", e.Tool, pattern, err))
-			continue
-		}
-		e.ManualOverride = true
-		safe = append(safe, e)
-	}
-	if len(safe) == 0 {
-		return nil, errs
-	}
-	granted, err := h.permRepo.BulkGrantPermissions(ctx, taskID, safe)
-	if err != nil {
-		errs = append(errs, fmt.Sprintf("BulkGrantPermissions: %v", err))
-		return nil, errs
-	}
-	tools := make([]string, 0, len(granted))
-	for _, p := range granted {
-		tools = append(tools, p.Tool)
-	}
-	slog.Info("permission grant from resolved request", "taskID", taskID, "tools", tools)
-	return granted, errs
+	return grantOverrideEntries(ctx, h.permRepo, taskID, entries)
 }
 
 // resolveTemplate expands a named permission template to GrantEntry slice.

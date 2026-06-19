@@ -1,6 +1,8 @@
 package pipeline_test
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -15,7 +17,7 @@ func TestBuildAllowList_ExcludesGitPushByDefault(t *testing.T) {
 		{Tool: "Bash", Pattern: &pattern, Granted: true},
 		{Tool: "Read", Granted: true},
 	}
-	allow := pipeline.BuildAllowList(perms, false, false)
+	allow := pipeline.BuildAllowList("manual", perms, false, false)
 	require.Contains(t, allow, "Read")
 	for _, a := range allow {
 		require.NotContains(t, a, "git push")
@@ -27,7 +29,7 @@ func TestBuildAllowList_AllowsGitPushWhenEnabled(t *testing.T) {
 	perms := []*ent.TaskPermission{
 		{Tool: "Bash", Pattern: &pattern, Granted: true},
 	}
-	allow := pipeline.BuildAllowList(perms, false, true)
+	allow := pipeline.BuildAllowList("manual", perms, false, true)
 	require.Contains(t, allow, "Bash(git push origin HEAD)")
 }
 
@@ -36,7 +38,7 @@ func TestBuildAllowList_FiltersDenied(t *testing.T) {
 		{Tool: "Bash", Granted: false},
 		{Tool: "Read", Granted: true},
 	}
-	allow := pipeline.BuildAllowList(perms, false, false)
+	allow := pipeline.BuildAllowList("manual", perms, false, false)
 	require.Contains(t, allow, "Read")
 	for _, a := range allow {
 		require.NotEqual(t, "Bash", a)
@@ -44,7 +46,7 @@ func TestBuildAllowList_FiltersDenied(t *testing.T) {
 }
 
 func TestBuildAllowList_IncludesChannelTools(t *testing.T) {
-	allow := pipeline.BuildAllowList(nil, true, false)
+	allow := pipeline.BuildAllowList("manual", nil, true, false)
 	require.Contains(t, allow, "mcp__dashboard-channel__request_permission")
 	require.Contains(t, allow, "mcp__dashboard-channel__dashboard_reply")
 }
@@ -267,7 +269,7 @@ func TestBuildAllowList_ManualOverride_BypassesAllowList(t *testing.T) {
 	perms := []*ent.TaskPermission{
 		{Tool: "Bash", Pattern: &pattern, Granted: true, ManualOverride: true},
 	}
-	allow := pipeline.BuildAllowList(perms, false, false)
+	allow := pipeline.BuildAllowList("manual", perms, false, false)
 	require.Contains(t, allow, "Bash(chmod +x ./x.sh)")
 }
 
@@ -276,7 +278,7 @@ func TestBuildAllowList_NoManualOverride_StripsBlockedPattern(t *testing.T) {
 	perms := []*ent.TaskPermission{
 		{Tool: "Bash", Pattern: &pattern, Granted: true, ManualOverride: false},
 	}
-	allow := pipeline.BuildAllowList(perms, false, false)
+	allow := pipeline.BuildAllowList("manual", perms, false, false)
 	for _, a := range allow {
 		if strings.Contains(a, "chmod") {
 			t.Errorf("BuildAllowList without override must strip 'chmod' pattern, got: %s", a)
@@ -290,8 +292,90 @@ func TestBuildAllowList_ManualOverride_BypassesGitPushGate(t *testing.T) {
 		{Tool: "Bash", Pattern: &pattern, Granted: true, ManualOverride: true},
 	}
 	// allowGitPush=false — override must still pass.
-	allow := pipeline.BuildAllowList(perms, false, false)
+	allow := pipeline.BuildAllowList("manual", perms, false, false)
 	require.Contains(t, allow, "Bash(git push origin HEAD)")
+}
+
+func TestBuildAllowList_AllowAllAutonomy_ReturnsBlanketBash(t *testing.T) {
+	for _, autonomy := range []string{"spec_gated", "full"} {
+		allow := pipeline.BuildAllowList(autonomy, nil, false, false)
+		require.Contains(t, allow, "Bash", "autonomy=%s must include blanket Bash", autonomy)
+		require.Contains(t, allow, "Read", "autonomy=%s must include Read", autonomy)
+	}
+}
+
+func TestBuildAllowList_ManualAutonomy_PreservesGatedBehaviour(t *testing.T) {
+	// manual with no granted perms → only channel tools (if any), no Bash
+	allow := pipeline.BuildAllowList("manual", nil, false, false)
+	for _, a := range allow {
+		require.NotEqual(t, "Bash", a, "manual autonomy with no perms must not include blanket Bash")
+	}
+}
+
+func TestBuildAllowList_EmptyAutonomy_PreservesGatedBehaviour(t *testing.T) {
+	allow := pipeline.BuildAllowList("", nil, false, false)
+	for _, a := range allow {
+		require.NotEqual(t, "Bash", a, "empty autonomy must not include blanket Bash")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// BuildDenyList — git-push containment on the allow-all path
+// ---------------------------------------------------------------------------
+
+func TestBuildDenyList_AllowAll_GitPushDisabled_ReturnsDeny(t *testing.T) {
+	for _, autonomy := range []string{"spec_gated", "full"} {
+		deny := pipeline.BuildDenyList(autonomy, false)
+		require.Contains(t, deny, "Bash(git push:*)",
+			"autonomy=%s, allowGitPush=false must include deny entry", autonomy)
+	}
+}
+
+func TestBuildDenyList_AllowAll_GitPushEnabled_ReturnsNil(t *testing.T) {
+	for _, autonomy := range []string{"spec_gated", "full"} {
+		deny := pipeline.BuildDenyList(autonomy, true)
+		require.Empty(t, deny,
+			"autonomy=%s, allowGitPush=true must return no deny entries", autonomy)
+	}
+}
+
+func TestBuildDenyList_ManualAutonomy_AlwaysNil(t *testing.T) {
+	// manual autonomy never triggers the deny-list path (git push is already
+	// blocked at the allow-list level via gitPushRE gate).
+	deny := pipeline.BuildDenyList("manual", false)
+	require.Empty(t, deny, "manual autonomy must return no deny entries")
+}
+
+func TestWriteSettingsFile_AllowAll_GitPushDisabled_IncludesDeny(t *testing.T) {
+	cwd := t.TempDir()
+	path, wrote, isLocal, err := pipeline.ExportedWriteSettingsFile("spec_gated", cwd, nil, false, false)
+	require.NoError(t, err)
+	require.True(t, wrote)
+	require.False(t, isLocal)
+	require.NotEmpty(t, path)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	perms, _ := parsed["permissions"].(map[string]any)
+	deny, _ := perms["deny"].([]any)
+	require.Contains(t, deny, "Bash(git push:*)", "settings.json must contain deny entry for git push")
+}
+
+func TestWriteSettingsFile_AllowAll_GitPushEnabled_NoDeny(t *testing.T) {
+	cwd := t.TempDir()
+	path, wrote, _, err := pipeline.ExportedWriteSettingsFile("spec_gated", cwd, nil, false, true)
+	require.NoError(t, err)
+	require.True(t, wrote)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	perms, _ := parsed["permissions"].(map[string]any)
+	deny, _ := perms["deny"].([]any)
+	require.Empty(t, deny, "settings.json must NOT contain deny when allowGitPush=true")
 }
 
 func TestBuildSpawnEnv_ForwardsDashboardPrefix(t *testing.T) {

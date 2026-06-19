@@ -8,6 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
+	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
@@ -161,6 +162,7 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				"template":           map[string]any{"type": "string", "description": "Predefined permission template name"},
 				"permissions":        map[string]any{"type": "array"},
 				"inheritPermissions": map[string]any{"type": "boolean"},
+				"autonomy":           map[string]any{"type": "string", "enum": []string{"manual", "spec_gated", "full"}, "description": "Permission gate level: manual=human-gated, spec_gated=auto-approve all requests (human gates the spec), full=allow-all"},
 				"projectId":          map[string]any{"type": "string", "description": "Optional project ID to associate the task with"},
 				"spawnerId":          map[string]any{"type": "string", "description": "Optional spawner ID overriding the project default"},
 			},
@@ -262,6 +264,12 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 				in.SpawnerID = &spawnerID
 			}
+			if v := mcp.OptionalString(args, "autonomy"); v != "" {
+				if _, ok := taskcontrol.ValidAutonomyValues[v]; !ok {
+					return nil, mcp.Fail("invalid autonomy value: must be manual, spec_gated, or full")
+				}
+				in.Autonomy = &v
+			}
 
 			task, err := d.TaskRepo.Create(ctx, in)
 			if err != nil {
@@ -321,6 +329,7 @@ func registerUpdateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				"tokenBudget":     map[string]any{"type": "integer"},
 				"costBudgetCents": map[string]any{"type": "integer"},
 				"metadata":        map[string]any{"type": "object"},
+				"autonomy":        map[string]any{"type": "string", "enum": []string{"manual", "spec_gated", "full"}, "description": "Permission gate level: manual=human-gated, spec_gated=auto-approve all requests (human gates the spec), full=allow-all"},
 			},
 			"required": []string{"id"},
 		},
@@ -365,6 +374,12 @@ func registerUpdateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				if m, ok := rawMeta.(map[string]any); ok {
 					in.Metadata = m
 				}
+			}
+			if v := mcp.OptionalString(args, "autonomy"); v != "" {
+				if _, ok := taskcontrol.ValidAutonomyValues[v]; !ok {
+					return nil, mcp.Fail("invalid autonomy value: must be manual, spec_gated, or full")
+				}
+				in.Autonomy = &v
 			}
 
 			updated, err := d.TaskRepo.Update(ctx, task.ID, in)

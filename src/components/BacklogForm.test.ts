@@ -92,6 +92,25 @@ describe('backlogForm single-screen', () => {
     expect(wrapper.findComponent({ name: 'QuickCreateProjectPanel' }).exists()).toBe(true)
   })
 
+  it('renders the autonomy selector with spec_gated as default', () => {
+    const wrapper = mount(BacklogForm)
+    const select = wrapper.find('[data-testid="details-autonomy"]').element as HTMLSelectElement
+    expect(select).toBeTruthy()
+    expect(select.value).toBe('spec_gated')
+  })
+
+  it('includes the selected autonomy in the create payload', async () => {
+    createTaskMock.mockClear()
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="backlog-project-select"]').setValue('p1')
+    await flushPromises()
+    await wrapper.get('[data-testid="details-title"]').setValue('Demo task')
+    await wrapper.get('[data-testid="details-autonomy"]').setValue('full')
+    await wrapper.get('[data-testid="details-submit-refine"]').trigger('click')
+    await flushPromises()
+    expect(createTaskMock).toHaveBeenCalledWith(expect.objectContaining({ autonomy: 'full' }))
+  })
+
   it('emits createdAndRefine with the new task via Create & Refine', async () => {
     createTaskMock.mockClear()
     const wrapper = mount(BacklogForm)
@@ -105,6 +124,7 @@ describe('backlogForm single-screen', () => {
       title: 'Demo task',
       slug: 'demo-task',
       cwd: '/repos/web',
+      autonomy: 'spec_gated',
     }))
     expect(createTaskMock).toHaveBeenCalledWith(expect.not.objectContaining({ stage: expect.anything() }))
     expect(wrapper.emitted('createdAndRefine')).toBeTruthy()

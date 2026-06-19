@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
+	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
@@ -39,7 +40,7 @@ type RefineStatusReader interface {
 // OrchestratorIface is the subset of PipelineOrchestrator consumed by the handler.
 type OrchestratorIface interface {
 	ProgressTask(ctx context.Context, taskID string, opts *pipeline.ProgressOpts) (*ent.StageRun, error)
-	ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error)
+	ResumeFromUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error)
 	RequeueForUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error)
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
 	InvalidateConfigCache()
@@ -127,9 +128,14 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Patch("/api/tasks/{id}", apierr.ErrorMiddleware(h.update))
 	r.Post("/api/tasks/{id}/rank", apierr.ErrorMiddleware(h.rankTask))
 	r.Delete("/api/tasks/{id}", apierr.ErrorMiddleware(h.delete))
+	r.Post("/api/tasks/{id}/advance", apierr.ErrorMiddleware(h.advance))
+	// NOTE: advance is the preferred entry point; progress is kept for compatibility.
 	r.Post("/api/tasks/{id}/progress", apierr.ErrorMiddleware(h.progress))
 	r.Post("/api/tasks/{id}/cancel", apierr.ErrorMiddleware(h.cancel))
 	r.Post("/api/tasks/{id}/retry", apierr.ErrorMiddleware(h.retry))
+	r.Post("/api/tasks/{id}/hold", apierr.ErrorMiddleware(h.hold))
+	r.Post("/api/tasks/{id}/resume", apierr.ErrorMiddleware(h.resume))
+	r.Post("/api/tasks/{id}/approve-all-pending", apierr.ErrorMiddleware(h.approveAllPending))
 	r.Post("/api/tasks/{id}/permissions", apierr.ErrorMiddleware(h.grantPermission))
 	r.Delete("/api/tasks/{id}/permissions/{permID}", apierr.ErrorMiddleware(h.revokePermission))
 	r.Post("/api/tasks/{id}/permission-requests/{reqID}/resolve", apierr.ErrorMiddleware(h.resolvePermissionRequest))
@@ -204,7 +210,8 @@ func (h *Handler) BroadcastTaskUpdate(taskID string) {
 	h.broadcastEnrichedUpdate(context.Background(), taskID)
 }
 
-// applyRefineStatus fills RefineStatus/RefineError from the injected reader.
+// applyRefineStatus fills RefineStatus/RefineError from the injected reader and
+// recomputes AvailableActions so the concept-stage refining case is reflected.
 func (h *Handler) applyRefineStatus(e *EnrichedTask, taskID string) {
 	if h.refineReader == nil || e == nil {
 		return
@@ -214,6 +221,8 @@ func (h *Handler) applyRefineStatus(e *EnrichedTask, taskID string) {
 	if errMsg != "" {
 		e.RefineError = &errMsg
 	}
+	// Refine status can change which action is primary for concept-stage tasks.
+	e.RecomputeAvailableActions()
 }
 
 // broadcastEnrichedEvent fetches and enriches the task, then broadcasts it with the given event type.
@@ -304,6 +313,7 @@ type CreateTaskParams struct {
 	SpawnerID       string // empty = unset
 	UserID          *string
 	Metadata        map[string]any
+	Autonomy        *string
 }
 
 // CreateTaskFromInput is the reusable task-creation core: it checks slug
@@ -388,6 +398,7 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 		CostBudgetCents:     costBudget,
 		ProjectID:           projectIDPtr,
 		SpawnerID:           spawnerIDPtr,
+		Autonomy:            p.Autonomy,
 		Metadata:            p.Metadata,
 	})
 	if err != nil {
@@ -413,6 +424,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		TokenBudget     *int    `json:"tokenBudget"`
 		ProjectID       string  `json:"projectId"`
 		SpawnerID       string  `json:"spawnerId"`
+		Autonomy        *string `json:"autonomy"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -428,6 +440,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	}
 	if body.Cwd == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "cwd is required")
+	}
+	if body.Autonomy != nil {
+		if _, ok := taskcontrol.ValidAutonomyValues[*body.Autonomy]; !ok {
+			return apierr.NewAppError(http.StatusBadRequest, "invalid autonomy")
+		}
 	}
 
 	payload, _ := auth.PayloadFromContext(r.Context())
@@ -446,6 +463,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		ProjectID:       body.ProjectID,
 		SpawnerID:       body.SpawnerID,
 		UserID:          &userID,
+		Autonomy:        body.Autonomy,
 	})
 	if err != nil {
 		return err
@@ -503,6 +521,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		Cwd             *string         `json:"cwd"`
 		ProjectID       json.RawMessage `json:"projectId"`
 		SpawnerID       json.RawMessage `json:"spawnerId"`
+		Autonomy        *string         `json:"autonomy"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -512,6 +531,11 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	}
 	if body.Description != nil && len(*body.Description) > maxDescriptionChars {
 		return apierr.NewAppError(http.StatusBadRequest, "description must be <= 10000 characters")
+	}
+	if body.Autonomy != nil {
+		if _, ok := taskcontrol.ValidAutonomyValues[*body.Autonomy]; !ok {
+			return apierr.NewAppError(http.StatusBadRequest, "invalid autonomy")
+		}
 	}
 
 	// Parse nullable projectId / spawnerId: absent = leave, null = clear, string = set.
@@ -561,6 +585,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		SpawnerID:       spawnerIDPtr,
 		ClearProjectID:  clearProject,
 		ClearSpawnerID:  clearSpawner,
+		Autonomy:        body.Autonomy,
 	})
 	if err != nil {
 		return fmt.Errorf("tasks.update: %w", err)
@@ -708,6 +733,72 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 	return jsonReply(w, http.StatusAccepted, sr)
 }
 
+func (h *Handler) advance(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	res, err := Advance(r.Context(), AdvanceDeps{
+		TaskRepo:     h.taskRepo,
+		SRRepo:       h.srRepo,
+		PermRepo:     h.permRepo,
+		AuditRepo:    h.auditRepo,
+		Orchestrator: h.orchestrator,
+		RefineReader: h.refineReader,
+	}, id)
+	if err != nil {
+		return fmt.Errorf("tasks.advance: %w", err)
+	}
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_advanced", "task:"+id, map[string]any{"actor": "user", "primary": res.Primary, "dispatched": res.Dispatched})
+	h.broadcastEnrichedUpdate(r.Context(), id)
+	return jsonReply(w, http.StatusOK, res)
+}
+
+func (h *Handler) hold(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	t, err := h.taskRepo.GetByID(r.Context(), id)
+	if err != nil {
+		return apierr.ErrNotFound
+	}
+	if t.CurrentStage == "done" || t.CurrentStage == "cancelled" || t.CurrentStage == "on_hold" {
+		return apierr.NewAppError(http.StatusBadRequest, "task is already "+t.CurrentStage)
+	}
+	onHold := "on_hold"
+	updated, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{CurrentStage: &onHold})
+	if err != nil {
+		return fmt.Errorf("tasks.hold: %w", err)
+	}
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_held", "task:"+id, map[string]any{"actor": "user", "fromStage": t.CurrentStage})
+	h.broadcastEnrichedUpdate(r.Context(), id)
+	return jsonReply(w, http.StatusOK, updated)
+}
+
+func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	t, err := h.taskRepo.GetByID(r.Context(), id)
+	if err != nil {
+		return apierr.ErrNotFound
+	}
+	var body struct {
+		AdditionalPrompt string `json:"additionalPrompt"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	// When on_hold: move back to implementation before re-queuing.
+	if t.CurrentStage == "on_hold" {
+		impl := "implementation"
+		if _, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{CurrentStage: &impl}); err != nil {
+			return fmt.Errorf("tasks.resume.unstage: %w", err)
+		}
+	}
+	sr, err := h.orchestrator.ResumeFromUser(r.Context(), id, body.AdditionalPrompt)
+	if err != nil {
+		return fmt.Errorf("tasks.resume: %w", err)
+	}
+	if sr == nil {
+		return apierr.NewAppError(http.StatusConflict, "task cannot be resumed (terminal or missing)")
+	}
+	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_resumed", "task:"+id, map[string]any{"actor": "user", "hadPrompt": body.AdditionalPrompt != ""})
+	h.broadcastEnrichedUpdate(r.Context(), id)
+	return jsonReply(w, http.StatusAccepted, sr)
+}
+
 func (h *Handler) listStageRuns(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
 	runs, err := h.srRepo.ListForTask(r.Context(), id)
@@ -805,7 +896,7 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 		if _, errs := h.grantValidatedEntries(r.Context(), id, entries); len(errs) > 0 {
 			slog.Warn("resolvePermissionRequest: grant failed", "taskID", id, "errs", errs)
 		}
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id); err != nil {
+		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, ""); err != nil {
 			slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
 		}
 	}

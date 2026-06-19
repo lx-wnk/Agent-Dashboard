@@ -15,8 +15,8 @@ import (
 func TestRunner_State_DefaultsToIdle(t *testing.T) {
 	r := NewRunner(nil, nil)
 	status, errMsg := r.State("task-x")
-	if status != StatusIdle {
-		t.Errorf("default status: got %q, want %q", status, StatusIdle)
+	if status != StatusNone {
+		t.Errorf("default status: got %q, want %q", status, StatusNone)
 	}
 	if errMsg != "" {
 		t.Errorf("default errMsg: got %q, want empty", errMsg)
@@ -101,7 +101,7 @@ func TestRunner_Start_PersistsAssistantTurnAndMarksDone(t *testing.T) {
 	}
 	waitFor(t, func() bool {
 		s, _ := r.State("task-1")
-		return s == StatusDone
+		return s == StatusDraftReady
 	}, "status done")
 
 	if turns.assistantCount() != 1 {
@@ -184,7 +184,7 @@ func TestRunner_Start_PersistsPhaseAndStripsMarker(t *testing.T) {
 	out, _ := r.Start("task-1", SpawnConfig{}, nil)
 	for range out { //nolint:revive
 	}
-	waitFor(t, func() bool { s, _ := r.State("task-1"); return s == StatusDone }, "done")
+	waitFor(t, func() bool { s, _ := r.State("task-1"); return s == StatusDraftReady }, "done")
 
 	turns.mu.Lock()
 	defer turns.mu.Unlock()

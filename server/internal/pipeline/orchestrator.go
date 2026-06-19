@@ -716,8 +716,8 @@ func (o *PipelineOrchestrator) ClearStalePendingPermissions(ctx context.Context,
 
 // ResumeFromUser re-queues a task after a user action (permission grant) so the
 // tick-loop picker picks it up when a slot is free.
-func (o *PipelineOrchestrator) ResumeFromUser(ctx context.Context, taskID string) (*ent.StageRun, error) {
-	return o.RequeueForUser(ctx, taskID, "")
+func (o *PipelineOrchestrator) ResumeFromUser(ctx context.Context, taskID, userPrompt string) (*ent.StageRun, error) {
+	return o.RequeueForUser(ctx, taskID, userPrompt)
 }
 
 // RequeueForUser creates a new pending stage_run for taskID so the tick-loop

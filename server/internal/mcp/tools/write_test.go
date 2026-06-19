@@ -1,11 +1,15 @@
 package tools
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
 func TestRegisterWriteTools_AllToolsPresent(t *testing.T) {
@@ -114,3 +118,108 @@ func TestPermInputsToGrantEntries_ValidExpiresAt(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// --- create_task / update_task autonomy ---
+
+func newWriteDepsForTest(t *testing.T) WriteDeps {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	client := bundle.Client
+	return WriteDeps{
+		TaskRepo:  repo.NewTaskRepo(client),
+		PermRepo:  repo.NewPermissionRepo(client),
+		AuditRepo: repo.NewAuditEventRepo(client),
+	}
+}
+
+// toolResultJSON unmarshals the first content block text from a ToolResult.
+func toolResultJSON(t *testing.T, result *mcp.ToolResult) map[string]any {
+	t.Helper()
+	require.NotEmpty(t, result.Content)
+	var m map[string]any
+	require.NoError(t, json.Unmarshal([]byte(result.Content[0].Text), &m))
+	return m
+}
+
+func invokeCreateTask(t *testing.T, registry mcp.ToolRegistry, args map[string]any) (map[string]any, error) {
+	t.Helper()
+	tool, ok := registry["create_task"]
+	require.True(t, ok, "create_task not registered")
+	result, err := tool.Handler(context.Background(), args)
+	if err != nil {
+		return nil, err
+	}
+	return toolResultJSON(t, result), nil
+}
+
+func invokeUpdateTask(t *testing.T, registry mcp.ToolRegistry, args map[string]any) (map[string]any, error) {
+	t.Helper()
+	tool, ok := registry["update_task"]
+	require.True(t, ok, "update_task not registered")
+	result, err := tool.Handler(context.Background(), args)
+	if err != nil {
+		return nil, err
+	}
+	return toolResultJSON(t, result), nil
+}
+
+func TestCreateTask_Autonomy_Persists(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	out, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":     "aut-mcp-full",
+		"title":    "Full Autonomy MCP Task",
+		"cwd":      "/tmp/aut-mcp-full",
+		"autonomy": "full",
+	})
+	require.NoError(t, err)
+
+	taskMap, _ := out["task"].(map[string]any)
+	require.NotNil(t, taskMap, "response must contain task")
+	require.Equal(t, "full", taskMap["autonomy"], "autonomy must be persisted")
+}
+
+func TestCreateTask_Autonomy_InvalidValue_ReturnsError(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	_, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":     "aut-mcp-bad",
+		"title":    "Bad Autonomy",
+		"cwd":      "/tmp/aut-mcp-bad",
+		"autonomy": "superuser",
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid autonomy value")
+}
+
+func TestUpdateTask_Autonomy_Persists(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	// Create task first.
+	out, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":  "aut-mcp-upd",
+		"title": "Update Autonomy MCP",
+		"cwd":   "/tmp/aut-mcp-upd",
+	})
+	require.NoError(t, err)
+	taskMap, _ := out["task"].(map[string]any)
+	require.NotNil(t, taskMap)
+	id, _ := taskMap["id"].(string)
+	require.NotEmpty(t, id)
+
+	// Update autonomy.
+	updated, err := invokeUpdateTask(t, registry, map[string]any{
+		"id":       id,
+		"autonomy": "manual",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "manual", updated["autonomy"], "autonomy must be updated")
+}

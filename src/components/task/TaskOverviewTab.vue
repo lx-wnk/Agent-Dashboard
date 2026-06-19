@@ -2,6 +2,7 @@
 import type { PipelineStage, PipelineTask } from '../../types'
 import { computed, ref, watch } from 'vue'
 import { useInjectedTask, useInjectedTaskDetails } from '../../composables/taskModalContext'
+import { runAction } from '../../composables/useRunAction'
 import { useTaskAssignment } from '../../composables/useTaskAssignment'
 import { refreshTask } from '../../composables/useTasks'
 import { STAGE_LABELS } from '../../utils/stageLabels'
@@ -54,6 +55,57 @@ const {
 
 const runtime = computed(() => (task.value ? taskRuntime(task.value) : '—'))
 const active = computed(() => activeRuntime(stageRuns.value))
+
+const autonomyPatchError = ref('')
+
+async function onAutonomyChange(e: Event): Promise<void> {
+  if (!task.value)
+    return
+  const value = (e.target as HTMLSelectElement).value as 'manual' | 'spec_gated' | 'full'
+  autonomyPatchError.value = ''
+  try {
+    const res = await fetch(`/api/tasks/${task.value.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autonomy: value }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+      autonomyPatchError.value = (err as { error?: string }).error || 'Failed to update autonomy'
+    }
+  }
+  catch {
+    autonomyPatchError.value = 'Failed to update autonomy'
+  }
+}
+
+const conceptSpec = computed(() =>
+  typeof task.value?.metadata?.spec === 'string' ? task.value.metadata.spec : null,
+)
+const conceptPlan = computed(() =>
+  typeof task.value?.metadata?.plan === 'string' ? task.value.metadata.plan : null,
+)
+const hasConcept = computed(() => !!conceptSpec.value || !!conceptPlan.value)
+const showApproveSpec = computed(() => task.value?.refineStatus === 'draft_ready')
+
+const isApprovingSpec = ref(false)
+const approveSpecError = ref('')
+
+async function onApproveSpec(): Promise<void> {
+  if (!task.value)
+    return
+  isApprovingSpec.value = true
+  approveSpecError.value = ''
+  try {
+    await runAction(task.value.id, 'approve_spec')
+  }
+  catch (e) {
+    approveSpecError.value = (e as Error).message
+  }
+  finally {
+    isApprovingSpec.value = false
+  }
+}
 
 const lastRefineOutput = ref('')
 const completedRefinePhases = ref<string[]>([])
@@ -108,7 +160,7 @@ watch(
 
     <template v-if="task.currentStage === 'concept'">
       <RefineStatusPanel
-        :status="task.refineStatus ?? 'idle'"
+        :status="task.refineStatus ?? 'none'"
         :error="task.refineError ?? null"
         :last-output="lastRefineOutput"
         :completed-phases="completedRefinePhases"
@@ -204,6 +256,66 @@ watch(
         </dd>
       </div>
     </dl>
+
+    <section class="border-t border-line pt-3 flex flex-col gap-1.5">
+      <label class="text-[11px] uppercase tracking-[0.5px] text-fg-mute font-semibold" :for="`task-modal-autonomy-${task.id}`">
+        Autonomy
+      </label>
+      <p v-if="autonomyPatchError" class="text-[11px] text-danger-text">
+        {{ autonomyPatchError }}
+      </p>
+      <select
+        :id="`task-modal-autonomy-${task.id}`"
+        :value="task.autonomy ?? 'spec_gated'"
+        data-testid="task-autonomy-select"
+        class="bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
+        @change="onAutonomyChange"
+      >
+        <option value="manual">
+          Manual — approve every stage
+        </option>
+        <option value="spec_gated">
+          Spec-gated — approve the spec, then autonomous
+        </option>
+        <option value="full">
+          Full — fully autonomous
+        </option>
+      </select>
+    </section>
+
+    <section v-if="hasConcept" class="border-t border-line pt-3 flex flex-col gap-2" data-testid="concept-viewer">
+      <div class="flex items-center justify-between gap-3">
+        <h4 class="text-[11px] font-semibold uppercase tracking-[0.5px] text-fg-mute">
+          Concept
+        </h4>
+        <div v-if="showApproveSpec" class="flex items-center gap-2">
+          <p v-if="approveSpecError" class="text-[11px] text-danger-text">
+            {{ approveSpecError }}
+          </p>
+          <AppButton
+            variant="primary"
+            size="sm"
+            :disabled="isApprovingSpec"
+            data-testid="approve-spec-btn"
+            @click="onApproveSpec"
+          >
+            {{ isApprovingSpec ? 'Approving…' : 'Approve Spec' }}
+          </AppButton>
+        </div>
+      </div>
+      <div v-if="conceptSpec">
+        <div class="text-[10px] uppercase tracking-[0.5px] text-fg-mute mb-1">
+          Spec
+        </div>
+        <pre class="font-mono text-[11px] bg-card rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-fg leading-relaxed">{{ conceptSpec }}</pre>
+      </div>
+      <div v-if="conceptPlan">
+        <div class="text-[10px] uppercase tracking-[0.5px] text-fg-mute mb-1">
+          Plan
+        </div>
+        <pre class="font-mono text-[11px] bg-card rounded px-3 py-2.5 whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-fg leading-relaxed">{{ conceptPlan }}</pre>
+      </div>
+    </section>
 
     <WorktreePanel
       :task-id="task.id"

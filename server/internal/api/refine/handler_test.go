@@ -37,6 +37,7 @@ func (f *fakeTurnRepo) Create(_ context.Context, inp repo.CreateTurnInput) (*ent
 	t := &ent.RefinementTurn{
 		ID:        fmt.Sprintf("turn-%d", n), // F055: monotonic counter avoids content-based ID collisions
 		TaskID:    inp.TaskID,
+		Role:      refinementturn.Role(inp.Role),
 		Content:   inp.Content,
 		Phase:     inp.Phase,
 		CreatedAt: time.Now(),
@@ -384,7 +385,7 @@ func TestConfirm_PersistsConceptOntoTask(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
-func TestStatus_ReturnsIdleForUnknownTask(t *testing.T) {
+func TestStatus_ReturnsNoneForUnknownTask(t *testing.T) {
 	turns := &fakeTurnRepo{}
 	tasks := newFakeTaskRepo()
 	router := makeRouter(turns, tasks, noopSpawner)
@@ -398,7 +399,7 @@ func TestStatus_ReturnsIdleForUnknownTask(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if body["status"] != "idle" {
-		t.Errorf("status field: got %v, want idle", body["status"])
+	if body["status"] != "none" {
+		t.Errorf("status field: got %v, want none", body["status"])
 	}
 }

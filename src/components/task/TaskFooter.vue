@@ -1,13 +1,53 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useInjectedTaskActions, useInjectedTaskDetails } from '../../composables/taskModalContext'
+import { computed, ref } from 'vue'
+import { useInjectedTask, useInjectedTaskActions, useInjectedTaskDetails } from '../../composables/taskModalContext'
+import { actionLabel, actionVariant, renderableActions, runAction } from '../../composables/useRunAction'
 import TaskSlashCommandMenu from '../TaskSlashCommandMenu.vue'
 import AppButton from '../ui/AppButton.vue'
 
-const { isActing, actionError, actionSuccess, latestStageRun, isFailedRun, isTerminal, isOnHoldStage, isResumableAwaitingUser } = useInjectedTaskDetails()
-const { additionalPrompt, analysisInfo, cancelConfirm, slashCommands, onCancelClick, onAnalyze, onResume, onRetry, onProgress, onSlashSelect } = useInjectedTaskActions()
+const task = useInjectedTask()
+const { isActing, actionError, actionSuccess, handleAction } = useInjectedTaskDetails()
+const { additionalPrompt, analysisInfo, cancelConfirm, slashCommands, onCancelClick, onAnalyze, onSlashSelect } = useInjectedTaskActions()
 
 const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
+
+// Spec approval is owned by the concept section in TaskOverviewTab; exclude it
+// here so a concept-stage task does not render two "Approve Spec" buttons.
+const actions = computed(() =>
+  renderableActions(task.value?.availableActions).filter(a => a.action !== 'approve_spec'),
+)
+
+// Show the prompt textarea when retry or resume is among the available actions.
+const hasRetryOrResume = computed(() =>
+  actions.value.some(a => a.action === 'retry' || a.action === 'resume'),
+)
+
+// Show analyze when any failure-related action is present (retry implies failed run).
+const showAnalyze = computed(() =>
+  actions.value.some(a => a.action === 'retry'),
+)
+
+// Body payload for actions that accept an additional prompt.
+function bodyFor(action: string): Record<string, unknown> | undefined {
+  if ((action === 'retry' || action === 'resume') && additionalPrompt.value.trim())
+    return { additionalPrompt: additionalPrompt.value.trim() }
+  return undefined
+}
+
+async function onActionClick(action: string): Promise<void> {
+  if (action === 'cancel') {
+    onCancelClick()
+    return
+  }
+  await handleAction(() => runAction(task.value!.id, action, bodyFor(action)))
+}
+
+// Fallback: if no availableActions on the payload, detect the legacy cancel button.
+const showLegacyCancel = computed(() =>
+  !task.value?.availableActions
+  && task.value?.currentStage !== 'done'
+  && task.value?.currentStage !== 'cancelled',
+)
 </script>
 
 <template>
@@ -21,7 +61,8 @@ const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
     <p v-if="analysisInfo" class="text-green-600 dark:text-green-400 text-xs mb-2">
       Analysis agent spawned · PID <code>{{ analysisInfo.pid }}</code> · look for it in the agents list.
     </p>
-    <div v-if="isFailedRun || isResumableAwaitingUser" class="mb-2">
+
+    <div v-if="hasRetryOrResume" class="mb-2">
       <div class="relative">
         <TaskSlashCommandMenu
           ref="slashMenuRef"
@@ -38,29 +79,34 @@ const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
         />
       </div>
     </div>
-    <div class="flex gap-2 justify-end">
+
+    <div v-if="actions.length > 0" class="flex gap-2 justify-end flex-wrap">
+      <template v-for="a in actions" :key="a.action">
+        <!-- Cancel uses two-step confirm; delegate to existing handler. -->
+        <AppButton
+          v-if="a.action === 'cancel'"
+          variant="danger"
+          :disabled="isActing || !a.enabled"
+          :title="cancelConfirm
+            ? 'Click again to confirm — this stops the task and marks it cancelled'
+            : (a.reason || 'Stop this task and mark it as cancelled')"
+          @click="onCancelClick"
+        >
+          {{ cancelConfirm ? 'Confirm Cancel?' : actionLabel(a.action) }}
+        </AppButton>
+        <AppButton
+          v-else
+          :variant="actionVariant(a.action)"
+          :disabled="isActing || !a.enabled"
+          :title="a.reason"
+          @click="onActionClick(a.action)"
+        >
+          {{ actionLabel(a.action) }}
+        </AppButton>
+      </template>
+
       <AppButton
-        v-if="(isFailedRun && latestStageRun?.sessionId) || isResumableAwaitingUser"
-        variant="secondary"
-        :disabled="isActing"
-        :title="isResumableAwaitingUser
-          ? 'Re-run this stage — the agent stopped without a passing result'
-          : 'Continue the agent\'s last session from where it stopped'"
-        @click="onResume"
-      >
-        {{ isResumableAwaitingUser && !latestStageRun?.sessionId ? 'Resume Stage' : 'Resume Session' }}
-      </AppButton>
-      <AppButton
-        v-if="isFailedRun"
-        variant="info"
-        :disabled="isActing"
-        title="Start a fresh iteration of this stage"
-        @click="onRetry"
-      >
-        Retry Stage
-      </AppButton>
-      <AppButton
-        v-if="isFailedRun || isResumableAwaitingUser"
+        v-if="showAnalyze"
         variant="secondary"
         :disabled="isActing"
         title="Spawn a standalone Claude session with the failure context attached"
@@ -68,20 +114,14 @@ const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
       >
         Analyze Failure
       </AppButton>
+    </div>
+
+    <!-- Graceful fallback for older payloads without availableActions. -->
+    <div v-else-if="showLegacyCancel" class="flex gap-2 justify-end">
       <AppButton
-        v-if="!isTerminal && !isOnHoldStage && !isFailedRun"
-        variant="secondary"
-        :disabled="isActing"
-        title="Manually advance to the next stage (skips approval gates)"
-        @click="onProgress"
-      >
-        Progress →
-      </AppButton>
-      <AppButton
-        v-if="!isTerminal"
         variant="danger"
         :disabled="isActing"
-        :title="cancelConfirm ? 'Click again to confirm — this stops the task and marks it cancelled' : 'Stop this task and mark it as cancelled'"
+        :title="cancelConfirm ? 'Click again to confirm' : 'Stop this task and mark it as cancelled'"
         @click="onCancelClick"
       >
         {{ cancelConfirm ? 'Confirm Cancel?' : 'Cancel Task' }}

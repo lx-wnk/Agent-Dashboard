@@ -8,6 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 )
 
 // EnrichedTask is the API response shape for a task. All fields use camelCase
@@ -25,6 +26,7 @@ type EnrichedTask struct {
 	TargetBranch        *string                `json:"targetBranch"`
 	CurrentStage        string                 `json:"currentStage"`
 	Priority            string                 `json:"priority"`
+	Autonomy            string                 `json:"autonomy"`
 	UserID              *string                `json:"userId"`
 	ParentTaskID        *string                `json:"parentTaskId"`
 	ProjectID           *string                `json:"projectId"`
@@ -48,7 +50,12 @@ type EnrichedTask struct {
 	CurrentIteration            int        `json:"currentIteration"`
 	ActiveSessionID             *string    `json:"activeSessionId"`
 	ActivePID                   *int       `json:"activePid"`
-	BlockedByPendingPermissions bool       `json:"blockedByPendingPermissions"`
+	BlockedByPendingPermissions bool                  `json:"blockedByPendingPermissions"`
+	AvailableActions            []taskcontrol.Action  `json:"availableActions"`
+
+	// pendingPermsCount preserves the raw count so a later RecomputeAvailableActions
+	// (e.g. from applyRefineStatus) stays faithful instead of assuming zero.
+	pendingPermsCount int
 }
 
 // pidAliveMemo returns a func(int) bool that wraps pipeline.IsPidAlive and caches
@@ -171,7 +178,7 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 		}
 	}
 
-	return &EnrichedTask{
+	e := &EnrichedTask{
 		ID:                          t.ID,
 		Slug:                        t.Slug,
 		Title:                       t.Title,
@@ -182,6 +189,7 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 		TargetBranch:                t.TargetBranch,
 		CurrentStage:                t.CurrentStage,
 		Priority:                    t.Priority,
+		Autonomy:                    t.Autonomy,
 		UserID:                      t.UserID,
 		ParentTaskID:                t.ParentTaskID,
 		ProjectID:                   t.ProjectID,
@@ -203,5 +211,30 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 		ActiveSessionID:             activeSessionID,
 		ActivePID:                   activePID,
 		BlockedByPendingPermissions: blockedByPendingPermissions,
-	}, nil
+		pendingPermsCount:           pendingPermsCount,
+	}
+	recomputeAvailableActionsWithPerms(e, pendingPermsCount)
+	return e, nil
+}
+
+// RecomputeAvailableActions rebuilds AvailableActions from the current enriched
+// fields. Called once by enrichOne and again by applyRefineStatus so that the
+// refine runner status is always reflected in the action set.
+func (e *EnrichedTask) RecomputeAvailableActions() {
+	recomputeAvailableActionsWithPerms(e, e.pendingPermsCount)
+}
+
+// recomputeAvailableActionsWithPerms rebuilds AvailableActions with the exact
+// pending permission count. Used by enrichOne which has the raw count available.
+func recomputeAvailableActionsWithPerms(e *EnrichedTask, pendingPermsCount int) {
+	runStatus := ""
+	if e.LatestStageRunStatus != nil {
+		runStatus = *e.LatestStageRunStatus
+	}
+	refineStatus := ""
+	if e.RefineStatus != nil {
+		refineStatus = *e.RefineStatus
+	}
+	s := taskcontrol.FromFields(e.CurrentStage, runStatus, refineStatus, pendingPermsCount, e.NeedsUser)
+	e.AvailableActions = taskcontrol.ComputeActions(s)
 }

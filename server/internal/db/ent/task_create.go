@@ -226,6 +226,20 @@ func (_c *TaskCreate) SetNillableSilverBullet(v *bool) *TaskCreate {
 	return _c
 }
 
+// SetAutonomy sets the "autonomy" field.
+func (_c *TaskCreate) SetAutonomy(v string) *TaskCreate {
+	_c.mutation.SetAutonomy(v)
+	return _c
+}
+
+// SetNillableAutonomy sets the "autonomy" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableAutonomy(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetAutonomy(*v)
+	}
+	return _c
+}
+
 // SetMetadata sets the "metadata" field.
 func (_c *TaskCreate) SetMetadata(v map[string]interface{}) *TaskCreate {
 	_c.mutation.SetMetadata(v)
@@ -423,6 +437,10 @@ func (_c *TaskCreate) defaults() {
 		v := task.DefaultSilverBullet
 		_c.mutation.SetSilverBullet(v)
 	}
+	if _, ok := _c.mutation.Autonomy(); !ok {
+		v := task.DefaultAutonomy
+		_c.mutation.SetAutonomy(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := task.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -468,6 +486,9 @@ func (_c *TaskCreate) check() error {
 	}
 	if _, ok := _c.mutation.SilverBullet(); !ok {
 		return &ValidationError{Name: "silver_bullet", err: errors.New(`ent: missing required field "Task.silver_bullet"`)}
+	}
+	if _, ok := _c.mutation.Autonomy(); !ok {
+		return &ValidationError{Name: "autonomy", err: errors.New(`ent: missing required field "Task.autonomy"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Task.created_at"`)}
@@ -574,6 +595,10 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.SilverBullet(); ok {
 		_spec.SetField(task.FieldSilverBullet, field.TypeBool, value)
 		_node.SilverBullet = value
+	}
+	if value, ok := _c.mutation.Autonomy(); ok {
+		_spec.SetField(task.FieldAutonomy, field.TypeString, value)
+		_node.Autonomy = value
 	}
 	if value, ok := _c.mutation.Metadata(); ok {
 		_spec.SetField(task.FieldMetadata, field.TypeJSON, value)
@@ -976,6 +1001,18 @@ func (u *TaskUpsert) SetSilverBullet(v bool) *TaskUpsert {
 // UpdateSilverBullet sets the "silver_bullet" field to the value that was provided on create.
 func (u *TaskUpsert) UpdateSilverBullet() *TaskUpsert {
 	u.SetExcluded(task.FieldSilverBullet)
+	return u
+}
+
+// SetAutonomy sets the "autonomy" field.
+func (u *TaskUpsert) SetAutonomy(v string) *TaskUpsert {
+	u.Set(task.FieldAutonomy, v)
+	return u
+}
+
+// UpdateAutonomy sets the "autonomy" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateAutonomy() *TaskUpsert {
+	u.SetExcluded(task.FieldAutonomy)
 	return u
 }
 
@@ -1425,6 +1462,20 @@ func (u *TaskUpsertOne) SetSilverBullet(v bool) *TaskUpsertOne {
 func (u *TaskUpsertOne) UpdateSilverBullet() *TaskUpsertOne {
 	return u.Update(func(s *TaskUpsert) {
 		s.UpdateSilverBullet()
+	})
+}
+
+// SetAutonomy sets the "autonomy" field.
+func (u *TaskUpsertOne) SetAutonomy(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetAutonomy(v)
+	})
+}
+
+// UpdateAutonomy sets the "autonomy" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateAutonomy() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateAutonomy()
 	})
 }
 
@@ -2056,6 +2107,20 @@ func (u *TaskUpsertBulk) SetSilverBullet(v bool) *TaskUpsertBulk {
 func (u *TaskUpsertBulk) UpdateSilverBullet() *TaskUpsertBulk {
 	return u.Update(func(s *TaskUpsert) {
 		s.UpdateSilverBullet()
+	})
+}
+
+// SetAutonomy sets the "autonomy" field.
+func (u *TaskUpsertBulk) SetAutonomy(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetAutonomy(v)
+	})
+}
+
+// UpdateAutonomy sets the "autonomy" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateAutonomy() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateAutonomy()
 	})
 }
 

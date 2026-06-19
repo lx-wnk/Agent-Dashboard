@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
@@ -43,9 +44,11 @@ func captureNextEvent(t *testing.T, tb *sse.TaskBroadcaster, fn func()) map[stri
 	}
 }
 
-// seedRunningTask creates a task and a stage run in "running" status, returning
-// the task ID and stage run ID.
-func seedRunningTask(t *testing.T, taskRepo repo.TaskRepo, srRepo repo.StageRunRepo) (taskID, stageRunID string) {
+// seedRunningTask creates a task with "manual" autonomy and a stage run in
+// "running" status, returning the task ID and stage run ID.
+// Autonomy is pinned to "manual" so the task stays in the gated (non-allow-all)
+// path regardless of the schema default ("spec_gated").
+func seedRunningTask(t *testing.T, client *ent.Client, taskRepo repo.TaskRepo, srRepo repo.StageRunRepo) (taskID, stageRunID string) {
 	t.Helper()
 	ctx := testCtx(t)
 
@@ -59,6 +62,9 @@ func seedRunningTask(t *testing.T, taskRepo repo.TaskRepo, srRepo repo.StageRunR
 	})
 	if err != nil {
 		t.Fatalf("create task: %v", err)
+	}
+	if _, err = client.Task.UpdateOneID(task.ID).SetAutonomy("manual").Save(ctx); err != nil {
+		t.Fatalf("set autonomy manual: %v", err)
 	}
 
 	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
@@ -90,7 +96,7 @@ func TestPermissionRequest_BroadcastsEnrichedPayload(t *testing.T) {
 	srRepo := repo.NewStageRunRepo(bundle.Client)
 
 	tb, r := newTestHandlerWithBroadcaster(t, bundle.Client)
-	taskID, stageRunID := seedRunningTask(t, taskRepo, srRepo)
+	taskID, stageRunID := seedRunningTask(t, bundle.Client, taskRepo, srRepo)
 
 	body := map[string]any{
 		"stageRunId": stageRunID,
@@ -140,7 +146,7 @@ func TestBulkCreatePermissionRequests_BroadcastsEnrichedPayload(t *testing.T) {
 	srRepo := repo.NewStageRunRepo(bundle.Client)
 
 	tb, r := newTestHandlerWithBroadcaster(t, bundle.Client)
-	taskID, stageRunID := seedRunningTask(t, taskRepo, srRepo)
+	taskID, stageRunID := seedRunningTask(t, bundle.Client, taskRepo, srRepo)
 
 	body := map[string]any{
 		"stageRunId": stageRunID,

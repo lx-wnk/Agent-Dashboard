@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
+	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 )
 
 var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)
@@ -75,10 +76,27 @@ var channelAllow = []string{
 	"mcp__dashboard-channel__request_permission",
 }
 
-func BuildAllowList(perms []*ent.TaskPermission, enableChannel, allowGitPush bool) []string {
+// BuildDenyList returns the settings deny entries that must be written
+// alongside the allow list. On the allow-all path, a deny for "Bash(git push:*)"
+// is injected when allowGitPush is false so Claude refuses git-push even though
+// blanket Bash is allowed. Returns nil when no deny entries are needed.
+func BuildDenyList(autonomy string, allowGitPush bool) []string {
+	if taskcontrol.IsAllowAll(autonomy) && !allowGitPush {
+		return []string{"Bash(git push:*)"}
+	}
+	return nil
+}
+
+// BuildAllowList assembles the --allowedTools slice for a spawn.
+// When autonomy is an allow-all level (spec_gated or full), the restrictive
+// per-permission loop is skipped and the permissive list is returned instead.
+func BuildAllowList(autonomy string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) []string {
 	var allow []string
 	if enableChannel {
 		allow = append(allow, channelAllow...)
+	}
+	if taskcontrol.IsAllowAll(autonomy) {
+		return append(allow, taskcontrol.PermissiveAllowList(allowGitPush)...)
 	}
 	now := time.Now()
 	for _, p := range perms {
@@ -340,9 +358,10 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	return env
 }
 
-func writeSettingsFile(cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
-	allow := BuildAllowList(perms, enableChannel, allowGitPush)
-	if len(allow) == 0 {
+func writeSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
+	allow := BuildAllowList(autonomy, perms, enableChannel, allowGitPush)
+	deny := BuildDenyList(autonomy, allowGitPush)
+	if len(allow) == 0 && len(deny) == 0 {
 		return "", false, false, nil
 	}
 	claudeDir := filepath.Join(cwd, ".claude")
@@ -351,8 +370,12 @@ func writeSettingsFile(cwd string, perms []*ent.TaskPermission, enableChannel, a
 		if err := os.MkdirAll(claudeDir, 0o700); err != nil {
 			return "", false, false, fmt.Errorf("writeSettingsFile: mkdir .claude: %w", err)
 		}
+		permsMap := map[string]any{"allow": allow}
+		if len(deny) > 0 {
+			permsMap["deny"] = deny
+		}
 		settings := map[string]any{
-			"permissions":       map[string]any{"allow": allow},
+			"permissions":       permsMap,
 			"_dashboardManaged": true,
 		}
 		data, _ := json.MarshalIndent(settings, "", "  ")
@@ -387,7 +410,21 @@ func writeSettingsFile(cwd string, perms []*ent.TaskPermission, enableChannel, a
 			newEntries = append(newEntries, entry)
 		}
 	}
-	if len(newEntries) == 0 {
+	// Union deny entries the same way allow entries are unioned.
+	existingDeny, _ := existingPerms["deny"].([]any)
+	existingDenySet := make(map[string]bool, len(existingDeny))
+	for _, e := range existingDeny {
+		if s, ok := e.(string); ok {
+			existingDenySet[s] = true
+		}
+	}
+	var newDenyEntries []string
+	for _, entry := range deny {
+		if !existingDenySet[entry] {
+			newDenyEntries = append(newDenyEntries, entry)
+		}
+	}
+	if len(newEntries) == 0 && len(newDenyEntries) == 0 {
 		return localPath, false, true, nil
 	}
 	merged := make([]any, 0, len(existingAllow)+len(newEntries))
@@ -396,6 +433,14 @@ func writeSettingsFile(cwd string, perms []*ent.TaskPermission, enableChannel, a
 		merged = append(merged, e)
 	}
 	existingPerms["allow"] = merged
+	if len(newDenyEntries) > 0 {
+		mergedDeny := make([]any, 0, len(existingDeny)+len(newDenyEntries))
+		mergedDeny = append(mergedDeny, existingDeny...)
+		for _, e := range newDenyEntries {
+			mergedDeny = append(mergedDeny, e)
+		}
+		existingPerms["deny"] = mergedDeny
+	}
 	existing["permissions"] = existingPerms
 	existing["_dashboardManagedAllows"] = newEntries
 	if err := os.MkdirAll(claudeDir, 0o700); err != nil {
@@ -447,7 +492,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 		cwd = *opts.Task.WorktreePath
 	}
 	allowGitPush := IsGitPushAllowed(opts.Task)
-	settingsPath, wrote, isLocal, err := writeSettingsFile(cwd, opts.Permissions, opts.EnableChannel, allowGitPush)
+	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush)
 	if err != nil {
 		slog.Warn("writeSettingsFile failed — continuing without pre-approved allow-list", "err", err)
 	}

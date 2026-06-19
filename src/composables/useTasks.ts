@@ -1,6 +1,7 @@
 import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
 import { computed, onUnmounted, ref, shallowRef } from 'vue'
 import { errorMessage } from '../utils/errorMessage'
+import { runAction } from './useRunAction'
 import { createSseResource } from './useSseResource'
 
 const tasks = shallowRef<PipelineTask[]>([])
@@ -186,6 +187,7 @@ export interface CreateTaskInput {
   template?: string
   projectId?: string
   spawnerId?: string
+  autonomy?: 'manual' | 'spec_gated' | 'full'
 }
 
 export async function createTask(input: CreateTaskInput): Promise<PipelineTask> {
@@ -209,6 +211,7 @@ export async function createTask(input: CreateTaskInput): Promise<PipelineTask> 
       template: input.template,
       projectId: input.projectId,
       spawnerId: input.spawnerId,
+      autonomy: input.autonomy,
     }),
   })
   if (!res.ok) {
@@ -226,29 +229,19 @@ export async function progressTask(taskId: string): Promise<void> {
   }
 }
 
+// Endpoint defined in ACTION_META (useRunAction.ts — canonical source).
 export async function cancelTask(taskId: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(err.error || 'Failed to cancel task')
-  }
+  return runAction(taskId, 'cancel')
 }
 
 /**
  * Re-queue the task's current stage after a failed stage_run. Returns 202
  * Accepted — the stage_run is pending and will start when a runner slot is
  * free. Only valid when latestStageRunStatus === 'failed'.
+ * Endpoint defined in ACTION_META (useRunAction.ts — canonical source).
  */
 export async function retryTask(taskId: string, additionalPrompt?: string): Promise<void> {
-  const res = await fetch(`/api/tasks/${taskId}/retry`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ additionalPrompt: additionalPrompt?.trim() || undefined }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(err.error || 'Failed to retry task')
-  }
+  return runAction(taskId, 'retry', additionalPrompt?.trim() ? { additionalPrompt: additionalPrompt.trim() } : undefined)
 }
 
 /**

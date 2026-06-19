@@ -33,6 +33,11 @@ func (Task) Fields() []ent.Field {
 		field.Int("cost_budget_cents").Optional().Nillable(),
 		field.Int("stage_timeout_seconds").Default(1800),
 		field.Bool("silver_bullet").Default(false),
+		// autonomy controls the permission gate: "spec_gated" and "full" auto-approve
+		// all permission requests; "manual" keeps today's gated behaviour. Empty-string
+		// rows (pre-migration) are treated as "manual" in IsAllowAll to preserve the
+		// gate for old tasks. New tasks default to "spec_gated" via the schema default.
+		field.String("autonomy").Default("spec_gated"),
 		field.JSON("metadata", map[string]any{}).Optional(),
 		field.String("project_id").Optional().Nillable(),
 		field.String("spawner_id").Optional().Nillable(),

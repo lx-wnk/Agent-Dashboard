@@ -50,6 +50,8 @@ type Task struct {
 	StageTimeoutSeconds int `json:"stage_timeout_seconds,omitempty"`
 	// SilverBullet holds the value of the "silver_bullet" field.
 	SilverBullet bool `json:"silver_bullet,omitempty"`
+	// Autonomy holds the value of the "autonomy" field.
+	Autonomy string `json:"autonomy,omitempty"`
 	// Metadata holds the value of the "metadata" field.
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 	// ProjectID holds the value of the "project_id" field.
@@ -132,7 +134,7 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case task.FieldMaxIterations, task.FieldTokenBudget, task.FieldCostBudgetCents, task.FieldStageTimeoutSeconds:
 			values[i] = new(sql.NullInt64)
-		case task.FieldID, task.FieldSlug, task.FieldTitle, task.FieldDescription, task.FieldCwd, task.FieldWorktreePath, task.FieldSourceBranch, task.FieldTargetBranch, task.FieldCurrentStage, task.FieldPriority, task.FieldUserID, task.FieldParentTaskID, task.FieldProjectID, task.FieldSpawnerID:
+		case task.FieldID, task.FieldSlug, task.FieldTitle, task.FieldDescription, task.FieldCwd, task.FieldWorktreePath, task.FieldSourceBranch, task.FieldTargetBranch, task.FieldCurrentStage, task.FieldPriority, task.FieldUserID, task.FieldParentTaskID, task.FieldAutonomy, task.FieldProjectID, task.FieldSpawnerID:
 			values[i] = new(sql.NullString)
 		case task.FieldCreatedAt, task.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -260,6 +262,12 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field silver_bullet", values[i])
 			} else if value.Valid {
 				_m.SilverBullet = value.Bool
+			}
+		case task.FieldAutonomy:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field autonomy", values[i])
+			} else if value.Valid {
+				_m.Autonomy = value.String
 			}
 		case task.FieldMetadata:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -421,6 +429,9 @@ func (_m *Task) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("silver_bullet=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SilverBullet))
+	builder.WriteString(", ")
+	builder.WriteString("autonomy=")
+	builder.WriteString(_m.Autonomy)
 	builder.WriteString(", ")
 	builder.WriteString("metadata=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Metadata))

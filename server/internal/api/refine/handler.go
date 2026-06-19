@@ -61,6 +61,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/refine/{taskId}/turns", h.listTurns)
 	r.Post("/api/refine/{taskId}/turn", h.submitTurn)
 	r.Post("/api/refine/{taskId}/confirm", h.confirm)
+	r.Post("/api/refine/{taskId}/concept", h.injectConcept)
 	r.Get("/api/refine/{taskId}/status", h.status)
 }
 
@@ -235,63 +236,12 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 	// Auth enforced by RequireAuth middleware (skipped in bypass mode) — see listTurns.
 	taskID := chi.URLParam(r, "taskId")
 
-	// Bridge the finalized concept from the refinement turns onto the task BEFORE
-	// advancing. Without this the concept lived only in refinement_turns and the
-	// implementation stage (which reads spec/plan/toolRequests from task.Metadata)
-	// saw an empty {} block. Routing fields (title, branch) land on task columns;
-	// setting SourceBranch also triggers the orchestrator's auto-worktree.
-	backlog := "backlog"
-	update := repo.UpdateTaskInput{CurrentStage: &backlog}
-	if h.deps.Turns != nil {
-		if turns, err := h.deps.Turns.ListForTask(r.Context(), taskID, 0); err == nil {
-			if concept, ok := refine.ExtractConcept(turns); ok {
-				if meta := concept.Metadata(); len(meta) > 0 {
-					update.Metadata = meta
-				}
-				if concept.RefinedTitle != "" {
-					update.Title = &concept.RefinedTitle
-				}
-				if concept.SourceBranch != "" {
-					update.SourceBranch = &concept.SourceBranch
-				}
-				if concept.TargetBranch != "" {
-					update.TargetBranch = &concept.TargetBranch
-				}
-			}
-		}
-	}
-
-	phase := "confirmed"
-	if _, err := h.deps.Turns.Create(r.Context(), repo.CreateTurnInput{
-		TaskID:  taskID,
-		Role:    "assistant",
-		Content: "confirmed",
-		Phase:   &phase,
-	}); err != nil {
-		jsonError(w, "failed to store confirmation turn", http.StatusInternalServerError)
-		return
-	}
-
-	// Mark the concept stage run done and advance the task to backlog so the
-	// pipeline orchestrator can immediately pick it up for implementation.
-	if h.deps.StageRuns != nil {
-		now := time.Now()
-		done := "done"
-		if sr, err := h.deps.StageRuns.GetLatestByTaskAndStage(r.Context(), taskID, "concept"); err == nil && sr != nil {
-			_, _ = h.deps.StageRuns.Update(r.Context(), sr.ID, repo.UpdateStageRunInput{
-				Status:  &done,
-				EndedAt: &now,
-			})
-		}
-	}
-	if h.deps.Tasks != nil {
-		_, _ = h.deps.Tasks.Update(r.Context(), taskID, update)
-	}
-	if h.deps.Advance != nil {
-		_ = h.deps.Advance(r.Context(), taskID)
-	}
-
-	task, err := h.deps.Tasks.GetByID(r.Context(), taskID)
+	task, err := Confirm(r.Context(), ConfirmDeps{
+		Turns:     h.deps.Turns,
+		Tasks:     h.deps.Tasks,
+		StageRuns: h.deps.StageRuns,
+		Advance:   h.deps.Advance,
+	}, taskID)
 	if err != nil {
 		jsonError(w, "confirmed but could not fetch updated task", http.StatusInternalServerError)
 		return
@@ -299,6 +249,62 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(task)
+}
+
+// ConceptBody is the JSON payload accepted by POST /api/refine/{taskId}/concept.
+type ConceptBody struct {
+	Spec         string   `json:"spec"`
+	Plan         []string `json:"plan"`
+	ToolRequests []string `json:"toolRequests"`
+	RefinedTitle string   `json:"refinedTitle"`
+	SourceBranch string   `json:"sourceBranch"`
+	TargetBranch string   `json:"targetBranch"`
+}
+
+// POST /api/refine/{taskId}/concept — inject a finished concept without an agent round-trip.
+func (h *Handler) injectConcept(w http.ResponseWriter, r *http.Request) {
+	taskID := chi.URLParam(r, "taskId")
+
+	var body ConceptBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Spec) == "" {
+		jsonError(w, "spec is required", http.StatusBadRequest)
+		return
+	}
+
+	raw := map[string]any{"spec": body.Spec}
+	if len(body.Plan) > 0 {
+		plans := make([]any, len(body.Plan))
+		for i, p := range body.Plan {
+			plans[i] = p
+		}
+		raw["plan"] = plans
+	}
+	if len(body.ToolRequests) > 0 {
+		reqs := make([]any, len(body.ToolRequests))
+		for i, p := range body.ToolRequests {
+			reqs[i] = p
+		}
+		raw["toolRequests"] = reqs
+	}
+
+	c := refine.Concept{
+		Raw:          raw,
+		RefinedTitle: body.RefinedTitle,
+		SourceBranch: body.SourceBranch,
+		TargetBranch: body.TargetBranch,
+	}
+
+	if err := InjectConcept(r.Context(), InjectDeps{
+		Turns:  h.deps.Turns,
+		Runner: h.deps.Runner,
+	}, taskID, c); err != nil {
+		jsonError(w, "inject failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	status, _ := h.deps.Runner.State(taskID)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": status})
 }
 
 func jsonError(w http.ResponseWriter, msg string, status int) {

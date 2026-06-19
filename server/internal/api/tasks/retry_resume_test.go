@@ -35,7 +35,7 @@ func (c *captureOrchestrator) ProgressTask(_ context.Context, taskID string, opt
 	c.opts = opts
 	return &ent.StageRun{ID: taskID + "-run"}, nil
 }
-func (c *captureOrchestrator) ResumeFromUser(_ context.Context, _ string) (*ent.StageRun, error) {
+func (c *captureOrchestrator) ResumeFromUser(_ context.Context, _ string, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
 func (c *captureOrchestrator) RequeueForUser(_ context.Context, taskID, userPrompt string) (*ent.StageRun, error) {
