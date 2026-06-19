@@ -11,7 +11,11 @@ const { additionalPrompt, analysisInfo, cancelConfirm, slashCommands, onCancelCl
 
 const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
 
-const actions = computed(() => renderableActions(task.value?.availableActions))
+// Spec approval is owned by the concept section in TaskOverviewTab; exclude it
+// here so a concept-stage task does not render two "Approve Spec" buttons.
+const actions = computed(() =>
+  renderableActions(task.value?.availableActions).filter(a => a.action !== 'approve_spec'),
+)
 
 // Show the prompt textarea when retry or resume is among the available actions.
 const hasRetryOrResume = computed(() =>
@@ -92,7 +96,7 @@ const showLegacyCancel = computed(() =>
         </AppButton>
         <AppButton
           v-else
-          :variant="a.primary ? actionVariant(a.action) : actionVariant(a.action)"
+          :variant="actionVariant(a.action)"
           :disabled="isActing || !a.enabled"
           :title="a.reason"
           @click="onActionClick(a.action)"
