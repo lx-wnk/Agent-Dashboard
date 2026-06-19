@@ -53,9 +53,23 @@ type EnrichedTask struct {
 	BlockedByPendingPermissions bool                  `json:"blockedByPendingPermissions"`
 	AvailableActions            []taskcontrol.Action  `json:"availableActions"`
 
+	// Child-task summary — populated by ChildSummariesByParent, zero when no children.
+	ChildCount       int          `json:"childCount"`
+	ActiveChildCount int          `json:"activeChildCount"`
+	ActiveChild      *ActiveChild `json:"activeChild"`
+
 	// pendingPermsCount preserves the raw count so a later RecomputeAvailableActions
 	// (e.g. from applyRefineStatus) stays faithful instead of assuming zero.
 	pendingPermsCount int
+}
+
+// ActiveChild is the representative active child attached to a parent EnrichedTask.
+type ActiveChild struct {
+	TokensUsed      int    `json:"tokensUsed"`
+	CostCents       int    `json:"costCents"`
+	DurationSeconds int    `json:"durationSeconds"`
+	CurrentStage    string `json:"currentStage"`
+	LatestOutput    string `json:"latestOutput"`
 }
 
 // pidAliveMemo returns a func(int) bool that wraps pipeline.IsPidAlive and caches
@@ -82,13 +96,18 @@ func memoizeProbe(probe func(int) bool) func(int) bool {
 	}
 }
 
-func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) (*EnrichedTask, error) {
+func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo, bulkRepo rawrepo.StageRunBulkRepo) (*EnrichedTask, error) {
 	latest, _ := srRepo.GetLatestForTask(ctx, t.ID)
 	var pendingCount int
 	if latest != nil && latest.Stage == t.CurrentStage {
 		pendingCount, _ = permRepo.CountForStageRun(ctx, latest.ID)
 	}
-	return enrichOne(t, latest, pendingCount, pidAliveMemo())
+	var childSummary *rawrepo.ChildSummary
+	if bulkRepo != nil {
+		childMap, _ := bulkRepo.ChildSummariesByParent(ctx, []string{t.ID})
+		childSummary = childMap[t.ID]
+	}
+	return enrichOne(t, latest, pendingCount, pidAliveMemo(), childSummary)
 }
 
 // EnrichTasksBulk enriches a slice of tasks with their latest stage-run status
@@ -105,6 +124,11 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo
 		ids[i] = t.ID
 	}
 	latestMap, err := bulkRepo.LatestPerTask(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	childMap, err := bulkRepo.ChildSummariesByParent(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +156,7 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo
 		if latest != nil && latest.Stage == t.CurrentStage {
 			pendingCount = pendingCounts[latest.ID]
 		}
-		enriched, err := enrichOne(t, latest, pendingCount, isAlive)
+		enriched, err := enrichOne(t, latest, pendingCount, isAlive, childMap[t.ID])
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +165,7 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo
 	return result, nil
 }
 
-func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive func(int) bool) (*EnrichedTask, error) {
+func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive func(int) bool, childSummary *rawrepo.ChildSummary) (*EnrichedTask, error) {
 	latestBelongsToCurrent := latest != nil && latest.Stage == t.CurrentStage
 	var latestStatus *string
 	currentIteration := 0
@@ -213,6 +237,21 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 		BlockedByPendingPermissions: blockedByPendingPermissions,
 		pendingPermsCount:           pendingPermsCount,
 	}
+
+	if childSummary != nil {
+		e.ChildCount = childSummary.ChildCount
+		e.ActiveChildCount = childSummary.ActiveChildCount
+		if childSummary.HasActive {
+			e.ActiveChild = &ActiveChild{
+				TokensUsed:      childSummary.TokensUsed,
+				CostCents:       childSummary.CostCents,
+				DurationSeconds: childSummary.DurationSeconds,
+				CurrentStage:    childSummary.CurrentStage,
+				LatestOutput:    childSummary.LatestOutput,
+			}
+		}
+	}
+
 	recomputeAvailableActionsWithPerms(e, pendingPermsCount)
 	return e, nil
 }

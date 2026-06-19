@@ -83,7 +83,7 @@ func provideOrchestrator(
 				slog.Warn("BuildTaskPayload: task lookup failed", "taskID", taskID, "err", err)
 				return nil
 			}
-			enriched, err := tasks.EnrichTask(ctx, t, txSRRepo, txPermRepo)
+			enriched, err := tasks.EnrichTask(ctx, t, txSRRepo, txPermRepo, nil)
 			if err != nil {
 				slog.Warn("BuildTaskPayload: enrich failed", "taskID", taskID, "err", err)
 				return nil
@@ -111,7 +111,7 @@ func provideOrchestrator(
 					return
 				}
 				var ferr error
-				enriched, ferr = tasks.EnrichTask(ctx, t, srRepo, permRepo)
+				enriched, ferr = tasks.EnrichTask(ctx, t, srRepo, permRepo, nil)
 				if ferr != nil {
 					slog.Warn("OnTaskChanged: enrich failed", "taskID", taskID, "err", ferr)
 					return

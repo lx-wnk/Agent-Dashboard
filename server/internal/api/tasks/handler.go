@@ -232,7 +232,7 @@ func (h *Handler) broadcastEnrichedEvent(ctx context.Context, eventType string, 
 	if err != nil {
 		return
 	}
-	enriched, err := EnrichTask(ctx, t, h.srRepo, h.permRepo)
+	enriched, err := EnrichTask(ctx, t, h.srRepo, h.permRepo, h.srBulkRepo)
 	if err != nil {
 		return
 	}
@@ -275,7 +275,7 @@ func (h *Handler) getOne(w http.ResponseWriter, r *http.Request) error {
 		}
 		return fmt.Errorf("tasks.getOne: %w", err)
 	}
-	enriched, err := EnrichTask(r.Context(), t, h.srRepo, h.permRepo)
+	enriched, err := EnrichTask(r.Context(), t, h.srRepo, h.permRepo, h.srBulkRepo)
 	if err != nil {
 		return fmt.Errorf("tasks.getOne.enrich: %w", err)
 	}
@@ -413,7 +413,7 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 	if err != nil {
 		return nil, fmt.Errorf("tasks.create: %w", err)
 	}
-	enriched, _ := EnrichTask(ctx, task, h.srRepo, h.permRepo)
+	enriched, _ := EnrichTask(ctx, task, h.srRepo, h.permRepo, h.srBulkRepo)
 	h.applyRefineStatus(enriched, task.ID)
 	h.broadcaster.Broadcast(sse.TaskEvent{Type: "task_created", TaskID: task.ID, Payload: enriched})
 	return enriched, nil
@@ -610,7 +610,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	projectInPatch := projectIDPtr != nil || clearProject
 	if cwdInPatch || projectInPatch {
 		if updated.ProjectID != nil && h.cwdNotInProjectWarning(r.Context(), *updated.ProjectID, updated.Cwd) {
-			enriched, _ := EnrichTask(r.Context(), updated, h.srRepo, h.permRepo)
+			enriched, _ := EnrichTask(r.Context(), updated, h.srRepo, h.permRepo, h.srBulkRepo)
 			h.applyRefineStatus(enriched, enriched.ID)
 			return jsonReply(w, http.StatusOK, map[string]any{
 				"task":    enriched,
@@ -662,7 +662,7 @@ func (h *Handler) rankTask(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("tasks.rankTask: %w", err)
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	enriched, err := EnrichTask(r.Context(), updated, h.srRepo, h.permRepo)
+	enriched, err := EnrichTask(r.Context(), updated, h.srRepo, h.permRepo, h.srBulkRepo)
 	if err != nil {
 		return fmt.Errorf("tasks.rankTask.enrich: %w", err)
 	}
