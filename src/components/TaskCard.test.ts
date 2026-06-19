@@ -32,6 +32,14 @@ const baseTask: PipelineTask = {
   userId: null,
 }
 
+const activeChild: NonNullable<PipelineTask['activeChild']> = {
+  tokensUsed: 12000,
+  costCents: 50,
+  durationSeconds: 180,
+  currentStage: 'implementation',
+  latestOutput: 'Writing unit tests for the formatter utility',
+}
+
 const stubs = {
   WorktreePill: true,
 }
@@ -162,5 +170,61 @@ describe('taskCard — agent chip', () => {
     })
     const chip = wrapper.find('button[data-testid="task-agent-chip"]')
     expect(chip.attributes('aria-label')).toContain('my-app')
+  })
+})
+
+describe('taskCard — active child block', () => {
+  it('hides the block when childCount is 0', () => {
+    const task = { ...baseTask, childCount: 0, activeChildCount: 0, activeChild }
+    const wrapper = mount(TaskCard, {
+      props: { task },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="active-child-block"]').exists()).toBe(false)
+  })
+
+  it('hides the block when activeChild is null', () => {
+    const task = { ...baseTask, childCount: 2, activeChildCount: 0, activeChild: null }
+    const wrapper = mount(TaskCard, {
+      props: { task },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="active-child-block"]').exists()).toBe(false)
+  })
+
+  it('hides the block when childCount is absent', () => {
+    const wrapper = mount(TaskCard, {
+      props: { task: baseTask },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="active-child-block"]').exists()).toBe(false)
+  })
+
+  it('shows the block with stage, token count, cost, and output snippet', () => {
+    const task = { ...baseTask, childCount: 3, activeChildCount: 2, activeChild }
+    const wrapper = mount(TaskCard, {
+      props: { task },
+      global: { stubs },
+    })
+    const block = wrapper.find('[data-testid="active-child-block"]')
+    expect(block.exists()).toBe(true)
+    expect(block.text()).toContain('2/3')
+    expect(block.text()).toContain('12k tok')
+    expect(block.text()).toContain('Implementation')
+    expect(wrapper.find('[data-testid="active-child-latest-output"]').text()).toContain('Writing unit tests')
+  })
+
+  it('expand toggle reveals full latestOutput on click', async () => {
+    const task = { ...baseTask, childCount: 1, activeChildCount: 1, activeChild }
+    const wrapper = mount(TaskCard, {
+      props: { task },
+      global: { stubs },
+    })
+    const output = wrapper.find('[data-testid="active-child-latest-output"]')
+    expect(output.classes()).toContain('truncate')
+
+    await wrapper.find('[data-testid="active-child-expand-toggle"]').trigger('click')
+    expect(output.classes()).not.toContain('truncate')
+    expect(output.classes()).toContain('whitespace-pre-wrap')
   })
 })

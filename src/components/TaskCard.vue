@@ -6,6 +6,7 @@ import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { shortId, useCopyId } from '../composables/useCopyId'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { secondsUntil } from '../utils/retryCountdown'
+import { formatCost, formatDuration } from '../utils/format'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { agentStatusTone, runStatusLabel, runStatusTone, stageTone } from '../utils/statusColors'
 import PluginSlot from './PluginSlot.vue'
@@ -62,6 +63,8 @@ function refreshCountdown() {
 const isRequeued = computed(() => props.task.autoRetryCount != null)
 
 useIntervalFn(refreshCountdown, 1000, { immediate: true })
+
+const activeChildOutputExpanded = ref(false)
 </script>
 
 <template>
@@ -137,6 +140,39 @@ useIntervalFn(refreshCountdown, 1000, { immediate: true })
       <AppBadge :variant="agentBadgeVariant" />
       <span class="font-mono text-[10px] text-fg-soft truncate max-w-[120px]">{{ workingAgent.projectName }}</span>
     </button>
+    <div
+      v-if="(task.childCount ?? 0) > 0 && task.activeChild"
+      data-testid="active-child-block"
+      class="relative z-10 rounded-md border border-line bg-raised px-2 py-1.5 flex flex-col gap-1"
+      @click.stop
+    >
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[10px] font-semibold text-fg-mute">
+          {{ task.activeChildCount ?? 0 }}/{{ task.childCount }} active subtask{{ (task.childCount ?? 0) !== 1 ? 's' : '' }}
+        </span>
+        <span class="text-[10px] font-mono text-fg-mute whitespace-nowrap">
+          {{ formatDuration(task.activeChild.durationSeconds) }} · {{ Math.round(task.activeChild.tokensUsed / 1000) }}k tok · {{ formatCost(task.activeChild.costCents / 100) }}
+        </span>
+      </div>
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <span class="text-[11px] font-mono text-info-text">●</span>
+        <span class="font-mono text-[11px] text-fg-soft">{{ STAGE_LABELS[task.activeChild.currentStage as keyof typeof STAGE_LABELS] ?? task.activeChild.currentStage }}</span>
+      </div>
+      <div v-if="task.activeChild.latestOutput" class="flex items-start gap-1">
+        <span
+          class="font-mono text-[11px] text-fg-mute leading-snug"
+          :class="activeChildOutputExpanded ? 'whitespace-pre-wrap break-words' : 'truncate'"
+          data-testid="active-child-latest-output"
+        >{{ task.activeChild.latestOutput }}</span>
+        <button
+          type="button"
+          class="flex-shrink-0 text-[10px] text-fg-mute hover:text-fg-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+          :aria-label="activeChildOutputExpanded ? 'Collapse child output' : 'Expand child output'"
+          data-testid="active-child-expand-toggle"
+          @click="activeChildOutputExpanded = !activeChildOutputExpanded"
+        >{{ activeChildOutputExpanded ? '▲' : '▼' }}</button>
+      </div>
+    </div>
     <div class="flex flex-wrap gap-1 mt-0.5">
       <AppChip :tone="stageTone(task.currentStage)" mono>
         {{ stageLabel(task.currentStage) }}

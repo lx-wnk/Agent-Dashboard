@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
-import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
+import { formatBurnRate, formatCost, formatDuration, formatRelativeActivity, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
 import { friendlyProjectName } from '../utils/friendlyProjectName'
 import MachineBadge from './MachineBadge.vue'
 import PromptInput from './PromptInput.vue'
@@ -36,6 +36,19 @@ const secSince = computed(() => secondsSince(props.agent.lastActivity, nowMs.val
 const relActivity = computed(() => formatRelativeActivity(secSince.value))
 const stalled = computed(() => isStalled(props.agent.status, secSince.value))
 const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.agent.uptime))
+
+const activeSubagents = computed(() => props.agent.subagents.filter(s => s.status === 'active'))
+
+const expandedSubagentIds = ref<Set<string>>(new Set())
+
+function toggleSubagentExpand(id: string) {
+  const next = new Set(expandedSubagentIds.value)
+  if (next.has(id))
+    next.delete(id)
+  else
+    next.add(id)
+  expandedSubagentIds.value = next
+}
 </script>
 
 <template>
@@ -86,6 +99,40 @@ const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.a
       </template>
       <span v-else class="text-fg-mute italic">No output yet</span>
       <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+    </div>
+    <div
+      v-if="activeSubagents.length"
+      data-testid="active-subagents-block"
+      class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1"
+      @click.stop
+    >
+      <span class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
+        {{ activeSubagents.length }} active subagent{{ activeSubagents.length !== 1 ? 's' : '' }}
+      </span>
+      <div v-for="sa in activeSubagents" :key="sa.id" class="flex flex-col gap-0.5">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <AppBadge variant="active" />
+          <span class="font-mono text-[11px] text-fg-soft">{{ sa.type }}</span>
+          <span v-if="sa.currentAction" class="text-[10px] text-fg-mute">· {{ sa.currentAction }}</span>
+          <span class="text-[10px] font-mono text-fg-mute ml-auto whitespace-nowrap">
+            {{ formatDuration(sa.durationSeconds) }} · {{ Math.round(sa.tokensUsed / 1000) }}k tok
+          </span>
+        </div>
+        <div v-if="sa.latestOutput" class="flex items-start gap-1">
+          <span
+            class="font-mono text-[11px] text-fg-mute leading-snug"
+            :class="expandedSubagentIds.has(sa.id) ? 'whitespace-pre-wrap break-words' : 'truncate'"
+            data-testid="subagent-latest-output"
+          >{{ sa.latestOutput }}</span>
+          <button
+            type="button"
+            class="flex-shrink-0 text-[10px] text-fg-mute hover:text-fg-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+            :aria-label="expandedSubagentIds.has(sa.id) ? 'Collapse subagent output' : 'Expand subagent output'"
+            data-testid="subagent-expand-toggle"
+            @click="toggleSubagentExpand(sa.id)"
+          >{{ expandedSubagentIds.has(sa.id) ? '▲' : '▼' }}</button>
+        </div>
+      </div>
     </div>
     <div v-if="agent.lastBtw" class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1 text-[12px] font-mono" @click.stop>
       <div class="text-fg-mute border-l-2 border-warning-line pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
