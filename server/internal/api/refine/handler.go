@@ -61,6 +61,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/refine/{taskId}/turns", h.listTurns)
 	r.Post("/api/refine/{taskId}/turn", h.submitTurn)
 	r.Post("/api/refine/{taskId}/confirm", h.confirm)
+	r.Post("/api/refine/{taskId}/concept", h.injectConcept)
 	r.Get("/api/refine/{taskId}/status", h.status)
 }
 
@@ -248,6 +249,62 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(task)
+}
+
+// ConceptBody is the JSON payload accepted by POST /api/refine/{taskId}/concept.
+type ConceptBody struct {
+	Spec         string   `json:"spec"`
+	Plan         []string `json:"plan"`
+	ToolRequests []string `json:"toolRequests"`
+	RefinedTitle string   `json:"refinedTitle"`
+	SourceBranch string   `json:"sourceBranch"`
+	TargetBranch string   `json:"targetBranch"`
+}
+
+// POST /api/refine/{taskId}/concept — inject a finished concept without an agent round-trip.
+func (h *Handler) injectConcept(w http.ResponseWriter, r *http.Request) {
+	taskID := chi.URLParam(r, "taskId")
+
+	var body ConceptBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Spec) == "" {
+		jsonError(w, "spec is required", http.StatusBadRequest)
+		return
+	}
+
+	raw := map[string]any{"spec": body.Spec}
+	if len(body.Plan) > 0 {
+		plans := make([]any, len(body.Plan))
+		for i, p := range body.Plan {
+			plans[i] = p
+		}
+		raw["plan"] = plans
+	}
+	if len(body.ToolRequests) > 0 {
+		reqs := make([]any, len(body.ToolRequests))
+		for i, p := range body.ToolRequests {
+			reqs[i] = p
+		}
+		raw["toolRequests"] = reqs
+	}
+
+	c := refine.Concept{
+		Raw:          raw,
+		RefinedTitle: body.RefinedTitle,
+		SourceBranch: body.SourceBranch,
+		TargetBranch: body.TargetBranch,
+	}
+
+	if err := InjectConcept(r.Context(), InjectDeps{
+		Turns:  h.deps.Turns,
+		Runner: h.deps.Runner,
+	}, taskID, c); err != nil {
+		jsonError(w, "inject failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	status, _ := h.deps.Runner.State(taskID)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": status})
 }
 
 func jsonError(w http.ResponseWriter, msg string, status int) {
