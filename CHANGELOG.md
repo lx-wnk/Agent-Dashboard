@@ -62,6 +62,15 @@ Preparing the first public release.
 
 ### Fixed
 
+- Pipeline: a task whose git worktree could not be created (e.g. its `source_branch`
+  was already checked out by another worktree) silently stalled forever in
+  `implementation` — the orchestrator returned a bare error before any stage run was
+  created, so the picker just retried every tick with nothing surfaced in the UI.
+  Worktree-creation failures are now recorded as a failed stage run and follow the
+  normal retry/requeue path.
+- Pipeline: creating or refining a task now rejects a `source_branch` already used by
+  another active (non-terminal) task, preventing the duplicate-branch state that caused
+  the silent stall (one branch can back at most one worktree).
 - Accessibility: the light-mode `--fg-faint` text token now meets WCAG 2.2 AA
   contrast (4.97:1) on raised surfaces; it previously fell to 4.34:1 on
   `--raised`, below the 4.5:1 threshold at the small sizes used across the UI.

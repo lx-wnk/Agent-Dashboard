@@ -25,6 +25,10 @@ type TaskRepo interface {
 	// ListByIDs returns all tasks matching the given IDs in a single query.
 	// Used by the eval collector to resolve task metadata (spawner_id, model) in bulk.
 	ListByIDs(ctx context.Context, ids []string) ([]*ent.Task, error)
+	// CountActiveBySourceBranch counts non-terminal tasks (excluding done/cancelled)
+	// that use the given source_branch, optionally excluding one task ID. A branch can
+	// back at most one git worktree, so two active tasks must never share one.
+	CountActiveBySourceBranch(ctx context.Context, branch, excludeID string) (int, error)
 }
 
 type CreateTaskInput struct {
@@ -352,4 +356,19 @@ func (r *entTaskRepo) ListByIDs(ctx context.Context, ids []string) ([]*ent.Task,
 		return nil, fmt.Errorf("task.ListByIDs: %w", err)
 	}
 	return tasks, nil
+}
+
+func (r *entTaskRepo) CountActiveBySourceBranch(ctx context.Context, branch, excludeID string) (int, error) {
+	q := r.client.Task.Query().Where(
+		task.CurrentStageNotIn("done", "cancelled"),
+		task.SourceBranch(branch),
+	)
+	if excludeID != "" {
+		q = q.Where(task.IDNEQ(excludeID))
+	}
+	n, err := q.Count(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("task.CountActiveBySourceBranch: %w", err)
+	}
+	return n, nil
 }

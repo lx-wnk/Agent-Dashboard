@@ -110,6 +110,9 @@ func (f *fakeTaskRepo) ListForUser(_ context.Context, _ string, _ bool) ([]*ent.
 func (f *fakeTaskRepo) ListPickable(_ context.Context) ([]*ent.Task, error)          { return nil, nil }
 func (f *fakeTaskRepo) ListByStage(_ context.Context, _ string) ([]*ent.Task, error) { return nil, nil }
 func (f *fakeTaskRepo) ListByIDs(_ context.Context, _ []string) ([]*ent.Task, error) { return nil, nil }
+func (f *fakeTaskRepo) CountActiveBySourceBranch(_ context.Context, _, _ string) (int, error) {
+	return 0, nil
+}
 
 // --- helpers ---
 
