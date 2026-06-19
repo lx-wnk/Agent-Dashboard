@@ -52,6 +52,12 @@ Preparing the first public release.
 
 ### Fixed
 
+- Accessibility: the light-mode `--fg-faint` text token now meets WCAG 2.2 AA
+  contrast (4.97:1) on raised surfaces; it previously fell to 4.34:1 on
+  `--raised`, below the 4.5:1 threshold at the small sizes used across the UI.
+- Accessibility: the login gate now uses a `<main>` landmark and an `<h1>`
+  heading, moves keyboard focus to the login control when it appears, and
+  announces OAuth failures (`?error=`) via a `role="alert"` region.
 - Worktree panel now emits a `change` event after create/remove so the task view
   can react; previously the action ran but the parent was never notified.
 - Production build now embeds the real Vue SPA. `vite build` writes to
