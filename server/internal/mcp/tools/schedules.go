@@ -223,6 +223,9 @@ func manageScheduleUpdate(ctx context.Context, d ScheduleDeps, args map[string]a
 			in.NLText = &nlText
 		}
 	}
+	if v := mcp.OptionalString(args, "timezone"); v != "" {
+		in.Timezone = &v
+	}
 	s, err := d.Repo.Update(ctx, id, in)
 	if err != nil {
 		return nil, mcp.Fail("manage_schedule update: " + err.Error())

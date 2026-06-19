@@ -87,3 +87,26 @@ func TestManageSchedule_EnableDisableDelete(t *testing.T) {
 	_, err = r.GetByID(ctx, s.ID)
 	require.Error(t, err)
 }
+
+// Regression: a timezone-only update (no nlText/cronExpr) must persist the new
+// timezone. Previously the field was read only inside the cron-change branch,
+// so updating the zone alone was a silent no-op.
+func TestManageSchedule_TimezoneOnlyUpdatePersists(t *testing.T) {
+	registry, r := newScheduleRegistry(t)
+	ctx := context.Background()
+
+	s, err := r.Create(ctx, repo.CreateTaskScheduleInput{
+		Name: "tz", CronExpr: "0 9 * * *", Timezone: "UTC", SlugPrefix: "tz", Title: "TZ", Cwd: "/tmp",
+		MaxIterations: 20, StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	_, err = registry["manage_schedule"].Handler(ctx, map[string]any{
+		"action": "update", "id": s.ID, "timezone": "Europe/Berlin",
+	})
+	require.NoError(t, err)
+
+	got, err := r.GetByID(ctx, s.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Europe/Berlin", got.Timezone)
+}

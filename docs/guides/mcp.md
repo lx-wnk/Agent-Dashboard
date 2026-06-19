@@ -22,9 +22,9 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 | `pipeline:control` | Progress, approve, cancel, retry tasks; manage permissions (implies `tasks:read`) |
 | `keys:manage` | Full access including API key management |
 
-## Tools (19)
+## Tools (21)
 
-`list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `create_task`, `update_task`, `delete_task`, `manage_task`, `progress_task`, `cancel_task`, `retry_task`, `grant_permission`, `resolve_permission_request`, `add_dependency`, `remove_dependency`, `list_api_keys`, `create_api_key`, `revoke_api_key`
+`list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `create_task`, `update_task`, `delete_task`, `manage_task`, `progress_task`, `cancel_task`, `retry_task`, `grant_permission`, `resolve_permission_request`, `add_dependency`, `remove_dependency`, `list_schedules`, `manage_schedule`, `list_api_keys`, `create_api_key`, `revoke_api_key`
 
 Each tool checks its required scope at call time and returns an MCP error if the token's scope is insufficient.
 
