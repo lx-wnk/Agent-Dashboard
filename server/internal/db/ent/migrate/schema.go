@@ -102,6 +102,85 @@ var (
 			},
 		},
 	}
+	// DriftAlertsColumns holds the columns for the "drift_alerts" table.
+	DriftAlertsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "spawner_id", Type: field.TypeString},
+		{Name: "model", Type: field.TypeString},
+		{Name: "stage", Type: field.TypeString},
+		{Name: "metric_key", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "open"},
+		{Name: "direction", Type: field.TypeString},
+		{Name: "baseline_value", Type: field.TypeFloat64},
+		{Name: "recent_value", Type: field.TypeFloat64},
+		{Name: "delta", Type: field.TypeFloat64},
+		{Name: "threshold", Type: field.TypeFloat64},
+		{Name: "sample_count", Type: field.TypeInt},
+		{Name: "detected_at", Type: field.TypeTime},
+		{Name: "acknowledged_at", Type: field.TypeTime, Nullable: true},
+	}
+	// DriftAlertsTable holds the schema information for the "drift_alerts" table.
+	DriftAlertsTable = &schema.Table{
+		Name:       "drift_alerts",
+		Columns:    DriftAlertsColumns,
+		PrimaryKey: []*schema.Column{DriftAlertsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "driftalert_status",
+				Unique:  false,
+				Columns: []*schema.Column{DriftAlertsColumns[5]},
+			},
+			{
+				Name:    "driftalert_metric_key",
+				Unique:  false,
+				Columns: []*schema.Column{DriftAlertsColumns[4]},
+			},
+			{
+				Name:    "driftalert_spawner_id_model_stage_metric_key",
+				Unique:  true,
+				Columns: []*schema.Column{DriftAlertsColumns[1], DriftAlertsColumns[2], DriftAlertsColumns[3], DriftAlertsColumns[4]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "status = 'open'",
+				},
+			},
+		},
+	}
+	// EvalMetricSnapshotsColumns holds the columns for the "eval_metric_snapshots" table.
+	EvalMetricSnapshotsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "spawner_id", Type: field.TypeString},
+		{Name: "model", Type: field.TypeString},
+		{Name: "stage", Type: field.TypeString},
+		{Name: "metric_key", Type: field.TypeString},
+		{Name: "value", Type: field.TypeFloat64},
+		{Name: "sample_count", Type: field.TypeInt},
+		{Name: "window_start", Type: field.TypeTime},
+		{Name: "window_end", Type: field.TypeTime},
+		{Name: "recorded_at", Type: field.TypeTime},
+	}
+	// EvalMetricSnapshotsTable holds the schema information for the "eval_metric_snapshots" table.
+	EvalMetricSnapshotsTable = &schema.Table{
+		Name:       "eval_metric_snapshots",
+		Columns:    EvalMetricSnapshotsColumns,
+		PrimaryKey: []*schema.Column{EvalMetricSnapshotsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "evalmetricsnapshot_recorded_at",
+				Unique:  false,
+				Columns: []*schema.Column{EvalMetricSnapshotsColumns[9]},
+			},
+			{
+				Name:    "evalmetricsnapshot_metric_key",
+				Unique:  false,
+				Columns: []*schema.Column{EvalMetricSnapshotsColumns[4]},
+			},
+			{
+				Name:    "evalmetricsnapshot_spawner_id_model_stage",
+				Unique:  false,
+				Columns: []*schema.Column{EvalMetricSnapshotsColumns[1], EvalMetricSnapshotsColumns[2], EvalMetricSnapshotsColumns[3]},
+			},
+		},
+	}
 	// PermissionPresetsColumns holds the columns for the "permission_presets" table.
 	PermissionPresetsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -543,6 +622,8 @@ var (
 		AgentCostTrendsTable,
 		APIKeysTable,
 		AuditEventsTable,
+		DriftAlertsTable,
+		EvalMetricSnapshotsTable,
 		PermissionPresetsTable,
 		PermissionRequestsTable,
 		PipelineConfigsTable,

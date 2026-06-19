@@ -18,6 +18,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
@@ -45,6 +47,10 @@ type Client struct {
 	ApiKey *ApiKeyClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
+	// DriftAlert is the client for interacting with the DriftAlert builders.
+	DriftAlert *DriftAlertClient
+	// EvalMetricSnapshot is the client for interacting with the EvalMetricSnapshot builders.
+	EvalMetricSnapshot *EvalMetricSnapshotClient
 	// PermissionPreset is the client for interacting with the PermissionPreset builders.
 	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
@@ -87,6 +93,8 @@ func (c *Client) init() {
 	c.AgentCostTrend = NewAgentCostTrendClient(c.config)
 	c.ApiKey = NewApiKeyClient(c.config)
 	c.AuditEvent = NewAuditEventClient(c.config)
+	c.DriftAlert = NewDriftAlertClient(c.config)
+	c.EvalMetricSnapshot = NewEvalMetricSnapshotClient(c.config)
 	c.PermissionPreset = NewPermissionPresetClient(c.config)
 	c.PermissionRequest = NewPermissionRequestClient(c.config)
 	c.PipelineConfig = NewPipelineConfigClient(c.config)
@@ -196,6 +204,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		AgentCostTrend:     NewAgentCostTrendClient(cfg),
 		ApiKey:             NewApiKeyClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
+		DriftAlert:         NewDriftAlertClient(cfg),
+		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
@@ -232,6 +242,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		AgentCostTrend:     NewAgentCostTrendClient(cfg),
 		ApiKey:             NewApiKeyClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
+		DriftAlert:         NewDriftAlertClient(cfg),
+		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
@@ -275,10 +287,10 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.PermissionPreset,
-		c.PermissionRequest, c.PipelineConfig, c.Project, c.ProjectFolder,
-		c.RefinementTurn, c.RemoteRegistration, c.Spawner, c.StageRun, c.SystemPrompt,
-		c.Task, c.TaskDependency, c.TaskPermission, c.User,
+		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.DriftAlert, c.EvalMetricSnapshot,
+		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Project,
+		c.ProjectFolder, c.RefinementTurn, c.RemoteRegistration, c.Spawner, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -288,10 +300,10 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.PermissionPreset,
-		c.PermissionRequest, c.PipelineConfig, c.Project, c.ProjectFolder,
-		c.RefinementTurn, c.RemoteRegistration, c.Spawner, c.StageRun, c.SystemPrompt,
-		c.Task, c.TaskDependency, c.TaskPermission, c.User,
+		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.DriftAlert, c.EvalMetricSnapshot,
+		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Project,
+		c.ProjectFolder, c.RefinementTurn, c.RemoteRegistration, c.Spawner, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -306,6 +318,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ApiKey.mutate(ctx, m)
 	case *AuditEventMutation:
 		return c.AuditEvent.mutate(ctx, m)
+	case *DriftAlertMutation:
+		return c.DriftAlert.mutate(ctx, m)
+	case *EvalMetricSnapshotMutation:
+		return c.EvalMetricSnapshot.mutate(ctx, m)
 	case *PermissionPresetMutation:
 		return c.PermissionPreset.mutate(ctx, m)
 	case *PermissionRequestMutation:
@@ -735,6 +751,272 @@ func (c *AuditEventClient) mutate(ctx context.Context, m *AuditEventMutation) (V
 		return (&AuditEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AuditEvent mutation op: %q", m.Op())
+	}
+}
+
+// DriftAlertClient is a client for the DriftAlert schema.
+type DriftAlertClient struct {
+	config
+}
+
+// NewDriftAlertClient returns a client for the DriftAlert from the given config.
+func NewDriftAlertClient(c config) *DriftAlertClient {
+	return &DriftAlertClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `driftalert.Hooks(f(g(h())))`.
+func (c *DriftAlertClient) Use(hooks ...Hook) {
+	c.hooks.DriftAlert = append(c.hooks.DriftAlert, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `driftalert.Intercept(f(g(h())))`.
+func (c *DriftAlertClient) Intercept(interceptors ...Interceptor) {
+	c.inters.DriftAlert = append(c.inters.DriftAlert, interceptors...)
+}
+
+// Create returns a builder for creating a DriftAlert entity.
+func (c *DriftAlertClient) Create() *DriftAlertCreate {
+	mutation := newDriftAlertMutation(c.config, OpCreate)
+	return &DriftAlertCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of DriftAlert entities.
+func (c *DriftAlertClient) CreateBulk(builders ...*DriftAlertCreate) *DriftAlertCreateBulk {
+	return &DriftAlertCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *DriftAlertClient) MapCreateBulk(slice any, setFunc func(*DriftAlertCreate, int)) *DriftAlertCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &DriftAlertCreateBulk{err: fmt.Errorf("calling to DriftAlertClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*DriftAlertCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &DriftAlertCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for DriftAlert.
+func (c *DriftAlertClient) Update() *DriftAlertUpdate {
+	mutation := newDriftAlertMutation(c.config, OpUpdate)
+	return &DriftAlertUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *DriftAlertClient) UpdateOne(_m *DriftAlert) *DriftAlertUpdateOne {
+	mutation := newDriftAlertMutation(c.config, OpUpdateOne, withDriftAlert(_m))
+	return &DriftAlertUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *DriftAlertClient) UpdateOneID(id string) *DriftAlertUpdateOne {
+	mutation := newDriftAlertMutation(c.config, OpUpdateOne, withDriftAlertID(id))
+	return &DriftAlertUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for DriftAlert.
+func (c *DriftAlertClient) Delete() *DriftAlertDelete {
+	mutation := newDriftAlertMutation(c.config, OpDelete)
+	return &DriftAlertDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *DriftAlertClient) DeleteOne(_m *DriftAlert) *DriftAlertDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *DriftAlertClient) DeleteOneID(id string) *DriftAlertDeleteOne {
+	builder := c.Delete().Where(driftalert.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &DriftAlertDeleteOne{builder}
+}
+
+// Query returns a query builder for DriftAlert.
+func (c *DriftAlertClient) Query() *DriftAlertQuery {
+	return &DriftAlertQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeDriftAlert},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a DriftAlert entity by its id.
+func (c *DriftAlertClient) Get(ctx context.Context, id string) (*DriftAlert, error) {
+	return c.Query().Where(driftalert.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *DriftAlertClient) GetX(ctx context.Context, id string) *DriftAlert {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *DriftAlertClient) Hooks() []Hook {
+	return c.hooks.DriftAlert
+}
+
+// Interceptors returns the client interceptors.
+func (c *DriftAlertClient) Interceptors() []Interceptor {
+	return c.inters.DriftAlert
+}
+
+func (c *DriftAlertClient) mutate(ctx context.Context, m *DriftAlertMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&DriftAlertCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&DriftAlertUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&DriftAlertUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&DriftAlertDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown DriftAlert mutation op: %q", m.Op())
+	}
+}
+
+// EvalMetricSnapshotClient is a client for the EvalMetricSnapshot schema.
+type EvalMetricSnapshotClient struct {
+	config
+}
+
+// NewEvalMetricSnapshotClient returns a client for the EvalMetricSnapshot from the given config.
+func NewEvalMetricSnapshotClient(c config) *EvalMetricSnapshotClient {
+	return &EvalMetricSnapshotClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `evalmetricsnapshot.Hooks(f(g(h())))`.
+func (c *EvalMetricSnapshotClient) Use(hooks ...Hook) {
+	c.hooks.EvalMetricSnapshot = append(c.hooks.EvalMetricSnapshot, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `evalmetricsnapshot.Intercept(f(g(h())))`.
+func (c *EvalMetricSnapshotClient) Intercept(interceptors ...Interceptor) {
+	c.inters.EvalMetricSnapshot = append(c.inters.EvalMetricSnapshot, interceptors...)
+}
+
+// Create returns a builder for creating a EvalMetricSnapshot entity.
+func (c *EvalMetricSnapshotClient) Create() *EvalMetricSnapshotCreate {
+	mutation := newEvalMetricSnapshotMutation(c.config, OpCreate)
+	return &EvalMetricSnapshotCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of EvalMetricSnapshot entities.
+func (c *EvalMetricSnapshotClient) CreateBulk(builders ...*EvalMetricSnapshotCreate) *EvalMetricSnapshotCreateBulk {
+	return &EvalMetricSnapshotCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *EvalMetricSnapshotClient) MapCreateBulk(slice any, setFunc func(*EvalMetricSnapshotCreate, int)) *EvalMetricSnapshotCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &EvalMetricSnapshotCreateBulk{err: fmt.Errorf("calling to EvalMetricSnapshotClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*EvalMetricSnapshotCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &EvalMetricSnapshotCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for EvalMetricSnapshot.
+func (c *EvalMetricSnapshotClient) Update() *EvalMetricSnapshotUpdate {
+	mutation := newEvalMetricSnapshotMutation(c.config, OpUpdate)
+	return &EvalMetricSnapshotUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *EvalMetricSnapshotClient) UpdateOne(_m *EvalMetricSnapshot) *EvalMetricSnapshotUpdateOne {
+	mutation := newEvalMetricSnapshotMutation(c.config, OpUpdateOne, withEvalMetricSnapshot(_m))
+	return &EvalMetricSnapshotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *EvalMetricSnapshotClient) UpdateOneID(id string) *EvalMetricSnapshotUpdateOne {
+	mutation := newEvalMetricSnapshotMutation(c.config, OpUpdateOne, withEvalMetricSnapshotID(id))
+	return &EvalMetricSnapshotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for EvalMetricSnapshot.
+func (c *EvalMetricSnapshotClient) Delete() *EvalMetricSnapshotDelete {
+	mutation := newEvalMetricSnapshotMutation(c.config, OpDelete)
+	return &EvalMetricSnapshotDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *EvalMetricSnapshotClient) DeleteOne(_m *EvalMetricSnapshot) *EvalMetricSnapshotDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *EvalMetricSnapshotClient) DeleteOneID(id string) *EvalMetricSnapshotDeleteOne {
+	builder := c.Delete().Where(evalmetricsnapshot.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &EvalMetricSnapshotDeleteOne{builder}
+}
+
+// Query returns a query builder for EvalMetricSnapshot.
+func (c *EvalMetricSnapshotClient) Query() *EvalMetricSnapshotQuery {
+	return &EvalMetricSnapshotQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeEvalMetricSnapshot},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a EvalMetricSnapshot entity by its id.
+func (c *EvalMetricSnapshotClient) Get(ctx context.Context, id string) (*EvalMetricSnapshot, error) {
+	return c.Query().Where(evalmetricsnapshot.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *EvalMetricSnapshotClient) GetX(ctx context.Context, id string) *EvalMetricSnapshot {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *EvalMetricSnapshotClient) Hooks() []Hook {
+	return c.hooks.EvalMetricSnapshot
+}
+
+// Interceptors returns the client interceptors.
+func (c *EvalMetricSnapshotClient) Interceptors() []Interceptor {
+	return c.inters.EvalMetricSnapshot
+}
+
+func (c *EvalMetricSnapshotClient) mutate(ctx context.Context, m *EvalMetricSnapshotMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&EvalMetricSnapshotCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&EvalMetricSnapshotUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&EvalMetricSnapshotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&EvalMetricSnapshotDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown EvalMetricSnapshot mutation op: %q", m.Op())
 	}
 }
 
@@ -2795,15 +3077,15 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AgentCostTrend, ApiKey, AuditEvent, PermissionPreset, PermissionRequest,
-		PipelineConfig, Project, ProjectFolder, RefinementTurn, RemoteRegistration,
-		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
-		User []ent.Hook
+		AgentCostTrend, ApiKey, AuditEvent, DriftAlert, EvalMetricSnapshot,
+		PermissionPreset, PermissionRequest, PipelineConfig, Project, ProjectFolder,
+		RefinementTurn, RemoteRegistration, Spawner, StageRun, SystemPrompt, Task,
+		TaskDependency, TaskPermission, User []ent.Hook
 	}
 	inters struct {
-		AgentCostTrend, ApiKey, AuditEvent, PermissionPreset, PermissionRequest,
-		PipelineConfig, Project, ProjectFolder, RefinementTurn, RemoteRegistration,
-		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
-		User []ent.Interceptor
+		AgentCostTrend, ApiKey, AuditEvent, DriftAlert, EvalMetricSnapshot,
+		PermissionPreset, PermissionRequest, PipelineConfig, Project, ProjectFolder,
+		RefinementTurn, RemoteRegistration, Spawner, StageRun, SystemPrompt, Task,
+		TaskDependency, TaskPermission, User []ent.Interceptor
 	}
 )

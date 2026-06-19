@@ -18,6 +18,10 @@ type Tx struct {
 	ApiKey *ApiKeyClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
+	// DriftAlert is the client for interacting with the DriftAlert builders.
+	DriftAlert *DriftAlertClient
+	// EvalMetricSnapshot is the client for interacting with the EvalMetricSnapshot builders.
+	EvalMetricSnapshot *EvalMetricSnapshotClient
 	// PermissionPreset is the client for interacting with the PermissionPreset builders.
 	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
@@ -180,6 +184,8 @@ func (tx *Tx) init() {
 	tx.AgentCostTrend = NewAgentCostTrendClient(tx.config)
 	tx.ApiKey = NewApiKeyClient(tx.config)
 	tx.AuditEvent = NewAuditEventClient(tx.config)
+	tx.DriftAlert = NewDriftAlertClient(tx.config)
+	tx.EvalMetricSnapshot = NewEvalMetricSnapshotClient(tx.config)
 	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
 	tx.PermissionRequest = NewPermissionRequestClient(tx.config)
 	tx.PipelineConfig = NewPipelineConfigClient(tx.config)

@@ -4,16 +4,16 @@ import { NAV_GROUPS, NAV_ITEMS, viewTitle } from './navConfig'
 describe('navConfig', () => {
   it('has one item per ActiveView', () => {
     const views = NAV_ITEMS.map(i => i.view).sort()
-    expect(views).toEqual(['cost', 'dashboard', 'pipeline', 'workflows'])
+    expect(views).toEqual(['cost', 'dashboard', 'eval', 'pipeline', 'workflows'])
   })
 
   it('groups are Monitor, Build and Insights', () => {
     expect(NAV_GROUPS).toEqual(['Monitor', 'Build', 'Insights'])
   })
 
-  it('groups Workflows and Cost under Insights', () => {
+  it('groups Workflows, Cost and Eval under Insights', () => {
     const insights = NAV_ITEMS.filter(i => i.group === 'Insights').map(i => i.view)
-    expect(insights).toEqual(['workflows', 'cost'])
+    expect(insights).toEqual(['workflows', 'cost', 'eval'])
   })
 
   it('every item belongs to a known group', () => {

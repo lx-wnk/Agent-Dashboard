@@ -22,24 +22,29 @@ import (
 // Config holds all server configuration. Keys match environment variable
 // names after stripping the DASHBOARD_ prefix and lowercasing.
 type Config struct {
-	Host                   string `koanf:"host"`
-	Port                   int    `koanf:"port"`
-	JWTSecret              string `koanf:"jwt_secret"`
-	DBPath                 string `koanf:"db_path"`
-	SSEIntervalMs          int    `koanf:"sse_interval_ms"`
-	ShutdownTimeoutSeconds int    `koanf:"shutdown_timeout_seconds"`
-	PluginDir              string `koanf:"plugin_dir"`
-	AllowGitPush           bool   `koanf:"allow_git_push"`
-	HooksSecret            string `koanf:"hooks_secret"`
-	HooksDebounceMs        int    `koanf:"hooks_debounce_ms"`
-	SpawnRateLimit         int    `koanf:"spawn_rate_limit"`
-	SpawnRateWindowMs      int    `koanf:"spawn_rate_window_ms"`
-	InjectRateLimit        int    `koanf:"inject_rate_limit"`
-	InjectRateWindowMs     int    `koanf:"inject_rate_window_ms"`
-	CostScanIntervalMs     int    `koanf:"cost_scan_interval_ms"`
-	MCPToken               string `koanf:"mcp_token"`
-	WorktreeRoot           string `koanf:"worktree_root"`
-	ForceWorktrees         bool   `koanf:"force_worktrees"`
+	Host                   string  `koanf:"host"`
+	Port                   int     `koanf:"port"`
+	JWTSecret              string  `koanf:"jwt_secret"`
+	DBPath                 string  `koanf:"db_path"`
+	SSEIntervalMs          int     `koanf:"sse_interval_ms"`
+	ShutdownTimeoutSeconds int     `koanf:"shutdown_timeout_seconds"`
+	PluginDir              string  `koanf:"plugin_dir"`
+	AllowGitPush           bool    `koanf:"allow_git_push"`
+	HooksSecret            string  `koanf:"hooks_secret"`
+	HooksDebounceMs        int     `koanf:"hooks_debounce_ms"`
+	SpawnRateLimit         int     `koanf:"spawn_rate_limit"`
+	SpawnRateWindowMs      int     `koanf:"spawn_rate_window_ms"`
+	InjectRateLimit        int     `koanf:"inject_rate_limit"`
+	InjectRateWindowMs     int     `koanf:"inject_rate_window_ms"`
+	CostScanIntervalMs     int     `koanf:"cost_scan_interval_ms"`
+	EvalScanIntervalMs     int     `koanf:"eval_scan_interval_ms"`
+	EvalWindowHours        int     `koanf:"eval_window_hours"`
+	EvalMinSamples         int     `koanf:"eval_min_samples"`
+	EvalRateDropPP         float64 `koanf:"eval_rate_drop_pp"`
+	EvalStddevK            float64 `koanf:"eval_stddev_k"`
+	MCPToken               string  `koanf:"mcp_token"`
+	WorktreeRoot           string  `koanf:"worktree_root"`
+	ForceWorktrees         bool    `koanf:"force_worktrees"`
 	// RemotesEnabled allows binding to a non-loopback address. Set via DASHBOARD_REMOTES_ENABLED=true.
 	// Must be explicitly opted in because the dashboard exposes sensitive Claude session data.
 	RemotesEnabled bool `koanf:"remotes_enabled"`
@@ -65,6 +70,11 @@ func Defaults() Config {
 		WorktreeRoot:           home + "/" + worktree.DefaultRootDirName,
 		SSEIntervalMs:          3000,
 		CostScanIntervalMs:     300000,
+		EvalScanIntervalMs:     3600000,
+		EvalWindowHours:        168,
+		EvalMinSamples:         20,
+		EvalRateDropPP:         15,
+		EvalStddevK:            3,
 		ShutdownTimeoutSeconds: 10,
 		HooksDebounceMs:        100,
 		SpawnRateLimit:         5,
@@ -88,6 +98,11 @@ func Load(cfgFile string) (Config, error) {
 		"db_path":                  cfg.DBPath,
 		"sse_interval_ms":          cfg.SSEIntervalMs,
 		"cost_scan_interval_ms":    cfg.CostScanIntervalMs,
+		"eval_scan_interval_ms":    cfg.EvalScanIntervalMs,
+		"eval_window_hours":        cfg.EvalWindowHours,
+		"eval_min_samples":         cfg.EvalMinSamples,
+		"eval_rate_drop_pp":        cfg.EvalRateDropPP,
+		"eval_stddev_k":            cfg.EvalStddevK,
 		"shutdown_timeout_seconds": cfg.ShutdownTimeoutSeconds,
 		"hooks_debounce_ms":        cfg.HooksDebounceMs,
 		"spawn_rate_limit":         cfg.SpawnRateLimit,
@@ -126,6 +141,19 @@ func Load(cfgFile string) (Config, error) {
 		cfg.Auth = "plugin"
 	default:
 		return Config{}, fmt.Errorf("config: DASHBOARD_AUTH must be \"none\" or \"plugin\", got %q", cfg.Auth)
+	}
+
+	if cfg.EvalWindowHours <= 0 {
+		return Config{}, fmt.Errorf("config: DASHBOARD_EVAL_WINDOW_HOURS must be > 0, got %d", cfg.EvalWindowHours)
+	}
+	if cfg.EvalMinSamples < 0 {
+		return Config{}, fmt.Errorf("config: DASHBOARD_EVAL_MIN_SAMPLES must be >= 0, got %d", cfg.EvalMinSamples)
+	}
+	if cfg.EvalRateDropPP < 0 {
+		return Config{}, fmt.Errorf("config: DASHBOARD_EVAL_RATE_DROP_PP must be >= 0, got %g", cfg.EvalRateDropPP)
+	}
+	if cfg.EvalStddevK < 0 {
+		return Config{}, fmt.Errorf("config: DASHBOARD_EVAL_STDDEV_K must be >= 0, got %g", cfg.EvalStddevK)
 	}
 
 	// Reject operator-set JWT secrets that are too short (< 32 chars).
