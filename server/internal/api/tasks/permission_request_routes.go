@@ -133,7 +133,7 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 		}
 
 		// Gated path: flip stage_run to awaiting_user if it is currently running.
-		if srErr == nil && sr.Status == "running" {
+		if sr.Status == "running" {
 			awaitingUser := "awaiting_user"
 			if _, err2 := h.srRepo.Update(r.Context(), body.StageRunID, repo.UpdateStageRunInput{Status: &awaitingUser}); err2 != nil {
 				slog.Warn("createPermissionRequest: flip to awaiting_user failed", "stageRunID", body.StageRunID, "err", err2)

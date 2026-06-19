@@ -14,6 +14,12 @@ Preparing the first public release.
 
 ### Added
 
+- Per-task autonomy levels (`manual`, `spec_gated`, `full`) over REST and MCP
+  `create_task`/`update_task`. New tasks default to `spec_gated`, which auto-approves
+  permission requests (blanket Bash, audit-logged as `permission_auto_approved`);
+  `manual` keeps the human-gated behaviour. Pre-existing tasks without the field stay
+  gated. A self-describing `availableActions` set and an `approve_all_pending` control
+  let blocked tasks be unblocked in one step (PR #200).
 - In-dashboard `~/.claude` config explorer — browse and edit skills, slash commands,
   and memory files from the UI without leaving the dashboard (PR #190).
 - Git worktree panel — create and remove worktrees for pipeline tasks directly from

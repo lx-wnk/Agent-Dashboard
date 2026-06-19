@@ -52,6 +52,10 @@ type EnrichedTask struct {
 	ActivePID                   *int       `json:"activePid"`
 	BlockedByPendingPermissions bool                  `json:"blockedByPendingPermissions"`
 	AvailableActions            []taskcontrol.Action  `json:"availableActions"`
+
+	// pendingPermsCount preserves the raw count so a later RecomputeAvailableActions
+	// (e.g. from applyRefineStatus) stays faithful instead of assuming zero.
+	pendingPermsCount int
 }
 
 // pidAliveMemo returns a func(int) bool that wraps pipeline.IsPidAlive and caches
@@ -207,6 +211,7 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 		ActiveSessionID:             activeSessionID,
 		ActivePID:                   activePID,
 		BlockedByPendingPermissions: blockedByPendingPermissions,
+		pendingPermsCount:           pendingPermsCount,
 	}
 	recomputeAvailableActionsWithPerms(e, pendingPermsCount)
 	return e, nil
@@ -216,20 +221,7 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 // fields. Called once by enrichOne and again by applyRefineStatus so that the
 // refine runner status is always reflected in the action set.
 func (e *EnrichedTask) RecomputeAvailableActions() {
-	runStatus := ""
-	if e.LatestStageRunStatus != nil {
-		runStatus = *e.LatestStageRunStatus
-	}
-	refineStatus := ""
-	if e.RefineStatus != nil {
-		refineStatus = *e.RefineStatus
-	}
-	s := taskcontrol.FromFields(e.CurrentStage, runStatus, refineStatus, 0, e.NeedsUser)
-	// PendingPerms is encoded in BlockedByPendingPermissions but we need the count
-	// for the reason string. Reconstruct the count from the NeedsUser + blocked flag
-	// only if we don't have the raw count. Since enrichOne knows the count, it sets
-	// AvailableActions via the dedicated path below instead of this method.
-	e.AvailableActions = taskcontrol.ComputeActions(s)
+	recomputeAvailableActionsWithPerms(e, e.pendingPermsCount)
 }
 
 // recomputeAvailableActionsWithPerms rebuilds AvailableActions with the exact
