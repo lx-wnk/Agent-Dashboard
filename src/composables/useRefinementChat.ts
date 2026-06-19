@@ -1,5 +1,6 @@
 import type { PipelineTask } from '../types'
 import { ref } from 'vue'
+import { actionEndpoint } from './useRunAction'
 
 export interface ImageAttachment {
   dataUrl: string
@@ -277,7 +278,7 @@ export function useRefinementChat(taskId: () => string | null) {
     if (!id)
       return null
     try {
-      const res = await fetch(`/api/refine/${id}/confirm`, { method: 'POST' })
+      const res = await fetch(actionEndpoint('approve_spec', id)!, { method: 'POST' })
       if (!res.ok) {
         error.value = (await res.json().catch(() => null))?.error ?? 'Confirm failed'
         return null

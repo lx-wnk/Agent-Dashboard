@@ -18,6 +18,14 @@ const ACTION_META: Record<string, ActionMeta> = {
   approve_spec: { label: 'Approve Spec', variant: 'primary', endpoint: id => `/api/refine/${id}/confirm` },
 }
 
+/**
+ * Resolve an action's endpoint URL. Lets other callers reuse the canonical
+ *  endpoint without re-defining the path (e.g. the refinement confirm flow).
+ */
+export function actionEndpoint(action: string, taskId: string): string | undefined {
+  return ACTION_META[action]?.endpoint(taskId)
+}
+
 export function actionLabel(action: string): string {
   return ACTION_META[action]?.label ?? action
 }
