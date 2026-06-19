@@ -44,7 +44,9 @@ A real-time monitoring and control dashboard for locally running Claude Code age
 | `channel/` | channel discovery + proxy to per-agent MCP stdio server |
 | `refine/` | refinement chat repo + spawner |
 | `history/` | cost-history importer service |
+| `eval/` | passive drift detection over `stage_run` (leaf: `db/repo`, `db/ent`, `sdk`, `config`, `parser` only — never `pipeline`/`notifications`/`sse`/routes). See [ADR-0006](adr/0006-eval-drift-detection-leaf.md) |
 | `webpush/` | Web Push VAPID service |
+| `scheduler/` | cron scheduling leaf — fires recurring pipeline tasks on a configurable tick |
 
 ## SDK (`sdk/`)
 
@@ -81,6 +83,21 @@ See the ADRs for rationale:
 - [ADR-0001 — SQLite for the task pipeline](adr/0001-sqlite-for-task-pipeline.md)
 - [ADR-0002 — Runner-slot priority model](adr/0002-runner-slot-priority-model.md)
 - [ADR-0003 — Pluggable spawners](adr/0003-pluggable-spawners.md)
+
+## Scheduler
+
+`server/internal/scheduler/` is a leaf package that fires recurring pipeline tasks on a configurable tick (default 30 s). It runs as a 4th `errgroup` worker alongside the pipeline orchestrator in `server/cmd/serve/main.go`.
+
+**Layering rules:**
+- `scheduler/` must not import `pipeline/` or `api/`. It creates tasks via an injected `CreateTaskFromInput` closure supplied by the DI layer — this is the only path from the scheduler into task-creation logic.
+- `pipeline/` must not import `scheduler/`. The dependency arrow points inward: `serve/` → `scheduler/` → `db/repo`.
+
+**Key design properties:**
+- NL→cron translation (`NLCron`) happens once, at schedule create/edit. The stored 5-field cron expression is what drives firing — deterministic and offline-safe.
+- **Skip-on-overlap:** if the prior task from a schedule is still in a non-terminal stage, the fire is skipped and `next_run_at` advances.
+- **Catchup policy:** `once` fires a single catch-up run after downtime; `none` skips missed windows. Both always advance `next_run_at`. Configurable globally via `scheduleCatchup` (pipeline_config) and overridable per schedule.
+
+See [ADR-0007 — Cron scheduling engine](adr/0007-cron-scheduling-engine.md) for the rationale behind the stored-expression design and the choice of `robfig/cron/v3`.
 
 ## Key conventions
 

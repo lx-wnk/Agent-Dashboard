@@ -23,6 +23,7 @@ import (
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apiconfig "github.com/lx-wnk/agent-dashboard/server/internal/api/config"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
+	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
@@ -30,6 +31,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/projects"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/schedules"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
@@ -120,6 +122,7 @@ type RouterDeps struct {
 	// May be nil; when nil the project handler skips the active-task check.
 	TaskProjectOps        projects.TaskProjectOps
 	TaskHandler           *tasks.Handler
+	SchedulesHandler      *schedules.Handler
 	WebPushHandler        *apiwp.Handler
 	RemotesHandler        *remotes.Handler
 	PresetsHandler        *presets.Handler
@@ -129,6 +132,7 @@ type RouterDeps struct {
 	RefineHandler         *refineapi.Handler
 	AnalyticsHandler      *apianalytics.Handler
 	CostHandler           *apicost.Handler
+	EvalHandler           *apieval.Handler
 	VisualizationsHandler *visualizations.Handler
 	AdapterHandler        *adapters.Handler
 	MCPHandler            http.Handler
@@ -284,6 +288,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 			deps.TaskHandler.Mount(r)
 		}
 
+		if deps.SchedulesHandler != nil {
+			deps.SchedulesHandler.Mount(r)
+		}
+
 		if deps.RemotesHandler != nil {
 			deps.RemotesHandler.Mount(r)
 		}
@@ -324,10 +332,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 
 		// Cost analytics — aggregated spend by model, day, and week.
-		// Mounted at the END of the protected group to keep route additions
-		// append-only and free of merge conflicts with other parallel feature groups.
 		if deps.CostHandler != nil {
 			deps.CostHandler.Mount(r)
+		}
+
+		// Eval metrics and drift alerts.
+		if deps.EvalHandler != nil {
+			deps.EvalHandler.Mount(r)
 		}
 
 		// Spawn management — rate-limited user-initiated agent spawning and channel message forwarding.

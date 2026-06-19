@@ -7,6 +7,7 @@ import type {
   PendingPermission,
   TokenUsage,
 } from './sdk.generated'
+import type { MetricKey } from './utils/evalMetrics'
 // Types generated from sdk/types.go via tygo — do not edit these directly.
 // Run `task generate` to regenerate after changing sdk/types.go.
 import {
@@ -340,6 +341,40 @@ export interface Spawner {
   isDefault: boolean
   createdAt: string
   updatedAt: string
+}
+
+// Eval / drift-detection types.
+// MetricKey is derived from the canonical key list in utils/evalMetrics.
+export type { MetricKey } from './utils/evalMetrics'
+
+export interface EvalMetricSnapshot {
+  id: string
+  spawnerId: string
+  model: string
+  stage: string
+  metricKey: MetricKey
+  value: number
+  sampleCount: number
+  windowStart: string
+  windowEnd: string
+  recordedAt: string
+}
+
+export interface DriftAlert {
+  id: string
+  spawnerId: string
+  model: string
+  stage: string
+  metricKey: MetricKey
+  status: string
+  direction: 'up' | 'down'
+  baselineValue: number
+  recentValue: number
+  delta: number
+  threshold: number
+  sampleCount: number
+  detectedAt: string
+  acknowledgedAt: string | null
 }
 
 // MCP API Key types

@@ -38,6 +38,7 @@ The following third-party packages are used as transitive dependencies.
 | github.com/mitchellh/reflectwalk | MIT | https://github.com/mitchellh/reflectwalk/blob/v1.0.2/LICENSE |
 | github.com/modelcontextprotocol/go-sdk | Apache-2.0 | https://github.com/modelcontextprotocol/go-sdk/blob/v1.6.1/LICENSE |
 | github.com/remyoudompheng/bigfft | BSD-3-Clause | https://github.com/remyoudompheng/bigfft/blob/24d4a6f8daec/LICENSE |
+| github.com/robfig/cron/v3 | MIT | https://github.com/robfig/cron/blob/v3.0.1/LICENSE |
 | github.com/segmentio/asm | MIT | https://github.com/segmentio/asm/blob/v1.1.3/LICENSE |
 | github.com/segmentio/encoding | MIT | https://github.com/segmentio/encoding/blob/v0.5.4/LICENSE |
 | github.com/spf13/cobra | Apache-2.0 | https://github.com/spf13/cobra/blob/v1.10.2/LICENSE.txt |

@@ -169,6 +169,45 @@ func TestStageRunRepo_Update_StartedAtClear(t *testing.T) {
 	require.Nil(t, reloaded.StartedAt)
 }
 
+func TestStageRunRepo_ListInWindow(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-window-1")
+
+	// Create three stage_runs and note their creation times.
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "implement", Iteration: 1})
+	require.NoError(t, err)
+	run3, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "review", Iteration: 1})
+	require.NoError(t, err)
+
+	// All three share the same created_at second — use a window that captures all.
+	from := run1.CreatedAt.Add(-time.Second)
+	to := run3.CreatedAt.Add(time.Second)
+
+	all, err := sr.ListInWindow(ctx, from, to)
+	require.NoError(t, err)
+	require.Len(t, all, 3)
+
+	// Window that excludes future runs (before run1 was created) should return nothing.
+	none, err := sr.ListInWindow(ctx, run1.CreatedAt.Add(-2*time.Hour), run1.CreatedAt.Add(-time.Hour))
+	require.NoError(t, err)
+	require.Len(t, none, 0)
+
+	// Verify IDs round-trip.
+	ids := make(map[string]struct{}, 3)
+	for _, r := range all {
+		ids[r.ID] = struct{}{}
+	}
+	require.Contains(t, ids, run1.ID)
+	require.Contains(t, ids, run2.ID)
+	require.Contains(t, ids, run3.ID)
+}
+
 func TestStageRunRepo_Update_RetryFields(t *testing.T) {
 	client := openDB(t)
 	ctx := context.Background()

@@ -22,10 +22,12 @@ var ToolScopeMap = map[string]string{
 	"list_permission_requests": "tasks:read",
 	"list_projects":            "tasks:read",
 	"list_spawners":            "tasks:read",
+	"list_schedules":           "tasks:read",
 	// tasks:write
 	"create_task": "tasks:write", "update_task": "tasks:write",
 	"delete_task": "tasks:write", "manage_task": "tasks:write",
 	"add_dependency": "tasks:write", "remove_dependency": "tasks:write",
+	"manage_schedule": "tasks:write",
 	// pipeline:control
 	"advance_task": "pipeline:control", "hold_task": "pipeline:control",
 	"resume_task": "pipeline:control",
@@ -88,6 +90,12 @@ func AuthFromContext(ctx context.Context) *MCPAuthInfo {
 	return v
 }
 
+// ContextWithAuth attaches MCPAuthInfo to ctx. Used by the auth middleware and
+// by tests that exercise auth-scoped tool handlers.
+func ContextWithAuth(ctx context.Context, info *MCPAuthInfo) context.Context {
+	return context.WithValue(ctx, mcpAuthKey{}, info)
+}
+
 func writeAuthError(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
@@ -139,7 +147,7 @@ func McpAuthMiddleware(keyRepo repo.ApiKeyRepo) func(http.Handler) http.Handler 
 				KeyID:  key.ID,
 				Scopes: ResolveScopes(key.Scopes),
 			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpAuthKey{}, info)))
+			next.ServeHTTP(w, r.WithContext(ContextWithAuth(r.Context(), info)))
 		})
 	}
 }

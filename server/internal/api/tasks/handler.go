@@ -292,6 +292,124 @@ func clampNegativeBudget(p *int) {
 	}
 }
 
+// CreateTaskParams is the resolved input for creating a pipeline task, shared by
+// the HTTP create handler and the scheduler materializer. Defaults for priority,
+// stage, maxIterations, stageTimeoutSeconds, and budgets are applied inside
+// CreateTaskFromInput when their zero value is passed.
+type CreateTaskParams struct {
+	Slug            string
+	Title           string
+	Description     *string
+	Cwd             string
+	Priority        string
+	Stage           string
+	SilverBullet    bool
+	MaxIterations   int
+	SourceBranch    *string
+	TargetBranch    *string
+	TokenBudget     *int
+	CostBudgetCents *int
+	ProjectID       string // empty = unset
+	SpawnerID       string // empty = unset
+	UserID          *string
+	Metadata        map[string]any
+	Autonomy        *string
+}
+
+// CreateTaskFromInput is the reusable task-creation core: it checks slug
+// uniqueness, resolves and validates the optional project/spawner references,
+// applies defaults, persists the task, and broadcasts task_created. It returns
+// the enriched task. Errors are *apierr.AppError where they map to a client
+// status; the HTTP handler returns them directly and non-HTTP callers (the
+// scheduler) treat any error as a skip. Body-format validation (slug pattern,
+// title length, required cwd) stays with the HTTP handler.
+func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (*EnrichedTask, error) {
+	if _, err := h.taskRepo.GetBySlug(ctx, p.Slug); err == nil {
+		return nil, apierr.NewAppError(http.StatusConflict, "slug already exists")
+	}
+
+	// Resolve optional project + spawner. Empty string = unset.
+	var projectIDPtr, spawnerIDPtr *string
+	if p.ProjectID != "" {
+		if h.projectRepo == nil {
+			return nil, apierr.NewAppError(http.StatusInternalServerError, "project repo not configured")
+		}
+		if _, err := h.projectRepo.GetByID(ctx, p.ProjectID); err != nil {
+			if ent.IsNotFound(err) {
+				return nil, apierr.NewAppError(http.StatusNotFound, "project not found")
+			}
+			return nil, fmt.Errorf("tasks.create.projectLookup: %w", err)
+		}
+		pid := p.ProjectID
+		projectIDPtr = &pid
+	}
+	if p.SpawnerID != "" {
+		if h.spawnerRepo == nil {
+			return nil, apierr.NewAppError(http.StatusInternalServerError, "spawner repo not configured")
+		}
+		if _, err := h.spawnerRepo.GetByID(ctx, p.SpawnerID); err != nil {
+			if ent.IsNotFound(err) {
+				return nil, apierr.NewAppError(http.StatusNotFound, "spawner not found")
+			}
+			return nil, fmt.Errorf("tasks.create.spawnerLookup: %w", err)
+		}
+		sid := p.SpawnerID
+		spawnerIDPtr = &sid
+	}
+
+	priority := p.Priority
+	if priority == "" {
+		priority = db.DefaultPriority
+	}
+	stage := p.Stage
+	if stage == "" {
+		stage = db.DefaultStage
+	}
+	maxIter := p.MaxIterations
+	if maxIter <= 0 {
+		maxIter = db.DefaultMaxIterations
+	}
+	costBudget := p.CostBudgetCents
+	if costBudget == nil {
+		v := db.DefaultCostBudgetCents
+		costBudget = &v
+	}
+	clampNegativeBudget(costBudget)
+	tokenBudget := p.TokenBudget
+	if tokenBudget == nil {
+		v := db.DefaultTokenBudget
+		tokenBudget = &v
+	}
+	clampNegativeBudget(tokenBudget)
+	task, err := h.taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:                p.Slug,
+		Title:               p.Title,
+		Description:         p.Description,
+		Cwd:                 p.Cwd,
+		UserID:              p.UserID,
+		Priority:            priority,
+		CurrentStage:        stage,
+		SilverBullet:        p.SilverBullet,
+		MaxIterations:       maxIter,
+		StageTimeoutSeconds: db.DefaultStageTimeoutSeconds,
+		SourceBranch:        p.SourceBranch,
+		TargetBranch:        p.TargetBranch,
+		TokenBudget:         tokenBudget,
+		CostBudgetCents:     costBudget,
+		ProjectID:           projectIDPtr,
+		SpawnerID:           spawnerIDPtr,
+		Autonomy:            p.Autonomy,
+		Metadata:            p.Metadata,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("tasks.create: %w", err)
+	}
+	enriched, _ := EnrichTask(ctx, task, h.srRepo, h.permRepo)
+	h.applyRefineStatus(enriched, task.ID)
+	h.broadcaster.Broadcast(sse.TaskEvent{Type: "task_created", TaskID: task.ID, Payload: enriched})
+	return enriched, nil
+}
+
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
 		Slug            string  `json:"slug"`
@@ -323,100 +441,40 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if body.Cwd == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "cwd is required")
 	}
-	if _, err := h.taskRepo.GetBySlug(r.Context(), body.Slug); err == nil {
-		return apierr.NewAppError(http.StatusConflict, "slug already exists")
-	}
 	if body.Autonomy != nil {
 		if _, ok := taskcontrol.ValidAutonomyValues[*body.Autonomy]; !ok {
 			return apierr.NewAppError(http.StatusBadRequest, "invalid autonomy")
 		}
 	}
 
-	// Resolve optional project + spawner. Empty string = unset.
-	var projectIDPtr, spawnerIDPtr *string
-	if body.ProjectID != "" {
-		if h.projectRepo == nil {
-			return apierr.NewAppError(http.StatusInternalServerError, "project repo not configured")
-		}
-		if _, err := h.projectRepo.GetByID(r.Context(), body.ProjectID); err != nil {
-			if ent.IsNotFound(err) {
-				return apierr.NewAppError(http.StatusNotFound, "project not found")
-			}
-			return fmt.Errorf("tasks.create.projectLookup: %w", err)
-		}
-		pid := body.ProjectID
-		projectIDPtr = &pid
-	}
-	if body.SpawnerID != "" {
-		if h.spawnerRepo == nil {
-			return apierr.NewAppError(http.StatusInternalServerError, "spawner repo not configured")
-		}
-		if _, err := h.spawnerRepo.GetByID(r.Context(), body.SpawnerID); err != nil {
-			if ent.IsNotFound(err) {
-				return apierr.NewAppError(http.StatusNotFound, "spawner not found")
-			}
-			return fmt.Errorf("tasks.create.spawnerLookup: %w", err)
-		}
-		sid := body.SpawnerID
-		spawnerIDPtr = &sid
-	}
-
-	priority := body.Priority
-	if priority == "" {
-		priority = db.DefaultPriority
-	}
-	stage := body.Stage
-	if stage == "" {
-		stage = db.DefaultStage
-	}
-	maxIter := body.MaxIterations
-	if maxIter <= 0 {
-		maxIter = db.DefaultMaxIterations
-	}
-	costBudget := body.CostBudgetCents
-	if costBudget == nil {
-		v := db.DefaultCostBudgetCents
-		costBudget = &v
-	}
-	clampNegativeBudget(costBudget)
-	tokenBudget := body.TokenBudget
-	if tokenBudget == nil {
-		v := db.DefaultTokenBudget
-		tokenBudget = &v
-	}
-	clampNegativeBudget(tokenBudget)
 	payload, _ := auth.PayloadFromContext(r.Context())
 	userID := payload.Sub
-	task, err := h.taskRepo.Create(r.Context(), repo.CreateTaskInput{
-		Slug:                body.Slug,
-		Title:               body.Title,
-		Description:         body.Description,
-		Cwd:                 body.Cwd,
-		UserID:              &userID,
-		Priority:            priority,
-		CurrentStage:        stage,
-		SilverBullet:        body.SilverBullet,
-		MaxIterations:       maxIter,
-		StageTimeoutSeconds: db.DefaultStageTimeoutSeconds,
-		CostBudgetCents:     costBudget,
-		TokenBudget:         tokenBudget,
-		ProjectID:           projectIDPtr,
-		SpawnerID:           spawnerIDPtr,
-		Autonomy:            body.Autonomy,
+	enriched, err := h.CreateTaskFromInput(r.Context(), CreateTaskParams{
+		Slug:            body.Slug,
+		Title:           body.Title,
+		Description:     body.Description,
+		Cwd:             body.Cwd,
+		Priority:        body.Priority,
+		Stage:           body.Stage,
+		SilverBullet:    body.SilverBullet,
+		MaxIterations:   body.MaxIterations,
+		CostBudgetCents: body.CostBudgetCents,
+		TokenBudget:     body.TokenBudget,
+		ProjectID:       body.ProjectID,
+		SpawnerID:       body.SpawnerID,
+		UserID:          &userID,
+		Autonomy:        body.Autonomy,
 	})
 	if err != nil {
-		return fmt.Errorf("tasks.create: %w", err)
+		return err
 	}
-	enriched, _ := EnrichTask(r.Context(), task, h.srRepo, h.permRepo)
-	h.applyRefineStatus(enriched, task.ID)
-	h.broadcaster.Broadcast(sse.TaskEvent{Type: "task_created", TaskID: task.ID, Payload: enriched})
 
 	// Non-blocking cwd_not_in_project warning when project is set and cwd does
 	// not match any of its folder paths exactly. Response shape stays flat for
 	// the no-warning path (backwards-compat); a wrapper is used only when the
 	// warning fires.
-	if projectIDPtr != nil && h.projectFolderRepo != nil {
-		if warn := h.cwdNotInProjectWarning(r.Context(), *projectIDPtr, body.Cwd); warn {
+	if body.ProjectID != "" && h.projectFolderRepo != nil {
+		if warn := h.cwdNotInProjectWarning(r.Context(), body.ProjectID, body.Cwd); warn {
 			return jsonReply(w, http.StatusCreated, map[string]any{
 				"task":    enriched,
 				"warning": "cwd_not_in_project",

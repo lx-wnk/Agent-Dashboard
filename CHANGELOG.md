@@ -20,6 +20,14 @@ Preparing the first public release.
   `manual` keeps the human-gated behaviour. Pre-existing tasks without the field stay
   gated. A self-describing `availableActions` set and an `approve_all_pending` control
   let blocked tasks be unblocked in one step (PR #200).
+- Natural-language cron scheduling for pipeline tasks — describe a cadence in plain
+  English ("every weekday at 9am") and the dashboard stores it as a cron expression,
+  firing offline and deterministically. New REST endpoints under `/api/schedules`
+  and MCP tools `list_schedules` / `manage_schedule` (PR #197).
+- Multi-provider session resolution — Codex and Gemini agents resolve their JSONL
+  session logs under each provider's own config dir, so foreign CLI agents can surface
+  in the roster (cost reported as unknown until a real foreign session schema lands)
+  (PR #199).
 - In-dashboard `~/.claude` config explorer — browse and edit skills, slash commands,
   and memory files from the UI without leaving the dashboard (PR #190).
 - Git worktree panel — create and remove worktrees for pipeline tasks directly from
@@ -54,6 +62,12 @@ Preparing the first public release.
 
 ### Fixed
 
+- Accessibility: the light-mode `--fg-faint` text token now meets WCAG 2.2 AA
+  contrast (4.97:1) on raised surfaces; it previously fell to 4.34:1 on
+  `--raised`, below the 4.5:1 threshold at the small sizes used across the UI.
+- Accessibility: the login gate now uses a `<main>` landmark and an `<h1>`
+  heading, moves keyboard focus to the login control when it appears, and
+  announces OAuth failures (`?error=`) via a `role="alert"` region.
 - Worktree panel now emits a `change` event after create/remove so the task view
   can react; previously the action ran but the parent was never notified.
 - Production build now embeds the real Vue SPA. `vite build` writes to

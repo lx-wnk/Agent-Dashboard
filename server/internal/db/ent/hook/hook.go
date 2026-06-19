@@ -45,6 +45,30 @@ func (f AuditEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuditEventMutation", m)
 }
 
+// The DriftAlertFunc type is an adapter to allow the use of ordinary
+// function as DriftAlert mutator.
+type DriftAlertFunc func(context.Context, *ent.DriftAlertMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f DriftAlertFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.DriftAlertMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.DriftAlertMutation", m)
+}
+
+// The EvalMetricSnapshotFunc type is an adapter to allow the use of ordinary
+// function as EvalMetricSnapshot mutator.
+type EvalMetricSnapshotFunc func(context.Context, *ent.EvalMetricSnapshotMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f EvalMetricSnapshotFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.EvalMetricSnapshotMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EvalMetricSnapshotMutation", m)
+}
+
 // The PermissionPresetFunc type is an adapter to allow the use of ordinary
 // function as PermissionPreset mutator.
 type PermissionPresetFunc func(context.Context, *ent.PermissionPresetMutation) (ent.Value, error)
@@ -199,6 +223,18 @@ func (f TaskPermissionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TaskPermissionMutation", m)
+}
+
+// The TaskScheduleFunc type is an adapter to allow the use of ordinary
+// function as TaskSchedule mutator.
+type TaskScheduleFunc func(context.Context, *ent.TaskScheduleMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f TaskScheduleFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.TaskScheduleMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TaskScheduleMutation", m)
 }
 
 // The UserFunc type is an adapter to allow the use of ordinary

@@ -15,6 +15,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
@@ -28,6 +30,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskdependency"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskschedule"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/user"
 )
 
@@ -92,6 +95,8 @@ func checkColumn(t, c string) error {
 			agentcosttrend.Table:     agentcosttrend.ValidColumn,
 			apikey.Table:             apikey.ValidColumn,
 			auditevent.Table:         auditevent.ValidColumn,
+			driftalert.Table:         driftalert.ValidColumn,
+			evalmetricsnapshot.Table: evalmetricsnapshot.ValidColumn,
 			permissionpreset.Table:   permissionpreset.ValidColumn,
 			permissionrequest.Table:  permissionrequest.ValidColumn,
 			pipelineconfig.Table:     pipelineconfig.ValidColumn,
@@ -105,6 +110,7 @@ func checkColumn(t, c string) error {
 			task.Table:               task.ValidColumn,
 			taskdependency.Table:     taskdependency.ValidColumn,
 			taskpermission.Table:     taskpermission.ValidColumn,
+			taskschedule.Table:       taskschedule.ValidColumn,
 			user.Table:               user.ValidColumn,
 		})
 	})

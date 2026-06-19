@@ -102,6 +102,85 @@ var (
 			},
 		},
 	}
+	// DriftAlertsColumns holds the columns for the "drift_alerts" table.
+	DriftAlertsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "spawner_id", Type: field.TypeString},
+		{Name: "model", Type: field.TypeString},
+		{Name: "stage", Type: field.TypeString},
+		{Name: "metric_key", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "open"},
+		{Name: "direction", Type: field.TypeString},
+		{Name: "baseline_value", Type: field.TypeFloat64},
+		{Name: "recent_value", Type: field.TypeFloat64},
+		{Name: "delta", Type: field.TypeFloat64},
+		{Name: "threshold", Type: field.TypeFloat64},
+		{Name: "sample_count", Type: field.TypeInt},
+		{Name: "detected_at", Type: field.TypeTime},
+		{Name: "acknowledged_at", Type: field.TypeTime, Nullable: true},
+	}
+	// DriftAlertsTable holds the schema information for the "drift_alerts" table.
+	DriftAlertsTable = &schema.Table{
+		Name:       "drift_alerts",
+		Columns:    DriftAlertsColumns,
+		PrimaryKey: []*schema.Column{DriftAlertsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "driftalert_status",
+				Unique:  false,
+				Columns: []*schema.Column{DriftAlertsColumns[5]},
+			},
+			{
+				Name:    "driftalert_metric_key",
+				Unique:  false,
+				Columns: []*schema.Column{DriftAlertsColumns[4]},
+			},
+			{
+				Name:    "driftalert_spawner_id_model_stage_metric_key",
+				Unique:  true,
+				Columns: []*schema.Column{DriftAlertsColumns[1], DriftAlertsColumns[2], DriftAlertsColumns[3], DriftAlertsColumns[4]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "status = 'open'",
+				},
+			},
+		},
+	}
+	// EvalMetricSnapshotsColumns holds the columns for the "eval_metric_snapshots" table.
+	EvalMetricSnapshotsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "spawner_id", Type: field.TypeString},
+		{Name: "model", Type: field.TypeString},
+		{Name: "stage", Type: field.TypeString},
+		{Name: "metric_key", Type: field.TypeString},
+		{Name: "value", Type: field.TypeFloat64},
+		{Name: "sample_count", Type: field.TypeInt},
+		{Name: "window_start", Type: field.TypeTime},
+		{Name: "window_end", Type: field.TypeTime},
+		{Name: "recorded_at", Type: field.TypeTime},
+	}
+	// EvalMetricSnapshotsTable holds the schema information for the "eval_metric_snapshots" table.
+	EvalMetricSnapshotsTable = &schema.Table{
+		Name:       "eval_metric_snapshots",
+		Columns:    EvalMetricSnapshotsColumns,
+		PrimaryKey: []*schema.Column{EvalMetricSnapshotsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "evalmetricsnapshot_recorded_at",
+				Unique:  false,
+				Columns: []*schema.Column{EvalMetricSnapshotsColumns[9]},
+			},
+			{
+				Name:    "evalmetricsnapshot_metric_key",
+				Unique:  false,
+				Columns: []*schema.Column{EvalMetricSnapshotsColumns[4]},
+			},
+			{
+				Name:    "evalmetricsnapshot_spawner_id_model_stage",
+				Unique:  false,
+				Columns: []*schema.Column{EvalMetricSnapshotsColumns[1], EvalMetricSnapshotsColumns[2], EvalMetricSnapshotsColumns[3]},
+			},
+		},
+	}
 	// PermissionPresetsColumns holds the columns for the "permission_presets" table.
 	PermissionPresetsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -523,6 +602,57 @@ var (
 			},
 		},
 	}
+	// TaskSchedulesColumns holds the columns for the "task_schedules" table.
+	TaskSchedulesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString, Size: 200},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "nl_text", Type: field.TypeString, Nullable: true},
+		{Name: "cron_expr", Type: field.TypeString},
+		{Name: "timezone", Type: field.TypeString, Default: "UTC"},
+		{Name: "catchup", Type: field.TypeString, Default: "none"},
+		{Name: "slug_prefix", Type: field.TypeString, Size: 100},
+		{Name: "title", Type: field.TypeString, Size: 200},
+		{Name: "description", Type: field.TypeString, Nullable: true},
+		{Name: "cwd", Type: field.TypeString, Size: 4096},
+		{Name: "source_branch", Type: field.TypeString, Nullable: true},
+		{Name: "target_branch", Type: field.TypeString, Nullable: true},
+		{Name: "priority", Type: field.TypeString, Default: "medium"},
+		{Name: "current_stage", Type: field.TypeString, Default: "concept"},
+		{Name: "max_iterations", Type: field.TypeInt, Default: 20},
+		{Name: "token_budget", Type: field.TypeInt, Nullable: true},
+		{Name: "cost_budget_cents", Type: field.TypeInt, Nullable: true},
+		{Name: "stage_timeout_seconds", Type: field.TypeInt, Default: 1800},
+		{Name: "silver_bullet", Type: field.TypeBool, Default: false},
+		{Name: "project_id", Type: field.TypeString, Nullable: true},
+		{Name: "spawner_id", Type: field.TypeString, Nullable: true},
+		{Name: "permission_template", Type: field.TypeString, Nullable: true},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
+		{Name: "next_run_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_run_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_task_id", Type: field.TypeString, Nullable: true},
+		{Name: "user_id", Type: field.TypeString, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// TaskSchedulesTable holds the schema information for the "task_schedules" table.
+	TaskSchedulesTable = &schema.Table{
+		Name:       "task_schedules",
+		Columns:    TaskSchedulesColumns,
+		PrimaryKey: []*schema.Column{TaskSchedulesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "taskschedule_enabled",
+				Unique:  false,
+				Columns: []*schema.Column{TaskSchedulesColumns[2]},
+			},
+			{
+				Name:    "taskschedule_next_run_at",
+				Unique:  false,
+				Columns: []*schema.Column{TaskSchedulesColumns[24]},
+			},
+		},
+	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -544,6 +674,8 @@ var (
 		AgentCostTrendsTable,
 		APIKeysTable,
 		AuditEventsTable,
+		DriftAlertsTable,
+		EvalMetricSnapshotsTable,
 		PermissionPresetsTable,
 		PermissionRequestsTable,
 		PipelineConfigsTable,
@@ -557,6 +689,7 @@ var (
 		TasksTable,
 		TaskDependenciesTable,
 		TaskPermissionsTable,
+		TaskSchedulesTable,
 		UsersTable,
 	}
 )

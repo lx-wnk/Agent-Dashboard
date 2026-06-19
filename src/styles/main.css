@@ -99,7 +99,8 @@
   --fg: var(--color-slate-900);
   --fg-soft: var(--color-slate-700);
   --fg-mute: var(--color-slate-600);
-  --fg-faint: var(--color-slate-500);
+  /* faint off slate-500 (fails AA 4.34:1 on --raised) -> 4.97:1 */
+  --fg-faint: #5c6b7d;
   /* Accent — indigo */
   --accent: var(--color-indigo-600);
   --accent-soft: var(--color-indigo-100);

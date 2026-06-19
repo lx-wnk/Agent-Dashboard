@@ -15,6 +15,12 @@ type ApiKey func(*sql.Selector)
 // AuditEvent is the predicate function for auditevent builders.
 type AuditEvent func(*sql.Selector)
 
+// DriftAlert is the predicate function for driftalert builders.
+type DriftAlert func(*sql.Selector)
+
+// EvalMetricSnapshot is the predicate function for evalmetricsnapshot builders.
+type EvalMetricSnapshot func(*sql.Selector)
+
 // PermissionPreset is the predicate function for permissionpreset builders.
 type PermissionPreset func(*sql.Selector)
 
@@ -53,6 +59,9 @@ type TaskDependency func(*sql.Selector)
 
 // TaskPermission is the predicate function for taskpermission builders.
 type TaskPermission func(*sql.Selector)
+
+// TaskSchedule is the predicate function for taskschedule builders.
+type TaskSchedule func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
