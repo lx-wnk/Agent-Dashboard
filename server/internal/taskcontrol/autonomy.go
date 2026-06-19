@@ -23,12 +23,12 @@ var ValidAutonomyValues = map[string]struct{}{
 // The operator has opted into unrestricted tool access, so the safe-list check
 // for Bash patterns is bypassed and blanket Bash is included.
 //
-// When allowGitPush is false, blanket Bash is still included but git-push
-// containment relies on the spawner's --permission-mode default (same
-// behaviour as the existing gitPushRE gate in the restrictive path: the
-// restriction is honoured at CLI level, not allow-list level).
+// Git push is still gated when allowGitPush is false: the spawner writes a
+// settings deny entry for Bash(git push:*) so Claude honours the restriction
+// at the CLI level even on the allow-all path.
 func PermissiveAllowList(allowGitPush bool) []string {
-	tools := []string{
+	_ = allowGitPush // containment is handled via BuildDenyList / settings deny
+	return []string{
 		"Read",
 		"Write",
 		"Edit",
@@ -48,6 +48,4 @@ func PermissiveAllowList(allowGitPush bool) []string {
 		// operator has opted into unattended operation.
 		"Bash",
 	}
-	_ = allowGitPush // git-push gate is advisory on the allow-all path (see doc comment)
-	return tools
 }

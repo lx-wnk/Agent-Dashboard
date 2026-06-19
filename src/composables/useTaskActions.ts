@@ -9,9 +9,7 @@ import {
   cancelTask,
   fetchTaskPermissions,
   grantTaskPermission,
-  progressTask,
   resolvePermissionRequest,
-  resumeStageTask,
   retryTask,
 } from './useTasks'
 
@@ -95,20 +93,11 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
     })
   }
 
-  function onResume(): Promise<void> {
-    return details.handleAction(
-      () => resumeStageTask(task.value!.id, additionalPrompt.value || undefined),
-      'Stage re-queued — will run when a slot is free',
-    )
-  }
   function onRetry(): Promise<void> {
     return details.handleAction(
       () => retryTask(task.value!.id, additionalPrompt.value || undefined),
       'Stage re-queued — will run when a slot is free',
     )
-  }
-  function onProgress(): Promise<void> {
-    return details.handleAction(() => progressTask(task.value!.id))
   }
 
   async function onSlashSelect(cmd: { name: string }): Promise<void> {
@@ -146,9 +135,7 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
     onResolveAll,
     onGrantPermission,
     onAnalyze,
-    onResume,
     onRetry,
-    onProgress,
     onSlashSelect,
   }
 }

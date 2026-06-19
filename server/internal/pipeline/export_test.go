@@ -6,6 +6,11 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
+// ExportedWriteSettingsFile exposes writeSettingsFile for spawner tests.
+func ExportedWriteSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
+	return writeSettingsFile(autonomy, cwd, perms, enableChannel, allowGitPush)
+}
+
 // SortPickCandidatesForTest exposes sortPickCandidates for testing.
 var SortPickCandidatesForTest = sortPickCandidates
 
