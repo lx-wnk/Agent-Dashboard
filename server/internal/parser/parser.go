@@ -415,6 +415,7 @@ func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 // SessionData is the parsed output of a Claude Code JSONL session log.
 type SessionData struct {
 	SessionID           string
+	Path                string
 	ProjectPath         string
 	Entrypoint          sdk.Entrypoint
 	LastActivity        time.Time
@@ -614,6 +615,7 @@ func findSessionForProjectFiltered(cwd string, pid int, uptimeSeconds int64, cla
 
 	// Populate session ID and meta before caching.
 	data.SessionID = strings.TrimSuffix(filepath.Base(chosenPath), ".jsonl")
+	data.Path = chosenPath
 	data.ProjectPath = cwd
 	data.Meta = loadSessionMeta(data.SessionID)
 
