@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useCostHeatmap } from '../composables/useCostHeatmap'
 import { useTheme } from '../composables/useTheme'
 import { chartColors } from '../utils/chartColors'
@@ -12,15 +13,16 @@ const { grid, loading, error } = useCostHeatmap()
 
 const { theme } = useTheme()
 
-// Derive rgba from the token each time the cell is rendered; re-evaluates on theme toggle.
-function heatmapColor(opacity: number): string {
+// Resolve the token channels once per render (re-evaluates on theme toggle), then
+// splice the per-cell alpha — avoids a chartColors() DOM probe for every cell.
+const heatmapChannels = computed(() => {
   void theme.value // re-evaluate when the theme toggles
-  // chartColors() returns an "rgb(r, g, b)" string — splice in the alpha.
-  const c = chartColors().info
-  const m = c.match(RGB_CHANNELS_RE)
-  if (!m)
-    return `rgba(59, 130, 246, ${opacity})`
-  return `rgba(${m[1]}, ${opacity})`
+  const m = chartColors().info.match(RGB_CHANNELS_RE)
+  return m ? m[1] : '59, 130, 246'
+})
+
+function heatmapColor(opacity: number): string {
+  return `rgba(${heatmapChannels.value}, ${opacity})`
 }
 
 function maxCost(): number {

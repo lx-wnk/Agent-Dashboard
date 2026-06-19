@@ -62,6 +62,10 @@ Preparing the first public release.
 
 ### Fixed
 
+- Performance: the cost heatmap resolved chart color tokens once per cell
+  (10 DOM probes × 168 cells per render); it now resolves them once per render and
+  splices the per-cell alpha, which also stops the component test from timing out
+  on slower CI runners.
 - Pipeline: a task whose git worktree could not be created (e.g. its `source_branch`
   was already checked out by another worktree) silently stalled forever in
   `implementation` — the orchestrator returned a bare error before any stage run was
