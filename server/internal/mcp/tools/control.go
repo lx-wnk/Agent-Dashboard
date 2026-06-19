@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 
+	tasksapi "github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
@@ -319,48 +320,24 @@ func registerApproveAllPending(registry mcp.ToolRegistry, d ControlDeps) {
 			if err != nil {
 				return nil, err
 			}
-			task, err := d.TaskRepo.GetByID(ctx, taskID)
-			if err != nil {
-				return nil, mcp.Fail("Task not found: " + taskID)
-			}
 
-			runs, err := d.SRRepo.ListForTask(ctx, taskID)
-			if err != nil {
-				return nil, mcp.Fail("approve_all_pending: list runs: " + err.Error())
-			}
-			runIDs := make([]string, len(runs))
-			for i, sr := range runs {
-				runIDs[i] = sr.ID
-			}
-
-			pending, err := d.PermRepo.ListPendingForTask(ctx, taskID, runIDs)
-			if err != nil {
-				return nil, mcp.Fail("approve_all_pending: list pending: " + err.Error())
-			}
-
-			for _, req := range pending {
-				if err := d.PermRepo.ResolvePermissionRequest(ctx, req.ID, "approved"); err != nil {
-					return nil, mcp.Fail("approve_all_pending: resolve " + req.ID + ": " + err.Error())
-				}
-			}
-
-			_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "permissions_bulk_approved", "task:"+taskID, map[string]any{
-				"actor": "user",
-				"count": len(pending),
-			})
-
-			var requeued bool
+			var requeuer tasksapi.ApproveAllRequeuer
 			if d.Orchestrator != nil {
-				latest, srErr := d.SRRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
-				if srErr == nil && latest != nil && latest.Status == "awaiting_user" {
-					if sr, reqErr := d.Orchestrator.RequeueForUser(ctx, taskID, ""); reqErr == nil && sr != nil {
-						requeued = true
-					}
-				}
+				requeuer = d.Orchestrator
+			}
+			res, err := tasksapi.ApproveAllPending(ctx, tasksapi.ApproveAllPendingDeps{
+				TaskRepo:     d.TaskRepo,
+				SRRepo:       d.SRRepo,
+				PermRepo:     d.PermRepo,
+				AuditRepo:    d.AuditRepo,
+				Orchestrator: requeuer,
+			}, taskID)
+			if err != nil {
+				return nil, mcp.Fail(err.Error())
 			}
 
 			safeBroadcast(d.Broadcast, taskID)
-			return mcp.OK(map[string]any{"approved": len(pending), "requeued": requeued})
+			return mcp.OK(map[string]any{"approved": res.Approved, "requeued": res.Requeued})
 		},
 	})
 }

@@ -107,6 +107,13 @@ func TestApproveAllPendingTool_ReturnsCountAndRequeued(t *testing.T) {
 	stillPending, err := permRepo.ListPendingForTask(ctx, task.ID, runIDs)
 	require.NoError(t, err)
 	require.Empty(t, stillPending, "expected no pending requests after approve_all_pending")
+
+	// The approval must also persist a grant so a re-queued agent's repeated
+	// request is auto-satisfied — without this the manual task re-stalls.
+	grants, err := permRepo.ListTaskPermissions(ctx, task.ID)
+	require.NoError(t, err)
+	require.Len(t, grants, 1, "expected a persistent grant for the approved request")
+	require.Equal(t, "Bash", grants[0].Tool)
 }
 
 // stubOrchestrator satisfies ControlOrchestrator for MCP tool tests.

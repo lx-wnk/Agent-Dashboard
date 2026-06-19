@@ -521,58 +521,21 @@ func (h *Handler) approveAllPending(w http.ResponseWriter, r *http.Request) erro
 		return apierr.ErrNotFound
 	}
 
-	runs, err := h.srRepo.ListForTask(r.Context(), taskID)
+	res, err := ApproveAllPending(r.Context(), ApproveAllPendingDeps{
+		TaskRepo:     h.taskRepo,
+		SRRepo:       h.srRepo,
+		PermRepo:     h.permRepo,
+		AuditRepo:    h.auditRepo,
+		Orchestrator: h.orchestrator,
+	}, taskID)
 	if err != nil {
-		return fmt.Errorf("approve_all_pending: list runs: %w", err)
-	}
-	runIDs := make([]string, len(runs))
-	for i, sr := range runs {
-		runIDs[i] = sr.ID
-	}
-
-	pending, err := h.permRepo.ListPendingForTask(r.Context(), taskID, runIDs)
-	if err != nil {
-		return fmt.Errorf("approve_all_pending: list pending: %w", err)
-	}
-
-	for _, req := range pending {
-		if err := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "approved"); err != nil {
-			return fmt.Errorf("approve_all_pending: resolve %s: %w", req.ID, err)
-		}
-	}
-
-	var entries []repo.GrantEntry
-	for _, req := range pending {
-		entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern})
-	}
-	if len(entries) > 0 {
-		if _, errs := h.grantValidatedEntries(r.Context(), taskID, entries); len(errs) > 0 {
-			slog.Warn("approve_all_pending: grant failed", "taskID", taskID, "errs", errs)
-		}
-	}
-
-	_ = h.auditRepo.RecordTaskAudit(r.Context(), taskID, nil, "permissions_bulk_approved", "task:"+taskID, map[string]any{
-		"actor":   "user",
-		"count":   len(pending),
-	})
-
-	// Re-queue only when we actually cleared a pending request and the latest
-	// stage run is awaiting_user — nothing to unblock otherwise.
-	var requeued bool
-	t, taskErr := h.taskRepo.GetByID(r.Context(), taskID)
-	if taskErr == nil && len(pending) > 0 {
-		latest, srErr := h.srRepo.GetLatestByTaskAndStage(r.Context(), taskID, t.CurrentStage)
-		if srErr == nil && latest != nil && latest.Status == "awaiting_user" {
-			if sr, reqErr := h.orchestrator.RequeueForUser(r.Context(), taskID, ""); reqErr == nil && sr != nil {
-				requeued = true
-			}
-		}
+		return fmt.Errorf("approve_all_pending: %w", err)
 	}
 
 	h.broadcastEnrichedUpdate(r.Context(), taskID)
 	return jsonReply(w, http.StatusOK, map[string]any{
-		"approved": len(pending),
-		"requeued": requeued,
+		"approved": res.Approved,
+		"requeued": res.Requeued,
 	})
 }
 
@@ -618,41 +581,10 @@ func presetCovers(tool string, pattern *string, presets []*ent.PermissionPreset)
 	return false
 }
 
-// grantValidatedEntries validates each entry as a human override and persists
-// the safe ones via BulkGrantPermissions. Called exclusively from human REST
-// resolve endpoints, so override=true applies: the Bash allow-list and
-// injection guard are bypassed but a non-empty pattern is still required, and
-// WebFetch still needs a domain. Invalid entries are collected and returned as
-// error strings rather than aborting the call.
+// grantValidatedEntries persists human-override grants for the handler's repo.
+// Logic lives in grantOverrideEntries, shared with the approve-all-pending service.
 func (h *Handler) grantValidatedEntries(ctx context.Context, taskID string, entries []repo.GrantEntry) ([]*ent.TaskPermission, []string) {
-	var safe []repo.GrantEntry
-	var errs []string
-	for _, e := range entries {
-		pattern := ""
-		if e.Pattern != nil {
-			pattern = *e.Pattern
-		}
-		if err := permissions.ValidateGrantEntryWithOverride(e.Tool, pattern, true); err != nil {
-			errs = append(errs, fmt.Sprintf("grant skipped (%s %s): %v", e.Tool, pattern, err))
-			continue
-		}
-		e.ManualOverride = true
-		safe = append(safe, e)
-	}
-	if len(safe) == 0 {
-		return nil, errs
-	}
-	granted, err := h.permRepo.BulkGrantPermissions(ctx, taskID, safe)
-	if err != nil {
-		errs = append(errs, fmt.Sprintf("BulkGrantPermissions: %v", err))
-		return nil, errs
-	}
-	tools := make([]string, 0, len(granted))
-	for _, p := range granted {
-		tools = append(tools, p.Tool)
-	}
-	slog.Info("permission grant from resolved request", "taskID", taskID, "tools", tools)
-	return granted, errs
+	return grantOverrideEntries(ctx, h.permRepo, taskID, entries)
 }
 
 // resolveTemplate expands a named permission template to GrantEntry slice.
