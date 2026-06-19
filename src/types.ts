@@ -158,7 +158,7 @@ export interface PipelineTask {
   latestStageRunStatus?: StageRunStatus | null
   autoRetryCount?: number | null
   nextRetryAt?: string | null
-  refineStatus?: 'idle' | 'running' | 'done' | 'failed' | null
+  refineStatus?: 'idle' | 'running' | 'done' | 'failed' | 'draft_ready' | null
   refineError?: string | null
   currentIteration?: number
   // Session id of the most relevant stage_run (running > most recent with session).
@@ -181,6 +181,15 @@ export interface PipelineTask {
   // Project and spawner associations (Projects/Folders/Spawners feature).
   projectId?: string | null
   spawnerId?: string | null
+  autonomy?: 'manual' | 'spec_gated' | 'full'
+  availableActions?: AvailableAction[]
+}
+
+export interface AvailableAction {
+  action: string
+  enabled: boolean
+  reason?: string
+  primary: boolean
 }
 
 export interface StageRun {
