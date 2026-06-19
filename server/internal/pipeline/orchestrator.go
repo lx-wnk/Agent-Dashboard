@@ -96,6 +96,9 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 	if sf == nil {
 		sf = syntheticSpawn
 	}
+	if opts.EnsureWorktreeFn == nil {
+		opts.EnsureWorktreeFn = ensureTaskWorktree
+	}
 	poolSize := defaultMaxParallel
 	o := &PipelineOrchestrator{
 		opts:             opts,

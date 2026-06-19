@@ -70,6 +70,7 @@ func provideOrchestrator(
 		WorktreeRoot:          cfg.WorktreeRoot,
 		ForceWorktrees:        cfg.ForceWorktrees,
 		SpawnFn:               pipeline.SpawnStageAgent,
+		EnsureWorktreeFn:      pipeline.EnsureTaskWorktree,
 		ResolveSpawner:        resolveFn,
 		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the
