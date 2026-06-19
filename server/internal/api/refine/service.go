@@ -2,6 +2,7 @@ package refine
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -63,8 +64,12 @@ func Confirm(ctx context.Context, d ConfirmDeps, taskID string) (*ent.Task, erro
 			})
 		}
 	}
+	// The task update is the load-bearing write (stage move + concept freeze);
+	// fail loudly rather than advancing a task whose spec never landed.
 	if d.Tasks != nil {
-		_, _ = d.Tasks.Update(ctx, taskID, update)
+		if _, err := d.Tasks.Update(ctx, taskID, update); err != nil {
+			return nil, fmt.Errorf("confirm: apply concept to task: %w", err)
+		}
 	}
 	if d.Advance != nil {
 		_ = d.Advance(ctx, taskID)

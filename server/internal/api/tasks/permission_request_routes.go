@@ -140,6 +140,11 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 			}
 			h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
 		}
+	} else {
+		// Stage-run lookup failed: the request was created but can be neither
+		// auto-approved nor surfaced via the awaiting_user gate. Log so a dropped
+		// gating is observable rather than silent.
+		slog.Warn("createPermissionRequest: stage-run lookup failed; request not gated", "stageRunID", body.StageRunID, "reqID", req.ID, "err", srErr)
 	}
 
 	return jsonReply(w, http.StatusCreated, req)
