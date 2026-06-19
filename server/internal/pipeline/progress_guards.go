@@ -56,32 +56,36 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		}
 	}
 
+	// latest is non-nil only for agent-driven stages; ensureStageRun falls back to
+	// a DB query when it is nil (non-agent stages). The run is created before the
+	// worktree so a worktree failure can be recorded against it via FailTransition.
+	stageRun, err := o.ensureStageRun(ctx, task, latest)
+	if err != nil {
+		return nil, fmt.Errorf("orchestrator.ensureStageRun: %w", err)
+	}
+
 	// Auto-create a git worktree before spawning the agent.
 	// Triggered when: ForceWorktrees is set (global) OR task has an explicit SourceBranch.
-	// Must happen before ensureStageRun so the spawner uses the correct cwd from the first run.
+	// A failure here (e.g. branch already checked out in another worktree) is recorded
+	// as a failed stage_run rather than a swallowed error that silently re-queues forever.
 	needsWorktree := handler.RequiresAgent() &&
 		(task.WorktreePath == nil || *task.WorktreePath == "") &&
 		(o.opts.ForceWorktrees || (task.SourceBranch != nil && *task.SourceBranch != ""))
 	if needsWorktree {
-		wtPath, wtBranch, wtErr := ensureTaskWorktree(task, o.opts.WorktreeRoot)
+		wtPath, wtBranch, wtErr := o.opts.EnsureWorktreeFn(task, o.opts.WorktreeRoot)
 		if wtErr != nil {
-			return nil, fmt.Errorf("orchestrator: ensure worktree: %w", wtErr)
+			return o.applyTransition(ctx, task, stageRun,
+				FailTransition{Reason: fmt.Sprintf("worktree creation failed: %v", wtErr)})
 		}
 		upd := repo.UpdateTaskInput{WorktreePath: &wtPath}
 		if task.SourceBranch == nil || *task.SourceBranch == "" {
 			upd.SourceBranch = &wtBranch
 		}
 		if task, err = o.opts.TaskRepo.Update(ctx, task.ID, upd); err != nil {
-			return nil, fmt.Errorf("orchestrator: set worktree path: %w", err)
+			return o.applyTransition(ctx, task, stageRun,
+				FailTransition{Reason: fmt.Sprintf("persisting worktree path failed: %v", err)})
 		}
 		slog.Info("orchestrator: created worktree", "taskID", taskID, "path", wtPath, "branch", wtBranch)
-	}
-
-	// latest is non-nil only for agent-driven stages; ensureStageRun falls back to
-	// a DB query when it is nil (non-agent stages).
-	stageRun, err := o.ensureStageRun(ctx, task, latest)
-	if err != nil {
-		return nil, fmt.Errorf("orchestrator.ensureStageRun: %w", err)
 	}
 
 	// Re-entry guard: if the run is already running with a live PID, return without spawning.

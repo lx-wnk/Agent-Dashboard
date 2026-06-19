@@ -193,6 +193,11 @@ type OrchestratorOptions struct {
 	// defaults to syntheticSpawn so tests can never launch a real agent.
 	SpawnFn SpawnFunc
 
+	// EnsureWorktreeFn creates (or verifies) a git worktree for a task.
+	// Production wires ensureTaskWorktree; tests inject a stub to avoid real git.
+	// When nil the orchestrator defaults to ensureTaskWorktree.
+	EnsureWorktreeFn func(task *ent.Task, worktreeRoot string) (path, branch string, err error)
+
 	// ResolveSpawner returns the effective DB spawner row for a task right
 	// before the native Claude path is taken. When nil, stage handlers spawn
 	// with the legacy `claude` CLI (current behaviour).

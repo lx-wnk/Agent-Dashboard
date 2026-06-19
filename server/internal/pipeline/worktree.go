@@ -13,6 +13,9 @@ import (
 // gitRunner runs git for worktree mutations with a bounded timeout.
 var gitRunner = worktree.NewRunner()
 
+// EnsureTaskWorktree is the exported production wiring for OrchestratorOptions.EnsureWorktreeFn.
+var EnsureTaskWorktree = ensureTaskWorktree
+
 // ensureTaskWorktree creates a git worktree for task at <worktreeRoot>/<slug>.
 // Idempotent: returns the path immediately if the directory already exists.
 // When task.SourceBranch is nil, falls back to "feat/<slug>" as the branch name.

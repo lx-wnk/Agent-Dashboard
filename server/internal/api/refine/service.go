@@ -35,6 +35,13 @@ func Confirm(ctx context.Context, d ConfirmDeps, taskID string) (*ent.Task, erro
 					update.Title = &concept.RefinedTitle
 				}
 				if concept.SourceBranch != "" {
+					n, err := d.Tasks.CountActiveBySourceBranch(ctx, concept.SourceBranch, taskID)
+					if err != nil {
+						return nil, err
+					}
+					if n > 0 {
+						return nil, fmt.Errorf("source_branch %q already in use by another active task", concept.SourceBranch)
+					}
 					update.SourceBranch = &concept.SourceBranch
 				}
 				if concept.TargetBranch != "" {

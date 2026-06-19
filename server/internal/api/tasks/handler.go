@@ -327,6 +327,15 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 	if _, err := h.taskRepo.GetBySlug(ctx, p.Slug); err == nil {
 		return nil, apierr.NewAppError(http.StatusConflict, "slug already exists")
 	}
+	if p.SourceBranch != nil && *p.SourceBranch != "" {
+		n, err := h.taskRepo.CountActiveBySourceBranch(ctx, *p.SourceBranch, "")
+		if err != nil {
+			return nil, fmt.Errorf("tasks.create.sourceBranchCheck: %w", err)
+		}
+		if n > 0 {
+			return nil, apierr.NewAppError(http.StatusConflict, "source_branch already in use by another active task")
+		}
+	}
 
 	// Resolve optional project + spawner. Empty string = unset.
 	var projectIDPtr, spawnerIDPtr *string

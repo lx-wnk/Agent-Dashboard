@@ -285,3 +285,40 @@ func TestTaskRepo_RerankBetween(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskRepo_CountActiveBySourceBranch(t *testing.T) {
+	client := openDB(t)
+	r := repo.NewTaskRepo(client)
+	ctx := context.Background()
+
+	mk := func(slug, stage, branch string) string {
+		b := branch
+		task, err := r.Create(ctx, repo.CreateTaskInput{
+			Slug: slug, Title: slug, Cwd: "/tmp",
+			CurrentStage: stage, Priority: "medium",
+			MaxIterations: 20, StageTimeoutSeconds: 1800,
+			SourceBranch: &b,
+		})
+		require.NoError(t, err)
+		return task.ID
+	}
+
+	mk("a-impl", "implementation", "feat/shared")
+	mk("b-concept", "concept", "feat/shared")
+	mk("c-done", "done", "feat/shared")           // terminal — must be ignored
+	mk("d-cancelled", "cancelled", "feat/shared") // terminal — must be ignored
+	mk("e-other", "implementation", "feat/other")
+
+	n, err := r.CountActiveBySourceBranch(ctx, "feat/shared", "")
+	require.NoError(t, err)
+	require.Equal(t, 2, n, "only non-terminal tasks on the branch count")
+
+	excludeID := mk("f-self", "implementation", "feat/self")
+	n, err = r.CountActiveBySourceBranch(ctx, "feat/self", excludeID)
+	require.NoError(t, err)
+	require.Equal(t, 0, n, "excluded task must not count itself")
+
+	n, err = r.CountActiveBySourceBranch(ctx, "feat/none", "")
+	require.NoError(t, err)
+	require.Equal(t, 0, n, "unused branch counts zero")
+}
