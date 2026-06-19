@@ -23,7 +23,7 @@ export const PHASE_LABELS: Record<string, string> = {
   approval: 'Approval',
 }
 
-export type RefineRunStatus = 'idle' | 'running' | 'done' | 'failed' | null
+export type RefineRunStatus = 'none' | 'refining' | 'draft_ready' | 'failed' | null
 
 export function useRefinementChat(taskId: () => string | null) {
   const messages = ref<ChatMessage[]>([])
@@ -93,7 +93,7 @@ export function useRefinementChat(taskId: () => string | null) {
       return
     messages.value.push({ role: 'user', content: message, images })
     isStreaming.value = true
-    runStatus.value = 'running'
+    runStatus.value = 'refining'
     error.value = null
 
     let assistantContent = ''
@@ -187,7 +187,7 @@ export function useRefinementChat(taskId: () => string | null) {
         }
       }
       // Stream finished cleanly → the run is complete.
-      runStatus.value = 'done'
+      runStatus.value = 'draft_ready'
     }
     catch (err) {
       // An abort (modal closed) is expected — the detached run keeps going and
@@ -212,18 +212,18 @@ export function useRefinementChat(taskId: () => string | null) {
   async function fetchStatus(): Promise<RefineRunStatus> {
     const id = taskId()
     if (!id)
-      return 'idle'
+      return 'none'
     try {
       const res = await fetch(`/api/refine/${id}/status`)
       if (!res.ok)
-        return 'idle'
+        return 'none'
       const data = await res.json() as { status?: RefineRunStatus, error?: string }
       if (data.error)
         error.value = data.error
-      return data.status ?? 'idle'
+      return data.status ?? 'none'
     }
     catch {
-      return 'idle'
+      return 'none'
     }
   }
 
@@ -233,7 +233,7 @@ export function useRefinementChat(taskId: () => string | null) {
       return
     const status = await fetchStatus()
     runStatus.value = status
-    if (status === 'running') {
+    if (status === 'refining') {
       pollTimer = setTimeout(() => void pollUntilDone(id), POLL_INTERVAL_MS)
       return
     }
@@ -255,7 +255,7 @@ export function useRefinementChat(taskId: () => string | null) {
       return
     const status = await fetchStatus()
     runStatus.value = status
-    if (status === 'running') {
+    if (status === 'refining') {
       isStreaming.value = true
       stopPolling()
       pollTimer = setTimeout(() => void pollUntilDone(id), POLL_INTERVAL_MS)

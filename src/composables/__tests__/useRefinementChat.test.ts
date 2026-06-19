@@ -120,7 +120,7 @@ describe('useRefinementChat.syncStatus (detached-run reconnect)', () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
       if (url.endsWith('/status')) {
         statusCalls++
-        const status = statusCalls === 1 ? 'running' : 'done'
+        const status = statusCalls === 1 ? 'refining' : 'draft_ready'
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ status }) })
       }
       // /turns
@@ -139,12 +139,12 @@ describe('useRefinementChat.syncStatus (detached-run reconnect)', () => {
 
     // running → indicator on, status surfaced
     expect(chat.isStreaming.value).toBe(true)
-    expect(chat.runStatus.value).toBe('running')
+    expect(chat.runStatus.value).toBe('refining')
 
     // advance the poll loop → /status now done → reload persisted turns
     await vi.advanceTimersByTimeAsync(2000)
 
-    expect(chat.runStatus.value).toBe('done')
+    expect(chat.runStatus.value).toBe('draft_ready')
     expect(chat.isStreaming.value).toBe(false)
     expect(chat.messages.value).toHaveLength(2)
     expect(chat.messages.value[1]).toMatchObject({ role: 'assistant', content: 'analysis…' })
@@ -154,7 +154,7 @@ describe('useRefinementChat.syncStatus (detached-run reconnect)', () => {
     vi.useFakeTimers()
     vi.stubGlobal('fetch', vi.fn((url: string) => {
       if (url.endsWith('/status'))
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'running' }) })
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'refining' }) })
       return Promise.resolve({ ok: true, status: 200, json: async () => [] })
     }))
 

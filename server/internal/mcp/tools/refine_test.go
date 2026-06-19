@@ -66,7 +66,7 @@ func TestGetRefineStatus_IdleWhenNoRun(t *testing.T) {
 
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal([]byte(result.Content[0].Text), &payload))
-	require.Equal(t, "idle", payload["status"])
+	require.Equal(t, "none", payload["status"])
 }
 
 func TestApproveSpec_AdvancesTaskPastConcept(t *testing.T) {
@@ -166,7 +166,7 @@ func TestRefineTask_StoresUserTurnAndRunsRefinement(t *testing.T) {
 
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal([]byte(result.Content[0].Text), &payload))
-	require.Equal(t, "done", payload["status"])
+	require.Equal(t, "draft_ready", payload["status"])
 	require.Contains(t, payload["response"], "assistant reply")
 
 	// Both user and assistant turns should be persisted.

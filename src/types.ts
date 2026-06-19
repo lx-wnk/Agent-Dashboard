@@ -158,7 +158,7 @@ export interface PipelineTask {
   latestStageRunStatus?: StageRunStatus | null
   autoRetryCount?: number | null
   nextRetryAt?: string | null
-  refineStatus?: 'idle' | 'running' | 'done' | 'failed' | 'draft_ready' | null
+  refineStatus?: 'none' | 'refining' | 'draft_ready' | 'failed' | null
   refineError?: string | null
   currentIteration?: number
   // Session id of the most relevant stage_run (running > most recent with session).

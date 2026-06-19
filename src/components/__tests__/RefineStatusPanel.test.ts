@@ -2,13 +2,13 @@ import { mount } from '@vue/test-utils'
 import { expect, it } from 'vitest'
 import RefineStatusPanel from '../RefineStatusPanel.vue'
 
-it('shows a running badge when status is running', () => {
-  const w = mount(RefineStatusPanel, { props: { status: 'running', error: null, lastOutput: '' } })
-  expect(w.text().toLowerCase()).toContain('running')
+it('shows a refining badge when status is refining', () => {
+  const w = mount(RefineStatusPanel, { props: { status: 'refining', error: null, lastOutput: '' } })
+  expect(w.text().toLowerCase()).toContain('refining')
 })
 
-it('shows the last output when done', () => {
-  const w = mount(RefineStatusPanel, { props: { status: 'done', error: null, lastOutput: 'analysis result' } })
+it('shows the last output when draft is ready', () => {
+  const w = mount(RefineStatusPanel, { props: { status: 'draft_ready', error: null, lastOutput: 'analysis result' } })
   expect(w.text()).toContain('analysis result')
 })
 
@@ -17,14 +17,14 @@ it('shows the error when failed', () => {
   expect(w.text()).toContain('claude exited: boom')
 })
 
-it('renders nothing for idle with no output', () => {
-  const w = mount(RefineStatusPanel, { props: { status: 'idle', error: null, lastOutput: '' } })
+it('renders nothing for none with no output', () => {
+  const w = mount(RefineStatusPanel, { props: { status: 'none', error: null, lastOutput: '' } })
   expect(w.text().trim()).toBe('')
 })
 
 it('renders a phase stepper marking completed phases done', () => {
   const w = mount(RefineStatusPanel, {
-    props: { status: 'running', error: null, lastOutput: '', completedPhases: ['analysis', 'spec'] },
+    props: { status: 'refining', error: null, lastOutput: '', completedPhases: ['analysis', 'spec'] },
   })
   const text = w.text()
   expect(text).toContain('Analysis')
@@ -36,9 +36,9 @@ it('renders a phase stepper marking completed phases done', () => {
   expect(w.findAll('[data-phase-state="current"]').length).toBe(1)
 })
 
-it('marks no phase current when status is done', () => {
+it('marks no phase current when draft is ready', () => {
   const w = mount(RefineStatusPanel, {
-    props: { status: 'done', error: null, lastOutput: 'x', completedPhases: ['analysis', 'spec', 'implementation_plan', 'approval'] },
+    props: { status: 'draft_ready', error: null, lastOutput: 'x', completedPhases: ['analysis', 'spec', 'implementation_plan', 'approval'] },
   })
   expect(w.findAll('[data-phase-state="current"]').length).toBe(0)
   expect(w.findAll('[data-phase-state="done"]').length).toBe(4)

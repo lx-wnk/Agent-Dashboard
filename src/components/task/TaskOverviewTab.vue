@@ -160,7 +160,7 @@ watch(
 
     <template v-if="task.currentStage === 'concept'">
       <RefineStatusPanel
-        :status="task.refineStatus ?? 'idle'"
+        :status="task.refineStatus ?? 'none'"
         :error="task.refineError ?? null"
         :last-output="lastRefineOutput"
         :completed-phases="completedRefinePhases"

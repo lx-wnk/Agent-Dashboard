@@ -384,7 +384,7 @@ func TestConfirm_PersistsConceptOntoTask(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
-func TestStatus_ReturnsIdleForUnknownTask(t *testing.T) {
+func TestStatus_ReturnsNoneForUnknownTask(t *testing.T) {
 	turns := &fakeTurnRepo{}
 	tasks := newFakeTaskRepo()
 	router := makeRouter(turns, tasks, noopSpawner)
@@ -398,7 +398,7 @@ func TestStatus_ReturnsIdleForUnknownTask(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if body["status"] != "idle" {
-		t.Errorf("status field: got %v, want idle", body["status"])
+	if body["status"] != "none" {
+		t.Errorf("status field: got %v, want none", body["status"])
 	}
 }

@@ -11,11 +11,11 @@ type stubRefineReader struct{ status, errMsg string }
 func (s stubRefineReader) State(string) (string, string) { return s.status, s.errMsg }
 
 func TestApplyRefineStatus_SetsFields(t *testing.T) {
-	h := &Handler{refineReader: stubRefineReader{status: "running"}}
+	h := &Handler{refineReader: stubRefineReader{status: "refining"}}
 	e := &EnrichedTask{}
 	h.applyRefineStatus(e, "t")
-	if e.RefineStatus == nil || *e.RefineStatus != "running" {
-		t.Fatalf("expected RefineStatus=running, got %v", e.RefineStatus)
+	if e.RefineStatus == nil || *e.RefineStatus != "refining" {
+		t.Fatalf("expected RefineStatus=refining, got %v", e.RefineStatus)
 	}
 	if e.RefineError != nil {
 		t.Fatalf("expected RefineError=nil, got %v", e.RefineError)
@@ -41,7 +41,7 @@ func TestApplyRefineStatus_NilReaderNoPanic(t *testing.T) {
 }
 
 func TestApplyRefineStatus_NilTaskNoPanic(t *testing.T) {
-	h := &Handler{refineReader: stubRefineReader{status: "idle"}}
+	h := &Handler{refineReader: stubRefineReader{status: "none"}}
 	h.applyRefineStatus(nil, "t")
 	// must not panic
 }
@@ -51,7 +51,7 @@ func TestApplyRefineStatus_NilTaskNoPanic(t *testing.T) {
 // assumed zero pending perms, flipping the primary action away from
 // approve_all_pending and defeating the stall rescue for blocked tasks.
 func TestApplyRefineStatus_PreservesPendingPermsPrimary(t *testing.T) {
-	h := &Handler{refineReader: stubRefineReader{status: "idle"}}
+	h := &Handler{refineReader: stubRefineReader{status: "none"}}
 	awaiting := "awaiting_user"
 	e := &EnrichedTask{
 		CurrentStage:         "implementation",

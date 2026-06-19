@@ -16,13 +16,13 @@ var ErrAlreadyRunning = errors.New("refine: a run is already in progress for thi
 
 const runTimeout = 5 * time.Minute
 
-// Run status values surfaced to the UI via the enriched task.
+// Run status values surfaced to the UI via the enriched task. The lifecycle is
+// none → refining → draft_ready (→ task advances on approve_spec), or → failed.
 const (
-	StatusIdle       = "idle"
-	StatusRunning    = "running"
-	StatusDone       = "done"
+	StatusNone       = "none"
+	StatusRefining   = "refining"
 	StatusFailed     = "failed"
-	StatusDraftReady = "draft_ready" // concept injected directly, ready for approve_spec
+	StatusDraftReady = "draft_ready" // refinement complete or concept injected — ready for approve_spec
 )
 
 // SpawnFunc spawns a refinement turn and returns a line stream. Matches
@@ -64,7 +64,7 @@ func (r *Runner) State(taskID string) (status, errMsg string) {
 	defer r.mu.Unlock()
 	s, ok := r.runs[taskID]
 	if !ok {
-		return StatusIdle, ""
+		return StatusNone, ""
 	}
 	return s.status, s.errMsg
 }
@@ -74,7 +74,7 @@ func (r *Runner) IsRunning(taskID string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	s, ok := r.runs[taskID]
-	return ok && s.status == StatusRunning
+	return ok && s.status == StatusRefining
 }
 
 // Start spawns a refinement run in a detached background goroutine and returns
@@ -83,11 +83,11 @@ func (r *Runner) IsRunning(taskID string) bool {
 // even if the caller stops reading the tee channel (e.g. client disconnect).
 func (r *Runner) Start(taskID string, cfg SpawnConfig, sp *ent.Spawner) (<-chan string, error) {
 	r.mu.Lock()
-	if s, ok := r.runs[taskID]; ok && s.status == StatusRunning {
+	if s, ok := r.runs[taskID]; ok && s.status == StatusRefining {
 		r.mu.Unlock()
 		return nil, ErrAlreadyRunning
 	}
-	r.runs[taskID] = &runState{status: StatusRunning}
+	r.runs[taskID] = &runState{status: StatusRefining}
 	r.mu.Unlock()
 	if r.onRunChange != nil {
 		r.onRunChange(taskID)
@@ -137,7 +137,7 @@ func (r *Runner) Start(taskID string, cfg SpawnConfig, sp *ent.Spawner) (<-chan 
 				in.Phase = &last
 			}
 			_, _ = r.turns.Create(context.Background(), in)
-			r.setState(taskID, StatusDone, "")
+			r.setState(taskID, StatusDraftReady, "")
 		}
 	}()
 
