@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { PHASE_LABELS, PHASE_ORDER } from '../composables/useRefinementChat'
 
 const props = defineProps<{
-  status: 'idle' | 'running' | 'done' | 'failed' | null
+  status: 'idle' | 'running' | 'done' | 'failed' | 'draft_ready' | null
   error: string | null
   lastOutput: string
   completedPhases?: string[]
