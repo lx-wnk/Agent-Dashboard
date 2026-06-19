@@ -16,6 +16,8 @@ macOS and Linux. `server/internal/platform/` provides `IS_LINUX` constant. CPU m
 
 Browser subscribes to `/api/agents/stream` (SSE) → Go backend scans processes (`ps`/`lsof`) → matches PIDs to `~/.claude/projects/{encoded_path}/{sessionId}.jsonl` → tail-reads JSONL + reads session-meta JSON → merges, calculates cost/status → broadcasts `Agent[]` to SSE clients.
 
+Non-Claude agents (Codex, Gemini) resolve their JSONL under each provider's own config dir instead of the Claude session path, dispatched per provider in the parser; cost is reported as unknown until a real foreign session schema lands.
+
 ## Excluded Directories
 
 - `node_modules/`
