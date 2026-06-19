@@ -12,8 +12,8 @@ type TaskState struct {
 	// RunStatus is the status of the latest StageRun that belongs to the current
 	// stage, or "" when no run exists yet.
 	RunStatus string
-	// RefineStatus is the status returned by the refine runner ("idle", "running",
-	// "done", "failed"), or "" when the refine feature is not configured.
+	// RefineStatus is the status returned by the refine runner ("none", "refining",
+	// "draft_ready", "failed"), or "" when the refine feature is not configured.
 	RefineStatus string
 	// PendingPerms is the count of unresolved permission requests on the latest run.
 	PendingPerms int

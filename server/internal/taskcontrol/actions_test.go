@@ -47,7 +47,7 @@ func TestComputeActions(t *testing.T) {
 	}{
 		{
 			name:  "concept stage, refining in progress",
-			state: taskcontrol.FromFields("concept", "running", "running", 0, false),
+			state: taskcontrol.FromFields("concept", "", "refining", 0, false),
 			// Concept is running refine — primary is advance (spec flowing)
 			wantPrimary:  "advance",
 			wantEnabled:  []string{"advance", "cancel"},
@@ -55,7 +55,7 @@ func TestComputeActions(t *testing.T) {
 		},
 		{
 			name:  "concept stage, draft ready, no run",
-			state: taskcontrol.FromFields("concept", "", "done", 0, false),
+			state: taskcontrol.FromFields("concept", "", "draft_ready", 0, false),
 			// Spec complete, awaiting human approval to move forward
 			wantPrimary:  "approve_spec",
 			wantEnabled:  []string{"approve_spec", "refine", "cancel"},
@@ -172,8 +172,8 @@ func TestComputeActions(t *testing.T) {
 // at most one enabled action carries Primary:true.
 func TestComputeActions_ExactlyOnePrimaryAmongEnabled(t *testing.T) {
 	states := []taskcontrol.TaskState{
-		taskcontrol.FromFields("concept", "running", "running", 0, false),
-		taskcontrol.FromFields("concept", "", "done", 0, false),
+		taskcontrol.FromFields("concept", "", "refining", 0, false),
+		taskcontrol.FromFields("concept", "", "draft_ready", 0, false),
 		taskcontrol.FromFields("implementation", "running", "", 0, false),
 		taskcontrol.FromFields("implementation", "failed", "", 0, false),
 		taskcontrol.FromFields("implementation", "awaiting_user", "", 3, true),

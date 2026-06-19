@@ -80,7 +80,8 @@ func ComputeActions(s TaskState) []Action {
 // "approve_spec" is the key gate to moving the task forward.
 func conceptActions(s TaskState) []Action {
 	// Refine runner in flight — wait for it; advance is the tentative next step.
-	if s.RunStatus == "running" || s.RefineStatus == "running" {
+	// RefineStatus values mirror refine.Status* ("refining"/"draft_ready"/...).
+	if s.RunStatus == "running" || s.RefineStatus == "refining" {
 		return []Action{
 			enabled(ActionAdvance, true),
 			enabled(ActionCancel, false),
@@ -104,7 +105,7 @@ func conceptActions(s TaskState) []Action {
 
 	// Spec draft is ready (refine done or task freshly created with no run).
 	// This is the normal idle state after concept authoring.
-	if s.RefineStatus == "done" || s.RunStatus == "" || s.RunStatus == "done" {
+	if s.RefineStatus == "draft_ready" || s.RunStatus == "" || s.RunStatus == "done" {
 		return []Action{
 			enabled(ActionApproveSpec, true),
 			enabled(ActionRefine, false),
