@@ -174,6 +174,9 @@ func manageScheduleCreate(ctx context.Context, d ScheduleDeps, args map[string]a
 		v := int(f)
 		in.MaxIterations = v
 	}
+	if owner := scheduleOwnerID(ctx); owner != "" {
+		in.UserID = &owner
+	}
 	s, err := d.Repo.Create(ctx, in)
 	if err != nil {
 		return nil, mcp.Fail("manage_schedule create: " + err.Error())
@@ -270,13 +273,13 @@ func manageScheduleSimple(ctx context.Context, d ScheduleDeps, args map[string]a
 func registerListSchedules(registry mcp.ToolRegistry, d ScheduleDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "list_schedules",
-		Description: "List all recurring task schedules.",
+		Description: "List recurring task schedules owned by the calling API key.",
 		InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{},
 		},
 		Handler: func(ctx context.Context, _ map[string]any) (*mcp.ToolResult, error) {
-			rows, err := d.Repo.ListForUser(ctx, "", true)
+			rows, err := d.Repo.ListForUser(ctx, scheduleOwnerID(ctx), false)
 			if err != nil {
 				return nil, mcp.Fail("list_schedules: " + err.Error())
 			}
@@ -286,6 +289,16 @@ func registerListSchedules(registry mcp.ToolRegistry, d ScheduleDeps) {
 			return mcp.OK(rows)
 		},
 	})
+}
+
+// scheduleOwnerID returns the API-key identity that owns MCP-created schedules.
+// REST scopes schedules by JWT user; MCP has only the bearer key, so schedules
+// created over MCP are owned by — and listed for — the calling key.
+func scheduleOwnerID(ctx context.Context) string {
+	if info := mcp.AuthFromContext(ctx); info != nil {
+		return info.KeyID
+	}
+	return ""
 }
 
 func scheduleBroadcast(d ScheduleDeps, id string) {

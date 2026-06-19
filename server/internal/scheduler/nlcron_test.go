@@ -17,7 +17,9 @@ func TestTranslate_RuleBased(t *testing.T) {
 		"every hour":           "0 * * * *",
 		"hourly":               "0 * * * *",
 		"every 15 minutes":     "*/15 * * * *",
+		"every 60 minutes":     "0 * * * *", // boundary: == hourly
 		"every 2 hours":        "0 */2 * * *",
+		"every 24 hours":       "0 0 * * *", // boundary: == daily
 		"at midnight":          "0 0 * * *",
 		"at noon":              "0 12 * * *",
 		"weekdays":             "0 0 * * 1-5",

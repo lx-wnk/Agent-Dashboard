@@ -85,6 +85,12 @@ func AuthFromContext(ctx context.Context) *MCPAuthInfo {
 	return v
 }
 
+// ContextWithAuth attaches MCPAuthInfo to ctx. Used by the auth middleware and
+// by tests that exercise auth-scoped tool handlers.
+func ContextWithAuth(ctx context.Context, info *MCPAuthInfo) context.Context {
+	return context.WithValue(ctx, mcpAuthKey{}, info)
+}
+
 func writeAuthError(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
@@ -136,7 +142,7 @@ func McpAuthMiddleware(keyRepo repo.ApiKeyRepo) func(http.Handler) http.Handler 
 				KeyID:  key.ID,
 				Scopes: ResolveScopes(key.Scopes),
 			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpAuthKey{}, info)))
+			next.ServeHTTP(w, r.WithContext(ContextWithAuth(r.Context(), info)))
 		})
 	}
 }

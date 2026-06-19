@@ -161,13 +161,23 @@ func ruleBasedCron(phrase string) (string, bool) {
 
 	// "every N minutes" / "every N hours".
 	if m := everyNMinutesRe.FindStringSubmatch(p); m != nil {
-		if step, err := strconv.Atoi(m[1]); err == nil && step > 0 && step < 60 {
-			return fmt.Sprintf("*/%d * * * *", step), true
+		if step, err := strconv.Atoi(m[1]); err == nil && step > 0 {
+			switch {
+			case step < 60:
+				return fmt.Sprintf("*/%d * * * *", step), true
+			case step == 60:
+				return "0 * * * *", true // every 60 minutes == hourly
+			}
 		}
 	}
 	if m := everyNHoursRe.FindStringSubmatch(p); m != nil {
-		if step, err := strconv.Atoi(m[1]); err == nil && step > 0 && step < 24 {
-			return fmt.Sprintf("0 */%d * * *", step), true
+		if step, err := strconv.Atoi(m[1]); err == nil && step > 0 {
+			switch {
+			case step < 24:
+				return fmt.Sprintf("0 */%d * * *", step), true
+			case step == 24:
+				return "0 0 * * *", true // every 24 hours == daily
+			}
 		}
 	}
 

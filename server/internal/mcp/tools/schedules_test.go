@@ -88,6 +88,28 @@ func TestManageSchedule_EnableDisableDelete(t *testing.T) {
 	require.Error(t, err)
 }
 
+// MCP-created schedules are owned by the calling API key, and list_schedules
+// is scoped to that key — a different key must not see them.
+func TestManageSchedule_ScopedToCallingKey(t *testing.T) {
+	registry, _ := newScheduleRegistry(t)
+	keyA := mcp.ContextWithAuth(context.Background(), &mcp.MCPAuthInfo{KeyID: "key-a"})
+	keyB := mcp.ContextWithAuth(context.Background(), &mcp.MCPAuthInfo{KeyID: "key-b"})
+
+	_, err := registry["manage_schedule"].Handler(keyA, map[string]any{
+		"action": "create", "name": "owned", "nlText": "every day at 3am",
+		"slugPrefix": "owned", "title": "Owned", "cwd": "/tmp",
+	})
+	require.NoError(t, err)
+
+	resA, err := registry["list_schedules"].Handler(keyA, map[string]any{})
+	require.NoError(t, err)
+	require.Contains(t, resA.Content[0].Text, "owned")
+
+	resB, err := registry["list_schedules"].Handler(keyB, map[string]any{})
+	require.NoError(t, err)
+	require.Equal(t, "[]", resB.Content[0].Text)
+}
+
 // Regression: a timezone-only update (no nlText/cronExpr) must persist the new
 // timezone. Previously the field was read only inside the cron-change branch,
 // so updating the zone alone was a silent no-op.
