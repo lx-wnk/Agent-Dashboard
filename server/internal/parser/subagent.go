@@ -106,6 +106,9 @@ func ParseSubagentFile(path string) (SubagentParse, error) {
 			switch block.Type {
 			case "text":
 				result.LatestOutput = block.Text
+				if len(result.LatestOutput) > 1000 {
+					result.LatestOutput = result.LatestOutput[:1000]
+				}
 			case "tool_use":
 				result.CurrentAction = block.Name
 			}
