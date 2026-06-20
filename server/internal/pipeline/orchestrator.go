@@ -166,8 +166,8 @@ func (o *PipelineOrchestrator) resolveHandler(stage string) StageHandler {
 
 func (o *PipelineOrchestrator) getCachedConfigNumber(ctx context.Context, key string, fallback int) int {
 	if v, ok := o.configCache.Load(key); ok {
-		c := v.(cachedConfig)
-		if time.Now().Before(c.expiresAt) {
+		c, ok := v.(cachedConfig)
+		if ok && time.Now().Before(c.expiresAt) {
 			return c.value
 		}
 	}
