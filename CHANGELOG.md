@@ -79,6 +79,12 @@ Preparing the first public release.
 
 ### Fixed
 
+- Startup: databases created before the per-stage pipeline config landed stored
+  `pipeline_configs` as a bare (key, value) table; the new `(project_id, key)` index
+  forced a table rebuild that failed with `NOT NULL constraint failed: ...id`. The DB
+  layer now rebuilds the legacy table into the scoped `(id, key, project_id, value)`
+  shape before auto-migrate (id backfilled from key, existing settings preserved),
+  so existing installs upgrade cleanly. Idempotent (PR follows #206).
 - Pipeline: a task reaching a terminal stage (`done`/`cancelled`) left its git
   worktree on disk, keeping its `source_branch` checked out. Because the
   duplicate-branch guard only inspected non-terminal tasks, a new task assigned the

@@ -76,6 +76,16 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: dedup agent_cost_trends: %w", err)
 	}
+	// Rebuild the legacy (key, value) pipeline_configs table into the scoped
+	// (id, key, project_id, value) shape before ent auto-migrate. The id field was
+	// historically a phantom (declared in the schema but never materialised because
+	// key was the PK); the per-stage-config index change forces a table rebuild whose
+	// row-copy cannot populate the NOT NULL id, so we backfill id=key here first.
+	// Idempotent: skipped once an id column exists.
+	if err := migrateLegacyPipelineConfig(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: migrate legacy pipeline_configs: %w", err)
+	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -360,4 +370,50 @@ func migrateRenameGithubLogin(db *sql.DB) error {
 	}
 	_, err = db.Exec(`ALTER TABLE users RENAME COLUMN github_login TO provider_login`)
 	return err
+}
+
+// migrateLegacyPipelineConfig rebuilds the legacy (key, value) pipeline_configs
+// table into the scoped (id, key, project_id, value) shape ent now expects.
+// Older databases created pipeline_configs with key as the primary key and no id
+// column; the per-stage-config index change forces a SQLite table rebuild whose
+// row-copy fails the NOT NULL id constraint. We pre-empt that by rebuilding the
+// table here with id backfilled from key (key was unique, so ids stay unique).
+// Idempotent: a no-op once an id column is present, or when the table is absent.
+func migrateLegacyPipelineConfig(db *sql.DB) error {
+	var hasTable int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='pipeline_configs'`,
+	).Scan(&hasTable); err != nil {
+		return fmt.Errorf("check pipeline_configs table: %w", err)
+	}
+	if hasTable == 0 {
+		return nil // fresh database; ent will create the table
+	}
+	var hasID int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('pipeline_configs') WHERE name='id'`,
+	).Scan(&hasID); err != nil {
+		return fmt.Errorf("inspect pipeline_configs columns: %w", err)
+	}
+	if hasID > 0 {
+		return nil // already migrated
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmts := []string{
+		`ALTER TABLE pipeline_configs RENAME TO pipeline_configs_legacy`,
+		"CREATE TABLE `pipeline_configs` (`id` text NOT NULL, `key` text NOT NULL, `project_id` text NOT NULL DEFAULT (''), `value` text NOT NULL, PRIMARY KEY (`id`))",
+		`INSERT INTO pipeline_configs (id, key, project_id, value) SELECT key, key, '', value FROM pipeline_configs_legacy`,
+		`DROP TABLE pipeline_configs_legacy`,
+		"CREATE UNIQUE INDEX `pipelineconfig_project_id_key` ON `pipeline_configs` (`project_id`, `key`)",
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("rebuild pipeline_configs (%s): %w", s, err)
+		}
+	}
+	return tx.Commit()
 }
