@@ -62,8 +62,15 @@ func removeTaskWorktree(cwd, worktreePath string) error {
 	if worktreePath == "" {
 		return nil
 	}
-	out, err := gitRunner.Combined(context.Background(), cwd, "worktree", "remove", "--force", worktreePath)
+	ctx := context.Background()
+	out, err := gitRunner.Combined(ctx, cwd, "worktree", "remove", "--force", worktreePath)
 	if err != nil {
+		// Directory already gone — prune stale metadata and treat as success.
+		lower := strings.ToLower(out)
+		if strings.Contains(lower, "is not a working tree") || strings.Contains(lower, "no such file") {
+			_, _ = gitRunner.Combined(ctx, cwd, "worktree", "prune")
+			return nil
+		}
 		return fmt.Errorf("removeTaskWorktree: %s: %w", strings.TrimSpace(out), err)
 	}
 	return nil
