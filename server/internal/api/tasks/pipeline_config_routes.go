@@ -7,8 +7,10 @@ import (
 	"runtime"
 	"strconv"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
 // validStageModelKeys lists the three agent-driven stages that support a per-stage model override.
@@ -97,11 +99,22 @@ func (h *Handler) putPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 			return fmt.Errorf("pipeline_config.put: %w", err)
 		}
 	}
-	// Write only the valid stage keys that have a non-empty value.
+	// ok && model == "" → delete row (revert to coded default)
+	// ok && model != "" → validate then set
+	// !ok → leave untouched
 	for _, stage := range validStageModelKeys {
 		model, ok := body.StageModels[stage]
-		if !ok || model == "" {
+		if !ok {
 			continue
+		}
+		if model == "" {
+			if err := h.cfgRepo.Delete(ctx, "stageModel."+stage); err != nil {
+				return fmt.Errorf("pipeline_config.put: stageModel.%s: %w", stage, err)
+			}
+			continue
+		}
+		if !pipeline.IsValidModel(model) {
+			return apierr.NewAppError(http.StatusBadRequest, fmt.Sprintf("stageModel.%s: unknown model %q", stage, model))
 		}
 		if err := h.cfgRepo.Set(ctx, "stageModel."+stage, model); err != nil {
 			return fmt.Errorf("pipeline_config.put: stageModel.%s: %w", stage, err)

@@ -14,6 +14,8 @@ type PipelineConfigRepo interface {
 	GetNumber(ctx context.Context, key string, fallback float64) float64
 	GetString(ctx context.Context, key, fallback string) string
 	Set(ctx context.Context, key, value string) error
+	// Delete removes the config row for key. Deleting a missing key is a no-op.
+	Delete(ctx context.Context, key string) error
 	GetAll(ctx context.Context) (map[string]string, error)
 }
 
@@ -67,6 +69,17 @@ func (r *entPipelineConfigRepo) Set(ctx context.Context, key, value string) erro
 		return nil
 	}
 	return fmt.Errorf("pipelineconfig.Set: %w", err)
+}
+
+func (r *entPipelineConfigRepo) Delete(ctx context.Context, key string) error {
+	err := r.client.PipelineConfig.DeleteOneID(key).Exec(ctx)
+	if ent.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("pipelineconfig.Delete: %w", err)
+	}
+	return nil
 }
 
 func (r *entPipelineConfigRepo) GetAll(ctx context.Context) (map[string]string, error) {

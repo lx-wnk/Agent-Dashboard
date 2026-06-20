@@ -162,13 +162,48 @@ func TestPutPipelineConfig_StageModelOverrideRoundTrip(t *testing.T) {
 	}
 }
 
-func TestPutPipelineConfig_EmptyModelIgnored(t *testing.T) {
+func TestPutPipelineConfig_EmptyModelClearsRow(t *testing.T) {
+	// Use a real orchestrator so EffectiveStageModel resolves from the DB.
+	r := newTestHandlerWithRealOrchestrator(t)
+
+	// First, override self_review with a non-default model.
+	set := map[string]any{"stageModels": map[string]string{"self_review": "claude-haiku-4-5"}}
+	b, _ := json.Marshal(set)
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT override: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Now clear it by sending empty string — should revert to coded default (claude-sonnet-4-6).
+	clear := map[string]any{"stageModels": map[string]string{"self_review": ""}}
+	b2, _ := json.Marshal(clear)
+	req2 := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b2)))
+	req2.Header.Set("Content-Type", "application/json")
+	rr2 := httptest.NewRecorder()
+	r.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("PUT clear: expected 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+	var resp struct {
+		StageModels map[string]string `json:"stageModels"`
+	}
+	if err := json.Unmarshal(rr2.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.StageModels["self_review"] != "claude-sonnet-4-6" {
+		t.Errorf("after clear: self_review=%q, want coded default claude-sonnet-4-6", resp.StageModels["self_review"])
+	}
+}
+
+func TestPutPipelineConfig_UnknownModelRejected(t *testing.T) {
 	_, r := newTestHandler(t)
 
-	// Empty string for self_review — should be ignored, not written.
 	body := map[string]any{
 		"stageModels": map[string]string{
-			"self_review": "",
+			"implementation": "claude-unknown-99",
 		},
 	}
 	b, _ := json.Marshal(body)
@@ -177,18 +212,8 @@ func TestPutPipelineConfig_EmptyModelIgnored(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var resp struct {
-		StageModels map[string]string `json:"stageModels"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	// noopOrchestrator still returns the coded default because the empty value was not persisted.
-	if resp.StageModels["self_review"] != "claude-sonnet-4-6" {
-		t.Errorf("empty model should be ignored; got %q", resp.StageModels["self_review"])
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for unknown model, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
