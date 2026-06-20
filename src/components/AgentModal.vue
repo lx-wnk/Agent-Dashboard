@@ -7,6 +7,7 @@ import { useRovingTabList } from '../composables/useRovingTabList'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
+import HookEventList from './HookEventList.vue'
 import MachineBadge from './MachineBadge.vue'
 import PluginSlot from './PluginSlot.vue'
 import PromptInput from './PromptInput.vue'
@@ -93,7 +94,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
         :local-messages="localMessages"
         class="flex-1 min-h-0 overflow-y-auto p-4"
       />
-      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0" class="border-t border-line flex-shrink-0">
+      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0 || (agent.recentHookEvents?.length ?? 0) > 0" class="border-t border-line flex-shrink-0">
         <details>
           <summary class="px-4 py-2 text-xs text-fg-soft cursor-pointer select-none hover:text-fg dark:hover:text-fg">
             Agent Details (Tasks, Tools, Subagents)
@@ -124,6 +125,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
           </div>
           <div v-if="activeDetailsTab === 'details'" v-bind="panelAttrs('details')" class="px-4 pb-3 pt-2 flex flex-col gap-3 max-h-[200px] overflow-y-auto">
             <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
+            <HookEventList v-if="(agent.recentHookEvents?.length ?? 0) > 0" :events="agent.recentHookEvents ?? []" />
             <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
             <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
             <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">

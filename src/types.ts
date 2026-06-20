@@ -4,6 +4,7 @@ import type {
   SubAgent as _SubAgentBase,
   TaskInfo as _TaskInfoBase,
   AgentStatus,
+  HookEvent,
   PendingPermission,
   TokenUsage,
 } from './sdk.generated'
@@ -16,7 +17,7 @@ import {
   AgentStatusWaiting,
 } from './sdk.generated'
 
-export type { AgentStatus, PendingPermission, TokenUsage }
+export type { AgentStatus, HookEvent, PendingPermission, TokenUsage }
 
 export interface SessionMeta extends Omit<_SessionMetaBase, 'firstPrompt'> {
   firstPrompt: string | null

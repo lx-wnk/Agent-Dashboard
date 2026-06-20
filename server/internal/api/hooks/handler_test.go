@@ -8,13 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
-// newTestHandler is a convenience constructor for tests.
-// onEvent is always a no-op — tests verify HTTP behaviour, not side effects.
+// newTestHandler is a convenience constructor for tests. It wires a real
+// hookstore so the record path is exercised; onEvent is a no-op since tests
+// verify HTTP behaviour and recorded state, not the rescan side effect.
 func newTestHandler(secret string) *Handler {
-	return New(secret, func() {})
+	return New(secret, hookstore.New(50, 0), func() {})
 }
 
 // -------------------------------------------------------------------
@@ -55,7 +57,75 @@ func TestNew_PanicsOnEmptySecret(t *testing.T) {
 			t.Error("New(\"\", ...) did not panic; expected panic on empty secret")
 		}
 	}()
-	New("", func() {})
+	New("", hookstore.New(50, 0), func() {})
+}
+
+// TestEvent_RecordsHookEvent verifies the payload is decoded (snake_case keys)
+// and a truncated, secret-safe HookEvent is recorded against the session.
+func TestEvent_RecordsHookEvent(t *testing.T) {
+	const secret = "s3cr3t"
+	h := newTestHandler(secret)
+	body := `{"hookType":"PostToolUse","session_id":"sess-rec","tool_name":"Read","tool_response":"file contents here"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/hooks/event", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+secret)
+	w := httptest.NewRecorder()
+
+	h.Event(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("Event: got status %d, want 204", w.Code)
+	}
+	got := h.store.Recent("sess-rec")
+	if len(got) != 1 {
+		t.Fatalf("recorded events: got %d, want 1", len(got))
+	}
+	if got[0].Type != "PostToolUse" || got[0].Tool != "Read" {
+		t.Errorf("recorded event = %+v, want Type=PostToolUse Tool=Read", got[0])
+	}
+	if got[0].Summary == "" || got[0].At == "" {
+		t.Errorf("recorded event missing summary/at: %+v", got[0])
+	}
+}
+
+// TestEvent_TruncatesSummary verifies an oversized payload field is capped.
+func TestEvent_TruncatesSummary(t *testing.T) {
+	const secret = "s3cr3t"
+	h := newTestHandler(secret)
+	big := make([]byte, 2000)
+	for i := range big {
+		big[i] = 'x'
+	}
+	payload := map[string]any{"session_id": "sess-big", "tool_name": "Bash", "tool_input": string(big)}
+	buf, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/hooks/event", bytes.NewReader(buf))
+	req.Header.Set("Authorization", "Bearer "+secret)
+	w := httptest.NewRecorder()
+
+	h.Event(w, req)
+
+	got := h.store.Recent("sess-big")
+	if len(got) != 1 {
+		t.Fatalf("recorded events: got %d, want 1", len(got))
+	}
+	if len(got[0].Summary) > maxSummaryBytes {
+		t.Errorf("summary length %d exceeds cap %d", len(got[0].Summary), maxSummaryBytes)
+	}
+}
+
+// TestEvent_MalformedBodyStill204 verifies an unparseable body does not break
+// the 204 contract — recording is best-effort.
+func TestEvent_MalformedBodyStill204(t *testing.T) {
+	const secret = "s3cr3t"
+	h := newTestHandler(secret)
+	req := httptest.NewRequest(http.MethodPost, "/api/hooks/event", bytes.NewBufferString("not json{{"))
+	req.Header.Set("Authorization", "Bearer "+secret)
+	w := httptest.NewRecorder()
+
+	h.Event(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("malformed body: got status %d, want 204", w.Code)
+	}
 }
 
 func TestEvent_WithMissingBearer_Returns401(t *testing.T) {

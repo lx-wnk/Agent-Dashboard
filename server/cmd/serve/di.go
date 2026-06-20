@@ -39,6 +39,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/eval"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
+	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
@@ -273,11 +274,20 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver, repo.NewPermissionRepo(entClient))
 	}
 
-	// Built here (not earlier) so it captures pipelineEnricher — admin agent
-	// search results carry the same pipeline-task annotation as /api/agents.
+	// Hook-event store + enricher: the opt-in receiver records per-event hook
+	// granularity here (write side in the hooks API), and this enricher reads it
+	// back onto each agent. Always constructed — hooks work without a database.
+	hookStore := hookstore.New(cfg.HookEventsPerSession, hookstore.DefaultTTL)
+
+	// Combine the read-only crossings into one enricher applied at every GetAgents
+	// call site. A nil pipelineEnricher (no DB) composes away.
+	agentEnricher := merger.ChainEnrichers(pipelineEnricher, agentbroadcast.NewHookEventEnricher(hookStore))
+
+	// Built here (not earlier) so it captures agentEnricher — admin agent search
+	// results carry the same pipeline-task and hook-event annotations as /api/agents.
 	var searchHandler *search.Handler
 	if bundle != nil {
-		searchHandler = search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), pipelineEnricher)
+		searchHandler = search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), agentEnricher)
 	}
 
 	var costHandler *apicost.Handler
@@ -321,7 +331,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		Ctx:                   ctx,
 		Config:                routerConfig,
 		AgentBroadcaster:      broadcaster,
-		Enricher:              pipelineEnricher,
+		Enricher:              agentEnricher,
+		HookStore:             hookStore,
 		OAuthProvider:         oauthProvider,
 		UserRepo:              userRepo,
 		ApiKeyRepo:            apiKeyRepo,
@@ -354,5 +365,5 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
-	return server, broadcaster, orch, sched, histImporter, baselineProvider, pipelineEnricher, evalService, cleanup, nil
+	return server, broadcaster, orch, sched, histImporter, baselineProvider, agentEnricher, evalService, cleanup, nil
 }

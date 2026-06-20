@@ -52,6 +52,7 @@ These are normally injected into spawned stage agents by the orchestrator — yo
 | `DASHBOARD_TASK_ID` | — | Task ID injected into stage agents |
 | `DASHBOARD_HOOKS_SECRET` | auto-generated & persisted | Shared bearer token for `/api/hooks/*`. Persisted to `~/.claude/dashboard-hooks-secret` if unset |
 | `DASHBOARD_HOOKS_DEBOUNCE_MS` | `100` | Debounce before SSE rescan after a hook event |
+| `DASHBOARD_HOOK_EVENTS_PER_SESSION` | `50` | Max recent lifecycle-hook events kept in memory per session for the agent-modal **Hook events** view. Must be positive |
 
 ## Scheduler (pipeline DB config keys)
 

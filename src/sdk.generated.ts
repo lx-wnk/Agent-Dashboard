@@ -241,6 +241,19 @@ export interface PendingToolUse {
   pattern: string
 }
 /**
+ * HookEvent is one lifecycle-hook event recorded for a session when the opt-in
+ * hook receiver is installed (POST /api/hooks/event). It adds per-event
+ * granularity on top of the process/JSONL scan. Tool and Summary are truncated,
+ * secret-safe projections of the raw hook payload — never the full tool_input or
+ * tool_response.
+ */
+export interface HookEvent {
+  type: string
+  tool: string
+  at: string
+  summary: string
+}
+/**
  * Agent is the unified view of a running Claude Code process.
  */
 export interface Agent {
@@ -298,4 +311,10 @@ export interface Agent {
    * cost cannot be estimated. CostEstimate will be 0 in this case.
    */
   costUnknown?: boolean
+  /**
+   * RecentHookEvents carries per-event hook granularity for sessions where the
+   * opt-in hook receiver holds events. Omitted entirely when no hook is
+   * installed, so clients without hooks receive byte-identical payloads.
+   */
+  recentHookEvents?: HookEvent[]
 }
