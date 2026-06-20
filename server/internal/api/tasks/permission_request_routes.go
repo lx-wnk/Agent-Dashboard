@@ -21,14 +21,14 @@ import (
 // permissionRequestResponse is the API response shape for a single pending permission request.
 // It extends the DB row with computed fields that are not stored in the database.
 type permissionRequestResponse struct {
-	ID             string  `json:"id"`
-	StageRunID     string  `json:"stageRunId"`
-	Tool           string  `json:"tool"`
-	Pattern        *string `json:"pattern"`
-	Reason         *string `json:"reason"`
-	Outcome        *string `json:"outcome"`
-	RequestedAt    string  `json:"requestedAt"`
-	ResolvedAt     *string `json:"resolvedAt"`
+	ID          string  `json:"id"`
+	StageRunID  string  `json:"stageRunId"`
+	Tool        string  `json:"tool"`
+	Pattern     *string `json:"pattern"`
+	Reason      *string `json:"reason"`
+	Outcome     *string `json:"outcome"`
+	RequestedAt string  `json:"requestedAt"`
+	ResolvedAt  *string `json:"resolvedAt"`
 	// OutsideSafeList is true when the request is for a Bash command not in the
 	// safe allow-list, meaning a Grant is a conscious human override.
 	OutsideSafeList bool `json:"outsideSafeList"`

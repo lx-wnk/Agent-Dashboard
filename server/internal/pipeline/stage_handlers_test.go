@@ -69,12 +69,12 @@ func TestBuildStageUserPrompt(t *testing.T) {
 	const extraInstruction = "also do this extra thing"
 
 	tests := []struct {
-		name            string
-		resumeSessionID string
-		priorOutput     map[string]any
+		name             string
+		resumeSessionID  string
+		priorOutput      map[string]any
 		additionalPrompt string
-		wantContains    []string
-		wantAbsent      []string
+		wantContains     []string
+		wantAbsent       []string
 	}{
 		{
 			name:         "fresh run passes full spec through",

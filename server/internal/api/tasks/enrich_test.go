@@ -16,7 +16,7 @@ import (
 // enrichForTest is a thin wrapper so tests don't repeat the nil permRepo wiring.
 func enrichForTest(ctx context.Context, t *testing.T, task *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) *tasks.EnrichedTask {
 	t.Helper()
-	enriched, err := tasks.EnrichTask(ctx, task, srRepo, permRepo)
+	enriched, err := tasks.EnrichTask(ctx, task, srRepo, permRepo, nil)
 	if err != nil {
 		t.Fatalf("EnrichTask: %v", err)
 	}

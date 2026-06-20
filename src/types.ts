@@ -185,6 +185,15 @@ export interface PipelineTask {
   spawnerId?: string | null
   autonomy?: 'manual' | 'spec_gated' | 'full'
   availableActions?: AvailableAction[]
+  childCount?: number
+  activeChildCount?: number
+  activeChild?: {
+    tokensUsed: number
+    costCents: number
+    durationSeconds: number
+    currentStage: string
+    latestOutput: string
+  } | null
 }
 
 export interface AvailableAction {

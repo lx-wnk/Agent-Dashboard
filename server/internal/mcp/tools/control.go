@@ -29,7 +29,7 @@ type ControlDeps struct {
 	SRRepo       repo.StageRunRepo
 	PermRepo     repo.PermissionRepo
 	AuditRepo    repo.AuditEventRepo
-	Orchestrator ControlOrchestrator // may be nil in tests
+	Orchestrator ControlOrchestrator         // may be nil in tests
 	RefineReader tasksapi.RefineStatusReader // may be nil; lets advance_task see refine status
 	Broadcast    func(taskID string)
 }

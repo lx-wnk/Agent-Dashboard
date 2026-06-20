@@ -79,6 +79,8 @@ export function formatUptime(seconds: number): string {
   return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
 }
 
+export const formatDuration = formatUptime
+
 export function shortModel(model: string | null): string {
   if (!model)
     return '—'

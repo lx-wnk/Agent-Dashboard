@@ -34,11 +34,14 @@ const (
 
 // SubAgent represents a sub-agent spawned by a parent Claude session.
 type SubAgent struct {
-	ID            string         `json:"id"`
-	Type          string         `json:"type"`
-	Status        SubAgentStatus `json:"status"`
-	CurrentAction string         `json:"currentAction"`
-	SessionFile   string         `json:"sessionFile"`
+	ID              string         `json:"id"`
+	Type            string         `json:"type"`
+	Status          SubAgentStatus `json:"status"`
+	CurrentAction   string         `json:"currentAction"`
+	SessionFile     string         `json:"sessionFile"`
+	TokensUsed      int            `json:"tokensUsed"`
+	DurationSeconds int            `json:"durationSeconds"`
+	LatestOutput    string         `json:"latestOutput"`
 }
 
 // TaskInfoStatus is the state of a TodoWrite-tracked task.

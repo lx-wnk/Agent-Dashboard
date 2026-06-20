@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -283,7 +284,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData, baselineC
 		CurrentAction:             strPtr(session.CurrentAction),
 		LastTools:                 append(make([]string, 0), session.LastTools...),
 		Tasks:                     append(make([]sdk.TaskInfo, 0), session.Tasks...),
-		Subagents:                 []sdk.SubAgent{},
+		Subagents:                 buildSubagents(session),
 		TokenUsage:                session.TokenUsage,
 		CostEstimate:              c.Total,
 		CacheCreationCostEstimate: c.CacheCreate,
@@ -301,4 +302,55 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData, baselineC
 		LastBtw:                   session.LastBtw,
 		PendingToolUse:            session.PendingToolUse,
 	}
+}
+
+// buildSubagents reads <sessionDir>/subagents/*.jsonl and returns a populated
+// SubAgent slice. Returns an empty slice when the directory does not exist or
+// session.Path is unset.
+func buildSubagents(session *parser.SessionData) []sdk.SubAgent {
+	out := []sdk.SubAgent{}
+	if session.Path == "" {
+		return out
+	}
+	subDir := filepath.Join(filepath.Dir(session.Path), session.SessionID, "subagents")
+	entries, err := os.ReadDir(subDir)
+	if err != nil {
+		return out
+	}
+	// Collect live paths first so we can evict stale cache entries in one pass.
+	livePaths := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
+			livePaths[filepath.Join(subDir, e.Name())] = true
+		}
+	}
+	parser.PruneSubagentCache(livePaths)
+
+	now := time.Now()
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".jsonl") {
+			continue
+		}
+		p := filepath.Join(subDir, name)
+		parsed, err := parser.ParseSubagentFileCached(p)
+		if err != nil {
+			continue
+		}
+		status := sdk.SubAgentStatusCompleted
+		if !parsed.LastActivity.IsZero() && now.Sub(parsed.LastActivity) < activeThreshold {
+			status = sdk.SubAgentStatusActive
+		}
+		out = append(out, sdk.SubAgent{
+			ID:              strings.TrimSuffix(name, ".jsonl"),
+			Type:            "subagent",
+			Status:          status,
+			CurrentAction:   parsed.CurrentAction,
+			SessionFile:     p,
+			TokensUsed:      parsed.TokensUsed,
+			DurationSeconds: parsed.DurationSeconds,
+			LatestOutput:    parsed.LatestOutput,
+		})
+	}
+	return out
 }

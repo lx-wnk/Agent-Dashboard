@@ -239,4 +239,3 @@ func registerRefineTask(registry mcp.ToolRegistry, d RefineDeps) {
 		},
 	})
 }
-

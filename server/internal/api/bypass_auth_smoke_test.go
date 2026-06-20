@@ -43,8 +43,8 @@ func (noopOrchestrator) ProgressTask(_ context.Context, _ string, _ *pipeline.Pr
 func (noopOrchestrator) ResumeFromUser(_ context.Context, _ string, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
-func (noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)       {}
-func (noopOrchestrator) InvalidateConfigCache()                                    {}
+func (noopOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
+func (noopOrchestrator) InvalidateConfigCache()                                   {}
 func (noopOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}
 func (noopOrchestrator) RequeueForUser(_ context.Context, _ string, _ string) (*ent.StageRun, error) {
 	return nil, nil

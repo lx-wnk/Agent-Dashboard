@@ -1,4 +1,4 @@
-import type { Agent } from '../types'
+import type { Agent, SubAgent } from '../types'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -36,6 +36,17 @@ const baseAgent: Agent = {
   meta: null,
 }
 
+const activeSubagent: SubAgent = {
+  id: 'sa-1',
+  type: 'researcher',
+  status: 'active',
+  currentAction: 'Read',
+  sessionFile: '/tmp/sa-1.jsonl',
+  tokensUsed: 5000,
+  durationSeconds: 90,
+  latestOutput: 'Analyzing the codebase for relevant patterns',
+}
+
 const stubs = {
   MachineBadge: true,
   ProviderBadge: true,
@@ -69,5 +80,69 @@ describe('agentCard', () => {
     await wrapper.find('button[data-testid="agent-card-open"]').trigger('click')
     expect(wrapper.emitted('select')).toBeTruthy()
     expect(wrapper.emitted('select')![0]).toEqual([baseAgent])
+  })
+})
+
+describe('agentCard — active subagents block', () => {
+  it('hides the block when there are no active subagents', () => {
+    const agent = { ...baseAgent, subagents: [{ ...activeSubagent, status: 'completed' as const }] }
+    const wrapper = mount(AgentCard, {
+      props: { agent },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="active-subagents-block"]').exists()).toBe(false)
+  })
+
+  it('hides the block when subagents is empty', () => {
+    const wrapper = mount(AgentCard, {
+      props: { agent: baseAgent },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="active-subagents-block"]').exists()).toBe(false)
+  })
+
+  it('shows the block with type, token count, and output snippet for active subagents', () => {
+    const agent = { ...baseAgent, subagents: [activeSubagent] }
+    const wrapper = mount(AgentCard, {
+      props: { agent },
+      global: { stubs },
+    })
+    const block = wrapper.find('[data-testid="active-subagents-block"]')
+    expect(block.exists()).toBe(true)
+    expect(block.text()).toContain('researcher')
+    expect(block.text()).toContain('5k tok')
+    expect(wrapper.find('[data-testid="subagent-latest-output"]').text()).toContain('Analyzing the codebase')
+  })
+
+  it('shows the expand toggle when latestOutput is non-empty', () => {
+    const agent = { ...baseAgent, subagents: [activeSubagent] }
+    const wrapper = mount(AgentCard, {
+      props: { agent },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="subagent-expand-toggle"]').exists()).toBe(true)
+  })
+
+  it('does not show expand toggle when latestOutput is empty', () => {
+    const agent = { ...baseAgent, subagents: [{ ...activeSubagent, latestOutput: '' }] }
+    const wrapper = mount(AgentCard, {
+      props: { agent },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="subagent-expand-toggle"]').exists()).toBe(false)
+  })
+
+  it('expand toggle reveals full latestOutput on click', async () => {
+    const agent = { ...baseAgent, subagents: [activeSubagent] }
+    const wrapper = mount(AgentCard, {
+      props: { agent },
+      global: { stubs },
+    })
+    const output = wrapper.find('[data-testid="subagent-latest-output"]')
+    expect(output.classes()).toContain('truncate')
+
+    await wrapper.find('[data-testid="subagent-expand-toggle"]').trigger('click')
+    expect(output.classes()).not.toContain('truncate')
+    expect(output.classes()).toContain('whitespace-pre-wrap')
   })
 })

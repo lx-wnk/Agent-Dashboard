@@ -44,6 +44,9 @@ export interface SubAgent {
   status: SubAgentStatus
   currentAction: string
   sessionFile: string
+  tokensUsed: number
+  durationSeconds: number
+  latestOutput: string
 }
 /**
  * TaskInfoStatus is the state of a TodoWrite-tracked task.
