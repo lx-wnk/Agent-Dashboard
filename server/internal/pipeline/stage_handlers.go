@@ -38,7 +38,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	// loaded (e.g. it was deleted out from under us). Propagate the error.
 	var resolved *ent.Spawner
 	if ctx.ResolveSpawner != nil {
-		sp, err := ctx.ResolveSpawner(ctx.Ctx, ctx.Task.ID)
+		sp, err := ctx.ResolveSpawner(ctx.Ctx, ctx.Task.ID, h.stage)
 		if err != nil {
 			return nil, fmt.Errorf("agentStageHandler.Execute(%s): resolve spawner: %w", h.stage, err)
 		}
@@ -64,7 +64,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		// > per-stage config/default. Per-stage default is only the floor.
 		model := ""
 		if ctx.StageModelFn != nil {
-			model = ctx.StageModelFn(ctx.Ctx, h.stage)
+			model = ctx.StageModelFn(ctx.Ctx, h.stage, ctx.Task.ProjectID)
 		}
 		if ctx.Task.Metadata != nil {
 			if m, ok := ctx.Task.Metadata["model"].(string); ok && m != "" {
@@ -138,7 +138,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	if !spawnerHasOverride {
 		// Start with per-stage default (coded + DB row), then let task override it.
 		if ctx.StageModelFn != nil {
-			nativeModel = ctx.StageModelFn(ctx.Ctx, h.stage)
+			nativeModel = ctx.StageModelFn(ctx.Ctx, h.stage, ctx.Task.ProjectID)
 		}
 		if ctx.Task.Metadata != nil {
 			if m, ok := ctx.Task.Metadata["model"].(string); ok && m != "" {

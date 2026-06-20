@@ -1,17 +1,21 @@
 import { ref } from 'vue'
 
+type SpawnerStage = 'implementation' | 'self_review' | 'finalization'
+
 export interface PipelineConfig {
   maxParallelOrchestrators: number
   stageTimeoutSeconds: number
   maxAutoRetries: number
   retryBackoffSeconds: number
-  stageModels: Record<'implementation' | 'self_review' | 'finalization', string>
+  stageModels: Record<SpawnerStage, string>
+  stageSpawners: Record<SpawnerStage, string>
 }
 
 interface PartialPipelineConfig {
   maxParallelOrchestrators?: number
   stageTimeoutSeconds?: number
   stageModels?: Partial<PipelineConfig['stageModels']>
+  stageSpawners?: Partial<PipelineConfig['stageSpawners']>
 }
 
 const config = ref<PipelineConfig | null>(null)

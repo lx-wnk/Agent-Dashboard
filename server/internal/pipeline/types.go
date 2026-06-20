@@ -77,9 +77,10 @@ type SystemPromptQuerier interface {
 // SpawnerResolverFunc resolves the effective DB spawner row for a task right
 // before `exec`. The pipeline only needs the resolved spawner; the actual
 // resolver lives in internal/services and is wired by the composition root.
+// stage is the current pipeline stage (e.g. "implementation"); "" for non-agent stages.
 // Errors are propagated and abort the spawn — callers must NEVER silently
 // fall back when an explicit reference fails to load.
-type SpawnerResolverFunc func(ctx context.Context, taskID string) (*ent.Spawner, error)
+type SpawnerResolverFunc func(ctx context.Context, taskID, stage string) (*ent.Spawner, error)
 
 // StageContext is passed to stage handlers.
 type StageContext struct {
@@ -112,11 +113,11 @@ type StageContext struct {
 	// May be nil if the feature is not configured.
 	SystemPromptRepo SystemPromptQuerier
 
-	// StageModelFn returns the effective per-stage model for the current stage,
-	// applying: coded Balanced default → DB config row. Task/spawner explicit
-	// overrides are applied on top by stage_handlers.go after calling this.
-	// Returns "" when no stage-level default applies (non-agent stages).
-	StageModelFn func(ctx context.Context, stage string) string
+	// StageModelFn returns the effective per-stage model for the current stage and
+	// project, applying: coded Balanced default → global DB row → project DB row.
+	// Task/spawner explicit overrides are applied on top by stage_handlers.go.
+	// projectID may be nil for tasks without a project. Returns "" for non-agent stages.
+	StageModelFn func(ctx context.Context, stage string, projectID *string) string
 
 	// DispatchHTTPSpawn runs the given HTTP spawn function in the goroutine pool
 	// and returns immediately. The caller should return AsyncRunningTransition{PID:0}

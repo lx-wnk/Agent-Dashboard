@@ -2,10 +2,13 @@
 import type { PipelineConfig } from '../composables/usePipelineConfig'
 import { computed, onMounted, ref, watch } from 'vue'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
+import { useSpawners } from '../composables/useSpawners'
 import { AVAILABLE_MODELS } from '../utils/models'
+import { STAGE_LABELS } from '../utils/stageLabels'
 import AppButton from './ui/AppButton.vue'
 
 const { config, loading, error, fetchConfig, saveConfig } = usePipelineConfig()
+const { spawners } = useSpawners()
 
 onMounted(() => {
   void fetchConfig()
@@ -33,6 +36,7 @@ async function handleSave() {
     maxParallelOrchestrators: draft.value.maxParallelOrchestrators,
     stageTimeoutSeconds: draft.value.stageTimeoutSeconds,
     stageModels: { ...draft.value.stageModels },
+    stageSpawners: { ...draft.value.stageSpawners },
   })
   if (!error.value) {
     saved.value = true
@@ -45,11 +49,6 @@ async function handleSave() {
   }
 }
 
-const STAGE_LABELS: Record<'implementation' | 'self_review' | 'finalization', string> = {
-  implementation: 'Implementation',
-  self_review: 'Self Review',
-  finalization: 'Finalization',
-}
 const STAGES = ['implementation', 'self_review', 'finalization'] as const
 </script>
 
@@ -117,34 +116,56 @@ const STAGES = ['implementation', 'self_review', 'finalization'] as const
         </div>
       </div>
 
-      <!-- Per-stage model pickers -->
+      <!-- Per-stage model + spawner pickers -->
       <div class="border border-line rounded-lg p-4 flex flex-col gap-4">
         <div>
           <h4 class="text-sm font-semibold text-fg mb-0.5">
-            Per-Stage Models
+            Per-Stage Settings
           </h4>
           <p class="text-[11px] text-fg-mute">
-            Select the Claude model used for each pipeline stage.
+            Configure the spawner and model used for each pipeline stage. The model only applies to Claude-native spawners.
           </p>
         </div>
 
-        <div class="grid grid-cols-1 gap-3">
-          <div v-for="stage in STAGES" :key="stage">
-            <label
-              class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1"
-              :for="`pc-model-${stage}`"
-            >
-              {{ STAGE_LABELS[stage] }}
-            </label>
-            <select
-              :id="`pc-model-${stage}`"
-              v-model="effectiveConfig.stageModels[stage]"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
-            >
-              <option v-for="model in AVAILABLE_MODELS" :key="model" :value="model">
-                {{ model }}
-              </option>
-            </select>
+        <div class="grid grid-cols-1 gap-4">
+          <div v-for="stage in STAGES" :key="stage" class="grid grid-cols-2 gap-3 items-end">
+            <div>
+              <label
+                class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1"
+                :for="`pc-spawner-${stage}`"
+              >
+                {{ STAGE_LABELS[stage] }} — Spawner
+              </label>
+              <select
+                :id="`pc-spawner-${stage}`"
+                v-model="effectiveConfig.stageSpawners[stage]"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              >
+                <option value="">
+                  Auto (Task → Projekt → Default)
+                </option>
+                <option v-for="spawner in spawners" :key="spawner.id" :value="spawner.id">
+                  {{ spawner.name }}{{ spawner.builtIn ? ' (built-in)' : '' }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label
+                class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1"
+                :for="`pc-model-${stage}`"
+              >
+                {{ STAGE_LABELS[stage] }} — Model
+              </label>
+              <select
+                :id="`pc-model-${stage}`"
+                v-model="effectiveConfig.stageModels[stage]"
+                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
+              >
+                <option v-for="model in AVAILABLE_MODELS" :key="model" :value="model">
+                  {{ model }}
+                </option>
+              </select>
+            </div>
           </div>
         </div>
       </div>

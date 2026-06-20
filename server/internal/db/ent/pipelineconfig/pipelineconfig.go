@@ -10,7 +10,11 @@ const (
 	// Label holds the string label denoting the pipelineconfig type in the database.
 	Label = "pipeline_config"
 	// FieldID holds the string denoting the id field in the database.
-	FieldID = "key"
+	FieldID = "id"
+	// FieldKey holds the string denoting the key field in the database.
+	FieldKey = "key"
+	// FieldProjectID holds the string denoting the project_id field in the database.
+	FieldProjectID = "project_id"
 	// FieldValue holds the string denoting the value field in the database.
 	FieldValue = "value"
 	// Table holds the table name of the pipelineconfig in the database.
@@ -20,6 +24,8 @@ const (
 // Columns holds all SQL columns for pipelineconfig fields.
 var Columns = []string{
 	FieldID,
+	FieldKey,
+	FieldProjectID,
 	FieldValue,
 }
 
@@ -33,12 +39,27 @@ func ValidColumn(column string) bool {
 	return false
 }
 
+var (
+	// DefaultProjectID holds the default value on creation for the "project_id" field.
+	DefaultProjectID string
+)
+
 // OrderOption defines the ordering options for the PipelineConfig queries.
 type OrderOption func(*sql.Selector)
 
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByKey orders the results by the key field.
+func ByKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldKey, opts...).ToFunc()
+}
+
+// ByProjectID orders the results by the project_id field.
+func ByProjectID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProjectID, opts...).ToFunc()
 }
 
 // ByValue orders the results by the value field.

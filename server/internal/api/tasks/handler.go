@@ -147,6 +147,10 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Put("/api/pipeline/config", apierr.ErrorMiddleware(h.putPipelineConfig))
 	r.Get("/api/pipeline/recommendation", apierr.ErrorMiddleware(h.getPipelineRecommendation))
 
+	// Per-project pipeline config overrides.
+	r.Get("/api/projects/{id}/pipeline-config", apierr.ErrorMiddleware(h.getProjectPipelineConfig))
+	r.Put("/api/projects/{id}/pipeline-config", apierr.ErrorMiddleware(h.putProjectPipelineConfig))
+
 	// Cost breakdown and stage output.
 	r.Get("/api/tasks/{id}/cost-breakdown", apierr.ErrorMiddleware(h.getCostBreakdown))
 	r.Get("/api/tasks/{id}/stage-runs/{runId}/agent-output", apierr.ErrorMiddleware(h.getStageRunAgentOutput))

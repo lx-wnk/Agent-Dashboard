@@ -118,7 +118,7 @@ func TestStageModelDefault_SpawnerModelOverrideWins(t *testing.T) {
 	spawnFn := modelCaptureSpawnFn(&capturedOpts)
 
 	// Spawner with ModelOverride set — this should beat the Balanced default (Opus).
-	orch.SetResolveSpawner(func(_ context.Context, _ string) (*ent.Spawner, error) {
+	orch.SetResolveSpawner(func(_ context.Context, _, _ string) (*ent.Spawner, error) {
 		return &ent.Spawner{
 			Slug:          "test-spawner",
 			AdapterType:   "claude",
@@ -170,4 +170,68 @@ func TestStageModelDefault_DBConfigRowOverridesCoded(t *testing.T) {
 
 	assert.Equal(t, customModel, capturedOpts.Model,
 		"DB config row stageModel.implementation should override the Opus default")
+}
+
+// TestEffectiveStageModelForProject_PrecedenceChain verifies the three-level
+// precedence chain:
+//
+//	coded default < global stageModel.<stage> row < project stageModel.<stage> row
+//
+// Each assertion is independent so a single failure does not mask others.
+func TestEffectiveStageModelForProject_PrecedenceChain(t *testing.T) {
+	const stage = "implementation"
+	const codedDefault = "claude-opus-4-6"
+	const globalOverride = "claude-sonnet-4-6"
+	const projectOverride = "claude-haiku-4-5"
+
+	// Synthetic project ID — does not need to exist as a DB row because
+	// EffectiveStageModelForProject only queries pipeline_config.
+	projID := "test-project-abc123"
+
+	t.Run("coded_default_when_no_config", func(t *testing.T) {
+		bundle := openBundle(t)
+		orch, _, _ := makeOrchWithConfig(t, bundle)
+		ctx := context.Background()
+
+		got := orch.EffectiveStageModelForProject(ctx, &projID, stage)
+		assert.Equal(t, codedDefault, got,
+			"no config rows → must return the coded Balanced default")
+	})
+
+	t.Run("global_row_overrides_coded_default", func(t *testing.T) {
+		bundle := openBundle(t)
+		orch, _, cfgRepo := makeOrchWithConfig(t, bundle)
+		ctx := context.Background()
+
+		require.NoError(t, cfgRepo.SetScoped(ctx, nil, "stageModel."+stage, globalOverride))
+
+		got := orch.EffectiveStageModelForProject(ctx, &projID, stage)
+		assert.Equal(t, globalOverride, got,
+			"global stageModel.<stage> row must override the coded default")
+	})
+
+	t.Run("project_row_overrides_global_row", func(t *testing.T) {
+		bundle := openBundle(t)
+		orch, _, cfgRepo := makeOrchWithConfig(t, bundle)
+		ctx := context.Background()
+
+		require.NoError(t, cfgRepo.SetScoped(ctx, nil, "stageModel."+stage, globalOverride))
+		require.NoError(t, cfgRepo.SetScoped(ctx, &projID, "stageModel."+stage, projectOverride))
+
+		got := orch.EffectiveStageModelForProject(ctx, &projID, stage)
+		assert.Equal(t, projectOverride, got,
+			"project stageModel.<stage> row must override the global row")
+	})
+
+	t.Run("nil_projectID_returns_global_scope", func(t *testing.T) {
+		bundle := openBundle(t)
+		orch, _, cfgRepo := makeOrchWithConfig(t, bundle)
+		ctx := context.Background()
+
+		require.NoError(t, cfgRepo.SetScoped(ctx, nil, "stageModel."+stage, globalOverride))
+
+		got := orch.EffectiveStageModelForProject(ctx, nil, stage)
+		assert.Equal(t, globalOverride, got,
+			"nil projectID must fall back to global scope, not coded default")
+	})
 }

@@ -48,6 +48,10 @@ const (
 	// Per-stage model config key prefix (e.g. stageModelKeyPrefix+"implementation").
 	stageModelKeyPrefix = "stageModel."
 
+	// Per-stage spawner config key prefix (e.g. stageSpawnerKeyPrefix+"implementation").
+	// Must match the constant in internal/services/spawner_resolver.go.
+	stageSpawnerKeyPrefix = "stageSpawner."
+
 	// Balanced defaults: implementation gets the most capable model, finalization
 	// the fastest. An explicit DB row or task/spawner override takes precedence.
 	defaultModelImplementation = "claude-opus-4-6"
@@ -188,15 +192,24 @@ func (o *PipelineOrchestrator) getCachedConfigString(ctx context.Context, key st
 	return s
 }
 
-// EffectiveStageModel returns the effective model for the given stage, applying
-// coded default → DB config row precedence. Exported for use by api/* handlers.
+// EffectiveStageModel returns the effective global model for the given stage,
+// applying coded default → global DB config row precedence.
+// Exported for use by api/* handlers (global reads, no project context).
 func (o *PipelineOrchestrator) EffectiveStageModel(ctx context.Context, stage string) string {
-	return o.stageModelDefault(ctx, stage)
+	return o.stageModelDefault(ctx, stage, nil)
 }
 
-// stageModelDefault returns the effective per-stage model string, applying the
-// full precedence: coded default → DB config row → (caller applies task/spawner override).
-func (o *PipelineOrchestrator) stageModelDefault(ctx context.Context, stage string) string {
+// EffectiveStageModelForProject returns the effective model for the given stage
+// and project, applying coded default → global DB row → project DB row.
+// Exported for use by api/* handlers that serve per-project config reads.
+func (o *PipelineOrchestrator) EffectiveStageModelForProject(ctx context.Context, projectID *string, stage string) string {
+	return o.stageModelDefault(ctx, stage, projectID)
+}
+
+// stageModelDefault returns the effective per-stage model string for the given
+// project scope. Precedence: coded default → global config row → project config row
+// (project→global→coded via GetStringScoped). Caller applies task/spawner override on top.
+func (o *PipelineOrchestrator) stageModelDefault(ctx context.Context, stage string, projectID *string) string {
 	var coded string
 	switch stage {
 	case "implementation":
@@ -206,7 +219,12 @@ func (o *PipelineOrchestrator) stageModelDefault(ctx context.Context, stage stri
 	case "finalization":
 		coded = defaultModelFinalization
 	}
-	return o.getCachedConfigString(ctx, stageModelKeyPrefix+stage, coded)
+	if projectID == nil {
+		// Global-only path: use the cached global lookup.
+		return o.getCachedConfigString(ctx, stageModelKeyPrefix+stage, coded)
+	}
+	// Project-scoped path: project row → global row → coded default (no cache bypass needed).
+	return o.opts.ConfigRepo.GetStringScoped(ctx, projectID, stageModelKeyPrefix+stage, coded)
 }
 
 // Run starts the orchestrator tick loop. It blocks until ctx is cancelled.

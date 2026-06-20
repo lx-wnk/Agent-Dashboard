@@ -152,7 +152,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		if err := migrateAdapterConfigToSpawners(ctx, cfg, spawnerRepo); err != nil {
 			return nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
 		}
-		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo)
+		pipelineConfigRepo := repo.NewPipelineConfigRepo(entClient)
+		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo, pipelineConfigRepo)
 	}
 
 	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver)
@@ -238,7 +239,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 				if spawnerResolver == nil {
 					return nil, services.SpawnerSourceDefault, nil
 				}
-				return spawnerResolver.Resolve(ctx, taskID)
+				// Refinement is not a per-stage-configurable stage; resolve with empty
+				// stage so it falls through to task -> project default -> claude default.
+				return spawnerResolver.Resolve(ctx, taskID, "")
 			},
 		})
 	}

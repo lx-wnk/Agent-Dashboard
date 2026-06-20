@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -246,5 +247,273 @@ func TestPutPipelineConfig_UnknownStageIgnored(t *testing.T) {
 	}
 	if len(resp.StageModels) != 3 {
 		t.Errorf("expected 3 stageModels keys, got %d", len(resp.StageModels))
+	}
+}
+
+// newTestHandlerWithSpawner builds a handler wired with projectRepo + spawnerRepo and
+// seeds a spawner. Returns the router, the ent.Client (for direct seeding), and the
+// spawner ID.
+func newTestHandlerWithSpawner(t *testing.T) (*ent.Client, *chi.Mux, string) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	client := bundle.Client
+	t.Cleanup(func() { _ = client.Close() })
+
+	taskRepo := repo.NewTaskRepo(client)
+	srRepo := repo.NewStageRunRepo(client)
+	permRepo := repo.NewPermissionRepo(client)
+	auditRepo := repo.NewAuditEventRepo(client)
+	cfgRepo := repo.NewPipelineConfigRepo(client)
+	projectRepo := repo.NewProjectRepo(client)
+	spawnerRepo := repo.NewSpawnerRepo(client)
+
+	spawner, err := spawnerRepo.Create(testCtx(t), "test", "test-spawner", "claude", nil, nil, nil, nil, "claude", nil, false)
+	if err != nil {
+		t.Fatalf("seed spawner: %v", err)
+	}
+
+	h := tasks.NewHandler(tasks.Deps{
+		Client:       client,
+		TaskRepo:     taskRepo,
+		SRRepo:       srRepo,
+		PermRepo:     permRepo,
+		AuditRepo:    auditRepo,
+		CfgRepo:      cfgRepo,
+		ProjectRepo:  projectRepo,
+		SpawnerRepo:  spawnerRepo,
+		Orchestrator: &noopOrchestrator{},
+		Broadcaster:  sse.NewTaskBroadcaster(sse.NewBroadcaster()),
+	})
+
+	r := chi.NewRouter()
+	r.Use(auth.RequireAuth(testJWTSecret))
+	h.Mount(r)
+	return client, r, spawner.ID
+}
+
+// TestGetPipelineConfig_StageSpawnersInResponse verifies the global GET includes stageSpawners.
+func TestGetPipelineConfig_StageSpawnersInResponse(t *testing.T) {
+	_, r := newTestHandler(t)
+
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/pipeline/config", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		StageSpawners map[string]string `json:"stageSpawners"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.StageSpawners == nil {
+		t.Fatal("stageSpawners must be present in global config response")
+	}
+	for _, stage := range []string{"implementation", "self_review", "finalization"} {
+		if _, ok := resp.StageSpawners[stage]; !ok {
+			t.Errorf("stageSpawners missing key %q", stage)
+		}
+	}
+}
+
+// TestPutPipelineConfig_StageSpawnersRoundTrip verifies global stageSpawner set/get.
+func TestPutPipelineConfig_StageSpawnersRoundTrip(t *testing.T) {
+	_, r, spawnerID := newTestHandlerWithSpawner(t)
+
+	body := map[string]any{
+		"stageSpawners": map[string]string{
+			"implementation": spawnerID,
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		StageSpawners map[string]string `json:"stageSpawners"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.StageSpawners["implementation"] != spawnerID {
+		t.Errorf("expected implementation spawner=%q, got %q", spawnerID, resp.StageSpawners["implementation"])
+	}
+	// Other stages should be empty (no override).
+	if resp.StageSpawners["self_review"] != "" {
+		t.Errorf("self_review spawner should be empty, got %q", resp.StageSpawners["self_review"])
+	}
+
+	// Clear by sending empty string.
+	clear := map[string]any{"stageSpawners": map[string]string{"implementation": ""}}
+	b2, _ := json.Marshal(clear)
+	req2 := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b2)))
+	req2.Header.Set("Content-Type", "application/json")
+	rr2 := httptest.NewRecorder()
+	r.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("PUT clear: expected 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+	var resp2 struct {
+		StageSpawners map[string]string `json:"stageSpawners"`
+	}
+	if err := json.Unmarshal(rr2.Body.Bytes(), &resp2); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp2.StageSpawners["implementation"] != "" {
+		t.Errorf("after clear: implementation spawner should be empty, got %q", resp2.StageSpawners["implementation"])
+	}
+}
+
+// TestPutPipelineConfig_UnknownSpawnerRejected verifies 400 on unknown spawner ID.
+func TestPutPipelineConfig_UnknownSpawnerRejected(t *testing.T) {
+	_, r, _ := newTestHandlerWithSpawner(t)
+
+	body := map[string]any{
+		"stageSpawners": map[string]string{
+			"implementation": "nonexistent-spawner-id",
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for unknown spawner, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestProjectPipelineConfig_RoundTrip verifies per-project set/get/clear for stageSpawners and stageModels.
+func TestProjectPipelineConfig_RoundTrip(t *testing.T) {
+	client, r, spawnerID := newTestHandlerWithSpawner(t)
+	projectRepo := repo.NewProjectRepo(client)
+	proj, err := projectRepo.Create(testCtx(t), "Test Project", "test-project", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	projectID := proj.ID
+
+	// PUT — set stageSpawners and stageModels.
+	body := map[string]any{
+		"stageSpawners": map[string]string{"implementation": spawnerID},
+		"stageModels":   map[string]string{"self_review": "claude-haiku-4-5"},
+	}
+	b, _ := json.Marshal(body)
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/projects/"+projectID+"/pipeline-config", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var putResp struct {
+		StageSpawners map[string]string `json:"stageSpawners"`
+		StageModels   map[string]string `json:"stageModels"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &putResp); err != nil {
+		t.Fatalf("decode PUT: %v", err)
+	}
+	if putResp.StageSpawners["implementation"] != spawnerID {
+		t.Errorf("PUT: implementation spawner=%q, want %q", putResp.StageSpawners["implementation"], spawnerID)
+	}
+	if putResp.StageModels["self_review"] != "claude-haiku-4-5" {
+		t.Errorf("PUT: self_review model=%q, want claude-haiku-4-5", putResp.StageModels["self_review"])
+	}
+	// Unset stages should be empty string (inherit).
+	if putResp.StageSpawners["self_review"] != "" {
+		t.Errorf("PUT: self_review spawner should be empty, got %q", putResp.StageSpawners["self_review"])
+	}
+
+	// GET — verify round-trip.
+	req2 := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/projects/"+projectID+"/pipeline-config", nil))
+	rr2 := httptest.NewRecorder()
+	r.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("GET: expected 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+	var getResp struct {
+		StageSpawners map[string]string `json:"stageSpawners"`
+		StageModels   map[string]string `json:"stageModels"`
+	}
+	if err := json.Unmarshal(rr2.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("decode GET: %v", err)
+	}
+	if getResp.StageSpawners["implementation"] != spawnerID {
+		t.Errorf("GET: implementation spawner=%q, want %q", getResp.StageSpawners["implementation"], spawnerID)
+	}
+
+	// Clear the spawner override.
+	clear := map[string]any{"stageSpawners": map[string]string{"implementation": ""}}
+	b2, _ := json.Marshal(clear)
+	req3 := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/projects/"+projectID+"/pipeline-config", bytes.NewReader(b2)))
+	req3.Header.Set("Content-Type", "application/json")
+	rr3 := httptest.NewRecorder()
+	r.ServeHTTP(rr3, req3)
+	if rr3.Code != http.StatusOK {
+		t.Fatalf("PUT clear: expected 200, got %d: %s", rr3.Code, rr3.Body.String())
+	}
+	var clearResp struct {
+		StageSpawners map[string]string `json:"stageSpawners"`
+	}
+	if err := json.Unmarshal(rr3.Body.Bytes(), &clearResp); err != nil {
+		t.Fatalf("decode clear: %v", err)
+	}
+	if clearResp.StageSpawners["implementation"] != "" {
+		t.Errorf("after clear: implementation spawner should be empty, got %q", clearResp.StageSpawners["implementation"])
+	}
+}
+
+// TestProjectPipelineConfig_UnknownSpawnerRejected verifies 400 on unknown spawner for project scope.
+func TestProjectPipelineConfig_UnknownSpawnerRejected(t *testing.T) {
+	client, r, _ := newTestHandlerWithSpawner(t)
+	projectRepo := repo.NewProjectRepo(client)
+	proj, err := projectRepo.Create(testCtx(t), "P2", "p2", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	body := map[string]any{
+		"stageSpawners": map[string]string{"implementation": "nonexistent-id"},
+	}
+	b, _ := json.Marshal(body)
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/projects/"+proj.ID+"/pipeline-config", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for unknown spawner, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestProjectPipelineConfig_UnknownProjectReturns404 verifies 404 when project does not exist.
+func TestProjectPipelineConfig_UnknownProjectReturns404(t *testing.T) {
+	_, r, _ := newTestHandlerWithSpawner(t)
+
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/projects/nonexistent-id/pipeline-config", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	body := map[string]any{"stageModels": map[string]string{"implementation": "claude-haiku-4-5"}}
+	b, _ := json.Marshal(body)
+	req2 := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/projects/nonexistent-id/pipeline-config", bytes.NewReader(b)))
+	req2.Header.Set("Content-Type", "application/json")
+	rr2 := httptest.NewRecorder()
+	r.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusNotFound {
+		t.Errorf("PUT: expected 404, got %d: %s", rr2.Code, rr2.Body.String())
 	}
 }

@@ -27,6 +27,20 @@ func (_u *PipelineConfigUpdate) Where(ps ...predicate.PipelineConfig) *PipelineC
 	return _u
 }
 
+// SetProjectID sets the "project_id" field.
+func (_u *PipelineConfigUpdate) SetProjectID(v string) *PipelineConfigUpdate {
+	_u.mutation.SetProjectID(v)
+	return _u
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_u *PipelineConfigUpdate) SetNillableProjectID(v *string) *PipelineConfigUpdate {
+	if v != nil {
+		_u.SetProjectID(*v)
+	}
+	return _u
+}
+
 // SetValue sets the "value" field.
 func (_u *PipelineConfigUpdate) SetValue(v string) *PipelineConfigUpdate {
 	_u.mutation.SetValue(v)
@@ -82,6 +96,9 @@ func (_u *PipelineConfigUpdate) sqlSave(ctx context.Context) (_node int, err err
 			}
 		}
 	}
+	if value, ok := _u.mutation.ProjectID(); ok {
+		_spec.SetField(pipelineconfig.FieldProjectID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Value(); ok {
 		_spec.SetField(pipelineconfig.FieldValue, field.TypeString, value)
 	}
@@ -103,6 +120,20 @@ type PipelineConfigUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *PipelineConfigMutation
+}
+
+// SetProjectID sets the "project_id" field.
+func (_u *PipelineConfigUpdateOne) SetProjectID(v string) *PipelineConfigUpdateOne {
+	_u.mutation.SetProjectID(v)
+	return _u
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_u *PipelineConfigUpdateOne) SetNillableProjectID(v *string) *PipelineConfigUpdateOne {
+	if v != nil {
+		_u.SetProjectID(*v)
+	}
+	return _u
 }
 
 // SetValue sets the "value" field.
@@ -189,6 +220,9 @@ func (_u *PipelineConfigUpdateOne) sqlSave(ctx context.Context) (_node *Pipeline
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.ProjectID(); ok {
+		_spec.SetField(pipelineconfig.FieldProjectID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Value(); ok {
 		_spec.SetField(pipelineconfig.FieldValue, field.TypeString, value)
