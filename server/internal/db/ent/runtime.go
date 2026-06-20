@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
@@ -94,6 +95,12 @@ func init() {
 	permissionrequestDescRequestedAt := permissionrequestFields[6].Descriptor()
 	// permissionrequest.DefaultRequestedAt holds the default value on creation for the requested_at field.
 	permissionrequest.DefaultRequestedAt = permissionrequestDescRequestedAt.Default.(func() time.Time)
+	pipelineconfigFields := schema.PipelineConfig{}.Fields()
+	_ = pipelineconfigFields
+	// pipelineconfigDescProjectID is the schema descriptor for project_id field.
+	pipelineconfigDescProjectID := pipelineconfigFields[2].Descriptor()
+	// pipelineconfig.DefaultProjectID holds the default value on creation for the project_id field.
+	pipelineconfig.DefaultProjectID = pipelineconfigDescProjectID.Default.(string)
 	projectFields := schema.Project{}.Fields()
 	_ = projectFields
 	// projectDescCreatedAt is the schema descriptor for created_at field.

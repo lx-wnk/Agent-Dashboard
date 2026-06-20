@@ -52,8 +52,8 @@ func provideOrchestrator(
 
 	var resolveFn pipeline.SpawnerResolverFunc
 	if spawnerResolver != nil {
-		resolveFn = func(ctx context.Context, taskID string) (*ent.Spawner, error) {
-			sp, _, err := spawnerResolver.Resolve(ctx, taskID)
+		resolveFn = func(ctx context.Context, taskID, stage string) (*ent.Spawner, error) {
+			sp, _, err := spawnerResolver.Resolve(ctx, taskID, stage)
 			return sp, err
 		}
 	}

@@ -22,6 +22,26 @@ type PipelineConfigCreate struct {
 	conflict []sql.ConflictOption
 }
 
+// SetKey sets the "key" field.
+func (_c *PipelineConfigCreate) SetKey(v string) *PipelineConfigCreate {
+	_c.mutation.SetKey(v)
+	return _c
+}
+
+// SetProjectID sets the "project_id" field.
+func (_c *PipelineConfigCreate) SetProjectID(v string) *PipelineConfigCreate {
+	_c.mutation.SetProjectID(v)
+	return _c
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_c *PipelineConfigCreate) SetNillableProjectID(v *string) *PipelineConfigCreate {
+	if v != nil {
+		_c.SetProjectID(*v)
+	}
+	return _c
+}
+
 // SetValue sets the "value" field.
 func (_c *PipelineConfigCreate) SetValue(v string) *PipelineConfigCreate {
 	_c.mutation.SetValue(v)
@@ -41,6 +61,7 @@ func (_c *PipelineConfigCreate) Mutation() *PipelineConfigMutation {
 
 // Save creates the PipelineConfig in the database.
 func (_c *PipelineConfigCreate) Save(ctx context.Context) (*PipelineConfig, error) {
+	_c.defaults()
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
@@ -66,8 +87,22 @@ func (_c *PipelineConfigCreate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (_c *PipelineConfigCreate) defaults() {
+	if _, ok := _c.mutation.ProjectID(); !ok {
+		v := pipelineconfig.DefaultProjectID
+		_c.mutation.SetProjectID(v)
+	}
+}
+
 // check runs all checks and user-defined validators on the builder.
 func (_c *PipelineConfigCreate) check() error {
+	if _, ok := _c.mutation.Key(); !ok {
+		return &ValidationError{Name: "key", err: errors.New(`ent: missing required field "PipelineConfig.key"`)}
+	}
+	if _, ok := _c.mutation.ProjectID(); !ok {
+		return &ValidationError{Name: "project_id", err: errors.New(`ent: missing required field "PipelineConfig.project_id"`)}
+	}
 	if _, ok := _c.mutation.Value(); !ok {
 		return &ValidationError{Name: "value", err: errors.New(`ent: missing required field "PipelineConfig.value"`)}
 	}
@@ -107,6 +142,14 @@ func (_c *PipelineConfigCreate) createSpec() (*PipelineConfig, *sqlgraph.CreateS
 		_node.ID = id
 		_spec.ID.Value = id
 	}
+	if value, ok := _c.mutation.Key(); ok {
+		_spec.SetField(pipelineconfig.FieldKey, field.TypeString, value)
+		_node.Key = value
+	}
+	if value, ok := _c.mutation.ProjectID(); ok {
+		_spec.SetField(pipelineconfig.FieldProjectID, field.TypeString, value)
+		_node.ProjectID = value
+	}
 	if value, ok := _c.mutation.Value(); ok {
 		_spec.SetField(pipelineconfig.FieldValue, field.TypeString, value)
 		_node.Value = value
@@ -118,7 +161,7 @@ func (_c *PipelineConfigCreate) createSpec() (*PipelineConfig, *sqlgraph.CreateS
 // of the `INSERT` statement. For example:
 //
 //	client.PipelineConfig.Create().
-//		SetValue(v).
+//		SetKey(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -127,7 +170,7 @@ func (_c *PipelineConfigCreate) createSpec() (*PipelineConfig, *sqlgraph.CreateS
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.PipelineConfigUpsert) {
-//			SetValue(v+v).
+//			SetKey(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *PipelineConfigCreate) OnConflict(opts ...sql.ConflictOption) *PipelineConfigUpsertOne {
@@ -163,6 +206,18 @@ type (
 	}
 )
 
+// SetProjectID sets the "project_id" field.
+func (u *PipelineConfigUpsert) SetProjectID(v string) *PipelineConfigUpsert {
+	u.Set(pipelineconfig.FieldProjectID, v)
+	return u
+}
+
+// UpdateProjectID sets the "project_id" field to the value that was provided on create.
+func (u *PipelineConfigUpsert) UpdateProjectID() *PipelineConfigUpsert {
+	u.SetExcluded(pipelineconfig.FieldProjectID)
+	return u
+}
+
 // SetValue sets the "value" field.
 func (u *PipelineConfigUpsert) SetValue(v string) *PipelineConfigUpsert {
 	u.Set(pipelineconfig.FieldValue, v)
@@ -191,6 +246,9 @@ func (u *PipelineConfigUpsertOne) UpdateNewValues() *PipelineConfigUpsertOne {
 	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
 		if _, exists := u.create.mutation.ID(); exists {
 			s.SetIgnore(pipelineconfig.FieldID)
+		}
+		if _, exists := u.create.mutation.Key(); exists {
+			s.SetIgnore(pipelineconfig.FieldKey)
 		}
 	}))
 	return u
@@ -221,6 +279,20 @@ func (u *PipelineConfigUpsertOne) Update(set func(*PipelineConfigUpsert)) *Pipel
 		set(&PipelineConfigUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetProjectID sets the "project_id" field.
+func (u *PipelineConfigUpsertOne) SetProjectID(v string) *PipelineConfigUpsertOne {
+	return u.Update(func(s *PipelineConfigUpsert) {
+		s.SetProjectID(v)
+	})
+}
+
+// UpdateProjectID sets the "project_id" field to the value that was provided on create.
+func (u *PipelineConfigUpsertOne) UpdateProjectID() *PipelineConfigUpsertOne {
+	return u.Update(func(s *PipelineConfigUpsert) {
+		s.UpdateProjectID()
+	})
 }
 
 // SetValue sets the "value" field.
@@ -294,6 +366,7 @@ func (_c *PipelineConfigCreateBulk) Save(ctx context.Context) ([]*PipelineConfig
 	for i := range _c.builders {
 		func(i int, root context.Context) {
 			builder := _c.builders[i]
+			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*PipelineConfigMutation)
 				if !ok {
@@ -372,7 +445,7 @@ func (_c *PipelineConfigCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.PipelineConfigUpsert) {
-//			SetValue(v+v).
+//			SetKey(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *PipelineConfigCreateBulk) OnConflict(opts ...sql.ConflictOption) *PipelineConfigUpsertBulk {
@@ -419,6 +492,9 @@ func (u *PipelineConfigUpsertBulk) UpdateNewValues() *PipelineConfigUpsertBulk {
 			if _, exists := b.mutation.ID(); exists {
 				s.SetIgnore(pipelineconfig.FieldID)
 			}
+			if _, exists := b.mutation.Key(); exists {
+				s.SetIgnore(pipelineconfig.FieldKey)
+			}
 		}
 	}))
 	return u
@@ -449,6 +525,20 @@ func (u *PipelineConfigUpsertBulk) Update(set func(*PipelineConfigUpsert)) *Pipe
 		set(&PipelineConfigUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetProjectID sets the "project_id" field.
+func (u *PipelineConfigUpsertBulk) SetProjectID(v string) *PipelineConfigUpsertBulk {
+	return u.Update(func(s *PipelineConfigUpsert) {
+		s.SetProjectID(v)
+	})
+}
+
+// UpdateProjectID sets the "project_id" field to the value that was provided on create.
+func (u *PipelineConfigUpsertBulk) UpdateProjectID() *PipelineConfigUpsertBulk {
+	return u.Update(func(s *PipelineConfigUpsert) {
+		s.UpdateProjectID()
+	})
 }
 
 // SetValue sets the "value" field.

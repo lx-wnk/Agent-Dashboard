@@ -262,12 +262,12 @@ func (_q *PipelineConfigQuery) Clone() *PipelineConfigQuery {
 // Example:
 //
 //	var v []struct {
-//		Value string `json:"value,omitempty"`
+//		Key string `json:"key,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.PipelineConfig.Query().
-//		GroupBy(pipelineconfig.FieldValue).
+//		GroupBy(pipelineconfig.FieldKey).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *PipelineConfigQuery) GroupBy(field string, fields ...string) *PipelineConfigGroupBy {
@@ -285,11 +285,11 @@ func (_q *PipelineConfigQuery) GroupBy(field string, fields ...string) *Pipeline
 // Example:
 //
 //	var v []struct {
-//		Value string `json:"value,omitempty"`
+//		Key string `json:"key,omitempty"`
 //	}
 //
 //	client.PipelineConfig.Query().
-//		Select(pipelineconfig.FieldValue).
+//		Select(pipelineconfig.FieldKey).
 //		Scan(ctx, &v)
 func (_q *PipelineConfigQuery) Select(fields ...string) *PipelineConfigSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

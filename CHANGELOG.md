@@ -15,6 +15,17 @@ Preparing the first public release.
 ### Added
 
 - Live subtasks on agent and task cards — token usage, duration, and latest output for each active subagent are parsed from JSONL in real time and surfaced directly on the roster cards; child-task summaries are projected onto enriched tasks, gated on pid-liveness (PR #203).
+- Per-stage spawner and model configuration — choose which engine (e.g. Codex for
+  `self_review`, Claude Code for `implementation`) and which model runs each of the
+  three agent stages (`implementation`, `self_review`, `finalization`). Settings are
+  scoped globally or per-project; the resolution chain is: task `spawner_id` →
+  project `stageSpawner.<stage>` → project `default_spawner_id` → global
+  `stageSpawner.<stage>` → claude-default (for spawner); spawner `ModelOverride` →
+  task `metadata.model` → project `stageModel.<stage>` → global `stageModel.<stage>`
+  → coded default (for model). New endpoints: `stageSpawners` field added to
+  `GET`/`PUT /api/pipeline/config`; new `GET`/`PUT /api/projects/{id}/pipeline-config`
+  for project-scoped overrides. Drag-and-drop task reordering within stage columns
+  is now supported. (PR #206)
 - Per-task autonomy levels (`manual`, `spec_gated`, `full`) over REST and MCP
   `create_task`/`update_task`. New tasks default to `spec_gated`, which auto-approves
   permission requests (blanket Bash, audit-logged as `permission_auto_approved`);

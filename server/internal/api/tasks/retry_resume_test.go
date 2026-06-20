@@ -43,6 +43,11 @@ func (c *captureOrchestrator) RequeueForUser(_ context.Context, taskID, userProm
 	c.requeuePrompt = userPrompt
 	return &ent.StageRun{ID: taskID + "-run"}, nil
 }
+
+func (c *captureOrchestrator) EffectiveStageModel(_ context.Context, _ string) string {
+	return ""
+}
+
 func (c *captureOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
 func (c *captureOrchestrator) InvalidateConfigCache()                                   {}
 func (c *captureOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}

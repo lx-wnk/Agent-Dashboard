@@ -7,6 +7,7 @@ import {
   fetchProjectFolders,
   updateFolder,
 } from '../composables/useProjectFolders'
+import { useProjectPipelineConfig } from '../composables/useProjectPipelineConfig'
 import {
   createProject,
   deleteProject,
@@ -15,6 +16,8 @@ import {
 } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
 import { errorMessage } from '../utils/errorMessage'
+import { AVAILABLE_MODELS } from '../utils/models'
+import { STAGE_LABELS } from '../utils/stageLabels'
 import { isAbsolutePath } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 
@@ -22,8 +25,43 @@ withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
 
 // Projects composable — auto-loads on mount
 const { projects, isLoading, error, refetch } = useProjects()
-// Spawner list — feeds the default-spawner dropdown
+// Spawner list — feeds the default-spawner dropdown and per-stage spawner pickers
 const { spawners } = useSpawners()
+
+// Per-project pipeline config composable (instantiated once; re-fetched on project open)
+const { config: projectPipelineConfig, loading: pipelineLoading, error: pipelineError, fetch: fetchProjectPipeline, save: saveProjectPipeline } = useProjectPipelineConfig()
+
+const PIPELINE_STAGES = ['implementation', 'self_review', 'finalization'] as const
+
+// Draft for per-project pipeline settings
+const pipelineDraft = ref<{ stageModels: Record<string, string>, stageSpawners: Record<string, string> } | null>(null)
+const pipelineSaved = ref(false)
+const pipelineSaveError = ref<string | null>(null)
+
+watch(projectPipelineConfig, (val) => {
+  if (val)
+    pipelineDraft.value = JSON.parse(JSON.stringify(val))
+})
+
+async function handlePipelineSave(projectId: string) {
+  if (!pipelineDraft.value)
+    return
+  pipelineSaveError.value = null
+  pipelineSaved.value = false
+  await saveProjectPipeline(projectId, {
+    stageModels: { ...pipelineDraft.value.stageModels } as Record<'implementation' | 'self_review' | 'finalization', string>,
+    stageSpawners: { ...pipelineDraft.value.stageSpawners } as Record<'implementation' | 'self_review' | 'finalization', string>,
+  })
+  if (!pipelineError.value) {
+    pipelineSaved.value = true
+    setTimeout(() => {
+      pipelineSaved.value = false
+    }, 2500)
+  }
+  else {
+    pipelineSaveError.value = pipelineError.value
+  }
+}
 
 // ── Edit / create project form ──────────────────────────────────────────────
 interface ProjectFormState {
@@ -64,6 +102,8 @@ function openEdit(project: Project) {
   formVisible.value = true
   isCreating.value = false
   void loadFolders(project.id)
+  pipelineDraft.value = null
+  void fetchProjectPipeline(project.id)
 }
 
 function closeForm() {
@@ -71,6 +111,7 @@ function closeForm() {
   editingProject.value = null
   folderRows.value = []
   folderError.value = null
+  pipelineDraft.value = null
 }
 
 async function handleSave() {
@@ -433,6 +474,81 @@ watch(folderRows, () => {}, { deep: true })
           Cancel
         </AppButton>
       </div>
+
+      <!-- Per-project pipeline config (only shown when editing an existing project) -->
+      <template v-if="!isCreating && editingProject">
+        <div class="border-t border-line pt-4 mt-1">
+          <div class="mb-3">
+            <h5 class="text-xs font-semibold uppercase tracking-wider text-fg-mute mb-0.5">
+              Pipeline pro Stage
+            </h5>
+            <p class="text-[11px] text-fg-mute">
+              Spawner und Modell pro Stage überschreiben. Leer lassen = globale Einstellung übernehmen. Das Modell gilt nur für Claude-native Spawner.
+            </p>
+          </div>
+
+          <div v-if="pipelineLoading && !pipelineDraft" class="text-xs text-fg-mute py-3">
+            Loading pipeline config...
+          </div>
+
+          <div v-else-if="pipelineDraft" class="grid grid-cols-1 gap-4">
+            <div v-for="stage in PIPELINE_STAGES" :key="stage" class="grid grid-cols-2 gap-3 items-end">
+              <div>
+                <label
+                  class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1"
+                  :for="`pp-spawner-${stage}-${editingProject.id}`"
+                >
+                  {{ STAGE_LABELS[stage] }} — Spawner
+                </label>
+                <select
+                  :id="`pp-spawner-${stage}-${editingProject.id}`"
+                  v-model="pipelineDraft.stageSpawners[stage]"
+                  class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
+                >
+                  <option value="">
+                    Global übernehmen
+                  </option>
+                  <option v-for="s in spawners" :key="s.id" :value="s.id">
+                    {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label
+                  class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1"
+                  :for="`pp-model-${stage}-${editingProject.id}`"
+                >
+                  {{ STAGE_LABELS[stage] }} — Model
+                </label>
+                <select
+                  :id="`pp-model-${stage}-${editingProject.id}`"
+                  v-model="pipelineDraft.stageModels[stage]"
+                  class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
+                >
+                  <option value="">
+                    Global übernehmen
+                  </option>
+                  <option v-for="model in AVAILABLE_MODELS" :key="model" :value="model">
+                    {{ model }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <p v-if="pipelineError" class="text-xs text-danger-text mt-2">
+            {{ pipelineError }}
+          </p>
+
+          <div class="flex items-center gap-3 mt-3">
+            <AppButton variant="secondary" size="sm" :disabled="pipelineLoading || !pipelineDraft" @click="handlePipelineSave(editingProject.id)">
+              {{ pipelineLoading ? 'Saving…' : 'Pipeline-Config speichern' }}
+            </AppButton>
+            <span v-if="pipelineSaved" class="text-xs text-emerald-600 dark:text-emerald-400">Gespeichert.</span>
+            <span v-if="pipelineSaveError" class="text-xs text-red-600 dark:text-red-400">{{ pipelineSaveError }}</span>
+          </div>
+        </div>
+      </template>
 
       <!-- Folder management (only shown when editing an existing project) -->
       <template v-if="!isCreating && editingProject">

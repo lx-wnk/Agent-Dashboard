@@ -53,3 +53,20 @@ const ResumeContinueInstructionForTest = resumeContinueInstruction
 // SyntheticSpawnPIDForTest exposes syntheticSpawnPID for use in test capture
 // spawn functions that want to return the canonical no-op PID.
 const SyntheticSpawnPIDForTest = syntheticSpawnPID
+
+// NewAgentStageHandlerForTest creates an agentStageHandler with the given spawn
+// function injected, so unit tests can capture SpawnAgentOptions without running
+// a real claude subprocess.
+func NewAgentStageHandlerForTest(stage string, spawnFn func(SpawnAgentOptions) (SpawnResult, error)) StageHandler {
+	return &agentStageHandler{
+		stage:       stage,
+		buildPrompt: func(_ *StageContext) PromptBundle { return PromptBundle{UserPrompt: "test"} },
+		spawnFn:     spawnFn,
+	}
+}
+
+// SetResolveSpawner injects a SpawnerResolverFunc for testing spawner-override
+// precedence without a full DB-backed spawner repo.
+func (o *PipelineOrchestrator) SetResolveSpawner(fn SpawnerResolverFunc) {
+	o.opts.ResolveSpawner = fn
+}

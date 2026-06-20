@@ -280,17 +280,17 @@ type Agent struct {
 	// running interactive session as real keyboard input — either via the pty
 	// broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending
 	// resumes the session as a new one (MCP log delivery does not drive it).
-	LiveInjectable      bool        `json:"liveInjectable,omitempty"`
-	LastOutput          *string     `json:"lastOutput"`
-	ConvergenceAlert    bool        `json:"convergenceAlert"`
-	ConvergenceToolName *string     `json:"convergenceToolName"`
-	ErrorState          *ErrorState `json:"errorState"`
-	PipelineTaskID         string               `json:"pipelineTaskId,omitempty"`
-	PipelineTaskTitle      string               `json:"pipelineTaskTitle,omitempty"`
-	PendingPermissions     []PendingPermission  `json:"pendingPermissions,omitempty"`
-	PendingToolUse         *PendingToolUse      `json:"pendingToolUse,omitempty"`
-	Machine             string      `json:"machine,omitempty"`
-	LastBtw             *BtwMessage `json:"lastBtw"`
+	LiveInjectable      bool                `json:"liveInjectable,omitempty"`
+	LastOutput          *string             `json:"lastOutput"`
+	ConvergenceAlert    bool                `json:"convergenceAlert"`
+	ConvergenceToolName *string             `json:"convergenceToolName"`
+	ErrorState          *ErrorState         `json:"errorState"`
+	PipelineTaskID      string              `json:"pipelineTaskId,omitempty"`
+	PipelineTaskTitle   string              `json:"pipelineTaskTitle,omitempty"`
+	PendingPermissions  []PendingPermission `json:"pendingPermissions,omitempty"`
+	PendingToolUse      *PendingToolUse     `json:"pendingToolUse,omitempty"`
+	Machine             string              `json:"machine,omitempty"`
+	LastBtw             *BtwMessage         `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`

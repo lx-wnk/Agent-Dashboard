@@ -12,12 +12,18 @@ Skip files that are empty or contain only comments.
 
 ## Load By Task Type
 
-| Working on...         | Read first                        |
-| --------------------- | --------------------------------- |
-| Backend / API         | `server/` source, `decisions.json` |
-| Frontend / Components | `src/` source, `decisions.json`    |
-| Process scanning      | `server/processScanner.ts`         |
-| JSONL parsing         | `server/jsonlParser.ts`            |
+These files are **load-on-demand** (not eager-imported via `AGENTS.md`). `Read` the matching one when your task enters that area:
+
+| Working on...                       | Read first                                          |
+| ----------------------------------- | --------------------------------------------------- |
+| Backend / API                       | `server/` source, `decisions.json`                  |
+| Frontend / Components               | `src/` source, `decisions.json`                     |
+| Process scanning                    | `server/processScanner.ts`                          |
+| JSONL parsing                       | `server/jsonlParser.ts`                             |
+| Modules / data flow overview        | `.agent-context/architecture.md`                    |
+| Pipeline state machine / sweeps / Go layering | `.agent-context/task-pipeline.md`         |
+| MCP endpoint / auth / scopes        | `.agent-context/mcp.md`                             |
+| Pipeline permissions / grants       | `.agent-context/permissions.md`                     |
 
 ## Skills Index
 

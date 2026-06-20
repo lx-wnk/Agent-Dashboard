@@ -21,6 +21,7 @@ type ControlOrchestrator interface {
 	NotifyTaskTerminated(ctx context.Context, taskID, stage string)
 	InvalidateConfigCache()
 	ClearStalePendingPermissions(ctx context.Context, taskID string)
+	EffectiveStageModel(ctx context.Context, stage string) string
 }
 
 // ControlDeps holds dependencies required by the pipeline control tools.

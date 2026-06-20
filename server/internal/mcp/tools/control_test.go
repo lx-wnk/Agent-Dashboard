@@ -136,3 +136,4 @@ func (s *stubOrchestrator) RequeueForUser(_ context.Context, taskID, _ string) (
 func (s *stubOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
 func (s *stubOrchestrator) InvalidateConfigCache()                                   {}
 func (s *stubOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}
+func (s *stubOrchestrator) EffectiveStageModel(_ context.Context, _ string) string   { return "" }

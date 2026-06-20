@@ -44,6 +44,15 @@ const (
 	defaultRateLimitBackoff    = 600
 	maxRateLimitRetriesKey     = "maxRateLimitRetries"
 	defaultMaxRateLimitRetries = 36
+
+	// Per-stage model config key prefix (e.g. stageModelKeyPrefix+"implementation").
+	stageModelKeyPrefix = "stageModel."
+
+	// Balanced defaults: implementation gets the most capable model, finalization
+	// the fastest. An explicit DB row or task/spawner override takes precedence.
+	defaultModelImplementation = "claude-opus-4-6"
+	defaultModelSelfReview     = "claude-sonnet-4-6"
+	defaultModelFinalization   = "claude-haiku-4-5"
 )
 
 // httpSpawnResult carries the outcome of an asynchronous HTTP-adapter spawn.
@@ -74,6 +83,11 @@ type PipelineOrchestrator struct {
 
 type cachedConfig struct {
 	value     int
+	expiresAt time.Time
+}
+
+type cachedConfigStr struct {
+	value     string
 	expiresAt time.Time
 }
 
@@ -152,14 +166,61 @@ func (o *PipelineOrchestrator) resolveHandler(stage string) StageHandler {
 
 func (o *PipelineOrchestrator) getCachedConfigNumber(ctx context.Context, key string, fallback int) int {
 	if v, ok := o.configCache.Load(key); ok {
-		c := v.(cachedConfig)
-		if time.Now().Before(c.expiresAt) {
+		c, ok := v.(cachedConfig)
+		if ok && time.Now().Before(c.expiresAt) {
 			return c.value
 		}
 	}
 	n := int(o.opts.ConfigRepo.GetNumber(ctx, key, float64(fallback)))
 	o.configCache.Store(key, cachedConfig{value: n, expiresAt: time.Now().Add(60 * time.Second)})
 	return n
+}
+
+func (o *PipelineOrchestrator) getCachedConfigString(ctx context.Context, key string, fallback string) string {
+	if v, ok := o.configCache.Load(key); ok {
+		c, ok := v.(cachedConfigStr)
+		if ok && time.Now().Before(c.expiresAt) {
+			return c.value
+		}
+	}
+	s := o.opts.ConfigRepo.GetString(ctx, key, fallback)
+	o.configCache.Store(key, cachedConfigStr{value: s, expiresAt: time.Now().Add(60 * time.Second)})
+	return s
+}
+
+// EffectiveStageModel returns the effective global model for the given stage,
+// applying coded default → global DB config row precedence.
+// Exported for use by api/* handlers (global reads, no project context).
+func (o *PipelineOrchestrator) EffectiveStageModel(ctx context.Context, stage string) string {
+	return o.stageModelDefault(ctx, stage, nil)
+}
+
+// EffectiveStageModelForProject returns the effective model for the given stage
+// and project, applying coded default → global DB row → project DB row.
+// Exported for use by api/* handlers that serve per-project config reads.
+func (o *PipelineOrchestrator) EffectiveStageModelForProject(ctx context.Context, projectID *string, stage string) string {
+	return o.stageModelDefault(ctx, stage, projectID)
+}
+
+// stageModelDefault returns the effective per-stage model string for the given
+// project scope. Precedence: coded default → global config row → project config row
+// (project→global→coded via GetStringScoped). Caller applies task/spawner override on top.
+func (o *PipelineOrchestrator) stageModelDefault(ctx context.Context, stage string, projectID *string) string {
+	var coded string
+	switch stage {
+	case "implementation":
+		coded = defaultModelImplementation
+	case "self_review":
+		coded = defaultModelSelfReview
+	case "finalization":
+		coded = defaultModelFinalization
+	}
+	if projectID == nil {
+		// Global-only path: use the cached global lookup.
+		return o.getCachedConfigString(ctx, stageModelKeyPrefix+stage, coded)
+	}
+	// Project-scoped path: project row → global row → coded default (no cache bypass needed).
+	return o.opts.ConfigRepo.GetStringScoped(ctx, projectID, stageModelKeyPrefix+stage, coded)
 }
 
 // Run starts the orchestrator tick loop. It blocks until ctx is cancelled.

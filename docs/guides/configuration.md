@@ -54,6 +54,37 @@ These are normally injected into spawned stage agents by the orchestrator — yo
 | `DASHBOARD_HOOKS_DEBOUNCE_MS` | `100` | Debounce before SSE rescan after a hook event |
 | `DASHBOARD_HOOK_EVENTS_PER_SESSION` | `50` | Max recent lifecycle-hook events kept in memory per session for the agent-modal **Hook events** view. Must be positive |
 
+## Pipeline stage configuration
+
+Per-stage engine (spawner) and model are stored in the `pipeline_config` table and
+exposed via two endpoints:
+
+| Endpoint | Scope |
+|---|---|
+| `GET`/`PUT /api/pipeline/config` | Global defaults — `stageModels` and `stageSpawners` maps are included in the response |
+| `GET`/`PUT /api/projects/{id}/pipeline-config` | Per-project overrides — same `stageModels` / `stageSpawners` shape; empty string means "inherit global" |
+
+Supported stages for both maps: `implementation`, `self_review`, `finalization`.
+
+**Spawner resolution order** (first match wins):
+
+1. `task.spawner_id` (explicit task override)
+2. Project `stageSpawner.<stage>` config row
+3. Project `default_spawner_id`
+4. Global `stageSpawner.<stage>` config row
+5. The `is_default` spawner row, falling back to the seeded `claude-default`
+
+**Model resolution order** (first match wins):
+
+1. Spawner's own `ModelOverride` field
+2. Task `metadata.model`
+3. Project `stageModel.<stage>` config row
+4. Global `stageModel.<stage>` config row
+5. Coded default per stage
+
+The UI exposes these pickers in **Settings → Pipeline** (global) and on each project's
+settings page (per-project).
+
 ## Scheduler (pipeline DB config keys)
 
 These keys live in the `pipeline_config` table, not in environment variables. Write them with a direct SQL update or via `PUT /api/config`.

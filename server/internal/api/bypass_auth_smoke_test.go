@@ -49,6 +49,9 @@ func (noopOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string
 func (noopOrchestrator) RequeueForUser(_ context.Context, _ string, _ string) (*ent.StageRun, error) {
 	return nil, nil
 }
+func (noopOrchestrator) EffectiveStageModel(_ context.Context, _ string) string {
+	return ""
+}
 
 // buildBypassRouter wires the full production router (every handler mounted) in
 // bypass-auth mode against an in-memory SQLite database. It mirrors the DI in

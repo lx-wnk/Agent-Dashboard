@@ -5733,6 +5733,8 @@ type PipelineConfigMutation struct {
 	op            Op
 	typ           string
 	id            *string
+	key           *string
+	project_id    *string
 	value         *string
 	clearedFields map[string]struct{}
 	done          bool
@@ -5844,6 +5846,78 @@ func (m *PipelineConfigMutation) IDs(ctx context.Context) ([]string, error) {
 	}
 }
 
+// SetKey sets the "key" field.
+func (m *PipelineConfigMutation) SetKey(s string) {
+	m.key = &s
+}
+
+// Key returns the value of the "key" field in the mutation.
+func (m *PipelineConfigMutation) Key() (r string, exists bool) {
+	v := m.key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKey returns the old "key" field's value of the PipelineConfig entity.
+// If the PipelineConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PipelineConfigMutation) OldKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKey: %w", err)
+	}
+	return oldValue.Key, nil
+}
+
+// ResetKey resets all changes to the "key" field.
+func (m *PipelineConfigMutation) ResetKey() {
+	m.key = nil
+}
+
+// SetProjectID sets the "project_id" field.
+func (m *PipelineConfigMutation) SetProjectID(s string) {
+	m.project_id = &s
+}
+
+// ProjectID returns the value of the "project_id" field in the mutation.
+func (m *PipelineConfigMutation) ProjectID() (r string, exists bool) {
+	v := m.project_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectID returns the old "project_id" field's value of the PipelineConfig entity.
+// If the PipelineConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PipelineConfigMutation) OldProjectID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectID: %w", err)
+	}
+	return oldValue.ProjectID, nil
+}
+
+// ResetProjectID resets all changes to the "project_id" field.
+func (m *PipelineConfigMutation) ResetProjectID() {
+	m.project_id = nil
+}
+
 // SetValue sets the "value" field.
 func (m *PipelineConfigMutation) SetValue(s string) {
 	m.value = &s
@@ -5914,7 +5988,13 @@ func (m *PipelineConfigMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PipelineConfigMutation) Fields() []string {
-	fields := make([]string, 0, 1)
+	fields := make([]string, 0, 3)
+	if m.key != nil {
+		fields = append(fields, pipelineconfig.FieldKey)
+	}
+	if m.project_id != nil {
+		fields = append(fields, pipelineconfig.FieldProjectID)
+	}
 	if m.value != nil {
 		fields = append(fields, pipelineconfig.FieldValue)
 	}
@@ -5926,6 +6006,10 @@ func (m *PipelineConfigMutation) Fields() []string {
 // schema.
 func (m *PipelineConfigMutation) Field(name string) (ent.Value, bool) {
 	switch name {
+	case pipelineconfig.FieldKey:
+		return m.Key()
+	case pipelineconfig.FieldProjectID:
+		return m.ProjectID()
 	case pipelineconfig.FieldValue:
 		return m.Value()
 	}
@@ -5937,6 +6021,10 @@ func (m *PipelineConfigMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *PipelineConfigMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
+	case pipelineconfig.FieldKey:
+		return m.OldKey(ctx)
+	case pipelineconfig.FieldProjectID:
+		return m.OldProjectID(ctx)
 	case pipelineconfig.FieldValue:
 		return m.OldValue(ctx)
 	}
@@ -5948,6 +6036,20 @@ func (m *PipelineConfigMutation) OldField(ctx context.Context, name string) (ent
 // type.
 func (m *PipelineConfigMutation) SetField(name string, value ent.Value) error {
 	switch name {
+	case pipelineconfig.FieldKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKey(v)
+		return nil
+	case pipelineconfig.FieldProjectID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectID(v)
+		return nil
 	case pipelineconfig.FieldValue:
 		v, ok := value.(string)
 		if !ok {
@@ -6004,6 +6106,12 @@ func (m *PipelineConfigMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *PipelineConfigMutation) ResetField(name string) error {
 	switch name {
+	case pipelineconfig.FieldKey:
+		m.ResetKey()
+		return nil
+	case pipelineconfig.FieldProjectID:
+		m.ResetProjectID()
+		return nil
 	case pipelineconfig.FieldValue:
 		m.ResetValue()
 		return nil

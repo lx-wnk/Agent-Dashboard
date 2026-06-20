@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 
@@ -37,7 +38,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	// loaded (e.g. it was deleted out from under us). Propagate the error.
 	var resolved *ent.Spawner
 	if ctx.ResolveSpawner != nil {
-		sp, err := ctx.ResolveSpawner(ctx.Ctx, ctx.Task.ID)
+		sp, err := ctx.ResolveSpawner(ctx.Ctx, ctx.Task.ID, h.stage)
 		if err != nil {
 			return nil, fmt.Errorf("agentStageHandler.Execute(%s): resolve spawner: %w", h.stage, err)
 		}
@@ -59,14 +60,18 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 			return nil, fmt.Errorf("agentStageHandler.Execute(%s): adapter factory returned nil for adapter_type %q", h.stage, resolved.AdapterType)
 		}
 
+		// Precedence (highest wins): spawner.ModelOverride > task.Metadata["model"]
+		// > per-stage config/default. Per-stage default is only the floor.
 		model := ""
+		if ctx.StageModelFn != nil {
+			model = ctx.StageModelFn(ctx.Ctx, h.stage, ctx.Task.ProjectID)
+		}
 		if ctx.Task.Metadata != nil {
-			if m, ok := ctx.Task.Metadata["model"].(string); ok {
+			if m, ok := ctx.Task.Metadata["model"].(string); ok && m != "" {
 				model = m
 			}
 		}
-		// Per-spawner ModelOverride wins over the task metadata model — mirrors
-		// the native-path behaviour in spawner.go::buildClaudeArgs.
+		// Per-spawner ModelOverride wins over everything — mirrors native-path.
 		if resolved.ModelOverride != nil && *resolved.ModelOverride != "" {
 			model = *resolved.ModelOverride
 		}
@@ -123,6 +128,25 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		return nil, fmt.Errorf("agentStageHandler.Execute(%s): spawnFn not set", h.stage)
 	}
 
+	// Resolve the native-path model following full precedence:
+	// per-stage default → task.Metadata["model"] → BUT spawner.ModelOverride
+	// must still win. Since BuildSpawnArgs only inserts spawner.ModelOverride
+	// when opts.Model is empty, we must NOT set opts.Model when the spawner
+	// declares its own override — otherwise opts.Model would silently win.
+	nativeModel := ""
+	spawnerHasOverride := resolved != nil && resolved.ModelOverride != nil && *resolved.ModelOverride != ""
+	if !spawnerHasOverride {
+		// Start with per-stage default (coded + DB row), then let task override it.
+		if ctx.StageModelFn != nil {
+			nativeModel = ctx.StageModelFn(ctx.Ctx, h.stage, ctx.Task.ProjectID)
+		}
+		if ctx.Task.Metadata != nil {
+			if m, ok := ctx.Task.Metadata["model"].(string); ok && m != "" {
+				nativeModel = m
+			}
+		}
+	}
+
 	result, err := h.spawnFn(SpawnAgentOptions{
 		Task:            ctx.Task,
 		StageRun:        ctx.StageRun,
@@ -134,6 +158,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		MCPToken:        ctx.MCPToken,
 		MCPUrl:          ctx.MCPUrl,
 		Spawner:         resolved,
+		Model:           nativeModel,
 		AdditionalDirs:  ctx.AdditionalDirs,
 	})
 	if err != nil {
@@ -242,11 +267,7 @@ func implementationBuilder(ctx *StageContext) PromptBundle {
 		}
 	}
 	conceptOutput := map[string]any{}
-	if ctx.Task.Metadata != nil {
-		for k, v := range ctx.Task.Metadata {
-			conceptOutput[k] = v
-		}
-	}
+	maps.Copy(conceptOutput, ctx.Task.Metadata)
 	return ImplementationPrompt(ctx.Task, conceptOutput, feedback)
 }
 

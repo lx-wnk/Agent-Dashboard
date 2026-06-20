@@ -16,6 +16,10 @@ type PipelineConfig struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID string `json:"id,omitempty"`
+	// Key holds the value of the "key" field.
+	Key string `json:"key,omitempty"`
+	// ProjectID holds the value of the "project_id" field.
+	ProjectID string `json:"project_id,omitempty"`
 	// Value holds the value of the "value" field.
 	Value        string `json:"value,omitempty"`
 	selectValues sql.SelectValues
@@ -26,7 +30,7 @@ func (*PipelineConfig) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case pipelineconfig.FieldID, pipelineconfig.FieldValue:
+		case pipelineconfig.FieldID, pipelineconfig.FieldKey, pipelineconfig.FieldProjectID, pipelineconfig.FieldValue:
 			values[i] = new(sql.NullString)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -48,6 +52,18 @@ func (_m *PipelineConfig) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value.Valid {
 				_m.ID = value.String
+			}
+		case pipelineconfig.FieldKey:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field key", values[i])
+			} else if value.Valid {
+				_m.Key = value.String
+			}
+		case pipelineconfig.FieldProjectID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field project_id", values[i])
+			} else if value.Valid {
+				_m.ProjectID = value.String
 			}
 		case pipelineconfig.FieldValue:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -91,6 +107,12 @@ func (_m *PipelineConfig) String() string {
 	var builder strings.Builder
 	builder.WriteString("PipelineConfig(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("key=")
+	builder.WriteString(_m.Key)
+	builder.WriteString(", ")
+	builder.WriteString("project_id=")
+	builder.WriteString(_m.ProjectID)
+	builder.WriteString(", ")
 	builder.WriteString("value=")
 	builder.WriteString(_m.Value)
 	builder.WriteByte(')')

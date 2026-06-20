@@ -34,6 +34,7 @@ func (a *advanceOrchestrator) ProgressTask(_ context.Context, _ string, _ *pipel
 func (a *advanceOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
 func (a *advanceOrchestrator) InvalidateConfigCache()                                   {}
 func (a *advanceOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}
+func (a *advanceOrchestrator) EffectiveStageModel(_ context.Context, _ string) string   { return "" }
 
 func openAdvanceDB(t *testing.T) *ent.Client {
 	t.Helper()

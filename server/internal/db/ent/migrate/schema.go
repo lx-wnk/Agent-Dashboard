@@ -241,7 +241,9 @@ var (
 	}
 	// PipelineConfigsColumns holds the columns for the "pipeline_configs" table.
 	PipelineConfigsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
 		{Name: "key", Type: field.TypeString},
+		{Name: "project_id", Type: field.TypeString, Default: ""},
 		{Name: "value", Type: field.TypeString},
 	}
 	// PipelineConfigsTable holds the schema information for the "pipeline_configs" table.
@@ -249,6 +251,13 @@ var (
 		Name:       "pipeline_configs",
 		Columns:    PipelineConfigsColumns,
 		PrimaryKey: []*schema.Column{PipelineConfigsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "pipelineconfig_project_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{PipelineConfigsColumns[2], PipelineConfigsColumns[1]},
+			},
+		},
 	}
 	// ProjectsColumns holds the columns for the "projects" table.
 	ProjectsColumns = []*schema.Column{
