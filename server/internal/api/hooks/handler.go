@@ -10,6 +10,7 @@ package hooks
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -26,6 +27,9 @@ const (
 	// maxSummaryBytes bounds the secret-safe payload preview stored per event.
 	// Raw tool_input / tool_response are never stored in full.
 	maxSummaryBytes = 512
+	// maxEventBodyBytes caps how many bytes we read from the hook event body
+	// before JSON decoding — only the first field prefix is ever retained.
+	maxEventBodyBytes = 64 * 1024
 )
 
 // OnEventFn is called when an authenticated hook event is received.
@@ -119,7 +123,7 @@ func (h *Handler) recordEvent(r *http.Request) {
 		return
 	}
 	var p hookPayload
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxEventBodyBytes)).Decode(&p); err != nil {
 		return
 	}
 	sessionID := firstNonEmpty(p.SessionID, p.SessionIDSnk)

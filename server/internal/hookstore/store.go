@@ -34,11 +34,12 @@ type entry struct {
 // Store is a concurrency-safe, per-session bounded ring of hook events.
 // The zero value is not usable — construct with New.
 type Store struct {
-	mu     sync.Mutex
-	cap    int
-	ttl    time.Duration // <=0 disables TTL pruning
-	events map[string][]entry
-	now    func() time.Time // injectable clock; defaults to time.Now
+	mu        sync.Mutex
+	cap       int
+	ttl       time.Duration // <=0 disables TTL pruning
+	events    map[string][]entry
+	now       func() time.Time // injectable clock; defaults to time.Now
+	lastSwept time.Time        // guards the global sweep to at most once per ttl
 }
 
 // New returns a Store retaining at most perSessionCap events per session and
@@ -77,6 +78,7 @@ func (s *Store) Record(sessionID string, ev sdk.HookEvent) {
 		buf = trimmed
 	}
 	s.events[sessionID] = buf
+	s.sweepLocked(now)
 }
 
 // Recent returns the session's non-expired events, newest first. It returns nil
@@ -98,6 +100,22 @@ func (s *Store) Recent(sessionID string) []sdk.HookEvent {
 		out[len(buf)-1-i] = e.ev
 	}
 	return out
+}
+
+// sweepLocked removes sessions whose newest event has aged past the TTL. It
+// runs at most once per TTL interval to keep Record at O(1) in the common case.
+// Caller must hold s.mu.
+func (s *Store) sweepLocked(now time.Time) {
+	if s.ttl <= 0 || now.Sub(s.lastSwept) < s.ttl {
+		return
+	}
+	cutoff := now.Add(-s.ttl)
+	for sid, buf := range s.events {
+		if len(buf) > 0 && !buf[len(buf)-1].at.After(cutoff) {
+			delete(s.events, sid)
+		}
+	}
+	s.lastSwept = now
 }
 
 // pruneLocked drops entries older than the TTL. Caller must hold s.mu.

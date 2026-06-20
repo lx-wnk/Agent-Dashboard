@@ -85,6 +85,32 @@ func TestTTL_AllExpiredReturnsNil(t *testing.T) {
 	}
 }
 
+func TestSweep_RemovesStaleSessionsFromMap(t *testing.T) {
+	base := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	clock := base
+	s := New(10, 10*time.Second)
+	s.now = func() time.Time { return clock }
+
+	s.Record("stale", ev("old"))
+	s.Record("fresh-too", ev("also-old"))
+
+	// Advance past TTL to trigger sweep on next Record call.
+	clock = base.Add(11 * time.Second)
+	s.Record("new-sess", ev("new"))
+
+	s.mu.Lock()
+	_, stalePresent := s.events["stale"]
+	_, freshTooPresent := s.events["fresh-too"]
+	s.mu.Unlock()
+
+	if stalePresent {
+		t.Error("stale session should have been swept from the map")
+	}
+	if freshTooPresent {
+		t.Error("fresh-too session (all events expired) should have been swept from the map")
+	}
+}
+
 func TestConcurrentRecordRecent_NoRace(t *testing.T) {
 	s := New(20, time.Minute)
 	var wg sync.WaitGroup
