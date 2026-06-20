@@ -130,7 +130,9 @@ function toggleSubagentExpand(id: string) {
             :aria-label="expandedSubagentIds.has(sa.id) ? 'Collapse subagent output' : 'Expand subagent output'"
             data-testid="subagent-expand-toggle"
             @click="toggleSubagentExpand(sa.id)"
-          >{{ expandedSubagentIds.has(sa.id) ? '▲' : '▼' }}</button>
+          >
+            {{ expandedSubagentIds.has(sa.id) ? '▲' : '▼' }}
+          </button>
         </div>
       </div>
     </div>

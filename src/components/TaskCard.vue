@@ -5,8 +5,8 @@ import { computed, ref } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { shortId, useCopyId } from '../composables/useCopyId'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
-import { secondsUntil } from '../utils/retryCountdown'
 import { formatCost, formatDuration } from '../utils/format'
+import { secondsUntil } from '../utils/retryCountdown'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import { agentStatusTone, runStatusLabel, runStatusTone, stageTone } from '../utils/statusColors'
 import PluginSlot from './PluginSlot.vue'
@@ -170,7 +170,9 @@ const activeChildOutputExpanded = ref(false)
           :aria-label="activeChildOutputExpanded ? 'Collapse child output' : 'Expand child output'"
           data-testid="active-child-expand-toggle"
           @click="activeChildOutputExpanded = !activeChildOutputExpanded"
-        >{{ activeChildOutputExpanded ? '▲' : '▼' }}</button>
+        >
+          {{ activeChildOutputExpanded ? '▲' : '▼' }}
+        </button>
       </div>
     </div>
     <div class="flex flex-wrap gap-1 mt-0.5">
