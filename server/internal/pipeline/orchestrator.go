@@ -99,6 +99,19 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 	if opts.EnsureWorktreeFn == nil {
 		opts.EnsureWorktreeFn = ensureTaskWorktree
 	}
+	if opts.RemoveWorktreeFn == nil {
+		taskRepo := opts.TaskRepo
+		opts.RemoveWorktreeFn = func(ctx context.Context, task *ent.Task, _ bool) error {
+			if task == nil || task.WorktreePath == nil || *task.WorktreePath == "" {
+				return nil
+			}
+			if err := removeTaskWorktree(task.Cwd, *task.WorktreePath); err != nil {
+				return err
+			}
+			_, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{ClearWorktreePath: true})
+			return err
+		}
+	}
 	poolSize := defaultMaxParallel
 	o := &PipelineOrchestrator{
 		opts:             opts,
@@ -681,7 +694,40 @@ func (o *PipelineOrchestrator) updateTokenUsage(ctx context.Context, stageRunID,
 // It also removes the per-task mutex so taskLocks does not grow unbounded.
 func (o *PipelineOrchestrator) NotifyTaskTerminated(ctx context.Context, taskID, stage string) {
 	o.taskLocks.Delete(taskID)
+	if task, err := o.opts.TaskRepo.GetByID(ctx, taskID); err == nil {
+		o.cleanupTerminalWorktree(ctx, task, true)
+	}
 	o.handleDependentTasks(ctx, taskID, stage)
+}
+
+// afterCommitTerminalCleanup removes the task's worktree once a DoneTransition
+// has been committed. Cancellation is handled separately via NotifyTaskTerminated.
+func (o *PipelineOrchestrator) afterCommitTerminalCleanup(ctx context.Context, task *ent.Task, t StageTransition) {
+	if _, ok := t.(DoneTransition); ok {
+		o.cleanupTerminalWorktree(ctx, task, true)
+	}
+}
+
+// cleanupTerminalWorktree removes a terminal task's git worktree via the
+// RemoveWorktreeFn seam, freeing its source branch and reclaiming disk. It is
+// best-effort: a missing worktree is a no-op and any removal error is logged and
+// swallowed so terminal-state handling never fails on git. On success it records
+// a "worktree_removed" audit event (force=true discards uncommitted work).
+func (o *PipelineOrchestrator) cleanupTerminalWorktree(ctx context.Context, task *ent.Task, force bool) {
+	if task == nil || task.WorktreePath == nil || *task.WorktreePath == "" {
+		return
+	}
+	if o.opts.RemoveWorktreeFn == nil {
+		return
+	}
+	path := *task.WorktreePath
+	if err := o.opts.RemoveWorktreeFn(ctx, task, force); err != nil {
+		slog.Warn("orchestrator: terminal worktree cleanup failed", "taskID", task.ID, "path", path, "err", err)
+		return
+	}
+	_ = o.opts.AuditRepo.RecordTaskAudit(ctx, task.ID, nil, "worktree_removed", "task:"+task.ID,
+		map[string]any{"path": path, "force": force})
+	slog.Info("orchestrator: removed terminal worktree", "taskID", task.ID, "path", path)
 }
 
 // ClearStalePendingPermissions expires unresolved permission_requests left on the

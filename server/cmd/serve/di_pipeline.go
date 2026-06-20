@@ -48,6 +48,7 @@ func provideOrchestrator(
 	auditRepo := repo.NewAuditEventRepo(client)
 	cfgRepo := repo.NewPipelineConfigRepo(client)
 	folderRepo := repo.NewProjectFolderRepo(client)
+	worktreeManager := services.NewWorktreeManager(taskRepo)
 
 	var resolveFn pipeline.SpawnerResolverFunc
 	if spawnerResolver != nil {
@@ -58,19 +59,22 @@ func provideOrchestrator(
 	}
 
 	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
-		Client:                client,
-		TaskRepo:              taskRepo,
-		StageRunRepo:          srRepo,
-		PermissionRepo:        permRepo,
-		AuditRepo:             auditRepo,
-		ConfigRepo:            cfgRepo,
-		SystemPromptRepo:      systemPromptRepo,
-		MCPToken:              cfg.MCPToken,
-		MCPUrl:                fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
-		WorktreeRoot:          cfg.WorktreeRoot,
-		ForceWorktrees:        cfg.ForceWorktrees,
-		SpawnFn:               pipeline.SpawnStageAgent,
-		EnsureWorktreeFn:      pipeline.EnsureTaskWorktree,
+		Client:           client,
+		TaskRepo:         taskRepo,
+		StageRunRepo:     srRepo,
+		PermissionRepo:   permRepo,
+		AuditRepo:        auditRepo,
+		ConfigRepo:       cfgRepo,
+		SystemPromptRepo: systemPromptRepo,
+		MCPToken:         cfg.MCPToken,
+		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
+		WorktreeRoot:     cfg.WorktreeRoot,
+		ForceWorktrees:   cfg.ForceWorktrees,
+		SpawnFn:          pipeline.SpawnStageAgent,
+		EnsureWorktreeFn: pipeline.EnsureTaskWorktree,
+		RemoveWorktreeFn: func(ctx context.Context, task *ent.Task, force bool) error {
+			return worktreeManager.RemoveWorktree(ctx, task.ID, force)
+		},
 		ResolveSpawner:        resolveFn,
 		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the

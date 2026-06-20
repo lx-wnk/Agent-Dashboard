@@ -62,6 +62,15 @@ Preparing the first public release.
 
 ### Fixed
 
+- Pipeline: a task reaching a terminal stage (`done`/`cancelled`) left its git
+  worktree on disk, keeping its `source_branch` checked out. Because the
+  duplicate-branch guard only inspected non-terminal tasks, a new task assigned the
+  same branch then failed worktree creation. Terminal tasks now auto-remove their
+  worktree (force, freeing the branch and reclaiming disk; cancellation discards
+  uncommitted work, audit-logged as `worktree_removed`). The branch-collision
+  preflight is now authoritative against git (`git worktree list`), so a branch held
+  by any leftover or manual worktree yields a descriptive error on task create/refine
+  and at worktree creation.
 - Performance: the cost heatmap resolved chart color tokens once per cell
   (10 DOM probes × 168 cells per render); it now resolves them once per render and
   splices the per-cell alpha, which also stops the component test from timing out
