@@ -48,10 +48,6 @@ const (
 	// Per-stage model config key prefix (e.g. stageModelKeyPrefix+"implementation").
 	stageModelKeyPrefix = "stageModel."
 
-	// Per-stage spawner config key prefix (e.g. stageSpawnerKeyPrefix+"implementation").
-	// Must match the constant in internal/services/spawner_resolver.go.
-	stageSpawnerKeyPrefix = "stageSpawner."
-
 	// Balanced defaults: implementation gets the most capable model, finalization
 	// the fastest. An explicit DB row or task/spawner override takes precedence.
 	defaultModelImplementation = "claude-opus-4-6"
