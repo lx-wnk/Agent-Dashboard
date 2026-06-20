@@ -1,3 +1,14 @@
+import type {
+  Agent as _AgentBase,
+  SessionMeta as _SessionMetaBase,
+  SubAgent as _SubAgentBase,
+  TaskInfo as _TaskInfoBase,
+  AgentStatus,
+  HookEvent,
+  PendingPermission,
+  TokenUsage,
+} from './sdk.generated'
+import type { MetricKey } from './utils/evalMetrics'
 // Types generated from sdk/types.go via tygo — do not edit these directly.
 // Run `task generate` to regenerate after changing sdk/types.go.
 import {
@@ -5,19 +16,8 @@ import {
   AgentStatusIdle,
   AgentStatusWaiting,
 } from './sdk.generated'
-import type {
-  Agent as _AgentBase,
-  SessionMeta as _SessionMetaBase,
-  SubAgent as _SubAgentBase,
-  TaskInfo as _TaskInfoBase,
-  AgentStatus,
-  PendingPermission,
-  HookEvent,
-  TokenUsage,
-} from './sdk.generated'
-import type { MetricKey } from './utils/evalMetrics'
 
-export type { AgentStatus, PendingPermission, HookEvent, TokenUsage }
+export type { AgentStatus, HookEvent, PendingPermission, TokenUsage }
 
 export interface SessionMeta extends Omit<_SessionMetaBase, 'firstPrompt'> {
   firstPrompt: string | null
