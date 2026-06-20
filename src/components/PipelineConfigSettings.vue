@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
 import type { PipelineConfig } from '../composables/usePipelineConfig'
+import { computed, onMounted, ref, watch } from 'vue'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { AVAILABLE_MODELS } from '../utils/models'
 import AppButton from './ui/AppButton.vue'
 
 const { config, loading, error, fetchConfig, saveConfig } = usePipelineConfig()
 
-onMounted(() => { void fetchConfig() })
+onMounted(() => {
+  void fetchConfig()
+})
 
 // Local draft — only written back on save
 const draft = ref<PipelineConfig | null>(null)
@@ -34,7 +36,9 @@ async function handleSave() {
   })
   if (!error.value) {
     saved.value = true
-    setTimeout(() => { saved.value = false }, 2500)
+    setTimeout(() => {
+      saved.value = false
+    }, 2500)
   }
   else {
     saveError.value = error.value

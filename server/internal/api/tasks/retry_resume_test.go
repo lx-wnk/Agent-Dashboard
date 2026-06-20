@@ -48,12 +48,6 @@ func (c *captureOrchestrator) EffectiveStageModel(_ context.Context, _ string) s
 	return ""
 }
 
-func (c *captureOrchestrator) resumeID() string {
-	if c.opts == nil {
-		return ""
-	}
-	return c.opts.ResumeSessionID
-}
 func (c *captureOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
 func (c *captureOrchestrator) InvalidateConfigCache()                                   {}
 func (c *captureOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}

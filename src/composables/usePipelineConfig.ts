@@ -8,7 +8,7 @@ export interface PipelineConfig {
   stageModels: Record<'implementation' | 'self_review' | 'finalization', string>
 }
 
-type PartialPipelineConfig = {
+interface PartialPipelineConfig {
   maxParallelOrchestrators?: number
   stageTimeoutSeconds?: number
   stageModels?: Partial<PipelineConfig['stageModels']>
