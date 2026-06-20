@@ -48,13 +48,13 @@ func newApproveAllHandler(t *testing.T, orch tasks.OrchestratorIface) (*ent.Clie
 	t.Cleanup(func() { _ = client.Close() })
 
 	h := tasks.NewHandler(tasks.Deps{
-		TaskRepo:    repo.NewTaskRepo(client),
-		SRRepo:      repo.NewStageRunRepo(client),
-		PermRepo:    repo.NewPermissionRepo(client),
-		AuditRepo:   repo.NewAuditEventRepo(client),
-		CfgRepo:     repo.NewPipelineConfigRepo(client),
+		TaskRepo:     repo.NewTaskRepo(client),
+		SRRepo:       repo.NewStageRunRepo(client),
+		PermRepo:     repo.NewPermissionRepo(client),
+		AuditRepo:    repo.NewAuditEventRepo(client),
+		CfgRepo:      repo.NewPipelineConfigRepo(client),
 		Orchestrator: orch,
-		Broadcaster: sse.NewTaskBroadcaster(sse.NewBroadcaster()),
+		Broadcaster:  sse.NewTaskBroadcaster(sse.NewBroadcaster()),
 	})
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))

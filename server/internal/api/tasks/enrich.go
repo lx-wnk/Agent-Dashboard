@@ -41,17 +41,17 @@ type EnrichedTask struct {
 	CreatedAt           time.Time              `json:"createdAt"`
 	UpdatedAt           time.Time              `json:"updatedAt"`
 	// Computed fields — not stored in DB.
-	NeedsUser                   bool       `json:"needsUser"`
-	LatestStageRunStatus        *string    `json:"latestStageRunStatus"`
-	AutoRetryCount              *int       `json:"autoRetryCount,omitempty"`
-	NextRetryAt                 *time.Time `json:"nextRetryAt,omitempty"`
-	RefineStatus                *string    `json:"refineStatus,omitempty"`
-	RefineError                 *string    `json:"refineError,omitempty"`
-	CurrentIteration            int        `json:"currentIteration"`
-	ActiveSessionID             *string    `json:"activeSessionId"`
-	ActivePID                   *int       `json:"activePid"`
-	BlockedByPendingPermissions bool                  `json:"blockedByPendingPermissions"`
-	AvailableActions            []taskcontrol.Action  `json:"availableActions"`
+	NeedsUser                   bool                 `json:"needsUser"`
+	LatestStageRunStatus        *string              `json:"latestStageRunStatus"`
+	AutoRetryCount              *int                 `json:"autoRetryCount,omitempty"`
+	NextRetryAt                 *time.Time           `json:"nextRetryAt,omitempty"`
+	RefineStatus                *string              `json:"refineStatus,omitempty"`
+	RefineError                 *string              `json:"refineError,omitempty"`
+	CurrentIteration            int                  `json:"currentIteration"`
+	ActiveSessionID             *string              `json:"activeSessionId"`
+	ActivePID                   *int                 `json:"activePid"`
+	BlockedByPendingPermissions bool                 `json:"blockedByPendingPermissions"`
+	AvailableActions            []taskcontrol.Action `json:"availableActions"`
 
 	// Child-task summary — populated by ChildSummariesByParent, zero when no children.
 	ChildCount       int          `json:"childCount"`

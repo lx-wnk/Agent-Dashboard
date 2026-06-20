@@ -361,17 +361,17 @@ func newTestHandlerWithRepos(t *testing.T) (*ent.Client, *chi.Mux) {
 	broadcaster := sse.NewTaskBroadcaster(sse.NewBroadcaster())
 
 	h := tasks.NewHandler(tasks.Deps{
-		Client:      client,
-		TaskRepo:    taskRepo,
-		SRRepo:      srRepo,
-		SRBulkRepo:  srBulkRepo,
-		PermRepo:    permRepo,
-		AuditRepo:   auditRepo,
-		CfgRepo:     cfgRepo,
-		ProjectRepo: projectRepo,
-		SpawnerRepo: spawnerRepo,
+		Client:       client,
+		TaskRepo:     taskRepo,
+		SRRepo:       srRepo,
+		SRBulkRepo:   srBulkRepo,
+		PermRepo:     permRepo,
+		AuditRepo:    auditRepo,
+		CfgRepo:      cfgRepo,
+		ProjectRepo:  projectRepo,
+		SpawnerRepo:  spawnerRepo,
 		Orchestrator: &noopOrchestrator{},
-		Broadcaster: broadcaster,
+		Broadcaster:  broadcaster,
 	})
 
 	r := chi.NewRouter()

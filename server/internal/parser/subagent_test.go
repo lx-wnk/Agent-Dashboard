@@ -116,6 +116,46 @@ func TestParseSubagentFileCached_ReturnsSameResult(t *testing.T) {
 	}
 }
 
+func TestPruneSubagentCache_RemovesStaleEntries(t *testing.T) {
+	dir := t.TempDir()
+	kept := writeFixture(t, dir, "kept.jsonl", sampleSubagentJSONL)
+	evicted := writeFixture(t, dir, "evicted.jsonl", sampleSubagentJSONL)
+
+	// Warm the cache for both paths.
+	if _, err := ParseSubagentFileCached(kept); err != nil {
+		t.Fatalf("warm kept: %v", err)
+	}
+	if _, err := ParseSubagentFileCached(evicted); err != nil {
+		t.Fatalf("warm evicted: %v", err)
+	}
+
+	subagentCacheMu.RLock()
+	beforeKept := subagentCache[kept]
+	beforeEvicted := subagentCache[evicted]
+	subagentCacheMu.RUnlock()
+	if beforeKept == (subagentCacheEntry{}) {
+		t.Fatal("expected kept path in cache before prune")
+	}
+	if beforeEvicted == (subagentCacheEntry{}) {
+		t.Fatal("expected evicted path in cache before prune")
+	}
+
+	// Prune with only the kept path live.
+	PruneSubagentCache(map[string]bool{kept: true})
+
+	subagentCacheMu.RLock()
+	afterKept := subagentCache[kept]
+	_, evictedPresent := subagentCache[evicted]
+	subagentCacheMu.RUnlock()
+
+	if afterKept == (subagentCacheEntry{}) {
+		t.Error("kept path should still be in cache after prune")
+	}
+	if evictedPresent {
+		t.Error("evicted path should have been removed from cache after prune")
+	}
+}
+
 func TestParseSubagentFileCached_ReParseOnMtimeChange(t *testing.T) {
 	dir := t.TempDir()
 	p := writeFixture(t, dir, "reparsed.jsonl", sampleSubagentJSONL)

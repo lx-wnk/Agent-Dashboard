@@ -292,6 +292,15 @@ func buildSubagents(session *parser.SessionData) []sdk.SubAgent {
 	if err != nil {
 		return out
 	}
+	// Collect live paths first so we can evict stale cache entries in one pass.
+	livePaths := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
+			livePaths[filepath.Join(subDir, e.Name())] = true
+		}
+	}
+	parser.PruneSubagentCache(livePaths)
+
 	now := time.Now()
 	for _, e := range entries {
 		name := e.Name()

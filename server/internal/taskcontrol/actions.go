@@ -14,16 +14,16 @@ type Action struct {
 
 // action name constants — single source of truth; never type these strings elsewhere.
 const (
-	ActionRefine           = "refine"
-	ActionApproveSpec      = "approve_spec"
-	ActionAdvance          = "advance"
-	ActionRetry            = "retry"
-	ActionBack             = "back"
-	ActionCancel           = "cancel"
-	ActionHold             = "hold"
-	ActionResume           = "resume"
+	ActionRefine            = "refine"
+	ActionApproveSpec       = "approve_spec"
+	ActionAdvance           = "advance"
+	ActionRetry             = "retry"
+	ActionBack              = "back"
+	ActionCancel            = "cancel"
+	ActionHold              = "hold"
+	ActionResume            = "resume"
 	ActionApproveAllPending = "approve_all_pending"
-	ActionOpenPR           = "open_pr"
+	ActionOpenPR            = "open_pr"
 )
 
 // enabled returns an enabled Action, optionally marked primary.

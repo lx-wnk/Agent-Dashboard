@@ -38,12 +38,12 @@ func findAction(actions []taskcontrol.Action, name string) taskcontrol.Action {
 // by the sub-project spec.
 func TestComputeActions(t *testing.T) {
 	tests := []struct {
-		name           string
-		state          taskcontrol.TaskState
-		wantPrimary    string // "" means no primary (terminal)
-		wantEnabled    []string
-		wantDisabled   []string
-		wantReasonIn   map[string]string // action → substring that must appear in Reason
+		name         string
+		state        taskcontrol.TaskState
+		wantPrimary  string // "" means no primary (terminal)
+		wantEnabled  []string
+		wantDisabled []string
+		wantReasonIn map[string]string // action → substring that must appear in Reason
 	}{
 		{
 			name:  "concept stage, refining in progress",
@@ -78,8 +78,8 @@ func TestComputeActions(t *testing.T) {
 			wantDisabled: []string{"advance", "retry", "resume", "approve_all_pending"},
 		},
 		{
-			name:  "implementation stage, failed",
-			state: taskcontrol.FromFields("implementation", "failed", "", 0, false),
+			name:         "implementation stage, failed",
+			state:        taskcontrol.FromFields("implementation", "failed", "", 0, false),
 			wantPrimary:  "retry",
 			wantEnabled:  []string{"retry", "cancel"},
 			wantDisabled: []string{"advance", "resume", "approve_all_pending"},
@@ -104,8 +104,8 @@ func TestComputeActions(t *testing.T) {
 			wantDisabled: []string{"retry", "advance", "resume", "approve_all_pending"},
 		},
 		{
-			name:  "finalization stage, running",
-			state: taskcontrol.FromFields("finalization", "running", "", 0, false),
+			name:         "finalization stage, running",
+			state:        taskcontrol.FromFields("finalization", "running", "", 0, false),
 			wantPrimary:  "",
 			wantEnabled:  []string{"cancel"},
 			wantDisabled: []string{"retry", "advance", "resume"},
@@ -119,15 +119,15 @@ func TestComputeActions(t *testing.T) {
 			wantDisabled: []string{"cancel", "retry", "advance", "resume"},
 		},
 		{
-			name:  "cancelled — terminal, no enabled actions",
-			state: taskcontrol.FromFields("cancelled", "", "", 0, false),
+			name:         "cancelled — terminal, no enabled actions",
+			state:        taskcontrol.FromFields("cancelled", "", "", 0, false),
 			wantPrimary:  "",
 			wantEnabled:  []string{},
 			wantDisabled: []string{"retry", "advance"},
 		},
 		{
-			name:  "implementation, awaiting_user, no pending perms — resume is primary",
-			state: taskcontrol.FromFields("implementation", "awaiting_user", "", 0, true),
+			name:         "implementation, awaiting_user, no pending perms — resume is primary",
+			state:        taskcontrol.FromFields("implementation", "awaiting_user", "", 0, true),
 			wantPrimary:  "resume",
 			wantEnabled:  []string{"resume", "cancel"},
 			wantDisabled: []string{"approve_all_pending", "advance"},

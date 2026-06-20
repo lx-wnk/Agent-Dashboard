@@ -233,6 +233,72 @@ func TestChildSummariesByParent(t *testing.T) {
 	}
 }
 
+// TestChildSummariesByParent_DeadPidNotActive verifies that a child whose DB
+// status is non-terminal but whose PID is dead is not counted as active.
+func TestChildSummariesByParent_DeadPidNotActive(t *testing.T) {
+	bundle := openTestDB(t)
+	ctx := context.Background()
+
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+
+	// alwaysDead probe — simulates a zombie process.
+	alwaysDead := func(int) bool { return false }
+	bulkRepo := rawrepo.NewStageRunBulkRepoWithProbe(bundle.DB, alwaysDead)
+
+	parent, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug: "parent-zombie", Title: "Parent Zombie", Cwd: "/tmp/pz",
+		CurrentStage: "implementation", Priority: "medium",
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	parentID := parent.ID
+
+	child, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug: "child-zombie", Title: "Child Zombie", Cwd: "/tmp/cz",
+		CurrentStage: "implementation", Priority: "medium",
+		ParentTaskID: &parentID,
+	})
+	if err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID: child.ID, Stage: "implementation", Iteration: 1,
+	})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+	runningStatus := "running"
+	pid := 99999
+	_, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status: &runningStatus,
+		PID:    &pid,
+	})
+	if err != nil {
+		t.Fatalf("update stage run: %v", err)
+	}
+
+	summaries, err := bulkRepo.ChildSummariesByParent(ctx, []string{parentID})
+	if err != nil {
+		t.Fatalf("ChildSummariesByParent: %v", err)
+	}
+	s, ok := summaries[parentID]
+	if !ok {
+		t.Fatal("expected summary for parent, got none")
+	}
+	if s.ChildCount != 1 {
+		t.Errorf("ChildCount: want 1, got %d", s.ChildCount)
+	}
+	if s.ActiveChildCount != 0 {
+		t.Errorf("ActiveChildCount: want 0 for dead-pid child, got %d", s.ActiveChildCount)
+	}
+	if s.HasActive {
+		t.Error("HasActive: want false for dead-pid child")
+	}
+}
+
 // TestStageRunBulkRepo_LatestPerTask_RetryFields verifies that retry_count and
 // next_retry_at are correctly scanned by LatestPerTask.
 func TestStageRunBulkRepo_LatestPerTask_RetryFields(t *testing.T) {

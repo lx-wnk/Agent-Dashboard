@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
 // StageRunBulkRepo provides bulk raw-SQL helpers for stage_runs that cannot
@@ -40,11 +41,22 @@ type ChildSummary struct {
 	LatestOutput     string
 }
 
-type sqlStageRunBulkRepo struct{ db *sql.DB }
+type sqlStageRunBulkRepo struct {
+	db         *sql.DB
+	isPidAlive func(int) bool
+}
 
 // NewStageRunBulkRepo returns a StageRunBulkRepo backed by db.
+// pipeline.IsPidAlive is used as the default liveness probe; tests can
+// substitute a fake by calling newStageRunBulkRepoWithProbe directly.
 func NewStageRunBulkRepo(db *sql.DB) StageRunBulkRepo {
-	return &sqlStageRunBulkRepo{db: db}
+	return &sqlStageRunBulkRepo{db: db, isPidAlive: pipeline.IsPidAlive}
+}
+
+// NewStageRunBulkRepoWithProbe is the test-seam constructor that substitutes
+// the default pipeline.IsPidAlive with a custom probe.
+func NewStageRunBulkRepoWithProbe(db *sql.DB, probe func(int) bool) StageRunBulkRepo {
+	return &sqlStageRunBulkRepo{db: db, isPidAlive: probe}
 }
 
 // LatestPerTask uses ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY created_at DESC)
@@ -141,10 +153,10 @@ func (r *sqlStageRunBulkRepo) ChildSummariesByParent(ctx context.Context, parent
 	placeholders, args := buildInArgs(parentIDs)
 	q := fmt.Sprintf(`
 SELECT t.parent_task_id, t.id, t.current_stage,
-       lr.status, lr.tokens_used, lr.cost_cents, lr.output, lr.started_at, lr.ended_at, lr.created_at
+       lr.status, lr.pid, lr.tokens_used, lr.cost_cents, lr.output, lr.started_at, lr.ended_at, lr.created_at
 FROM tasks t
 LEFT JOIN (
-    SELECT task_id, status, tokens_used, cost_cents, output, started_at, ended_at, created_at,
+    SELECT task_id, status, pid, tokens_used, cost_cents, output, started_at, ended_at, created_at,
            ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY created_at DESC) AS rn
     FROM stage_runs
 ) lr ON lr.task_id = t.id AND lr.rn = 1
@@ -174,6 +186,7 @@ WHERE t.parent_task_id IN (%s)`, placeholders)
 			childID      string
 			currentStage string
 			status       sql.NullString
+			pid          sql.NullInt64
 			tokensUsed   sql.NullInt64
 			costCents    sql.NullInt64
 			outputRaw    sql.NullString
@@ -183,7 +196,7 @@ WHERE t.parent_task_id IN (%s)`, placeholders)
 		)
 		if err := rows.Scan(
 			&parentID, &childID, &currentStage,
-			&status, &tokensUsed, &costCents, &outputRaw,
+			&status, &pid, &tokensUsed, &costCents, &outputRaw,
 			&startedAt, &endedAt, &createdAt,
 		); err != nil {
 			return nil, fmt.Errorf("stagerun.ChildSummariesByParent scan: %w", err)
@@ -197,7 +210,11 @@ WHERE t.parent_task_id IN (%s)`, placeholders)
 		s.ChildCount++
 
 		hasRun := status.Valid
-		isActive := hasRun && !terminalStatuses[status.String]
+		// A child is active when DB status is non-terminal AND, if a PID is
+		// recorded, that process is still alive. A NULL pid means the run has
+		// not yet recorded its process; treat it as alive to match enrichOne.
+		pidLive := !pid.Valid || r.isPidAlive(int(pid.Int64))
+		isActive := hasRun && !terminalStatuses[status.String] && pidLive
 		if isActive {
 			s.ActiveChildCount++
 
@@ -212,6 +229,7 @@ WHERE t.parent_task_id IN (%s)`, placeholders)
 			if prev, seen := best[parentID]; !seen || repTime.After(prev.bestTime) {
 				dur := 0
 				if startedAt.Valid {
+					// Cap duration at ended_at when present; otherwise use wall time.
 					if endedAt.Valid {
 						dur = int(endedAt.Time.Sub(startedAt.Time).Seconds())
 					} else {

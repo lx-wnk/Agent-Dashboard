@@ -137,6 +137,19 @@ var (
 	subagentCache   = map[string]subagentCacheEntry{}
 )
 
+// PruneSubagentCache removes cache entries whose path is not in livePaths.
+// Call once per directory walk after collecting the current set of subagent
+// file paths to prevent unbounded growth.
+func PruneSubagentCache(livePaths map[string]bool) {
+	subagentCacheMu.Lock()
+	defer subagentCacheMu.Unlock()
+	for path := range subagentCache {
+		if !livePaths[path] {
+			delete(subagentCache, path)
+		}
+	}
+}
+
 // ParseSubagentFileCached returns a cached parse result when the file mtime is
 // unchanged, otherwise re-parses and updates the cache.
 func ParseSubagentFileCached(path string) (SubagentParse, error) {
