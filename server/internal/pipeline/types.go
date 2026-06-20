@@ -198,6 +198,14 @@ type OrchestratorOptions struct {
 	// When nil the orchestrator defaults to ensureTaskWorktree.
 	EnsureWorktreeFn func(task *ent.Task, worktreeRoot string) (path, branch string, err error)
 
+	// RemoveWorktreeFn force-removes a task's git worktree and clears its
+	// WorktreePath, freeing the source branch when the task reaches a terminal
+	// stage. Production wires services.WorktreeManager.RemoveWorktree; tests
+	// inject a stub to avoid real git. When nil the orchestrator defaults to a
+	// closure over removeTaskWorktree + TaskRepo (force-only). Errors are
+	// non-fatal — callers log and continue.
+	RemoveWorktreeFn func(ctx context.Context, task *ent.Task, force bool) error
+
 	// ResolveSpawner returns the effective DB spawner row for a task right
 	// before the native Claude path is taken. When nil, stage handlers spawn
 	// with the legacy `claude` CLI (current behaviour).

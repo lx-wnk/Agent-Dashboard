@@ -38,6 +38,9 @@ func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Ta
 		if retErr = tx.Commit(); retErr != nil {
 			return nil, fmt.Errorf("applyTransition.commit: %w", retErr)
 		}
+		// Worktree removal runs a separate DB write; it must happen after the tx
+		// commits to avoid blocking on SQLite's single-writer lock.
+		o.afterCommitTerminalCleanup(ctx, task, t)
 		// Broadcast after successful commit — payload was already read in-tx.
 		if o.opts.OnTaskChanged != nil {
 			o.opts.OnTaskChanged(task.ID, transitionKindName(t), enrichedPayload)
@@ -52,6 +55,7 @@ func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Ta
 	if retErr != nil {
 		return nil, retErr
 	}
+	o.afterCommitTerminalCleanup(ctx, task, t)
 	if o.opts.OnTaskChanged != nil {
 		o.opts.OnTaskChanged(task.ID, transitionKindName(t), enrichedPayload)
 	}

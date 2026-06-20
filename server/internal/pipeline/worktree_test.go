@@ -19,7 +19,7 @@ func initRepoWithCommit(t *testing.T, repoDir string) {
 		{"config", "user.name", "Test"},
 		{"commit", "--allow-empty", "-m", "init"},
 	} {
-		full := append([]string{"-C", repoDir}, args...)
+		full := append([]string{"-C", repoDir, "-c", "commit.gpgsign=false"}, args...)
 		if err := exec.Command("git", full...).Run(); err != nil {
 			t.Fatalf("git %v: %v", args, err)
 		}

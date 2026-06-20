@@ -18,6 +18,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
+	"github.com/lx-wnk/agent-dashboard/server/internal/worktree"
 )
 
 const (
@@ -334,6 +335,12 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 		}
 		if n > 0 {
 			return nil, apierr.NewAppError(http.StatusConflict, "source_branch already in use by another active task")
+		}
+		// Authoritative git check: a leftover/manual worktree may hold the branch
+		// even when no active task references it.
+		if held, gErr := worktree.BranchCheckedOutAt(ctx, p.Cwd, *p.SourceBranch); gErr == nil && held != "" {
+			return nil, apierr.NewAppError(http.StatusConflict,
+				fmt.Sprintf("source_branch %q already checked out at %s", *p.SourceBranch, held))
 		}
 	}
 

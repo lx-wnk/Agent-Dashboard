@@ -67,6 +67,59 @@ func TestRunnerOutput(t *testing.T) {
 	}
 }
 
+func TestParseWorktreeBranches(t *testing.T) {
+	porcelain := "worktree /repo/main\nHEAD aaaa\nbranch refs/heads/main\n\n" +
+		"worktree /repo/wt-feat\nHEAD bbbb\nbranch refs/heads/feat/x\n\n" +
+		"worktree /repo/detached\nHEAD cccc\ndetached\n\n"
+	got := parseWorktreeBranches(porcelain)
+	if got["main"] != "/repo/main" {
+		t.Fatalf("main: got %q", got["main"])
+	}
+	if got["feat/x"] != "/repo/wt-feat" {
+		t.Fatalf("feat/x: got %q", got["feat/x"])
+	}
+	if _, ok := got["detached"]; ok {
+		t.Fatal("detached worktree must not produce a branch entry")
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 branches, got %d: %v", len(got), got)
+	}
+}
+
+func TestBranchCheckedOutAt(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available:", err)
+	}
+	repoDir := t.TempDir()
+	run := func(args ...string) {
+		full := append([]string{"-C", repoDir, "-c", "commit.gpgsign=false"}, args...)
+		cmd := exec.Command("git", full...)
+		cmd.Env = append(cmd.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Skipf("git %v failed: %v (%s)", args, err, out)
+		}
+	}
+	run("init", "-b", "main")
+	run("commit", "--allow-empty", "-m", "init")
+	wtPath := filepath.Join(t.TempDir(), "wt")
+	run("worktree", "add", "-b", "feat/held", wtPath)
+
+	ctx := context.Background()
+	path, err := BranchCheckedOutAt(ctx, repoDir, "feat/held")
+	if err != nil {
+		t.Fatalf("BranchCheckedOutAt: %v", err)
+	}
+	// git may report the symlink-resolved path (e.g. /private/var on macOS), so
+	// match by basename rather than the exact temp path.
+	if filepath.Base(path) != filepath.Base(wtPath) || path == "" {
+		t.Fatalf("held branch: got %q want suffix %q", path, wtPath)
+	}
+	if free, _ := BranchCheckedOutAt(ctx, repoDir, "feat/unused"); free != "" {
+		t.Fatalf("unused branch must be free, got %q", free)
+	}
+}
+
 func TestRunnerCombinedSurfacesError(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available:", err)

@@ -194,8 +194,15 @@ func (m *WorktreeManager) RemoveWorktree(ctx context.Context, taskID string, for
 	}
 	args = append(args, path)
 
-	if _, err := m.runner.Combined(ctx, task.Cwd, args...); err != nil {
-		return fmt.Errorf("remove_worktree: git worktree remove: %w", err)
+	out, gitErr := m.runner.Combined(ctx, task.Cwd, args...)
+	if gitErr != nil {
+		// Directory already gone — prune stale metadata and treat as success.
+		lower := strings.ToLower(out)
+		if strings.Contains(lower, "is not a working tree") || strings.Contains(lower, "no such file") {
+			_, _ = m.runner.Combined(ctx, task.Cwd, "worktree", "prune")
+		} else {
+			return fmt.Errorf("remove_worktree: git worktree remove: %w", gitErr)
+		}
 	}
 
 	if _, err := m.taskRepo.Update(ctx, taskID, repo.UpdateTaskInput{ClearWorktreePath: true}); err != nil {

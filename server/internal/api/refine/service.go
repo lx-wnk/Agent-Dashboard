@@ -8,6 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
+	"github.com/lx-wnk/agent-dashboard/server/internal/worktree"
 )
 
 // ConfirmDeps are the subset of Deps required by Confirm.
@@ -41,6 +42,11 @@ func Confirm(ctx context.Context, d ConfirmDeps, taskID string) (*ent.Task, erro
 					}
 					if n > 0 {
 						return nil, fmt.Errorf("source_branch %q already in use by another active task", concept.SourceBranch)
+					}
+					if task, terr := d.Tasks.GetByID(ctx, taskID); terr == nil && task != nil {
+						if held, gErr := worktree.BranchCheckedOutAt(ctx, task.Cwd, concept.SourceBranch); gErr == nil && held != "" {
+							return nil, fmt.Errorf("source_branch %q already checked out at %s", concept.SourceBranch, held)
+						}
 					}
 					update.SourceBranch = &concept.SourceBranch
 				}

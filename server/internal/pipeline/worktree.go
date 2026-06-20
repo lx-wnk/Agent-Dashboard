@@ -35,6 +35,14 @@ func ensureTaskWorktree(task *ent.Task, worktreeRoot string) (path, branch strin
 	}
 
 	ctx := context.Background()
+	// Authoritative preflight: reject a branch already held by any worktree
+	// (e.g. a terminal task's leftover) before git fails with a terse message.
+	// Best-effort — a git error here is ignored so a transient failure does not
+	// block an otherwise-valid checkout; `git worktree add` is the real gate.
+	if held, hErr := worktree.BranchCheckedOutAt(ctx, task.Cwd, branch); hErr == nil && held != "" {
+		return "", "", fmt.Errorf("ensureTaskWorktree: branch %q already checked out at %s", branch, held)
+	}
+
 	// Try creating a new branch + worktree from HEAD.
 	out, cmdErr := gitRunner.Combined(ctx, task.Cwd, "worktree", "add", "-b", branch, worktreePath)
 	if cmdErr != nil {
@@ -54,8 +62,15 @@ func removeTaskWorktree(cwd, worktreePath string) error {
 	if worktreePath == "" {
 		return nil
 	}
-	out, err := gitRunner.Combined(context.Background(), cwd, "worktree", "remove", "--force", worktreePath)
+	ctx := context.Background()
+	out, err := gitRunner.Combined(ctx, cwd, "worktree", "remove", "--force", worktreePath)
 	if err != nil {
+		// Directory already gone — prune stale metadata and treat as success.
+		lower := strings.ToLower(out)
+		if strings.Contains(lower, "is not a working tree") || strings.Contains(lower, "no such file") {
+			_, _ = gitRunner.Combined(ctx, cwd, "worktree", "prune")
+			return nil
+		}
 		return fmt.Errorf("removeTaskWorktree: %s: %w", strings.TrimSpace(out), err)
 	}
 	return nil
