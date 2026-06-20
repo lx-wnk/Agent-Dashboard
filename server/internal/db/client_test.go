@@ -1,6 +1,7 @@
 package db_test
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -153,4 +154,35 @@ func TestOpen_FTS5TriggerRoundTrip(t *testing.T) {
 	).Scan(&taskID)
 	require.NoError(t, err)
 	require.Equal(t, "task-fts-1", taskID)
+}
+
+func TestOpen_MigratesLegacyPipelineConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "legacy.db")
+
+	// Seed the legacy pipeline_configs shape: (key, value) with key as PK, no id column.
+	raw, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	_, err = raw.Exec("CREATE TABLE `pipeline_configs` (`key` text NOT NULL, `value` text NOT NULL, PRIMARY KEY (`key`))")
+	require.NoError(t, err)
+	_, err = raw.Exec("INSERT INTO pipeline_configs (key, value) VALUES ('maxAutoRetries','3'),('stageModel.implementation','claude-opus-4-8')")
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	// Open via the production path — must migrate without the NOT NULL id failure.
+	bundle, err := db.Open(path)
+	require.NoError(t, err)
+	defer func() { _ = bundle.Client.Close() }()
+
+	all, err := bundle.Client.PipelineConfig.Query().All(t.Context())
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	byKey := map[string]string{}
+	for _, c := range all {
+		byKey[c.Key] = c.Value
+		require.Equal(t, c.Key, c.ID)     // id backfilled from key
+		require.Equal(t, "", c.ProjectID) // global scope sentinel
+	}
+	require.Equal(t, "3", byKey["maxAutoRetries"])
+	require.Equal(t, "claude-opus-4-8", byKey["stageModel.implementation"])
 }
