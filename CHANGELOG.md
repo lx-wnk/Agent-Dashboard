@@ -34,7 +34,12 @@ Preparing the first public release.
   the task UI (PR #193).
 - Opt-in HTTP hook receiver (`/api/hooks/event`, `/api/hooks/pre-tool`) for
   per-event agent rescans, gated by an auto-generated shared secret — keeps the
-  no-hooks default intact.
+  no-hooks default intact. The receiver records a bounded per-session history of
+  recent lifecycle-hook events (`PreToolUse`, `PostToolUse`, `Stop`, …) and
+  surfaces them in the agent modal under **Hook events**; payload previews are
+  truncated to 512 bytes and nothing is written to disk. The cap is controlled
+  by `DASHBOARD_HOOK_EVENTS_PER_SESSION` (default 50). Stale sessions are swept
+  on every record call (PR #205).
 - Frontend plugin slot framework — named extension points (`refinement`, `settings`,
   and others) that sidecar plugins can mount custom UI into (PR #168).
 - Lean, front-door `README.md` and a structured `docs/` tree (configuration, MCP,
