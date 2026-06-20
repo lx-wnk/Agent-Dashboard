@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -75,6 +76,53 @@ func (r *Runner) run(ctx context.Context, cwd string, combined bool, args ...str
 	}
 	out, err := cmd.Output()
 	return string(out), err
+}
+
+// WorktreeBranches returns a map of short branch name → worktree path for every
+// worktree registered in the repo at repoCwd, parsed from
+// `git worktree list --porcelain`. Detached worktrees (no branch line) are
+// skipped. A git error is returned verbatim so callers can decide whether to
+// treat a missing repo as fatal.
+func (r *Runner) WorktreeBranches(ctx context.Context, repoCwd string) (map[string]string, error) {
+	out, err := r.Output(ctx, repoCwd, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	return parseWorktreeBranches(out), nil
+}
+
+// parseWorktreeBranches maps short branch names to worktree paths from porcelain
+// output. Each record is a block separated by a blank line; "worktree <path>"
+// opens a record and "branch refs/heads/<name>" names its checked-out branch.
+func parseWorktreeBranches(porcelain string) map[string]string {
+	branches := make(map[string]string)
+	var curPath string
+	for line := range strings.SplitSeq(porcelain, "\n") {
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			curPath = strings.TrimPrefix(line, "worktree ")
+		case strings.HasPrefix(line, "branch "):
+			ref := strings.TrimPrefix(line, "branch ")
+			name := strings.TrimPrefix(ref, "refs/heads/")
+			if curPath != "" && name != "" {
+				branches[name] = curPath
+			}
+		case line == "":
+			curPath = ""
+		}
+	}
+	return branches
+}
+
+// BranchCheckedOutAt reports the worktree path where branch is currently checked
+// out in the repo at repoCwd, or "" when no worktree holds it. Best-effort: a
+// git failure returns ("", err) and callers may choose to ignore it.
+func BranchCheckedOutAt(ctx context.Context, repoCwd, branch string) (string, error) {
+	branches, err := NewRunner().WorktreeBranches(ctx, repoCwd)
+	if err != nil {
+		return "", err
+	}
+	return branches[branch], nil
 }
 
 // DefaultRoot returns root unchanged when set, else $HOME/dashboard-worktrees.
