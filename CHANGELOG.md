@@ -14,6 +14,7 @@ Preparing the first public release.
 
 ### Added
 
+- Live subtasks on agent and task cards — token usage, duration, and latest output for each active subagent are parsed from JSONL in real time and surfaced directly on the roster cards; child-task summaries are projected onto enriched tasks, gated on pid-liveness (PR #203).
 - Per-task autonomy levels (`manual`, `spec_gated`, `full`) over REST and MCP
   `create_task`/`update_task`. New tasks default to `spec_gated`, which auto-approves
   permission requests (blanket Bash, audit-logged as `permission_auto_approved`);

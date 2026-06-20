@@ -32,7 +32,7 @@ Most agent monitors require you to wire hooks or wrappers into every project. Th
 
 ## Features
 
-**Monitor** — real-time agent roster over SSE (list, card, kanban) with tokens, cost, status, and uptime; chat-style transcript with collapsible tool groups and subagent badges; `Cmd+K` spotlight search and n-gram pattern discovery.
+**Monitor** — real-time agent roster over SSE (list, card, kanban) with tokens, cost, status, and uptime; live active-subtask metrics (token usage, duration, latest output) on every agent and task card; chat-style transcript with collapsible tool groups and subagent badges; `Cmd+K` spotlight search and n-gram pattern discovery.
 
 **Build & control** — multi-stage task pipeline (`concept → implementation → review → done`) running in isolated git worktrees behind per-stage permission gates; spawn agents and send follow-ups or `/btw` interrupts via MCP channels; refinement chat to shape a concept first.
 
