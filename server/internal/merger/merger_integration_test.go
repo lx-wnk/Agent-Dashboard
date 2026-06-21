@@ -22,9 +22,7 @@ import (
 // in an environment with no running Claude processes.
 // It may return an error (e.g. scanner not available) or an empty slice — both are valid.
 func TestGetAgents_DoesNotPanic(t *testing.T) {
-	merger.ResetStaleTrackerForTest()
-	t.Cleanup(merger.ResetStaleTrackerForTest)
-	agents, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	agents, err := merger.New().GetAgents(context.Background(), merger.GetAgentsOpts{})
 	if err != nil {
 		// Scanner may fail in CI — acceptable.
 		t.Logf("GetAgents returned error (acceptable in CI): %v", err)
@@ -35,7 +33,7 @@ func TestGetAgents_DoesNotPanic(t *testing.T) {
 	assert.IsType(t, []sdk.Agent{}, agents)
 }
 
-// fixedScanFn returns a scanProcessesFn override that yields a fixed process list.
+// fixedScanFn returns a scan override that yields a fixed process list.
 func fixedScanFn(procs []scanner.ProcessInfo) func(ctx context.Context) ([]scanner.ProcessInfo, error) {
 	return func(ctx context.Context) ([]scanner.ProcessInfo, error) {
 		return procs, nil
@@ -48,15 +46,11 @@ func TestGetAgents_CodexProcess_NoFiles(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome) // exists but has no projects/ session files
 
-	merger.ResetStaleTrackerForTest()
-	t.Cleanup(merger.ResetStaleTrackerForTest)
-
-	restore := merger.SetScanProcessesForTest(fixedScanFn([]scanner.ProcessInfo{
+	m := merger.New(merger.WithScanFn(fixedScanFn([]scanner.ProcessInfo{
 		{PID: 4242, CWD: "/some/project", Uptime: 30, Provider: sdk.ProviderCodex},
-	}))
-	defer restore()
+	})))
 
-	agents, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	agents, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	assert.Empty(t, agents, "no JSONL under codex dir must yield zero agents")
 }
@@ -67,9 +61,6 @@ func TestGetAgents_CodexProcess_NoFiles(t *testing.T) {
 func TestGetAgents_CodexProcess_WithJSONL(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
-
-	merger.ResetStaleTrackerForTest()
-	t.Cleanup(merger.ResetStaleTrackerForTest)
 
 	cwd := "/some/project"
 	projectDir := filepath.Join(codexHome, "projects", parser.EncodePath(cwd))
@@ -82,12 +73,11 @@ func TestGetAgents_CodexProcess_WithJSONL(t *testing.T) {
 	sessionFile := filepath.Join(projectDir, "11111111-2222-3333-4444-555555555555.jsonl")
 	require.NoError(t, os.WriteFile(sessionFile, []byte(line), 0o644))
 
-	restore := merger.SetScanProcessesForTest(fixedScanFn([]scanner.ProcessInfo{
+	m := merger.New(merger.WithScanFn(fixedScanFn([]scanner.ProcessInfo{
 		{PID: 4243, CWD: cwd, Uptime: 30, Provider: sdk.ProviderCodex},
-	}))
-	defer restore()
+	})))
 
-	agents, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	agents, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	require.Len(t, agents, 1)
 	assert.Equal(t, sdk.ProviderCodex, agents[0].Provider)
@@ -101,16 +91,12 @@ func TestGetAgents_CodexProcess_WithJSONL(t *testing.T) {
 func TestGetAgents_EmitsFinishedAfterProcessExits(t *testing.T) {
 	fs := fakespawn.New(t)
 
-	merger.ResetStaleTrackerForTest()
-	t.Cleanup(merger.ResetStaleTrackerForTest)
-
 	ag := fs.Spawn(fakespawn.SpawnOpts{})
 
-	restore := merger.SetScanProcessesForTest(fs.ScanFn())
-	t.Cleanup(restore)
+	m := merger.New(merger.WithScanFn(fs.ScanFn()))
 
 	// Tick 1: process is live, session resolves, snapshot recorded.
-	live, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	live, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	require.Len(t, live, 1)
 	require.Equal(t, ag.SessionID, live[0].SessionID)
@@ -119,7 +105,7 @@ func TestGetAgents_EmitsFinishedAfterProcessExits(t *testing.T) {
 	// Tick 2: process is gone; the finished card must be emitted from the tracker.
 	fs.Exit(ag.PID)
 
-	finished, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	finished, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	require.Len(t, finished, 1)
 	assert.Equal(t, ag.SessionID, finished[0].SessionID)
@@ -134,8 +120,6 @@ func TestGetAgents_EmitsFinishedAfterProcessExits(t *testing.T) {
 func TestGetAgents_FinishedSurvivesDiscoveryFileRemoval(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	merger.ResetStaleTrackerForTest()
-	t.Cleanup(merger.ResetStaleTrackerForTest)
 
 	const sessionID = "11111111-2222-3333-4444-555555555555"
 	const pid = 4242
@@ -154,22 +138,25 @@ func TestGetAgents_FinishedSurvivesDiscoveryFileRemoval(t *testing.T) {
 	discFile := filepath.Join(discDir, "4242.json")
 	require.NoError(t, os.WriteFile(discFile, []byte(`{"port":1}`), 0o644))
 
-	// Tick 1: live + channel-available → recorded.
-	restore := merger.SetScanProcessesForTest(fixedScanFn([]scanner.ProcessInfo{
-		{PID: pid, CWD: cwd, Uptime: 30, Provider: sdk.ProviderClaude},
+	// One Merger across both ticks so the tracker persists; a mutable scan source
+	// flips the agent from live to gone between ticks.
+	var procs []scanner.ProcessInfo
+	m := merger.New(merger.WithScanFn(func(context.Context) ([]scanner.ProcessInfo, error) {
+		return procs, nil
 	}))
-	live, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+
+	// Tick 1: live + channel-available → recorded.
+	procs = []scanner.ProcessInfo{{PID: pid, CWD: cwd, Uptime: 30, Provider: sdk.ProviderClaude}}
+	live, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	require.Len(t, live, 1)
 	require.True(t, live[0].ChannelAvailable)
-	restore()
 
 	// Process exits AND the bridge removes its discovery file (real behaviour).
 	require.NoError(t, os.Remove(discFile))
-	restore = merger.SetScanProcessesForTest(fixedScanFn(nil))
-	defer restore()
+	procs = nil
 
-	finished, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	finished, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	require.Len(t, finished, 1)
 	assert.Equal(t, sdk.AgentStatusFinished, finished[0].Status)
@@ -181,8 +168,6 @@ func TestGetAgents_FinishedSurvivesDiscoveryFileRemoval(t *testing.T) {
 func TestGetAgents_NonChannelAgentNoFinishedCard(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	merger.ResetStaleTrackerForTest()
-	t.Cleanup(merger.ResetStaleTrackerForTest)
 
 	const sessionID = "22222222-2222-3333-4444-555555555555"
 	const pid = 5252
@@ -197,16 +182,16 @@ func TestGetAgents_NonChannelAgentNoFinishedCard(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, sessionID+".jsonl"), []byte(lines), 0o644))
 	// NO discovery file → not channel-available.
 
-	restore := merger.SetScanProcessesForTest(fixedScanFn([]scanner.ProcessInfo{
-		{PID: pid, CWD: cwd, Uptime: 30, Provider: sdk.ProviderClaude},
+	var procs []scanner.ProcessInfo
+	m := merger.New(merger.WithScanFn(func(context.Context) ([]scanner.ProcessInfo, error) {
+		return procs, nil
 	}))
-	_, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	procs = []scanner.ProcessInfo{{PID: pid, CWD: cwd, Uptime: 30, Provider: sdk.ProviderClaude}}
+	_, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
-	restore()
 
-	restore = merger.SetScanProcessesForTest(fixedScanFn(nil))
-	defer restore()
-	finished, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	procs = nil
+	finished, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	for _, a := range finished {
 		if a.SessionID == sessionID {

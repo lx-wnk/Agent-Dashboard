@@ -32,18 +32,14 @@ func findBySession(agentsList []sdk.Agent, sessionID string) (sdk.Agent, bool) {
 // lifecycle end to end: live → finished (after exit) → dismissed via the real
 // HTTP handler → gone from GetAgents.
 func TestFinishedAgentFullLifecycle(t *testing.T) {
-	merger.ResetStaleTrackerForTest()
-	t.Cleanup(merger.ResetStaleTrackerForTest)
-
 	fs := fakespawn.New(t)
 
-	restore := merger.SetScanProcessesForTest(fs.ScanFn())
-	t.Cleanup(restore)
+	m := merger.New(merger.WithScanFn(fs.ScanFn()))
 
 	ag := fs.Spawn(fakespawn.SpawnOpts{})
 
 	// Live: agent is scanned and exposes its channel.
-	live, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	live, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	liveAgent, ok := findBySession(live, ag.SessionID)
 	require.True(t, ok, "live agent must be emitted")
@@ -52,7 +48,7 @@ func TestFinishedAgentFullLifecycle(t *testing.T) {
 
 	// Exit → finished: process gone, reconstructed from JSONL + discovery file.
 	fs.Exit(ag.PID)
-	afterExit, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	afterExit, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	finishedAgent, ok := findBySession(afterExit, ag.SessionID)
 	require.True(t, ok, "finished agent must be emitted after exit")
@@ -60,8 +56,10 @@ func TestFinishedAgentFullLifecycle(t *testing.T) {
 	assert.Equal(t, ag.PID, finishedAgent.PID)
 	assert.True(t, finishedAgent.ChannelAvailable, "finished agent must still expose its channel")
 
-	// Dismiss via the real HTTP handler: deletes the discovery file.
+	// Dismiss via the real HTTP handler: forgets the agent in the tracker (and
+	// cleans up any leftover discovery file).
 	h := agents.NewSpawnHandler(nil)
+	h.SetAgentDismisser(m)
 	r := chi.NewRouter()
 	r.Delete("/api/agents/{pid}/channel", h.DismissChannel)
 	req := httptest.NewRequest(http.MethodDelete, "/api/agents/"+strconv.Itoa(ag.PID)+"/channel", nil)
@@ -73,7 +71,7 @@ func TestFinishedAgentFullLifecycle(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "discovery file must be removed")
 
 	// Gone: the agent is no longer emitted.
-	afterDismiss, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	afterDismiss, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
 	_, ok = findBySession(afterDismiss, ag.SessionID)
 	assert.False(t, ok, "dismissed agent must not be emitted anymore")

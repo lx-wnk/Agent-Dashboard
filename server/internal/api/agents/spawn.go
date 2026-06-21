@@ -604,10 +604,18 @@ func sendHTTPMessage(ctx context.Context, port int, token, message string) error
 	return nil
 }
 
+// AgentDismisser forgets a finished agent from the in-memory finished-card
+// tracker. Satisfied by *merger.Merger; kept as an interface so this package
+// does not import merger.
+type AgentDismisser interface {
+	DismissAgent(pid int)
+}
+
 // SpawnHandler handles spawn-related HTTP endpoints.
 type SpawnHandler struct {
 	manager   *SpawnManager
 	auditRepo repo.AuditEventRepo // may be nil
+	dismisser AgentDismisser      // may be nil
 }
 
 // NewSpawnHandler creates a SpawnHandler backed by the given manager.
@@ -618,6 +626,12 @@ func NewSpawnHandler(manager *SpawnManager) *SpawnHandler {
 // SetAuditRepo wires an audit repository into the handler for injection audit logging.
 func (h *SpawnHandler) SetAuditRepo(r repo.AuditEventRepo) {
 	h.auditRepo = r
+}
+
+// SetAgentDismisser wires the finished-card tracker so DismissChannel can forget
+// a dismissed agent. When nil, dismissal only cleans up discovery files.
+func (h *SpawnHandler) SetAgentDismisser(d AgentDismisser) {
+	h.dismisser = d
 }
 
 // Spawn handles POST /api/agents/spawn.

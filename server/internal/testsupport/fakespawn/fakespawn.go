@@ -138,7 +138,7 @@ func (s *Spawner) Dismiss(pid int) error {
 	return nil
 }
 
-// ScanFn returns a scan closure suitable for merger.SetScanProcessesForTest.
+// ScanFn returns a scan closure suitable for merger.WithScanFn.
 func (s *Spawner) ScanFn() func(context.Context) ([]scanner.ProcessInfo, error) {
 	return func(context.Context) ([]scanner.ProcessInfo, error) {
 		s.mu.Lock()

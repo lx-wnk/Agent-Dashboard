@@ -10,6 +10,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -25,6 +26,7 @@ func TestRouter_BypassAuth_LoopbackNoOAuth(t *testing.T) {
 			BypassAuth:  true,
 		},
 		AgentBroadcaster: sse.NewBroadcaster(),
+		Merger:           merger.New(),
 	}
 	router := api.NewRouter(deps)
 
@@ -50,6 +52,7 @@ func TestRouter_RequireAuth_Returns401WhenUnauthenticated(t *testing.T) {
 			BypassAuth:  false,
 		},
 		AgentBroadcaster: sse.NewBroadcaster(),
+		Merger:           merger.New(),
 		// OAuthProvider set to non-nil triggers auth
 		OAuthProvider: &stubOAuth{},
 	}

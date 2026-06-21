@@ -45,15 +45,17 @@ type searchResponse struct {
 // Handler handles GET /api/search.
 type Handler struct {
 	searchRepo rawrepo.SearchRepo
+	merger     *merger.Merger
 	enricher   merger.Enricher
 }
 
-// NewHandler creates a new Handler backed by the given SearchRepo. The enricher
+// NewHandler creates a new Handler backed by the given SearchRepo. The merger is
+// the shared roster builder used for the admin agent-search branch. The enricher
 // (may be nil) is the same pipeline-task crossing applied by the router's
 // GetAgents accessor — passing it here keeps admin agent search results
 // enriched consistently with /api/agents and the SSE stream.
-func NewHandler(searchRepo rawrepo.SearchRepo, enricher merger.Enricher) *Handler {
-	return &Handler{searchRepo: searchRepo, enricher: enricher}
+func NewHandler(searchRepo rawrepo.SearchRepo, m *merger.Merger, enricher merger.Enricher) *Handler {
+	return &Handler{searchRepo: searchRepo, merger: m, enricher: enricher}
 }
 
 // Search handles GET /api/search?q=...&type=...&limit=...
@@ -109,7 +111,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if (searchType == "agents" || searchType == "all") && payload.IsAdmin {
-		agents, err := merger.GetAgents(r.Context(), merger.GetAgentsOpts{Enricher: h.enricher})
+		agents, err := h.merger.GetAgents(r.Context(), merger.GetAgentsOpts{Enricher: h.enricher})
 		if err == nil {
 			resp.Agents = filterAgents(agents, q, limit)
 		}

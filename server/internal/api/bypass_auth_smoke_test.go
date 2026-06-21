@@ -28,6 +28,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
+	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	refinesvc "github.com/lx-wnk/agent-dashboard/server/internal/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -89,6 +90,7 @@ func buildBypassRouter(t *testing.T) http.Handler {
 			AuthRateLimiterConfig: IPRateLimiterConfig{Rate: rate.Limit(1_000_000), Burst: 1_000_000},
 		},
 		AgentBroadcaster:  sse.NewBroadcaster(),
+		Merger:            merger.New(),
 		UserRepo:          repo.NewUserRepo(c),
 		ApiKeyRepo:        repo.NewApiKeyRepo(c),
 		ProjectRepo:       repo.NewProjectRepo(c),
@@ -116,7 +118,7 @@ func buildBypassRouter(t *testing.T) http.Handler {
 		RemotesHandler:       remotes.NewHandler(repo.NewRemoteRegistrationRepo(c)),
 		PresetsHandler:       presets.NewHandler(repo.NewPermissionPresetRepo(c)),
 		SystemPromptsHandler: systemprompts.NewHandler(repo.NewSystemPromptRepo(c)),
-		SearchHandler:        search.NewHandler(rawrepo.NewSearchRepo(rawDB), nil),
+		SearchHandler:        search.NewHandler(rawrepo.NewSearchRepo(rawDB), merger.New(), nil),
 		HistoryHandler:       apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
 		RefineHandler: refineapi.NewHandler(refineapi.Deps{
 			Turns:     repo.NewRefinementTurnRepo(c),

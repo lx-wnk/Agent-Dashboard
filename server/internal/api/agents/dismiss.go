@@ -7,7 +7,6 @@ import (
 	"syscall"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
-	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 )
 
 // DismissChannel handles DELETE /api/agents/{pid}/channel. It forgets a FINISHED
@@ -27,7 +26,9 @@ func (h *SpawnHandler) DismissChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	merger.DismissAgent(pid)
+	if h.dismisser != nil {
+		h.dismisser.DismissAgent(pid)
+	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {

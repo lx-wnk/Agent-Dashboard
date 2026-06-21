@@ -170,14 +170,37 @@ type GetAgentsOpts struct {
 	Enricher Enricher
 }
 
-// scanProcessesFn is the process scanner used by GetAgents. It is a package
-// var so tests can inject a synthetic process list without spawning real CLIs.
-var scanProcessesFn = scanner.ScanProcesses
+// Merger builds the agent roster by combining a process scan with session data.
+// It owns the stale tracker (cross-tick finished-agent state), so exactly one
+// Merger should exist per process; the composition root builds it and shares it
+// with every read path (broadcast loop, HTTP accessors, search).
+type Merger struct {
+	scan    func(ctx context.Context) ([]scanner.ProcessInfo, error)
+	tracker *staleTracker
+}
+
+// Option configures a Merger.
+type Option func(*Merger)
+
+// WithScanFn overrides the process scanner (tests inject a synthetic list).
+func WithScanFn(fn func(ctx context.Context) ([]scanner.ProcessInfo, error)) Option {
+	return func(m *Merger) { m.scan = fn }
+}
+
+// New builds a Merger. Defaults: the real scanner.ScanProcesses and a fresh
+// stale tracker.
+func New(opts ...Option) *Merger {
+	m := &Merger{scan: scanner.ScanProcesses, tracker: newStaleTracker()}
+	for _, o := range opts {
+		o(m)
+	}
+	return m
+}
 
 // GetAgents scans running Claude processes and merges them with session data.
 // Processes with no matching active session are silently skipped.
-func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
-	processes, err := scanProcessesFn(ctx)
+func (m *Merger) GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
+	processes, err := m.scan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -185,6 +208,10 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 	// Pre-allocate the result slice so each goroutine writes to its own index,
 	// avoiding a mutex and producing deterministic ordering (same as processes).
 	agents := make([]sdk.Agent, len(processes))
+
+	// Resolved session paths, indexed by process index so each goroutine writes
+	// its own disjoint slot (same race-safety as the agents slice).
+	sessionPaths := make([]string, len(processes))
 
 	// Group process indices by project directory (encoded cwd + config dir).
 	// Resolution must be sequential WITHIN a group so the shared `claimed` set
@@ -217,7 +244,7 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 					continue // no matching session; zero value left at agents[i]
 				}
 				agents[i] = buildAgent(proc, session, opts.BaselinePerSessionCostUSD)
-				processes[i].SessionPath = session.Path
+				sessionPaths[i] = session.Path
 			}
 			return nil
 		})
@@ -239,9 +266,9 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 		livePIDs[a.PID] = true
 		liveSessions[a.SessionID] = true
 		if a.ChannelAvailable {
-			defaultStaleTracker.record(a.PID, liveSnapshot{
+			m.tracker.record(a.PID, liveSnapshot{
 				sessionID:   a.SessionID,
-				path:        processes[i].SessionPath,
+				path:        sessionPaths[i],
 				projectPath: a.ProjectPath,
 				configDir:   a.ClaudeConfigDir,
 				provider:    a.Provider,
@@ -252,7 +279,7 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 	// Append finished (stale) controllable agents. Dedup guards the PID-reuse
 	// edge: a session re-launched under a new live PID must not also show a
 	// stale card from the old PID's snapshot.
-	for _, s := range defaultStaleTracker.buildStale(livePIDs, opts.BaselinePerSessionCostUSD) {
+	for _, s := range m.tracker.buildStale(livePIDs, opts.BaselinePerSessionCostUSD) {
 		if liveSessions[s.SessionID] {
 			continue
 		}
@@ -264,6 +291,11 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 	}
 	return result, nil
 }
+
+// DismissAgent removes a finished agent from the in-memory tracker so its card
+// stops appearing. Dismissal is in-memory (not discovery-file deletion) because
+// the channel bridge already deletes that file when the agent exits.
+func (m *Merger) DismissAgent(pid int) { m.tracker.dismiss(pid) }
 
 // resolveSession dispatches session resolution by provider. Claude (and the
 // empty default) use the pid-session-aware path; other providers resolve their

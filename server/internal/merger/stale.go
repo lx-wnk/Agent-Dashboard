@@ -52,17 +52,6 @@ func parseSessionByPath(path string) (*parser.SessionData, error) {
 	return data, nil
 }
 
-// defaultStaleTracker is the process-wide tracker used by GetAgents.
-var defaultStaleTracker = newStaleTracker()
-
-// resetStaleTracker re-initialises the package tracker. Test-only.
-func resetStaleTracker() { defaultStaleTracker = newStaleTracker() }
-
-// DismissAgent removes a finished agent from the in-memory tracker so its card
-// stops appearing (used by the dismiss endpoint; dismissal is in-memory because
-// the bridge already deletes the discovery file on exit).
-func DismissAgent(pid int) { defaultStaleTracker.dismiss(pid) }
-
 // record stores a snapshot for a live agent. Snapshots without a session id or
 // path are useless for later reconstruction and are dropped. Non-Claude
 // providers (Codex/Gemini) never resolve a session path, so they are dropped
