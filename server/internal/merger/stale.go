@@ -2,6 +2,7 @@ package merger
 
 import (
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,9 +35,28 @@ func newStaleTracker() *staleTracker {
 	return &staleTracker{
 		seen:      make(map[int]liveSnapshot),
 		channelFn: func(pid int) bool { avail, _ := channelDiscovery(pid); return avail },
-		parseFn:   parser.ParseSessionFile,
+		parseFn:   parseSessionByPath,
 	}
 }
+
+// parseSessionByPath parses a JSONL session file and fills SessionID/Path from
+// the path. ParseSessionFile only parses the body; the live resolver derives
+// these from the filename, so the stale path must do the same to match.
+func parseSessionByPath(path string) (*parser.SessionData, error) {
+	data, err := parser.ParseSessionFile(path)
+	if err != nil {
+		return nil, err
+	}
+	data.SessionID = strings.TrimSuffix(filepath.Base(path), ".jsonl")
+	data.Path = path
+	return data, nil
+}
+
+// defaultStaleTracker is the process-wide tracker used by GetAgents.
+var defaultStaleTracker = newStaleTracker()
+
+// resetStaleTracker re-initialises the package tracker. Test-only.
+func resetStaleTracker() { defaultStaleTracker = newStaleTracker() }
 
 // record stores a snapshot for a live agent. Snapshots without a session id or
 // path are useless for later reconstruction and are dropped.

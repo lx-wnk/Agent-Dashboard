@@ -220,6 +220,7 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 					continue // no matching session; zero value left at agents[i]
 				}
 				agents[i] = buildAgent(proc, session, opts.BaselinePerSessionCostUSD)
+				processes[i].SessionPath = session.Path
 			}
 			return nil
 		})
@@ -227,13 +228,35 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	// Filter out zero-value entries (processes with no matching session).
+	// Filter out zero-value entries (processes with no matching session) and
+	// record each live channel-capable agent for later stale emission.
+	livePIDs := make(map[int]bool, len(processes))
+	liveSessions := make(map[string]bool)
 	result := agents[:0]
-	for _, a := range agents {
-		if a.SessionID != "" {
-			result = append(result, a)
+	for i, a := range agents {
+		if a.SessionID == "" {
+			continue
 		}
+		result = append(result, a)
+		livePIDs[a.PID] = true
+		liveSessions[a.SessionID] = true
+		defaultStaleTracker.record(a.PID, liveSnapshot{
+			sessionID:   a.SessionID,
+			path:        processes[i].SessionPath,
+			projectPath: a.ProjectPath,
+			configDir:   a.ClaudeConfigDir,
+			provider:    a.Provider,
+		})
 	}
+
+	// Append finished (stale) controllable agents, deduped against live sessions.
+	for _, s := range defaultStaleTracker.buildStale(livePIDs, opts.BaselinePerSessionCostUSD) {
+		if liveSessions[s.SessionID] {
+			continue
+		}
+		result = append(result, s)
+	}
+
 	if opts.Enricher != nil {
 		opts.Enricher(ctx, result)
 	}
