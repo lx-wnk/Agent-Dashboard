@@ -5,13 +5,13 @@ package fakespawn
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
@@ -77,9 +77,8 @@ func (s *Spawner) Spawn(opts SpawnOpts) Agent {
 	s.nextPID++
 	s.mu.Unlock()
 
-	// Valid session UUID derived from the pid so the parser's uuidRE accepts it
-	// (8-4-4-4-12 lowercase hex); the pid fills the final 12-hex segment.
-	sessionID := fmt.Sprintf("00000000-0000-0000-0000-%012x", pid)
+	// Real UUID, parser-valid by construction (8-4-4-4-12 lowercase hex).
+	sessionID := uuid.NewString()
 
 	projectDir := filepath.Join(s.Home, ".claude", "projects", parser.EncodePath(cwd))
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
