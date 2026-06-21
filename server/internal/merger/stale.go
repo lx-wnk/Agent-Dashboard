@@ -59,7 +59,9 @@ var defaultStaleTracker = newStaleTracker()
 func resetStaleTracker() { defaultStaleTracker = newStaleTracker() }
 
 // record stores a snapshot for a live agent. Snapshots without a session id or
-// path are useless for later reconstruction and are dropped.
+// path are useless for later reconstruction and are dropped. Non-Claude
+// providers (Codex/Gemini) never resolve a session path, so they are dropped
+// here and never get a finished card — the feature is Claude-only by design.
 func (t *staleTracker) record(pid int, snap liveSnapshot) {
 	if snap.sessionID == "" || snap.path == "" {
 		return
