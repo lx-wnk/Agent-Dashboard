@@ -21,21 +21,21 @@ type liveSnapshot struct {
 }
 
 // staleTracker is an in-memory, process-scoped registry of controllable agents
-// (channel/MCP-connected) seen while live, so their cards can stay visible as
-// finished after the process exits. channelFn and parseFn are injectable for
-// tests; defaults hit the real discovery files and JSONL parser.
+// (channel/MCP-connected) recorded while they were live, so their cards can stay
+// visible as finished after the process exits. Emission no longer depends on the
+// discovery file still existing — the bridge deletes it on exit — so the
+// recorded fact is the source of truth. parseFn is injectable for tests; the
+// default hits the real JSONL parser.
 type staleTracker struct {
-	mu        sync.Mutex
-	seen      map[int]liveSnapshot
-	channelFn func(pid int) bool
-	parseFn   func(path string) (*parser.SessionData, error)
+	mu      sync.Mutex
+	seen    map[int]liveSnapshot
+	parseFn func(path string) (*parser.SessionData, error)
 }
 
 func newStaleTracker() *staleTracker {
 	return &staleTracker{
-		seen:      make(map[int]liveSnapshot),
-		channelFn: func(pid int) bool { avail, _ := channelDiscovery(pid); return avail },
-		parseFn:   parseSessionByPath,
+		seen:    make(map[int]liveSnapshot),
+		parseFn: parseSessionByPath,
 	}
 }
 
@@ -58,6 +58,11 @@ var defaultStaleTracker = newStaleTracker()
 // resetStaleTracker re-initialises the package tracker. Test-only.
 func resetStaleTracker() { defaultStaleTracker = newStaleTracker() }
 
+// DismissAgent removes a finished agent from the in-memory tracker so its card
+// stops appearing (used by the dismiss endpoint; dismissal is in-memory because
+// the bridge already deletes the discovery file on exit).
+func DismissAgent(pid int) { defaultStaleTracker.dismiss(pid) }
+
 // record stores a snapshot for a live agent. Snapshots without a session id or
 // path are useless for later reconstruction and are dropped. Non-Claude
 // providers (Codex/Gemini) never resolve a session path, so they are dropped
@@ -72,9 +77,9 @@ func (t *staleTracker) record(pid int, snap liveSnapshot) {
 }
 
 // buildStale emits a finished sdk.Agent for each tracked pid whose process is no
-// longer live but whose channel discovery file still exists. A pid whose
-// discovery file is gone has been dismissed — forget it so a reused pid cannot
-// resurrect a stale card.
+// longer live. Tracked pids are forgotten only via dismiss (the DELETE
+// endpoint), not by inspecting the discovery file — the bridge deletes that file
+// on exit, so its absence no longer means "dismissed".
 func (t *staleTracker) buildStale(livePIDs map[int]bool, baselineCost float64) []sdk.Agent {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -82,10 +87,6 @@ func (t *staleTracker) buildStale(livePIDs map[int]bool, baselineCost float64) [
 	var out []sdk.Agent
 	for pid, snap := range t.seen {
 		if livePIDs[pid] {
-			continue
-		}
-		if !t.channelFn(pid) {
-			delete(t.seen, pid) // discovery gone => dismissed
 			continue
 		}
 		session, err := t.parseFn(snap.path)
@@ -98,6 +99,13 @@ func (t *staleTracker) buildStale(livePIDs map[int]bool, baselineCost float64) [
 		out = append(out, buildFinishedAgent(pid, snap, session, baselineCost))
 	}
 	return out
+}
+
+// dismiss forgets a tracked pid so its finished card stops appearing.
+func (t *staleTracker) dismiss(pid int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.seen, pid)
 }
 
 // buildFinishedAgent mirrors buildAgent but reconstructs a finished, controllable

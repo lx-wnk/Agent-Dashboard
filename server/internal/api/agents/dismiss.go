@@ -8,12 +8,14 @@ import (
 	"syscall"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 )
 
-// DismissChannel handles DELETE /api/agents/{pid}/channel. It removes the
-// dashboard-channel discovery files for a FINISHED agent so its card stops
-// appearing on the dashboard. It refuses a live PID (only finished agents are
-// dismissable) and is idempotent when the files are already gone.
+// DismissChannel handles DELETE /api/agents/{pid}/channel. It forgets a FINISHED
+// agent in the in-memory tracker so its card stops appearing, then removes any
+// leftover dashboard-channel discovery files (best-effort orphan cleanup for a
+// SIGKILLed bridge that never ran its own removal). It refuses a live PID (only
+// finished agents are dismissable) and is idempotent when the files are gone.
 func (h *SpawnHandler) DismissChannel(w http.ResponseWriter, r *http.Request) {
 	pid, err := strconv.Atoi(r.PathValue("pid"))
 	if err != nil || pid <= 0 {
@@ -25,6 +27,8 @@ func (h *SpawnHandler) DismissChannel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"agent is still running"}`, http.StatusConflict)
 		return
 	}
+
+	merger.DismissAgent(pid)
 
 	home, err := os.UserHomeDir()
 	if err != nil {

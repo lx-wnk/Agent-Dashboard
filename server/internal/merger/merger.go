@@ -229,8 +229,8 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 		return nil, err
 	}
 	// Filter out zero-value entries (processes with no matching session) and
-	// record each live agent's snapshot; channel-capability is gated later in
-	// buildStale, which forgets non-channel PIDs on their first stale pass.
+	// record each live controllable agent's snapshot. Only channel-available
+	// agents are recorded, so only they can later surface as a finished card.
 	livePIDs := make(map[int]bool, len(processes))
 	liveSessions := make(map[string]bool)
 	result := agents[:0]
@@ -241,13 +241,15 @@ func GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent, error) {
 		result = append(result, a)
 		livePIDs[a.PID] = true
 		liveSessions[a.SessionID] = true
-		defaultStaleTracker.record(a.PID, liveSnapshot{
-			sessionID:   a.SessionID,
-			path:        processes[i].SessionPath,
-			projectPath: a.ProjectPath,
-			configDir:   a.ClaudeConfigDir,
-			provider:    a.Provider,
-		})
+		if a.ChannelAvailable {
+			defaultStaleTracker.record(a.PID, liveSnapshot{
+				sessionID:   a.SessionID,
+				path:        processes[i].SessionPath,
+				projectPath: a.ProjectPath,
+				configDir:   a.ClaudeConfigDir,
+				provider:    a.Provider,
+			})
+		}
 	}
 
 	// Append finished (stale) controllable agents. Dedup guards the PID-reuse

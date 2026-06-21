@@ -145,3 +145,91 @@ func TestGetAgents_EmitsFinishedAfterProcessExits(t *testing.T) {
 	assert.Equal(t, sdk.AgentStatusFinished, finished[0].Status)
 	assert.Equal(t, pid, finished[0].PID)
 }
+
+// TestGetAgents_FinishedSurvivesDiscoveryFileRemoval models the real bridge,
+// which removes ~/.claude/dashboard-channel/{pid}.json when the process exits.
+// The finished card must still appear, driven by the in-memory tracker rather
+// than the discovery file's continued existence.
+func TestGetAgents_FinishedSurvivesDiscoveryFileRemoval(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	merger.ResetStaleTrackerForTest()
+	t.Cleanup(merger.ResetStaleTrackerForTest)
+
+	const sessionID = "11111111-2222-3333-4444-555555555555"
+	const pid = 4242
+	cwd := filepath.Join(home, "work", "project")
+	projectDir := filepath.Join(home, ".claude", "projects", parser.EncodePath(cwd))
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+	ts := time.Now().UTC().Format(time.RFC3339)
+	lines := `{"type":"user","sessionId":"` + sessionID + `","timestamp":"` + ts +
+		`","message":{"role":"user","content":"hi"}}` + "\n" +
+		`{"type":"assistant","sessionId":"` + sessionID + `","timestamp":"` + ts +
+		`","message":{"role":"assistant","model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":5}}}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(projectDir, sessionID+".jsonl"), []byte(lines), 0o644))
+
+	discDir := filepath.Join(home, ".claude", "dashboard-channel")
+	require.NoError(t, os.MkdirAll(discDir, 0o755))
+	discFile := filepath.Join(discDir, "4242.json")
+	require.NoError(t, os.WriteFile(discFile, []byte(`{"port":1}`), 0o644))
+
+	// Tick 1: live + channel-available → recorded.
+	restore := merger.SetScanProcessesForTest(fixedScanFn([]scanner.ProcessInfo{
+		{PID: pid, CWD: cwd, Uptime: 30, Provider: sdk.ProviderClaude},
+	}))
+	live, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+	require.True(t, live[0].ChannelAvailable)
+	restore()
+
+	// Process exits AND the bridge removes its discovery file (real behaviour).
+	require.NoError(t, os.Remove(discFile))
+	restore = merger.SetScanProcessesForTest(fixedScanFn(nil))
+	defer restore()
+
+	finished, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	require.NoError(t, err)
+	require.Len(t, finished, 1)
+	assert.Equal(t, sdk.AgentStatusFinished, finished[0].Status)
+	assert.Equal(t, sessionID, finished[0].SessionID)
+}
+
+// TestGetAgents_NonChannelAgentNoFinishedCard verifies an agent that was never
+// channel-available (no discovery file) does not get a finished card after exit.
+func TestGetAgents_NonChannelAgentNoFinishedCard(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	merger.ResetStaleTrackerForTest()
+	t.Cleanup(merger.ResetStaleTrackerForTest)
+
+	const sessionID = "22222222-2222-3333-4444-555555555555"
+	const pid = 5252
+	cwd := filepath.Join(home, "work", "p2")
+	projectDir := filepath.Join(home, ".claude", "projects", parser.EncodePath(cwd))
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+	ts := time.Now().UTC().Format(time.RFC3339)
+	lines := `{"type":"user","sessionId":"` + sessionID + `","timestamp":"` + ts +
+		`","message":{"role":"user","content":"hi"}}` + "\n" +
+		`{"type":"assistant","sessionId":"` + sessionID + `","timestamp":"` + ts +
+		`","message":{"role":"assistant","model":"claude-opus-4-8","usage":{"input_tokens":1,"output_tokens":1}}}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(projectDir, sessionID+".jsonl"), []byte(lines), 0o644))
+	// NO discovery file → not channel-available.
+
+	restore := merger.SetScanProcessesForTest(fixedScanFn([]scanner.ProcessInfo{
+		{PID: pid, CWD: cwd, Uptime: 30, Provider: sdk.ProviderClaude},
+	}))
+	_, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	require.NoError(t, err)
+	restore()
+
+	restore = merger.SetScanProcessesForTest(fixedScanFn(nil))
+	defer restore()
+	finished, err := merger.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	require.NoError(t, err)
+	for _, a := range finished {
+		if a.SessionID == sessionID {
+			t.Fatalf("non-channel agent must not get a finished card")
+		}
+	}
+}
