@@ -104,7 +104,7 @@ func (s *Spawner) Spawn(opts SpawnOpts) Agent {
 		if opts.LiveInjectable {
 			content = `{"port":1,"tmuxPane":"%1"}`
 		}
-		if err := os.WriteFile(filepath.Join(discoveryDir, fmt.Sprintf("%d.json", pid)), []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(channelconfig.DiscoveryFile(s.Home, pid), []byte(content), 0o644); err != nil {
 			panic(err)
 		}
 	}
@@ -127,9 +127,12 @@ func (s *Spawner) Exit(pid int) {
 // Dismiss removes the discovery files, mirroring the real DELETE endpoint for
 // tests that don't drive the HTTP handler.
 func (s *Spawner) Dismiss(pid int) error {
-	dir := filepath.Join(s.Home, channelconfig.DiscoveryDir)
-	for _, name := range []string{fmt.Sprintf("%d.json", pid), fmt.Sprintf("%d.pty.json", pid)} {
-		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+	files := []string{
+		channelconfig.DiscoveryFile(s.Home, pid),
+		channelconfig.DiscoveryPtyFile(s.Home, pid),
+	}
+	for _, path := range files {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
@@ -150,5 +153,5 @@ func (s *Spawner) ScanFn() func(context.Context) ([]scanner.ProcessInfo, error) 
 }
 
 func (s *Spawner) DiscoveryPath(pid int) string {
-	return filepath.Join(s.Home, channelconfig.DiscoveryDir, fmt.Sprintf("%d.json", pid))
+	return channelconfig.DiscoveryFile(s.Home, pid)
 }

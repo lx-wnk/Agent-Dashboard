@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -157,7 +156,7 @@ func writePtyDiscovery(childPid, port int, token string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, strconv.Itoa(childPid)+".pty.json")
+	path := channelconfig.DiscoveryPtyFile(home, childPid)
 	data, _ := json.Marshal(map[string]any{
 		"port":      port,
 		"token":     token,

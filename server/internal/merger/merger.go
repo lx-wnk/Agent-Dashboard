@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -61,10 +60,8 @@ func channelDiscovery(pid int) (channelAvailable, liveInjectable bool) {
 	if err != nil {
 		return false, false
 	}
-	base := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid))
-
 	// Read bridge file ({pid}.json).
-	if data, err := os.ReadFile(base + ".json"); err == nil {
+	if data, err := os.ReadFile(channelconfig.DiscoveryFile(home, pid)); err == nil {
 		channelAvailable = true
 		var disc struct {
 			TmuxPane string `json:"tmuxPane"`
@@ -75,7 +72,7 @@ func channelDiscovery(pid int) (channelAvailable, liveInjectable bool) {
 	}
 
 	// Read pty file ({pid}.pty.json).
-	if data, err := os.ReadFile(base + ".pty.json"); err == nil {
+	if data, err := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid)); err == nil {
 		channelAvailable = true
 		var disc struct {
 			PtyInject bool `json:"ptyInject"`

@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -514,12 +513,10 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 	if herr != nil {
 		return "", fmt.Errorf("UserHomeDir: %w", herr)
 	}
-	base := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid))
-
 	// Attempt 1: read the bridge file for tmux delivery.
 	var bridgePort int
 	var bridgeToken string
-	if data, rerr := os.ReadFile(base + ".json"); rerr == nil {
+	if data, rerr := os.ReadFile(channelconfig.DiscoveryFile(home, pid)); rerr == nil {
 		var disc struct {
 			Port       int    `json:"port"`
 			Token      string `json:"token"`
@@ -537,7 +534,7 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 	}
 
 	// Attempt 2: read the pty file for loopback-HTTP delivery.
-	if data, rerr := os.ReadFile(base + ".pty.json"); rerr == nil {
+	if data, rerr := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid)); rerr == nil {
 		var disc struct {
 			Port  int    `json:"port"`
 			Token string `json:"token"`
