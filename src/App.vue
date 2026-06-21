@@ -87,7 +87,7 @@ onUnmounted(() => {
     clearTimeout(toastTimer)
 })
 
-const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, startStream: startAgents } = useAgents({ autoStart: false })
+const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, dismissAgent, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 const { items: permissionItems, approve: approvePermission, deny: denyPermission } = usePendingPermissions(tasks)
 const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length)
@@ -429,7 +429,7 @@ onMounted(fetchQuota)
           </template>
           <template v-else>
             <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
-            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" />
+            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" @dismiss="dismissAgent" />
           </template>
           <ChannelScriptCallout />
         </template>
