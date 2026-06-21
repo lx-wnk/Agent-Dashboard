@@ -64,9 +64,10 @@ type TaskInfo struct {
 type AgentStatus string
 
 const (
-	AgentStatusActive  AgentStatus = "active"
-	AgentStatusWaiting AgentStatus = "waiting"
-	AgentStatusIdle    AgentStatus = "idle"
+	AgentStatusActive   AgentStatus = "active"
+	AgentStatusWaiting  AgentStatus = "waiting"
+	AgentStatusIdle     AgentStatus = "idle"
+	AgentStatusFinished AgentStatus = "finished"
 )
 
 // Entrypoint describes how the Claude Code process was launched.

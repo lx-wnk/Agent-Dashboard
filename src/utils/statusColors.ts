@@ -53,6 +53,7 @@ export function statusLabel(status: string): string {
     case 'active': return 'Active'
     case 'waiting': return 'Waiting'
     case 'idle': return 'Idle'
+    case 'finished': return 'Finished'
     case 'completed': return 'Completed'
     case 'error': return 'Error'
     case 'info': return 'Info'
