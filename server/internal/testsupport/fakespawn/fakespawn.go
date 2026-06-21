@@ -34,6 +34,7 @@ type SpawnOpts struct {
 	Model          string       // default: "claude-opus-4-8"
 	LiveInjectable bool         // when true, discovery file has a non-empty tmuxPane
 	NoChannel      bool         // when true, do NOT write a discovery file (plain terminal agent)
+	Pty            bool         // when true, also write a {pid}.pty.json pty-broker discovery file with ptyInject:true
 }
 
 type Agent struct {
@@ -108,6 +109,16 @@ func (s *Spawner) Spawn(opts SpawnOpts) Agent {
 		}
 	}
 
+	if opts.Pty {
+		discoveryDir := filepath.Join(s.Home, channelconfig.DiscoveryDir)
+		if err := os.MkdirAll(discoveryDir, 0o755); err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(channelconfig.DiscoveryPtyFile(s.Home, pid), []byte(`{"port":1,"ptyInject":true}`), 0o644); err != nil {
+			panic(err)
+		}
+	}
+
 	s.mu.Lock()
 	s.live[pid] = scanner.ProcessInfo{PID: pid, CWD: cwd, Uptime: 30, Provider: provider}
 	s.mu.Unlock()
@@ -153,4 +164,8 @@ func (s *Spawner) ScanFn() func(context.Context) ([]scanner.ProcessInfo, error) 
 
 func (s *Spawner) DiscoveryPath(pid int) string {
 	return channelconfig.DiscoveryFile(s.Home, pid)
+}
+
+func (s *Spawner) DiscoveryPtyPath(pid int) string {
+	return channelconfig.DiscoveryPtyFile(s.Home, pid)
 }

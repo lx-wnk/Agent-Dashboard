@@ -58,6 +58,30 @@ func TestSpawnNoChannel(t *testing.T) {
 	}
 }
 
+func TestSpawnPtyWritesBothFiles(t *testing.T) {
+	s := New(t)
+	a := s.Spawn(SpawnOpts{Pty: true})
+
+	if _, err := os.Stat(s.DiscoveryPtyPath(a.PID)); err != nil {
+		t.Errorf("pty file should be written: %v", err)
+	}
+	if _, err := os.Stat(s.DiscoveryPath(a.PID)); err != nil {
+		t.Errorf("bridge file should be written: %v", err)
+	}
+}
+
+func TestSpawnPtyOnly(t *testing.T) {
+	s := New(t)
+	a := s.Spawn(SpawnOpts{NoChannel: true, Pty: true})
+
+	if _, err := os.Stat(s.DiscoveryPtyPath(a.PID)); err != nil {
+		t.Errorf("pty file should be written: %v", err)
+	}
+	if _, err := os.Stat(s.DiscoveryPath(a.PID)); !os.IsNotExist(err) {
+		t.Errorf("bridge file should not exist, stat err: %v", err)
+	}
+}
+
 func TestSpawnLiveInjectable(t *testing.T) {
 	s := New(t)
 	a := s.Spawn(SpawnOpts{LiveInjectable: true})
@@ -91,13 +115,16 @@ func TestExitLeavesDiscoveryFile(t *testing.T) {
 
 func TestDismissRemovesDiscoveryFile(t *testing.T) {
 	s := New(t)
-	a := s.Spawn(SpawnOpts{})
+	a := s.Spawn(SpawnOpts{Pty: true})
 
 	if err := s.Dismiss(a.PID); err != nil {
 		t.Fatalf("Dismiss: %v", err)
 	}
 	if _, err := os.Stat(s.DiscoveryPath(a.PID)); !os.IsNotExist(err) {
 		t.Errorf("discovery file should be removed, stat err: %v", err)
+	}
+	if _, err := os.Stat(s.DiscoveryPtyPath(a.PID)); !os.IsNotExist(err) {
+		t.Errorf("pty file should be removed, stat err: %v", err)
 	}
 }
 

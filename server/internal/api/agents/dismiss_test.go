@@ -10,20 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/testsupport/fakespawn"
 )
-
-func discoveryFile(t *testing.T, home string, pid int, suffix string) string {
-	t.Helper()
-	dir := filepath.Join(home, channelconfig.DiscoveryDir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	p := filepath.Join(dir, strconv.Itoa(pid)+suffix)
-	if err := os.WriteFile(p, []byte(`{}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
 
 func doDismiss(t *testing.T, pid int) *httptest.ResponseRecorder {
 	t.Helper()
@@ -37,37 +25,39 @@ func doDismiss(t *testing.T, pid int) *httptest.ResponseRecorder {
 }
 
 func TestDismissChannel_DeletesFilesForDeadPID(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	pid := 999999 // almost certainly dead
-	bridge := discoveryFile(t, home, pid, ".json")
-	pty := discoveryFile(t, home, pid, ".pty.json")
+	fs := fakespawn.New(t)
+	ag := fs.Spawn(fakespawn.SpawnOpts{Pty: true})
 
-	rec := doDismiss(t, pid)
+	rec := doDismiss(t, ag.PID)
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
-	if _, err := os.Stat(bridge); !os.IsNotExist(err) {
+	if _, err := os.Stat(fs.DiscoveryPath(ag.PID)); !os.IsNotExist(err) {
 		t.Errorf("bridge file still present")
 	}
-	if _, err := os.Stat(pty); !os.IsNotExist(err) {
+	if _, err := os.Stat(fs.DiscoveryPtyPath(ag.PID)); !os.IsNotExist(err) {
 		t.Errorf("pty file still present")
 	}
 }
 
 func TestDismissChannel_IdempotentWhenAbsent(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	fakespawn.New(t)
 	if rec := doDismiss(t, 999998); rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
 }
 
 func TestDismissChannel_RefusesLivePID(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	fs := fakespawn.New(t)
 	pid := os.Getpid() // current process is alive
-	bridge := discoveryFile(t, home, pid, ".json")
+	bridge := channelconfig.DiscoveryFile(fs.Home, pid)
+	if err := os.MkdirAll(filepath.Dir(bridge), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bridge, []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	rec := doDismiss(t, pid)
 
