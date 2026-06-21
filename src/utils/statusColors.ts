@@ -43,6 +43,7 @@ export function agentStatusTone(status: string): ChipTone {
     case 'waiting': return 'warning'
     case 'error': return 'danger'
     case 'completed': return 'success'
+    case 'finished': return 'neutral'
     default: return 'neutral'
   }
 }
