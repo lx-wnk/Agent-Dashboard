@@ -77,7 +77,9 @@ func (s *Spawner) Spawn(opts SpawnOpts) Agent {
 	s.nextPID++
 	s.mu.Unlock()
 
-	sessionID := fmt.Sprintf("%08d-0000-0000-0000-000000000000", pid)
+	// Valid session UUID derived from the pid so the parser's uuidRE accepts it
+	// (8-4-4-4-12 lowercase hex); the pid fills the final 12-hex segment.
+	sessionID := fmt.Sprintf("00000000-0000-0000-0000-%012x", pid)
 
 	projectDir := filepath.Join(s.Home, ".claude", "projects", parser.EncodePath(cwd))
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
