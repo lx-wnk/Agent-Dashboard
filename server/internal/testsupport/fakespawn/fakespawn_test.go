@@ -3,11 +3,26 @@ package fakespawn
 import (
 	"context"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
 )
+
+// sessionUUIDRE mirrors the parser's session-filename rule (parser.go uuidRE).
+// The fake's whole purpose is to produce a session the real parser resolves, so
+// guard the generated id against that contract directly — file-existence checks
+// alone passed even when the id was malformed and GetAgents resolved nothing.
+var sessionUUIDRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+func TestSpawnSessionIDIsParserValidUUID(t *testing.T) {
+	s := New(t)
+	a := s.Spawn(SpawnOpts{})
+	if !sessionUUIDRE.MatchString(a.SessionID) {
+		t.Fatalf("session id %q does not match parser uuidRE", a.SessionID)
+	}
+}
 
 func TestSpawnWritesArtifacts(t *testing.T) {
 	s := New(t)
