@@ -18,9 +18,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 )
 
-// Spawner simulates the on-disk + process-scan artifacts a controllable Claude
-// agent leaves behind, so flow tests can exercise the live → finished → dismiss
-// lifecycle without launching a real process.
+// Spawner owns one fake agent's temp HOME and the set of currently-live fake
+// processes. Construct it with New; one instance per test.
 type Spawner struct {
 	Home string
 
