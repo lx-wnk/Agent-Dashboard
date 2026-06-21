@@ -68,7 +68,10 @@ func (t *staleTracker) buildStale(livePIDs map[int]bool, baselineCost float64) [
 		}
 		session, err := t.parseFn(snap.path)
 		if err != nil || session == nil || session.SessionID == "" {
-			continue // transient parse miss; retry next tick
+			// Transient parse miss; retry next tick. A permanently unparseable
+			// dead pid stays in seen for the process lifetime — accepted bounded
+			// leak for this process-scoped registry; no age-out by design.
+			continue
 		}
 		out = append(out, buildFinishedAgent(pid, snap, session, baselineCost))
 	}
@@ -78,6 +81,7 @@ func (t *staleTracker) buildStale(livePIDs map[int]bool, baselineCost float64) [
 // buildFinishedAgent mirrors buildAgent but reconstructs a finished, controllable
 // card from a cached snapshot plus freshly parsed session data. Uptime is left
 // zero because the process is gone.
+// Keep sdk.Agent field population in parity with buildAgent in merger.go — a new sdk.Agent field must be added to both.
 func buildFinishedAgent(pid int, snap liveSnapshot, session *parser.SessionData, baselineCost float64) sdk.Agent {
 	provider := snap.provider
 	if provider == "" {
