@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -105,5 +106,27 @@ func TestEngine_JunieTokensAndInFileCost(t *testing.T) {
 	}
 	if r.InFileCost < 0.0202 || r.InFileCost > 0.0204 {
 		t.Fatalf("want ~0.0203 cost, got %f", r.InFileCost)
+	}
+}
+
+func TestEngine_EmptyAndMalformedFile(t *testing.T) {
+	dir := t.TempDir()
+	empty := filepath.Join(dir, "empty.jsonl")
+	if err := os.WriteFile(empty, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := parseJSONL(codexDescriptor(), empty)
+	if err != nil {
+		t.Fatalf("empty file must not error, got %v", err)
+	}
+	if r.Session.TokenUsage.InputTokens != 0 {
+		t.Fatalf("empty file must yield zero tokens, got %d", r.Session.TokenUsage.InputTokens)
+	}
+	bad := filepath.Join(dir, "bad.jsonl")
+	if err := os.WriteFile(bad, []byte("not json\n{also not\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseJSONL(codexDescriptor(), bad); err != nil {
+		t.Fatalf("all-malformed file must skip lines, not error, got %v", err)
 	}
 }

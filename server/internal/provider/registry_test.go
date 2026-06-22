@@ -122,3 +122,27 @@ func TestResolveSession_CodexNestedGlobAndJunieParentID(t *testing.T) {
 		t.Fatalf("junie session ids should be the parent dirs sess-A/sess-B, got %v", ids)
 	}
 }
+
+func TestResolveSession_EndToEndCodex(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "sessions", "2026", "04", "19")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := `{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":42,"output_tokens":7}}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(nested, "rollout-xyz.jsonl"), []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", root)
+	reg := testRegistry(t, "codex")
+	session, _, _, err := reg.ResolveSession("codex", "/some/cwd", map[string]bool{})
+	if err != nil {
+		t.Fatalf("expected to resolve codex session, got %v", err)
+	}
+	if session.TokenUsage.InputTokens != 42 {
+		t.Fatalf("want 42 input tokens, got %d", session.TokenUsage.InputTokens)
+	}
+	if session.SessionID != "rollout-xyz" {
+		t.Fatalf("want session id rollout-xyz, got %q", session.SessionID)
+	}
+}

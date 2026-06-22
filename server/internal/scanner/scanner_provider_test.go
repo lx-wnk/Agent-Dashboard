@@ -24,3 +24,12 @@ func TestDetectVia_UsesInjectedDetector(t *testing.T) {
 		t.Fatal("claude must always resolve")
 	}
 }
+
+func TestDetectVia_NilDetector(t *testing.T) {
+	if detectProviderVia(nil, "claude --x") != sdk.ProviderClaude {
+		t.Fatal("nil detector must still resolve claude")
+	}
+	if detectProviderVia(nil, "codex") != "" {
+		t.Fatal("nil detector must not resolve non-claude")
+	}
+}
