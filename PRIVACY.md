@@ -14,6 +14,9 @@ The dashboard reads the following data from your local filesystem at runtime. No
 | `~/.claude/usage-data/session-meta/*.json` | Session metadata — model, start time, token totals | Cost and status display |
 | `ps`, `lsof` (macOS) / `/proc/<pid>/cwd` (Linux) | Running process list, working directories | Matching PIDs to session files |
 | `~/.claude/dashboard-tasks.db` | Task pipeline state (see section 2) | Pipeline orchestration |
+| Provider session logs (`~/.codex`, `~/.gemini`, `~/.junie`, or the path from the provider's config-dir/env) | Local JSONL session logs of an enabled provider — tokens, model, cost | Monitoring Codex/Gemini/Junie agents (only when that provider is enabled) |
+
+When a provider is enabled, the dashboard additionally performs a local `GET http://localhost:11434/api/tags` request to Ollama (when reachable) to classify local models and report them at $0 cost. This request stays on your machine; no data leaves it.
 
 **Important:** JSONL session files may contain sensitive information — API keys typed into prompts, file contents, credentials pasted during a session, or other PII. The dashboard does not sanitize or redact these files. You are responsible for protecting them using standard host-OS file permissions (e.g. `chmod 700 ~/.claude/projects/`).
 

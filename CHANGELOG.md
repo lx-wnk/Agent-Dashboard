@@ -14,6 +14,8 @@ Preparing the first public release.
 
 ### Added
 
+- Opt-in monitoring of Codex CLI, Gemini CLI, and Junie CLI agents via a declarative provider registry (off by default; enable with DASHBOARD_PROVIDERS_ENABLED or custom descriptors in DASHBOARD_PROVIDER_DIR).
+- Ollama-backed local models are now reported at $0 cost instead of unknown.
 - Agents now show an animated **Working** badge while actively generating — derived from conversation turn-state plus live tmux/pty output — distinct from the idle/waiting staleness states.
 - Agents spawned from the dashboard now run as interactive **live** sessions (tmux when available, headless pty broker otherwise) so you can converse with them live, instead of a one-shot run. The spawned agent's chat opens automatically once it appears.
 - Controllable (channel/MCP-connected) agents now remain on the dashboard as a
