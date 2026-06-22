@@ -38,6 +38,8 @@ When a controllable (channel/MCP-connected) agent exits, its card stays on the d
 
 **Build & control** — multi-stage task pipeline (`concept → implementation → review → done`) running in isolated git worktrees behind per-stage permission gates; per-stage engine and model selection (global and per-project); spawn agents and send follow-ups or `/btw` interrupts via MCP channels; refinement chat to shape a concept first; drag-and-drop task reordering.
 
+Agents spawned from the dashboard run as interactive **live** sessions rather than one-shot runs, so you can converse with them as they work. Live injection uses tmux when it's available (the agent runs in a detached session) and falls back to a built-in pty broker otherwise. The spawned agent's chat modal opens automatically once it appears on the roster.
+
 **Extend** — authenticated MCP control plane with scoped tokens; in-dashboard `~/.claude` config explorer and git-worktree panel; frontend plugin slots and pluggable LLM adapters; Web Push, webhook, and email notifications.
 
 See [`docs/`](docs/README.md) for the full feature reference.

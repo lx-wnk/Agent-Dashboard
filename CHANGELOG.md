@@ -14,6 +14,7 @@ Preparing the first public release.
 
 ### Added
 
+- Agents spawned from the dashboard now run as interactive **live** sessions (tmux when available, headless pty broker otherwise) so you can converse with them live, instead of a one-shot run. The spawned agent's chat opens automatically once it appears.
 - Controllable (channel/MCP-connected) agents now remain on the dashboard as a
   dismissable **Finished** card after their process exits, so results no longer
   disappear into the Sessions list. Click ✕ on a finished card to dismiss it
