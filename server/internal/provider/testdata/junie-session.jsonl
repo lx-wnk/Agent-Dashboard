@@ -1,0 +1,3 @@
+{"timestampMs":1750000000000,"kind":"UserPromptEvent","event":{}}
+{"timestampMs":1750000005000,"kind":"LlmResponseMetadataEvent","event":{"agentEvent":{"kind":"LlmResponseMetadataEvent","modelUsage":[{"model":"claude-opus-4-6","provider":"anthropic","inputTokens":1234,"outputTokens":456,"cacheInputTokens":100,"cacheCreateTokens":50,"cost":0.0123,"time":3200}]}}}
+{"timestampMs":1750000020000,"kind":"LlmResponseMetadataEvent","event":{"agentEvent":{"kind":"LlmResponseMetadataEvent","modelUsage":[{"model":"claude-opus-4-6","provider":"anthropic","inputTokens":800,"outputTokens":300,"cacheInputTokens":40,"cacheCreateTokens":20,"cost":0.0080,"time":2100}]}}}
