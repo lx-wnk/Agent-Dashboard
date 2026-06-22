@@ -86,7 +86,7 @@ func TestWritePtyDiscovery_WritesPtyJsonFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	discPath, err := writePtyDiscovery(12345, 9999, "test-token")
+	discPath, err := writePtyDiscovery(12345, 9999, "test-token", time.Now())
 	if err != nil {
 		t.Fatalf("writePtyDiscovery: %v", err)
 	}

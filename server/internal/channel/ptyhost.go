@@ -70,14 +70,17 @@ func RunPTY(ctx context.Context, command []string) error {
 	if err != nil {
 		return fmt.Errorf("ptyhost: http: %w", err)
 	}
-	discPath, derr := writePtyDiscovery(childPid, port, token.value())
+	// Foreground sessions proxy output directly to the user's terminal and are
+	// interactive/owned by the user; treat them as always-recent (time.Now())
+	// rather than tracking output, which the dashboard interprets as live.
+	discPath, derr := writePtyDiscovery(childPid, port, token.value(), time.Now())
 	if derr != nil {
 		slog.Warn("ptyhost: discovery write failed", "err", derr)
 	}
 
 	// Rotate the inject token periodically, re-emitting the 0600 discovery file.
 	go startTokenRotation(ctx, token, injectTokenRotateInterval(), func(newToken string) error {
-		_, werr := writePtyDiscovery(childPid, port, newToken)
+		_, werr := writePtyDiscovery(childPid, port, newToken, time.Now())
 		return werr
 	})
 	defer func() {
@@ -147,7 +150,7 @@ func startPtyHTTPServer(ptmx io.Writer, token *rotatingToken) (*http.Server, int
 // the same claude process. The dashboard reads BOTH files independently:
 //   - {pid}.json  → channel bridge (channelAvailable, tmuxPane)
 //   - {pid}.pty.json → pty broker (channelAvailable, ptyInject)
-func writePtyDiscovery(childPid, port int, token string) (string, error) {
+func writePtyDiscovery(childPid, port int, token string, lastOutputAt time.Time) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -158,12 +161,13 @@ func writePtyDiscovery(childPid, port int, token string) (string, error) {
 	}
 	path := channelconfig.DiscoveryPtyFile(home, childPid)
 	data, _ := json.Marshal(map[string]any{
-		"port":      port,
-		"token":     token,
-		"parentPid": childPid,
-		"cwd":       cwd(),
-		"ptyInject": true,
-		"startedAt": time.Now().UTC().Format(time.RFC3339),
+		"port":         port,
+		"token":        token,
+		"parentPid":    childPid,
+		"cwd":          cwd(),
+		"ptyInject":    true,
+		"startedAt":    time.Now().UTC().Format(time.RFC3339),
+		"lastOutputAt": lastOutputAt.UTC().Format(time.RFC3339),
 	})
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", err
