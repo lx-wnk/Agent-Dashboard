@@ -25,6 +25,7 @@ import (
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
+	providersapi "github.com/lx-wnk/agent-dashboard/server/internal/api/providers"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
@@ -45,6 +46,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
+	"github.com/lx-wnk/agent-dashboard/server/internal/providersettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
@@ -95,7 +97,25 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("provider registry: %w", err)
 	}
-	providerRegistry.SetEnabled(provider.DefaultEnabled(providerRegistry.Descriptors(), cfg.ProvidersEnabled))
+	var providerSettingRepo repo.ProviderSettingRepo
+	if entClient != nil {
+		providerSettingRepo = repo.NewProviderSettingRepo(entClient)
+	}
+	providerSettingsSvc := providersettings.New(
+		providerSettingRepo,
+		provider.DefaultEnabled(providerRegistry.Descriptors(), cfg.ProvidersEnabled),
+	)
+	if providerSettingRepo != nil {
+		if err := providerSettingsSvc.Load(ctx); err != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("provider settings load: %w", err)
+		}
+	}
+	providerRegistry.SetEnabled(providerSettingsSvc.EnabledFunc())
+
+	var providersHandler *providersapi.Handler
+	if providerSettingRepo != nil {
+		providersHandler = providersapi.NewHandler(providerRegistry, providerSettingsSvc)
+	}
 
 	agentMerger := merger.New(
 		merger.WithRegistry(providerRegistry),
@@ -378,6 +398,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		PermissionPresetRepo:  permissionPresetRepo,
 		SystemPromptsHandler:  systemPromptsHandler,
 		AdapterHandler:        adapterHandler,
+		ProvidersHandler:      providersHandler,
 		SearchHandler:         searchHandler,
 		HistoryHandler:        historyHandler,
 		RefineHandler:         refineHandler,
