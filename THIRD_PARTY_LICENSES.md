@@ -47,7 +47,7 @@ The following third-party packages are used as transitive dependencies.
 | github.com/zclconf/go-cty-yaml | Apache-2.0 | https://github.com/zclconf/go-cty-yaml/blob/v1.1.0/LICENSE |
 | github.com/zclconf/go-cty/cty | MIT | https://github.com/zclconf/go-cty/blob/v1.14.4/LICENSE |
 | golang.org/x/crypto/hkdf | BSD-3-Clause | https://cs.opensource.google/go/x/crypto/+/v0.45.0:LICENSE |
-| golang.org/x/mod/semver | BSD-3-Clause | https://cs.opensource.google/go/x/mod/+/v0.33.0:LICENSE |
+| golang.org/x/mod/semver | BSD-3-Clause | https://cs.opensource.google/go/x/mod/+/v0.36.0:LICENSE |
 | golang.org/x/oauth2 | BSD-3-Clause | https://cs.opensource.google/go/x/oauth2/+/v0.35.0:LICENSE |
 | golang.org/x/sync/errgroup | BSD-3-Clause | https://cs.opensource.google/go/x/sync/+/v0.21.0:LICENSE |
 | golang.org/x/sys | BSD-3-Clause | https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE |
@@ -55,10 +55,10 @@ The following third-party packages are used as transitive dependencies.
 | golang.org/x/text | BSD-3-Clause | https://cs.opensource.google/go/x/text/+/v0.31.0:LICENSE |
 | golang.org/x/time/rate | BSD-3-Clause | https://cs.opensource.google/go/x/time/+/v0.15.0:LICENSE |
 | gopkg.in/yaml.v3 | MIT | https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE |
-| modernc.org/libc | MIT | https://gitlab.com/cznic/libc/blob/v1.72.3/LICENSE-3RD-PARTY.md |
+| modernc.org/libc | MIT | https://gitlab.com/cznic/libc/blob/v1.73.4/LICENSE-3RD-PARTY.md |
 | modernc.org/mathutil | BSD-3-Clause | https://pkg.go.dev/modernc.org/mathutil |
 | modernc.org/memory | BSD-3-Clause | https://gitlab.com/cznic/memory/blob/v1.11.0/LICENSE-GO |
-| modernc.org/sqlite | BSD-3-Clause | https://gitlab.com/cznic/sqlite/blob/v1.52.0/LICENSE |
+| modernc.org/sqlite | BSD-3-Clause | https://gitlab.com/cznic/sqlite/blob/v1.53.0/LICENSE |
 
 ## Frontend Dependencies
 
