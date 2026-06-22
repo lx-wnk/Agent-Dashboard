@@ -44,7 +44,9 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
+	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -84,7 +86,23 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// tracker, so finished-agent state must persist across every read path
 	// (broadcast loop, router accessors, search). Constructing more than one
 	// would split that state and lose finished cards between ticks.
-	agentMerger := merger.New()
+	ollama := provider.NewOllamaClassifier("http://localhost:11434")
+	providerRegistry, err := provider.NewRegistry(provider.Options{
+		UserDir: cfg.ProviderDir,
+		Ollama:  ollama,
+		Pricing: merger.PricingAdapter(),
+	})
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("provider registry: %w", err)
+	}
+	providerRegistry.SetEnabled(provider.DefaultEnabled(providerRegistry.Descriptors(), cfg.ProvidersEnabled))
+
+	agentMerger := merger.New(
+		merger.WithRegistry(providerRegistry),
+		merger.WithScanFn(func(ctx context.Context) ([]scanner.ProcessInfo, error) {
+			return scanner.ScanProcessesWithDetector(ctx, providerRegistry)
+		}),
+	)
 
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
