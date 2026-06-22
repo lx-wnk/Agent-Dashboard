@@ -230,6 +230,35 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 	return result, nil
 }
 
+// ProviderDetector maps a process command to a provider. The provider Registry
+// implements this; tests can fake it.
+type ProviderDetector interface {
+	DetectProvider(comm string) sdk.Provider
+}
+
+// detectProviderVia resolves a process command through an injected detector,
+// always honoring Claude even when no detector or a disabled detector is given.
+func detectProviderVia(d ProviderDetector, comm string) sdk.Provider {
+	if d != nil {
+		if p := d.DetectProvider(comm); p != "" {
+			return p
+		}
+	}
+	if commBase(comm) == "claude" {
+		return sdk.ProviderClaude
+	}
+	return ""
+}
+
+// commBase extracts argv[0]'s base name from a command string.
+func commBase(comm string) string {
+	comm = strings.TrimSpace(comm)
+	if i := strings.IndexByte(comm, ' '); i >= 0 {
+		comm = comm[:i]
+	}
+	return filepath.Base(comm)
+}
+
 // DetectProviderFromCommand maps a process command name to a provider.
 // Matches both bare names (e.g. "claude") and absolute paths
 // (e.g. "/usr/local/bin/codex"). Returns "" when the command does not
