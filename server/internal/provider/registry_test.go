@@ -146,3 +146,25 @@ func TestResolveSession_EndToEndCodex(t *testing.T) {
 		t.Fatalf("want session id rollout-xyz, got %q", session.SessionID)
 	}
 }
+
+func TestRegistry_KnownProviders(t *testing.T) {
+	reg := testRegistry(t, "codex")
+	infos := reg.KnownProviders()
+	var codex *ProviderInfo
+	for i := range infos {
+		if infos[i].ID == "codex" {
+			codex = &infos[i]
+		}
+	}
+	if codex == nil {
+		t.Fatal("codex should be a known provider")
+	}
+	if codex.DisplayName != "Codex CLI" {
+		t.Fatalf("want display name Codex CLI, got %q", codex.DisplayName)
+	}
+	for _, in := range infos {
+		if in.ID == "claude" {
+			t.Fatal("claude must not appear in KnownProviders")
+		}
+	}
+}

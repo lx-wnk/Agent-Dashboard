@@ -120,6 +120,41 @@ func (r *Registry) ingest(b []byte, name string) {
 func (r *Registry) Descriptors() map[string]Descriptor { return r.descriptors }
 func (r *Registry) SetEnabled(fn EnabledFunc)          { r.enabled = fn }
 
+// ProviderInfo is the public, UI-facing summary of a known provider.
+type ProviderInfo struct {
+	ID               string
+	DisplayName      string
+	ConfigDirPresent bool
+}
+
+// KnownProviders returns every loaded descriptor (sorted by id) with its
+// display name and whether its config directory exists on disk. Claude is the
+// always-on built-in and is intentionally excluded (it is not a descriptor).
+func (r *Registry) KnownProviders() []ProviderInfo {
+	home, _ := os.UserHomeDir()
+	ids := make([]string, 0, len(r.descriptors))
+	for id := range r.descriptors {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]ProviderInfo, 0, len(ids))
+	for _, id := range ids {
+		d := r.descriptors[id]
+		dir := expandHome(d.ConfigDir.Default, home)
+		if d.ConfigDir.Env != "" {
+			if v := os.Getenv(d.ConfigDir.Env); v != "" {
+				dir = v
+			}
+		}
+		out = append(out, ProviderInfo{
+			ID:               id,
+			DisplayName:      d.DisplayName,
+			ConfigDirPresent: dir != "" && isDir(dir),
+		})
+	}
+	return out
+}
+
 // DetectProvider maps a process command to an enabled provider id, or "".
 func (r *Registry) DetectProvider(comm string) sdk.Provider {
 	comm = strings.TrimSpace(comm)
