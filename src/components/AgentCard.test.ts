@@ -148,6 +148,21 @@ describe('agentCard — active subagents block', () => {
   })
 })
 
+describe('agentCard working badge', () => {
+  const badgeStubs = { MachineBadge: true, ProviderBadge: true, PromptInput: true }
+
+  it('shows Working badge when agent.working, overriding status', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'waiting', working: true } }, global: { stubs: badgeStubs } })
+    expect(w.text()).toContain('Working')
+    expect(w.text()).not.toContain('Waiting')
+  })
+
+  it('shows the status label when not working', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'waiting', working: false } }, global: { stubs: badgeStubs } })
+    expect(w.text()).toContain('Waiting')
+  })
+})
+
 describe('agentCard finished state', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, status: 204 })))

@@ -75,7 +75,7 @@ function toggleSubagentExpand(id: string) {
     />
     <div class="bg-raised px-3 py-2 flex justify-between items-center gap-2">
       <div class="flex items-center gap-2 min-w-0">
-        <AppBadge :variant="agent.status" />
+        <AppBadge :variant="agent.working ? 'working' : agent.status" />
         <span
           v-if="stalled"
           class="text-[10px] font-medium px-1 py-0.5 rounded bg-warning-soft text-warning-text whitespace-nowrap"

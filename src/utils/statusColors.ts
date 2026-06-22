@@ -40,6 +40,7 @@ export function runStatusTone(status: StageRunStatus | string): ChipTone {
 export function agentStatusTone(status: string): ChipTone {
   switch (status) {
     case 'active': return 'success'
+    case 'working': return 'info'
     case 'waiting': return 'warning'
     case 'error': return 'danger'
     case 'completed': return 'success'
@@ -52,6 +53,7 @@ export function agentStatusTone(status: string): ChipTone {
 export function statusLabel(status: string): string {
   switch (status) {
     case 'active': return 'Active'
+    case 'working': return 'Working'
     case 'waiting': return 'Waiting'
     case 'idle': return 'Idle'
     case 'finished': return 'Finished'
