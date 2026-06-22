@@ -1,0 +1,23 @@
+id: gemini
+displayName: Gemini CLI
+enabled: false
+exeNames: [gemini]
+configDir:
+  default: ~/.gemini
+sessionGlob: tmp/*/chats/session-*.jsonl
+source: jsonl
+parse:
+  eventFilter:
+    path: type
+    equals: gemini
+  tokens:
+    mode: perMessage
+    input: [tokens.input]
+    output: [tokens.output]
+    cacheRead: [tokens.cached]
+  model: [model]
+cost:
+  rule: byModel
+  localIf:
+    providerEquals: ollama
+    orModelInOllamaTags: true
