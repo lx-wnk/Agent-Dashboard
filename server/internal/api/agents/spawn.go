@@ -421,9 +421,12 @@ func (m *SpawnManager) launchInteractive(binary string, args, env []string, cwd,
 			return 0, nil, err
 		}
 		_ = cmd.Wait() // tmux client exits immediately after creating the detached session
-		// Under test the execStart seam runs a stub that produces no pane PID;
-		// treat empty output as a no-op spawn so command-shape assertions still pass.
+		// Empty output means the transport produced no pid (test stub or a failed
+		// start), so there is no watch to clean up the cfg — remove it here.
 		if strings.TrimSpace(buf.String()) == "" {
+			if channelCfgPath != "" {
+				_ = os.Remove(channelCfgPath)
+			}
 			return 0, func() {}, nil
 		}
 		pid, perr := parsePanePID(buf.String())
@@ -446,9 +449,12 @@ func (m *SpawnManager) launchInteractive(binary string, args, env []string, cwd,
 			return 0, nil, err
 		}
 		pid, empty, rerr := readFirstPID(pipe)
-		// Under test the execStart seam runs a stub that prints no PID line;
-		// treat empty output as a no-op spawn so command-shape assertions still pass.
+		// Empty output means the transport produced no pid (test stub or a failed
+		// start), so there is no watch to clean up the cfg — remove it here.
 		if empty {
+			if channelCfgPath != "" {
+				_ = os.Remove(channelCfgPath)
+			}
 			return 0, func() {}, nil
 		}
 		if rerr != nil {

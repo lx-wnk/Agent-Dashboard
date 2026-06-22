@@ -346,6 +346,42 @@ describe('spawnDialog', () => {
     wrapper.unmount()
   })
 
+  it('does not show an error when an interactive session exits with a null exit code', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url === '/api/projects')
+        return Promise.resolve({ ok: true, json: async () => [sampleProject] })
+      if (url === '/api/spawners')
+        return Promise.resolve({ ok: true, json: async () => [sampleSpawner] })
+      if (url === '/api/agents/spawn')
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true, pid: 12345 }) })
+      if (url.startsWith('/api/agents/spawn/12345/status'))
+        return Promise.resolve({ ok: true, json: async () => ({ pid: 12345, status: 'exited', exitCode: null }) })
+      return Promise.resolve({ ok: true, json: async () => [] })
+    }))
+
+    const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
+    await flushPromises()
+
+    const projectSelect = document.querySelector('#spawn-project') as HTMLSelectElement
+    setSelectValue(projectSelect, 'prj_a')
+    await flushPromises()
+    await flushPromises()
+
+    const promptInput = document.querySelector('[data-testid="spawn-prompt-wrap"]') as HTMLTextAreaElement
+    setInputValue(promptInput, 'do a thing')
+    await flushPromises()
+
+    const spawnBtn = document.querySelector('[data-testid="spawn-btn"]') as HTMLButtonElement
+    spawnBtn.click()
+    await flushPromises()
+    await flushPromises()
+
+    // A clean interactive-session end (null exitCode) must not surface an error.
+    expect(document.body.textContent).not.toContain('exited with code')
+
+    wrapper.unmount()
+  })
+
   it('sends permissionMode:acceptEdits without confirm gate', async () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()

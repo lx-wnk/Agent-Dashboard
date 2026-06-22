@@ -124,7 +124,9 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
       spawnStatusMsg.value = `Agent PID ${pid} running...`
       statusPollTimer = setTimeout(pollSpawnStatus, SPAWN_STATUS_POLL_MS, pid, attempts + 1)
     }
-    else if (data.status === 'exited' && data.exitCode !== 0) {
+    // Interactive (tmux/pty) sessions yield no exit code; a null/undefined
+    // exitCode means a clean end, not a failure. Only a non-zero code is an error.
+    else if (data.status === 'exited' && data.exitCode != null && data.exitCode !== 0) {
       const stderr = data.stderr?.trim()
       errorMsg.value = `Agent exited with code ${data.exitCode}${stderr ? `: ${stderr.slice(-300)}` : ''}`
       spawnStatusMsg.value = ''
@@ -134,6 +136,11 @@ async function pollSpawnStatus(pid: number, attempts = 0) {
       errorMsg.value = data.stderr?.trim() || 'Spawn error'
       spawnStatusMsg.value = ''
       isSpawning.value = false
+    }
+    else if (data.status === 'exited') {
+      // Interactive session ended cleanly (no exit code) — normal, not an error.
+      spawnStatusMsg.value = 'Agent session ready'
+      stopStatusPoll()
     }
     else {
       spawnStatusMsg.value = ''
