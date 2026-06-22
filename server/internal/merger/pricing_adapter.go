@@ -2,8 +2,13 @@ package merger
 
 import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
+	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/sdk"
 )
+
+// PricingAdapter returns the parser-backed pricing implementation for the
+// provider registry.
+func PricingAdapter() provider.Pricing { return pricingAdapter{} }
 
 // pricingAdapter exposes the parser pricing wrappers as a provider.Pricing.
 type pricingAdapter struct{}
