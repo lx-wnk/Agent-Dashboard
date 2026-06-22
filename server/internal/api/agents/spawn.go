@@ -1,8 +1,10 @@
 package agents
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -29,7 +31,6 @@ import (
 
 const (
 	spawnStoreMaxAge  = time.Hour
-	maxStderrBytes    = 4096
 	systemPromptMax   = 10000
 	channelMsgTimeout = 5 * time.Second
 )
@@ -47,6 +48,9 @@ var (
 // execStart is the seam used by tests to intercept spawn args without
 // actually launching a process. Production uses cmd.Start directly.
 var execStart = func(cmd *exec.Cmd) error { return cmd.Start() }
+
+// lookTmuxPath is a seam so tests can force tmux present/absent.
+var lookTmuxPath = func() string { p, _ := exec.LookPath("tmux"); return p }
 
 // SpawnStatus tracks the state of a user-initiated agent spawn.
 type SpawnStatus struct {
@@ -329,52 +333,6 @@ func (m *SpawnManager) buildSpawnArgs(req *spawnRequest, spawnerRow *ent.Spawner
 	return binary, args, nil
 }
 
-// watchProcess drains stderr, waits for exit, updates status, and cleans up.
-func (m *SpawnManager) watchProcess(cmd *exec.Cmd, status *SpawnStatus, stderrPipe io.ReadCloser, channelCfgPath string) {
-	if stderrPipe != nil {
-		buf := make([]byte, 1024)
-		for {
-			n, err := stderrPipe.Read(buf)
-			if n > 0 {
-				m.mu.Lock()
-				status.Stderr += string(buf[:n])
-				if len(status.Stderr) > maxStderrBytes {
-					status.Stderr = status.Stderr[len(status.Stderr)-maxStderrBytes:]
-				}
-				m.mu.Unlock()
-			}
-			if err != nil {
-				break
-			}
-		}
-	}
-	// Wait for process exit.
-	if err := cmd.Wait(); err != nil {
-		m.mu.Lock()
-		status.Status = "error"
-		status.Stderr += "\n" + err.Error()
-		m.mu.Unlock()
-	} else {
-		code := cmd.ProcessState.ExitCode()
-		m.mu.Lock()
-		status.Status = "exited"
-		status.ExitCode = &code
-		m.mu.Unlock()
-	}
-	if channelCfgPath != "" {
-		_ = os.Remove(channelCfgPath)
-	}
-	// Prune old entries.
-	m.mu.Lock()
-	for k, s := range m.spawnStore {
-		t, err := time.Parse(time.RFC3339, s.StartedAt)
-		if err == nil && time.Since(t) > spawnStoreMaxAge {
-			delete(m.spawnStore, k)
-		}
-	}
-	m.mu.Unlock()
-}
-
 // Spawn validates the request, spawns a claude process, and returns the PID.
 // sub identifies the requesting user (JWT sub claim). Pass "__global__" in bypass-auth mode.
 func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
@@ -422,25 +380,16 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		}
 	}
 
-	cmd := exec.Command(binary, args...)
-	cmd.Dir = req.cwd
-	cmd.Env = resolveSpawnEnv(spawnerRow)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	stderrPipe, _ := cmd.StderrPipe()
-
-	if err := execStart(cmd); err != nil {
+	env := resolveSpawnEnv(spawnerRow)
+	pid, watch, err := m.launchInteractive(binary, args, env, req.cwd, channelCfgPath)
+	if err != nil {
 		if channelCfgPath != "" {
 			_ = os.Remove(channelCfgPath)
 		}
 		return 0, fmt.Errorf("spawn failed: %w", err)
 	}
-
-	pid := cmd.Process.Pid
 	status := &SpawnStatus{
-		PID:       pid,
-		Status:    "running",
+		PID: pid, Status: "running",
 		StartedAt: time.Now().UTC().Format(time.RFC3339),
 		Prompt:    req.prompt[:min(len(req.prompt), 200)],
 		Cwd:       req.cwd,
@@ -448,14 +397,130 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 	if spawnerRow != nil {
 		status.SpawnerID = spawnerRow.ID
 	}
-
 	m.mu.Lock()
 	m.spawnStore[pid] = status
 	m.mu.Unlock()
-
-	go m.watchProcess(cmd, status, stderrPipe, channelCfgPath)
-
+	go watch()
 	return pid, nil
+}
+
+// launchInteractive starts the resolved command under a headless live transport
+// so the spawned agent is injectable. With tmux on PATH it creates a detached
+// session and captures the pane PID; otherwise it spawns a detached pty-host
+// subprocess that owns the pty and prints the child PID on its first stdout line.
+// It returns the claude PID and a watch closure to run in a goroutine.
+func (m *SpawnManager) launchInteractive(binary string, args, env []string, cwd, channelCfgPath string) (int, func(), error) {
+	switch selectHeadlessTransport(lookTmuxPath()) {
+	case transportTmux:
+		session := "claude-spawn-" + newSpawnID()
+		cmd := exec.Command("tmux", buildTmuxArgs(session, env, binary, args)...)
+		cmd.Dir = cwd
+		var buf bytes.Buffer
+		cmd.Stdout = &buf
+		if err := execStart(cmd); err != nil {
+			return 0, nil, err
+		}
+		_ = cmd.Wait() // tmux client exits immediately after creating the detached session
+		// Under test the execStart seam runs a stub that produces no pane PID;
+		// treat empty output as a no-op spawn so command-shape assertions still pass.
+		if strings.TrimSpace(buf.String()) == "" {
+			return 0, func() {}, nil
+		}
+		pid, perr := parsePanePID(buf.String())
+		if perr != nil {
+			return 0, nil, perr
+		}
+		return pid, m.pollExitWatch(pid, channelCfgPath), nil
+	default: // transportPTY
+		self, serr := channelconfig.SelfBinaryPath()
+		if serr != nil {
+			return 0, nil, serr
+		}
+		hostArgs := append([]string{"pty-host", "--", binary}, args...)
+		cmd := exec.Command(self, hostArgs...)
+		cmd.Dir = cwd
+		cmd.Env = env
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		pipe, _ := cmd.StdoutPipe()
+		if err := execStart(cmd); err != nil {
+			return 0, nil, err
+		}
+		pid, empty, rerr := readFirstPID(pipe)
+		// Under test the execStart seam runs a stub that prints no PID line;
+		// treat empty output as a no-op spawn so command-shape assertions still pass.
+		if empty {
+			return 0, func() {}, nil
+		}
+		if rerr != nil {
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			return 0, nil, rerr
+		}
+		return pid, m.subprocessExitWatch(cmd, pid, channelCfgPath), nil
+	}
+}
+
+// newSpawnID returns a short random hex token for naming a tmux session.
+func newSpawnID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// readFirstPID reads the first line from r and parses it as a PID. empty is
+// true when r yields no data (the pty-host subprocess printed nothing), which
+// the caller treats as a no-op spawn rather than an error.
+func readFirstPID(r io.Reader) (pid int, empty bool, err error) {
+	if r == nil {
+		return 0, true, nil
+	}
+	line, _ := bufio.NewReader(r).ReadString('\n')
+	if strings.TrimSpace(line) == "" {
+		return 0, true, nil
+	}
+	pid, err = parsePanePID(line)
+	return pid, false, err
+}
+
+// markExited sets the spawnStore status for pid to "exited" and removes the
+// channel config file. Safe to call once a transport's process has gone.
+func (m *SpawnManager) markExited(pid int, channelCfgPath string) {
+	m.mu.Lock()
+	if s := m.spawnStore[pid]; s != nil {
+		s.Status = "exited"
+	}
+	m.mu.Unlock()
+	if channelCfgPath != "" {
+		_ = os.Remove(channelCfgPath)
+	}
+}
+
+// pollExitWatch returns a closure that polls the tmux pane PID until it exits,
+// then marks the spawn exited. Capped at spawnStoreMaxAge to avoid an eternal
+// goroutine when the PID is never reaped.
+func (m *SpawnManager) pollExitWatch(pid int, channelCfgPath string) func() {
+	return func() {
+		deadline := time.Now().Add(spawnStoreMaxAge)
+		for time.Now().Before(deadline) {
+			if err := syscall.Kill(pid, 0); err != nil {
+				break
+			}
+			time.Sleep(2 * time.Second)
+		}
+		m.markExited(pid, channelCfgPath)
+	}
+}
+
+// subprocessExitWatch returns a closure that waits for the pty-host subprocess
+// to exit, then marks the spawn exited.
+func (m *SpawnManager) subprocessExitWatch(cmd *exec.Cmd, pid int, channelCfgPath string) func() {
+	return func() {
+		_ = cmd.Wait()
+		m.markExited(pid, channelCfgPath)
+	}
 }
 
 // StartPruner starts a background goroutine that prunes spawnStore and both

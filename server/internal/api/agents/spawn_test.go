@@ -399,9 +399,14 @@ func TestSpawn_CustomAdapter_UsesSpawnerCommand(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	require.NotNil(t, *captured)
-	path := (*captured).Path
-	assert.True(t, path == "npx" || strings.HasSuffix(path, "/npx"),
-		"expected captured.Path to be 'npx' or end with '/npx', got %q", path)
+	// The launched command is the pty-host wrapper; the resolved binary "npx"
+	// and its args are passed as wrapper arguments after `pty-host --`.
+	assert.True(t,
+		containsConsecutive((*captured).Args, "pty-host", "--"),
+		"expected pty-host wrapper, got args %v", (*captured).Args,
+	)
+	assert.Contains(t, (*captured).Args, "npx",
+		"expected resolved binary 'npx' in wrapped args, got %v", (*captured).Args)
 	assert.True(t,
 		containsConsecutive((*captured).Args, "--", "claude-clone"),
 		"expected spawner args '-- claude-clone' before canonical args, got %v", (*captured).Args,
@@ -1130,6 +1135,38 @@ func TestSendMessageToChannel_FallsBackToBridgeHTTPWhenNoPty(t *testing.T) {
 	_, err := m.SendMessageToChannel(context.Background(), pid, "bridge msg")
 	require.NoError(t, err, "must succeed with bridge file only")
 	assert.Equal(t, "bridge msg", gotMessage)
+}
+
+// TestSpawn_TmuxTransportBuildsInteractiveSession verifies that when tmux is on
+// PATH, Spawn launches the agent via a detached tmux session (new-session -d -P
+// -F '#{pane_pid}') carrying the positional prompt, and never uses one-shot -p.
+func TestSpawn_TmuxTransportBuildsInteractiveSession(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+
+	origLook := lookTmuxPath
+	lookTmuxPath = func() string { return "/usr/bin/tmux" }
+	t.Cleanup(func() { lookTmuxPath = origLook })
+
+	capturedPtr := captureExec(t)
+
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing via tmux",
+		"cwd":           cwd,
+		"enableChannel": false,
+	})
+	require.NoError(t, err)
+
+	captured := *capturedPtr
+	require.NotNil(t, captured, "expected execStart to be called")
+
+	args := captured.Args
+	for _, want := range []string{"new-session", "-d", "-P", "-F", "#{pane_pid}", "do thing via tmux"} {
+		assert.Contains(t, args, want, "expected %q in tmux args %v", want, args)
+	}
+	assert.NotContains(t, args, "-p", "tmux transport must not pass one-shot -p, got %v", args)
 }
 
 func TestBuildSpawnArgs_InteractivePositionalPrompt(t *testing.T) {
