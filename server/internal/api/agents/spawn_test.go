@@ -319,6 +319,9 @@ func TestSpawn_OpenAIAdapter_Rejected(t *testing.T) {
 func TestSpawn_ClaudeAdapter_HydratesModelFromOverride(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	captured := captureExec(t)
 
 	row := &ent.Spawner{
@@ -347,6 +350,9 @@ func TestSpawn_ClaudeAdapter_HydratesModelFromOverride(t *testing.T) {
 func TestSpawn_BodyModelOverridesSpawnerModelOverride(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	captured := captureExec(t)
 
 	row := &ent.Spawner{
@@ -380,6 +386,9 @@ func TestSpawn_CustomAdapter_UsesSpawnerCommand(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
 	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "npx")
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	captured := captureExec(t)
 
 	row := &ent.Spawner{
@@ -399,9 +408,14 @@ func TestSpawn_CustomAdapter_UsesSpawnerCommand(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	require.NotNil(t, *captured)
-	path := (*captured).Path
-	assert.True(t, path == "npx" || strings.HasSuffix(path, "/npx"),
-		"expected captured.Path to be 'npx' or end with '/npx', got %q", path)
+	// The launched command is the pty-host wrapper; the resolved binary "npx"
+	// and its args are passed as wrapper arguments after `pty-host --`.
+	assert.True(t,
+		containsConsecutive((*captured).Args, "pty-host", "--"),
+		"expected pty-host wrapper, got args %v", (*captured).Args,
+	)
+	assert.Contains(t, (*captured).Args, "npx",
+		"expected resolved binary 'npx' in wrapped args, got %v", (*captured).Args)
 	assert.True(t,
 		containsConsecutive((*captured).Args, "--", "claude-clone"),
 		"expected spawner args '-- claude-clone' before canonical args, got %v", (*captured).Args,
@@ -435,6 +449,9 @@ func TestSpawn_EnvMerge_DashboardWins(t *testing.T) {
 	t.Setenv("HOME", tmp)
 	t.Setenv("DASHBOARD_MCP_TOKEN", "from-dashboard")
 	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	captured := captureExec(t)
 
 	row := &ent.Spawner{
@@ -512,6 +529,9 @@ func TestSpawn_CustomAdapter_ChannelArgOverride(t *testing.T) {
 
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	capturedPtr := captureExec(t)
 
 	_, err := m.Spawn("u1", map[string]any{
@@ -658,6 +678,9 @@ func TestSpawn_AdditionalDirs_InjectedForMultiFolderProject(t *testing.T) {
 	base, _ = filepath.EvalSymlinks(base)
 
 	t.Setenv("HOME", base)
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	capturedPtr := captureExec(t)
 
 	folderRepo := &fakeProjectFolderRepo{
@@ -697,6 +720,9 @@ func TestSpawn_AdditionalDirs_NotInjectedWithoutProjectId(t *testing.T) {
 	base := t.TempDir()
 	cwd, _ := filepath.EvalSymlinks(base)
 	t.Setenv("HOME", base)
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	capturedPtr := captureExec(t)
 
 	folderRepo := &fakeProjectFolderRepo{
@@ -728,6 +754,9 @@ func TestSpawn_AdditionalDirs_NotInjectedWithNilRepo(t *testing.T) {
 	base := t.TempDir()
 	cwd, _ := filepath.EvalSymlinks(base)
 	t.Setenv("HOME", base)
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	capturedPtr := captureExec(t)
 
 	// SpawnManager without SetProjectFolderRepo → repo is nil
@@ -754,6 +783,9 @@ func TestSpawn_AdditionalDirs_RepoErrorSkipped(t *testing.T) {
 	base := t.TempDir()
 	cwd, _ := filepath.EvalSymlinks(base)
 	t.Setenv("HOME", base)
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	capturedPtr := captureExec(t)
 
 	folderRepo := &fakeProjectFolderRepo{
@@ -796,6 +828,10 @@ func TestSpawn_PermissionMode_ExplicitAcceptEdits(t *testing.T) {
 	t.Setenv("HOME", base)
 	capturedPtr := captureExec(t)
 
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
+
 	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":         "do thing",
@@ -816,6 +852,10 @@ func TestSpawn_PermissionMode_AbsentDefaultsToDefault(t *testing.T) {
 	cwd, _ := filepath.EvalSymlinks(base)
 	t.Setenv("HOME", base)
 	capturedPtr := captureExec(t)
+
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 
 	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	_, err := m.Spawn("u1", map[string]any{
@@ -838,6 +878,10 @@ func TestSpawn_PermissionMode_BypassPermissions(t *testing.T) {
 	t.Setenv("HOME", base)
 	capturedPtr := captureExec(t)
 
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
+
 	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
 	_, err := m.Spawn("u1", map[string]any{
 		"prompt":         "do thing",
@@ -859,6 +903,9 @@ func TestSpawn_PermissionMode_AutoAndDontAsk(t *testing.T) {
 			base := t.TempDir()
 			cwd, _ := filepath.EvalSymlinks(base)
 			t.Setenv("HOME", base)
+			prevLook := lookTmuxPath
+			lookTmuxPath = func() string { return "" }
+			t.Cleanup(func() { lookTmuxPath = prevLook })
 			capturedPtr := captureExec(t)
 
 			m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
@@ -901,6 +948,9 @@ func TestSpawn_PermissionMode_SpawnerOwnsPermissionMode_NotDoubled(t *testing.T)
 	cwd, _ := filepath.EvalSymlinks(base)
 	t.Setenv("HOME", base)
 	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	capturedPtr := captureExec(t)
 
 	// Spawner declares its own --permission-mode acceptEdits; dashboard must not
@@ -935,6 +985,9 @@ func TestSpawn_PermissionMode_SpawnerDangerouslySkip_NotDoubled(t *testing.T) {
 	cwd, _ := filepath.EvalSymlinks(base)
 	t.Setenv("HOME", base)
 	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	capturedPtr := captureExec(t)
 
 	row := &ent.Spawner{
@@ -963,6 +1016,9 @@ func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {
 	t.Setenv("DASHBOARD_JWT_SECRET", "x")
 	t.Setenv("DASHBOARD_HOOKS_SECRET", "y")
 	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
 	captured := captureExec(t)
 
 	row := &ent.Spawner{
@@ -1130,4 +1186,55 @@ func TestSendMessageToChannel_FallsBackToBridgeHTTPWhenNoPty(t *testing.T) {
 	_, err := m.SendMessageToChannel(context.Background(), pid, "bridge msg")
 	require.NoError(t, err, "must succeed with bridge file only")
 	assert.Equal(t, "bridge msg", gotMessage)
+}
+
+// TestSpawn_TmuxTransportBuildsInteractiveSession verifies that when tmux is on
+// PATH, Spawn launches the agent via a detached tmux session (new-session -d -P
+// -F '#{pane_pid}') carrying the positional prompt, and never uses one-shot -p.
+func TestSpawn_TmuxTransportBuildsInteractiveSession(t *testing.T) {
+	base := t.TempDir()
+	cwd, _ := filepath.EvalSymlinks(base)
+	t.Setenv("HOME", base)
+
+	origLook := lookTmuxPath
+	lookTmuxPath = func() string { return "/usr/bin/tmux" }
+	t.Cleanup(func() { lookTmuxPath = origLook })
+
+	capturedPtr := captureExec(t)
+
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
+	_, err := m.Spawn("u1", map[string]any{
+		"prompt":        "do thing via tmux",
+		"cwd":           cwd,
+		"enableChannel": false,
+	})
+	require.NoError(t, err)
+
+	captured := *capturedPtr
+	require.NotNil(t, captured, "expected execStart to be called")
+
+	args := captured.Args
+	for _, want := range []string{"new-session", "-d", "-P", "-F", "#{pane_pid}", "do thing via tmux"} {
+		assert.Contains(t, args, want, "expected %q in tmux args %v", want, args)
+	}
+	assert.NotContains(t, args, "-p", "tmux transport must not pass one-shot -p, got %v", args)
+}
+
+func TestBuildSpawnArgs_InteractivePositionalPrompt(t *testing.T) {
+	m := &SpawnManager{}
+	binary, args, err := m.buildSpawnArgs(&spawnRequest{prompt: "hello world", permissionMode: "default"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binary != claudeBin {
+		t.Errorf("binary = %q", binary)
+	}
+	for _, a := range args {
+		if a == "-p" {
+			t.Fatal("must not pass -p (interactive mode)")
+		}
+	}
+	if args[len(args)-1] != "hello world" {
+		t.Errorf("last arg = %q, want the prompt positional", args[len(args)-1])
+	}
 }

@@ -143,6 +143,39 @@ export function useAgents(options?: { autoStart?: boolean }) {
     agents.value = agents.value.filter(a => a.pid !== pid)
   }
 
+  // After a spawn we have the new process pid but the scanner/SSE takes a few
+  // seconds to surface the agent. Open its modal as soon as it appears, giving
+  // up silently after timeoutMs so a never-appearing pid leaks no watcher/timer.
+  function selectAgentWhenAvailable(pid: number, timeoutMs = 30000) {
+    const existing = agents.value.find(a => a.pid === pid)
+    if (existing) {
+      selectAgent(existing)
+      return
+    }
+
+    let stop: (() => void) | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      stop?.()
+      stop = null
+    }
+
+    stop = watch(agents, (list) => {
+      const match = list.find(a => a.pid === pid)
+      if (match) {
+        selectAgent(match)
+        cleanup()
+      }
+    })
+
+    timer = setTimeout(cleanup, timeoutMs)
+  }
+
   return {
     agents,
     costTrend,
@@ -155,6 +188,7 @@ export function useAgents(options?: { autoStart?: boolean }) {
     searchQuery,
     selectAgent,
     dismissAgent,
+    selectAgentWhenAvailable,
     startStream: sse.startStream,
   }
 }
