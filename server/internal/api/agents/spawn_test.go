@@ -1131,3 +1131,22 @@ func TestSendMessageToChannel_FallsBackToBridgeHTTPWhenNoPty(t *testing.T) {
 	require.NoError(t, err, "must succeed with bridge file only")
 	assert.Equal(t, "bridge msg", gotMessage)
 }
+
+func TestBuildSpawnArgs_InteractivePositionalPrompt(t *testing.T) {
+	m := &SpawnManager{}
+	binary, args, err := m.buildSpawnArgs(&spawnRequest{prompt: "hello world", permissionMode: "default"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binary != claudeBin {
+		t.Errorf("binary = %q", binary)
+	}
+	for _, a := range args {
+		if a == "-p" {
+			t.Fatal("must not pass -p (interactive mode)")
+		}
+	}
+	if args[len(args)-1] != "hello world" {
+		t.Errorf("last arg = %q, want the prompt positional", args[len(args)-1])
+	}
+}

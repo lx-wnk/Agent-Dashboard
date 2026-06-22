@@ -290,7 +290,6 @@ func (m *SpawnManager) buildSpawnArgs(req *spawnRequest, spawnerRow *ent.Spawner
 	if req.resumeSessionID != "" {
 		canonicalArgs = append(canonicalArgs, "--resume", req.resumeSessionID)
 	}
-	canonicalArgs = append(canonicalArgs, "-p", req.prompt)
 	if req.model != "" {
 		canonicalArgs = append(canonicalArgs, "--model", req.model)
 	}
@@ -321,7 +320,12 @@ func (m *SpawnManager) buildSpawnArgs(req *spawnRequest, spawnerRow *ent.Spawner
 	}
 
 	// Order: spawner args first, canonical args last so user-supplied flags win.
+	// The prompt is passed as a trailing positional argument (no -p) so claude
+	// starts an interactive session seeded with it instead of one-shot print mode.
 	args = append(spawnerArgs, canonicalArgs...)
+	if req.prompt != "" {
+		args = append(args, req.prompt)
+	}
 	return binary, args, nil
 }
 
