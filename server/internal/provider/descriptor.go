@@ -27,15 +27,16 @@ const (
 // Descriptor declares one provider. source "jsonl" is fully declarative;
 // source "custom:<id>" routes to a registered Adapter (none built in this plan).
 type Descriptor struct {
-	ID          string        `yaml:"id"`
-	DisplayName string        `yaml:"displayName"`
-	Enabled     bool          `yaml:"enabled"`
-	ExeNames    []string      `yaml:"exeNames"`
-	ConfigDir   ConfigDirSpec `yaml:"configDir"`
-	SessionGlob string        `yaml:"sessionGlob"`
-	Source      string        `yaml:"source"`
-	Parse       ParseSpec     `yaml:"parse"`
-	Cost        CostSpec      `yaml:"cost"`
+	ID            string        `yaml:"id"`
+	DisplayName   string        `yaml:"displayName"`
+	Enabled       bool          `yaml:"enabled"`
+	ExeNames      []string      `yaml:"exeNames"`
+	ConfigDir     ConfigDirSpec `yaml:"configDir"`
+	SessionGlob   string        `yaml:"sessionGlob"`
+	SessionIDFrom string        `yaml:"sessionIdFrom"`
+	Source        string        `yaml:"source"`
+	Parse         ParseSpec     `yaml:"parse"`
+	Cost          CostSpec      `yaml:"cost"`
 }
 
 type ConfigDirSpec struct {
@@ -95,6 +96,11 @@ func (d Descriptor) Validate() error {
 	if d.Source == "jsonl" {
 		if d.SessionGlob == "" {
 			return fmt.Errorf("descriptor %q: sessionGlob required for source jsonl", d.ID)
+		}
+		switch d.SessionIDFrom {
+		case "", "filename", "parentDir":
+		default:
+			return fmt.Errorf("descriptor %q: unknown sessionIdFrom %q", d.ID, d.SessionIDFrom)
 		}
 		switch d.Parse.Tokens.Mode {
 		case "", TokenCumulative, TokenPerMessage:

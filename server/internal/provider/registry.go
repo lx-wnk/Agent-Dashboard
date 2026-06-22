@@ -6,12 +6,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"gopkg.in/yaml.v3"
 )
 
@@ -177,12 +178,12 @@ func (r *Registry) ResolveSession(p sdk.Provider, cwd string, claimed map[string
 		if pcd.Provider != p {
 			continue
 		}
-		matches, _ := filepath.Glob(filepath.Join(pcd.Path, filepath.FromSlash(d.SessionGlob)))
+		matches := findSessions(pcd.Path, d.SessionGlob)
 		sort.Slice(matches, func(i, j int) bool {
 			return fileMtime(matches[i]).After(fileMtime(matches[j]))
 		})
 		for _, path := range matches {
-			id := strings.TrimSuffix(filepath.Base(path), ".jsonl")
+			id := sessionID(d, path)
 			if claimed != nil && claimed[id] {
 				continue
 			}
@@ -254,4 +255,73 @@ func fileMtime(p string) time.Time {
 		return info.ModTime()
 	}
 	return time.Time{}
+}
+
+// sessionID derives a session id from a session-file path per the descriptor's
+// sessionIdFrom: "parentDir" uses the containing directory name (for providers
+// with a fixed session filename like junie's events.jsonl); default uses the
+// filename without the .jsonl suffix.
+func sessionID(d Descriptor, path string) string {
+	if d.SessionIDFrom == "parentDir" {
+		return filepath.Base(filepath.Dir(path))
+	}
+	return strings.TrimSuffix(filepath.Base(path), ".jsonl")
+}
+
+// globToRegexp compiles a path glob into an anchored regexp. "**" matches any
+// run of characters including "/"; "*" matches within a path segment; "?"
+// matches a single non-separator char. A "**/" prefix also matches zero dirs.
+func globToRegexp(glob string) (*regexp.Regexp, error) {
+	var b strings.Builder
+	b.WriteByte('^')
+	for i := 0; i < len(glob); i++ {
+		c := glob[i]
+		switch c {
+		case '*':
+			if i+1 < len(glob) && glob[i+1] == '*' {
+				i++ // consume second '*'
+				if i+1 < len(glob) && glob[i+1] == '/' {
+					i++ // consume '/', so "**/x" also matches "x"
+					b.WriteString("(?:.*/)?")
+				} else {
+					b.WriteString(".*")
+				}
+			} else {
+				b.WriteString("[^/]*")
+			}
+		case '?':
+			b.WriteString("[^/]")
+		case '.', '+', '(', ')', '|', '[', ']', '{', '}', '^', '$', '\\':
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte('$')
+	return regexp.Compile(b.String())
+}
+
+// findSessions returns every regular file under root whose root-relative,
+// slash-separated path matches the glob (with ** support).
+func findSessions(root, glob string) []string {
+	re, err := globToRegexp(glob)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	_ = filepath.WalkDir(root, func(path string, e os.DirEntry, err error) error {
+		if err != nil || e.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil
+		}
+		if re.MatchString(filepath.ToSlash(rel)) {
+			out = append(out, path)
+		}
+		return nil
+	})
+	return out
 }

@@ -5,6 +5,7 @@ exeNames: [junie]
 configDir:
   default: ~/.junie
 sessionGlob: sessions/*/events.jsonl
+sessionIdFrom: parentDir
 source: jsonl
 parse:
   eventFilter:

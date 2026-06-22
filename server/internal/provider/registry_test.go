@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
@@ -74,5 +76,49 @@ func TestRegistry_CostInFileJunie(t *testing.T) {
 	cb := reg.Cost("junie", sdk.TokenUsage{InputTokens: 100}, "claude-opus-4-6", 0.0203, "anthropic")
 	if cb.Unknown || cb.Local || cb.Total != 0.0203 {
 		t.Fatalf("junie in-file cost should pass through, got %+v", cb)
+	}
+}
+
+func TestResolveSession_CodexNestedGlobAndJunieParentID(t *testing.T) {
+	// --- codex: date-nested sessions/YYYY/MM/DD/rollout-*.jsonl must match via ** ---
+	codexRoot := t.TempDir()
+	nested := filepath.Join(codexRoot, "sessions", "2026", "04", "19")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	codexLine := `{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":5,"output_tokens":2}}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(nested, "rollout-abc.jsonl"), []byte(codexLine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cd := codexDescriptor()
+	cd.SessionGlob = "sessions/**/rollout-*.jsonl"
+	if got := findSessions(codexRoot, cd.SessionGlob); len(got) != 1 {
+		t.Fatalf("findSessions should match the nested codex file, got %v", got)
+	}
+
+	// --- junie: two sessions, each <id>/events.jsonl, must yield distinct ids ---
+	junieRoot := t.TempDir()
+	line := `{"kind":"LlmResponseMetadataEvent","event":{"agentEvent":{"modelUsage":[{"model":"m","inputTokens":1,"outputTokens":1,"cost":0.01}]}}}` + "\n"
+	for _, id := range []string{"sess-A", "sess-B"} {
+		dir := filepath.Join(junieRoot, "sessions", id)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "events.jsonl"), []byte(line), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := findSessions(junieRoot, "sessions/*/events.jsonl")
+	if len(files) != 2 {
+		t.Fatalf("expected 2 junie session files, got %d (%v)", len(files), files)
+	}
+	jd := junieDescriptor()
+	jd.SessionIDFrom = "parentDir"
+	ids := map[string]bool{}
+	for _, f := range files {
+		ids[sessionID(jd, f)] = true
+	}
+	if !ids["sess-A"] || !ids["sess-B"] || len(ids) != 2 {
+		t.Fatalf("junie session ids should be the parent dirs sess-A/sess-B, got %v", ids)
 	}
 }
