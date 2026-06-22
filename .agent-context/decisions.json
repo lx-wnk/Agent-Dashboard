@@ -19,5 +19,14 @@
     "status": "accepted",
     "date": "2026-06-18",
     "path": "docs/architecture/adr/0007-cron-scheduling-engine.md"
+  },
+  {
+    "id": "ADR-0008",
+    "title": "Provider integration via declarative descriptor registry",
+    "status": "accepted",
+    "date": "2026-06-22",
+    "context": "Non-Claude agents were handled by five hardcoded provider switches; Codex/Gemini were stubbed with unknown cost. We wanted opt-in extensibility for more CLIs, including classifying local Ollama-backed models as $0.",
+    "decision": "A new `provider` package loads embedded + user YAML descriptors that declare exe names, config dir, session glob, and token/model/cost field-paths. Session dispatch moved OUT of the `parser` package into the registry to break an import cycle. Enable-state is injected via an `EnabledFunc` seam (a DB-backed Settings UI is a follow-up, Plan 2). IDE-embedded providers are deferred to `source: custom:<id>` Go adapters.",
+    "consequences": "Adding a JSONL-based provider is now a YAML change, no Go code. Non-Claude cost is now real or $0 (local) instead of always unknown. The `parser` package is no longer provider-aware."
   }
 ]
