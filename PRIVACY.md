@@ -18,6 +18,8 @@ The dashboard reads the following data from your local filesystem at runtime. No
 
 When a provider is enabled, the dashboard additionally performs a local `GET http://localhost:11434/api/tags` request to Ollama (when reachable) to classify local models and report them at $0 cost. This request stays on your machine; no data leaves it.
 
+Custom provider descriptors placed in `DASHBOARD_PROVIDER_DIR` are trusted configuration: a descriptor's `configDir` and `sessionGlob` can direct the dashboard to read files anywhere your user account can access. Only add descriptors you trust, the same way you would trust any local config file.
+
 **Important:** JSONL session files may contain sensitive information — API keys typed into prompts, file contents, credentials pasted during a session, or other PII. The dashboard does not sanitize or redact these files. You are responsible for protecting them using standard host-OS file permissions (e.g. `chmod 700 ~/.claude/projects/`).
 
 ---

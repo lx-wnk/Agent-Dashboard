@@ -53,8 +53,9 @@ func resolvePath(root any, path string) []any {
 	return cur
 }
 
-// toFloat coerces a decoded JSON value (float64, json.Number, or numeric
-// string) to float64. Non-numeric or nil yields 0.
+// toFloat coerces a decoded JSON value (float64 or numeric string) to float64.
+// Non-numeric or nil yields 0. Standard json.Unmarshal into map[string]any
+// decodes numbers as float64, so json.Number is not handled.
 func toFloat(v any) float64 {
 	switch t := v.(type) {
 	case float64:
