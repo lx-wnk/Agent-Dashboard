@@ -10,145 +10,145 @@ Package sdk provides shared types for the agent-dashboard modules.
  * TokenUsage mirrors the Claude Code session token counters.
  */
 export interface TokenUsage {
-  inputTokens: number /* int */;
-  outputTokens: number /* int */;
-  cacheCreationTokens: number /* int */;
-  cacheReadTokens: number /* int */;
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
 }
 /**
  * SessionMeta is read from ~/.claude/usage-data/session-meta/{sessionId}.json
  */
 export interface SessionMeta {
-  inputTokens: number /* int */;
-  outputTokens: number /* int */;
-  linesAdded: number /* int */;
-  linesRemoved: number /* int */;
-  filesModified: number /* int */;
-  gitCommits: number /* int */;
-  toolErrors: number /* int */;
-  usesMcp: boolean;
-  firstPrompt: string;
+  inputTokens: number
+  outputTokens: number
+  linesAdded: number
+  linesRemoved: number
+  filesModified: number
+  gitCommits: number
+  toolErrors: number
+  usesMcp: boolean
+  firstPrompt: string
 }
 /**
  * SubAgentStatus is the lifecycle state of a spawned sub-agent.
  */
-export const SubAgentStatusActive = "active";
-export const SubAgentStatusCompleted = "completed";
-export type SubAgentStatus = typeof SubAgentStatusActive | typeof SubAgentStatusCompleted;
+export const SubAgentStatusActive = 'active'
+export const SubAgentStatusCompleted = 'completed'
+export type SubAgentStatus = typeof SubAgentStatusActive | typeof SubAgentStatusCompleted
 /**
  * SubAgent represents a sub-agent spawned by a parent Claude session.
  */
 export interface SubAgent {
-  id: string;
-  type: string;
-  status: SubAgentStatus;
-  currentAction: string;
-  sessionFile: string;
-  tokensUsed: number /* int */;
-  durationSeconds: number /* int */;
-  latestOutput: string;
+  id: string
+  type: string
+  status: SubAgentStatus
+  currentAction: string
+  sessionFile: string
+  tokensUsed: number
+  durationSeconds: number
+  latestOutput: string
 }
 /**
  * TaskInfoStatus is the state of a TodoWrite-tracked task.
  */
-export const TaskInfoStatusPending = "pending";
-export const TaskInfoStatusInProgress = "in_progress";
-export const TaskInfoStatusCompleted = "completed";
-export type TaskInfoStatus = typeof TaskInfoStatusPending | typeof TaskInfoStatusInProgress | typeof TaskInfoStatusCompleted;
+export const TaskInfoStatusPending = 'pending'
+export const TaskInfoStatusInProgress = 'in_progress'
+export const TaskInfoStatusCompleted = 'completed'
+export type TaskInfoStatus = typeof TaskInfoStatusPending | typeof TaskInfoStatusInProgress | typeof TaskInfoStatusCompleted
 /**
  * TaskInfo is a task tracked by Claude Code's internal task list.
  */
 export interface TaskInfo {
-  id: string;
-  subject: string;
-  status: TaskInfoStatus;
+  id: string
+  subject: string
+  status: TaskInfoStatus
 }
 /**
  * AgentStatus is the computed activity state of an agent process.
  */
-export const AgentStatusActive = "active";
-export const AgentStatusWaiting = "waiting";
-export const AgentStatusIdle = "idle";
-export const AgentStatusFinished = "finished";
-export type AgentStatus = typeof AgentStatusActive | typeof AgentStatusWaiting | typeof AgentStatusIdle | typeof AgentStatusFinished;
+export const AgentStatusActive = 'active'
+export const AgentStatusWaiting = 'waiting'
+export const AgentStatusIdle = 'idle'
+export const AgentStatusFinished = 'finished'
+export type AgentStatus = typeof AgentStatusActive | typeof AgentStatusWaiting | typeof AgentStatusIdle | typeof AgentStatusFinished
 /**
  * Entrypoint describes how the Claude Code process was launched.
  */
-export const EntrypointCLI = "cli";
-export const EntrypointDesktop = "desktop";
-export const EntrypointUnknown = "unknown";
-export type Entrypoint = typeof EntrypointCLI | typeof EntrypointDesktop | typeof EntrypointUnknown;
+export const EntrypointCLI = 'cli'
+export const EntrypointDesktop = 'desktop'
+export const EntrypointUnknown = 'unknown'
+export type Entrypoint = typeof EntrypointCLI | typeof EntrypointDesktop | typeof EntrypointUnknown
 /**
  * Provider identifies which AI coding CLI an agent process belongs to.
  */
-export const ProviderClaude = "claude";
-export const ProviderCodex = "codex";
-export const ProviderGemini = "gemini";
-export type Provider = typeof ProviderClaude | typeof ProviderCodex | typeof ProviderGemini;
+export const ProviderClaude = 'claude'
+export const ProviderCodex = 'codex'
+export const ProviderGemini = 'gemini'
+export type Provider = typeof ProviderClaude | typeof ProviderCodex | typeof ProviderGemini
 /**
  * ErrorState describes a recognisable error condition seen in the session log.
  */
-export const ErrorStateQuotaExhausted = "quota_exhausted";
-export const ErrorStateRateLimited = "rate_limited";
-export const ErrorStateAuthFailed = "auth_failed";
-export type ErrorState = typeof ErrorStateQuotaExhausted | typeof ErrorStateRateLimited | typeof ErrorStateAuthFailed;
+export const ErrorStateQuotaExhausted = 'quota_exhausted'
+export const ErrorStateRateLimited = 'rate_limited'
+export const ErrorStateAuthFailed = 'auth_failed'
+export type ErrorState = typeof ErrorStateQuotaExhausted | typeof ErrorStateRateLimited | typeof ErrorStateAuthFailed
 /**
  * SankeyNode is one node in the tool-call Sankey diagram. ID equals Name
  * today but is kept separate so collisions across distinct sources can
  * later be disambiguated.
  */
 export interface SankeyNode {
-  id: string;
-  name: string;
+  id: string
+  name: string
 }
 /**
  * SankeyLink is one directed source→target flow with an aggregated count.
  */
 export interface SankeyLink {
-  source: string;
-  target: string;
-  value: number /* int */;
+  source: string
+  target: string
+  value: number
 }
 /**
  * SankeyMeta carries summary counters for the Sankey response.
  */
 export interface SankeyMeta {
-  sessionCount: number /* int */;
-  callCount: number /* int */;
+  sessionCount: number
+  callCount: number
 }
 /**
  * SankeyData is the response payload for GET /api/visualizations/sankey.
  */
 export interface SankeyData {
-  nodes: SankeyNode[];
-  links: SankeyLink[];
-  meta: SankeyMeta;
+  nodes: SankeyNode[]
+  links: SankeyLink[]
+  meta: SankeyMeta
 }
 /**
  * DAGNode is one node in the session DAG (tool call, assistant turn, or
  * user message). The DAG is per-session so IDs are line-local.
  */
 export interface DAGNode {
-  id: string;
-  type: string; // "tool" | "assistant" | "user"
-  label: string;
-  ts: string; // RFC3339 timestamp, empty if absent
+  id: string
+  type: string // "tool" | "assistant" | "user"
+  label: string
+  ts: string // RFC3339 timestamp, empty if absent
 }
 /**
  * DAGLink is one edge in the session DAG. Kind is "chrono" for time-
  * ordered succession or "result" for a tool_use → tool_result match.
  */
 export interface DAGLink {
-  source: string;
-  target: string;
-  kind: string;
+  source: string
+  target: string
+  kind: string
 }
 /**
  * DAGData is the response payload for GET /api/visualizations/dag.
  */
 export interface DAGData {
-  nodes: DAGNode[];
-  links: DAGLink[];
+  nodes: DAGNode[]
+  links: DAGLink[]
 }
 /**
  * SpawnTreeNode is one session node in the spawn tree. Depth is computed
@@ -156,36 +156,36 @@ export interface DAGData {
  * not the cumulative subtree.
  */
 export interface SpawnTreeNode {
-  id: string;
-  label: string;
-  depth: number /* int */;
-  toolCount: number /* int */;
-  costCents: number /* int */;
-  project: string;
-  model: string;
-  firstPrompt: string;
+  id: string
+  label: string
+  depth: number
+  toolCount: number
+  costCents: number
+  project: string
+  model: string
+  firstPrompt: string
 }
 /**
  * SpawnTreeLink is a parent→child spawn relationship.
  */
 export interface SpawnTreeLink {
-  source: string;
-  target: string;
+  source: string
+  target: string
 }
 /**
  * SpawnTreeData is the response payload for GET /api/visualizations/spawn-tree.
  */
 export interface SpawnTreeData {
-  roots: string[];
-  nodes: SpawnTreeNode[];
-  links: SpawnTreeLink[];
+  roots: string[]
+  nodes: SpawnTreeNode[]
+  links: SpawnTreeLink[]
 }
 /**
  * CoOccurrenceMeta carries summary counters for the co-occurrence response.
  */
 export interface CoOccurrenceMeta {
-  sessionCount: number /* int */;
-  truncated: boolean;
+  sessionCount: number
+  truncated: boolean
 }
 /**
  * CoOccurrenceData is the response payload for
@@ -197,18 +197,18 @@ export interface CoOccurrenceMeta {
  * total session count. Diagonal is 0 (self-lift is meaningless).
  */
 export interface CoOccurrenceData {
-  tools: string[];
-  matrix: number /* int */[][];
-  lift: number /* float64 */[][];
-  meta: CoOccurrenceMeta;
+  tools: string[]
+  matrix: number /* int */[][]
+  lift: number /* float64 */[][]
+  meta: CoOccurrenceMeta
 }
 /**
  * BtwMessage is the last assistant text that appeared alongside tool calls.
  * Message is the text content; Response is reserved for future use.
  */
 export interface BtwMessage {
-  message: string;
-  response?: string;
+  message: string
+  response?: string
 }
 /**
  * WorktreeStatusDTO describes the live git state of a task's worktree.
@@ -216,22 +216,22 @@ export interface BtwMessage {
  * branch cannot be resolved on `origin` (e.g. local-only base).
  */
 export interface WorktreeStatusDTO {
-  branch: string;
-  ahead?: number /* int */;
-  behind?: number /* int */;
-  dirty: boolean;
-  fileCount: number /* int */;
+  branch: string
+  ahead?: number
+  behind?: number
+  dirty: boolean
+  fileCount: number
 }
 /**
  * PendingPermission is a permission request an orchestrated agent is currently
  * blocked on, surfaced on the agent so it can be resolved from the roster.
  */
 export interface PendingPermission {
-  id: string;
-  tool: string;
-  pattern?: string;
-  reason?: string;
-  requestedAt: string;
+  id: string
+  tool: string
+  pattern?: string
+  reason?: string
+  requestedAt: string
 }
 /**
  * PendingToolUse is the last assistant tool_use block that has no matching
@@ -240,9 +240,9 @@ export interface PendingPermission {
  * or empty for other tools.
  */
 export interface PendingToolUse {
-  id: string;
-  tool: string;
-  pattern: string;
+  id: string
+  tool: string
+  pattern: string
 }
 /**
  * HookEvent is one lifecycle-hook event recorded for a session when the opt-in
@@ -252,79 +252,74 @@ export interface PendingToolUse {
  * tool_response.
  */
 export interface HookEvent {
-  type: string; // hook type, e.g. "PreToolUse" | "PostToolUse" | "Stop"
-  tool: string; // tool name, empty for non-tool hooks
-  at: string; // RFC3339 timestamp the event was received
-  summary: string; // truncated, secret-safe payload preview
+  type: string
+  tool: string
+  at: string
+  summary: string
 }
 /**
  * Agent is the unified view of a running Claude Code process.
  */
 export interface Agent {
-  pid: number /* int */;
-  sessionId: string;
-  provider: Provider;
-  projectPath: string;
-  projectName: string;
-  cwd: string;
+  pid: number
+  sessionId: string
+  provider: Provider
+  projectPath: string
+  projectName: string
+  cwd: string
   /**
    * ClaudeConfigDir is the value of CLAUDE_CONFIG_DIR detected in the running
    * session's process env (empty when the session uses the default ~/.claude).
    * Lets the dashboard resolve which config root a session's slash commands /
    * skills / plugins are loaded from when enumerating per-session scope.
    */
-  claudeConfigDir?: string;
-  entrypoint: Entrypoint;
-  status: AgentStatus;
-  uptime: number /* int64 */;
-  lastActivity: string;
-  currentAction?: string;
-  lastTools: string[];
-  tasks: TaskInfo[];
-  subagents: SubAgent[];
-  tokenUsage: TokenUsage;
-  costEstimate: number /* float64 */;
-  cacheCreationCostEstimate: number /* float64 */;
-  cacheReadCostEstimate: number /* float64 */;
-  healthScore: number /* int */;
-  model?: string;
-  codeVersion?: string;
-  conversationTurns: number /* int */;
-  toolCounts: { [key: string]: number /* int */};
-  meta?: SessionMeta;
-  channelAvailable: boolean;
-  /**
-   * Working is true when the session owes the next step (an open turn): a
-   * trailing user message or an unmatched tool_use. Derived from
-   * parser.SessionData.TurnOpen.
-   */
-  working: boolean;
+  claudeConfigDir?: string
+  entrypoint: Entrypoint
+  status: AgentStatus
+  uptime: number
+  lastActivity: string
+  currentAction?: string
+  lastTools: string[]
+  tasks: TaskInfo[]
+  subagents: SubAgent[]
+  tokenUsage: TokenUsage
+  costEstimate: number
+  cacheCreationCostEstimate: number
+  cacheReadCostEstimate: number
+  healthScore: number
+  model?: string
+  codeVersion?: string
+  conversationTurns: number
+  toolCounts: { [key: string]: number /* int */ }
+  meta?: SessionMeta
+  channelAvailable: boolean
+  working: boolean
   /**
    * LiveInjectable is true when the dashboard can deliver a prompt to this
    * running interactive session as real keyboard input — either via the pty
    * broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending
    * resumes the session as a new one (MCP log delivery does not drive it).
    */
-  liveInjectable?: boolean;
-  lastOutput?: string;
-  convergenceAlert: boolean;
-  convergenceToolName?: string;
-  errorState?: ErrorState;
-  pipelineTaskId?: string;
-  pipelineTaskTitle?: string;
-  pendingPermissions?: PendingPermission[];
-  pendingToolUse?: PendingToolUse;
-  machine?: string;
-  lastBtw?: BtwMessage;
+  liveInjectable?: boolean
+  lastOutput?: string
+  convergenceAlert: boolean
+  convergenceToolName?: string
+  errorState?: ErrorState
+  pipelineTaskId?: string
+  pipelineTaskTitle?: string
+  pendingPermissions?: PendingPermission[]
+  pendingToolUse?: PendingToolUse
+  machine?: string
+  lastBtw?: BtwMessage
   /**
    * CostUnknown is true when the provider does not expose token counts and
    * cost cannot be estimated. CostEstimate will be 0 in this case.
    */
-  costUnknown?: boolean;
+  costUnknown?: boolean
   /**
    * RecentHookEvents carries per-event hook granularity for sessions where the
    * opt-in hook receiver holds events. Omitted entirely when no hook is
    * installed, so clients without hooks receive byte-identical payloads.
    */
-  recentHookEvents?: HookEvent[];
+  recentHookEvents?: HookEvent[]
 }
