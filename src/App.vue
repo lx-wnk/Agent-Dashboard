@@ -87,7 +87,7 @@ onUnmounted(() => {
     clearTimeout(toastTimer)
 })
 
-const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, dismissAgent, startStream: startAgents } = useAgents({ autoStart: false })
+const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, dismissAgent, selectAgentWhenAvailable, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 const { items: permissionItems, approve: approvePermission, deny: denyPermission } = usePendingPermissions(tasks)
 const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length)
@@ -500,7 +500,7 @@ onMounted(fetchQuota)
         </div>
       </Transition>
     </div>
-    <SpawnDialog :open="showSpawnDialog" @close="showSpawnDialog = false" />
+    <SpawnDialog :open="showSpawnDialog" @close="showSpawnDialog = false" @spawned="selectAgentWhenAvailable" />
     <RefinementChat
       :open="showRefinementChat"
       :task="activeConceptTask"

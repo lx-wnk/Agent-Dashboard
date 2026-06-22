@@ -16,7 +16,7 @@ import AppModal from './ui/AppModal.vue'
 import AppModalHeader from './ui/AppModalHeader.vue'
 
 const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
 
 const { projects } = useProjects()
 const { spawners } = useSpawners()
@@ -184,6 +184,7 @@ async function handleSpawn() {
     const data = await res.json()
     const pid = data.pid as number
     spawnStatusMsg.value = `Agent PID ${pid} spawned, verifying...`
+    emit('spawned', pid)
     pollSpawnStatus(pid)
     autoCloseTimer = setTimeout(() => {
       if (isSpawning.value && !errorMsg.value) {
