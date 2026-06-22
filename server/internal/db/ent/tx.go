@@ -32,6 +32,8 @@ type Tx struct {
 	Project *ProjectClient
 	// ProjectFolder is the client for interacting with the ProjectFolder builders.
 	ProjectFolder *ProjectFolderClient
+	// ProviderSetting is the client for interacting with the ProviderSetting builders.
+	ProviderSetting *ProviderSettingClient
 	// RefinementTurn is the client for interacting with the RefinementTurn builders.
 	RefinementTurn *RefinementTurnClient
 	// RemoteRegistration is the client for interacting with the RemoteRegistration builders.
@@ -193,6 +195,7 @@ func (tx *Tx) init() {
 	tx.PipelineConfig = NewPipelineConfigClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
 	tx.ProjectFolder = NewProjectFolderClient(tx.config)
+	tx.ProviderSetting = NewProviderSettingClient(tx.config)
 	tx.RefinementTurn = NewRefinementTurnClient(tx.config)
 	tx.RemoteRegistration = NewRemoteRegistrationClient(tx.config)
 	tx.Spawner = NewSpawnerClient(tx.config)

@@ -36,6 +36,9 @@ type Project func(*sql.Selector)
 // ProjectFolder is the predicate function for projectfolder builders.
 type ProjectFolder func(*sql.Selector)
 
+// ProviderSetting is the predicate function for providersetting builders.
+type ProviderSetting func(*sql.Selector)
+
 // RefinementTurn is the predicate function for refinementturn builders.
 type RefinementTurn func(*sql.Selector)
 

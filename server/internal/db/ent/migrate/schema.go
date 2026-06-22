@@ -313,6 +313,27 @@ var (
 			},
 		},
 	}
+	// ProviderSettingsColumns holds the columns for the "provider_settings" table.
+	ProviderSettingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "provider_id", Type: field.TypeString, Unique: true},
+		{Name: "enabled", Type: field.TypeBool, Default: false},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// ProviderSettingsTable holds the schema information for the "provider_settings" table.
+	ProviderSettingsTable = &schema.Table{
+		Name:       "provider_settings",
+		Columns:    ProviderSettingsColumns,
+		PrimaryKey: []*schema.Column{ProviderSettingsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "providersetting_provider_id",
+				Unique:  false,
+				Columns: []*schema.Column{ProviderSettingsColumns[1]},
+			},
+		},
+	}
 	// RefinementTurnsColumns holds the columns for the "refinement_turns" table.
 	RefinementTurnsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -690,6 +711,7 @@ var (
 		PipelineConfigsTable,
 		ProjectsTable,
 		ProjectFoldersTable,
+		ProviderSettingsTable,
 		RefinementTurnsTable,
 		RemoteRegistrationsTable,
 		SpawnersTable,
