@@ -426,6 +426,7 @@ type SessionData struct {
 	Meta                *sdk.SessionMeta
 	LastBtw             *sdk.BtwMessage
 	PendingToolUse      *sdk.PendingToolUse
+	TurnOpen            bool
 }
 
 // sessionFileCandidate holds mtime + inode info gathered via os.Stat (cheap).
@@ -707,6 +708,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 	resolvedToolUseIDs := make(map[string]bool)
 
 	scanner := bufio.NewScanner(bytes.NewReader([]byte(content)))
+	var lastEntryType string
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -715,6 +717,9 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		var entry jsonlMessage
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
+		}
+		if entry.Type == "user" || entry.Type == "assistant" || entry.Type == "message" {
+			lastEntryType = entry.Type
 		}
 		// compact_boundary lines carry no per-message usage and no tool/model/
 		// activity data the tail parse needs — skip them. Token totals come from
@@ -831,6 +836,11 @@ func ParseSessionFile(path string) (*SessionData, error) {
 			}
 		}
 	}
+
+	// TurnOpen: the agent owes the next step when the trailing entry is a user
+	// message (prompt or tool_result) or a tool_use is still unresolved.
+	data.TurnOpen = lastEntryType == "user" || data.PendingToolUse != nil
+
 	if err := scanner.Err(); err != nil {
 		slog.Warn("parser: session scan error — partial data returned", "err", err)
 	}
