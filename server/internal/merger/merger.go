@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,7 +23,57 @@ import (
 const (
 	activeThreshold  = 30 * time.Second
 	waitingThreshold = 5 * time.Minute
+	outputThreshold  = 5 * time.Second
 )
+
+// tmuxActivityFn returns a tmux pane's last-activity time. Seam for tests.
+var tmuxActivityFn = realTmuxActivity
+
+func realTmuxActivity(pane string) (time.Time, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "-t", pane, "#{window_activity}").Output()
+	if err != nil {
+		return time.Time{}, false
+	}
+	sec, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(sec, 0), true
+}
+
+// recentChannelOutput reports whether a live session emitted output within
+// outputThreshold: a pty broker's lastOutputAt, or a tmux pane's window_activity.
+func recentChannelOutput(pid int) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	// pty: lastOutputAt in {pid}.pty.json
+	if data, err := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid)); err == nil {
+		var d struct {
+			LastOutputAt string `json:"lastOutputAt"`
+		}
+		if json.Unmarshal(data, &d) == nil && d.LastOutputAt != "" {
+			if ts, perr := time.Parse(time.RFC3339, d.LastOutputAt); perr == nil && time.Since(ts) < outputThreshold {
+				return true
+			}
+		}
+	}
+	// tmux: window_activity for the pane in {pid}.json
+	if data, err := os.ReadFile(channelconfig.DiscoveryFile(home, pid)); err == nil {
+		var d struct {
+			TmuxPane string `json:"tmuxPane"`
+		}
+		if json.Unmarshal(data, &d) == nil && d.TmuxPane != "" {
+			if ts, ok := tmuxActivityFn(d.TmuxPane); ok && time.Since(ts) < outputThreshold {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // CalculateStatus returns the agent status based on time since last activity.
 func CalculateStatus(lastActivity time.Time) sdk.AgentStatus {
@@ -334,6 +386,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData, baselineC
 		ClaudeConfigDir:           proc.ClaudeConfigDir,
 		Entrypoint:                session.Entrypoint,
 		Status:                    CalculateStatus(session.LastActivity),
+		Working:                   session.TurnOpen || recentChannelOutput(proc.PID),
 		ChannelAvailable:          chanAvail,
 		LiveInjectable:            chanInject,
 		Uptime:                    proc.Uptime,

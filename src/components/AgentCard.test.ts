@@ -32,6 +32,7 @@ const baseAgent: Agent = {
   conversationTurns: 0,
   toolCounts: {},
   channelAvailable: false,
+  working: false,
   convergenceAlert: false,
   meta: null,
 }
@@ -144,6 +145,21 @@ describe('agentCard — active subagents block', () => {
     await wrapper.find('[data-testid="subagent-expand-toggle"]').trigger('click')
     expect(output.classes()).not.toContain('truncate')
     expect(output.classes()).toContain('whitespace-pre-wrap')
+  })
+})
+
+describe('agentCard working badge', () => {
+  const badgeStubs = { MachineBadge: true, ProviderBadge: true, PromptInput: true }
+
+  it('shows Working badge when agent.working, overriding status', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'waiting', working: true } }, global: { stubs: badgeStubs } })
+    expect(w.text()).toContain('Working')
+    expect(w.text()).not.toContain('Waiting')
+  })
+
+  it('shows the status label when not working', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'waiting', working: false } }, global: { stubs: badgeStubs } })
+    expect(w.text()).toContain('Waiting')
   })
 })
 

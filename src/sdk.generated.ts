@@ -293,6 +293,7 @@ export interface Agent {
   toolCounts: { [key: string]: number /* int */ }
   meta?: SessionMeta
   channelAvailable: boolean
+  working: boolean
   /**
    * LiveInjectable is true when the dashboard can deliver a prompt to this
    * running interactive session as real keyboard input — either via the pty

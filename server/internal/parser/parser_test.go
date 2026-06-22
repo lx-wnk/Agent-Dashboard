@@ -7,8 +7,28 @@ import (
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestParse_TurnOpen(t *testing.T) {
+	dir := t.TempDir()
+	closed := filepath.Join(dir, "closed.jsonl")
+	require.NoError(t, os.WriteFile(closed, []byte(
+		`{"type":"user","message":{"role":"user","content":"hi"}}`+"\n"+
+			`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}`+"\n"), 0o644))
+	d, err := parser.ParseSessionFile(closed)
+	require.NoError(t, err)
+	assert.False(t, d.TurnOpen, "completed assistant turn → TurnOpen false")
+
+	open := filepath.Join(dir, "open.jsonl")
+	require.NoError(t, os.WriteFile(open, []byte(
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}`+"\n"+
+			`{"type":"user","message":{"role":"user","content":"next task"}}`+"\n"), 0o644))
+	d2, err := parser.ParseSessionFile(open)
+	require.NoError(t, err)
+	assert.True(t, d2.TurnOpen, "trailing user message → TurnOpen true")
+}
 
 func TestTailRead_ReturnsContent(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "session*.jsonl")

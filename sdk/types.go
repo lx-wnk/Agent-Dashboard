@@ -277,6 +277,11 @@ type Agent struct {
 	ToolCounts                map[string]int `json:"toolCounts"`
 	Meta                      *SessionMeta   `json:"meta"`
 	ChannelAvailable          bool           `json:"channelAvailable"`
+	// Working is true when the agent is actively generating: it owes the next
+	// step (open turn — a trailing user message or unmatched tool_use, via
+	// parser.SessionData.TurnOpen) OR a live session emitted output within the
+	// last few seconds (pty lastOutputAt / tmux window_activity).
+	Working bool `json:"working"`
 	// LiveInjectable is true when the dashboard can deliver a prompt to this
 	// running interactive session as real keyboard input — either via the pty
 	// broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending

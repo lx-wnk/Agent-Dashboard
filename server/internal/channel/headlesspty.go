@@ -3,10 +3,10 @@ package channel
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
+	"sync/atomic"
 	"time"
 
 	"github.com/creack/pty"
@@ -46,14 +46,35 @@ func RunHeadlessPTY(ctx context.Context, name string, args, env []string, cwd st
 	if err != nil {
 		return fmt.Errorf("headlesspty: http: %w", err)
 	}
-	discPath, derr := writePtyDiscovery(childPid, port, token.value())
+	var lastOut atomic.Int64
+	lastOut.Store(time.Now().UnixNano())
+	discPath, derr := writePtyDiscovery(childPid, port, token.value(), time.Now())
 	if derr != nil {
 		slog.Warn("headlesspty: discovery write failed", "err", derr)
 	}
 	go startTokenRotation(ctx, token, injectTokenRotateInterval(), func(newToken string) error {
-		_, werr := writePtyDiscovery(childPid, port, newToken)
+		_, werr := writePtyDiscovery(childPid, port, newToken, time.Unix(0, lastOut.Load()))
 		return werr
 	})
+	// Refresh the discovery file's lastOutputAt between token rotations so the
+	// dashboard sees recent activity without waiting for the next rotation.
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		var written int64
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// Only rewrite when output advanced — avoid idle per-second churn.
+				if cur := lastOut.Load(); cur != written {
+					_, _ = writePtyDiscovery(childPid, port, token.value(), time.Unix(0, cur))
+					written = cur
+				}
+			}
+		}
+	}()
 	defer func() {
 		if discPath != "" {
 			_ = os.Remove(discPath)
@@ -63,8 +84,20 @@ func RunHeadlessPTY(ctx context.Context, name string, args, env []string, cwd st
 		_ = srv.Shutdown(shutCtx)
 	}()
 
-	// Drain output so the child never blocks on a full pty buffer.
-	go func() { _, _ = io.Copy(io.Discard, ptmx) }()
+	// Drain output so the child never blocks on a full pty buffer, recording the
+	// time of each chunk so the dashboard can tell the agent is generating.
+	go func() {
+		buf := make([]byte, 32*1024)
+		for {
+			n, err := ptmx.Read(buf)
+			if n > 0 {
+				lastOut.Store(time.Now().UnixNano())
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
 
 	return cmd.Wait()
 }
