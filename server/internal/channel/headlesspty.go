@@ -61,12 +61,17 @@ func RunHeadlessPTY(ctx context.Context, name string, args, env []string, cwd st
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
+		var written int64
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				_, _ = writePtyDiscovery(childPid, port, token.value(), time.Unix(0, lastOut.Load()))
+				// Only rewrite when output advanced — avoid idle per-second churn.
+				if cur := lastOut.Load(); cur != written {
+					_, _ = writePtyDiscovery(childPid, port, token.value(), time.Unix(0, cur))
+					written = cur
+				}
 			}
 		}
 	}()
