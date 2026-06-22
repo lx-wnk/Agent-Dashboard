@@ -1,6 +1,6 @@
 import type { Agent, SubAgent } from '../types'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentCard from './AgentCard.vue'
 
@@ -144,5 +144,41 @@ describe('agentCard — active subagents block', () => {
     await wrapper.find('[data-testid="subagent-expand-toggle"]').trigger('click')
     expect(output.classes()).not.toContain('truncate')
     expect(output.classes()).toContain('whitespace-pre-wrap')
+  })
+})
+
+describe('agentCard finished state', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, status: 204 })))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows no dismiss button for a live agent', () => {
+    const wrapper = mount(AgentCard, {
+      props: { agent: { ...baseAgent, status: 'active' } },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="agent-card-dismiss"]').exists()).toBe(false)
+  })
+
+  it('shows a dismiss button for a finished agent', () => {
+    const wrapper = mount(AgentCard, {
+      props: { agent: { ...baseAgent, status: 'finished' } },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="agent-card-dismiss"]').exists()).toBe(true)
+  })
+
+  it('calls the DELETE endpoint and emits dismiss on click', async () => {
+    const wrapper = mount(AgentCard, {
+      props: { agent: { ...baseAgent, pid: 4242, status: 'finished' } },
+      global: { stubs },
+    })
+    await wrapper.find('[data-testid="agent-card-dismiss"]').trigger('click')
+    expect(fetch).toHaveBeenCalledWith('/api/agents/4242/channel', expect.objectContaining({ method: 'DELETE' }))
+    expect(wrapper.emitted('dismiss')?.[0]).toEqual([4242])
   })
 })

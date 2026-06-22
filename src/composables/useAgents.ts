@@ -136,6 +136,13 @@ export function useAgents(options?: { autoStart?: boolean }) {
     selectedAgent.value = agent
   }
 
+  // Optimistic removal of a dismissed finished card. The next SSE frame
+  // reflects server truth (the discovery file is deleted, so the agent is no
+  // longer emitted); if the dismiss DELETE failed, that frame re-adds it.
+  function dismissAgent(pid: number) {
+    agents.value = agents.value.filter(a => a.pid !== pid)
+  }
+
   return {
     agents,
     costTrend,
@@ -147,6 +154,7 @@ export function useAgents(options?: { autoStart?: boolean }) {
     error,
     searchQuery,
     selectAgent,
+    dismissAgent,
     startStream: sse.startStream,
   }
 }

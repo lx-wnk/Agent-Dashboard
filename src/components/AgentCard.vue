@@ -12,7 +12,20 @@ import AppBadge from './ui/AppBadge.vue'
 import AppCard from './ui/AppCard.vue'
 
 const props = defineProps<{ agent: Agent }>()
-defineEmits<{ select: [agent: Agent] }>()
+const emit = defineEmits<{ select: [agent: Agent], dismiss: [pid: number] }>()
+
+const isFinished = computed(() => props.agent.status === 'finished')
+
+async function dismiss() {
+  const pid = props.agent.pid
+  try {
+    await fetch(`/api/agents/${pid}/channel`, { method: 'DELETE', credentials: 'same-origin' })
+  }
+  catch {
+    // best-effort: the next SSE frame still reflects server truth
+  }
+  emit('dismiss', pid)
+}
 
 const { getIdentity } = useAgentIdentity()
 const { nowMs } = useNow()
@@ -84,6 +97,16 @@ function toggleSubagentExpand(id: string) {
         <MachineBadge v-if="agent.machine" :machine="agent.machine" />
       </div>
       <div class="flex-shrink-0 flex flex-col items-end gap-0.5">
+        <button
+          v-if="isFinished"
+          type="button"
+          class="relative z-10 self-end text-fg-mute hover:text-danger-text text-sm leading-none px-1 focus-visible:outline-2 focus-visible:outline-ring rounded"
+          aria-label="Dismiss finished agent"
+          data-testid="agent-card-dismiss"
+          @click.stop="dismiss"
+        >
+          ✕
+        </button>
         <span class="text-[11px] font-mono text-fg-mute whitespace-nowrap">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
         <span class="text-[10px] font-mono text-fg-mute whitespace-nowrap">{{ relActivity }}</span>
         <span v-if="burnRate !== '—'" class="text-[10px] font-mono text-fg-mute whitespace-nowrap">{{ burnRate }}</span>

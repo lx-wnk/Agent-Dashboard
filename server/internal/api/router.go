@@ -371,6 +371,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
+		r.Delete("/api/agents/{pid}/channel", spawnHandler.DismissChannel)
 		if deps.PermissionPresetRepo != nil {
 			allowToolHandler := agents.NewAllowToolHandler(getAgents, deps.PermissionPresetRepo)
 			r.Post("/api/agents/{pid}/allow-tool", ErrorMiddleware(allowToolHandler.AllowTool))

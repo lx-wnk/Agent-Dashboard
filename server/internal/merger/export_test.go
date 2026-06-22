@@ -14,3 +14,7 @@ func SetScanProcessesForTest(fn func(ctx context.Context) ([]scanner.ProcessInfo
 	scanProcessesFn = fn
 	return func() { scanProcessesFn = prev }
 }
+
+// ResetStaleTrackerForTest re-initialises the package stale tracker so a test
+// starts with no recorded snapshots. Test-only seam.
+func ResetStaleTrackerForTest() { resetStaleTracker() }

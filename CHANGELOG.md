@@ -14,6 +14,11 @@ Preparing the first public release.
 
 ### Added
 
+- Controllable (channel/MCP-connected) agents now remain on the dashboard as a
+  dismissable **Finished** card after their process exits, so results no longer
+  disappear into the Sessions list. Click ✕ on a finished card to dismiss it
+  (removes its channel discovery file). Finished cards are tracked per server run
+  and appear in the card grid view. (#192)
 - Live subtasks on agent and task cards — token usage, duration, and latest output for each active subagent are parsed from JSONL in real time and surfaced directly on the roster cards; child-task summaries are projected onto enriched tasks, gated on pid-liveness (PR #203).
 - Per-stage spawner and model configuration — choose which engine (e.g. Codex for
   `self_review`, Claude Code for `implementation`) and which model runs each of the

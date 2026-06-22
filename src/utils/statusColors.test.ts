@@ -45,5 +45,6 @@ describe('agentStatusTone', () => {
   it('waiting → warning', () => expect(agentStatusTone('waiting')).toBe('warning'))
   it('error → danger', () => expect(agentStatusTone('error')).toBe('danger'))
   it('idle → neutral', () => expect(agentStatusTone('idle')).toBe('neutral'))
+  it('finished → neutral', () => expect(agentStatusTone('finished')).toBe('neutral'))
   it('unknown → neutral', () => expect(agentStatusTone('unknown')).toBe('neutral'))
 })

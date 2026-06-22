@@ -62,6 +62,11 @@ describe('attentionFor', () => {
     expect(att?.weight).toBe(1)
   })
 
+  it('returns null for a finished agent even with a reconstructed errorState', () => {
+    const agent = makeAgent({ status: 'finished', errorState: 'auth_failed', pendingToolUse: { tool: 'Bash', pattern: 'ls', id: 'tu_3' } })
+    expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
+  })
+
   it('returns stalled for active + long silence', () => {
     const agent = makeAgent({ status: 'active' })
     const att = attentionFor(agent, STALLED_SECS)

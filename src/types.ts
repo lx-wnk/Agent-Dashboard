@@ -13,6 +13,7 @@ import type { MetricKey } from './utils/evalMetrics'
 // Run `task generate` to regenerate after changing sdk/types.go.
 import {
   AgentStatusActive,
+  AgentStatusFinished,
   AgentStatusIdle,
   AgentStatusWaiting,
 } from './sdk.generated'
@@ -42,7 +43,7 @@ export type Agent = Omit<_AgentBase, 'tasks' | 'subagents' | 'meta'> & {
 }
 
 // Derived from sdk.generated consts — automatically stays in sync with sdk/types.go.
-export const AGENT_STATUSES = [AgentStatusActive, AgentStatusWaiting, AgentStatusIdle] as const
+export const AGENT_STATUSES = [AgentStatusActive, AgentStatusWaiting, AgentStatusIdle, AgentStatusFinished] as const
 
 export interface ChannelReply {
   message: string

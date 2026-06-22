@@ -9,6 +9,10 @@ export interface Attention {
 }
 
 export function attentionFor(agent: Agent, secondsSinceActivity: number | null): Attention | null {
+  // A finished agent's process is gone: its reconstructed errorState/pendingToolUse
+  // are historical and not actionable from the triage band (dismiss lives on the card).
+  if (agent.status === 'finished')
+    return null
   if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
   if (agent.pendingToolUse)

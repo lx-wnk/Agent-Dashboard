@@ -69,7 +69,8 @@ export interface TaskInfo {
 export const AgentStatusActive = 'active'
 export const AgentStatusWaiting = 'waiting'
 export const AgentStatusIdle = 'idle'
-export type AgentStatus = typeof AgentStatusActive | typeof AgentStatusWaiting | typeof AgentStatusIdle
+export const AgentStatusFinished = 'finished'
+export type AgentStatus = typeof AgentStatusActive | typeof AgentStatusWaiting | typeof AgentStatusIdle | typeof AgentStatusFinished
 /**
  * Entrypoint describes how the Claude Code process was launched.
  */

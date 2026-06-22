@@ -10,7 +10,7 @@ const props = defineProps<{
   groups?: AgentGrouping[]
 }>()
 
-defineEmits<{ select: [agent: Agent] }>()
+defineEmits<{ select: [agent: Agent], dismiss: [pid: number] }>()
 
 // Use grouped rendering when groups are provided and at least one has a label.
 const useGroups = computed(() =>
@@ -29,6 +29,7 @@ const useGroups = computed(() =>
             :key="agent.pid"
             :agent="agent"
             @select="$emit('select', agent)"
+            @dismiss="$emit('dismiss', $event)"
           />
         </div>
       </div>
@@ -41,6 +42,7 @@ const useGroups = computed(() =>
         :key="agent.pid"
         :agent="agent"
         @select="$emit('select', agent)"
+        @dismiss="$emit('dismiss', $event)"
       />
       <p v-if="agents.length === 0" class="col-span-full text-center py-12 text-fg-mute text-sm">
         No running Claude agents found.
