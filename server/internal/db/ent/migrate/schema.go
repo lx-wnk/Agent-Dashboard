@@ -326,13 +326,6 @@ var (
 		Name:       "provider_settings",
 		Columns:    ProviderSettingsColumns,
 		PrimaryKey: []*schema.Column{ProviderSettingsColumns[0]},
-		Indexes: []*schema.Index{
-			{
-				Name:    "providersetting_provider_id",
-				Unique:  false,
-				Columns: []*schema.Column{ProviderSettingsColumns[1]},
-			},
-		},
 	}
 	// RefinementTurnsColumns holds the columns for the "refinement_turns" table.
 	RefinementTurnsColumns = []*schema.Column{
