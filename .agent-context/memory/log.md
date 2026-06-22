@@ -14,3 +14,4 @@
 - (2026-05-12) Go rework complete through Phase 6+ — MCP (19 tools, 4 scopes), channel bridge, refinement chat, history import, web push, FTS5 search, remote registrations, permission presets all implemented on feat/go-rework
 - (2026-05-12) docs: README + CONTRIBUTING rewritten for Go backend; outputs/ removed from git history via filter-repo + added to .gitignore; PR #29 (feat/go-rework → upcoming) updated
 - (2026-06-22) Provider registry backend (Codex/Gemini/Junie opt-in + Ollama $0) shipped on feat/provider-integration — declarative YAML descriptors, dispatch moved out of parser, CostLocal field for local models.
+- (2026-06-22) Provider settings UI + DB persistence shipped on feat/provider-integration — per-provider enable toggle (Settings → Providers), provider_setting ent table, GET/PATCH /api/providers endpoints, live enable snapshot updated within one scan tick.

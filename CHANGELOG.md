@@ -73,6 +73,7 @@ Preparing the first public release.
   the contributor entry barrier.
 - Community health files: `SECURITY.md`, `CODE_OF_CONDUCT.md`, Dependabot config,
   and `FUNDING.yml`.
+- Settings → Providers panel to enable or disable Codex/Gemini/Junie monitoring per provider, persisted in the database and applied within one scan tick.
 
 ### Changed
 
