@@ -164,8 +164,9 @@ func getCWDsMac(ctx context.Context, pids []int) map[int]string {
 	return ParseLsofBatch(string(out))
 }
 
-// ScanProcesses returns all running Claude Code processes with their CWDs.
-func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
+// ScanProcessesWithDetector returns all running agent processes with their CWDs,
+// detecting providers through the injected detector.
+func ScanProcessesWithDetector(ctx context.Context, detector ProviderDetector) ([]ProcessInfo, error) {
 	// Use `args` (full command line) rather than `comm` so flags like
 	// `--resume <sessionId>` survive — the merger needs them to bind a process
 	// to its exact session. DetectProviderFromCommand strips back to argv[0].
@@ -187,7 +188,7 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 			continue
 		}
 		comm := strings.Join(fields[2:], " ")
-		if DetectProviderFromCommand(comm) == "" {
+		if detectProviderVia(detector, comm) == "" {
 			continue
 		}
 		pid, err := strconv.Atoi(fields[0])
@@ -224,10 +225,16 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 			Uptime:          ParseElapsedTime(r.etime),
 			Command:         r.command,
 			ClaudeConfigDir: configDirs[r.pid],
-			Provider:        DetectProviderFromCommand(r.command),
+			Provider:        detectProviderVia(detector, r.command),
 		})
 	}
 	return result, nil
+}
+
+// ScanProcesses scans with Claude-only detection (no registry). Used by callers
+// that cannot depend on the provider registry (e.g. the parser running-CWD set).
+func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
+	return ScanProcessesWithDetector(ctx, nil)
 }
 
 // ProviderDetector maps a process command to a provider. The provider Registry
