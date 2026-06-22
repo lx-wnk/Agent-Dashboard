@@ -30,6 +30,7 @@ const baseAgent: Agent = {
   conversationTurns: 0,
   toolCounts: {},
   channelAvailable: false,
+  working: false,
   convergenceAlert: false,
   meta: null,
 }

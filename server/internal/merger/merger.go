@@ -334,6 +334,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData, baselineC
 		ClaudeConfigDir:           proc.ClaudeConfigDir,
 		Entrypoint:                session.Entrypoint,
 		Status:                    CalculateStatus(session.LastActivity),
+		Working:                   session.TurnOpen,
 		ChannelAvailable:          chanAvail,
 		LiveInjectable:            chanInject,
 		Uptime:                    proc.Uptime,
