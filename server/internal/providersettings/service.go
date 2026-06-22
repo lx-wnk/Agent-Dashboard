@@ -37,6 +37,9 @@ func New(repo repoIface, fallback provider.EnabledFunc) *Service {
 
 // Load reads all persisted rows into the snapshot. Call once at startup.
 func (s *Service) Load(ctx context.Context) error {
+	if s.repo == nil {
+		return fmt.Errorf("providersettings.Load: no repository configured")
+	}
 	rows, err := s.repo.List(ctx)
 	if err != nil {
 		return fmt.Errorf("providersettings.Load: %w", err)
@@ -70,6 +73,9 @@ func (s *Service) EnabledFunc() provider.EnabledFunc {
 
 // Set persists enabled-state for a provider and updates the live snapshot.
 func (s *Service) Set(ctx context.Context, id string, enabled bool) (*ent.ProviderSetting, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("providersettings.Set: no repository configured")
+	}
 	row, err := s.repo.Upsert(ctx, id, enabled)
 	if err != nil {
 		return nil, fmt.Errorf("providersettings.Set: %w", err)

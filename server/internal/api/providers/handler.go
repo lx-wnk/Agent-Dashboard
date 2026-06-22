@@ -77,7 +77,7 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) error {
 	return json.NewEncoder(w).Encode(providerView{
 		ID:               id,
 		DisplayName:      info.DisplayName,
-		Enabled:          body.Enabled,
+		Enabled:          h.settings.IsEnabled(id),
 		ConfigDirPresent: info.ConfigDirPresent,
 	})
 }
