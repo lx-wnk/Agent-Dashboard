@@ -39,7 +39,7 @@ type BaselineProvider func(ctx context.Context) float64
 // the JSON result to all SSE subscribers. Stops when ctx is cancelled.
 //
 // baseline, when non-nil, is consulted once per tick to derive the cost
-// baseline injected into merger.GetAgents for the health score. It may be nil
+// baseline injected into m.GetAgents for the health score. It may be nil
 // (no baseline → no cost penalty), which preserves correct behaviour.
 //
 // enricher, when non-nil, annotates each scanned agent with its linked pipeline
@@ -51,7 +51,7 @@ type BaselineProvider func(ctx context.Context) float64
 //   - F-PERF-006: Hash-dedupe frames with FNV-64a; send a heartbeat comment
 //     every 30 s so reverse-proxies do not close idle connections.
 //   - F-PERF-014: emptyTrend is a package-level var, not a per-tick literal.
-func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Duration, baseline BaselineProvider, enricher merger.Enricher) {
+func Run(ctx context.Context, m *merger.Merger, broadcaster *sse.Broadcaster, interval time.Duration, baseline BaselineProvider, enricher merger.Enricher) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -74,7 +74,7 @@ func Run(ctx context.Context, broadcaster *sse.Broadcaster, interval time.Durati
 				baselineCost = baseline(ctx)
 			}
 
-			agents, err := merger.GetAgents(ctx, merger.GetAgentsOpts{
+			agents, err := m.GetAgents(ctx, merger.GetAgentsOpts{
 				BaselinePerSessionCostUSD: baselineCost,
 				Enricher:                  enricher,
 			})

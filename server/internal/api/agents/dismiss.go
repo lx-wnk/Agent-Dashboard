@@ -3,12 +3,10 @@ package agents
 import (
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"syscall"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
-	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 )
 
 // DismissChannel handles DELETE /api/agents/{pid}/channel. It forgets a FINISHED
@@ -28,16 +26,21 @@ func (h *SpawnHandler) DismissChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	merger.DismissAgent(pid)
+	if h.dismisser != nil {
+		h.dismisser.DismissAgent(pid)
+	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		http.Error(w, `{"error":"cannot resolve home"}`, http.StatusInternalServerError)
 		return
 	}
-	base := filepath.Join(home, channelconfig.DiscoveryDir, strconv.Itoa(pid))
-	for _, suffix := range []string{".json", ".pty.json"} {
-		if err := os.Remove(base + suffix); err != nil && !os.IsNotExist(err) {
+	files := []string{
+		channelconfig.DiscoveryFile(home, pid),
+		channelconfig.DiscoveryPtyFile(home, pid),
+	}
+	for _, path := range files {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			http.Error(w, `{"error":"failed to remove discovery file"}`, http.StatusInternalServerError)
 			return
 		}

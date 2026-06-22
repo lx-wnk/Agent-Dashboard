@@ -29,7 +29,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -331,7 +330,7 @@ func writeDiscovery(parentPid, port int, token string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("mkdir: %w", err)
 	}
-	path := filepath.Join(dir, strconv.Itoa(parentPid)+".json")
+	path := channelconfig.DiscoveryFile(home, parentPid)
 	entry := map[string]any{
 		"port":       port,
 		"channelPid": os.Getpid(),

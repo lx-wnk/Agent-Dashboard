@@ -51,10 +51,10 @@ import (
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
 
-func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, func(), error) {
+func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *merger.Merger, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, func(), error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 	var entClient *ent.Client
 	if bundle != nil {
@@ -79,6 +79,13 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// taskBase / taskBroadcaster handle typed TaskEvent messages on /api/tasks/stream.
 	// Both use sse.Broadcaster under the hood (non-blocking fan-out, drops frames for slow consumers).
 	broadcaster := sse.NewBroadcaster()
+
+	// Single shared Merger for the whole process — owns the cross-tick stale
+	// tracker, so finished-agent state must persist across every read path
+	// (broadcast loop, router accessors, search). Constructing more than one
+	// would split that state and lose finished cards between ticks.
+	agentMerger := merger.New()
+
 	taskBase := sse.NewBroadcaster()
 	taskBroadcaster := sse.NewTaskBroadcaster(taskBase)
 	spawnerBroadcaster := sse.NewSpawnerBroadcaster(sse.NewBroadcaster())
@@ -100,7 +107,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 			slog.Info("auth: using plugin provider", "loginURL", loginURL)
 		},
 	}); err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
 	cleanup := func() { pluginRegistry.Shutdown() }
 
@@ -111,7 +118,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if pluginRegistry.HasDir() &&
 		pluginRegistry.HasAttemptedCapability(plugin.CapAuthProvider) &&
 		pluginRegistry.FindByCapability(plugin.CapAuthProvider) == nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf(
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf(
 			"auth_provider plugin configured but failed health-check — refusing to start with auth disabled",
 		)
 	}
@@ -143,14 +150,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		spawnerRepo = repo.NewSpawnerRepo(entClient)
 		if bundle != nil {
 			if err := repairSpawnerAdapterConfig(ctx, bundle.DB); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
+				return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
 			}
 		}
 		if err := seedSpawners(ctx, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
 		}
 		if err := migrateAdapterConfigToSpawners(ctx, cfg, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
 		}
 		pipelineConfigRepo := repo.NewPipelineConfigRepo(entClient)
 		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo, pipelineConfigRepo)
@@ -158,7 +165,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 
 	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, cleanup, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, err
 	}
 
 	// Construct the detached refinement runner before the task handler so the
@@ -290,7 +297,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// results carry the same pipeline-task and hook-event annotations as /api/agents.
 	var searchHandler *search.Handler
 	if bundle != nil {
-		searchHandler = search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), agentEnricher)
+		searchHandler = search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), agentMerger, agentEnricher)
 	}
 
 	var costHandler *apicost.Handler
@@ -334,6 +341,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		Ctx:                   ctx,
 		Config:                routerConfig,
 		AgentBroadcaster:      broadcaster,
+		Merger:                agentMerger,
 		Enricher:              agentEnricher,
 		HookStore:             hookStore,
 		OAuthProvider:         oauthProvider,
@@ -368,5 +376,5 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, router)
-	return server, broadcaster, orch, sched, histImporter, baselineProvider, agentEnricher, evalService, cleanup, nil
+	return server, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, agentEnricher, evalService, cleanup, nil
 }

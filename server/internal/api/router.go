@@ -61,9 +61,9 @@ import (
 // pipeline-task enricher, by contrast, IS applied here so request-scoped reads
 // carry the same PipelineTaskID/Title annotation as the SSE stream. A nil
 // enricher disables it.
-func newAgentsAccessor(enricher merger.Enricher) func(ctx context.Context) ([]sdk.Agent, error) {
+func newAgentsAccessor(m *merger.Merger, enricher merger.Enricher) func(ctx context.Context) ([]sdk.Agent, error) {
 	return func(ctx context.Context) ([]sdk.Agent, error) {
-		return merger.GetAgents(ctx, merger.GetAgentsOpts{Enricher: enricher})
+		return m.GetAgents(ctx, merger.GetAgentsOpts{Enricher: enricher})
 	}
 }
 
@@ -101,6 +101,9 @@ type RouterDeps struct {
 	Ctx              context.Context
 	Config           RouterConfig
 	AgentBroadcaster *sse.Broadcaster
+	// Merger is the shared roster builder (single instance per process, owns the
+	// cross-tick stale tracker). Used by every request-scoped GetAgents accessor.
+	Merger *merger.Merger
 	// Enricher, when non-nil, annotates each scanned agent with its linked
 	// pipeline task (read-only SQLite crossing). Applied to every request-scoped
 	// GetAgents call below via the agentsAccessor closure. May be nil (no DB →
@@ -109,7 +112,7 @@ type RouterDeps struct {
 	// HookStore records per-event hook granularity. The same instance is read by
 	// the Enricher (via the agentbroadcast hook enricher) so events POSTed to
 	// /api/hooks/event surface on the matching agent. May be nil (recording off).
-	HookStore *hookstore.Store
+	HookStore         *hookstore.Store
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -158,7 +161,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Single request-scoped GetAgents accessor, shared by every read path below
 	// (SSOT). Captures the injected pipeline-task enricher so HTTP reads and the
 	// debounced rescan carry the same task annotation as the SSE broadcast loop.
-	getAgents := newAgentsAccessor(deps.Enricher)
+	getAgents := newAgentsAccessor(deps.Merger, deps.Enricher)
 
 	r := chi.NewRouter()
 
@@ -367,6 +370,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 		spawnHandler := agents.NewSpawnHandler(spawnMgr)
 		if deps.AuditEventRepo != nil {
 			spawnHandler.SetAuditRepo(deps.AuditEventRepo)
+		}
+		if deps.Merger != nil {
+			spawnHandler.SetAgentDismisser(deps.Merger)
 		}
 		r.Post("/api/agents/spawn", spawnHandler.Spawn)
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)

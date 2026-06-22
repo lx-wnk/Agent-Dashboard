@@ -23,9 +23,6 @@ type ProcessInfo struct {
 	Command         string
 	ClaudeConfigDir string       // value of CLAUDE_CONFIG_DIR in the process env, or "" for default
 	Provider        sdk.Provider // detected AI coding CLI provider; defaults to ProviderClaude
-	// SessionPath is the resolved JSONL path, filled in by the merger after
-	// session resolution (not populated by the scanner itself).
-	SessionPath string `json:"-"`
 }
 
 var (

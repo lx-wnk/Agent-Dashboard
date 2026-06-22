@@ -26,6 +26,18 @@ type mcpConfig struct {
 // the channel bridge binary to avoid duplicating the path.
 const DiscoveryDir = ".claude/dashboard-channel"
 
+// DiscoveryFile returns the channel-bridge discovery file path for a pid:
+// <home>/.claude/dashboard-channel/<pid>.json
+func DiscoveryFile(home string, pid int) string {
+	return filepath.Join(home, DiscoveryDir, strconv.Itoa(pid)+".json")
+}
+
+// DiscoveryPtyFile returns the pty-broker discovery file path for a pid:
+// <home>/.claude/dashboard-channel/<pid>.pty.json
+func DiscoveryPtyFile(home string, pid int) string {
+	return filepath.Join(home, DiscoveryDir, strconv.Itoa(pid)+".pty.json")
+}
+
 // buildConfig returns the mcpConfig struct for the given binary path.
 // This is the single definition of the channel MCP config shape.
 func buildConfig(binaryPath string) mcpConfig {
