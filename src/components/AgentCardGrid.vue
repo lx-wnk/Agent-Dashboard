@@ -23,7 +23,8 @@ function readStoredKeys(): string[] {
   if (typeof localStorage === 'undefined')
     return []
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []
   }
   catch {
     return []
@@ -67,7 +68,8 @@ watch(() => props.groups, (groups) => {
   const labeled = groups.filter(g => g.label !== null)
   if (labeled.length === 0)
     return
-  collapsedKeys.value = new Set(labeled.slice(1).map(g => g.key))
+  const open = labeled.find(g => g.agents.length > 0) ?? labeled[0]
+  collapsedKeys.value = new Set(labeled.filter(g => g.key !== open.key).map(g => g.key))
   defaultApplied.value = true
 }, { immediate: true })
 </script>
