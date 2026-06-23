@@ -34,7 +34,7 @@ func (stubPricing) EstimateCacheReadCost(sdk.TokenUsage, string) float64     { r
 
 func TestRegistry_LoadsBuiltins(t *testing.T) {
 	reg := testRegistry(t)
-	for _, id := range []string{"codex", "gemini", "junie"} {
+	for _, id := range []string{"codex", "gemini", "junie", "pi"} {
 		if _, ok := reg.Descriptors()[id]; !ok {
 			t.Fatalf("missing built-in descriptor %q", id)
 		}

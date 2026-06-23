@@ -130,3 +130,45 @@ func TestEngine_EmptyAndMalformedFile(t *testing.T) {
 		t.Fatalf("all-malformed file must skip lines, not error, got %v", err)
 	}
 }
+
+func piDescriptor() Descriptor {
+	return Descriptor{
+		ID: "pi", ExeNames: []string{"pi"}, Source: "jsonl",
+		SessionGlob: "**/*.jsonl",
+		Parse: ParseSpec{
+			EventFilter: &EventFilter{Path: "message.role", Equals: "assistant"},
+			Tokens: TokenSpec{
+				Mode:        TokenPerMessage,
+				Input:       []string{"message.usage.input"},
+				Output:      []string{"message.usage.output"},
+				CacheRead:   []string{"message.usage.cacheRead"},
+				CacheCreate: []string{"message.usage.cacheWrite"},
+			},
+			Model:    []string{"message.model"},
+			Provider: []string{"message.provider"},
+		},
+		Cost: CostSpec{Rule: CostInFile, InFilePath: []string{"message.usage.cost.total"}},
+	}
+}
+
+func TestEngine_PiPerMessageAndInFileCost(t *testing.T) {
+	r, err := parseJSONL(piDescriptor(), filepath.Join("testdata", "pi-session.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Session.TokenUsage.InputTokens != 2700 { // 1200 + 1500; user line filtered out
+		t.Fatalf("want 2700 input, got %d", r.Session.TokenUsage.InputTokens)
+	}
+	if r.Session.TokenUsage.OutputTokens != 760 { // 340 + 420
+		t.Fatalf("want 760 output, got %d", r.Session.TokenUsage.OutputTokens)
+	}
+	if r.Session.TokenUsage.CacheReadTokens != 220 || r.Session.TokenUsage.CacheCreationTokens != 110 {
+		t.Fatalf("cache wrong: %+v", r.Session.TokenUsage)
+	}
+	if r.Session.Model != "claude-sonnet-4-5" || r.Provider != "anthropic" {
+		t.Fatalf("model/provider wrong: %q / %q", r.Session.Model, r.Provider)
+	}
+	if r.InFileCost < 0.0272 || r.InFileCost > 0.0274 { // 0.0123 + 0.0150
+		t.Fatalf("want ~0.0273 cost, got %f", r.InFileCost)
+	}
+}
