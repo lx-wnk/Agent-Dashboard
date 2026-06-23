@@ -20,6 +20,7 @@ type CustomCommandSpawner struct {
 func (c *CustomCommandSpawner) Name() string { return "custom" }
 
 func (c *CustomCommandSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnResult, error) {
+	args.Stream = false
 	argsJSON, err := json.Marshal(args)
 	if err != nil {
 		return LLMSpawnResult{}, err
@@ -45,6 +46,7 @@ func (c *CustomCommandSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LL
 // scans stdout line by line. Each non-empty line is emitted as a chunk. The
 // channel closes when the process exits or the context is cancelled.
 func (c *CustomCommandSpawner) SpawnStream(ctx context.Context, args LLMSpawnArgs) (<-chan string, error) {
+	args.Stream = true
 	argsJSON, err := json.Marshal(args)
 	if err != nil {
 		return nil, fmt.Errorf("CustomCommandSpawner.SpawnStream: marshal args: %w", err)
