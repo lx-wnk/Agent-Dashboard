@@ -120,7 +120,7 @@ const showMetrics = ref(false)
               class="text-fg-mute hover:text-fg-soft text-[11px] leading-none focus-visible:outline-2 focus-visible:outline-ring rounded"
               aria-label="Show more metrics"
               data-testid="agent-card-info"
-              @click.stop="showMetrics = true"
+              @click.stop="showMetrics = !showMetrics"
             >ⓘ</button>
             <MetricsPopover v-if="showMetrics" :agent="agent" @click.stop />
           </span>
