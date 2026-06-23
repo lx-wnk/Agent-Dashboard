@@ -19,5 +19,14 @@
     "status": "accepted",
     "date": "2026-06-18",
     "path": "docs/architecture/adr/0007-cron-scheduling-engine.md"
+  },
+  {
+    "id": "ADR-0008",
+    "title": "Anthropic Messages API spawner as out-of-process SDK binary",
+    "status": "accepted",
+    "date": "2026-06-23",
+    "context": "The server had no way to run stage agents against the Anthropic API (only the claude CLI subprocess + OpenAI-compat/Ollama HTTP). The anthropic-sdk-go dependency would bloat server/go.mod and transitively affect all consumers.",
+    "decision": "A standalone binary under plugins/anthropic-spawner (own go.mod, built GOWORK=off) invoked via the existing custom-exec adapter contract, surfaced as adapter_type 'anthropic'. A new LLMSpawnArgs.Stream flag disambiguates Spawn (false) vs SpawnStream (true). The binary reads ANTHROPIC_API_KEY from its inherited environment; the server locates it via DASHBOARD_ANTHROPIC_SPAWNER_CMD or PATH lookup of 'anthropic-spawner'.",
+    "consequences": "anthropic-sdk-go stays out of server/go.mod. Adding the adapter required ~1 struct field (LLMSpawnArgs.Stream), 1 factory case (adapter_factory.go), a path resolver (anthropic_path.go), and the plugin binary. New out-of-process spawners follow the same pattern."
   }
 ]
