@@ -74,6 +74,10 @@ Preparing the first public release.
 
 ### Changed
 
+- Agent card redesign — prominent, readable project name; a compact
+  cost · tokens · uptime metric row with the full labeled detail (last activity,
+  burn rate, cache costs) moved into a hover ⓘ popover and the agent modal; the
+  prompt input is now always docked at the bottom with a larger output area.
 - Accessibility: clickable agent rows are now native `<button>` elements, and the
   agent-modal summary uses a higher-contrast token.
 - SSE poll and retry intervals are centralized in `src/utils/sse.ts` instead of
@@ -86,6 +90,9 @@ Preparing the first public release.
 
 ### Fixed
 
+- Agent cards no longer show "No output yet" while an agent is actively working —
+  the card now falls back to the current action / last tool when there is no
+  assistant text yet.
 - Startup: databases created before the per-stage pipeline config landed stored
   `pipeline_configs` as a bare (key, value) table; the new `(project_id, key)` index
   forced a table rebuild that failed with `NOT NULL constraint failed: ...id`. The DB
