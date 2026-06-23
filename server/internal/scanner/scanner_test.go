@@ -3,7 +3,6 @@ package scanner_test
 import (
 	"testing"
 
-	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 	"github.com/stretchr/testify/require"
 )
@@ -66,31 +65,4 @@ func TestParseLsofBatch_Empty(t *testing.T) {
 func TestProjectName(t *testing.T) {
 	require.Equal(t, "project", scanner.ProjectName("/home/user/project"))
 	require.Equal(t, "agent-dashboard", scanner.ProjectName("/Users/alex/code/agent-dashboard"))
-}
-
-func TestDetectProviderFromCommand(t *testing.T) {
-	tests := []struct {
-		name string
-		comm string
-		want sdk.Provider
-	}{
-		{"bare claude", "claude", sdk.ProviderClaude},
-		{"absolute claude path", "/usr/local/bin/claude", sdk.ProviderClaude},
-		{"bare codex", "codex", sdk.ProviderCodex},
-		{"absolute codex path", "/opt/openai/bin/codex", sdk.ProviderCodex},
-		{"bare gemini", "gemini", sdk.ProviderGemini},
-		{"absolute gemini path", "/usr/bin/gemini", sdk.ProviderGemini},
-		{"command with args", "claude --resume abc", sdk.ProviderClaude},
-		{"unknown binary", "node", sdk.Provider("")},
-		{"empty", "", sdk.Provider("")},
-		{"whitespace", "   ", sdk.Provider("")},
-		{"claude-code is not claude", "claude-code", sdk.Provider("")},
-		{"codex-cli is not codex", "codex-cli", sdk.Provider("")},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := scanner.DetectProviderFromCommand(tt.comm)
-			require.Equal(t, tt.want, got)
-		})
-	}
 }

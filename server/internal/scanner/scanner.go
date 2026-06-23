@@ -169,7 +169,7 @@ func getCWDsMac(ctx context.Context, pids []int) map[int]string {
 func ScanProcessesWithDetector(ctx context.Context, detector ProviderDetector) ([]ProcessInfo, error) {
 	// Use `args` (full command line) rather than `comm` so flags like
 	// `--resume <sessionId>` survive — the merger needs them to bind a process
-	// to its exact session. DetectProviderFromCommand strips back to argv[0].
+	// to its exact session. The detector strips back to argv[0].
 	out, err := exec.CommandContext(ctx, "ps", "-eo", "pid,etime,args").Output()
 	if err != nil {
 		return nil, fmt.Errorf("ps: %w", err)
@@ -264,29 +264,4 @@ func commBase(comm string) string {
 		comm = comm[:i]
 	}
 	return filepath.Base(comm)
-}
-
-// DetectProviderFromCommand maps a process command name to a provider.
-// Matches both bare names (e.g. "claude") and absolute paths
-// (e.g. "/usr/local/bin/codex"). Returns "" when the command does not
-// belong to any supported AI coding CLI.
-func DetectProviderFromCommand(comm string) sdk.Provider {
-	comm = strings.TrimSpace(comm)
-	if comm == "" {
-		return ""
-	}
-	// Strip arguments — only look at argv[0].
-	if i := strings.IndexByte(comm, ' '); i >= 0 {
-		comm = comm[:i]
-	}
-	base := filepath.Base(comm)
-	switch base {
-	case "claude":
-		return sdk.ProviderClaude
-	case "codex":
-		return sdk.ProviderCodex
-	case "gemini":
-		return sdk.ProviderGemini
-	}
-	return ""
 }
