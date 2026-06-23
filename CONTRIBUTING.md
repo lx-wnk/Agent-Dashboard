@@ -62,7 +62,12 @@ server/internal/pipeline/         Task pipeline state machine
 server/internal/db/ent/schema/    Ent ORM schemas
 sdk/                              dashboard-channel MCP stdio binary (Go module)
 src/                              Vue 3 TypeScript SPA
+plugins/anthropic-spawner/        Out-of-process Anthropic Messages API binary (own go.mod)
 ```
+
+### Out-of-process spawner pattern
+
+`plugins/anthropic-spawner/` is its own Go module, built with `GOWORK=off` so that `anthropic-sdk-go` is never imported by the server. The server invokes it through the standard custom-exec contract (stdin: `LLMSpawnArgs` JSON; stdout: `LLMSpawnResult` JSON). A `Stream` flag on `LLMSpawnArgs` selects between a single-shot response (`Spawn`) and server-sent events (`SpawnStream`). New out-of-process spawners follow the same contract.
 
 The server binds exclusively to `127.0.0.1`. Never change this — the server reads sensitive Claude session data.
 

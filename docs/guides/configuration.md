@@ -54,6 +54,38 @@ These are normally injected into spawned stage agents by the orchestrator — yo
 | `DASHBOARD_HOOKS_DEBOUNCE_MS` | `100` | Debounce before SSE rescan after a hook event |
 | `DASHBOARD_HOOK_EVENTS_PER_SESSION` | `50` | Max recent lifecycle-hook events kept in memory per session for the agent-modal **Hook events** view. Must be positive |
 
+## LLM adapters
+
+Spawners can use different `adapter_type` values to route stage-agent calls to different LLM backends:
+
+| `adapter_type` | Description | Required env / config |
+|---|---|---|
+| `claude` (or empty) | Native Claude Code CLI subprocess (default) | None — uses the installed `claude` binary |
+| `openai` | OpenAI-compatible HTTP endpoint | `base_url`, `api_key_env`, `default_model` in `AdapterConfig`; the named env var must hold the key |
+| `ollama` | Ollama local server | `host`, `default_model` in `AdapterConfig`; defaults to `http://localhost:11434` |
+| `anthropic` | Anthropic Messages API via `anthropic-spawner` binary (see below) | `ANTHROPIC_API_KEY` in server env; binary on `PATH` or `DASHBOARD_ANTHROPIC_SPAWNER_CMD` |
+| `custom` | Any binary following the custom-exec contract | `spawner.command` must point to the binary |
+
+### `anthropic` adapter
+
+The `anthropic` adapter runs pipeline stage agents and refinement chat against the Anthropic Messages API. It works through an out-of-process binary (`anthropic-spawner`) so that the `anthropic-sdk-go` dependency never enters the server module.
+
+**Prerequisites:**
+
+1. `ANTHROPIC_API_KEY` set in the server environment (inherited by the spawner binary).
+2. The `anthropic-spawner` binary on `PATH`, or its absolute path in `DASHBOARD_ANTHROPIC_SPAWNER_CMD`.
+
+**Default model:** `claude-opus-4-8` (can be overridden per-spawner via the model resolution chain described in the [Pipeline stage configuration](#pipeline-stage-configuration) section).
+
+**Building the binary:**
+
+```bash
+cd plugins/anthropic-spawner
+GOWORK=off go build -o anthropic-spawner .
+# Move to somewhere on PATH, e.g.:
+mv anthropic-spawner "$(go env GOPATH)/bin/"
+```
+
 ## Pipeline stage configuration
 
 Per-stage engine (spawner) and model are stored in the `pipeline_config` table and
