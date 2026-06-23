@@ -64,13 +64,13 @@ const showMetrics = ref(false)
 </script>
 
 <template>
-  <AppCard surface="card" radius="lg" interactive class="relative flex flex-col h-[260px] overflow-hidden cursor-pointer">
+  <AppCard surface="card" radius="lg" interactive class="relative flex flex-col h-[260px] overflow-hidden cursor-pointer" @click="emit('select', agent)">
     <button
       type="button"
       class="absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
       :aria-label="`Open details for ${projectLabel}`"
       data-testid="agent-card-open"
-      @click="$emit('select', agent)"
+      @click.stop="emit('select', agent)"
     />
 
     <div class="bg-raised px-3 pt-2 pb-1.5 flex flex-col gap-1">
@@ -136,7 +136,7 @@ const showMetrics = ref(false)
       </div>
     </div>
 
-    <div class="relative flex-1 min-h-0 px-3 py-3 overflow-hidden text-[13px] leading-relaxed text-fg-mute font-mono">
+    <div class="relative flex-1 min-h-0 px-3 py-3 overflow-hidden text-[13px] leading-relaxed text-fg-mute font-mono" data-testid="agent-card-body">
       <template v-if="agent.lastOutput">
         {{ agent.lastOutput }}
       </template>

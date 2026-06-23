@@ -73,6 +73,17 @@ describe('agentCard interaction', () => {
     await w.get('[data-testid="prompt-input"]').trigger('click')
     expect(w.emitted('select')).toBeFalsy()
   })
+  it('emits select when the output body is clicked', async () => {
+    const w = mount(AgentCard, { props: { agent: makeAgent() }, global: { stubs } })
+    await w.get('[data-testid="agent-card-body"]').trigger('click')
+    expect(w.emitted('select')).toBeTruthy()
+  })
+  it('does not emit select when the dismiss button is clicked', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({})))
+    const w = mount(AgentCard, { props: { agent: makeAgent({ status: 'finished' }) }, global: { stubs } })
+    await w.get('[data-testid="agent-card-dismiss"]').trigger('click')
+    expect(w.emitted('select')).toBeFalsy()
+  })
 })
 
 describe('agentCard header', () => {
