@@ -115,3 +115,35 @@ func TestRunOnce_RefusalIsError(t *testing.T) {
 		t.Fatal("refusal must return an error")
 	}
 }
+
+// mockStreamRefusal emits a stream that ends in a message_delta carrying
+// stop_reason "refusal" (after one text delta), so the accumulated message's
+// StopReason drives the post-stream refusal check.
+func mockStreamRefusal() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl, _ := w.(http.Flusher)
+		write := func(s string) {
+			_, _ = w.Write([]byte(s))
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		write("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-opus-4-8\",\"content\":[],\"stop_reason\":null,\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n")
+		write("event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n")
+		write("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"partial\"}}\n\n")
+		write("event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n")
+		write("event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"refusal\"},\"usage\":{\"output_tokens\":1}}\n\n")
+		write("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+	}))
+}
+
+func TestRunStream_RefusalIsError(t *testing.T) {
+	srv := mockStreamRefusal()
+	defer srv.Close()
+	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	if err := runStream(spawnArgs{StageRunID: "sr", UserPrompt: "x", Model: "claude-opus-4-8"}, &bytes.Buffer{}); err == nil {
+		t.Fatal("streaming refusal must return an error")
+	}
+}

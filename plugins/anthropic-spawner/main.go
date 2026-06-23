@@ -95,7 +95,7 @@ func runOnce(args spawnArgs, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("messages.new: %w", err)
 	}
-	if string(msg.StopReason) == "refusal" {
+	if msg.StopReason == anthropic.StopReasonRefusal {
 		return fmt.Errorf("request refused by safety classifier")
 	}
 	var sb strings.Builder
@@ -157,7 +157,9 @@ func runStream(args spawnArgs, stdout io.Writer) error {
 	acc := anthropic.Message{}
 	for stream.Next() {
 		event := stream.Current()
-		_ = acc.Accumulate(event)
+		if err := acc.Accumulate(event); err != nil {
+			fmt.Fprintln(os.Stderr, "anthropic-spawner: accumulate:", err)
+		}
 		switch ev := event.AsAny().(type) {
 		case anthropic.ContentBlockDeltaEvent:
 			if d, ok := ev.Delta.AsAny().(anthropic.TextDelta); ok && d.Text != "" {
@@ -170,7 +172,7 @@ func runStream(args spawnArgs, stdout io.Writer) error {
 	if err := stream.Err(); err != nil {
 		return fmt.Errorf("messages stream: %w", err)
 	}
-	if string(acc.StopReason) == "refusal" {
+	if acc.StopReason == anthropic.StopReasonRefusal {
 		return fmt.Errorf("request refused by safety classifier")
 	}
 	return nil
