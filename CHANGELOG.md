@@ -15,8 +15,10 @@ Preparing the first public release.
 ### Added
 
 - Collapsible agent groups — when a grouping (project/status/model) is active on the
-  dashboard roster, click a group header to collapse or expand it. Collapsed state
-  is remembered in localStorage and survives live re-renders.
+  dashboard roster, click a group header to collapse or expand it. On first load only
+  the highest-priority non-empty group is expanded (Active, else Waiting, else Idle,
+  else Finished); the rest start collapsed. Collapsed state is then remembered in
+  localStorage and survives live re-renders.
 - Agents now show an animated **Working** badge while actively generating — derived from conversation turn-state plus live tmux/pty output — distinct from the idle/waiting staleness states.
 - Agents spawned from the dashboard now run as interactive **live** sessions (tmux when available, headless pty broker otherwise) so you can converse with them live, instead of a one-shot run. The spawned agent's chat opens automatically once it appears.
 - Controllable (channel/MCP-connected) agents now remain on the dashboard as a

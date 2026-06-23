@@ -92,6 +92,9 @@ describe('agentCardGrid collapsible groups', () => {
     const groupA = { key: 'project-a', label: 'Project A', agents: [finishedAgent(1)] }
     const groupB = { key: 'project-b', label: 'Project B', agents: [finishedAgent(2)] }
 
+    // Seed stored state so the first-load default (collapse all but first) is skipped.
+    localStorageMock.setItem('agent-dashboard-collapsed-groups', '[]')
+
     const w = mount(AgentCardGrid, {
       props: {
         agents: [finishedAgent(1), finishedAgent(2)],
@@ -135,5 +138,46 @@ describe('agentCardGrid collapsible groups', () => {
     expect(stored).not.toBeNull()
     const parsed = JSON.parse(stored!)
     expect(parsed).toContain('project-a')
+  })
+
+  it('collapses all groups except the first on first load', async () => {
+    const groups = [
+      { key: 'active', label: 'Active', agents: [finishedAgent(1)] },
+      { key: 'waiting', label: 'Waiting on you', agents: [finishedAgent(2)] },
+      { key: 'idle', label: 'Idle', agents: [finishedAgent(3)] },
+    ]
+
+    const w = mount(AgentCardGrid, {
+      props: { agents: groups.flatMap(g => g.agents), groups },
+      global: { stubs },
+      attachTo: document.body,
+    })
+    await nextTick()
+
+    const grids = w.findAll('[data-testid="group-card-grid"]')
+    expect(grids).toHaveLength(3)
+    expect(grids[0].isVisible()).toBe(true)
+    expect(grids[1].isVisible()).toBe(false)
+    expect(grids[2].isVisible()).toBe(false)
+  })
+
+  it('respects stored state over the first-load default', async () => {
+    // Empty array = a valid saved state meaning "user expanded everything".
+    localStorageMock.setItem('agent-dashboard-collapsed-groups', '[]')
+    const groups = [
+      { key: 'active', label: 'Active', agents: [finishedAgent(1)] },
+      { key: 'waiting', label: 'Waiting on you', agents: [finishedAgent(2)] },
+    ]
+
+    const w = mount(AgentCardGrid, {
+      props: { agents: groups.flatMap(g => g.agents), groups },
+      global: { stubs },
+      attachTo: document.body,
+    })
+    await nextTick()
+
+    const grids = w.findAll('[data-testid="group-card-grid"]')
+    expect(grids[0].isVisible()).toBe(true)
+    expect(grids[1].isVisible()).toBe(true)
   })
 })

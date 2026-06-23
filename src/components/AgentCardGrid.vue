@@ -30,6 +30,10 @@ function readStoredKeys(): string[] {
   }
 }
 
+function hasStoredState(): boolean {
+  return typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY) !== null
+}
+
 const collapsedKeys = ref<Set<string>>(new Set(readStoredKeys()))
 
 function isCollapsed(key: string): boolean {
@@ -50,6 +54,22 @@ watch(collapsedKeys, (value) => {
     return
   localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(value)))
 })
+
+// On first ever load (no stored state), collapse every group except the first
+// non-empty one. groupAgents sorts status groups by priority, so groups[0] is
+// Active → else Waiting → else Idle → else Finished. Applied once on the first
+// populated frame and persisted; thereafter the stored/user state wins.
+const defaultApplied = ref(hasStoredState())
+
+watch(() => props.groups, (groups) => {
+  if (defaultApplied.value || !useGroups.value || !groups)
+    return
+  const labeled = groups.filter(g => g.label !== null)
+  if (labeled.length === 0)
+    return
+  collapsedKeys.value = new Set(labeled.slice(1).map(g => g.key))
+  defaultApplied.value = true
+}, { immediate: true })
 </script>
 
 <template>
