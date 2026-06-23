@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
-import type { AgentGrouping } from '../utils/agentGroup'
+import type { AgentGroup, AgentGrouping } from '../utils/agentGroup'
 import { computed, ref, watch } from 'vue'
 import AgentCard from './AgentCard.vue'
 import GroupHeader from './shell/GroupHeader.vue'
@@ -8,6 +8,7 @@ import GroupHeader from './shell/GroupHeader.vue'
 const props = defineProps<{
   agents: Agent[]
   groups?: AgentGrouping[]
+  groupBy?: AgentGroup
 }>()
 
 defineEmits<{ select: [agent: Agent], dismiss: [pid: number] }>()
@@ -17,13 +18,19 @@ const useGroups = computed(() =>
   !!props.groups && props.groups.some(g => g.label !== null),
 )
 
-const STORAGE_KEY = 'agent-dashboard-collapsed-groups'
+// Collapsed state is namespaced per grouping mode: the component is reused (not
+// remounted) across mode switches, so an unscoped key would leak collapse state
+// between project/status/model groupings whose key spaces overlap.
+const STORAGE_PREFIX = 'agent-dashboard-collapsed-groups'
+const storageKey = computed(() =>
+  props.groupBy ? `${STORAGE_PREFIX}:${props.groupBy}` : STORAGE_PREFIX,
+)
 
-function readStoredKeys(): string[] {
+function readStoredKeys(key: string): string[] {
   if (typeof localStorage === 'undefined')
     return []
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
+    const parsed = JSON.parse(localStorage.getItem(key) ?? '[]')
     return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []
   }
   catch {
@@ -31,14 +38,25 @@ function readStoredKeys(): string[] {
   }
 }
 
-function hasStoredState(): boolean {
-  return typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY) !== null
+function hasStoredState(key: string): boolean {
+  return typeof localStorage !== 'undefined' && localStorage.getItem(key) !== null
 }
 
-const collapsedKeys = ref<Set<string>>(new Set(readStoredKeys()))
+const collapsedKeys = ref<Set<string>>(new Set(readStoredKeys(storageKey.value)))
+const defaultAppliedModes = ref<Set<string>>(
+  new Set(hasStoredState(storageKey.value) ? [storageKey.value] : []),
+)
 
 function isCollapsed(key: string): boolean {
   return collapsedKeys.value.has(key)
+}
+
+// Persistence is explicit (not a watch on collapsedKeys) so a programmatic
+// reset on mode switch is never mistaken for user-saved state.
+function persist(): void {
+  if (typeof localStorage === 'undefined')
+    return
+  localStorage.setItem(storageKey.value, JSON.stringify(Array.from(collapsedKeys.value)))
 }
 
 function toggleGroup(key: string): void {
@@ -48,29 +66,32 @@ function toggleGroup(key: string): void {
   else
     next.add(key)
   collapsedKeys.value = next
+  persist()
 }
 
-watch(collapsedKeys, (value) => {
-  if (typeof localStorage === 'undefined')
-    return
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(value)))
+// On a mode switch, load that mode's persisted collapse state (without
+// persisting); the groups watcher re-applies the first-load default once a
+// populated frame arrives for a mode that has none.
+watch(storageKey, (key) => {
+  collapsedKeys.value = new Set(readStoredKeys(key))
 })
 
-// On first ever load (no stored state), collapse every group except the first
-// non-empty one. groupAgents sorts status groups by priority, so groups[0] is
-// Active → else Waiting → else Idle → else Finished. Applied once on the first
-// populated frame and persisted; thereafter the stored/user state wins.
-const defaultApplied = ref(hasStoredState())
-
+// First populated frame per mode with no stored state: collapse every group
+// except the first non-empty one (groupAgents sorts status groups by priority),
+// then persist. Thereafter the stored/user state wins.
 watch(() => props.groups, (groups) => {
-  if (defaultApplied.value || !useGroups.value || !groups)
+  if (!useGroups.value || !groups)
+    return
+  const key = storageKey.value
+  if (defaultAppliedModes.value.has(key) || hasStoredState(key))
     return
   const labeled = groups.filter(g => g.label !== null)
   if (labeled.length === 0)
     return
   const open = labeled.find(g => g.agents.length > 0) ?? labeled[0]
   collapsedKeys.value = new Set(labeled.filter(g => g.key !== open.key).map(g => g.key))
-  defaultApplied.value = true
+  defaultAppliedModes.value = new Set(defaultAppliedModes.value).add(key)
+  persist()
 }, { immediate: true })
 </script>
 

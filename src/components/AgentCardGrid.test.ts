@@ -161,6 +161,41 @@ describe('agentCardGrid collapsible groups', () => {
     expect(grids[2].isVisible()).toBe(false)
   })
 
+  it('namespaces collapsed state per grouping mode and re-applies the default on switch', async () => {
+    const statusGroups = [
+      { key: 'active', label: 'Active', agents: [finishedAgent(1)] },
+      { key: 'waiting', label: 'Waiting on you', agents: [finishedAgent(2)] },
+    ]
+    const projectGroups = [
+      { key: 'project-a', label: 'Project A', agents: [finishedAgent(1)] },
+      { key: 'project-b', label: 'Project B', agents: [finishedAgent(2)] },
+    ]
+
+    const w = mount(AgentCardGrid, {
+      props: { agents: statusGroups.flatMap(g => g.agents), groups: statusGroups, groupBy: 'status' as const },
+      global: { stubs },
+      attachTo: document.body,
+    })
+    await nextTick()
+
+    // Status mode persists under its own namespaced key.
+    expect(localStorageMock.getItem('agent-dashboard-collapsed-groups:status')).not.toBeNull()
+    expect(localStorageMock.getItem('agent-dashboard-collapsed-groups:project')).toBeNull()
+
+    // Switch to project grouping: the status keys must not leak; the default
+    // (first group open, rest collapsed) re-applies and persists separately.
+    await w.setProps({ groups: projectGroups, groupBy: 'project' as const })
+    await nextTick()
+
+    const projectStored = JSON.parse(localStorageMock.getItem('agent-dashboard-collapsed-groups:project')!)
+    expect(projectStored).toEqual(['project-b'])
+    expect(projectStored).not.toContain('waiting')
+
+    const grids = w.findAll('[data-testid="group-card-grid"]')
+    expect(grids[0].isVisible()).toBe(true)
+    expect(grids[1].isVisible()).toBe(false)
+  })
+
   it('respects stored state over the first-load default', async () => {
     // Empty array = a valid saved state meaning "user expanded everything".
     localStorageMock.setItem('agent-dashboard-collapsed-groups', '[]')
