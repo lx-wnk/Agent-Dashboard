@@ -45,14 +45,14 @@ describe('groupHeader', () => {
   it('renders an expanded chevron when not collapsed', () => {
     const w = mount(GroupHeader, { props: { label: 'Active', agents: [] } })
     const btn = w.find('[data-testid="group-header-toggle"]')
-    expect(btn.text()).toContain('▾')
+    expect(btn.text()).toContain('▼')
     expect(btn.attributes('aria-expanded')).toBe('true')
   })
 
   it('renders a collapsed chevron when collapsed', () => {
     const w = mount(GroupHeader, { props: { label: 'Active', agents: [], collapsed: true } })
     const btn = w.find('[data-testid="group-header-toggle"]')
-    expect(btn.text()).toContain('▸')
+    expect(btn.text()).toContain('▶')
     expect(btn.attributes('aria-expanded')).toBe('false')
   })
 

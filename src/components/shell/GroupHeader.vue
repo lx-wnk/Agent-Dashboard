@@ -12,7 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{ toggle: [] }>()
 
 const totalCost = computed(() => props.agents.reduce((sum, a) => sum + a.costEstimate, 0))
-const chevron = computed(() => props.collapsed ? '▸' : '▾')
+const chevron = computed(() => props.collapsed ? '▶' : '▼')
 </script>
 
 <template>
@@ -24,7 +24,7 @@ const chevron = computed(() => props.collapsed ? '▸' : '▾')
     data-testid="group-header-toggle"
     @click="emit('toggle')"
   >
-    <span class="text-fg-soft text-sm leading-none w-4 inline-block text-center" aria-hidden="true">{{ chevron }}</span>
+    <span class="text-fg-soft text-xs leading-none w-4 inline-block text-center" aria-hidden="true">{{ chevron }}</span>
     <span class="font-mono text-[11px] font-semibold text-fg-soft">{{ label }}</span>
     <span class="text-[11px] text-fg-faint">{{ agents.length }} {{ agents.length === 1 ? 'agent' : 'agents' }}</span>
     <span class="flex-1 h-px bg-line" />
