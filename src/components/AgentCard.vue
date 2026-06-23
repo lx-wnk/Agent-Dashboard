@@ -61,9 +61,6 @@ function toggleSubagentExpand(id: string) {
 }
 
 const showMetrics = ref(false)
-function toggleMetrics() {
-  showMetrics.value = !showMetrics.value
-}
 </script>
 
 <template>
@@ -111,13 +108,19 @@ function toggleMetrics() {
             :class="healthChipClass"
             :title="`Health score: ${agent.healthScore}/100`"
           >{{ agent.healthScore }}</span>
-          <span class="relative z-10" @mouseenter="showMetrics = true" @mouseleave="showMetrics = false">
+          <span
+            class="relative z-10"
+            @mouseenter="showMetrics = true"
+            @mouseleave="showMetrics = false"
+            @focusin="showMetrics = true"
+            @focusout="showMetrics = false"
+          >
             <button
               type="button"
               class="text-fg-mute hover:text-fg-soft text-[11px] leading-none focus-visible:outline-2 focus-visible:outline-ring rounded"
               aria-label="Show more metrics"
               data-testid="agent-card-info"
-              @click.stop="toggleMetrics"
+              @click.stop="showMetrics = true"
             >ⓘ</button>
             <MetricsPopover v-if="showMetrics" :agent="agent" @click.stop />
           </span>

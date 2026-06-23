@@ -1,6 +1,11 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import AgentCard from '../AgentCard.vue'
+
+// Avoid the real composable's setTimeout localStorage write firing after teardown.
+vi.mock('../../composables/useAgentIdentity', () => ({
+  useAgentIdentity: () => ({ getIdentity: () => ({ emoji: '🤖' }) }),
+}))
 
 const stubs = {
   PromptInput: { template: '<div data-testid="prompt-input" />' },
