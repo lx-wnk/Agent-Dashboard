@@ -251,8 +251,9 @@ func (r *Registry) Cost(p sdk.Provider, usage sdk.TokenUsage, model string, inFi
 	}
 	if d.Cost.LocalIf != nil && r.ollama != nil {
 		li := d.Cost.LocalIf
-		if r.ollama.IsLocal(inFileProvider, model) ||
-			(li.ProviderEquals != "" && strings.EqualFold(inFileProvider, li.ProviderEquals)) {
+		providerLocal := strings.EqualFold(inFileProvider, "ollama") ||
+			(li.ProviderEquals != "" && strings.EqualFold(inFileProvider, li.ProviderEquals))
+		if providerLocal || (li.OrModelInOllamaTags && r.ollama.IsLocal(inFileProvider, model)) {
 			return CostBreakdown{Local: true}
 		}
 	}
