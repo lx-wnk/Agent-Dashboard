@@ -24,7 +24,7 @@ const chevron = computed(() => props.collapsed ? '▸' : '▾')
     data-testid="group-header-toggle"
     @click="emit('toggle')"
   >
-    <span class="text-fg-faint text-[10px] w-3 inline-block" aria-hidden="true">{{ chevron }}</span>
+    <span class="text-fg-soft text-sm leading-none w-4 inline-block text-center" aria-hidden="true">{{ chevron }}</span>
     <span class="font-mono text-[11px] font-semibold text-fg-soft">{{ label }}</span>
     <span class="text-[11px] text-fg-faint">{{ agents.length }} {{ agents.length === 1 ? 'agent' : 'agents' }}</span>
     <span class="flex-1 h-px bg-line" />
