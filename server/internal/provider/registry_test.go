@@ -147,6 +147,40 @@ func TestResolveSession_EndToEndCodex(t *testing.T) {
 	}
 }
 
+func TestResolveSessionScan_WalksOncePerTick(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "sessions", "2026", "04", "19")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := `{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1,"output_tokens":1}}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(nested, "rollout-1.jsonl"), []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", root)
+	reg := testRegistry(t, "codex")
+	scan := reg.NewSessionScan()
+
+	if _, _, _, err := reg.ResolveSessionScan("codex", "/cwd-a", map[string]bool{}, scan); err != nil {
+		t.Fatalf("first resolve failed: %v", err)
+	}
+	if got := len(scan.matches["codex"]); got != 1 {
+		t.Fatalf("want 1 cached match after first resolve, got %d", got)
+	}
+
+	// A session file appearing mid-tick must NOT be picked up: the scan walked
+	// the config tree once and serves later calls from the cache.
+	if err := os.WriteFile(filepath.Join(nested, "rollout-2.jsonl"), []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := reg.ResolveSessionScan("codex", "/cwd-b", map[string]bool{}, scan); err != nil {
+		t.Fatalf("second resolve failed: %v", err)
+	}
+	if got := len(scan.matches["codex"]); got != 1 {
+		t.Fatalf("scan re-walked mid-tick: want 1 cached match, got %d", got)
+	}
+}
+
 func TestRegistry_KnownProviders(t *testing.T) {
 	reg := testRegistry(t, "codex")
 	infos := reg.KnownProviders()

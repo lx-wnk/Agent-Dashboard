@@ -287,6 +287,14 @@ func (m *Merger) GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent
 		groups[k] = append(groups[k], i)
 	}
 
+	// One session-listing cache for the whole tick so non-Claude providers walk
+	// each config tree once, not once per process. Shared read-mostly across the
+	// parallel groups; SessionScan guards its own state.
+	var scan *provider.SessionScan
+	if m.registry != nil {
+		scan = m.registry.NewSessionScan()
+	}
+
 	g, _ := errgroup.WithContext(ctx)
 	for _, idxs := range groups {
 		idxs := idxs
@@ -300,7 +308,7 @@ func (m *Merger) GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent
 			claimed := make(map[string]bool)
 			for _, i := range idxs {
 				proc := processes[i]
-				session, extra, err := m.resolveSession(proc, claimed)
+				session, extra, err := m.resolveSession(proc, claimed, scan)
 				if err != nil {
 					continue // no matching session; zero value left at agents[i]
 				}
@@ -366,7 +374,7 @@ type resolveExtra struct {
 
 // resolveSession dispatches session resolution by provider. Claude (and empty)
 // use the pid-session-aware path; other providers resolve via the registry.
-func (m *Merger) resolveSession(proc scanner.ProcessInfo, claimed map[string]bool) (*parser.SessionData, resolveExtra, error) {
+func (m *Merger) resolveSession(proc scanner.ProcessInfo, claimed map[string]bool, scan *provider.SessionScan) (*parser.SessionData, resolveExtra, error) {
 	if proc.Provider == "" || proc.Provider == sdk.ProviderClaude {
 		s, err := parser.ResolveSessionForProcess(parser.SessionRequest{
 			CWD:             proc.CWD,
@@ -380,7 +388,7 @@ func (m *Merger) resolveSession(proc scanner.ProcessInfo, claimed map[string]boo
 	if m.registry == nil {
 		return nil, resolveExtra{}, fmt.Errorf("no registry to resolve provider %s", proc.Provider)
 	}
-	s, inFileProvider, inFileCost, err := m.registry.ResolveSession(proc.Provider, proc.CWD, claimed)
+	s, inFileProvider, inFileCost, err := m.registry.ResolveSessionScan(proc.Provider, proc.CWD, claimed, scan)
 	return s, resolveExtra{inFileProvider: inFileProvider, inFileCost: inFileCost}, err
 }
 

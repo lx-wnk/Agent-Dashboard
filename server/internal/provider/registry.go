@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
@@ -202,38 +203,79 @@ func (r *Registry) ConfigDirs() []parser.ProviderConfigDir {
 	return out
 }
 
+// SessionScan memoizes config dirs and per-provider session-file listings for a
+// single scan tick. ResolveSession walks the config tree (ConfigDirs +
+// findSessions) independently of cwd, so without caching every process of an
+// enabled provider re-walks the same tree each tick. One SessionScan is shared
+// across all ResolveSession calls of a tick; it is safe for concurrent use.
+type SessionScan struct {
+	mu       sync.Mutex
+	dirs     []parser.ProviderConfigDir
+	haveDirs bool
+	matches  map[string][]string // provider id → mtime-desc session files
+}
+
+// NewSessionScan returns an empty cache for one scan tick.
+func (r *Registry) NewSessionScan() *SessionScan {
+	return &SessionScan{matches: map[string][]string{}}
+}
+
+// matchesFor returns the mtime-desc session files for a provider, walking the
+// config tree only on the first request per provider in this scan.
+func (s *SessionScan) matchesFor(r *Registry, p sdk.Provider, glob string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if m, ok := s.matches[string(p)]; ok {
+		return m
+	}
+	if !s.haveDirs {
+		s.dirs = r.ConfigDirs()
+		s.haveDirs = true
+	}
+	var matches []string
+	for _, pcd := range s.dirs {
+		if pcd.Provider != p {
+			continue
+		}
+		matches = append(matches, findSessions(pcd.Path, glob)...)
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		return fileMtime(matches[i]).After(fileMtime(matches[j]))
+	})
+	s.matches[string(p)] = matches
+	return matches
+}
+
 // ResolveSession finds and parses the newest session file for a non-Claude
-// provider under cwd. claimed excludes already-bound session ids.
+// provider under cwd. claimed excludes already-bound session ids. It walks the
+// config tree on every call; use ResolveSessionScan with a shared SessionScan
+// to avoid redundant walks within one scan tick.
 func (r *Registry) ResolveSession(p sdk.Provider, cwd string, claimed map[string]bool) (*parser.SessionData, string, float64, error) {
+	return r.ResolveSessionScan(p, cwd, claimed, r.NewSessionScan())
+}
+
+// ResolveSessionScan is ResolveSession backed by a caller-owned per-tick cache.
+func (r *Registry) ResolveSessionScan(p sdk.Provider, cwd string, claimed map[string]bool, scan *SessionScan) (*parser.SessionData, string, float64, error) {
 	d, ok := r.descriptors[string(p)]
 	if !ok || d.IsCustom() {
 		return nil, "", 0, fmt.Errorf("no jsonl descriptor for %s", p)
 	}
-	for _, pcd := range r.ConfigDirs() {
-		if pcd.Provider != p {
+	for _, path := range scan.matchesFor(r, p, d.SessionGlob) {
+		id := sessionID(d, path)
+		if claimed != nil && claimed[id] {
 			continue
 		}
-		matches := findSessions(pcd.Path, d.SessionGlob)
-		sort.Slice(matches, func(i, j int) bool {
-			return fileMtime(matches[i]).After(fileMtime(matches[j]))
-		})
-		for _, path := range matches {
-			id := sessionID(d, path)
-			if claimed != nil && claimed[id] {
-				continue
-			}
-			res, err := parseJSONL(d, path)
-			if err != nil {
-				continue
-			}
-			res.Session.SessionID = id
-			res.Session.ProjectPath = cwd
-			res.Session.Path = path
-			if claimed != nil {
-				claimed[id] = true
-			}
-			return res.Session, res.Provider, res.InFileCost, nil
+		res, err := parseJSONL(d, path)
+		if err != nil {
+			continue
 		}
+		res.Session.SessionID = id
+		res.Session.ProjectPath = cwd
+		res.Session.Path = path
+		if claimed != nil {
+			claimed[id] = true
+		}
+		return res.Session, res.Provider, res.InFileCost, nil
 	}
 	return nil, "", 0, fmt.Errorf("no %s session for %s", p, cwd)
 }
