@@ -39,6 +39,10 @@ type spawnResult struct {
 
 const defaultModel = "claude-opus-4-8"
 
+// spawnTimeout bounds a single API call so a stalled stream or request cannot
+// hang the refine turn — SpawnStream applies no timeout of its own.
+const spawnTimeout = 5 * time.Minute
+
 func main() {
 	if err := run(os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "anthropic-spawner:", err)
@@ -91,18 +95,23 @@ func messageParams(args spawnArgs, maxTokens int64) anthropic.MessageNewParams {
 
 func runOnce(args spawnArgs, stdout io.Writer) error {
 	client := newClient()
-	msg, err := client.Messages.New(context.Background(), messageParams(args, 16000))
+	ctx, cancel := context.WithTimeout(context.Background(), spawnTimeout)
+	defer cancel()
+	msg, err := client.Messages.New(ctx, messageParams(args, 16000))
 	if err != nil {
 		return fmt.Errorf("messages.new: %w", err)
-	}
-	if msg.StopReason == anthropic.StopReasonRefusal {
-		return fmt.Errorf("request refused by safety classifier")
 	}
 	var sb strings.Builder
 	for _, block := range msg.Content {
 		if block.Type == "text" {
 			sb.WriteString(block.Text)
 		}
+	}
+	if msg.StopReason == anthropic.StopReasonRefusal {
+		return fmt.Errorf("request refused by safety classifier: %s", strings.TrimSpace(sb.String()))
+	}
+	if msg.StopReason == anthropic.StopReasonMaxTokens {
+		return fmt.Errorf("response truncated at max_tokens; increase MaxTokens")
 	}
 	sessionFile, err := writeSyntheticSession(args.StageRunID, sb.String())
 	if err != nil {
@@ -153,7 +162,9 @@ func writeSyntheticSession(stageRunID, content string) (string, error) {
 
 func runStream(args spawnArgs, stdout io.Writer) error {
 	client := newClient()
-	stream := client.Messages.NewStreaming(context.Background(), messageParams(args, 64000))
+	ctx, cancel := context.WithTimeout(context.Background(), spawnTimeout)
+	defer cancel()
+	stream := client.Messages.NewStreaming(ctx, messageParams(args, 64000))
 	acc := anthropic.Message{}
 	for stream.Next() {
 		event := stream.Current()
@@ -173,7 +184,16 @@ func runStream(args spawnArgs, stdout io.Writer) error {
 		return fmt.Errorf("messages stream: %w", err)
 	}
 	if acc.StopReason == anthropic.StopReasonRefusal {
-		return fmt.Errorf("request refused by safety classifier")
+		var sb strings.Builder
+		for _, block := range acc.Content {
+			if block.Type == "text" {
+				sb.WriteString(block.Text)
+			}
+		}
+		return fmt.Errorf("request refused by safety classifier: %s", strings.TrimSpace(sb.String()))
+	}
+	if acc.StopReason == anthropic.StopReasonMaxTokens {
+		return fmt.Errorf("response truncated at max_tokens; increase MaxTokens")
 	}
 	return nil
 }
