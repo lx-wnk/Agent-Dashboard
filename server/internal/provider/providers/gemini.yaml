@@ -18,6 +18,3 @@ parse:
   model: [model]
 cost:
   rule: byModel
-  localIf:
-    providerEquals: ollama
-    orModelInOllamaTags: true
