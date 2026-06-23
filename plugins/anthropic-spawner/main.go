@@ -151,5 +151,27 @@ func writeSyntheticSession(stageRunID, content string) (string, error) {
 	return path, nil
 }
 
-// runStream is implemented in Task 5.
-func runStream(args spawnArgs, stdout io.Writer) error { return fmt.Errorf("runStream not implemented") }
+func runStream(args spawnArgs, stdout io.Writer) error {
+	client := newClient()
+	stream := client.Messages.NewStreaming(context.Background(), messageParams(args, 64000))
+	acc := anthropic.Message{}
+	for stream.Next() {
+		event := stream.Current()
+		_ = acc.Accumulate(event)
+		switch ev := event.AsAny().(type) {
+		case anthropic.ContentBlockDeltaEvent:
+			if d, ok := ev.Delta.AsAny().(anthropic.TextDelta); ok && d.Text != "" {
+				if _, err := fmt.Fprintln(stdout, d.Text); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return fmt.Errorf("messages stream: %w", err)
+	}
+	if string(acc.StopReason) == "refusal" {
+		return fmt.Errorf("request refused by safety classifier")
+	}
+	return nil
+}
