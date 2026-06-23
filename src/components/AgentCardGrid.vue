@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Agent } from '../types'
 import type { AgentGrouping } from '../utils/agentGroup'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AgentCard from './AgentCard.vue'
 import GroupHeader from './shell/GroupHeader.vue'
 
@@ -16,14 +16,57 @@ defineEmits<{ select: [agent: Agent], dismiss: [pid: number] }>()
 const useGroups = computed(() =>
   !!props.groups && props.groups.some(g => g.label !== null),
 )
+
+const STORAGE_KEY = 'agent-dashboard-collapsed-groups'
+
+function readStoredKeys(): string[] {
+  if (typeof localStorage === 'undefined')
+    return []
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
+  }
+  catch {
+    return []
+  }
+}
+
+const collapsedKeys = ref<Set<string>>(new Set(readStoredKeys()))
+
+function isCollapsed(key: string): boolean {
+  return collapsedKeys.value.has(key)
+}
+
+function toggleGroup(key: string): void {
+  const next = new Set(collapsedKeys.value)
+  if (next.has(key))
+    next.delete(key)
+  else
+    next.add(key)
+  collapsedKeys.value = next
+}
+
+watch(collapsedKeys, (value) => {
+  if (typeof localStorage === 'undefined')
+    return
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(value)))
+})
 </script>
 
 <template>
   <template v-if="useGroups && groups">
     <div class="flex flex-col gap-4">
       <div v-for="group in groups" :key="group.key">
-        <GroupHeader :label="group.label!" :agents="group.agents" />
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-2">
+        <GroupHeader
+          :label="group.label!"
+          :agents="group.agents"
+          :collapsed="isCollapsed(group.key)"
+          @toggle="toggleGroup(group.key)"
+        />
+        <div
+          v-show="!isCollapsed(group.key)"
+          class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-2"
+          data-testid="group-card-grid"
+        >
           <AgentCard
             v-for="agent in group.agents"
             :key="agent.pid"
