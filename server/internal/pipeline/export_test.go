@@ -70,3 +70,6 @@ func NewAgentStageHandlerForTest(stage string, spawnFn func(SpawnAgentOptions) (
 func (o *PipelineOrchestrator) SetResolveSpawner(fn SpawnerResolverFunc) {
 	o.opts.ResolveSpawner = fn
 }
+
+// PlanReviewBuilderForTest exposes planReviewBuilder for unit tests.
+var PlanReviewBuilderForTest = planReviewBuilder

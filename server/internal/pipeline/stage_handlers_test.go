@@ -2,6 +2,7 @@ package pipeline_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -135,4 +136,76 @@ func TestBuildStageUserPrompt(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPlanReviewHandler_RegisteredAndRequiresAgent verifies the plan_review entry
+// in NewStageHandlers is wired as an agent stage.
+func TestPlanReviewHandler_RegisteredAndRequiresAgent(t *testing.T) {
+	h := pipeline.GetHandlerForStage("plan_review")
+	require.NotNil(t, h, "plan_review must be registered in NewStageHandlers")
+	require.True(t, h.RequiresAgent(), "plan_review must be an agent-driven stage")
+}
+
+// TestPlanReviewBuilder_PromptContainsConceptAndSelfReview verifies that the
+// prompt builder injects the task's concept metadata AND a self-review instruction.
+func TestPlanReviewBuilder_PromptContainsConceptAndSelfReview(t *testing.T) {
+	const conceptSpec = "Build the feature with these steps: A, B, C"
+	task := &ent.Task{
+		Title:    "My Plan Task",
+		PlanMode: true,
+		Metadata: map[string]any{"spec": conceptSpec},
+	}
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              task,
+		StageRun:          &ent.StageRun{Stage: "plan_review"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+	}
+	bundle := pipeline.PlanReviewBuilderForTest(ctx)
+	combined := bundle.SystemPrompt + "\n" + bundle.UserPrompt
+	require.Contains(t, combined, conceptSpec, "prompt must embed the concept/spec content")
+	require.Truef(t,
+		strings.Contains(combined, "self-review") || strings.Contains(combined, "critique") || strings.Contains(combined, "self_review"),
+		"prompt must contain a self-review or critique instruction, got:\n%s", combined)
+}
+
+// TestPlanReviewBuilder_IncludesFeedbackWhenPresent verifies that reject feedback
+// stored under the metadata key is injected into the prompt.
+func TestPlanReviewBuilder_IncludesFeedbackWhenPresent(t *testing.T) {
+	const feedbackText = "The plan is missing error-handling steps"
+	task := &ent.Task{
+		Title:    "Feedback Task",
+		PlanMode: true,
+		Metadata: map[string]any{"planReviewFeedback": feedbackText},
+	}
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              task,
+		StageRun:          &ent.StageRun{Stage: "plan_review"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+	}
+	bundle := pipeline.PlanReviewBuilderForTest(ctx)
+	combined := bundle.SystemPrompt + "\n" + bundle.UserPrompt
+	require.Contains(t, combined, feedbackText, "prompt must embed planReviewFeedback when present")
+}
+
+// TestPlanReviewBuilder_NoFeedbackIsDefensive verifies that an absent
+// planReviewFeedback key still produces a valid non-empty prompt.
+func TestPlanReviewBuilder_NoFeedbackIsDefensive(t *testing.T) {
+	task := &ent.Task{
+		Title:    "No Feedback Task",
+		PlanMode: true,
+		Metadata: map[string]any{"spec": "some spec"},
+	}
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              task,
+		StageRun:          &ent.StageRun{Stage: "plan_review"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+	}
+	bundle := pipeline.PlanReviewBuilderForTest(ctx)
+	require.NotEmpty(t, bundle.UserPrompt, "prompt must be non-empty even without feedback")
 }
