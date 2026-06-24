@@ -14,6 +14,11 @@ Preparing the first public release.
 
 ### Added
 
+- Collapsible agent groups — when a grouping (project/status/model) is active on the
+  dashboard roster, click a group header to collapse or expand it. On first load only
+  the highest-priority non-empty group is expanded (Active, else Waiting, else Idle,
+  else Finished); the rest start collapsed. Collapsed state is remembered per grouping
+  mode in localStorage and survives live re-renders.
 - Opt-in monitoring of Codex CLI, Gemini CLI, Junie CLI, and pi.dev agents via a declarative provider registry (off by default; enable with DASHBOARD_PROVIDERS_ENABLED or custom descriptors in DASHBOARD_PROVIDER_DIR). pi.dev's per-session JSONL (`~/.pi/agent/sessions/`) carries token usage, model, provider, and cost per turn.
 - Ollama-backed local models are now reported at $0 cost instead of unknown.
 - Agents now show an animated **Working** badge while actively generating — derived from conversation turn-state plus live tmux/pty output — distinct from the idle/waiting staleness states.

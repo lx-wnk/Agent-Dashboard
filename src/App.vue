@@ -429,7 +429,7 @@ onMounted(fetchQuota)
           </template>
           <template v-else>
             <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
-            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" @dismiss="dismissAgent" />
+            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" :group-by="dashboardGroup" @select="selectAgent" @dismiss="dismissAgent" />
           </template>
           <ChannelScriptCallout />
         </template>
