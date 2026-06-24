@@ -191,6 +191,30 @@ func TestPlanReviewBuilder_IncludesFeedbackWhenPresent(t *testing.T) {
 	require.Contains(t, combined, feedbackText, "prompt must embed planReviewFeedback when present")
 }
 
+// TestPlanReviewBuilder_FeedbackSurfacesInPrompt is a parity regression test that
+// pins the metadata key name used by planReviewBuilder to read reviewer feedback.
+// If "planReviewFeedback" is ever renamed on the read side the sentinel will
+// silently disappear from the prompt and this test will fail.
+func TestPlanReviewBuilder_FeedbackSurfacesInPrompt(t *testing.T) {
+	const sentinel = "SENTINEL_REVIEW_FEEDBACK_XYZ"
+	task := &ent.Task{
+		Title:    "Sentinel Task",
+		PlanMode: true,
+		Metadata: map[string]any{"planReviewFeedback": sentinel},
+	}
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              task,
+		StageRun:          &ent.StageRun{Stage: "plan_review"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+	}
+	bundle := pipeline.PlanReviewBuilderForTest(ctx)
+	combined := bundle.SystemPrompt + "\n" + bundle.UserPrompt
+	require.Contains(t, combined, sentinel,
+		"planReviewFeedback metadata value must reach the prompt — key mismatch would break the reject→rerun feedback loop")
+}
+
 // TestPlanReviewBuilder_NoFeedbackIsDefensive verifies that an absent
 // planReviewFeedback key still produces a valid non-empty prompt.
 func TestPlanReviewBuilder_NoFeedbackIsDefensive(t *testing.T) {

@@ -14,4 +14,5 @@ const (
 	DefaultTokenBudget         = 15000000 // 15M tokens per-task guardrail
 	DefaultAutonomy            = "spec_gated"
 	DefaultPlanMode            = false
+	DefaultPlanIterationCap    = 3
 )

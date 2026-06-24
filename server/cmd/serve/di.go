@@ -24,6 +24,7 @@ import (
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
+	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	providersapi "github.com/lx-wnk/agent-dashboard/server/internal/api/providers"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
@@ -291,6 +292,23 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		})
 	}
 
+	var planHandler *planapi.Handler
+	if entClient != nil {
+		planHandler = planapi.NewHandler(planapi.HandlerDeps{
+			Turns:     repo.NewRefinementTurnRepo(entClient),
+			Tasks:     repo.NewTaskRepo(entClient),
+			StageRuns: repo.NewStageRunRepo(entClient),
+			Advance: func(ctx context.Context, taskID string) error {
+				_, err := orch.ProgressTask(ctx, taskID, nil)
+				return err
+			},
+			Requeue: func(ctx context.Context, taskID, prompt string) error {
+				_, err := orch.RequeueForUser(ctx, taskID, prompt)
+				return err
+			},
+		})
+	}
+
 	// Late-bind the runner → task-handler status broadcast. Must happen after both
 	// are constructed; safe to call multiple times (last write wins in the runner).
 	if refineRunner != nil && taskHandler != nil {
@@ -402,6 +420,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		SearchHandler:         searchHandler,
 		HistoryHandler:        historyHandler,
 		RefineHandler:         refineHandler,
+		PlanHandler:           planHandler,
 		AnalyticsHandler:      analyticsHandler,
 		CostHandler:           costHandler,
 		EvalHandler:           evalHandler,

@@ -16,6 +16,8 @@ const ACTION_META: Record<string, ActionMeta> = {
   hold: { label: 'Hold', variant: 'secondary', endpoint: id => `/api/tasks/${id}/hold` },
   approve_all_pending: { label: 'Approve All Pending', variant: 'info', endpoint: id => `/api/tasks/${id}/approve-all-pending` },
   approve_spec: { label: 'Approve Spec', variant: 'primary', endpoint: id => `/api/refine/${id}/confirm` },
+  approve_plan: { label: 'Approve Plan', variant: 'primary', endpoint: id => `/api/plan/${id}/approve` },
+  reject_plan: { label: 'Reject Plan', variant: 'secondary', endpoint: id => `/api/plan/${id}/reject` },
 }
 
 /**
