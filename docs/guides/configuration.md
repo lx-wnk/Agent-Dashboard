@@ -54,6 +54,62 @@ These are normally injected into spawned stage agents by the orchestrator — yo
 | `DASHBOARD_HOOKS_DEBOUNCE_MS` | `100` | Debounce before SSE rescan after a hook event |
 | `DASHBOARD_HOOK_EVENTS_PER_SESSION` | `50` | Max recent lifecycle-hook events kept in memory per session for the agent-modal **Hook events** view. Must be positive |
 
+## LLM adapters
+
+Spawners can use different `adapter_type` values to route stage-agent calls to different LLM backends:
+
+| `adapter_type` | Description | Required env / config |
+|---|---|---|
+| `claude` (or empty) | Native Claude Code CLI subprocess (default) | None — uses the installed `claude` binary |
+| `openai` | OpenAI-compatible HTTP endpoint | `base_url`, `api_key_env`, `default_model` in `AdapterConfig`; the named env var must hold the key |
+| `ollama` | Ollama local server | `host`, `default_model` in `AdapterConfig`; defaults to `http://localhost:11434` |
+| `anthropic` | Anthropic Messages API via `anthropic-spawner` binary (see below) | `ANTHROPIC_API_KEY` in server env; binary on `PATH` or `DASHBOARD_ANTHROPIC_SPAWNER_CMD` |
+| `custom` | Any binary following the custom-exec contract | `spawner.command` must point to the binary |
+
+### `anthropic` adapter
+
+The `anthropic` adapter runs pipeline stage agents and refinement chat against the Anthropic Messages API. It works through an out-of-process binary (`anthropic-spawner`) so that the `anthropic-sdk-go` dependency never enters the server module.
+
+**Prerequisites:**
+
+1. `ANTHROPIC_API_KEY` set in the server environment (inherited by the spawner binary).
+2. The `anthropic-spawner` binary on `PATH`, or its absolute path in `DASHBOARD_ANTHROPIC_SPAWNER_CMD`.
+
+**Default model:** `claude-opus-4-8` (can be overridden per-spawner via the model resolution chain described in the [Pipeline stage configuration](#pipeline-stage-configuration) section).
+
+**Building the binary:**
+
+```bash
+cd plugins/anthropic-spawner
+GOWORK=off go build -o anthropic-spawner .
+# Move to somewhere on PATH, e.g.:
+mv anthropic-spawner "$(go env GOPATH)/bin/"
+```
+
+### OpenAI-compatible gateways (OpenRouter, Together AI, …)
+
+Any multi-model gateway that speaks the OpenAI **chat completions** protocol works with the
+existing `openai` adapter — **no new adapter is needed**. This is how you reach "basically any
+model" through one provider: point `base_url` at the gateway, name the env var holding its key,
+and set a default model in the gateway's string format. The adapter POSTs to
+`<base_url>/chat/completions` with an `Authorization: Bearer <key>` header, so `base_url` must
+include the version prefix (usually `/v1`).
+
+| Gateway | `base_url` | `api_key_env` | `default_model` (example) |
+|---|---|---|---|
+| OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | `anthropic/claude-opus-4`, `meta-llama/llama-3.3-70b-instruct` |
+| Together AI | `https://api.together.xyz/v1` | `TOGETHER_API_KEY` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| Inflection | (Inflection inference host) | `INFLECTION_API_KEY` | `inflection_3_productivity` |
+
+Set these three keys in the spawner's `AdapterConfig` with `adapter_type: openai`, and make sure
+the named env var is present in the server's environment. The per-spawner model override and the
+per-stage model resolution chain still apply, so a single gateway spawner can serve different
+models per stage. Streaming (refinement chat) works too — the `openai` adapter parses the standard
+OpenAI SSE stream.
+
+> A native `anthropic` adapter exists separately because the Anthropic Messages API is **not**
+> OpenAI-compatible. Aggregators almost always are, so they need no dedicated adapter.
+
 ## Pipeline stage configuration
 
 Per-stage engine (spawner) and model are stored in the `pipeline_config` table and

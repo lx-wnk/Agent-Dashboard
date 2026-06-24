@@ -6,6 +6,7 @@
 <!-- - (2026-01-15) Refactored auth module — moved session logic to SessionService -->
 <!-- - (2026-01-16) User confirmed: no mocking in integration tests -->
 
+- (2026-06-23) anthropic-spawner shipped — out-of-process Anthropic Messages API binary added as adapter_type "anthropic"; CI matrices updated; docs (README, CHANGELOG, CONTRIBUTING, PRIVACY, configuration.md) and ADR-0008 recorded
 - (2026-05-22) G1 (VA-2) shipped — PR #65 opened (`feat/va2-workflow-visualizations` → `upcoming`). All 14 tasks landed: 4 D3 charts (Sankey/DAG/spawn-tree/co-occurrence) + analytics builders + 4 endpoints + view-toggle. Deviations: full-file scanner in `analytics/scan.go` instead of extending `parser.ParseSessionFile` (which tail-reads 32KB); `SpawnTreeNode.CostCents` stubbed to 0 (cost integration parked). 200/200 vitest pass, all Go tests green, 3 typecheck errors pre-existing on `upcoming`.
 - (2026-05-22) G3 (CI-8) cancelled — `upcoming` already has `server/internal/api/system/quota.go` reading `~/.claude/usage-data/*.json` + `App.vue` quota chip with severity tiers. Roadmap audit grep missed it (searched for `quota_period|quotaUsage` — actual code uses `tokensUsed|periodEnd`). Spec retained as alt-impl reference.
 - (2026-05-22) G2 (IP-1) cancelled — `upcoming` already has `useAgentIdentity.ts` + COLORS/EMOJIS palette + AgentRow/Card/Modal integration. Original roadmap audit missed it because components are inline (not `Identity*`-prefixed). Only `IdentityEditor.vue` (explicit edit UI from spec §C.3) is missing — left as optional follow-up.

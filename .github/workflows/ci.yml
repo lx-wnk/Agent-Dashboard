@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
+        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech, anthropic-spawner]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
@@ -105,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech]
+        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech, anthropic-spawner]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
@@ -134,6 +134,7 @@ jobs:
           - plugins/office365-oauth
           - plugins/voice-whisper
           - plugins/voice-webspeech
+          - plugins/anthropic-spawner
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
@@ -164,7 +165,7 @@ jobs:
         run: go build -o /dev/null ./cmd/serve/...
       - name: Build plugin binaries
         run: |
-          for plugin in plugins/github-oauth plugins/office365-oauth plugins/voice-whisper plugins/voice-webspeech; do
+          for plugin in plugins/github-oauth plugins/office365-oauth plugins/voice-whisper plugins/voice-webspeech plugins/anthropic-spawner; do
             echo "=== building $plugin ===" && (cd "$plugin" && GOWORK=off go build -o /dev/null .)
           done
 

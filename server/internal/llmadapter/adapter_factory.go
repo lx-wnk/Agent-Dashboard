@@ -32,6 +32,15 @@ func NewLLMSpawnerFromSpawner(s *ent.Spawner) (LLMSpawner, error) {
 			APIKeyEnv:    s.AdapterConfig["api_key_env"],
 			DefaultModel: s.AdapterConfig["default_model"],
 		}, nil
+	case "anthropic":
+		// Native Anthropic Messages API via the out-of-process anthropic-spawner
+		// binary (keeps anthropic-sdk-go out of the server module). Reuses the
+		// custom-exec contract; the binary handles model/auth/streaming.
+		path, err := resolveAnthropicSpawnerPath()
+		if err != nil {
+			return nil, err
+		}
+		return &CustomCommandSpawner{Command: path}, nil
 	case "custom":
 		// Custom adapter reuses the row's top-level `command` column. The
 		// CustomCommandSpawner exec contract (stdin=LLMSpawnArgs JSON,

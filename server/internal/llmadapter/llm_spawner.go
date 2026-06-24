@@ -22,6 +22,10 @@ type LLMSpawnArgs struct {
 	AllowedTools []string
 	// Env is reserved for future use. Current adapters do not forward these vars.
 	Env []string
+	// Stream signals the custom-exec adapter's mode to the spawned binary:
+	// false → emit a single LLMSpawnResult JSON (Spawn); true → emit one
+	// output chunk per line (SpawnStream). Set by CustomCommandSpawner only.
+	Stream bool
 }
 
 // LLMSpawnResult is returned by a successful Spawn call.

@@ -42,7 +42,7 @@ When a controllable (channel/MCP-connected) agent exits, its card stays on the d
 
 Agents spawned from the dashboard run as interactive **live** sessions rather than one-shot runs, so you can converse with them as they work. Live injection uses tmux when it's available (the agent runs in a detached session) and falls back to a built-in pty broker otherwise. The spawned agent's chat modal opens automatically once it appears on the roster.
 
-**Extend** — authenticated MCP control plane with scoped tokens; in-dashboard `~/.claude` config explorer and git-worktree panel; frontend plugin slots and pluggable LLM adapters; Web Push, webhook, and email notifications.
+**Extend** — authenticated MCP control plane with scoped tokens; in-dashboard `~/.claude` config explorer and git-worktree panel; frontend plugin slots and pluggable LLM adapters (OpenAI-compatible, Ollama, `anthropic`); Web Push, webhook, and email notifications.
 
 **Supported agents / providers** — Claude Code is monitored by default. Codex CLI, Gemini CLI, and Junie CLI can be monitored too, but are opt-in. Enable or disable them from **Settings → Providers** in the dashboard UI — the change is persisted and takes effect within a few seconds without a restart. You can also set `DASHBOARD_PROVIDERS_ENABLED` to a comma-separated list of ids (`codex`, `gemini`, `junie`) as a fallback when no database row exists, or drop your own descriptor YAML files in a directory pointed to by `DASHBOARD_PROVIDER_DIR`. Agents using a local Ollama-served model show a cost of **$0** ("local") instead of "unknown".
 

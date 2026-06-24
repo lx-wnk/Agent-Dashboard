@@ -14,6 +14,8 @@ Preparing the first public release.
 
 ### Added
 
+- `anthropic` spawner adapter — run pipeline stage agents and refinement chat against the Anthropic Messages API via an out-of-process binary, keeping the SDK out of the server module. Requires `ANTHROPIC_API_KEY` in the server env and the `anthropic-spawner` binary on `PATH` (or `DASHBOARD_ANTHROPIC_SPAWNER_CMD`). Default model: `claude-opus-4-8`.
+- Documented using the existing `openai` adapter with OpenAI-compatible multi-model gateways (OpenRouter, Together AI, Inflection, …) — set `base_url` + `api_key_env` + `default_model`, no new code needed.
 - Collapsible agent groups — when a grouping (project/status/model) is active on the
   dashboard roster, click a group header to collapse or expand it. On first load only
   the highest-priority non-empty group is expanded (Active, else Waiting, else Idle,

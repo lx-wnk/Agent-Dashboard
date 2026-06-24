@@ -83,11 +83,13 @@ None of the following integrations are active by default. Data only leaves your 
 - **Retention:** Push subscriptions persist until you unsubscribe in the browser or delete the database row. There is no automatic expiry — delete entries manually if no longer needed.
 - **Transfer basis:** Mozilla (IE/EU entity), Google LLC (US, DPF), Apple Inc. (US, DPF).
 
-### LLM adapters (OpenAI / Ollama / custom)
+### LLM adapters (OpenAI / Ollama / Anthropic / custom)
 
 **OpenAI** — If you configure an OpenAI-backed spawner, stage agent prompts (including task descriptions and stage outputs) are sent to `api.openai.com` (US). **Transfer basis:** OpenAI Inc. is a US entity covered by the EU–US Data Privacy Framework (DPF).
 
 **Ollama** — Defaults to `http://localhost:11434`; in the default configuration no data leaves the machine. If you configure a remote `base_url`, full stage-agent prompts (task descriptions, stage outputs, possibly source-code excerpts) are sent to that host. You are responsible for that host's data-residency and applicable transfer basis.
+
+**Anthropic** — If you configure an `anthropic` spawner (`adapter_type: "anthropic"`), stage-agent prompts (task descriptions, stage outputs, and possibly source-code excerpts) are sent to `api.anthropic.com` (US) via the `anthropic-spawner` binary, which reads the `ANTHROPIC_API_KEY` environment variable from the server process. **Transfer basis:** Anthropic PBC is a US entity covered by the EU–US Data Privacy Framework (DPF) where applicable.
 
 ### Office365 OAuth plugin (if configured)
 

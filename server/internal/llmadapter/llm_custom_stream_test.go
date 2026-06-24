@@ -8,31 +8,48 @@ import (
 	"testing"
 )
 
-func TestCustomCommandSpawner_SpawnStream_LineByLine(t *testing.T) {
+func writeFakeSpawnerBinary(t *testing.T) string {
+	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("custom command streaming relies on POSIX scripts")
+		t.Skip("fake spawner script is POSIX sh")
 	}
 	dir := t.TempDir()
-	script := filepath.Join(dir, "fake.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf 'chunk1\\nchunk2\\nchunk3\\n'\n"), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
+	path := filepath.Join(dir, "fake-spawner.sh")
+	script := `#!/bin/sh
+in=$(cat)
+case "$in" in
+  *'"Stream":true'*) printf 'chunk-a\nchunk-b\n' ;;
+  *) printf '{"PID":0,"SessionID":"fake","SessionFile":"/tmp/fake.jsonl"}' ;;
+esac
+`
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
 	}
-	c := &CustomCommandSpawner{Command: script}
-	ch, err := c.SpawnStream(context.Background(), LLMSpawnArgs{UserPrompt: "x"})
+	return path
+}
+
+func TestCustomSpawner_SetsStreamFalseOnSpawn(t *testing.T) {
+	c := &CustomCommandSpawner{Command: writeFakeSpawnerBinary(t)}
+	res, err := c.Spawn(context.Background(), LLMSpawnArgs{StageRunID: "s1"})
 	if err != nil {
-		t.Fatalf("SpawnStream: %v", err)
+		t.Fatal(err)
+	}
+	if res.SessionID != "fake" {
+		t.Fatalf("Spawn must send Stream=false → result branch, got %+v", res)
+	}
+}
+
+func TestCustomSpawner_SetsStreamTrueOnSpawnStream(t *testing.T) {
+	c := &CustomCommandSpawner{Command: writeFakeSpawnerBinary(t)}
+	ch, err := c.SpawnStream(context.Background(), LLMSpawnArgs{StageRunID: "s1"})
+	if err != nil {
+		t.Fatal(err)
 	}
 	var got []string
-	for s := range ch {
-		got = append(got, s)
+	for line := range ch {
+		got = append(got, line)
 	}
-	want := []string{"chunk1", "chunk2", "chunk3"}
-	if len(got) != len(want) {
-		t.Fatalf("chunks: got %v want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("chunk[%d]: got %q want %q", i, got[i], want[i])
-		}
+	if len(got) != 2 || got[0] != "chunk-a" || got[1] != "chunk-b" {
+		t.Fatalf("SpawnStream must send Stream=true → token-lines, got %v", got)
 	}
 }

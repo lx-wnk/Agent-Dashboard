@@ -28,5 +28,14 @@
     "context": "Non-Claude agents were handled by five hardcoded provider switches; Codex/Gemini were stubbed with unknown cost. We wanted opt-in extensibility for more CLIs, including classifying local Ollama-backed models as $0.",
     "decision": "A new `provider` package loads embedded + user YAML descriptors that declare exe names, config dir, session glob, and token/model/cost field-paths. Session dispatch moved OUT of the `parser` package into the registry to break an import cycle. Enable-state is injected via an `EnabledFunc` seam (a DB-backed Settings UI is a follow-up, Plan 2). IDE-embedded providers are deferred to `source: custom:<id>` Go adapters.",
     "consequences": "Adding a JSONL-based provider is now a YAML change, no Go code. Non-Claude cost is now real or $0 (local) instead of always unknown. The `parser` package is no longer provider-aware."
+  },
+  {
+    "id": "ADR-0009",
+    "title": "Anthropic Messages API spawner as out-of-process SDK binary",
+    "status": "accepted",
+    "date": "2026-06-23",
+    "context": "The server had no way to run stage agents against the Anthropic API (only the claude CLI subprocess + OpenAI-compat/Ollama HTTP). The anthropic-sdk-go dependency would bloat server/go.mod and transitively affect all consumers.",
+    "decision": "A standalone binary under plugins/anthropic-spawner (own go.mod, built GOWORK=off) invoked via the existing custom-exec adapter contract, surfaced as adapter_type 'anthropic'. A new LLMSpawnArgs.Stream flag disambiguates Spawn (false) vs SpawnStream (true). The binary reads ANTHROPIC_API_KEY from its inherited environment; the server locates it via DASHBOARD_ANTHROPIC_SPAWNER_CMD or PATH lookup of 'anthropic-spawner'.",
+    "consequences": "anthropic-sdk-go stays out of server/go.mod. Adding the adapter required ~1 struct field (LLMSpawnArgs.Stream), 1 factory case (adapter_factory.go), a path resolver (anthropic_path.go), and the plugin binary. New out-of-process spawners follow the same pattern."
   }
 ]
