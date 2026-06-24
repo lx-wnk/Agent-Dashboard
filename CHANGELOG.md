@@ -154,3 +154,5 @@ Preparing the first public release.
   sanitization (PR #188).
 
 [Unreleased]: https://github.com/lx-wnk/Agent-Dashboard/commits/main
+
+<!-- ofd-smoke -->
