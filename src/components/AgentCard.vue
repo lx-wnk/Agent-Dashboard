@@ -3,9 +3,10 @@ import type { Agent } from '../types'
 import { computed, ref } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
-import { formatBurnRate, formatCost, formatDuration, formatRelativeActivity, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
+import { formatCost, formatDuration, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
 import { friendlyProjectName } from '../utils/friendlyProjectName'
 import MachineBadge from './MachineBadge.vue'
+import MetricsPopover from './MetricsPopover.vue'
 import PromptInput from './PromptInput.vue'
 import ProviderBadge from './ProviderBadge.vue'
 import AppBadge from './ui/AppBadge.vue'
@@ -31,10 +32,9 @@ const { getIdentity } = useAgentIdentity()
 const { nowMs } = useNow()
 
 const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
+const projectLabel = computed(() => friendlyProjectName(props.agent.projectName))
 
-const hasCacheCosts = computed(
-  () => props.agent.cacheCreationCostEstimate > 0 || props.agent.cacheReadCostEstimate > 0,
-)
+const activityFallback = computed(() => props.agent.currentAction || props.agent.lastTools?.at(-1) || '')
 
 const healthChipClass = computed(() => {
   const s = props.agent.healthScore
@@ -46,14 +46,11 @@ const healthChipClass = computed(() => {
 })
 
 const secSince = computed(() => secondsSince(props.agent.lastActivity, nowMs.value))
-const relActivity = computed(() => formatRelativeActivity(secSince.value))
 const stalled = computed(() => isStalled(props.agent.status, secSince.value))
-const burnRate = computed(() => formatBurnRate(props.agent.costEstimate, props.agent.uptime))
 
 const activeSubagents = computed(() => props.agent.subagents.filter(s => s.status === 'active'))
 
 const expandedSubagentIds = ref<Set<string>>(new Set())
-
 function toggleSubagentExpand(id: string) {
   const next = new Set(expandedSubagentIds.value)
   if (next.has(id))
@@ -62,18 +59,21 @@ function toggleSubagentExpand(id: string) {
     next.add(id)
   expandedSubagentIds.value = next
 }
+
+const showMetrics = ref(false)
 </script>
 
 <template>
-  <AppCard surface="card" radius="lg" interactive class="relative overflow-hidden cursor-pointer">
+  <AppCard surface="card" radius="lg" interactive class="relative flex flex-col h-[260px] overflow-hidden cursor-pointer" @click="emit('select', agent)">
     <button
       type="button"
       class="absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
-      :aria-label="`Open details for ${agent.projectName}`"
+      :aria-label="`Open details for ${projectLabel}`"
       data-testid="agent-card-open"
-      @click="$emit('select', agent)"
+      @click.stop="emit('select', agent)"
     />
-    <div class="bg-raised px-3 py-2 flex justify-between items-center gap-2">
+
+    <div class="bg-raised px-3 pt-2 pb-1.5 flex flex-col gap-1">
       <div class="flex items-center gap-2 min-w-0">
         <AppBadge :variant="agent.working ? 'working' : agent.status" />
         <span
@@ -81,52 +81,74 @@ function toggleSubagentExpand(id: string) {
           class="text-[10px] font-medium px-1 py-0.5 rounded bg-warning-soft text-warning-text whitespace-nowrap"
           title="Agent is active but has produced no output for 3+ minutes"
         >stalled</span>
-        <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
-        <span class="font-semibold text-[13px] text-fg whitespace-nowrap overflow-hidden text-ellipsis">{{ friendlyProjectName(agent.projectName) }}</span>
+        <span class="shrink-0" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
+        <span
+          class="font-semibold text-[13px] text-fg flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis"
+          data-testid="agent-card-project"
+          :title="projectLabel"
+        >{{ projectLabel }}</span>
         <ProviderBadge :provider="agent.provider" />
-        <span class="text-[11px] font-mono text-fg-mute whitespace-nowrap">
-          {{ shortModel(agent.model ?? null) }} ·
+        <span class="text-[10px] font-mono text-fg-mute whitespace-nowrap shrink-0">{{ shortModel(agent.model ?? null) }}</span>
+        <MachineBadge v-if="agent.machine" :machine="agent.machine" />
+      </div>
+
+      <div class="flex items-center gap-2 text-[11px] font-mono text-fg-mute min-w-0">
+        <span class="whitespace-nowrap" title="Total estimated cost">
           <span v-if="agent.costUnknown" title="Cost unknown — no pricing data for this provider/model">?</span>
           <template v-else>{{ formatCost(agent.costEstimate) }}</template>
         </span>
-        <span
-          class="text-[10px] font-mono px-1.5 py-0.5 rounded"
-          :class="healthChipClass"
-          :title="`Health score: ${agent.healthScore}/100`"
-        >{{ agent.healthScore }}</span>
-        <MachineBadge v-if="agent.machine" :machine="agent.machine" />
-      </div>
-      <div class="flex-shrink-0 flex flex-col items-end gap-0.5">
-        <button
-          v-if="isFinished"
-          type="button"
-          class="relative z-10 self-end text-fg-mute hover:text-danger-text text-sm leading-none px-1 focus-visible:outline-2 focus-visible:outline-ring rounded"
-          aria-label="Dismiss finished agent"
-          data-testid="agent-card-dismiss"
-          @click.stop="dismiss"
-        >
-          ✕
-        </button>
-        <span class="text-[11px] font-mono text-fg-mute whitespace-nowrap">{{ formatTokens(totalTokens) }} tok · {{ formatUptime(agent.uptime) }}</span>
-        <span class="text-[10px] font-mono text-fg-mute whitespace-nowrap">{{ relActivity }}</span>
-        <span v-if="burnRate !== '—'" class="text-[10px] font-mono text-fg-mute whitespace-nowrap">{{ burnRate }}</span>
-        <div v-if="hasCacheCosts" class="flex gap-2 text-[10px] font-mono text-fg-mute">
-          <span title="Cache write cost">W {{ formatCost(agent.cacheCreationCostEstimate) }}</span>
-          <span title="Cache read cost">R {{ formatCost(agent.cacheReadCostEstimate) }}</span>
-        </div>
+        <span aria-hidden="true">·</span>
+        <span class="whitespace-nowrap" title="Tokens used">{{ formatTokens(totalTokens) }} tok</span>
+        <span aria-hidden="true">·</span>
+        <span class="whitespace-nowrap" title="Uptime">{{ formatUptime(agent.uptime) }}</span>
+
+        <span class="ml-auto flex items-center gap-1.5 shrink-0">
+          <span
+            class="text-[10px] font-mono px-1.5 py-0.5 rounded"
+            :class="healthChipClass"
+            :title="`Health score: ${agent.healthScore}/100`"
+          >{{ agent.healthScore }}</span>
+          <span
+            class="relative z-10"
+            @mouseenter="showMetrics = true"
+            @mouseleave="showMetrics = false"
+            @focusin="showMetrics = true"
+            @focusout="showMetrics = false"
+          >
+            <button
+              type="button"
+              class="text-fg-mute hover:text-fg-soft text-[11px] leading-none focus-visible:outline-2 focus-visible:outline-ring rounded"
+              aria-label="Show more metrics"
+              data-testid="agent-card-info"
+              @click.stop="showMetrics = !showMetrics"
+            >ⓘ</button>
+            <MetricsPopover v-if="showMetrics" :agent="agent" @click.stop />
+          </span>
+          <button
+            v-if="isFinished"
+            type="button"
+            class="text-fg-mute hover:text-danger-text text-sm leading-none px-1 focus-visible:outline-2 focus-visible:outline-ring rounded"
+            aria-label="Dismiss finished agent"
+            data-testid="agent-card-dismiss"
+            @click.stop="dismiss"
+          >✕</button>
+        </span>
       </div>
     </div>
-    <div class="relative px-3 py-3 h-[150px] overflow-hidden text-[13px] leading-relaxed text-fg-mute font-mono">
+
+    <div class="relative flex-1 min-h-0 px-3 py-3 overflow-hidden text-[13px] leading-relaxed text-fg-mute font-mono" data-testid="agent-card-body">
       <template v-if="agent.lastOutput">
         {{ agent.lastOutput }}
       </template>
+      <span v-else-if="activityFallback" class="text-fg-soft">▶ running: {{ activityFallback }}</span>
       <span v-else class="text-fg-mute italic">No output yet</span>
       <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
     </div>
+
     <div
       v-if="activeSubagents.length"
       data-testid="active-subagents-block"
-      class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1"
+      class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1 shrink-0"
       @click.stop
     >
       <span class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
@@ -152,14 +174,15 @@ function toggleSubagentExpand(id: string) {
             class="flex-shrink-0 text-[10px] text-fg-mute hover:text-fg-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
             :aria-label="expandedSubagentIds.has(sa.id) ? 'Collapse subagent output' : 'Expand subagent output'"
             data-testid="subagent-expand-toggle"
-            @click="toggleSubagentExpand(sa.id)"
+            @click.stop="toggleSubagentExpand(sa.id)"
           >
             {{ expandedSubagentIds.has(sa.id) ? '▲' : '▼' }}
           </button>
         </div>
       </div>
     </div>
-    <div v-if="agent.lastBtw" class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1 text-[12px] font-mono" @click.stop>
+
+    <div v-if="agent.lastBtw" class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1 text-[12px] font-mono shrink-0" @click.stop>
       <div class="text-fg-mute border-l-2 border-warning-line pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
         {{ agent.lastBtw.message }}
       </div>
@@ -170,6 +193,7 @@ function toggleSubagentExpand(id: string) {
         ...
       </div>
     </div>
-    <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" class="relative z-10" @click.stop @keydown.enter.stop @keydown.space.stop />
+
+    <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" class="relative z-10 shrink-0" @click.stop @keydown.enter.stop @keydown.space.stop />
   </AppCard>
 </template>

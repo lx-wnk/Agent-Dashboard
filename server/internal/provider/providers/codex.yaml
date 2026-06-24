@@ -1,0 +1,25 @@
+id: codex
+displayName: Codex CLI
+enabled: false
+exeNames: [codex]
+configDir:
+  env: CODEX_HOME
+  default: ~/.codex
+sessionGlob: sessions/**/rollout-*.jsonl
+source: jsonl
+parse:
+  eventFilter:
+    path: payload.type
+    equals: token_count
+  tokens:
+    mode: cumulative
+    input: [payload.info.total_token_usage.input_tokens]
+    output: [payload.info.total_token_usage.output_tokens]
+    cacheRead: [payload.info.total_token_usage.cached_input_tokens]
+  model: [payload.model]
+  provider: [payload.model_provider]
+cost:
+  rule: byModel
+  localIf:
+    providerEquals: ollama
+    orModelInOllamaTags: true

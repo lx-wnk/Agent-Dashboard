@@ -4,6 +4,7 @@ package merger
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
+	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 )
 
@@ -227,8 +229,9 @@ type GetAgentsOpts struct {
 // Merger should exist per process; the composition root builds it and shares it
 // with every read path (broadcast loop, HTTP accessors, search).
 type Merger struct {
-	scan    func(ctx context.Context) ([]scanner.ProcessInfo, error)
-	tracker *staleTracker
+	scan     func(ctx context.Context) ([]scanner.ProcessInfo, error)
+	tracker  *staleTracker
+	registry *provider.Registry
 }
 
 // Option configures a Merger.
@@ -237,6 +240,12 @@ type Option func(*Merger)
 // WithScanFn overrides the process scanner (tests inject a synthetic list).
 func WithScanFn(fn func(ctx context.Context) ([]scanner.ProcessInfo, error)) Option {
 	return func(m *Merger) { m.scan = fn }
+}
+
+// WithRegistry injects the provider registry used to resolve and cost
+// non-Claude sessions. When nil, only Claude sessions are handled (legacy path).
+func WithRegistry(r *provider.Registry) Option {
+	return func(m *Merger) { m.registry = r }
 }
 
 // New builds a Merger. Defaults: the real scanner.ScanProcesses and a fresh
@@ -278,6 +287,14 @@ func (m *Merger) GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent
 		groups[k] = append(groups[k], i)
 	}
 
+	// One session-listing cache for the whole tick so non-Claude providers walk
+	// each config tree once, not once per process. Shared read-mostly across the
+	// parallel groups; SessionScan guards its own state.
+	var scan *provider.SessionScan
+	if m.registry != nil {
+		scan = m.registry.NewSessionScan()
+	}
+
 	g, _ := errgroup.WithContext(ctx)
 	for _, idxs := range groups {
 		idxs := idxs
@@ -291,11 +308,11 @@ func (m *Merger) GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent
 			claimed := make(map[string]bool)
 			for _, i := range idxs {
 				proc := processes[i]
-				session, err := resolveSession(proc, claimed)
+				session, extra, err := m.resolveSession(proc, claimed, scan)
 				if err != nil {
 					continue // no matching session; zero value left at agents[i]
 				}
-				agents[i] = buildAgent(proc, session, opts.BaselinePerSessionCostUSD)
+				agents[i] = m.buildAgent(proc, session, extra, opts.BaselinePerSessionCostUSD)
 				sessionPaths[i] = session.Path
 			}
 			return nil
@@ -349,37 +366,55 @@ func (m *Merger) GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent
 // the channel bridge already deletes that file when the agent exits.
 func (m *Merger) DismissAgent(pid int) { m.tracker.dismiss(pid) }
 
-// resolveSession dispatches session resolution by provider. Claude (and the
-// empty default) use the pid-session-aware path; other providers resolve their
-// own config-dir JSONL via the parser's non-Claude path.
-func resolveSession(proc scanner.ProcessInfo, claimed map[string]bool) (*parser.SessionData, error) {
+// resolveExtra carries provider-supplied cost signals from non-Claude resolution.
+type resolveExtra struct {
+	inFileProvider string
+	inFileCost     float64
+}
+
+// resolveSession dispatches session resolution by provider. Claude (and empty)
+// use the pid-session-aware path; other providers resolve via the registry.
+func (m *Merger) resolveSession(proc scanner.ProcessInfo, claimed map[string]bool, scan *provider.SessionScan) (*parser.SessionData, resolveExtra, error) {
 	if proc.Provider == "" || proc.Provider == sdk.ProviderClaude {
-		return parser.ResolveSessionForProcess(parser.SessionRequest{
+		s, err := parser.ResolveSessionForProcess(parser.SessionRequest{
 			CWD:             proc.CWD,
 			PID:             proc.PID,
 			Command:         proc.Command,
 			UptimeSeconds:   proc.Uptime,
 			ClaudeConfigDir: proc.ClaudeConfigDir,
 		}, claimed)
+		return s, resolveExtra{}, err
 	}
-	return parser.ResolveNonClaudeSession(proc.Provider, proc.CWD, claimed)
+	if m.registry == nil {
+		return nil, resolveExtra{}, fmt.Errorf("no registry to resolve provider %s", proc.Provider)
+	}
+	s, inFileProvider, inFileCost, err := m.registry.ResolveSessionScan(proc.Provider, proc.CWD, claimed, scan)
+	return s, resolveExtra{inFileProvider: inFileProvider, inFileCost: inFileCost}, err
 }
 
 // buildAgent assembles an sdk.Agent from a scanned process and its resolved
 // session data.
-func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData, baselineCost float64) sdk.Agent {
-	provider := proc.Provider
-	if provider == "" {
-		provider = sdk.ProviderClaude
+func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionData, extra resolveExtra, baselineCost float64) sdk.Agent {
+	prov := proc.Provider
+	if prov == "" {
+		prov = sdk.ProviderClaude
 	}
-	c := EstimateCostForProvider(provider, session.TokenUsage, session.Model)
+	var c CostBreakdown
+	var costLocal bool
+	if prov == sdk.ProviderClaude || m.registry == nil {
+		c = EstimateCostForProvider(prov, session.TokenUsage, session.Model)
+	} else {
+		rc := m.registry.Cost(prov, session.TokenUsage, session.Model, extra.inFileCost, extra.inFileProvider)
+		c = CostBreakdown{Total: rc.Total, CacheCreate: rc.CacheCreate, CacheRead: rc.CacheRead, Unknown: rc.Unknown}
+		costLocal = rc.Local
+	}
 	chanAvail, chanInject := channelDiscovery(proc.PID)
 	health := ComputeHealthScore(session, c.Total, c.Unknown, baselineCost)
 
 	return sdk.Agent{
 		PID:                       proc.PID,
 		SessionID:                 session.SessionID,
-		Provider:                  provider,
+		Provider:                  prov,
 		ProjectPath:               proc.CWD,
 		ProjectName:               filepath.Base(proc.CWD),
 		CWD:                       proc.CWD,
@@ -400,6 +435,7 @@ func buildAgent(proc scanner.ProcessInfo, session *parser.SessionData, baselineC
 		CacheCreationCostEstimate: c.CacheCreate,
 		CacheReadCostEstimate:     c.CacheRead,
 		CostUnknown:               c.Unknown,
+		CostLocal:                 costLocal,
 		HealthScore:               health,
 		Model:                     strPtr(session.Model),
 		ConversationTurns:         session.ConversationTurns,

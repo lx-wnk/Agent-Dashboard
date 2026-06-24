@@ -182,3 +182,19 @@ func TestLoad_EvalWindowHoursZero_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "DASHBOARD_EVAL_WINDOW_HOURS must be > 0")
 }
+
+func TestLoad_ProvidersEnabled_CommaSplit(t *testing.T) {
+	t.Setenv("DASHBOARD_PROVIDERS_ENABLED", "codex,junie")
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"codex", "junie"}, cfg.ProvidersEnabled)
+}
+
+func TestLoad_ProvidersEnabled_SingleValue(t *testing.T) {
+	t.Setenv("DASHBOARD_PROVIDERS_ENABLED", "codex")
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"codex"}, cfg.ProvidersEnabled)
+}

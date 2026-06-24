@@ -86,6 +86,7 @@ const (
 	ProviderClaude Provider = "claude"
 	ProviderCodex  Provider = "codex"
 	ProviderGemini Provider = "gemini"
+	ProviderJunie  Provider = "junie"
 )
 
 // ErrorState describes a recognisable error condition seen in the session log.
@@ -300,6 +301,9 @@ type Agent struct {
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`
+	// CostLocal is true when the session runs a locally-served (Ollama) model,
+	// whose cost is $0 rather than unknown. CostEstimate is 0 in this case.
+	CostLocal bool `json:"costLocal,omitempty"`
 	// RecentHookEvents carries per-event hook granularity for sessions where the
 	// opt-in hook receiver holds events. Omitted entirely when no hook is
 	// installed, so clients without hooks receive byte-identical payloads.

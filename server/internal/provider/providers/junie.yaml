@@ -1,0 +1,27 @@
+id: junie
+displayName: Junie CLI
+enabled: false
+exeNames: [junie]
+configDir:
+  default: ~/.junie
+sessionGlob: sessions/*/events.jsonl
+sessionIdFrom: parentDir
+source: jsonl
+parse:
+  eventFilter:
+    path: kind
+    equals: LlmResponseMetadataEvent
+  tokens:
+    mode: perMessage
+    input: ['event.agentEvent.modelUsage[].inputTokens', 'event.agentEvent.modelUsage[].input']
+    output: ['event.agentEvent.modelUsage[].outputTokens', 'event.agentEvent.modelUsage[].output']
+    cacheRead: ['event.agentEvent.modelUsage[].cacheInputTokens', 'event.agentEvent.modelUsage[].cacheReadInputTokens']
+    cacheCreate: ['event.agentEvent.modelUsage[].cacheCreateTokens', 'event.agentEvent.modelUsage[].cacheCreationInputTokens']
+  model: ['event.agentEvent.modelUsage[].model']
+  provider: ['event.agentEvent.modelUsage[].provider']
+cost:
+  rule: inFile
+  inFilePath: ['event.agentEvent.modelUsage[].cost']
+  localIf:
+    providerEquals: ollama
+    orModelInOllamaTags: true

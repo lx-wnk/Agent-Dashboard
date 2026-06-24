@@ -2,9 +2,10 @@
 import type { Agent, OutputMessage } from '../types'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
+import { useNow } from '../composables/useNow'
 import { usePermissionResolve } from '../composables/usePermissionResolve'
 import { useRovingTabList } from '../composables/useRovingTabList'
-import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '../utils/format'
+import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, secondsSince, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
 import HookEventList from './HookEventList.vue'
@@ -34,8 +35,11 @@ const chatStreamRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
 
 const { getIdentity } = useAgentIdentity()
 const { resolveAgent } = usePermissionResolve()
+const { nowMs } = useNow()
 
 const totalTokens = computed(() => props.agent ? totalTokenCount(props.agent.tokenUsage) : 0)
+const lastActivityLabel = computed(() => props.agent ? formatRelativeActivity(secondsSince(props.agent.lastActivity, nowMs.value)) : '')
+const burnLabel = computed(() => props.agent ? formatBurnRate(props.agent.costEstimate, props.agent.uptime) : '—')
 
 async function handleApprove() {
   if (!props.agent)
@@ -155,6 +159,26 @@ watch(() => props.agent?.sessionId, (sessionId) => {
                 {{ formatTokens(agent.tokenUsage.cacheReadTokens) }}
                 <span class="text-fg-mute ml-1">({{ formatCost(agent.cacheReadCostEstimate) }})</span>
               </dd>
+              <dt class="text-fg-mute">
+                Uptime
+              </dt>
+              <dd class="text-fg text-right font-mono">
+                {{ formatUptime(agent.uptime) }}
+              </dd>
+              <dt class="text-fg-mute">
+                Last activity
+              </dt>
+              <dd class="text-fg text-right font-mono">
+                {{ lastActivityLabel }}
+              </dd>
+              <template v-if="burnLabel !== '—'">
+                <dt class="text-fg-mute">
+                  Burn rate
+                </dt>
+                <dd class="text-fg text-right font-mono">
+                  {{ burnLabel }}
+                </dd>
+              </template>
               <dt class="text-fg-soft font-medium border-t border-line pt-1">
                 Total cost
               </dt>
