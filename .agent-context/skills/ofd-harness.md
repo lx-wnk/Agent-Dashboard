@@ -1,0 +1,15 @@
+---
+name: ofd-harness
+trigger: when executing an approved feature plan autonomously via an orchestrator subagent in an isolated worktree; keywords "OFD", "orchestrated delivery", "run the plan with subagents", "spawn orchestrator"
+---
+
+# OFD Harness
+
+Reusable process: human-gated spec/plan, then a spawned general-purpose **orchestrator** subagent coordinates implementer/reviewer/verifier **sub-subagents** in ONE git worktree until a draft PR.
+
+- Runbook (main thread): `docs/superpowers/harness/ofd-runbook.md`
+- Orchestrator prompt: `docs/superpowers/harness/ofd-orchestrator-prompt.md`
+- Role contracts: `docs/superpowers/harness/ofd-roles.md`
+- Design: `docs/superpowers/specs/2026-06-23-ofd-harness-design.md`
+
+Hard rule: isolation comes from the manually-created worktree (branched off `main`); never use the Agent `isolation:'worktree'` flag.
