@@ -14,6 +14,7 @@ import (
 	sdk "github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
+	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/testsupport/fakespawn"
 )
@@ -40,15 +41,31 @@ func fixedScanFn(procs []scanner.ProcessInfo) func(ctx context.Context) ([]scann
 	}
 }
 
+// codexRegistry builds a registry with codex enabled, resolving sessions under
+// the given CODEX_HOME root.
+func codexRegistry(t *testing.T) *provider.Registry {
+	t.Helper()
+	reg, err := provider.NewRegistry(provider.Options{
+		Ollama:  provider.NewOllamaClassifier("http://127.0.0.1:1"),
+		Pricing: merger.PricingAdapter(),
+	})
+	require.NoError(t, err)
+	reg.SetEnabled(provider.DefaultEnabled(reg.Descriptors(), []string{"codex"}))
+	return reg
+}
+
 // TestGetAgents_CodexProcess_NoFiles verifies a Codex process with no session
 // JSONL under its config dir produces zero agents and no error.
 func TestGetAgents_CodexProcess_NoFiles(t *testing.T) {
 	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome) // exists but has no projects/ session files
+	t.Setenv("CODEX_HOME", codexHome) // exists but has no sessions/ files
 
-	m := merger.New(merger.WithScanFn(fixedScanFn([]scanner.ProcessInfo{
-		{PID: 4242, CWD: "/some/project", Uptime: 30, Provider: sdk.ProviderCodex},
-	})))
+	m := merger.New(
+		merger.WithRegistry(codexRegistry(t)),
+		merger.WithScanFn(fixedScanFn([]scanner.ProcessInfo{
+			{PID: 4242, CWD: "/some/project", Uptime: 30, Provider: sdk.ProviderCodex},
+		})),
+	)
 
 	agents, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)
@@ -57,25 +74,27 @@ func TestGetAgents_CodexProcess_NoFiles(t *testing.T) {
 
 // TestGetAgents_CodexProcess_WithJSONL verifies a Codex process with a session
 // JSONL under its config dir surfaces an agent flagged provider=codex and
-// CostUnknown=true (no Codex pricing entry).
+// CostUnknown=true (no Codex pricing entry for an unknown model).
 func TestGetAgents_CodexProcess_WithJSONL(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
 
-	cwd := "/some/project"
-	projectDir := filepath.Join(codexHome, "projects", parser.EncodePath(cwd))
-	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+	nested := filepath.Join(codexHome, "sessions", "2026", "04", "19")
+	require.NoError(t, os.MkdirAll(nested, 0o755))
 
-	// Minimal Claude-compatible JSONL: one assistant turn with usage but no
-	// model — an unknown model forces CostUnknown for the non-Claude provider.
-	line := `{"type":"assistant","timestamp":"` + time.Now().UTC().Format(time.RFC3339) +
-		`","message":{"role":"assistant","usage":{"input_tokens":10,"output_tokens":5}}}` + "\n"
-	sessionFile := filepath.Join(projectDir, "11111111-2222-3333-4444-555555555555.jsonl")
+	// Codex rollout line: a token_count payload with usage but no known model —
+	// an unknown model forces CostUnknown for the non-Claude provider.
+	line := `{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"output_tokens":5}}}}` + "\n"
+	sessionFile := filepath.Join(nested, "rollout-abc.jsonl")
 	require.NoError(t, os.WriteFile(sessionFile, []byte(line), 0o644))
 
-	m := merger.New(merger.WithScanFn(fixedScanFn([]scanner.ProcessInfo{
-		{PID: 4243, CWD: cwd, Uptime: 30, Provider: sdk.ProviderCodex},
-	})))
+	cwd := "/some/project"
+	m := merger.New(
+		merger.WithRegistry(codexRegistry(t)),
+		merger.WithScanFn(fixedScanFn([]scanner.ProcessInfo{
+			{PID: 4243, CWD: cwd, Uptime: 30, Provider: sdk.ProviderCodex},
+		})),
+	)
 
 	agents, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
 	require.NoError(t, err)

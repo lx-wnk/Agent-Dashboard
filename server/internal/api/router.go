@@ -29,6 +29,7 @@ import (
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/projects"
+	providersapi "github.com/lx-wnk/agent-dashboard/server/internal/api/providers"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/schedules"
@@ -143,6 +144,7 @@ type RouterDeps struct {
 	EvalHandler           *apieval.Handler
 	VisualizationsHandler *visualizations.Handler
 	AdapterHandler        *adapters.Handler
+	ProvidersHandler      *providersapi.Handler
 	MCPHandler            http.Handler
 	ChannelReply          *agents.ChannelReplyHandler
 	ChannelStageOutput    *agents.ChannelStageOutputHandler
@@ -266,6 +268,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Post("/api/settings/api-keys", ErrorMiddleware(apiKeyHandler.Create))
 			r.Delete("/api/settings/api-keys/{id}", ErrorMiddleware(apiKeyHandler.Delete))
 			r.Post("/api/settings/api-keys/{id}/regenerate", ErrorMiddleware(apiKeyHandler.Regenerate))
+		}
+
+		if deps.ProvidersHandler != nil {
+			r.Get("/api/providers", ErrorMiddleware(deps.ProvidersHandler.List))
+			r.Patch("/api/providers/{id}", ErrorMiddleware(deps.ProvidersHandler.Patch))
 		}
 
 		// Projects + ProjectFolders — JWT-protected (no admin gate required).

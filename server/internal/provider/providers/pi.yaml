@@ -1,0 +1,27 @@
+id: pi
+displayName: pi.dev
+enabled: false
+exeNames: [pi]
+configDir:
+  env: PI_CODING_AGENT_SESSION_DIR
+  default: ~/.pi/agent/sessions
+sessionGlob: '**/*.jsonl'
+source: jsonl
+parse:
+  eventFilter:
+    path: message.role
+    equals: assistant
+  tokens:
+    mode: perMessage
+    input: [message.usage.input]
+    output: [message.usage.output]
+    cacheRead: [message.usage.cacheRead]
+    cacheCreate: [message.usage.cacheWrite]
+  model: [message.model]
+  provider: [message.provider]
+cost:
+  rule: inFile
+  inFilePath: [message.usage.cost.total]
+  localIf:
+    providerEquals: ollama
+    orModelInOllamaTags: true

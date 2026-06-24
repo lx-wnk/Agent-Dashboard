@@ -1,0 +1,84 @@
+package provider
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+)
+
+// OllamaClassifier decides whether a model is a locally-served (zero-cost)
+// Ollama model. It caches the installed-model set from GET <base>/api/tags for
+// a short TTL; an unreachable Ollama yields an empty set (by-name match fails,
+// but an explicit provider=="ollama" still classifies local).
+type OllamaClassifier struct {
+	base string
+	http *http.Client
+
+	mu      sync.Mutex
+	tags    map[string]bool
+	fetched time.Time
+	ttl     time.Duration
+}
+
+func NewOllamaClassifier(base string) *OllamaClassifier {
+	return &OllamaClassifier{
+		base: strings.TrimRight(base, "/"),
+		http: &http.Client{Timeout: 800 * time.Millisecond},
+		ttl:  10 * time.Second,
+	}
+}
+
+// IsLocal reports whether (provider, model) denotes a local zero-cost model.
+func (o *OllamaClassifier) IsLocal(provider, model string) bool {
+	if strings.EqualFold(provider, "ollama") {
+		return true
+	}
+	name := normalizeModel(model)
+	if name == "" {
+		return false
+	}
+	return o.tagSet()[name]
+}
+
+// normalizeModel strips known local-provider prefixes and lowercases.
+func normalizeModel(m string) string {
+	m = strings.ToLower(strings.TrimSpace(m))
+	for _, p := range []string{"ollama_chat/", "ollama/"} {
+		m = strings.TrimPrefix(m, p)
+	}
+	return m
+}
+
+func (o *OllamaClassifier) tagSet() map[string]bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.tags != nil && time.Since(o.fetched) < o.ttl {
+		return o.tags
+	}
+	o.tags = o.fetchTags()
+	o.fetched = time.Now()
+	return o.tags
+}
+
+func (o *OllamaClassifier) fetchTags() map[string]bool {
+	set := map[string]bool{}
+	resp, err := o.http.Get(o.base + "/api/tags")
+	if err != nil {
+		return set
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&body) != nil {
+		return set
+	}
+	for _, m := range body.Models {
+		set[strings.ToLower(m.Name)] = true
+	}
+	return set
+}

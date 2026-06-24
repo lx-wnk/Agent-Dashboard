@@ -84,7 +84,8 @@ export type Entrypoint = typeof EntrypointCLI | typeof EntrypointDesktop | typeo
 export const ProviderClaude = 'claude'
 export const ProviderCodex = 'codex'
 export const ProviderGemini = 'gemini'
-export type Provider = typeof ProviderClaude | typeof ProviderCodex | typeof ProviderGemini
+export const ProviderJunie = 'junie'
+export type Provider = typeof ProviderClaude | typeof ProviderCodex | typeof ProviderGemini | typeof ProviderJunie
 /**
  * ErrorState describes a recognisable error condition seen in the session log.
  */
@@ -252,10 +253,10 @@ export interface PendingToolUse {
  * tool_response.
  */
 export interface HookEvent {
-  type: string
-  tool: string
-  at: string
-  summary: string
+  type: string // hook type, e.g. "PreToolUse" | "PostToolUse" | "Stop"
+  tool: string // tool name, empty for non-tool hooks
+  at: string // RFC3339 timestamp the event was received
+  summary: string // truncated, secret-safe payload preview
 }
 /**
  * Agent is the unified view of a running Claude Code process.
@@ -293,6 +294,12 @@ export interface Agent {
   toolCounts: { [key: string]: number /* int */ }
   meta?: SessionMeta
   channelAvailable: boolean
+  /**
+   * Working is true when the agent is actively generating: it owes the next
+   * step (open turn — a trailing user message or unmatched tool_use, via
+   * parser.SessionData.TurnOpen) OR a live session emitted output within the
+   * last few seconds (pty lastOutputAt / tmux window_activity).
+   */
   working: boolean
   /**
    * LiveInjectable is true when the dashboard can deliver a prompt to this
@@ -316,6 +323,11 @@ export interface Agent {
    * cost cannot be estimated. CostEstimate will be 0 in this case.
    */
   costUnknown?: boolean
+  /**
+   * CostLocal is true when the session runs a locally-served (Ollama) model,
+   * whose cost is $0 rather than unknown. CostEstimate is 0 in this case.
+   */
+  costLocal?: boolean
   /**
    * RecentHookEvents carries per-event hook granularity for sessions where the
    * opt-in hook receiver holds events. Omitted entirely when no hook is

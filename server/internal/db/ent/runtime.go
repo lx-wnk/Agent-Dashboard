@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
@@ -127,6 +128,22 @@ func init() {
 	projectfolderDescCreatedAt := projectfolderFields[4].Descriptor()
 	// projectfolder.DefaultCreatedAt holds the default value on creation for the created_at field.
 	projectfolder.DefaultCreatedAt = projectfolderDescCreatedAt.Default.(func() time.Time)
+	providersettingFields := schema.ProviderSetting{}.Fields()
+	_ = providersettingFields
+	// providersettingDescEnabled is the schema descriptor for enabled field.
+	providersettingDescEnabled := providersettingFields[2].Descriptor()
+	// providersetting.DefaultEnabled holds the default value on creation for the enabled field.
+	providersetting.DefaultEnabled = providersettingDescEnabled.Default.(bool)
+	// providersettingDescCreatedAt is the schema descriptor for created_at field.
+	providersettingDescCreatedAt := providersettingFields[3].Descriptor()
+	// providersetting.DefaultCreatedAt holds the default value on creation for the created_at field.
+	providersetting.DefaultCreatedAt = providersettingDescCreatedAt.Default.(func() time.Time)
+	// providersettingDescUpdatedAt is the schema descriptor for updated_at field.
+	providersettingDescUpdatedAt := providersettingFields[4].Descriptor()
+	// providersetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	providersetting.DefaultUpdatedAt = providersettingDescUpdatedAt.Default.(func() time.Time)
+	// providersetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	providersetting.UpdateDefaultUpdatedAt = providersettingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	refinementturnFields := schema.RefinementTurn{}.Fields()
 	_ = refinementturnFields
 	// refinementturnDescCreatedAt is the schema descriptor for created_at field.

@@ -164,11 +164,12 @@ func getCWDsMac(ctx context.Context, pids []int) map[int]string {
 	return ParseLsofBatch(string(out))
 }
 
-// ScanProcesses returns all running Claude Code processes with their CWDs.
-func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
+// ScanProcessesWithDetector returns all running agent processes with their CWDs,
+// detecting providers through the injected detector.
+func ScanProcessesWithDetector(ctx context.Context, detector ProviderDetector) ([]ProcessInfo, error) {
 	// Use `args` (full command line) rather than `comm` so flags like
 	// `--resume <sessionId>` survive — the merger needs them to bind a process
-	// to its exact session. DetectProviderFromCommand strips back to argv[0].
+	// to its exact session. The detector strips back to argv[0].
 	out, err := exec.CommandContext(ctx, "ps", "-eo", "pid,etime,args").Output()
 	if err != nil {
 		return nil, fmt.Errorf("ps: %w", err)
@@ -187,7 +188,7 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 			continue
 		}
 		comm := strings.Join(fields[2:], " ")
-		if DetectProviderFromCommand(comm) == "" {
+		if detectProviderVia(detector, comm) == "" {
 			continue
 		}
 		pid, err := strconv.Atoi(fields[0])
@@ -224,33 +225,43 @@ func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
 			Uptime:          ParseElapsedTime(r.etime),
 			Command:         r.command,
 			ClaudeConfigDir: configDirs[r.pid],
-			Provider:        DetectProviderFromCommand(r.command),
+			Provider:        detectProviderVia(detector, r.command),
 		})
 	}
 	return result, nil
 }
 
-// DetectProviderFromCommand maps a process command name to a provider.
-// Matches both bare names (e.g. "claude") and absolute paths
-// (e.g. "/usr/local/bin/codex"). Returns "" when the command does not
-// belong to any supported AI coding CLI.
-func DetectProviderFromCommand(comm string) sdk.Provider {
-	comm = strings.TrimSpace(comm)
-	if comm == "" {
-		return ""
+// ScanProcesses scans with Claude-only detection (no registry). Used by callers
+// that cannot depend on the provider registry (e.g. the parser running-CWD set).
+func ScanProcesses(ctx context.Context) ([]ProcessInfo, error) {
+	return ScanProcessesWithDetector(ctx, nil)
+}
+
+// ProviderDetector maps a process command to a provider. The provider Registry
+// implements this; tests can fake it.
+type ProviderDetector interface {
+	DetectProvider(comm string) sdk.Provider
+}
+
+// detectProviderVia resolves a process command through an injected detector,
+// always honoring Claude even when no detector or a disabled detector is given.
+func detectProviderVia(d ProviderDetector, comm string) sdk.Provider {
+	if d != nil {
+		if p := d.DetectProvider(comm); p != "" {
+			return p
+		}
 	}
-	// Strip arguments — only look at argv[0].
+	if commBase(comm) == "claude" {
+		return sdk.ProviderClaude
+	}
+	return ""
+}
+
+// commBase extracts argv[0]'s base name from a command string.
+func commBase(comm string) string {
+	comm = strings.TrimSpace(comm)
 	if i := strings.IndexByte(comm, ' '); i >= 0 {
 		comm = comm[:i]
 	}
-	base := filepath.Base(comm)
-	switch base {
-	case "claude":
-		return sdk.ProviderClaude
-	case "codex":
-		return sdk.ProviderCodex
-	case "gemini":
-		return sdk.ProviderGemini
-	}
-	return ""
+	return filepath.Base(comm)
 }
