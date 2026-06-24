@@ -114,6 +114,7 @@ const COLUMNS: ColumnDef[] = [
   },
   { id: 'concept', label: STAGE_LABELS.concept, stages: ['concept'], group: 'active' },
   { id: 'backlog', label: STAGE_LABELS.backlog, stages: ['backlog'], group: 'active' },
+  { id: 'plan_review', label: STAGE_LABELS.plan_review, stages: ['plan_review'], group: 'active' },
   {
     id: 'implementation',
     label: STAGE_LABELS.implementation,

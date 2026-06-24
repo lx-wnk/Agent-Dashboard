@@ -52,6 +52,7 @@ const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'
 // Modal/panel components that drag in marked + dompurify (RefinementChat) and diff (EditGateModal) —
 // load on demand so those libs stay out of the first-load entry chunk.
 const RefinementChat = defineAsyncComponent(() => import('./components/RefinementChat.vue'))
+const PlanReviewPanel = defineAsyncComponent(() => import('./components/PlanReviewPanel.vue'))
 const EditGateModal = defineAsyncComponent(() => import('./components/EditGateModal.vue'))
 
 const { user, authEnabled, loaded, loadUser } = useUser()
@@ -180,6 +181,8 @@ const autoApprovingStrip = ref<InstanceType<typeof AutoApprovingStrip> | null>(n
 const showSpawnDialog = ref(false)
 const activeConceptTask = ref<PipelineTask | null>(null)
 const showRefinementChat = ref(false)
+const showPlanReview = ref(false)
+const activePlanTask = ref<PipelineTask | null>(null)
 const showBacklogForm = ref(false)
 const showSessions = ref(false)
 const showSettings = ref(false)
@@ -264,7 +267,7 @@ function handleKeydown(e: KeyboardEvent) {
 
   // Any open modal/dialog (incl. Spotlight) suppresses the single-key shortcuts.
   const overlayOpen = selectedAgent.value || showSettings.value || showSpawnDialog.value
-    || showBacklogForm.value || showSessions.value || showRefinementChat.value || activeConceptTask.value
+    || showBacklogForm.value || showSessions.value || showRefinementChat.value || activeConceptTask.value || showPlanReview.value || activePlanTask.value
     || document.querySelector('[role="dialog"], [aria-modal="true"]') !== null
   if (activeView.value !== 'dashboard' || overlayOpen || isTyping || e.ctrlKey || e.metaKey || e.altKey)
     return
@@ -317,6 +320,15 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
       }
     }
   })
+}
+
+function handleSelectTask(t: PipelineTask) {
+  if (t.currentStage === 'plan_review') {
+    activePlanTask.value = t
+    showPlanReview.value = true
+    return
+  }
+  selectTask(t)
 }
 
 interface QuotaInfo {
@@ -437,7 +449,7 @@ onMounted(fetchQuota)
         <PipelineBoard
           v-else-if="activeView === 'pipeline'"
           :agents="agents"
-          @select="selectTask"
+          @select="handleSelectTask"
           @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
           @navigate-agent="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"
         />
@@ -506,6 +518,13 @@ onMounted(fetchQuota)
       :task="activeConceptTask"
       @close="showRefinementChat = false; activeConceptTask = null"
       @confirmed="showRefinementChat = false; activeConceptTask = null"
+    />
+    <PlanReviewPanel
+      :open="showPlanReview"
+      :task="activePlanTask"
+      @close="showPlanReview = false; activePlanTask = null"
+      @approved="showPlanReview = false; activePlanTask = null"
+      @rejected="showPlanReview = false; activePlanTask = null"
     />
     <AppModal :open="showBacklogForm" width="560px" @close="showBacklogForm = false">
       <AppModalHeader title="New Task" @close="showBacklogForm = false" />
