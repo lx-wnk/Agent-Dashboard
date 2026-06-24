@@ -152,6 +152,7 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				"description":        map[string]any{"type": "string"},
 				"priority":           map[string]any{"type": "string", "enum": []string{"high", "medium", "low"}},
 				"silverBullet":       map[string]any{"type": "boolean"},
+	"planMode":           map[string]any{"type": "boolean", "description": "Enable plan-review gate before implementation"},
 				"metadata":           map[string]any{"type": "object"},
 				"sourceBranch":       map[string]any{"type": "string"},
 				"targetBranch":       map[string]any{"type": "string"},
@@ -212,6 +213,10 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				CurrentStage: "concept",
 				Priority:     "medium",
 				SilverBullet: mcp.OptionalBool(args, "silverBullet"),
+			}
+			if _, hasPM := args["planMode"]; hasPM {
+				v := mcp.OptionalBool(args, "planMode")
+				in.PlanMode = &v
 			}
 			if v := mcp.OptionalString(args, "description"); v != "" {
 				in.Description = &v
@@ -325,6 +330,7 @@ func registerUpdateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				"description":     map[string]any{"type": "string"},
 				"priority":        map[string]any{"type": "string", "enum": []string{"high", "medium", "low"}},
 				"silverBullet":    map[string]any{"type": "boolean"},
+	"planMode":        map[string]any{"type": "boolean", "description": "Enable plan-review gate before implementation"},
 				"maxIterations":   map[string]any{"type": "integer"},
 				"tokenBudget":     map[string]any{"type": "integer"},
 				"costBudgetCents": map[string]any{"type": "integer"},
@@ -357,6 +363,10 @@ func registerUpdateTask(registry mcp.ToolRegistry, d WriteDeps) {
 			if _, hasSB := args["silverBullet"]; hasSB {
 				v := mcp.OptionalBool(args, "silverBullet")
 				in.SilverBullet = &v
+			}
+			if _, hasPM := args["planMode"]; hasPM {
+				v := mcp.OptionalBool(args, "planMode")
+				in.PlanMode = &v
 			}
 			if f, ok := mcp.OptionalFloat64(args, "maxIterations"); ok {
 				v := int(f)

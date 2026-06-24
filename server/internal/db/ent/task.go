@@ -50,6 +50,8 @@ type Task struct {
 	StageTimeoutSeconds int `json:"stage_timeout_seconds,omitempty"`
 	// SilverBullet holds the value of the "silver_bullet" field.
 	SilverBullet bool `json:"silver_bullet,omitempty"`
+	// PlanMode holds the value of the "plan_mode" field.
+	PlanMode bool `json:"plan_mode,omitempty"`
 	// Autonomy holds the value of the "autonomy" field.
 	Autonomy string `json:"autonomy,omitempty"`
 	// Metadata holds the value of the "metadata" field.
@@ -128,7 +130,7 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case task.FieldMetadata:
 			values[i] = new([]byte)
-		case task.FieldSilverBullet:
+		case task.FieldSilverBullet, task.FieldPlanMode:
 			values[i] = new(sql.NullBool)
 		case task.FieldRank:
 			values[i] = new(sql.NullFloat64)
@@ -262,6 +264,12 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field silver_bullet", values[i])
 			} else if value.Valid {
 				_m.SilverBullet = value.Bool
+			}
+		case task.FieldPlanMode:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field plan_mode", values[i])
+			} else if value.Valid {
+				_m.PlanMode = value.Bool
 			}
 		case task.FieldAutonomy:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -429,6 +437,9 @@ func (_m *Task) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("silver_bullet=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SilverBullet))
+	builder.WriteString(", ")
+	builder.WriteString("plan_mode=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PlanMode))
 	builder.WriteString(", ")
 	builder.WriteString("autonomy=")
 	builder.WriteString(_m.Autonomy)

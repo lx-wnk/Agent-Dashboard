@@ -47,6 +47,7 @@ type CreateTaskInput struct {
 	CostBudgetCents     *int
 	StageTimeoutSeconds int
 	SilverBullet        bool
+	PlanMode            *bool
 	Priority            string
 	CurrentStage        string
 	Autonomy            *string
@@ -62,6 +63,7 @@ type UpdateTaskInput struct {
 	CurrentStage        *string
 	Priority            *string
 	SilverBullet        *bool
+	PlanMode            *bool
 	MaxIterations       *int
 	TokenBudget         *int
 	CostBudgetCents     *int
@@ -104,7 +106,8 @@ func (r *entTaskRepo) Create(ctx context.Context, in CreateTaskInput) (*ent.Task
 		SetPriority(in.Priority).
 		SetMaxIterations(in.MaxIterations).
 		SetStageTimeoutSeconds(in.StageTimeoutSeconds).
-		SetSilverBullet(in.SilverBullet)
+		SetSilverBullet(in.SilverBullet).
+		SetNillablePlanMode(in.PlanMode)
 	if in.Description != nil {
 		q = q.SetDescription(*in.Description)
 	}
@@ -179,6 +182,9 @@ func (r *entTaskRepo) Update(ctx context.Context, id string, in UpdateTaskInput)
 	}
 	if in.SilverBullet != nil {
 		q = q.SetSilverBullet(*in.SilverBullet)
+	}
+	if in.PlanMode != nil {
+		q = q.SetPlanMode(*in.PlanMode)
 	}
 	if in.MaxIterations != nil {
 		q = q.SetMaxIterations(*in.MaxIterations)
