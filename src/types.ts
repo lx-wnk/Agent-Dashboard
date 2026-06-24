@@ -85,6 +85,7 @@ export interface OutputMessage {
 export type PipelineStage
   = | 'concept'
     | 'backlog'
+    | 'plan_review'
     | 'implementation'
     | 'self_review'
     | 'finalization'
