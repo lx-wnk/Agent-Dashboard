@@ -36,3 +36,7 @@ Open the PR. If `[BLOCKED]`, read the failing output and decide: re-launch with 
 ```bash
 git worktree remove ../dashboard-wt-<feature>
 ```
+
+## Smoke validation
+- 2026-06-24 — chain verified end-to-end: nesting (orchestrator spawned implementer + verifier) + worktree boundary + verifier + draft PR (#218, throwaway, closed). Self-healed one false VERIFY_RED within the iteration cap.
+- Gotcha learned: the verifier's `pnpm lint` (antfu eslint) lints **untracked** files in the worktree too — a throwaway/non-deliverable file (e.g. a loose plan or scratch md) causes a false RED. Keep only deliverables in the worktree; the approved plan should live under tracked `docs/superpowers/` (lint-clean), not loose in the worktree root.
