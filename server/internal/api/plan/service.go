@@ -162,9 +162,10 @@ func RejectPlan(ctx context.Context, d RejectDeps, taskID, feedback string) erro
 func PlanStatus(ctx context.Context, d StatusDeps, taskID string) (PlanStatusResult, error) {
 	result := PlanStatusResult{GateState: "unknown"}
 
+	var sr *ent.StageRun
 	if d.StageRuns != nil {
-		sr, err := d.StageRuns.GetLatestByTaskAndStage(ctx, taskID, "plan_review")
-		if err == nil && sr != nil {
+		if fetched, err := d.StageRuns.GetLatestByTaskAndStage(ctx, taskID, "plan_review"); err == nil && fetched != nil {
+			sr = fetched
 			result.GateState = sr.Status
 		}
 	}
@@ -178,6 +179,11 @@ func PlanStatus(ctx context.Context, d StatusDeps, taskID string) (PlanStatusRes
 				}
 			}
 		}
+	}
+
+	// Fall back to the live stage_run output before approval freezes the plan.
+	if result.ApprovedPlan == nil && sr != nil && len(sr.Output) > 0 {
+		result.ApprovedPlan = sr.Output
 	}
 
 	return result, nil

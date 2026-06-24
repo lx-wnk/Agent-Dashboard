@@ -164,3 +164,68 @@ func TestPlanStatus_ReturnsCurrentState(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "awaiting_user", status.GateState)
 }
+
+func TestPlanStatus_ReturnsLivePlanBeforeApproval(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	ctx := context.Background()
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	turnsRepo := repo.NewRefinementTurnRepo(bundle.Client)
+
+	taskID, runID := seedPlanReviewTask(t, ctx, taskRepo, srRepo)
+
+	// Seed a live plan output into the stage_run — no approvedPlan metadata yet.
+	livePlan := map[string]any{"summary": "LIVE_PLAN_SENTINEL", "steps": []any{"step1"}}
+	_, err = srRepo.Update(ctx, runID, repo.UpdateStageRunInput{Output: livePlan})
+	require.NoError(t, err)
+
+	status, err := plan.PlanStatus(ctx, plan.StatusDeps{
+		Turns:     turnsRepo,
+		Tasks:     taskRepo,
+		StageRuns: srRepo,
+	}, taskID)
+	require.NoError(t, err)
+	require.Equal(t, "awaiting_user", status.GateState)
+	require.NotNil(t, status.ApprovedPlan, "live plan must be surfaced before approval")
+	require.Equal(t, "LIVE_PLAN_SENTINEL", status.ApprovedPlan["summary"],
+		"ApprovedPlan must contain the live stage_run output before approval")
+}
+
+func TestPlanStatus_FrozenPlanAfterApproval(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	ctx := context.Background()
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	turnsRepo := repo.NewRefinementTurnRepo(bundle.Client)
+
+	taskID, runID := seedPlanReviewTask(t, ctx, taskRepo, srRepo)
+
+	livePlan := map[string]any{"summary": "LIVE_PLAN_SENTINEL"}
+	_, err = srRepo.Update(ctx, runID, repo.UpdateStageRunInput{Output: livePlan})
+	require.NoError(t, err)
+
+	// Approve — freezes plan into metadata, marks stage_run done.
+	_, err = plan.ApprovePlan(ctx, plan.ApproveDeps{
+		Turns:     turnsRepo,
+		Tasks:     taskRepo,
+		StageRuns: srRepo,
+		Advance:   func(_ context.Context, _ string) error { return nil },
+	}, taskID)
+	require.NoError(t, err)
+
+	status, err := plan.PlanStatus(ctx, plan.StatusDeps{
+		Turns:     turnsRepo,
+		Tasks:     taskRepo,
+		StageRuns: srRepo,
+	}, taskID)
+	require.NoError(t, err)
+	require.NotNil(t, status.ApprovedPlan, "frozen plan must be returned after approval")
+	require.Equal(t, "LIVE_PLAN_SENTINEL", status.ApprovedPlan["summary"],
+		"frozen plan must match the plan that was approved")
+}
