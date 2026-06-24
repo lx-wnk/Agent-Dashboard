@@ -5,7 +5,7 @@ trigger: when executing an approved feature plan autonomously via an orchestrato
 
 # OFD Harness
 
-Reusable process: human-gated spec/plan, then a spawned general-purpose **orchestrator** subagent coordinates implementer/reviewer/verifier **sub-subagents** in ONE git worktree until a draft PR.
+Reusable process: human-gated spec/plan, then **the main thread orchestrates** (default, via subagent-driven-development) — dispatching implementer/reviewer/verifier **sub-subagents** synchronously in ONE git worktree until a PR. A spawned-orchestrator background mode exists but may stall (see runbook).
 
 - Runbook (main thread): `docs/superpowers/harness/ofd-runbook.md`
 - Orchestrator prompt: `docs/superpowers/harness/ofd-orchestrator-prompt.md`

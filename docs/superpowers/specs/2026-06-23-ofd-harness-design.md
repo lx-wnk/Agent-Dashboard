@@ -16,6 +16,8 @@
 
 ## 2. Agent Topology
 
+> **Update 2026-06-24 (default changed):** the spawned orchestrator (tier 2) proved unreliable on the first real run — a spawned orchestrator is not re-woken after dispatching a child and stalls mid-run. **The default is now main-thread orchestration:** the main thread plays the orchestrator role directly (via `superpowers:subagent-driven-development`), collapsing to two tiers (main thread → sub-subagents). The three-tier spawned model below remains available as an optional background mode (may stall; needs babysitting). See `harness/ofd-runbook.md`.
+
 Three tiers:
 
 ```

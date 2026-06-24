@@ -1,6 +1,8 @@
-# OFD Orchestrator Launch Prompt (template)
+# OFD Orchestrator Role
 
-> Fill the `{{...}}` placeholders, paste as the `Agent` prompt with `subagent_type: general-purpose`, NO `isolation` flag.
+> **Default: the MAIN THREAD follows this role directly** (no spawned orchestrator) via `superpowers:subagent-driven-development` — see `ofd-runbook.md`. The `{{...}}` placeholders are simply the run parameters the main thread already holds.
+>
+> **Optional background mode (advanced, may stall):** paste this as an `Agent` prompt with `subagent_type: general-purpose`, NO `isolation` flag, filling the `{{...}}` placeholders. A spawned orchestrator is not reliably re-woken after dispatching a child and tends to stall mid-run — only use with babysitting (see the runbook's stall warning).
 
 You are the OFD orchestrator for feature **{{featureName}}**. You coordinate sub-subagents to implement an approved plan to a draft PR. You write no code yourself — you dispatch and review.
 
@@ -16,8 +18,8 @@ You are the OFD orchestrator for feature **{{featureName}}**. You coordinate sub
 - Iteration cap before BLOCKED: `{{iterationCap}}`.
 - Role map: implementer=`{{implementerType}}`, reviewer=`agents:review`, verifier=`general-purpose`.
 
-## Dispatch mode (hard rule — learned 2026-06-24)
-Dispatch EVERY sub-subagent **synchronously (foreground)**: a normal Agent call returns its result directly to you, then you continue. NEVER use `run_in_background` for children, and NEVER arm `Monitor` / wait on custom events — a spawned orchestrator is not reliably re-woken that way and will stall mid-run. Call implementer → get return → call reviewer → get return → commit → next task.
+## Dispatch mode (hard rule)
+Dispatch EVERY sub-subagent **synchronously (foreground)** — automatic for the main thread; mandatory if spawned: a normal Agent call returns its result directly to you, then you continue. NEVER use `run_in_background` for children, and NEVER arm `Monitor` / wait on custom events — a spawned orchestrator is not reliably re-woken that way and will stall mid-run. Call implementer → get return → call reviewer → get return → commit → next task.
 
 ## Loop
 For each task in the plan, in order:
