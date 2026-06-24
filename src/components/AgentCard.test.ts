@@ -64,13 +64,13 @@ describe('agentCard', () => {
     expect(wrapper.find('button[data-testid="agent-card-open"]').exists()).toBe(true)
   })
 
-  it('aria-label on the open button contains projectName', () => {
+  it('aria-label on the open button contains the friendly project name', () => {
     const wrapper = mount(AgentCard, {
       props: { agent: baseAgent },
       global: { stubs },
     })
     const btn = wrapper.find('button[data-testid="agent-card-open"]')
-    expect(btn.attributes('aria-label')).toContain('my-project')
+    expect(btn.attributes('aria-label')).toContain('My Project')
   })
 
   it('clicking the open button emits select with the agent', async () => {

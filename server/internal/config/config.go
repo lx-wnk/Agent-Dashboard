@@ -29,6 +29,13 @@ type Config struct {
 	SSEIntervalMs          int     `koanf:"sse_interval_ms"`
 	ShutdownTimeoutSeconds int     `koanf:"shutdown_timeout_seconds"`
 	PluginDir              string  `koanf:"plugin_dir"`
+	// ProviderDir is an optional directory of user provider descriptors merged
+	// over the built-ins. Set via DASHBOARD_PROVIDER_DIR.
+	ProviderDir string `koanf:"provider_dir"`
+	// ProvidersEnabled is the explicit allowlist of enabled provider ids until
+	// the DB-backed Settings UI lands. Set via DASHBOARD_PROVIDERS_ENABLED as a
+	// comma list, e.g. "codex,junie".
+	ProvidersEnabled []string `koanf:"providers_enabled"`
 	AllowGitPush           bool    `koanf:"allow_git_push"`
 	HooksSecret            string  `koanf:"hooks_secret"`
 	HooksDebounceMs        int     `koanf:"hooks_debounce_ms"`
@@ -135,6 +142,17 @@ func Load(cfgFile string) (Config, error) {
 
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return Config{}, fmt.Errorf("config unmarshal: %w", err)
+	}
+
+	// koanf does not split comma env vars into []string automatically; split here.
+	if len(cfg.ProvidersEnabled) == 1 && strings.Contains(cfg.ProvidersEnabled[0], ",") {
+		parts := strings.Split(cfg.ProvidersEnabled[0], ",")
+		cfg.ProvidersEnabled = make([]string, 0, len(parts))
+		for _, p := range parts {
+			if s := strings.TrimSpace(p); s != "" {
+				cfg.ProvidersEnabled = append(cfg.ProvidersEnabled, s)
+			}
+		}
 	}
 
 	// Validate auth mode. "github" is a deprecated alias for "plugin".

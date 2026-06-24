@@ -16,6 +16,13 @@ Preparing the first public release.
 
 - `anthropic` spawner adapter — run pipeline stage agents and refinement chat against the Anthropic Messages API via an out-of-process binary, keeping the SDK out of the server module. Requires `ANTHROPIC_API_KEY` in the server env and the `anthropic-spawner` binary on `PATH` (or `DASHBOARD_ANTHROPIC_SPAWNER_CMD`). Default model: `claude-opus-4-8`.
 - Documented using the existing `openai` adapter with OpenAI-compatible multi-model gateways (OpenRouter, Together AI, Inflection, …) — set `base_url` + `api_key_env` + `default_model`, no new code needed.
+- Collapsible agent groups — when a grouping (project/status/model) is active on the
+  dashboard roster, click a group header to collapse or expand it. On first load only
+  the highest-priority non-empty group is expanded (Active, else Waiting, else Idle,
+  else Finished); the rest start collapsed. Collapsed state is remembered per grouping
+  mode in localStorage and survives live re-renders.
+- Opt-in monitoring of Codex CLI, Gemini CLI, Junie CLI, and pi.dev agents via a declarative provider registry (off by default; enable with DASHBOARD_PROVIDERS_ENABLED or custom descriptors in DASHBOARD_PROVIDER_DIR). pi.dev's per-session JSONL (`~/.pi/agent/sessions/`) carries token usage, model, provider, and cost per turn.
+- Ollama-backed local models are now reported at $0 cost instead of unknown.
 - Agents now show an animated **Working** badge while actively generating — derived from conversation turn-state plus live tmux/pty output — distinct from the idle/waiting staleness states.
 - Agents spawned from the dashboard now run as interactive **live** sessions (tmux when available, headless pty broker otherwise) so you can converse with them live, instead of a one-shot run. The spawned agent's chat opens automatically once it appears.
 - Controllable (channel/MCP-connected) agents now remain on the dashboard as a
@@ -73,9 +80,14 @@ Preparing the first public release.
   the contributor entry barrier.
 - Community health files: `SECURITY.md`, `CODE_OF_CONDUCT.md`, Dependabot config,
   and `FUNDING.yml`.
+- Settings → Providers panel to enable or disable Codex/Gemini/Junie monitoring per provider, persisted in the database and applied within one scan tick.
 
 ### Changed
 
+- Agent card redesign — prominent, readable project name; a compact
+  cost · tokens · uptime metric row with the full labeled detail (last activity,
+  burn rate, cache costs) moved into a hover ⓘ popover and the agent modal; the
+  prompt input is now always docked at the bottom with a larger output area.
 - Accessibility: clickable agent rows are now native `<button>` elements, and the
   agent-modal summary uses a higher-contrast token.
 - SSE poll and retry intervals are centralized in `src/utils/sse.ts` instead of
@@ -88,6 +100,9 @@ Preparing the first public release.
 
 ### Fixed
 
+- Agent cards no longer show "No output yet" while an agent is actively working —
+  the card now falls back to the current action / last tool when there is no
+  assistant text yet.
 - Startup: databases created before the per-stage pipeline config landed stored
   `pipeline_configs` as a bare (key, value) table; the new `(project_id, key)` index
   forced a table rebuild that failed with `NOT NULL constraint failed: ...id`. The DB

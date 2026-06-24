@@ -73,6 +73,12 @@ The server binds exclusively to `127.0.0.1`. Never change this — the server re
 
 Frontend path alias: `@/*` maps to `./src/*`.
 
+### Adding a provider
+
+For a CLI that writes file-per-session JSONL, add a descriptor YAML under `server/internal/provider/providers/` (or ship one via `DASHBOARD_PROVIDER_DIR`) — no Go code is needed. The descriptor declares the exe names, config dir, session glob, token/model/cost field-paths, and the token aggregation mode (`cumulative` or `perMessage`).
+
+IDE-embedded tools (Cursor, Copilot-in-VSCode, Windsurf) don't write file-per-session JSONL, so they need a Go `Adapter` (source `custom:<id>`) instead — not yet implemented.
+
 ## Pull Request Process
 
 1. Branch from `main`.

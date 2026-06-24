@@ -1,0 +1,4 @@
+{"sessionId":"abc123","projectHash":"deadbeef","startTime":"2026-04-19T11:00:00.000Z","kind":"main"}
+{"id":"m1","timestamp":"2026-04-19T11:00:05.000Z","type":"user","content":"hi"}
+{"id":"m2","timestamp":"2026-04-19T11:00:09.000Z","type":"gemini","model":"gemini-2.5-pro","tokens":{"input":1200,"output":340,"cached":100,"thoughts":50,"tool":0,"total":1690}}
+{"id":"m3","timestamp":"2026-04-19T11:00:20.000Z","type":"gemini","model":"gemini-2.5-pro","tokens":{"input":1500,"output":420,"cached":120,"thoughts":60,"tool":0,"total":2100}}

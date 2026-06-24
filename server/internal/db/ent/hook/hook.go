@@ -129,6 +129,18 @@ func (f ProjectFolderFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProjectFolderMutation", m)
 }
 
+// The ProviderSettingFunc type is an adapter to allow the use of ordinary
+// function as ProviderSetting mutator.
+type ProviderSettingFunc func(context.Context, *ent.ProviderSettingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ProviderSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ProviderSettingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProviderSettingMutation", m)
+}
+
 // The RefinementTurnFunc type is an adapter to allow the use of ordinary
 // function as RefinementTurn mutator.
 type RefinementTurnFunc func(context.Context, *ent.RefinementTurnMutation) (ent.Value, error)

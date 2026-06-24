@@ -22,6 +22,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
@@ -102,6 +103,7 @@ func checkColumn(t, c string) error {
 			pipelineconfig.Table:     pipelineconfig.ValidColumn,
 			project.Table:            project.ValidColumn,
 			projectfolder.Table:      projectfolder.ValidColumn,
+			providersetting.Table:    providersetting.ValidColumn,
 			refinementturn.Table:     refinementturn.ValidColumn,
 			remoteregistration.Table: remoteregistration.ValidColumn,
 			spawner.Table:            spawner.ValidColumn,
