@@ -28,6 +28,7 @@ const baseTask: PipelineTask = {
   updatedAt: '2026-01-01T00:00:00Z',
   metadata: null,
   silverBullet: false,
+  planMode: false,
   priority: 'medium',
   userId: null,
 }

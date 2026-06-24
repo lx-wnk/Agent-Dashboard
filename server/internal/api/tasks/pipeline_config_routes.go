@@ -231,6 +231,22 @@ func readProjectPlanMode(h *Handler, ctx context.Context, projectID *string) *bo
 	return &v
 }
 
+// resolveCreatePlanMode resolves the effective planMode for a task being created:
+// explicit request value > project-scoped default > global default > nil (ent default false).
+func resolveCreatePlanMode(h *Handler, ctx context.Context, projectID *string, explicit *bool) *bool {
+	if explicit != nil {
+		return explicit
+	}
+	if pm := readProjectPlanMode(h, ctx, projectID); pm != nil {
+		return pm
+	}
+	if h.cfgRepo.GetString(ctx, "planMode", "") == "true" {
+		v := true
+		return &v
+	}
+	return nil
+}
+
 func (h *Handler) getProjectPipelineConfig(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
 	ctx := r.Context()
