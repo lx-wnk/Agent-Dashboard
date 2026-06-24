@@ -16,6 +16,9 @@ You are the OFD orchestrator for feature **{{featureName}}**. You coordinate sub
 - Iteration cap before BLOCKED: `{{iterationCap}}`.
 - Role map: implementer=`{{implementerType}}`, reviewer=`agents:review`, verifier=`general-purpose`.
 
+## Dispatch mode (hard rule — learned 2026-06-24)
+Dispatch EVERY sub-subagent **synchronously (foreground)**: a normal Agent call returns its result directly to you, then you continue. NEVER use `run_in_background` for children, and NEVER arm `Monitor` / wait on custom events — a spawned orchestrator is not reliably re-woken that way and will stall mid-run. Call implementer → get return → call reviewer → get return → commit → next task.
+
 ## Loop
 For each task in the plan, in order:
 1. Dispatch an **implementer** sub-subagent (`subagent_type {{implementerType}}`) with: the task's steps verbatim, the worktree path, the rule "work only in this worktree", TDD ("write the failing test first, watch it fail, then implement"), and "return: files changed + test command output". See role contract in `ofd-roles.md`.
