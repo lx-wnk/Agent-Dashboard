@@ -52,6 +52,7 @@ const (
 	// the fastest. An explicit DB row or task/spawner override takes precedence.
 	defaultModelImplementation = "claude-opus-4-6"
 	defaultModelSelfReview     = "claude-sonnet-4-6"
+	defaultModelPlanReview     = "claude-sonnet-4-6"
 	defaultModelFinalization   = "claude-haiku-4-5"
 )
 
@@ -212,6 +213,8 @@ func (o *PipelineOrchestrator) stageModelDefault(ctx context.Context, stage stri
 		coded = defaultModelImplementation
 	case "self_review":
 		coded = defaultModelSelfReview
+	case "plan_review":
+		coded = defaultModelPlanReview
 	case "finalization":
 		coded = defaultModelFinalization
 	}
