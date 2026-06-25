@@ -41,6 +41,20 @@ func TestResolveScopes_KeysManage_ImpliesAll(t *testing.T) {
 	assert.True(t, scopes["pipeline:control"])
 }
 
+func TestAgentCoordScope(t *testing.T) {
+	for _, name := range []string{"write_scratchpad", "read_scratchpad", "list_scratchpad", "acquire_lock", "release_lock"} {
+		if ToolScopeMap[name] != "agent:coord" {
+			t.Fatalf("%s scope = %q want agent:coord", name, ToolScopeMap[name])
+		}
+	}
+	if !ResolveScopes([]string{"pipeline:control"})["agent:coord"] {
+		t.Fatalf("pipeline:control must imply agent:coord")
+	}
+	if !ResolveScopes([]string{"keys:manage"})["agent:coord"] {
+		t.Fatalf("keys:manage must imply agent:coord")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
