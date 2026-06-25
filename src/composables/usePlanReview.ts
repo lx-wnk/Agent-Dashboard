@@ -2,11 +2,25 @@ import type { PipelineTask } from '../types'
 import { ref } from 'vue'
 import { actionEndpoint } from './useRunAction'
 
+const POLL_INTERVAL_MS = 1500
+
+// gate_state mirrors stage_run.status; these values mean the gate is settled.
+const TERMINAL_STATES = new Set(['awaiting_user', 'done', 'failed', 'cancelled', 'requeued'])
+
 export function usePlanReview(taskId: () => string | null) {
   const gateState = ref<string>('unknown')
   const approvedPlan = ref<Record<string, unknown> | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  let pollTimer: ReturnType<typeof setTimeout> | null = null
+
+  function stopPolling(): void {
+    if (pollTimer) {
+      clearTimeout(pollTimer)
+      pollTimer = null
+    }
+  }
 
   async function fetchStatus(): Promise<void> {
     const id = taskId()
@@ -21,6 +35,9 @@ export function usePlanReview(taskId: () => string | null) {
         return
       }
       const data = await res.json() as { gate_state: string, approved_plan?: Record<string, unknown> | null }
+      // Discard a response that resolved after the panel switched to another task.
+      if (taskId() !== id)
+        return
       gateState.value = data.gate_state
       approvedPlan.value = data.approved_plan ?? null
     }
@@ -30,6 +47,34 @@ export function usePlanReview(taskId: () => string | null) {
     finally {
       loading.value = false
     }
+  }
+
+  // NOTE: taskId is captured at schedule time so a mid-flight task switch abandons the poll.
+  async function pollUntilDone(id: string): Promise<void> {
+    if (taskId() !== id)
+      return
+    await fetchStatus()
+    if (!TERMINAL_STATES.has(gateState.value))
+      pollTimer = setTimeout(() => void pollUntilDone(id), POLL_INTERVAL_MS)
+  }
+
+  /** Resets state, fetches, and begins polling if the gate is not yet settled. */
+  async function start(): Promise<void> {
+    const id = taskId()
+    if (!id)
+      return
+    stopPolling()
+    gateState.value = 'unknown'
+    approvedPlan.value = null
+    error.value = null
+    await fetchStatus()
+    if (!TERMINAL_STATES.has(gateState.value))
+      pollTimer = setTimeout(() => void pollUntilDone(id), POLL_INTERVAL_MS)
+  }
+
+  /** Cancels any pending poll. */
+  function stop(): void {
+    stopPolling()
   }
 
   async function approve(): Promise<PipelineTask | null> {
@@ -81,6 +126,8 @@ export function usePlanReview(taskId: () => string | null) {
     loading,
     error,
     fetchStatus,
+    start,
+    stop,
     approve,
     reject,
   }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PipelineTask } from '../types'
-import { onMounted, ref } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import { usePlanReview } from '../composables/usePlanReview'
 import { renderMarkdown } from '../utils/markdown'
 
@@ -21,14 +21,22 @@ const showRejectForm = ref(false)
 const feedbackText = ref('')
 const isActing = ref(false)
 
-const { gateState, approvedPlan, loading, error, fetchStatus, approve, reject } = usePlanReview(
+const { gateState, approvedPlan, loading, error, start, stop, approve, reject } = usePlanReview(
   () => props.task?.id ?? null,
 )
 
-onMounted(() => {
-  if (props.open && props.task?.id)
-    void fetchStatus()
-})
+watch(
+  () => [props.open, props.task?.id] as const,
+  ([open, id]) => {
+    if (open && id)
+      void start()
+    else if (!open)
+      stop()
+  },
+  { immediate: true },
+)
+
+onUnmounted(stop)
 
 async function handleApprove() {
   isActing.value = true

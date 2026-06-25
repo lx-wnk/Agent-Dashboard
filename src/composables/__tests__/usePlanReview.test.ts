@@ -119,3 +119,95 @@ describe('usePlanReview.reject', () => {
     expect(postedBodies[0]).toMatchObject({ feedback: 'Please add more detail on step 3' })
   })
 })
+
+describe('usePlanReview polling', () => {
+  it('polls until gate_state becomes awaiting_user then stops', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    vi.stubGlobal('fetch', vi.fn(() => {
+      callCount++
+      const state = callCount < 3 ? 'running' : 'awaiting_user'
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ gate_state: state, approved_plan: null }) })
+    }))
+
+    const pr = usePlanReview(() => 'task-poll')
+    await pr.start()
+
+    // After start() the first fetch lands with 'running'; two more polls needed.
+    expect(pr.gateState.value).toBe('running')
+    expect(callCount).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(callCount).toBe(2)
+    expect(pr.gateState.value).toBe('running')
+
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(callCount).toBe(3)
+    expect(pr.gateState.value).toBe('awaiting_user')
+
+    // No further fetches after reaching awaiting_user.
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(callCount).toBe(3)
+  })
+
+  it('stop() cancels a pending poll', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    vi.stubGlobal('fetch', vi.fn(() => {
+      callCount++
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ gate_state: 'running', approved_plan: null }) })
+    }))
+
+    const pr = usePlanReview(() => 'task-stop')
+    await pr.start()
+    expect(callCount).toBe(1)
+
+    pr.stop()
+
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(callCount).toBe(1)
+  })
+
+  it('abandons polling when taskId changes mid-flight', async () => {
+    vi.useFakeTimers()
+    let currentTaskId = 'task-a'
+    let callCount = 0
+    vi.stubGlobal('fetch', vi.fn(() => {
+      callCount++
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ gate_state: 'running', approved_plan: null }) })
+    }))
+
+    const pr = usePlanReview(() => currentTaskId)
+    await pr.start()
+    expect(callCount).toBe(1)
+
+    // Switch task before the scheduled poll fires.
+    currentTaskId = 'task-b'
+
+    await vi.advanceTimersByTimeAsync(1500)
+    // pollUntilDone sees taskId() !== captured id and returns early without fetching.
+    expect(callCount).toBe(1)
+  })
+
+  it('discards a status response that resolves after the task switched', async () => {
+    let current = 'task-a'
+    let resolveA: (() => void) | null = null
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<any>((resolve) => {
+      resolveA = () => resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ gate_state: 'running', approved_plan: { content: 'task A plan' } }),
+      })
+    })))
+
+    const pr = usePlanReview(() => current)
+    const pending = pr.fetchStatus()
+    current = 'task-b' // switch before task A's response resolves
+    resolveA!()
+    await pending
+
+    // The late task-A response must not clobber state now belonging to task B.
+    expect(pr.gateState.value).toBe('unknown')
+    expect(pr.approvedPlan.value).toBeNull()
+  })
+})
