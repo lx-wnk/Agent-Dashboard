@@ -5,6 +5,8 @@ import { ref } from 'vue'
 const approveMock = vi.fn().mockResolvedValue({ id: 't1', currentStage: 'implementation' })
 const rejectMock = vi.fn().mockResolvedValue(undefined)
 const fetchStatusMock = vi.fn().mockResolvedValue(undefined)
+const startMock = vi.fn().mockResolvedValue(undefined)
+const stopMock = vi.fn()
 
 vi.mock('../../composables/usePlanReview', () => ({
   usePlanReview: () => ({
@@ -13,6 +15,8 @@ vi.mock('../../composables/usePlanReview', () => ({
     loading: ref(false),
     error: ref(null),
     fetchStatus: fetchStatusMock,
+    start: startMock,
+    stop: stopMock,
     approve: approveMock,
     reject: rejectMock,
   }),
@@ -63,10 +67,10 @@ describe('planReviewPanel', () => {
     wrapper.unmount()
   })
 
-  it('calls fetchStatus on mount', async () => {
+  it('calls start when opened with a task', async () => {
     const wrapper = mountPanel()
     await flushPromises()
-    expect(fetchStatusMock).toHaveBeenCalled()
+    expect(startMock).toHaveBeenCalled()
     wrapper.unmount()
   })
 

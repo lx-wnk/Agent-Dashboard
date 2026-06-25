@@ -102,6 +102,13 @@ Preparing the first public release.
 
 ### Fixed
 
+- Plan-review gate: opening a `plan_review` task via deep-link, Spotlight, or
+  cross-modal navigation now routes to the plan-approval panel instead of the
+  generic task modal — the routing rule that previously lived only in the
+  pipeline-board click handler is now applied to every navigation path. (#221)
+- Plan-review panel now refreshes while a plan is still generating instead of
+  showing "No plan output available yet" indefinitely: it polls the plan status
+  until the gate settles, and re-fetches when reopened for a different task. (#222)
 - Agent cards no longer show "No output yet" while an agent is actively working —
   the card now falls back to the current action / last tool when there is no
   assistant text yet.

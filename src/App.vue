@@ -312,7 +312,7 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
     if (target.taskId) {
       const t = tasks.value.find(t => t.id === target.taskId)
       if (t) {
-        selectTask(t)
+        openTask(t)
       }
       else {
         console.warn('[navigateTo] task not found locally:', target.taskId)
@@ -322,13 +322,18 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
   })
 }
 
-function handleSelectTask(t: PipelineTask) {
+// Single routing rule: plan_review tasks open the plan panel, all others the generic modal.
+function openTask(t: PipelineTask) {
   if (t.currentStage === 'plan_review') {
     activePlanTask.value = t
     showPlanReview.value = true
     return
   }
   selectTask(t)
+}
+
+function handleSelectTask(t: PipelineTask) {
+  openTask(t)
 }
 
 interface QuotaInfo {
@@ -536,7 +541,7 @@ onMounted(fetchQuota)
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
     <EditGateModal />
     <SpotlightSearch
-      @navigate-task="task => selectTask(task)"
+      @navigate-task="task => openTask(task)"
       @navigate-agent="agent => selectAgent(agent)"
     />
   </div>
