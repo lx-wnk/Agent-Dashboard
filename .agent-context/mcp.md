@@ -8,7 +8,7 @@ Bearer token (`Authorization: Bearer mcp_<hex>`). Tokens are never stored — on
 
 ## Scope Model
 
-`tasks:read` | `tasks:write` | `pipeline:control` | `keys:manage`. Higher scopes imply lower ones (`keys:manage` → all; `tasks:write` → `tasks:read`). Each MCP tool checks its required scope at call time and returns an MCP error if insufficient.
+`tasks:read` | `tasks:write` | `agent:coord` | `pipeline:control` | `keys:manage`. Higher scopes imply lower ones (`keys:manage` → all; `tasks:write` → `tasks:read`; `pipeline:control` → `agent:coord`). The `agent:coord` scope grants the coordination tools (`write_scratchpad`/`read_scratchpad`/`list_scratchpad`/`acquire_lock`/`release_lock`) for shared scratchpads and lease-based locks. Each MCP tool checks its required scope at call time and returns an MCP error if insufficient.
 
 ## Key Files
 
