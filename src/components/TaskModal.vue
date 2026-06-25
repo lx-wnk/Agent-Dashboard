@@ -13,6 +13,7 @@ import { STAGE_LABELS } from '../utils/stageLabels'
 import { stageTone } from '../utils/statusColors'
 import AuditLogTab from './AuditLogTab.vue'
 import PluginSlot from './PluginSlot.vue'
+import CoordinationTab from './task/CoordinationTab.vue'
 import TaskCostTab from './task/TaskCostTab.vue'
 import TaskDependenciesTab from './task/TaskDependenciesTab.vue'
 import TaskFooter from './task/TaskFooter.vue'
@@ -42,7 +43,7 @@ useIntervalFn(() => {
   modalRetrySecondsLeft.value = secondsUntil(props.task?.nextRetryAt)
 }, 1000, { immediate: true })
 
-const TABS = ['overview', 'stages', 'cost', 'permissions', 'dependencies', 'audit'] as const
+const TABS = ['overview', 'stages', 'cost', 'permissions', 'dependencies', 'audit', 'coordination'] as const
 const TAB_LABELS: Record<typeof TABS[number], string> = {
   overview: 'Overview',
   stages: 'Stages',
@@ -50,6 +51,7 @@ const TAB_LABELS: Record<typeof TABS[number], string> = {
   permissions: 'Permissions',
   dependencies: 'Dependencies',
   audit: 'Audit',
+  coordination: 'Coordination',
 }
 const { activeTab, tabAttrs, panelAttrs, onKeydown, select } = useRovingTabList(TABS, { idPrefix: 'task-modal', initial: 'overview' })
 
@@ -131,6 +133,7 @@ watch(() => props.task?.id, (id, prevId) => {
         <section v-else-if="activeTab === 'audit'" class="p-5">
           <AuditLogTab :task-id="task.id" />
         </section>
+        <CoordinationTab v-else-if="activeTab === 'coordination'" />
       </div>
 
       <TaskFooter />
