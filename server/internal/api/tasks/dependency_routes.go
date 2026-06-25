@@ -52,9 +52,15 @@ func (h *Handler) addDependency(w http.ResponseWriter, r *http.Request) error {
 	if requiredStage == "" {
 		requiredStage = "done"
 	}
+	if requiredStage != "done" && requiredStage != "cancelled" {
+		return apierr.NewAppError(http.StatusBadRequest, "requiredStage must be 'done' or 'cancelled'")
+	}
 	onCancelAction := body.OnCancelAction
 	if onCancelAction == "" {
 		onCancelAction = "on_hold"
+	}
+	if onCancelAction != "cancel" && onCancelAction != "start" && onCancelAction != "on_hold" {
+		return apierr.NewAppError(http.StatusBadRequest, "onCancelAction must be 'cancel', 'start', or 'on_hold'")
 	}
 	dep, err := h.depRepo.Add(r.Context(), taskID, body.DependsOnID, requiredStage, onCancelAction)
 	if err != nil {

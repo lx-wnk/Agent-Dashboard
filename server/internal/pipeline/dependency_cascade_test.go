@@ -156,3 +156,52 @@ func TestCascade_AlreadyTerminalDownstreamSkipped(t *testing.T) {
 		}
 	}
 }
+
+// TestCascade_DiamondIsIdempotent verifies a diamond (A→B, A→C, B→D, C→D) where
+// cancelling A cascades to D exactly once: D is reached via both B and C, but the
+// terminal-skip guard makes the second visit a no-op.
+func TestCascade_DiamondIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, depRepo, _ := makeTestOrchestratorWithDeps(t)
+
+	a := makeCascadeTask(t, taskRepo, "diamond-a")
+	b := makeCascadeTask(t, taskRepo, "diamond-b")
+	c := makeCascadeTask(t, taskRepo, "diamond-c")
+	d := makeCascadeTask(t, taskRepo, "diamond-d")
+
+	for _, dep := range [][2]string{{b, a}, {c, a}, {d, b}, {d, c}} {
+		_, err := depRepo.Add(ctx, dep[0], dep[1], "done", "cancel")
+		require.NoError(t, err)
+	}
+
+	orch.HandleDependentTasksForTest(ctx, a, "cancelled")
+
+	require.Equal(t, "cancelled", stageOf(t, taskRepo, b))
+	require.Equal(t, "cancelled", stageOf(t, taskRepo, c))
+	require.Equal(t, "cancelled", stageOf(t, taskRepo, d), "diamond tail cancelled exactly once")
+}
+
+// TestCascade_CycleTerminates verifies the terminal-skip guard breaks a dependency
+// cycle (A→B, B→A): cancelling A cancels B, and the recursion back to A stops
+// because A is already terminal — no infinite loop.
+func TestCascade_CycleTerminates(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, depRepo, _ := makeTestOrchestratorWithDeps(t)
+
+	a := makeCascadeTask(t, taskRepo, "cycle-a")
+	b := makeCascadeTask(t, taskRepo, "cycle-b")
+	_, err := depRepo.Add(ctx, b, a, "done", "cancel")
+	require.NoError(t, err)
+	_, err = depRepo.Add(ctx, a, b, "done", "cancel")
+	require.NoError(t, err)
+
+	// Mirror the real cancel path: the origin task is set terminal before cascade.
+	cancelled := "cancelled"
+	_, err = taskRepo.Update(ctx, a, repo.UpdateTaskInput{CurrentStage: &cancelled})
+	require.NoError(t, err)
+
+	orch.HandleDependentTasksForTest(ctx, a, "cancelled")
+
+	require.Equal(t, "cancelled", stageOf(t, taskRepo, b), "B cancelled via cascade")
+	require.Equal(t, "cancelled", stageOf(t, taskRepo, a), "A stays cancelled; recursion did not loop")
+}

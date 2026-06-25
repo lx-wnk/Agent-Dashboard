@@ -116,6 +116,31 @@ func stageResolver(taskRepo repo.TaskRepo) func(context.Context, string) (string
 	}
 }
 
+// bulkStageResolver resolves upstream stages during a bulk enrich. It seeds a
+// cache with the stages of every task already in the slice (no query) and
+// memoizes a GetByID fallback for upstreams outside it, so each distinct
+// out-of-slice upstream is fetched at most once per pass.
+func bulkStageResolver(taskRepo repo.TaskRepo, slice []*ent.Task) func(context.Context, string) (string, error) {
+	if taskRepo == nil {
+		return nil
+	}
+	cache := make(map[string]string, len(slice))
+	for _, t := range slice {
+		cache[t.ID] = t.CurrentStage
+	}
+	return func(ctx context.Context, id string) (string, error) {
+		if s, ok := cache[id]; ok {
+			return s, nil
+		}
+		up, err := taskRepo.GetByID(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		cache[id] = up.CurrentStage
+		return up.CurrentStage, nil
+	}
+}
+
 func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo, bulkRepo rawrepo.StageRunBulkRepo) (*EnrichedTask, error) {
 	return EnrichTaskWithDeps(ctx, t, srRepo, permRepo, bulkRepo, nil, nil)
 }
@@ -176,7 +201,7 @@ func EnrichTasksBulkWithDeps(ctx context.Context, tasks []*ent.Task, _ repo.Stag
 	// One memo shared across the whole slice so a pid reused by sibling tasks
 	// hits the liveness syscall once per tick.
 	isAlive := pidAliveMemo()
-	resolveStage := stageResolver(taskRepo)
+	resolveStage := bulkStageResolver(taskRepo, tasks)
 
 	result := make([]*EnrichedTask, len(tasks))
 	for i, t := range tasks {
@@ -231,6 +256,9 @@ func enrichOne(ctx context.Context, t *ent.Task, latest *ent.StageRun, pendingPe
 		}
 	}
 
+	// Display-only flags: on eval error both stay false (task shows runnable). The
+	// picker gate is authoritative and fails conservative (errs → skip), so an
+	// optimistic display here cannot cause an unmet-dependency task to actually run.
 	var isBlocked, isUnsatisfiable bool
 	if depRepo != nil && resolveStage != nil {
 		if _, blocked, unsatisfiable, err := pipeline.EvaluateTaskDeps(ctx, t.ID, depRepo, resolveStage); err == nil {

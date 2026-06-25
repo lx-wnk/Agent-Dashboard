@@ -707,6 +707,29 @@ func (o *PipelineOrchestrator) recoverRunningStageRuns(ctx context.Context) {
 	}
 }
 
+// cascadeCancelDownstream cancels a downstream task under its per-task mutex so the
+// write cannot race a concurrent ProgressTask transition. Re-reads state under the
+// lock; returns true only if it actually moved the task to cancelled.
+func (o *PipelineOrchestrator) cascadeCancelDownstream(ctx context.Context, downstreamID string) bool {
+	mu := o.getTaskMutex(downstreamID)
+	mu.Lock()
+	defer mu.Unlock()
+	fresh, err := o.opts.TaskRepo.GetByID(ctx, downstreamID)
+	if err != nil {
+		slog.Warn("handleDependentTasks: cascade re-fetch failed", "downstreamID", downstreamID, "err", err)
+		return false
+	}
+	if IsTerminalStage(fresh.CurrentStage) {
+		return false
+	}
+	cancelled := "cancelled"
+	if _, err := o.opts.TaskRepo.Update(ctx, downstreamID, repo.UpdateTaskInput{CurrentStage: &cancelled}); err != nil {
+		slog.Warn("handleDependentTasks: cascade cancel failed", "downstreamID", downstreamID, "err", err)
+		return false
+	}
+	return true
+}
+
 func (o *PipelineOrchestrator) handleDependentTasks(ctx context.Context, taskID, newStage string) {
 	if o.opts.OnTaskChanged != nil {
 		o.opts.OnTaskChanged(taskID, "dependent_check", nil)
@@ -732,9 +755,7 @@ func (o *PipelineOrchestrator) handleDependentTasks(ctx context.Context, taskID,
 		if newStage == "cancelled" {
 			switch dep.OnCancelAction {
 			case "cancel":
-				cancelled := "cancelled"
-				if _, err := o.opts.TaskRepo.Update(ctx, downstreamID, repo.UpdateTaskInput{CurrentStage: &cancelled}); err != nil {
-					slog.Warn("handleDependentTasks: cascade cancel failed", "downstreamID", downstreamID, "err", err)
+				if !o.cascadeCancelDownstream(ctx, downstreamID) {
 					continue
 				}
 				if o.opts.OnTaskChanged != nil {
