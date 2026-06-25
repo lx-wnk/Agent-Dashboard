@@ -188,4 +188,26 @@ describe('usePlanReview polling', () => {
     // pollUntilDone sees taskId() !== captured id and returns early without fetching.
     expect(callCount).toBe(1)
   })
+
+  it('discards a status response that resolves after the task switched', async () => {
+    let current = 'task-a'
+    let resolveA: (() => void) | null = null
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<any>((resolve) => {
+      resolveA = () => resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ gate_state: 'running', approved_plan: { content: 'task A plan' } }),
+      })
+    })))
+
+    const pr = usePlanReview(() => current)
+    const pending = pr.fetchStatus()
+    current = 'task-b' // switch before task A's response resolves
+    resolveA!()
+    await pending
+
+    // The late task-A response must not clobber state now belonging to task B.
+    expect(pr.gateState.value).toBe('unknown')
+    expect(pr.approvedPlan.value).toBeNull()
+  })
 })

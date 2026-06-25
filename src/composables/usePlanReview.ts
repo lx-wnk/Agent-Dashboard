@@ -35,6 +35,9 @@ export function usePlanReview(taskId: () => string | null) {
         return
       }
       const data = await res.json() as { gate_state: string, approved_plan?: Record<string, unknown> | null }
+      // Discard a response that resolved after the panel switched to another task.
+      if (taskId() !== id)
+        return
       gateState.value = data.gate_state
       approvedPlan.value = data.approved_plan ?? null
     }

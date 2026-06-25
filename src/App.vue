@@ -332,10 +332,6 @@ function openTask(t: PipelineTask) {
   selectTask(t)
 }
 
-function handleSelectTask(t: PipelineTask) {
-  openTask(t)
-}
-
 interface QuotaInfo {
   periodStart: string | null
   periodEnd: string | null
@@ -454,7 +450,7 @@ onMounted(fetchQuota)
         <PipelineBoard
           v-else-if="activeView === 'pipeline'"
           :agents="agents"
-          @select="handleSelectTask"
+          @select="openTask"
           @open-chat="(t) => { activeConceptTask = t; showRefinementChat = true }"
           @navigate-agent="(sessionId) => { const a = agents.find(x => x.sessionId === sessionId); if (a) selectAgent(a) }"
         />
