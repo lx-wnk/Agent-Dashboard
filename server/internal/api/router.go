@@ -22,6 +22,7 @@ import (
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	apiconfig "github.com/lx-wnk/agent-dashboard/server/internal/api/config"
+	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
@@ -130,6 +131,7 @@ type RouterDeps struct {
 	// clear project_id on done/cancelled tasks during DELETE /api/projects/{id}.
 	// May be nil; when nil the project handler skips the active-task check.
 	TaskProjectOps        projects.TaskProjectOps
+	CoordHandler          *coordapi.Handler
 	TaskHandler           *tasks.Handler
 	SchedulesHandler      *schedules.Handler
 	WebPushHandler        *apiwp.Handler
@@ -301,6 +303,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.TaskHandler != nil {
 			deps.TaskHandler.Mount(r)
+		}
+
+		if deps.CoordHandler != nil {
+			deps.CoordHandler.Mount(r)
 		}
 
 		if deps.SchedulesHandler != nil {
