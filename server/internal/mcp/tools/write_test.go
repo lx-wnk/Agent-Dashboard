@@ -223,3 +223,67 @@ func TestUpdateTask_Autonomy_Persists(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "manual", updated["autonomy"], "autonomy must be updated")
 }
+
+// --- plan_mode ---
+
+func TestCreateTask_PlanMode_TrueIsPersisted(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	out, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":     "pm-mcp-true",
+		"title":    "Plan Mode Task",
+		"cwd":      "/tmp/pm-mcp-true",
+		"planMode": true,
+	})
+	require.NoError(t, err)
+
+	taskMap, _ := out["task"].(map[string]any)
+	require.NotNil(t, taskMap, "response must contain task")
+	require.Equal(t, true, taskMap["plan_mode"], "plan_mode must be persisted as true")
+}
+
+func TestCreateTask_PlanMode_DefaultIsFalse(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	out, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":  "pm-mcp-default",
+		"title": "Default Plan Mode Task",
+		"cwd":   "/tmp/pm-mcp-default",
+	})
+	require.NoError(t, err)
+
+	taskMap, _ := out["task"].(map[string]any)
+	require.NotNil(t, taskMap, "response must contain task")
+	// plan_mode=false is serialized with omitempty and absent from the JSON map.
+	require.NotEqual(t, true, taskMap["plan_mode"], "plan_mode must default to false (absent in JSON)")
+}
+
+func TestUpdateTask_PlanMode_Persists(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	// Create task first (plan_mode=false by default).
+	out, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":  "pm-mcp-upd",
+		"title": "Update Plan Mode Task",
+		"cwd":   "/tmp/pm-mcp-upd",
+	})
+	require.NoError(t, err)
+	taskMap, _ := out["task"].(map[string]any)
+	require.NotNil(t, taskMap)
+	id, _ := taskMap["id"].(string)
+	require.NotEmpty(t, id)
+
+	// Update plan_mode to true.
+	updated, err := invokeUpdateTask(t, registry, map[string]any{
+		"id":       id,
+		"planMode": true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, true, updated["plan_mode"], "plan_mode must be updated to true")
+}

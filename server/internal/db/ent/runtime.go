@@ -284,16 +284,20 @@ func init() {
 	taskDescSilverBullet := taskFields[16].Descriptor()
 	// task.DefaultSilverBullet holds the default value on creation for the silver_bullet field.
 	task.DefaultSilverBullet = taskDescSilverBullet.Default.(bool)
+	// taskDescPlanMode is the schema descriptor for plan_mode field.
+	taskDescPlanMode := taskFields[17].Descriptor()
+	// task.DefaultPlanMode holds the default value on creation for the plan_mode field.
+	task.DefaultPlanMode = taskDescPlanMode.Default.(bool)
 	// taskDescAutonomy is the schema descriptor for autonomy field.
-	taskDescAutonomy := taskFields[17].Descriptor()
+	taskDescAutonomy := taskFields[18].Descriptor()
 	// task.DefaultAutonomy holds the default value on creation for the autonomy field.
 	task.DefaultAutonomy = taskDescAutonomy.Default.(string)
 	// taskDescCreatedAt is the schema descriptor for created_at field.
-	taskDescCreatedAt := taskFields[22].Descriptor()
+	taskDescCreatedAt := taskFields[23].Descriptor()
 	// task.DefaultCreatedAt holds the default value on creation for the created_at field.
 	task.DefaultCreatedAt = taskDescCreatedAt.Default.(func() time.Time)
 	// taskDescUpdatedAt is the schema descriptor for updated_at field.
-	taskDescUpdatedAt := taskFields[23].Descriptor()
+	taskDescUpdatedAt := taskFields[24].Descriptor()
 	// task.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	task.DefaultUpdatedAt = taskDescUpdatedAt.Default.(func() time.Time)
 	// task.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

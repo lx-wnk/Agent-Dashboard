@@ -226,6 +226,20 @@ func (_c *TaskCreate) SetNillableSilverBullet(v *bool) *TaskCreate {
 	return _c
 }
 
+// SetPlanMode sets the "plan_mode" field.
+func (_c *TaskCreate) SetPlanMode(v bool) *TaskCreate {
+	_c.mutation.SetPlanMode(v)
+	return _c
+}
+
+// SetNillablePlanMode sets the "plan_mode" field if the given value is not nil.
+func (_c *TaskCreate) SetNillablePlanMode(v *bool) *TaskCreate {
+	if v != nil {
+		_c.SetPlanMode(*v)
+	}
+	return _c
+}
+
 // SetAutonomy sets the "autonomy" field.
 func (_c *TaskCreate) SetAutonomy(v string) *TaskCreate {
 	_c.mutation.SetAutonomy(v)
@@ -437,6 +451,10 @@ func (_c *TaskCreate) defaults() {
 		v := task.DefaultSilverBullet
 		_c.mutation.SetSilverBullet(v)
 	}
+	if _, ok := _c.mutation.PlanMode(); !ok {
+		v := task.DefaultPlanMode
+		_c.mutation.SetPlanMode(v)
+	}
 	if _, ok := _c.mutation.Autonomy(); !ok {
 		v := task.DefaultAutonomy
 		_c.mutation.SetAutonomy(v)
@@ -486,6 +504,9 @@ func (_c *TaskCreate) check() error {
 	}
 	if _, ok := _c.mutation.SilverBullet(); !ok {
 		return &ValidationError{Name: "silver_bullet", err: errors.New(`ent: missing required field "Task.silver_bullet"`)}
+	}
+	if _, ok := _c.mutation.PlanMode(); !ok {
+		return &ValidationError{Name: "plan_mode", err: errors.New(`ent: missing required field "Task.plan_mode"`)}
 	}
 	if _, ok := _c.mutation.Autonomy(); !ok {
 		return &ValidationError{Name: "autonomy", err: errors.New(`ent: missing required field "Task.autonomy"`)}
@@ -595,6 +616,10 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.SilverBullet(); ok {
 		_spec.SetField(task.FieldSilverBullet, field.TypeBool, value)
 		_node.SilverBullet = value
+	}
+	if value, ok := _c.mutation.PlanMode(); ok {
+		_spec.SetField(task.FieldPlanMode, field.TypeBool, value)
+		_node.PlanMode = value
 	}
 	if value, ok := _c.mutation.Autonomy(); ok {
 		_spec.SetField(task.FieldAutonomy, field.TypeString, value)
@@ -1001,6 +1026,18 @@ func (u *TaskUpsert) SetSilverBullet(v bool) *TaskUpsert {
 // UpdateSilverBullet sets the "silver_bullet" field to the value that was provided on create.
 func (u *TaskUpsert) UpdateSilverBullet() *TaskUpsert {
 	u.SetExcluded(task.FieldSilverBullet)
+	return u
+}
+
+// SetPlanMode sets the "plan_mode" field.
+func (u *TaskUpsert) SetPlanMode(v bool) *TaskUpsert {
+	u.Set(task.FieldPlanMode, v)
+	return u
+}
+
+// UpdatePlanMode sets the "plan_mode" field to the value that was provided on create.
+func (u *TaskUpsert) UpdatePlanMode() *TaskUpsert {
+	u.SetExcluded(task.FieldPlanMode)
 	return u
 }
 
@@ -1462,6 +1499,20 @@ func (u *TaskUpsertOne) SetSilverBullet(v bool) *TaskUpsertOne {
 func (u *TaskUpsertOne) UpdateSilverBullet() *TaskUpsertOne {
 	return u.Update(func(s *TaskUpsert) {
 		s.UpdateSilverBullet()
+	})
+}
+
+// SetPlanMode sets the "plan_mode" field.
+func (u *TaskUpsertOne) SetPlanMode(v bool) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetPlanMode(v)
+	})
+}
+
+// UpdatePlanMode sets the "plan_mode" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdatePlanMode() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdatePlanMode()
 	})
 }
 
@@ -2107,6 +2158,20 @@ func (u *TaskUpsertBulk) SetSilverBullet(v bool) *TaskUpsertBulk {
 func (u *TaskUpsertBulk) UpdateSilverBullet() *TaskUpsertBulk {
 	return u.Update(func(s *TaskUpsert) {
 		s.UpdateSilverBullet()
+	})
+}
+
+// SetPlanMode sets the "plan_mode" field.
+func (u *TaskUpsertBulk) SetPlanMode(v bool) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetPlanMode(v)
+	})
+}
+
+// UpdatePlanMode sets the "plan_mode" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdatePlanMode() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdatePlanMode()
 	})
 }
 

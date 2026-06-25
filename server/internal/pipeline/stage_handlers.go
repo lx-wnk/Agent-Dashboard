@@ -279,6 +279,18 @@ func finalizationBuilder(ctx *StageContext) PromptBundle {
 	return FinalizationPrompt(ctx.Task, ctx.AllStageRuns)
 }
 
+func planReviewBuilder(ctx *StageContext) PromptBundle {
+	feedback := ""
+	if ctx.Task.Metadata != nil {
+		if fb, ok := ctx.Task.Metadata["planReviewFeedback"].(string); ok {
+			feedback = fb
+		}
+	}
+	conceptOutput := map[string]any{}
+	maps.Copy(conceptOutput, ctx.Task.Metadata)
+	return PlanReviewPrompt(ctx.Task, conceptOutput, feedback)
+}
+
 // NewStageHandlers builds a stage registry with the given spawn function wired
 // into all agent-driven stages.
 func NewStageHandlers(spawnFn SpawnFunc) map[string]StageHandler {
@@ -287,6 +299,7 @@ func NewStageHandlers(spawnFn SpawnFunc) map[string]StageHandler {
 		"backlog":        backlogHandler,
 		"implementation": createAgentStage("implementation", implementationBuilder, spawnFn),
 		"self_review":    createAgentStage("self_review", selfReviewBuilder, spawnFn),
+		"plan_review":    createAgentStage("plan_review", planReviewBuilder, spawnFn),
 		"finalization":   createAgentStage("finalization", finalizationBuilder, spawnFn),
 	}
 }

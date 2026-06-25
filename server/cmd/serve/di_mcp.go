@@ -85,6 +85,19 @@ func provideMCPHandler(
 			return err
 		},
 	})
+	mcptools.RegisterPlanTools(registry, mcptools.PlanDeps{
+		Turns:     turnsRepo,
+		Tasks:     taskRepo,
+		StageRuns: srRepo,
+		Advance: func(ctx context.Context, taskID string) error {
+			_, err := orch.ProgressTask(ctx, taskID, nil)
+			return err
+		},
+		Requeue: func(ctx context.Context, taskID, prompt string) error {
+			_, err := orch.RequeueForUser(ctx, taskID, prompt)
+			return err
+		},
+	})
 	mcptools.RegisterScheduleTools(registry, mcptools.ScheduleDeps{
 		Repo:       repo.NewTaskScheduleRepo(client),
 		Translator: scheduler.NewNLCron(nil),

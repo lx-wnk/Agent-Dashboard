@@ -13788,6 +13788,7 @@ type TaskMutation struct {
 	stage_timeout_seconds    *int
 	addstage_timeout_seconds *int
 	silver_bullet            *bool
+	plan_mode                *bool
 	autonomy                 *string
 	metadata                 *map[string]interface{}
 	project_id               *string
@@ -14680,6 +14681,42 @@ func (m *TaskMutation) ResetSilverBullet() {
 	m.silver_bullet = nil
 }
 
+// SetPlanMode sets the "plan_mode" field.
+func (m *TaskMutation) SetPlanMode(b bool) {
+	m.plan_mode = &b
+}
+
+// PlanMode returns the value of the "plan_mode" field in the mutation.
+func (m *TaskMutation) PlanMode() (r bool, exists bool) {
+	v := m.plan_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanMode returns the old "plan_mode" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldPlanMode(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanMode: %w", err)
+	}
+	return oldValue.PlanMode, nil
+}
+
+// ResetPlanMode resets all changes to the "plan_mode" field.
+func (m *TaskMutation) ResetPlanMode() {
+	m.plan_mode = nil
+}
+
 // SetAutonomy sets the "autonomy" field.
 func (m *TaskMutation) SetAutonomy(s string) {
 	m.autonomy = &s
@@ -15255,7 +15292,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.slug != nil {
 		fields = append(fields, task.FieldSlug)
 	}
@@ -15303,6 +15340,9 @@ func (m *TaskMutation) Fields() []string {
 	}
 	if m.silver_bullet != nil {
 		fields = append(fields, task.FieldSilverBullet)
+	}
+	if m.plan_mode != nil {
+		fields = append(fields, task.FieldPlanMode)
 	}
 	if m.autonomy != nil {
 		fields = append(fields, task.FieldAutonomy)
@@ -15365,6 +15405,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.StageTimeoutSeconds()
 	case task.FieldSilverBullet:
 		return m.SilverBullet()
+	case task.FieldPlanMode:
+		return m.PlanMode()
 	case task.FieldAutonomy:
 		return m.Autonomy()
 	case task.FieldMetadata:
@@ -15420,6 +15462,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldStageTimeoutSeconds(ctx)
 	case task.FieldSilverBullet:
 		return m.OldSilverBullet(ctx)
+	case task.FieldPlanMode:
+		return m.OldPlanMode(ctx)
 	case task.FieldAutonomy:
 		return m.OldAutonomy(ctx)
 	case task.FieldMetadata:
@@ -15554,6 +15598,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSilverBullet(v)
+		return nil
+	case task.FieldPlanMode:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanMode(v)
 		return nil
 	case task.FieldAutonomy:
 		v, ok := value.(string)
@@ -15838,6 +15889,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldSilverBullet:
 		m.ResetSilverBullet()
+		return nil
+	case task.FieldPlanMode:
+		m.ResetPlanMode()
 		return nil
 	case task.FieldAutonomy:
 		m.ResetAutonomy()

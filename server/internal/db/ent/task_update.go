@@ -331,6 +331,20 @@ func (_u *TaskUpdate) SetNillableSilverBullet(v *bool) *TaskUpdate {
 	return _u
 }
 
+// SetPlanMode sets the "plan_mode" field.
+func (_u *TaskUpdate) SetPlanMode(v bool) *TaskUpdate {
+	_u.mutation.SetPlanMode(v)
+	return _u
+}
+
+// SetNillablePlanMode sets the "plan_mode" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillablePlanMode(v *bool) *TaskUpdate {
+	if v != nil {
+		_u.SetPlanMode(*v)
+	}
+	return _u
+}
+
 // SetAutonomy sets the "autonomy" field.
 func (_u *TaskUpdate) SetAutonomy(v string) *TaskUpdate {
 	_u.mutation.SetAutonomy(v)
@@ -725,6 +739,9 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.SilverBullet(); ok {
 		_spec.SetField(task.FieldSilverBullet, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PlanMode(); ok {
+		_spec.SetField(task.FieldPlanMode, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Autonomy(); ok {
 		_spec.SetField(task.FieldAutonomy, field.TypeString, value)
@@ -1259,6 +1276,20 @@ func (_u *TaskUpdateOne) SetNillableSilverBullet(v *bool) *TaskUpdateOne {
 	return _u
 }
 
+// SetPlanMode sets the "plan_mode" field.
+func (_u *TaskUpdateOne) SetPlanMode(v bool) *TaskUpdateOne {
+	_u.mutation.SetPlanMode(v)
+	return _u
+}
+
+// SetNillablePlanMode sets the "plan_mode" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillablePlanMode(v *bool) *TaskUpdateOne {
+	if v != nil {
+		_u.SetPlanMode(*v)
+	}
+	return _u
+}
+
 // SetAutonomy sets the "autonomy" field.
 func (_u *TaskUpdateOne) SetAutonomy(v string) *TaskUpdateOne {
 	_u.mutation.SetAutonomy(v)
@@ -1683,6 +1714,9 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if value, ok := _u.mutation.SilverBullet(); ok {
 		_spec.SetField(task.FieldSilverBullet, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PlanMode(); ok {
+		_spec.SetField(task.FieldPlanMode, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Autonomy(); ok {
 		_spec.SetField(task.FieldAutonomy, field.TypeString, value)

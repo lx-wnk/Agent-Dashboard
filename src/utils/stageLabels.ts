@@ -2,6 +2,7 @@ import type { PipelineStage } from '@/types'
 
 export const STAGE_LABELS: Record<PipelineStage, string> = {
   backlog: 'Backlog',
+  plan_review: 'Plan Review',
   concept: 'Concept',
   implementation: 'Implementation',
   self_review: 'Self-Review',
@@ -13,6 +14,7 @@ export const STAGE_LABELS: Record<PipelineStage, string> = {
 
 export const STAGE_DESCRIPTIONS: Record<PipelineStage, string> = {
   backlog: 'Task is queued and waiting to enter the pipeline',
+  plan_review: 'Reviewing the generated execution plan before implementation',
   concept: 'Exploring ideas and defining the task scope',
   implementation: 'Agent is actively writing code or making changes',
   self_review: 'Agent is reviewing its own output for correctness',

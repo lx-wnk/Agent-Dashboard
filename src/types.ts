@@ -85,6 +85,7 @@ export interface OutputMessage {
 export type PipelineStage
   = | 'concept'
     | 'backlog'
+    | 'plan_review'
     | 'implementation'
     | 'self_review'
     | 'finalization'
@@ -143,6 +144,7 @@ export interface PipelineTask {
    *  other ordering criteria. Set at creation, editable later.
    */
   silverBullet: boolean
+  planMode: boolean
   /** Soft priority used after silver-bullet and stage-furthest-first. */
   priority: TaskPriority
   /**

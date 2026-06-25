@@ -147,6 +147,7 @@ type PromptBundle struct {
 var StageOrder = []string{
 	"concept",
 	"backlog",
+	"plan_review",
 	"implementation",
 	"self_review",
 	"finalization",

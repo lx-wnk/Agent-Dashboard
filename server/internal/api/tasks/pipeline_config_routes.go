@@ -16,8 +16,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
-// validStageModelKeys lists the three agent-driven stages that support a per-stage model override.
-var validStageModelKeys = [3]string{"implementation", "self_review", "finalization"}
+// validStageModelKeys lists the agent-driven stages that support per-stage model and spawner overrides.
+var validStageModelKeys = [4]string{"implementation", "self_review", "finalization", "plan_review"}
 
 const (
 	stageModelKeyPrefix   = "stageModel."
@@ -33,6 +33,7 @@ type pipelineConfigResponse struct {
 	ExtraSafeBashCommands    string            `json:"extraSafeBashCommands"`
 	StageModels              map[string]string `json:"stageModels"`
 	StageSpawners            map[string]string `json:"stageSpawners"`
+	PlanMode                 bool              `json:"planMode"`
 }
 
 // projectPipelineConfigResponse is the per-project GET /api/projects/{id}/pipeline-config payload.
@@ -40,6 +41,7 @@ type pipelineConfigResponse struct {
 type projectPipelineConfigResponse struct {
 	StageModels   map[string]string `json:"stageModels"`
 	StageSpawners map[string]string `json:"stageSpawners"`
+	PlanMode      *bool             `json:"planMode"`
 }
 
 // readScopedStageSpawners returns a stage→spawnerID map for the given scope.
@@ -120,6 +122,7 @@ func (h *Handler) getPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 	maxAutoRetries := int(h.cfgRepo.GetNumber(ctx, "maxAutoRetries", 3))
 	retryBackoffSeconds := int(h.cfgRepo.GetNumber(ctx, "retryBackoffSeconds", 60))
 	extraSafeBashCommands := h.cfgRepo.GetString(ctx, "extraSafeBashCommands", "")
+	planMode := h.cfgRepo.GetString(ctx, "planMode", "") == "true"
 
 	stageModels := make(map[string]string, len(validStageModelKeys))
 	for _, stage := range validStageModelKeys {
@@ -134,6 +137,7 @@ func (h *Handler) getPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 		ExtraSafeBashCommands:    extraSafeBashCommands,
 		StageModels:              stageModels,
 		StageSpawners:            h.readScopedStageSpawners(ctx, nil),
+		PlanMode:                 planMode,
 	})
 }
 
@@ -146,6 +150,7 @@ func (h *Handler) putPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 		ExtraSafeBashCommands    *string           `json:"extraSafeBashCommands"`
 		StageModels              map[string]string `json:"stageModels"`
 		StageSpawners            map[string]string `json:"stageSpawners"`
+		PlanMode                 *bool             `json:"planMode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return fmt.Errorf("pipeline_config.put: decode: %w", err)
@@ -201,10 +206,45 @@ func (h *Handler) putPipelineConfig(w http.ResponseWriter, r *http.Request) erro
 			return fmt.Errorf("pipeline_config.put: %w", err)
 		}
 	}
+	if body.PlanMode != nil {
+		v := "false"
+		if *body.PlanMode {
+			v = "true"
+		}
+		if err := h.cfgRepo.Set(ctx, "planMode", v); err != nil {
+			return fmt.Errorf("pipeline_config.put: planMode: %w", err)
+		}
+	}
 	h.orchestrator.InvalidateConfigCache()
 	raw := h.cfgRepo.GetString(ctx, "extraSafeBashCommands", "")
 	permissions.SetExtraSafeBashCommands(permissions.ParseExtraSafeBashCommands(raw))
 	return h.getPipelineConfig(w, r)
+}
+
+// readProjectPlanMode returns the project-scoped planMode as *bool (nil when no override is set).
+func readProjectPlanMode(h *Handler, ctx context.Context, projectID *string) *bool {
+	raw := h.cfgRepo.GetStringForScope(ctx, projectID, "planMode", "")
+	if raw == "" {
+		return nil
+	}
+	v := raw == "true"
+	return &v
+}
+
+// resolveCreatePlanMode resolves the effective planMode for a task being created:
+// explicit request value > project-scoped default > global default > nil (ent default false).
+func resolveCreatePlanMode(h *Handler, ctx context.Context, projectID *string, explicit *bool) *bool {
+	if explicit != nil {
+		return explicit
+	}
+	if pm := readProjectPlanMode(h, ctx, projectID); pm != nil {
+		return pm
+	}
+	if h.cfgRepo.GetString(ctx, "planMode", "") == "true" {
+		v := true
+		return &v
+	}
+	return nil
 }
 
 func (h *Handler) getProjectPipelineConfig(w http.ResponseWriter, r *http.Request) error {
@@ -216,9 +256,11 @@ func (h *Handler) getProjectPipelineConfig(w http.ResponseWriter, r *http.Reques
 		}
 		return fmt.Errorf("project_pipeline_config.get: %w", err)
 	}
+	planMode := readProjectPlanMode(h, ctx, &id)
 	return jsonReply(w, http.StatusOK, projectPipelineConfigResponse{
 		StageModels:   h.readScopedStageModels(ctx, &id),
 		StageSpawners: h.readScopedStageSpawners(ctx, &id),
+		PlanMode:      planMode,
 	})
 }
 
@@ -234,6 +276,7 @@ func (h *Handler) putProjectPipelineConfig(w http.ResponseWriter, r *http.Reques
 	var body struct {
 		StageModels   map[string]string `json:"stageModels"`
 		StageSpawners map[string]string `json:"stageSpawners"`
+		PlanMode      *bool             `json:"planMode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return fmt.Errorf("project_pipeline_config.put: decode: %w", err)
@@ -248,9 +291,20 @@ func (h *Handler) putProjectPipelineConfig(w http.ResponseWriter, r *http.Reques
 			return fmt.Errorf("project_pipeline_config.put: %w", err)
 		}
 	}
+	if body.PlanMode != nil {
+		v := "false"
+		if *body.PlanMode {
+			v = "true"
+		}
+		if err := h.cfgRepo.SetScoped(ctx, &id, "planMode", v); err != nil {
+			return fmt.Errorf("project_pipeline_config.put: planMode: %w", err)
+		}
+	}
+	planMode := readProjectPlanMode(h, ctx, &id)
 	return jsonReply(w, http.StatusOK, projectPipelineConfigResponse{
 		StageModels:   h.readScopedStageModels(ctx, &id),
 		StageSpawners: h.readScopedStageSpawners(ctx, &id),
+		PlanMode:      planMode,
 	})
 }
 
