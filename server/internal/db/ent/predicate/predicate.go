@@ -45,6 +45,9 @@ type RefinementTurn func(*sql.Selector)
 // RemoteRegistration is the predicate function for remoteregistration builders.
 type RemoteRegistration func(*sql.Selector)
 
+// Scratchpad is the predicate function for scratchpad builders.
+type Scratchpad func(*sql.Selector)
+
 // Spawner is the predicate function for spawner builders.
 type Spawner func(*sql.Selector)
 

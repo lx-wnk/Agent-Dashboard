@@ -18,6 +18,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
@@ -156,6 +157,14 @@ func init() {
 	remoteregistrationDescCreatedAt := remoteregistrationFields[5].Descriptor()
 	// remoteregistration.DefaultCreatedAt holds the default value on creation for the created_at field.
 	remoteregistration.DefaultCreatedAt = remoteregistrationDescCreatedAt.Default.(func() time.Time)
+	scratchpadFields := schema.Scratchpad{}.Fields()
+	_ = scratchpadFields
+	// scratchpadDescUpdatedAt is the schema descriptor for updated_at field.
+	scratchpadDescUpdatedAt := scratchpadFields[4].Descriptor()
+	// scratchpad.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	scratchpad.DefaultUpdatedAt = scratchpadDescUpdatedAt.Default.(func() time.Time)
+	// scratchpad.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	scratchpad.UpdateDefaultUpdatedAt = scratchpadDescUpdatedAt.UpdateDefault.(func() time.Time)
 	spawnerFields := schema.Spawner{}.Fields()
 	_ = spawnerFields
 	// spawnerDescArgs is the schema descriptor for args field.

@@ -165,6 +165,18 @@ func (f RemoteRegistrationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RemoteRegistrationMutation", m)
 }
 
+// The ScratchpadFunc type is an adapter to allow the use of ordinary
+// function as Scratchpad mutator.
+type ScratchpadFunc func(context.Context, *ent.ScratchpadMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ScratchpadFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ScratchpadMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ScratchpadMutation", m)
+}
+
 // The SpawnerFunc type is an adapter to allow the use of ordinary
 // function as Spawner mutator.
 type SpawnerFunc func(context.Context, *ent.SpawnerMutation) (ent.Value, error)

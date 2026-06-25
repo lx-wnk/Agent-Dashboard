@@ -371,6 +371,28 @@ var (
 			},
 		},
 	}
+	// ScratchpadsColumns holds the columns for the "scratchpads" table.
+	ScratchpadsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "namespace", Type: field.TypeString},
+		{Name: "key", Type: field.TypeString},
+		{Name: "value", Type: field.TypeString, Size: 2147483647},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "updated_by_task_id", Type: field.TypeString},
+	}
+	// ScratchpadsTable holds the schema information for the "scratchpads" table.
+	ScratchpadsTable = &schema.Table{
+		Name:       "scratchpads",
+		Columns:    ScratchpadsColumns,
+		PrimaryKey: []*schema.Column{ScratchpadsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "scratchpad_namespace_key",
+				Unique:  true,
+				Columns: []*schema.Column{ScratchpadsColumns[1], ScratchpadsColumns[2]},
+			},
+		},
+	}
 	// SpawnersColumns holds the columns for the "spawners" table.
 	SpawnersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -707,6 +729,7 @@ var (
 		ProviderSettingsTable,
 		RefinementTurnsTable,
 		RemoteRegistrationsTable,
+		ScratchpadsTable,
 		SpawnersTable,
 		StageRunsTable,
 		SystemPromptsTable,
