@@ -179,6 +179,9 @@ type OrchestratorOptions struct {
 	AuditRepo        repo.AuditEventRepo
 	ConfigRepo       repo.PipelineConfigRepo
 	SystemPromptRepo SystemPromptQuerier
+	// DepRepo enables dependency-cascade and picker-gate behaviour.
+	// When nil (e.g. in older tests), dependency logic is skipped entirely.
+	DepRepo repo.DependencyRepo
 
 	// MCPToken and MCPUrl are injected into spawned stage agents via
 	// DASHBOARD_MCP_TOKEN / DASHBOARD_MCP_URL so the channel bridge can

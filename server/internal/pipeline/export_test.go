@@ -73,3 +73,8 @@ func (o *PipelineOrchestrator) SetResolveSpawner(fn SpawnerResolverFunc) {
 
 // PlanReviewBuilderForTest exposes planReviewBuilder for unit tests.
 var PlanReviewBuilderForTest = planReviewBuilder
+
+// HandleDependentTasksForTest exposes handleDependentTasks for cascade integration tests.
+func (o *PipelineOrchestrator) HandleDependentTasksForTest(ctx context.Context, taskID, newStage string) {
+	o.handleDependentTasks(ctx, taskID, newStage)
+}
