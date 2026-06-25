@@ -145,6 +145,11 @@ func SilverBullet(v bool) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldSilverBullet, v))
 }
 
+// PlanMode applies equality check predicate on the "plan_mode" field. It's identical to PlanModeEQ.
+func PlanMode(v bool) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldPlanMode, v))
+}
+
 // Autonomy applies equality check predicate on the "autonomy" field. It's identical to AutonomyEQ.
 func Autonomy(v string) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldAutonomy, v))
@@ -1138,6 +1143,16 @@ func SilverBulletEQ(v bool) predicate.Task {
 // SilverBulletNEQ applies the NEQ predicate on the "silver_bullet" field.
 func SilverBulletNEQ(v bool) predicate.Task {
 	return predicate.Task(sql.FieldNEQ(FieldSilverBullet, v))
+}
+
+// PlanModeEQ applies the EQ predicate on the "plan_mode" field.
+func PlanModeEQ(v bool) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldPlanMode, v))
+}
+
+// PlanModeNEQ applies the NEQ predicate on the "plan_mode" field.
+func PlanModeNEQ(v bool) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldPlanMode, v))
 }
 
 // AutonomyEQ applies the EQ predicate on the "autonomy" field.

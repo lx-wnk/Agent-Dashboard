@@ -199,3 +199,44 @@ func SummarizeReviewFindings(output map[string]any) string {
 	}
 	return result
 }
+
+// PlanReviewPrompt builds the prompt for the plan_review stage.
+// The agent drafts a concrete execution plan, self-reviews it for completeness
+// and concept fidelity, then emits only the final vetted plan as output.
+func PlanReviewPrompt(t *ent.Task, conceptOutput map[string]any, reviewFeedback string) PromptBundle {
+	conceptJSON, _ := json.MarshalIndent(conceptOutput, "", "  ")
+
+	feedbackBlock := ""
+	if reviewFeedback != "" {
+		feedbackBlock = fmt.Sprintf("\n\n## Reviewer Feedback — Incorporate This\n%s", reviewFeedback)
+	}
+
+	userPrompt := fmt.Sprintf(`## Task: %s
+
+%s
+
+## Approved Concept (spec, plan, context)
+`+"```json\n%s\n```"+`%s
+
+## Your Job: Draft → Self-Review → Finalize
+
+**Phase 1 — Draft:** Produce a concrete execution plan: files to create/modify, ordered implementation steps, and test approach.
+
+**Phase 2 — Self-Review (critique your draft):** Check for:
+1. Completeness — does the plan cover every requirement in the concept?
+2. Concept fidelity — does every step follow from the approved spec?
+3. Missing or incorrect files?
+4. Test gaps — are new behaviours covered?
+
+**Phase 3 — Rewrite:** Incorporate your critique and produce a final vetted plan.
+
+Output ONLY the final vetted plan as your FINAL action by calling the `+"`set_stage_output`"+` MCP tool with an `+"`output`"+` object of exactly this shape:
+{"summary": string, "steps": string[], "filesTouched": string[], "testApproach": string}
+If `+"`set_stage_output`"+` is unavailable, instead emit the same object as a `+"```json```"+` block.`,
+		t.Title,
+		strOrEmpty(t.Description),
+		string(conceptJSON),
+		feedbackBlock,
+	)
+	return PromptBundle{SystemPrompt: sharedContext, UserPrompt: userPrompt}
+}

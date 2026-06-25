@@ -26,6 +26,7 @@ import (
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
+	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/projects"
@@ -139,6 +140,7 @@ type RouterDeps struct {
 	SearchHandler         *search.Handler
 	HistoryHandler        *apihistory.Handler
 	RefineHandler         *refineapi.Handler
+	PlanHandler           *planapi.Handler
 	AnalyticsHandler      *apianalytics.Handler
 	CostHandler           *apicost.Handler
 	EvalHandler           *apieval.Handler
@@ -332,6 +334,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.RefineHandler != nil {
 			deps.RefineHandler.Mount(r)
+		}
+
+		if deps.PlanHandler != nil {
+			deps.PlanHandler.Mount(r)
 		}
 
 		if deps.AnalyticsHandler != nil {

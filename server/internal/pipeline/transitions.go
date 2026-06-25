@@ -362,5 +362,16 @@ func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, ta
 		}
 		return NextTransition{Stage: "finalization", Output: output}
 	}
+	// plan_review gates on human approval; it never auto-advances.
+	if run.Stage == "plan_review" {
+		return WaitUserTransition{Reason: "Plan review: awaiting user approval", AgentDone: true}
+	}
+	// After backlog, enter plan_review only when the task opted into plan mode.
+	if run.Stage == "backlog" {
+		if task.PlanMode {
+			return NextTransition{Stage: "plan_review", Output: output}
+		}
+		return NextTransition{Stage: "implementation", Output: output}
+	}
 	return NextTransition{Stage: NextStage(run.Stage), Output: output}
 }

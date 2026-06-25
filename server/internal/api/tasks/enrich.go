@@ -36,6 +36,7 @@ type EnrichedTask struct {
 	CostBudgetCents     *int                   `json:"costBudgetCents"`
 	StageTimeoutSeconds int                    `json:"stageTimeoutSeconds"`
 	SilverBullet        bool                   `json:"silverBullet"`
+	PlanMode            bool                   `json:"planMode"`
 	Rank                *float64               `json:"rank"`
 	Metadata            map[string]interface{} `json:"metadata"`
 	CreatedAt           time.Time              `json:"createdAt"`
@@ -223,6 +224,7 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 		CostBudgetCents:             t.CostBudgetCents,
 		StageTimeoutSeconds:         t.StageTimeoutSeconds,
 		SilverBullet:                t.SilverBullet,
+		PlanMode:                    t.PlanMode,
 		Rank:                        t.Rank,
 		Metadata:                    t.Metadata,
 		CreatedAt:                   t.CreatedAt,

@@ -320,6 +320,7 @@ type CreateTaskParams struct {
 	UserID          *string
 	Metadata        map[string]any
 	Autonomy        *string
+	PlanMode        *bool
 }
 
 // CreateTaskFromInput is the reusable task-creation core: it checks slug
@@ -402,6 +403,7 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 		tokenBudget = &v
 	}
 	clampNegativeBudget(tokenBudget)
+	planMode := resolveCreatePlanMode(h, ctx, projectIDPtr, p.PlanMode)
 	task, err := h.taskRepo.Create(ctx, repo.CreateTaskInput{
 		Slug:                p.Slug,
 		Title:               p.Title,
@@ -421,6 +423,7 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 		SpawnerID:           spawnerIDPtr,
 		Autonomy:            p.Autonomy,
 		Metadata:            p.Metadata,
+		PlanMode:            planMode,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("tasks.create: %w", err)
@@ -446,6 +449,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		ProjectID       string  `json:"projectId"`
 		SpawnerID       string  `json:"spawnerId"`
 		Autonomy        *string `json:"autonomy"`
+		PlanMode        *bool   `json:"planMode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -485,6 +489,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		SpawnerID:       body.SpawnerID,
 		UserID:          &userID,
 		Autonomy:        body.Autonomy,
+		PlanMode:        body.PlanMode,
 	})
 	if err != nil {
 		return err

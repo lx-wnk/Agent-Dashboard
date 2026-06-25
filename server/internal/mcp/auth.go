@@ -37,6 +37,7 @@ var ToolScopeMap = map[string]string{
 	"approve_all_pending":        "pipeline:control",
 	"get_refine_status":          "pipeline:control", "approve_spec": "pipeline:control",
 	"refine_task": "pipeline:control", "inject_concept": "pipeline:control",
+	"approve_plan": "pipeline:control", "reject_plan": "pipeline:control", "get_plan_status": "pipeline:control",
 	// keys:manage
 	"list_api_keys": "keys:manage", "create_api_key": "keys:manage",
 	"revoke_api_key": "keys:manage",

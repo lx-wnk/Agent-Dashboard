@@ -33,6 +33,7 @@ func (Task) Fields() []ent.Field {
 		field.Int("cost_budget_cents").Optional().Nillable(),
 		field.Int("stage_timeout_seconds").Default(1800),
 		field.Bool("silver_bullet").Default(false),
+		field.Bool("plan_mode").Default(false),
 		// autonomy controls the permission gate: "spec_gated" and "full" auto-approve
 		// all permission requests; "manual" keeps today's gated behaviour. Empty-string
 		// rows (pre-migration) are treated as "manual" in IsAllowAll to preserve the

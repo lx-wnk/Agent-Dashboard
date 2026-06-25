@@ -92,6 +92,7 @@ func TestGetPipelineConfig_DefaultStageModels(t *testing.T) {
 		"implementation": "claude-opus-4-6",
 		"self_review":    "claude-sonnet-4-6",
 		"finalization":   "claude-haiku-4-5",
+		"plan_review":    "claude-sonnet-4-6",
 	}
 	for stage, want := range wantModels {
 		got, ok := resp.StageModels[stage]
@@ -245,8 +246,8 @@ func TestPutPipelineConfig_UnknownStageIgnored(t *testing.T) {
 	if _, bad := resp.StageModels["nonexistent_stage"]; bad {
 		t.Errorf("unknown stage key leaked into GET response")
 	}
-	if len(resp.StageModels) != 3 {
-		t.Errorf("expected 3 stageModels keys, got %d", len(resp.StageModels))
+	if len(resp.StageModels) != 4 {
+		t.Errorf("expected 4 stageModels keys, got %d", len(resp.StageModels))
 	}
 }
 
@@ -515,5 +516,211 @@ func TestProjectPipelineConfig_UnknownProjectReturns404(t *testing.T) {
 	r.ServeHTTP(rr2, req2)
 	if rr2.Code != http.StatusNotFound {
 		t.Errorf("PUT: expected 404, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+}
+
+// TestPutPipelineConfig_PlanReviewStageModelRoundTrip verifies that plan_review
+// is accepted as a valid stage key for stageModels and stageSpawners.
+func TestPutPipelineConfig_PlanReviewStageModelRoundTrip(t *testing.T) {
+	r := newTestHandlerWithRealOrchestrator(t)
+
+	body := map[string]any{
+		"stageModels": map[string]string{
+			"plan_review": "claude-haiku-4-5",
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var putResp struct {
+		StageModels map[string]string `json:"stageModels"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &putResp); err != nil {
+		t.Fatalf("decode PUT: %v", err)
+	}
+	if putResp.StageModels["plan_review"] != "claude-haiku-4-5" {
+		t.Errorf("PUT: plan_review model=%q, want claude-haiku-4-5", putResp.StageModels["plan_review"])
+	}
+
+	// GET should round-trip the persisted override.
+	req2 := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/pipeline/config", nil))
+	rr2 := httptest.NewRecorder()
+	r.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("GET: expected 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+	var getResp struct {
+		StageModels map[string]string `json:"stageModels"`
+	}
+	if err := json.Unmarshal(rr2.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("decode GET: %v", err)
+	}
+	if getResp.StageModels["plan_review"] != "claude-haiku-4-5" {
+		t.Errorf("GET round-trip: plan_review model=%q, want claude-haiku-4-5", getResp.StageModels["plan_review"])
+	}
+}
+
+// TestPutPipelineConfig_PlanReviewStageSpawnerRoundTrip verifies plan_review
+// is accepted as a valid stage key for stageSpawners.
+func TestPutPipelineConfig_PlanReviewStageSpawnerRoundTrip(t *testing.T) {
+	_, r, spawnerID := newTestHandlerWithSpawner(t)
+
+	body := map[string]any{
+		"stageSpawners": map[string]string{
+			"plan_review": spawnerID,
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		StageSpawners map[string]string `json:"stageSpawners"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.StageSpawners["plan_review"] != spawnerID {
+		t.Errorf("plan_review spawner=%q, want %q", resp.StageSpawners["plan_review"], spawnerID)
+	}
+}
+
+// TestPipelineConfig_PlanModeGlobalRoundTrip verifies the global planMode bool
+// round-trips through PUT/GET.
+func TestPipelineConfig_PlanModeGlobalRoundTrip(t *testing.T) {
+	_, r := newTestHandler(t)
+
+	// Default should be false.
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/pipeline/config", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET default: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var defaultResp struct {
+		PlanMode bool `json:"planMode"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &defaultResp); err != nil {
+		t.Fatalf("decode default GET: %v", err)
+	}
+	if defaultResp.PlanMode {
+		t.Errorf("default planMode should be false, got true")
+	}
+
+	// PUT planMode=true.
+	planModeTrue := true
+	putBody := map[string]any{"planMode": planModeTrue}
+	b, _ := json.Marshal(putBody)
+	req2 := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b)))
+	req2.Header.Set("Content-Type", "application/json")
+	rr2 := httptest.NewRecorder()
+	r.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("PUT planMode=true: expected 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+	var putResp struct {
+		PlanMode bool `json:"planMode"`
+	}
+	if err := json.Unmarshal(rr2.Body.Bytes(), &putResp); err != nil {
+		t.Fatalf("decode PUT response: %v", err)
+	}
+	if !putResp.PlanMode {
+		t.Errorf("after PUT planMode=true: response planMode=%v, want true", putResp.PlanMode)
+	}
+
+	// GET should round-trip.
+	req3 := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/pipeline/config", nil))
+	rr3 := httptest.NewRecorder()
+	r.ServeHTTP(rr3, req3)
+	if rr3.Code != http.StatusOK {
+		t.Fatalf("GET after PUT: expected 200, got %d: %s", rr3.Code, rr3.Body.String())
+	}
+	var getResp struct {
+		PlanMode bool `json:"planMode"`
+	}
+	if err := json.Unmarshal(rr3.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("decode GET: %v", err)
+	}
+	if !getResp.PlanMode {
+		t.Errorf("GET round-trip: planMode=%v, want true", getResp.PlanMode)
+	}
+}
+
+// TestPipelineConfig_PlanModeProjectRoundTrip verifies the per-project planMode bool
+// round-trips through PUT/GET on the project pipeline-config endpoints.
+func TestPipelineConfig_PlanModeProjectRoundTrip(t *testing.T) {
+	client, r, _ := newTestHandlerWithSpawner(t)
+	projectRepo := repo.NewProjectRepo(client)
+	proj, err := projectRepo.Create(testCtx(t), "PM Project", "pm-project", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	projectID := proj.ID
+
+	// Default: planMode absent (false).
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/projects/"+projectID+"/pipeline-config", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET default: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var defaultResp struct {
+		PlanMode *bool `json:"planMode"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &defaultResp); err != nil {
+		t.Fatalf("decode default GET: %v", err)
+	}
+	// No project-level override yet — should be nil or false.
+	if defaultResp.PlanMode != nil && *defaultResp.PlanMode {
+		t.Errorf("default project planMode should be nil/false, got true")
+	}
+
+	// PUT project planMode=true.
+	planModeTrue := true
+	putBody := map[string]any{"planMode": planModeTrue}
+	b, _ := json.Marshal(putBody)
+	req2 := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/projects/"+projectID+"/pipeline-config", bytes.NewReader(b)))
+	req2.Header.Set("Content-Type", "application/json")
+	rr2 := httptest.NewRecorder()
+	r.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("PUT planMode=true: expected 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+	var putResp struct {
+		PlanMode *bool `json:"planMode"`
+	}
+	if err := json.Unmarshal(rr2.Body.Bytes(), &putResp); err != nil {
+		t.Fatalf("decode PUT response: %v", err)
+	}
+	if putResp.PlanMode == nil || !*putResp.PlanMode {
+		t.Errorf("after PUT planMode=true: response planMode=%v, want true", putResp.PlanMode)
+	}
+
+	// GET should round-trip.
+	req3 := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/projects/"+projectID+"/pipeline-config", nil))
+	rr3 := httptest.NewRecorder()
+	r.ServeHTTP(rr3, req3)
+	if rr3.Code != http.StatusOK {
+		t.Fatalf("GET after PUT: expected 200, got %d: %s", rr3.Code, rr3.Body.String())
+	}
+	var getResp struct {
+		PlanMode *bool `json:"planMode"`
+	}
+	if err := json.Unmarshal(rr3.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("decode GET: %v", err)
+	}
+	if getResp.PlanMode == nil || !*getResp.PlanMode {
+		t.Errorf("GET round-trip: project planMode=%v, want true", getResp.PlanMode)
 	}
 }

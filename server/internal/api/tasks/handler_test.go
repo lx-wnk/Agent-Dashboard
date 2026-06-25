@@ -123,6 +123,7 @@ func (n *noopOrchestrator) EffectiveStageModel(_ context.Context, stage string) 
 		"implementation": "claude-opus-4-6",
 		"self_review":    "claude-sonnet-4-6",
 		"finalization":   "claude-haiku-4-5",
+		"plan_review":    "claude-sonnet-4-6",
 	}
 	return defaults[stage]
 }
