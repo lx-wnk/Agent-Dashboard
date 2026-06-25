@@ -45,6 +45,18 @@ func (f AuditEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuditEventMutation", m)
 }
 
+// The CoordLockFunc type is an adapter to allow the use of ordinary
+// function as CoordLock mutator.
+type CoordLockFunc func(context.Context, *ent.CoordLockMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f CoordLockFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.CoordLockMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CoordLockMutation", m)
+}
+
 // The DriftAlertFunc type is an adapter to allow the use of ordinary
 // function as DriftAlert mutator.
 type DriftAlertFunc func(context.Context, *ent.DriftAlertMutation) (ent.Value, error)

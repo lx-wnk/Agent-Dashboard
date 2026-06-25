@@ -8,6 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
@@ -75,6 +76,12 @@ func init() {
 	auditeventDescTs := auditeventFields[1].Descriptor()
 	// auditevent.DefaultTs holds the default value on creation for the ts field.
 	auditevent.DefaultTs = auditeventDescTs.Default.(func() time.Time)
+	coordlockFields := schema.CoordLock{}.Fields()
+	_ = coordlockFields
+	// coordlockDescAcquiredAt is the schema descriptor for acquired_at field.
+	coordlockDescAcquiredAt := coordlockFields[4].Descriptor()
+	// coordlock.DefaultAcquiredAt holds the default value on creation for the acquired_at field.
+	coordlock.DefaultAcquiredAt = coordlockDescAcquiredAt.Default.(func() time.Time)
 	driftalertFields := schema.DriftAlert{}.Fields()
 	_ = driftalertFields
 	// driftalertDescStatus is the schema descriptor for status field.

@@ -15,6 +15,9 @@ type ApiKey func(*sql.Selector)
 // AuditEvent is the predicate function for auditevent builders.
 type AuditEvent func(*sql.Selector)
 
+// CoordLock is the predicate function for coordlock builders.
+type CoordLock func(*sql.Selector)
+
 // DriftAlert is the predicate function for driftalert builders.
 type DriftAlert func(*sql.Selector)
 

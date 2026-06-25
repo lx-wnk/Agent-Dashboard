@@ -18,6 +18,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
@@ -50,6 +51,8 @@ type Client struct {
 	ApiKey *ApiKeyClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
+	// CoordLock is the client for interacting with the CoordLock builders.
+	CoordLock *CoordLockClient
 	// DriftAlert is the client for interacting with the DriftAlert builders.
 	DriftAlert *DriftAlertClient
 	// EvalMetricSnapshot is the client for interacting with the EvalMetricSnapshot builders.
@@ -102,6 +105,7 @@ func (c *Client) init() {
 	c.AgentCostTrend = NewAgentCostTrendClient(c.config)
 	c.ApiKey = NewApiKeyClient(c.config)
 	c.AuditEvent = NewAuditEventClient(c.config)
+	c.CoordLock = NewCoordLockClient(c.config)
 	c.DriftAlert = NewDriftAlertClient(c.config)
 	c.EvalMetricSnapshot = NewEvalMetricSnapshotClient(c.config)
 	c.PermissionPreset = NewPermissionPresetClient(c.config)
@@ -216,6 +220,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		AgentCostTrend:     NewAgentCostTrendClient(cfg),
 		ApiKey:             NewApiKeyClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
+		CoordLock:          NewCoordLockClient(cfg),
 		DriftAlert:         NewDriftAlertClient(cfg),
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
@@ -257,6 +262,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		AgentCostTrend:     NewAgentCostTrendClient(cfg),
 		ApiKey:             NewApiKeyClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
+		CoordLock:          NewCoordLockClient(cfg),
 		DriftAlert:         NewDriftAlertClient(cfg),
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
@@ -305,11 +311,12 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.DriftAlert, c.EvalMetricSnapshot,
-		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Project,
-		c.ProjectFolder, c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration,
-		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
-		c.TaskPermission, c.TaskSchedule, c.User,
+		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.CoordLock, c.DriftAlert,
+		c.EvalMetricSnapshot, c.PermissionPreset, c.PermissionRequest,
+		c.PipelineConfig, c.Project, c.ProjectFolder, c.ProviderSetting,
+		c.RefinementTurn, c.RemoteRegistration, c.Scratchpad, c.Spawner, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
+		c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -319,11 +326,12 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.DriftAlert, c.EvalMetricSnapshot,
-		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Project,
-		c.ProjectFolder, c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration,
-		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
-		c.TaskPermission, c.TaskSchedule, c.User,
+		c.AgentCostTrend, c.ApiKey, c.AuditEvent, c.CoordLock, c.DriftAlert,
+		c.EvalMetricSnapshot, c.PermissionPreset, c.PermissionRequest,
+		c.PipelineConfig, c.Project, c.ProjectFolder, c.ProviderSetting,
+		c.RefinementTurn, c.RemoteRegistration, c.Scratchpad, c.Spawner, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
+		c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -338,6 +346,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ApiKey.mutate(ctx, m)
 	case *AuditEventMutation:
 		return c.AuditEvent.mutate(ctx, m)
+	case *CoordLockMutation:
+		return c.CoordLock.mutate(ctx, m)
 	case *DriftAlertMutation:
 		return c.DriftAlert.mutate(ctx, m)
 	case *EvalMetricSnapshotMutation:
@@ -777,6 +787,139 @@ func (c *AuditEventClient) mutate(ctx context.Context, m *AuditEventMutation) (V
 		return (&AuditEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AuditEvent mutation op: %q", m.Op())
+	}
+}
+
+// CoordLockClient is a client for the CoordLock schema.
+type CoordLockClient struct {
+	config
+}
+
+// NewCoordLockClient returns a client for the CoordLock from the given config.
+func NewCoordLockClient(c config) *CoordLockClient {
+	return &CoordLockClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `coordlock.Hooks(f(g(h())))`.
+func (c *CoordLockClient) Use(hooks ...Hook) {
+	c.hooks.CoordLock = append(c.hooks.CoordLock, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `coordlock.Intercept(f(g(h())))`.
+func (c *CoordLockClient) Intercept(interceptors ...Interceptor) {
+	c.inters.CoordLock = append(c.inters.CoordLock, interceptors...)
+}
+
+// Create returns a builder for creating a CoordLock entity.
+func (c *CoordLockClient) Create() *CoordLockCreate {
+	mutation := newCoordLockMutation(c.config, OpCreate)
+	return &CoordLockCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of CoordLock entities.
+func (c *CoordLockClient) CreateBulk(builders ...*CoordLockCreate) *CoordLockCreateBulk {
+	return &CoordLockCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CoordLockClient) MapCreateBulk(slice any, setFunc func(*CoordLockCreate, int)) *CoordLockCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CoordLockCreateBulk{err: fmt.Errorf("calling to CoordLockClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CoordLockCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CoordLockCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for CoordLock.
+func (c *CoordLockClient) Update() *CoordLockUpdate {
+	mutation := newCoordLockMutation(c.config, OpUpdate)
+	return &CoordLockUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CoordLockClient) UpdateOne(_m *CoordLock) *CoordLockUpdateOne {
+	mutation := newCoordLockMutation(c.config, OpUpdateOne, withCoordLock(_m))
+	return &CoordLockUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CoordLockClient) UpdateOneID(id string) *CoordLockUpdateOne {
+	mutation := newCoordLockMutation(c.config, OpUpdateOne, withCoordLockID(id))
+	return &CoordLockUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for CoordLock.
+func (c *CoordLockClient) Delete() *CoordLockDelete {
+	mutation := newCoordLockMutation(c.config, OpDelete)
+	return &CoordLockDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CoordLockClient) DeleteOne(_m *CoordLock) *CoordLockDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CoordLockClient) DeleteOneID(id string) *CoordLockDeleteOne {
+	builder := c.Delete().Where(coordlock.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CoordLockDeleteOne{builder}
+}
+
+// Query returns a query builder for CoordLock.
+func (c *CoordLockClient) Query() *CoordLockQuery {
+	return &CoordLockQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCoordLock},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a CoordLock entity by its id.
+func (c *CoordLockClient) Get(ctx context.Context, id string) (*CoordLock, error) {
+	return c.Query().Where(coordlock.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CoordLockClient) GetX(ctx context.Context, id string) *CoordLock {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *CoordLockClient) Hooks() []Hook {
+	return c.hooks.CoordLock
+}
+
+// Interceptors returns the client interceptors.
+func (c *CoordLockClient) Interceptors() []Interceptor {
+	return c.inters.CoordLock
+}
+
+func (c *CoordLockClient) mutate(ctx context.Context, m *CoordLockMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CoordLockCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CoordLockUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CoordLockUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CoordLockDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown CoordLock mutation op: %q", m.Op())
 	}
 }
 
@@ -3502,14 +3645,14 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AgentCostTrend, ApiKey, AuditEvent, DriftAlert, EvalMetricSnapshot,
+		AgentCostTrend, ApiKey, AuditEvent, CoordLock, DriftAlert, EvalMetricSnapshot,
 		PermissionPreset, PermissionRequest, PipelineConfig, Project, ProjectFolder,
 		ProviderSetting, RefinementTurn, RemoteRegistration, Scratchpad, Spawner,
 		StageRun, SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
 		User []ent.Hook
 	}
 	inters struct {
-		AgentCostTrend, ApiKey, AuditEvent, DriftAlert, EvalMetricSnapshot,
+		AgentCostTrend, ApiKey, AuditEvent, CoordLock, DriftAlert, EvalMetricSnapshot,
 		PermissionPreset, PermissionRequest, PipelineConfig, Project, ProjectFolder,
 		ProviderSetting, RefinementTurn, RemoteRegistration, Scratchpad, Spawner,
 		StageRun, SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,

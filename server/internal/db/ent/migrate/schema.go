@@ -102,6 +102,28 @@ var (
 			},
 		},
 	}
+	// CoordLocksColumns holds the columns for the "coord_locks" table.
+	CoordLocksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "namespace", Type: field.TypeString},
+		{Name: "key", Type: field.TypeString},
+		{Name: "owner_task_id", Type: field.TypeString},
+		{Name: "acquired_at", Type: field.TypeTime},
+		{Name: "expires_at", Type: field.TypeTime},
+	}
+	// CoordLocksTable holds the schema information for the "coord_locks" table.
+	CoordLocksTable = &schema.Table{
+		Name:       "coord_locks",
+		Columns:    CoordLocksColumns,
+		PrimaryKey: []*schema.Column{CoordLocksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "coordlock_namespace_key",
+				Unique:  true,
+				Columns: []*schema.Column{CoordLocksColumns[1], CoordLocksColumns[2]},
+			},
+		},
+	}
 	// DriftAlertsColumns holds the columns for the "drift_alerts" table.
 	DriftAlertsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -719,6 +741,7 @@ var (
 		AgentCostTrendsTable,
 		APIKeysTable,
 		AuditEventsTable,
+		CoordLocksTable,
 		DriftAlertsTable,
 		EvalMetricSnapshotsTable,
 		PermissionPresetsTable,

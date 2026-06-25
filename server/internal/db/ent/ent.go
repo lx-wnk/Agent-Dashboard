@@ -15,6 +15,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
@@ -97,6 +98,7 @@ func checkColumn(t, c string) error {
 			agentcosttrend.Table:     agentcosttrend.ValidColumn,
 			apikey.Table:             apikey.ValidColumn,
 			auditevent.Table:         auditevent.ValidColumn,
+			coordlock.Table:          coordlock.ValidColumn,
 			driftalert.Table:         driftalert.ValidColumn,
 			evalmetricsnapshot.Table: evalmetricsnapshot.ValidColumn,
 			permissionpreset.Table:   permissionpreset.ValidColumn,
