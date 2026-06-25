@@ -48,6 +48,25 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 			(latest.Status == "awaiting_user" || latest.Status == "failed" || latest.Status == "requeued") {
 			continue
 		}
+		// Dependency gate: skip unless all upstream deps are satisfied.
+		// N+1 per candidate is intentional here (upstreams are rare and small).
+		if o.opts.DepRepo != nil {
+			resolveStage := func(ctx context.Context, id string) (string, error) {
+				upstream, err := o.opts.TaskRepo.GetByID(ctx, id)
+				if err != nil {
+					return "", err
+				}
+				return upstream.CurrentStage, nil
+			}
+			allSat, _, _, err := EvaluateTaskDeps(ctx, t.ID, o.opts.DepRepo, resolveStage)
+			if err != nil {
+				slog.Warn("orchestrator: dep eval failed", "taskID", t.ID, "err", err)
+				continue
+			}
+			if !allSat {
+				continue
+			}
+		}
 		ready = append(ready, t)
 	}
 	// SQL already sorts by: silver_bullet DESC, priority DESC, created_at ASC

@@ -54,6 +54,10 @@ type EnrichedTask struct {
 	BlockedByPendingPermissions bool                 `json:"blockedByPendingPermissions"`
 	AvailableActions            []taskcontrol.Action `json:"availableActions"`
 
+	// Dependency state — computed from task_dependency rows; false when no upstreams.
+	IsBlocked       bool `json:"isBlocked"`
+	IsUnsatisfiable bool `json:"isUnsatisfiable"`
+
 	// Child-task summary — populated by ChildSummariesByParent, zero when no children.
 	ChildCount       int          `json:"childCount"`
 	ActiveChildCount int          `json:"activeChildCount"`
@@ -97,7 +101,26 @@ func memoizeProbe(probe func(int) bool) func(int) bool {
 	}
 }
 
+// stageResolver returns a closure that resolves a task's current_stage by ID,
+// or nil when no taskRepo is available (dependency state is then skipped).
+func stageResolver(taskRepo repo.TaskRepo) func(context.Context, string) (string, error) {
+	if taskRepo == nil {
+		return nil
+	}
+	return func(ctx context.Context, id string) (string, error) {
+		up, err := taskRepo.GetByID(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		return up.CurrentStage, nil
+	}
+}
+
 func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo, bulkRepo rawrepo.StageRunBulkRepo) (*EnrichedTask, error) {
+	return EnrichTaskWithDeps(ctx, t, srRepo, permRepo, bulkRepo, nil, nil)
+}
+
+func EnrichTaskWithDeps(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo, bulkRepo rawrepo.StageRunBulkRepo, depRepo repo.DependencyRepo, taskRepo repo.TaskRepo) (*EnrichedTask, error) {
 	latest, _ := srRepo.GetLatestForTask(ctx, t.ID)
 	var pendingCount int
 	if latest != nil && latest.Stage == t.CurrentStage {
@@ -108,7 +131,7 @@ func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, perm
 		childMap, _ := bulkRepo.ChildSummariesByParent(ctx, []string{t.ID})
 		childSummary = childMap[t.ID]
 	}
-	return enrichOne(t, latest, pendingCount, pidAliveMemo(), childSummary)
+	return enrichOne(ctx, t, latest, pendingCount, pidAliveMemo(), childSummary, depRepo, stageResolver(taskRepo))
 }
 
 // EnrichTasksBulk enriches a slice of tasks with their latest stage-run status
@@ -117,6 +140,10 @@ func EnrichTask(ctx context.Context, t *ent.Task, srRepo repo.StageRunRepo, perm
 // which is correct regardless of iteration count. srRepo is retained for the
 // single-task EnrichTask path; it is unused here.
 func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo, permRepo repo.PermissionRepo, bulkRepo rawrepo.StageRunBulkRepo) ([]*EnrichedTask, error) {
+	return EnrichTasksBulkWithDeps(ctx, tasks, nil, permRepo, bulkRepo, nil, nil)
+}
+
+func EnrichTasksBulkWithDeps(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo, permRepo repo.PermissionRepo, bulkRepo rawrepo.StageRunBulkRepo, depRepo repo.DependencyRepo, taskRepo repo.TaskRepo) ([]*EnrichedTask, error) {
 	if len(tasks) == 0 {
 		return []*EnrichedTask{}, nil
 	}
@@ -149,6 +176,7 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo
 	// One memo shared across the whole slice so a pid reused by sibling tasks
 	// hits the liveness syscall once per tick.
 	isAlive := pidAliveMemo()
+	resolveStage := stageResolver(taskRepo)
 
 	result := make([]*EnrichedTask, len(tasks))
 	for i, t := range tasks {
@@ -157,7 +185,7 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo
 		if latest != nil && latest.Stage == t.CurrentStage {
 			pendingCount = pendingCounts[latest.ID]
 		}
-		enriched, err := enrichOne(t, latest, pendingCount, isAlive, childMap[t.ID])
+		enriched, err := enrichOne(ctx, t, latest, pendingCount, isAlive, childMap[t.ID], depRepo, resolveStage)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +194,7 @@ func EnrichTasksBulk(ctx context.Context, tasks []*ent.Task, _ repo.StageRunRepo
 	return result, nil
 }
 
-func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive func(int) bool, childSummary *rawrepo.ChildSummary) (*EnrichedTask, error) {
+func enrichOne(ctx context.Context, t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive func(int) bool, childSummary *rawrepo.ChildSummary, depRepo repo.DependencyRepo, resolveStage func(context.Context, string) (string, error)) (*EnrichedTask, error) {
 	latestBelongsToCurrent := latest != nil && latest.Stage == t.CurrentStage
 	var latestStatus *string
 	currentIteration := 0
@@ -200,6 +228,14 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 		activeSessionID = latest.SessionID
 		if latest.Status == "running" {
 			activePID = latest.Pid
+		}
+	}
+
+	var isBlocked, isUnsatisfiable bool
+	if depRepo != nil && resolveStage != nil {
+		if _, blocked, unsatisfiable, err := pipeline.EvaluateTaskDeps(ctx, t.ID, depRepo, resolveStage); err == nil {
+			isBlocked = blocked
+			isUnsatisfiable = unsatisfiable
 		}
 	}
 
@@ -237,6 +273,8 @@ func enrichOne(t *ent.Task, latest *ent.StageRun, pendingPermsCount int, isAlive
 		ActiveSessionID:             activeSessionID,
 		ActivePID:                   activePID,
 		BlockedByPendingPermissions: blockedByPendingPermissions,
+		IsBlocked:                   isBlocked,
+		IsUnsatisfiable:             isUnsatisfiable,
 		pendingPermsCount:           pendingPermsCount,
 	}
 

@@ -54,7 +54,7 @@ func (h *Handler) addDependency(w http.ResponseWriter, r *http.Request) error {
 	}
 	onCancelAction := body.OnCancelAction
 	if onCancelAction == "" {
-		onCancelAction = "nothing"
+		onCancelAction = "on_hold"
 	}
 	dep, err := h.depRepo.Add(r.Context(), taskID, body.DependsOnID, requiredStage, onCancelAction)
 	if err != nil {

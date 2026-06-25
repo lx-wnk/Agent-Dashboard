@@ -708,11 +708,57 @@ func (o *PipelineOrchestrator) recoverRunningStageRuns(ctx context.Context) {
 }
 
 func (o *PipelineOrchestrator) handleDependentTasks(ctx context.Context, taskID, newStage string) {
-	// Dependency cascade — Phase 3 stub: no task_dependency traversal yet.
-	// Full cascade (cancel, on_hold, start actions) is part of the dependency
-	// sub-feature; implement when TaskDependency repo methods are available.
 	if o.opts.OnTaskChanged != nil {
 		o.opts.OnTaskChanged(taskID, "dependent_check", nil)
+	}
+	if o.opts.DepRepo == nil {
+		return
+	}
+	downstreams, err := o.opts.DepRepo.ListDownstream(ctx, taskID)
+	if err != nil {
+		slog.Warn("handleDependentTasks: ListDownstream failed", "taskID", taskID, "err", err)
+		return
+	}
+	for _, dep := range downstreams {
+		downstreamID := dep.TaskID
+		downstream, err := o.opts.TaskRepo.GetByID(ctx, downstreamID)
+		if err != nil {
+			slog.Warn("handleDependentTasks: GetByID failed", "downstreamID", downstreamID, "err", err)
+			continue
+		}
+		if IsTerminalStage(downstream.CurrentStage) {
+			continue
+		}
+		if newStage == "cancelled" {
+			switch dep.OnCancelAction {
+			case "cancel":
+				cancelled := "cancelled"
+				if _, err := o.opts.TaskRepo.Update(ctx, downstreamID, repo.UpdateTaskInput{CurrentStage: &cancelled}); err != nil {
+					slog.Warn("handleDependentTasks: cascade cancel failed", "downstreamID", downstreamID, "err", err)
+					continue
+				}
+				if o.opts.OnTaskChanged != nil {
+					o.opts.OnTaskChanged(downstreamID, "cancelled", nil)
+				}
+				// recurse so multi-level chains cascade
+				o.handleDependentTasks(ctx, downstreamID, "cancelled")
+			case "start":
+				// upstream cancelled + start = treated as satisfied by the lazy gate; just refresh UI
+				if o.opts.OnTaskChanged != nil {
+					o.opts.OnTaskChanged(downstreamID, "dependent_check", nil)
+				}
+			default: // "on_hold" or anything else — leave state, refresh UI
+				if o.opts.OnTaskChanged != nil {
+					o.opts.OnTaskChanged(downstreamID, "dependent_check", nil)
+				}
+			}
+		} else {
+			// upstream reached its required stage (e.g. "done") — lazy picker will pick
+			// up the downstream on the next poll tick
+			if o.opts.OnTaskChanged != nil {
+				o.opts.OnTaskChanged(downstreamID, "dependent_check", nil)
+			}
+		}
 	}
 }
 

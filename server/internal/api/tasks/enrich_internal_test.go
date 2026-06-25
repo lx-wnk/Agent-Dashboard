@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -40,7 +41,7 @@ func TestEnrichOne_AwaitingUserZombieGating(t *testing.T) {
 	// Dead pid → zombie await; with pending permissions it is blocked + needsUser.
 	deadCalls := 0
 	deadProbe := memoizeProbe(func(int) bool { deadCalls++; return false })
-	dead, err := enrichOne(task, latest, 1, deadProbe, nil)
+	dead, err := enrichOne(context.Background(), task, latest, 1, deadProbe, nil, nil, nil)
 	require.NoError(t, err)
 	require.True(t, dead.BlockedByPendingPermissions)
 	require.True(t, dead.NeedsUser)
@@ -48,7 +49,7 @@ func TestEnrichOne_AwaitingUserZombieGating(t *testing.T) {
 
 	// Live pid → not a zombie await; not blocked by the zombie path.
 	liveProbe := memoizeProbe(func(int) bool { return true })
-	live, err := enrichOne(task, latest, 1, liveProbe, nil)
+	live, err := enrichOne(context.Background(), task, latest, 1, liveProbe, nil, nil, nil)
 	require.NoError(t, err)
 	require.False(t, live.BlockedByPendingPermissions)
 }

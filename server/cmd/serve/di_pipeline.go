@@ -66,6 +66,7 @@ func provideOrchestrator(
 		AuditRepo:        auditRepo,
 		ConfigRepo:       cfgRepo,
 		SystemPromptRepo: systemPromptRepo,
+		DepRepo:          repo.NewDependencyRepo(client),
 		MCPToken:         cfg.MCPToken,
 		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		WorktreeRoot:     cfg.WorktreeRoot,
@@ -87,7 +88,7 @@ func provideOrchestrator(
 				slog.Warn("BuildTaskPayload: task lookup failed", "taskID", taskID, "err", err)
 				return nil
 			}
-			enriched, err := tasks.EnrichTask(ctx, t, txSRRepo, txPermRepo, nil)
+			enriched, err := tasks.EnrichTaskWithDeps(ctx, t, txSRRepo, txPermRepo, nil, repo.NewDependencyRepo(client), taskRepo)
 			if err != nil {
 				slog.Warn("BuildTaskPayload: enrich failed", "taskID", taskID, "err", err)
 				return nil

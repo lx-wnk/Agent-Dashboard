@@ -238,7 +238,7 @@ func (h *Handler) broadcastEnrichedEvent(ctx context.Context, eventType string, 
 	if err != nil {
 		return
 	}
-	enriched, err := EnrichTask(ctx, t, h.srRepo, h.permRepo, h.srBulkRepo)
+	enriched, err := EnrichTaskWithDeps(ctx, t, h.srRepo, h.permRepo, h.srBulkRepo, h.depRepo, h.taskRepo)
 	if err != nil {
 		return
 	}
@@ -262,7 +262,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 		}
 		tasks = filtered
 	}
-	enriched, err := EnrichTasksBulk(r.Context(), tasks, h.srRepo, h.permRepo, h.srBulkRepo)
+	enriched, err := EnrichTasksBulkWithDeps(r.Context(), tasks, h.srRepo, h.permRepo, h.srBulkRepo, h.depRepo, h.taskRepo)
 	if err != nil {
 		return fmt.Errorf("tasks.list.enrich: %w", err)
 	}
@@ -281,7 +281,7 @@ func (h *Handler) getOne(w http.ResponseWriter, r *http.Request) error {
 		}
 		return fmt.Errorf("tasks.getOne: %w", err)
 	}
-	enriched, err := EnrichTask(r.Context(), t, h.srRepo, h.permRepo, h.srBulkRepo)
+	enriched, err := EnrichTaskWithDeps(r.Context(), t, h.srRepo, h.permRepo, h.srBulkRepo, h.depRepo, h.taskRepo)
 	if err != nil {
 		return fmt.Errorf("tasks.getOne.enrich: %w", err)
 	}
