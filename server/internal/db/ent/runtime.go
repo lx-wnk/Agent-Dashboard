@@ -8,6 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
@@ -18,6 +19,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
@@ -74,6 +76,12 @@ func init() {
 	auditeventDescTs := auditeventFields[1].Descriptor()
 	// auditevent.DefaultTs holds the default value on creation for the ts field.
 	auditevent.DefaultTs = auditeventDescTs.Default.(func() time.Time)
+	coordlockFields := schema.CoordLock{}.Fields()
+	_ = coordlockFields
+	// coordlockDescAcquiredAt is the schema descriptor for acquired_at field.
+	coordlockDescAcquiredAt := coordlockFields[4].Descriptor()
+	// coordlock.DefaultAcquiredAt holds the default value on creation for the acquired_at field.
+	coordlock.DefaultAcquiredAt = coordlockDescAcquiredAt.Default.(func() time.Time)
 	driftalertFields := schema.DriftAlert{}.Fields()
 	_ = driftalertFields
 	// driftalertDescStatus is the schema descriptor for status field.
@@ -156,6 +164,14 @@ func init() {
 	remoteregistrationDescCreatedAt := remoteregistrationFields[5].Descriptor()
 	// remoteregistration.DefaultCreatedAt holds the default value on creation for the created_at field.
 	remoteregistration.DefaultCreatedAt = remoteregistrationDescCreatedAt.Default.(func() time.Time)
+	scratchpadFields := schema.Scratchpad{}.Fields()
+	_ = scratchpadFields
+	// scratchpadDescUpdatedAt is the schema descriptor for updated_at field.
+	scratchpadDescUpdatedAt := scratchpadFields[4].Descriptor()
+	// scratchpad.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	scratchpad.DefaultUpdatedAt = scratchpadDescUpdatedAt.Default.(func() time.Time)
+	// scratchpad.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	scratchpad.UpdateDefaultUpdatedAt = scratchpadDescUpdatedAt.UpdateDefault.(func() time.Time)
 	spawnerFields := schema.Spawner{}.Fields()
 	_ = spawnerFields
 	// spawnerDescArgs is the schema descriptor for args field.

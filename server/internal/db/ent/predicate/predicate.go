@@ -15,6 +15,9 @@ type ApiKey func(*sql.Selector)
 // AuditEvent is the predicate function for auditevent builders.
 type AuditEvent func(*sql.Selector)
 
+// CoordLock is the predicate function for coordlock builders.
+type CoordLock func(*sql.Selector)
+
 // DriftAlert is the predicate function for driftalert builders.
 type DriftAlert func(*sql.Selector)
 
@@ -44,6 +47,9 @@ type RefinementTurn func(*sql.Selector)
 
 // RemoteRegistration is the predicate function for remoteregistration builders.
 type RemoteRegistration func(*sql.Selector)
+
+// Scratchpad is the predicate function for scratchpad builders.
+type Scratchpad func(*sql.Selector)
 
 // Spawner is the predicate function for spawner builders.
 type Spawner func(*sql.Selector)

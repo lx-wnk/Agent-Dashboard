@@ -28,6 +28,10 @@ var ToolScopeMap = map[string]string{
 	"delete_task": "tasks:write", "manage_task": "tasks:write",
 	"add_dependency": "tasks:write", "remove_dependency": "tasks:write",
 	"manage_schedule": "tasks:write",
+	// agent:coord
+	"write_scratchpad": "agent:coord", "read_scratchpad": "agent:coord",
+	"list_scratchpad":  "agent:coord",
+	"acquire_lock":     "agent:coord", "release_lock": "agent:coord",
 	// pipeline:control
 	"advance_task": "pipeline:control", "hold_task": "pipeline:control",
 	"resume_task":   "pipeline:control",
@@ -46,8 +50,9 @@ var ToolScopeMap = map[string]string{
 var scopeImplies = map[string][]string{
 	"tasks:read":       {},
 	"tasks:write":      {"tasks:read"},
-	"pipeline:control": {"tasks:read"},
-	"keys:manage":      {"tasks:read", "tasks:write", "pipeline:control"},
+	"agent:coord":      {},
+	"pipeline:control": {"tasks:read", "agent:coord"},
+	"keys:manage":      {"tasks:read", "tasks:write", "pipeline:control", "agent:coord"},
 }
 
 // ResolveScopes expands scopes with their implied scopes.

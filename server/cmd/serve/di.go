@@ -21,6 +21,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
+	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
@@ -410,6 +411,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		ProjectBroadcaster:    projectBroadcaster,
 		TaskProjectOps:        newTaskProjectOps(entClient),
 		TaskHandler:           taskHandler,
+		CoordHandler:          coordapi.New(repo.NewScratchpadRepo(entClient), repo.NewCoordLockRepo(entClient)),
 		WebPushHandler:        webPushHandler,
 		RemotesHandler:        remotesHandler,
 		PresetsHandler:        presetsHandler,

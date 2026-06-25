@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
@@ -25,6 +26,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
@@ -47,6 +49,7 @@ const (
 	TypeAgentCostTrend     = "AgentCostTrend"
 	TypeApiKey             = "ApiKey"
 	TypeAuditEvent         = "AuditEvent"
+	TypeCoordLock          = "CoordLock"
 	TypeDriftAlert         = "DriftAlert"
 	TypeEvalMetricSnapshot = "EvalMetricSnapshot"
 	TypePermissionPreset   = "PermissionPreset"
@@ -57,6 +60,7 @@ const (
 	TypeProviderSetting    = "ProviderSetting"
 	TypeRefinementTurn     = "RefinementTurn"
 	TypeRemoteRegistration = "RemoteRegistration"
+	TypeScratchpad         = "Scratchpad"
 	TypeSpawner            = "Spawner"
 	TypeStageRun           = "StageRun"
 	TypeSystemPrompt       = "SystemPrompt"
@@ -2400,6 +2404,554 @@ func (m *AuditEventMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *AuditEventMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown AuditEvent edge %s", name)
+}
+
+// CoordLockMutation represents an operation that mutates the CoordLock nodes in the graph.
+type CoordLockMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *string
+	namespace     *string
+	key           *string
+	owner_task_id *string
+	acquired_at   *time.Time
+	expires_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*CoordLock, error)
+	predicates    []predicate.CoordLock
+}
+
+var _ ent.Mutation = (*CoordLockMutation)(nil)
+
+// coordlockOption allows management of the mutation configuration using functional options.
+type coordlockOption func(*CoordLockMutation)
+
+// newCoordLockMutation creates new mutation for the CoordLock entity.
+func newCoordLockMutation(c config, op Op, opts ...coordlockOption) *CoordLockMutation {
+	m := &CoordLockMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeCoordLock,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withCoordLockID sets the ID field of the mutation.
+func withCoordLockID(id string) coordlockOption {
+	return func(m *CoordLockMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *CoordLock
+		)
+		m.oldValue = func(ctx context.Context) (*CoordLock, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().CoordLock.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withCoordLock sets the old CoordLock of the mutation.
+func withCoordLock(node *CoordLock) coordlockOption {
+	return func(m *CoordLockMutation) {
+		m.oldValue = func(context.Context) (*CoordLock, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m CoordLockMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m CoordLockMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of CoordLock entities.
+func (m *CoordLockMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *CoordLockMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *CoordLockMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().CoordLock.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetNamespace sets the "namespace" field.
+func (m *CoordLockMutation) SetNamespace(s string) {
+	m.namespace = &s
+}
+
+// Namespace returns the value of the "namespace" field in the mutation.
+func (m *CoordLockMutation) Namespace() (r string, exists bool) {
+	v := m.namespace
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNamespace returns the old "namespace" field's value of the CoordLock entity.
+// If the CoordLock object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CoordLockMutation) OldNamespace(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNamespace is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNamespace requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNamespace: %w", err)
+	}
+	return oldValue.Namespace, nil
+}
+
+// ResetNamespace resets all changes to the "namespace" field.
+func (m *CoordLockMutation) ResetNamespace() {
+	m.namespace = nil
+}
+
+// SetKey sets the "key" field.
+func (m *CoordLockMutation) SetKey(s string) {
+	m.key = &s
+}
+
+// Key returns the value of the "key" field in the mutation.
+func (m *CoordLockMutation) Key() (r string, exists bool) {
+	v := m.key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKey returns the old "key" field's value of the CoordLock entity.
+// If the CoordLock object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CoordLockMutation) OldKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKey: %w", err)
+	}
+	return oldValue.Key, nil
+}
+
+// ResetKey resets all changes to the "key" field.
+func (m *CoordLockMutation) ResetKey() {
+	m.key = nil
+}
+
+// SetOwnerTaskID sets the "owner_task_id" field.
+func (m *CoordLockMutation) SetOwnerTaskID(s string) {
+	m.owner_task_id = &s
+}
+
+// OwnerTaskID returns the value of the "owner_task_id" field in the mutation.
+func (m *CoordLockMutation) OwnerTaskID() (r string, exists bool) {
+	v := m.owner_task_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerTaskID returns the old "owner_task_id" field's value of the CoordLock entity.
+// If the CoordLock object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CoordLockMutation) OldOwnerTaskID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerTaskID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerTaskID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerTaskID: %w", err)
+	}
+	return oldValue.OwnerTaskID, nil
+}
+
+// ResetOwnerTaskID resets all changes to the "owner_task_id" field.
+func (m *CoordLockMutation) ResetOwnerTaskID() {
+	m.owner_task_id = nil
+}
+
+// SetAcquiredAt sets the "acquired_at" field.
+func (m *CoordLockMutation) SetAcquiredAt(t time.Time) {
+	m.acquired_at = &t
+}
+
+// AcquiredAt returns the value of the "acquired_at" field in the mutation.
+func (m *CoordLockMutation) AcquiredAt() (r time.Time, exists bool) {
+	v := m.acquired_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAcquiredAt returns the old "acquired_at" field's value of the CoordLock entity.
+// If the CoordLock object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CoordLockMutation) OldAcquiredAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAcquiredAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAcquiredAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAcquiredAt: %w", err)
+	}
+	return oldValue.AcquiredAt, nil
+}
+
+// ResetAcquiredAt resets all changes to the "acquired_at" field.
+func (m *CoordLockMutation) ResetAcquiredAt() {
+	m.acquired_at = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *CoordLockMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *CoordLockMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the CoordLock entity.
+// If the CoordLock object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CoordLockMutation) OldExpiresAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *CoordLockMutation) ResetExpiresAt() {
+	m.expires_at = nil
+}
+
+// Where appends a list predicates to the CoordLockMutation builder.
+func (m *CoordLockMutation) Where(ps ...predicate.CoordLock) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the CoordLockMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *CoordLockMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.CoordLock, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *CoordLockMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *CoordLockMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (CoordLock).
+func (m *CoordLockMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *CoordLockMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.namespace != nil {
+		fields = append(fields, coordlock.FieldNamespace)
+	}
+	if m.key != nil {
+		fields = append(fields, coordlock.FieldKey)
+	}
+	if m.owner_task_id != nil {
+		fields = append(fields, coordlock.FieldOwnerTaskID)
+	}
+	if m.acquired_at != nil {
+		fields = append(fields, coordlock.FieldAcquiredAt)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, coordlock.FieldExpiresAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *CoordLockMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case coordlock.FieldNamespace:
+		return m.Namespace()
+	case coordlock.FieldKey:
+		return m.Key()
+	case coordlock.FieldOwnerTaskID:
+		return m.OwnerTaskID()
+	case coordlock.FieldAcquiredAt:
+		return m.AcquiredAt()
+	case coordlock.FieldExpiresAt:
+		return m.ExpiresAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *CoordLockMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case coordlock.FieldNamespace:
+		return m.OldNamespace(ctx)
+	case coordlock.FieldKey:
+		return m.OldKey(ctx)
+	case coordlock.FieldOwnerTaskID:
+		return m.OldOwnerTaskID(ctx)
+	case coordlock.FieldAcquiredAt:
+		return m.OldAcquiredAt(ctx)
+	case coordlock.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown CoordLock field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *CoordLockMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case coordlock.FieldNamespace:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNamespace(v)
+		return nil
+	case coordlock.FieldKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKey(v)
+		return nil
+	case coordlock.FieldOwnerTaskID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerTaskID(v)
+		return nil
+	case coordlock.FieldAcquiredAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAcquiredAt(v)
+		return nil
+	case coordlock.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown CoordLock field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *CoordLockMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *CoordLockMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *CoordLockMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown CoordLock numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *CoordLockMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *CoordLockMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *CoordLockMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown CoordLock nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *CoordLockMutation) ResetField(name string) error {
+	switch name {
+	case coordlock.FieldNamespace:
+		m.ResetNamespace()
+		return nil
+	case coordlock.FieldKey:
+		m.ResetKey()
+		return nil
+	case coordlock.FieldOwnerTaskID:
+		m.ResetOwnerTaskID()
+		return nil
+	case coordlock.FieldAcquiredAt:
+		m.ResetAcquiredAt()
+		return nil
+	case coordlock.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	}
+	return fmt.Errorf("unknown CoordLock field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *CoordLockMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *CoordLockMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *CoordLockMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *CoordLockMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *CoordLockMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *CoordLockMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *CoordLockMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown CoordLock unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *CoordLockMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown CoordLock edge %s", name)
 }
 
 // DriftAlertMutation represents an operation that mutates the DriftAlert nodes in the graph.
@@ -9212,6 +9764,554 @@ func (m *RemoteRegistrationMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *RemoteRegistrationMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown RemoteRegistration edge %s", name)
+}
+
+// ScratchpadMutation represents an operation that mutates the Scratchpad nodes in the graph.
+type ScratchpadMutation struct {
+	config
+	op                 Op
+	typ                string
+	id                 *string
+	namespace          *string
+	key                *string
+	value              *string
+	updated_at         *time.Time
+	updated_by_task_id *string
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*Scratchpad, error)
+	predicates         []predicate.Scratchpad
+}
+
+var _ ent.Mutation = (*ScratchpadMutation)(nil)
+
+// scratchpadOption allows management of the mutation configuration using functional options.
+type scratchpadOption func(*ScratchpadMutation)
+
+// newScratchpadMutation creates new mutation for the Scratchpad entity.
+func newScratchpadMutation(c config, op Op, opts ...scratchpadOption) *ScratchpadMutation {
+	m := &ScratchpadMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeScratchpad,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withScratchpadID sets the ID field of the mutation.
+func withScratchpadID(id string) scratchpadOption {
+	return func(m *ScratchpadMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Scratchpad
+		)
+		m.oldValue = func(ctx context.Context) (*Scratchpad, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Scratchpad.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withScratchpad sets the old Scratchpad of the mutation.
+func withScratchpad(node *Scratchpad) scratchpadOption {
+	return func(m *ScratchpadMutation) {
+		m.oldValue = func(context.Context) (*Scratchpad, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ScratchpadMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ScratchpadMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Scratchpad entities.
+func (m *ScratchpadMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ScratchpadMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ScratchpadMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Scratchpad.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetNamespace sets the "namespace" field.
+func (m *ScratchpadMutation) SetNamespace(s string) {
+	m.namespace = &s
+}
+
+// Namespace returns the value of the "namespace" field in the mutation.
+func (m *ScratchpadMutation) Namespace() (r string, exists bool) {
+	v := m.namespace
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNamespace returns the old "namespace" field's value of the Scratchpad entity.
+// If the Scratchpad object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ScratchpadMutation) OldNamespace(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNamespace is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNamespace requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNamespace: %w", err)
+	}
+	return oldValue.Namespace, nil
+}
+
+// ResetNamespace resets all changes to the "namespace" field.
+func (m *ScratchpadMutation) ResetNamespace() {
+	m.namespace = nil
+}
+
+// SetKey sets the "key" field.
+func (m *ScratchpadMutation) SetKey(s string) {
+	m.key = &s
+}
+
+// Key returns the value of the "key" field in the mutation.
+func (m *ScratchpadMutation) Key() (r string, exists bool) {
+	v := m.key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKey returns the old "key" field's value of the Scratchpad entity.
+// If the Scratchpad object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ScratchpadMutation) OldKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKey: %w", err)
+	}
+	return oldValue.Key, nil
+}
+
+// ResetKey resets all changes to the "key" field.
+func (m *ScratchpadMutation) ResetKey() {
+	m.key = nil
+}
+
+// SetValue sets the "value" field.
+func (m *ScratchpadMutation) SetValue(s string) {
+	m.value = &s
+}
+
+// Value returns the value of the "value" field in the mutation.
+func (m *ScratchpadMutation) Value() (r string, exists bool) {
+	v := m.value
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValue returns the old "value" field's value of the Scratchpad entity.
+// If the Scratchpad object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ScratchpadMutation) OldValue(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValue is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValue requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValue: %w", err)
+	}
+	return oldValue.Value, nil
+}
+
+// ResetValue resets all changes to the "value" field.
+func (m *ScratchpadMutation) ResetValue() {
+	m.value = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ScratchpadMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ScratchpadMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Scratchpad entity.
+// If the Scratchpad object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ScratchpadMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ScratchpadMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetUpdatedByTaskID sets the "updated_by_task_id" field.
+func (m *ScratchpadMutation) SetUpdatedByTaskID(s string) {
+	m.updated_by_task_id = &s
+}
+
+// UpdatedByTaskID returns the value of the "updated_by_task_id" field in the mutation.
+func (m *ScratchpadMutation) UpdatedByTaskID() (r string, exists bool) {
+	v := m.updated_by_task_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedByTaskID returns the old "updated_by_task_id" field's value of the Scratchpad entity.
+// If the Scratchpad object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ScratchpadMutation) OldUpdatedByTaskID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedByTaskID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedByTaskID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedByTaskID: %w", err)
+	}
+	return oldValue.UpdatedByTaskID, nil
+}
+
+// ResetUpdatedByTaskID resets all changes to the "updated_by_task_id" field.
+func (m *ScratchpadMutation) ResetUpdatedByTaskID() {
+	m.updated_by_task_id = nil
+}
+
+// Where appends a list predicates to the ScratchpadMutation builder.
+func (m *ScratchpadMutation) Where(ps ...predicate.Scratchpad) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ScratchpadMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ScratchpadMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Scratchpad, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ScratchpadMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ScratchpadMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Scratchpad).
+func (m *ScratchpadMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ScratchpadMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.namespace != nil {
+		fields = append(fields, scratchpad.FieldNamespace)
+	}
+	if m.key != nil {
+		fields = append(fields, scratchpad.FieldKey)
+	}
+	if m.value != nil {
+		fields = append(fields, scratchpad.FieldValue)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, scratchpad.FieldUpdatedAt)
+	}
+	if m.updated_by_task_id != nil {
+		fields = append(fields, scratchpad.FieldUpdatedByTaskID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ScratchpadMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case scratchpad.FieldNamespace:
+		return m.Namespace()
+	case scratchpad.FieldKey:
+		return m.Key()
+	case scratchpad.FieldValue:
+		return m.Value()
+	case scratchpad.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case scratchpad.FieldUpdatedByTaskID:
+		return m.UpdatedByTaskID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ScratchpadMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case scratchpad.FieldNamespace:
+		return m.OldNamespace(ctx)
+	case scratchpad.FieldKey:
+		return m.OldKey(ctx)
+	case scratchpad.FieldValue:
+		return m.OldValue(ctx)
+	case scratchpad.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case scratchpad.FieldUpdatedByTaskID:
+		return m.OldUpdatedByTaskID(ctx)
+	}
+	return nil, fmt.Errorf("unknown Scratchpad field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ScratchpadMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case scratchpad.FieldNamespace:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNamespace(v)
+		return nil
+	case scratchpad.FieldKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKey(v)
+		return nil
+	case scratchpad.FieldValue:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValue(v)
+		return nil
+	case scratchpad.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case scratchpad.FieldUpdatedByTaskID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedByTaskID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Scratchpad field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ScratchpadMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ScratchpadMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ScratchpadMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Scratchpad numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ScratchpadMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ScratchpadMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ScratchpadMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Scratchpad nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ScratchpadMutation) ResetField(name string) error {
+	switch name {
+	case scratchpad.FieldNamespace:
+		m.ResetNamespace()
+		return nil
+	case scratchpad.FieldKey:
+		m.ResetKey()
+		return nil
+	case scratchpad.FieldValue:
+		m.ResetValue()
+		return nil
+	case scratchpad.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case scratchpad.FieldUpdatedByTaskID:
+		m.ResetUpdatedByTaskID()
+		return nil
+	}
+	return fmt.Errorf("unknown Scratchpad field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ScratchpadMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ScratchpadMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ScratchpadMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ScratchpadMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ScratchpadMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ScratchpadMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ScratchpadMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown Scratchpad unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ScratchpadMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown Scratchpad edge %s", name)
 }
 
 // SpawnerMutation represents an operation that mutates the Spawner nodes in the graph.

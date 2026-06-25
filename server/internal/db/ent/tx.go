@@ -18,6 +18,8 @@ type Tx struct {
 	ApiKey *ApiKeyClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
+	// CoordLock is the client for interacting with the CoordLock builders.
+	CoordLock *CoordLockClient
 	// DriftAlert is the client for interacting with the DriftAlert builders.
 	DriftAlert *DriftAlertClient
 	// EvalMetricSnapshot is the client for interacting with the EvalMetricSnapshot builders.
@@ -38,6 +40,8 @@ type Tx struct {
 	RefinementTurn *RefinementTurnClient
 	// RemoteRegistration is the client for interacting with the RemoteRegistration builders.
 	RemoteRegistration *RemoteRegistrationClient
+	// Scratchpad is the client for interacting with the Scratchpad builders.
+	Scratchpad *ScratchpadClient
 	// Spawner is the client for interacting with the Spawner builders.
 	Spawner *SpawnerClient
 	// StageRun is the client for interacting with the StageRun builders.
@@ -188,6 +192,7 @@ func (tx *Tx) init() {
 	tx.AgentCostTrend = NewAgentCostTrendClient(tx.config)
 	tx.ApiKey = NewApiKeyClient(tx.config)
 	tx.AuditEvent = NewAuditEventClient(tx.config)
+	tx.CoordLock = NewCoordLockClient(tx.config)
 	tx.DriftAlert = NewDriftAlertClient(tx.config)
 	tx.EvalMetricSnapshot = NewEvalMetricSnapshotClient(tx.config)
 	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
@@ -198,6 +203,7 @@ func (tx *Tx) init() {
 	tx.ProviderSetting = NewProviderSettingClient(tx.config)
 	tx.RefinementTurn = NewRefinementTurnClient(tx.config)
 	tx.RemoteRegistration = NewRemoteRegistrationClient(tx.config)
+	tx.Scratchpad = NewScratchpadClient(tx.config)
 	tx.Spawner = NewSpawnerClient(tx.config)
 	tx.StageRun = NewStageRunClient(tx.config)
 	tx.SystemPrompt = NewSystemPromptClient(tx.config)

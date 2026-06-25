@@ -33,6 +33,8 @@ func provideMCPHandler(
 	apiKeyRepo := repo.NewApiKeyRepo(client)
 	projectRepo := repo.NewProjectRepo(client)
 	spawnerRepo := repo.NewSpawnerRepo(client)
+	scratchRepo := repo.NewScratchpadRepo(client)
+	lockRepo := repo.NewCoordLockRepo(client)
 	turnsRepo := repo.NewRefinementTurnRepo(client)
 
 	broadcast := func(taskID string) {
@@ -102,5 +104,6 @@ func provideMCPHandler(
 		Runner:     sched,
 		Broadcast:  broadcast,
 	})
+	mcptools.RegisterCoordTools(registry, mcptools.CoordDeps{Scratch: scratchRepo, Locks: lockRepo})
 	return mcp.MCPHandler(registry)
 }
