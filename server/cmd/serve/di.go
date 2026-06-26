@@ -53,9 +53,34 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
+	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	wpservice "github.com/lx-wnk/agent-dashboard/server/internal/webpush"
 )
+
+// settingsRepoAdapter maps settings.Repo onto the ent AppSettingRepo.
+type settingsRepoAdapter struct{ inner repo.AppSettingRepo }
+
+func (a settingsRepoAdapter) Get(ctx context.Context, k string) (string, bool, error) {
+	return a.inner.Get(ctx, k)
+}
+
+func (a settingsRepoAdapter) Set(ctx context.Context, k, v string) error {
+	_, err := a.inner.Upsert(ctx, k, v)
+	return err
+}
+
+func (a settingsRepoAdapter) ListAll(ctx context.Context) (map[string]string, error) {
+	rows, err := a.inner.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]string, len(rows))
+	for _, r := range rows {
+		m[r.Key] = r.Value
+	}
+	return m, nil
+}
 
 func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *merger.Merger, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, func(), error) {
 	bundle, err := provideDB(cfg)
@@ -118,6 +143,16 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if providerSettingRepo != nil {
 		providersHandler = providersapi.NewHandler(providerRegistry, providerSettingsSvc)
 	}
+
+	var settingsSvc *settings.Service
+	if entClient != nil {
+		appSettingRepo := repo.NewAppSettingRepo(entClient)
+		settingsSvc = settings.New(settingsRepoAdapter{inner: appSettingRepo})
+		if err := settingsSvc.Load(ctx); err != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("settings load: %w", err)
+		}
+	}
+	_ = settingsSvc // consumed in later tasks
 
 	agentMerger := merger.New(
 		merger.WithRegistry(providerRegistry),
