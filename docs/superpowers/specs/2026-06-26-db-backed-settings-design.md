@@ -44,24 +44,26 @@ and an unbuilt `auth_provider` plugin must not block boot.
 **Stays in env/flags** (koanf keeps reading these):
 
 `DB_PATH`, `HOST`, `PORT`, `JWT_SECRET`, `HOOKS_SECRET`, `MCP_TOKEN`,
-`AUTH_PLUGIN_SECRET`, `PLUGIN_DIR`, `PROVIDER_DIR`, `REMOTES_ENABLED`, `--config` flag.
+`AUTH_PLUGIN_SECRET`, `PLUGIN_DIR`, `PROVIDER_DIR`, `WORKTREE_ROOT`, `REMOTES_ENABLED`,
+`--config` flag.
 
 Reasoning: `DB_PATH` can't be read from the DB (chicken-egg); `HOST`/`PORT`/`REMOTES_ENABLED`
 are needed to bind before the DB matters and are security-bootstrap; `*_SECRET`/`MCP_TOKEN`
-must not sit in a readable settings table; `PLUGIN_DIR`/`PROVIDER_DIR` are discovery paths
-like `DB_PATH`.
+must not sit in a readable settings table; `PLUGIN_DIR`/`PROVIDER_DIR`/`WORKTREE_ROOT` are
+filesystem paths kept with `DB_PATH`.
 
 **Moves to DB-only** (dropped from koanf — see inventory):
 
 `auth`, `providers_enabled`, plugin enablement (new), `allow_git_push`, `force_worktrees`,
-`worktree_root`, `sse_interval_ms`, `shutdown_timeout_seconds`, `hooks_debounce_ms`,
-`hook_events_per_session`, `spawn_rate_limit`, `spawn_rate_window_ms`, `inject_rate_limit`,
-`inject_rate_window_ms`, `cost_scan_interval_ms`, `eval_scan_interval_ms`,
-`eval_window_hours`, `eval_min_samples`, `eval_rate_drop_pp`, `eval_stddev_k`, `adapters`.
+`sse_interval_ms`, `shutdown_timeout_seconds`, `hooks_debounce_ms`, `hook_events_per_session`,
+`spawn_rate_limit`, `spawn_rate_window_ms`, `inject_rate_limit`, `inject_rate_window_ms`,
+`cost_scan_interval_ms`, `eval_scan_interval_ms`, `eval_window_hours`, `eval_min_samples`,
+`eval_rate_drop_pp`, `eval_stddev_k`.
 
-> **Open for review:** `worktree_root` is a filesystem path; it could arguably stay env with
-> `PLUGIN_DIR`/`PROVIDER_DIR`. Default here: move to DB (it's an output location, not a
-> discovery path). Flagged for confirmation.
+**Explicitly out of scope** (not migrated): `adapters` / `AdapterConfig` and
+`DASHBOARD_SPAWN_COMMAND` are deprecated boot-migration shims — runtime spawner/adapter
+config already lives in the `spawners` table (edited via `/api/spawners`). Pulling them into
+`app_setting` would duplicate DB-backed config. They are left untouched.
 
 ## Settings Inventory
 
@@ -74,7 +76,6 @@ like `DB_PATH`.
 | `plugins.enabled` | json([]string) | `[]` | live | plugin registry |
 | `git.allowPush` | bool | `false` | restart | git-action/spawn |
 | `worktree.force` | bool | `false` | restart | pipeline pickup |
-| `worktree.root` | string(path) | `~/.claude/dashboard-worktrees` | restart | worktree create |
 | `sse.intervalMs` | int | `3000` | restart | broadcaster |
 | `shutdown.timeoutSeconds` | int | `10` | restart | shutdown |
 | `hooks.debounceMs` | int | `100` | restart | hooks receiver |
@@ -89,7 +90,6 @@ like `DB_PATH`.
 | `eval.minSamples` | int(>=0) | `20` | restart | eval service |
 | `eval.rateDropPP` | float(>=0) | `15` | restart | eval service |
 | `eval.stddevK` | float(>=0) | `3` | restart | eval service |
-| `adapters` | json(AdapterConfig) | `{}` | restart | spawner adapters |
 
 Validation rules (e.g. `eval.windowHours > 0`, `hooks.eventsPerSession > 0`) move from
 `config.Load` into the registry's per-key validators and run on every `Set`.
@@ -134,7 +134,10 @@ Validation rules (e.g. `eval.windowHours > 0`, `hooks.eventsPerSession > 0`) mov
      (router wiring is boot-time); the API surfaces this and the UI shows a warning.
 
 5. **Auth wiring** — `di_router.go` reads `auth.mode` from `settings.Service` instead of
-   `cfg.Auth`. Still boot-time → changing it is restart-to-apply.
+   `cfg.Auth`. Still boot-time → changing it is restart-to-apply. The `PATCH` response
+   carries `applied:"restart"`; the UI must raise a **warning toast** ("Auth mode change
+   takes effect after a server restart — and `plugin` will require login") whenever
+   `auth.mode` is changed.
 
 6. **API** (`internal/api/settings`) — mirrors the `systemprompts`/`providers` pattern:
    - `GET /api/settings` → all definitions with current value + default + apply-semantics.
@@ -153,8 +156,10 @@ Validation rules (e.g. `eval.windowHours > 0`, `hooks.eventsPerSession > 0`) mov
 
 8. **UI** — extend `ApiKeySettings.vue`. `PluginSettings.vue` goes from read-only to a
    toggle list (live). A new generic settings panel renders the registry grouped by
-   category, each control tagged `live`/`restart-required`, plus an auth-mode selector with
-   a "switches to login-required, applies on restart" warning.
+   category, each control tagged `live`/`restart-required`. Any change to a `restart`-apply
+   setting raises a **warning toast** ("Applies after a server restart"); the auth-mode
+   selector additionally warns that `plugin` enables login. Live changes show a success
+   toast / immediate state flip.
 
 ### Data flow — enabling a plugin (live)
 
@@ -211,12 +216,11 @@ first so bootstrap settings remain `.env`-settable.
 
 - **ent regen** required (new schema) — run via the project's generate flow; watch the
   known `runtime.go`/`go.sum` drift (revert non-schema drift).
-- **AdapterConfig** is the most complex moved value (nested struct → JSON); plan must handle
-  its shape + validation carefully.
 - **CLI vs server DB concurrency** — direct-DB writes use SQLite busy-timeout; live keys
   changed via CLI while the server runs are not seen until restart (documented; UI is the
-  live path). 
-- **`worktree.root` placement** (env vs DB) — confirm during review.
+  live path).
+- **Toast UX** — relies on an existing toast/notification primitive in the frontend; the
+  plan must confirm one exists (or add a minimal one) for the restart/auth warnings.
 
 ## Phasing (one PR, staged commits)
 
