@@ -173,6 +173,17 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// Load plugins from configured plugin_dir. ctx is the server-lifetime context
 	// (cancelled on SIGTERM/SIGINT). Load derives a 30-second startup timeout internally.
 	pluginRegistry := plugin.New(cfg.PluginDir)
+	pluginRegistry.SetEnabled(func(id string) bool {
+		if settingsSvc == nil {
+			return false
+		}
+		for _, e := range settingsSvc.StringSlice("plugins.enabled") {
+			if e == id {
+				return true
+			}
+		}
+		return false
+	})
 
 	// oauthProvider and pluginLoginURL are set by the SetAuth hook when an auth_provider
 	// plugin passes health-check. If no auth_provider plugin is configured both stay at
