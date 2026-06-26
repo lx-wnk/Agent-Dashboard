@@ -120,3 +120,33 @@ func TestRegistry_PluginWithHealthy_Loaded(t *testing.T) {
 	require.NotNil(t, entry)
 	assert.Equal(t, "test-plugin", entry.Descriptor.ID)
 }
+
+func writePluginJSON(t *testing.T, dir, id string, caps []string) {
+	t.Helper()
+	pluginDir := filepath.Join(dir, id)
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+	desc := plugin.Descriptor{
+		ID:           id,
+		Version:      "1.0.0",
+		Capabilities: caps,
+		Addr:         "127.0.0.1:0",
+	}
+	data, _ := json.Marshal(desc)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
+}
+
+func TestRegistry_LoadSkipsDisabled(t *testing.T) {
+	dir := t.TempDir()
+	writePluginJSON(t, dir, "enabled-one", []string{plugin.CapRouteExtension})
+	writePluginJSON(t, dir, "disabled-auth", []string{plugin.CapAuthProvider})
+
+	r := plugin.New(dir)
+	r.SetEnabled(func(id string) bool { return id == "enabled-one" })
+
+	// Neither plugin actually starts (no Command/health), but the capability
+	// recording must reflect ONLY enabled plugins.
+	_ = r.Load(context.Background(), plugin.Hooks{})
+
+	assert.False(t, r.HasAttemptedCapability(plugin.CapAuthProvider),
+		"disabled auth_provider plugin must not be recorded as attempted")
+}
