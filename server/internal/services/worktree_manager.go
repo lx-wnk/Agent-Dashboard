@@ -124,6 +124,41 @@ func (m *WorktreeManager) revListCount(ctx context.Context, cwd, rng string) *in
 	return &n
 }
 
+// HasUnpushedWork reports whether the task's worktree holds work that would be
+// lost by a force-remove: commits on the worktree branch not present on any
+// origin remote ref, or uncommitted changes in the working tree.
+func (m *WorktreeManager) HasUnpushedWork(ctx context.Context, task *ent.Task) bool {
+	if task == nil || task.WorktreePath == nil || *task.WorktreePath == "" {
+		return false
+	}
+	cwd := *task.WorktreePath
+	if dirty, _ := m.dirtyState(ctx, cwd); dirty {
+		return true
+	}
+	n := m.unpushedCommitCount(ctx, cwd)
+	if n == nil {
+		// Conservative: retain rather than risk losing work if the git command fails.
+		return true
+	}
+	return *n > 0
+}
+
+// unpushedCommitCount counts commits reachable from HEAD that are not present
+// on any origin remote ref. Each token is passed as a discrete argument because
+// Runner.Output is variadic — a single "HEAD --not --remotes=origin" string
+// would be treated as one argument and fail.
+func (m *WorktreeManager) unpushedCommitCount(ctx context.Context, cwd string) *int {
+	out, err := m.runner.Output(ctx, cwd, "rev-list", "--count", "HEAD", "--not", "--remotes=origin")
+	if err != nil {
+		return nil
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return nil
+	}
+	return &n
+}
+
 func (m *WorktreeManager) dirtyState(ctx context.Context, cwd string) (bool, int) {
 	out, err := m.runner.Output(ctx, cwd, "status", "--porcelain")
 	if err != nil {

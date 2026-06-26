@@ -76,6 +76,9 @@ func provideOrchestrator(
 		RemoveWorktreeFn: func(ctx context.Context, task *ent.Task, force bool) error {
 			return worktreeManager.RemoveWorktree(ctx, task.ID, force)
 		},
+		HasUnpushedWorkFn: func(ctx context.Context, task *ent.Task) bool {
+			return worktreeManager.HasUnpushedWork(ctx, task)
+		},
 		ResolveSpawner:        resolveFn,
 		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the

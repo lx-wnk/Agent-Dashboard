@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
@@ -230,5 +231,172 @@ func TestRemoveWorktree_NoWorktree(t *testing.T) {
 	err := mgr.RemoveWorktree(t.Context(), id, false)
 	if !errors.Is(err, services.ErrNoWorktree) {
 		t.Fatalf("expected ErrNoWorktree, got %v", err)
+	}
+}
+
+// initRepoWithOrigin creates a main git repo (mainDir) with a bare repo
+// (bareDir) as remote "origin" and an initial commit pushed to origin/main.
+func initRepoWithOrigin(t *testing.T, mainDir, bareDir string) {
+	t.Helper()
+	runIn := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
+		}
+	}
+
+	runIn(bareDir, "init", "--bare")
+
+	runIn(mainDir, "init")
+	runIn(mainDir, "config", "user.email", "t@t")
+	runIn(mainDir, "config", "user.name", "t")
+	runIn(mainDir, "config", "commit.gpgsign", "false")
+	if err := os.WriteFile(filepath.Join(mainDir, "README"), []byte("init"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runIn(mainDir, "add", "README")
+	runIn(mainDir, "commit", "-m", "init")
+	runIn(mainDir, "remote", "add", "origin", bareDir)
+	runIn(mainDir, "push", "-u", "origin", "HEAD:main")
+}
+
+func TestHasUnpushedWork_NilTask(t *testing.T) {
+	mgr, _ := newWTManager(t)
+	if mgr.HasUnpushedWork(t.Context(), nil) {
+		t.Fatal("expected false for nil task")
+	}
+}
+
+func TestHasUnpushedWork_NoWorktreePath(t *testing.T) {
+	mgr, taskRepo := newWTManager(t)
+	id := createTestTask(t, taskRepo, "no-path", "/tmp")
+	task, err := taskRepo.GetByID(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if mgr.HasUnpushedWork(t.Context(), task) {
+		t.Fatal("expected false for task with no worktree path")
+	}
+}
+
+func TestHasUnpushedWork_CleanBranchOnOrigin(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found")
+	}
+
+	mainDir := t.TempDir()
+	bareDir := t.TempDir()
+	initRepoWithOrigin(t, mainDir, bareDir)
+
+	mgr, taskRepo := newWTManager(t)
+	id := createTestTask(t, taskRepo, "clean-pushed", mainDir)
+
+	// Create the worktree on a new branch.
+	wtPath, err := mgr.CreateWorktree(t.Context(), id)
+	if err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	// Push the new branch to origin so it is fully represented on remote.
+	runIn := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	// Determine which branch the worktree is on, then push it.
+	branchCmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd.Dir = wtPath
+	branchOut, err := branchCmd.Output()
+	if err != nil {
+		t.Fatalf("rev-parse branch: %v", err)
+	}
+	branch := strings.TrimSpace(string(branchOut))
+	runIn(wtPath, "push", "origin", branch)
+
+	task, err := taskRepo.GetByID(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if mgr.HasUnpushedWork(t.Context(), task) {
+		t.Fatal("expected false: clean worktree with branch on origin")
+	}
+}
+
+func TestHasUnpushedWork_UnpushedCommit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found")
+	}
+
+	mainDir := t.TempDir()
+	bareDir := t.TempDir()
+	initRepoWithOrigin(t, mainDir, bareDir)
+
+	mgr, taskRepo := newWTManager(t)
+	id := createTestTask(t, taskRepo, "unpushed-commit", mainDir)
+
+	wtPath, err := mgr.CreateWorktree(t.Context(), id)
+	if err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	// Make a commit in the worktree without pushing.
+	if err := os.WriteFile(filepath.Join(wtPath, "work.txt"), []byte("work"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runIn := func(dir string, args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runIn(wtPath, "config", "user.email", "t@t")
+	runIn(wtPath, "config", "user.name", "t")
+	runIn(wtPath, "config", "commit.gpgsign", "false")
+	runIn(wtPath, "add", "work.txt")
+	runIn(wtPath, "commit", "-m", "unpushed work")
+
+	task, err := taskRepo.GetByID(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if !mgr.HasUnpushedWork(t.Context(), task) {
+		t.Fatal("expected true: worktree has commit not on origin")
+	}
+}
+
+func TestHasUnpushedWork_DirtyWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found")
+	}
+
+	mainDir := t.TempDir()
+	bareDir := t.TempDir()
+	initRepoWithOrigin(t, mainDir, bareDir)
+
+	mgr, taskRepo := newWTManager(t)
+	id := createTestTask(t, taskRepo, "dirty-wt", mainDir)
+
+	wtPath, err := mgr.CreateWorktree(t.Context(), id)
+	if err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	// Make the worktree dirty without committing.
+	if err := os.WriteFile(filepath.Join(wtPath, "dirty.txt"), []byte("uncommitted"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	task, err := taskRepo.GetByID(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if !mgr.HasUnpushedWork(t.Context(), task) {
+		t.Fatal("expected true: worktree has uncommitted changes")
 	}
 }

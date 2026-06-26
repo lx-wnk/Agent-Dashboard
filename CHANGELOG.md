@@ -103,6 +103,12 @@ Preparing the first public release.
 
 ### Fixed
 
+- Terminal worktree cleanup no longer force-removes a finished task's worktree
+  when its branch still holds unpushed commits or uncommitted changes. Previously,
+  if git-push was disabled (no `DASHBOARD_ALLOW_GIT_PUSH=true`) or a push failed,
+  finalization committed only locally and the subsequent cleanup discarded the
+  branch — orphaning the work as dangling commits. Cleanup now detects unpushed
+  work and retains the worktree (audited as `worktree_retained_unpushed`) instead.
 - Plan-review gate: opening a `plan_review` task via deep-link, Spotlight, or
   cross-modal navigation now routes to the plan-approval panel instead of the
   generic task modal — the routing rule that previously lived only in the

@@ -177,6 +177,67 @@ func TestEnsureTaskWorktree_RejectsHeldBranch(t *testing.T) {
 	require.Contains(t, err.Error(), leftover, "error must name the holding worktree path")
 }
 
+func orchWithUnpushedCheckFn(
+	t *testing.T,
+	bundle *db.DBBundle,
+	spy *removeWorktreeSpy,
+	hasUnpushedFn func(context.Context, *ent.Task) bool,
+) (*pipeline.PipelineOrchestrator, repo.TaskRepo) {
+	t.Helper()
+	c := bundle.Client
+	taskRepo := repo.NewTaskRepo(c)
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:          taskRepo,
+		StageRunRepo:      repo.NewStageRunRepo(c),
+		PermissionRepo:    repo.NewPermissionRepo(c),
+		AuditRepo:         repo.NewAuditEventRepo(c),
+		ConfigRepo:        repo.NewPipelineConfigRepo(c),
+		RemoveWorktreeFn:  spy.fn(taskRepo),
+		HasUnpushedWorkFn: hasUnpushedFn,
+	})
+	require.NoError(t, err)
+	return orch, taskRepo
+}
+
+// TestTerminalCleanup_RetainsWorktreeWhenUnpushed proves that when
+// HasUnpushedWorkFn returns true, RemoveWorktreeFn is NOT called and a
+// "worktree_retained_unpushed" audit event is recorded.
+func TestTerminalCleanup_RetainsWorktreeWhenUnpushed(t *testing.T) {
+	ctx := context.Background()
+	bundle := openSharedBundle(t)
+	spy := &removeWorktreeSpy{}
+	orch, taskRepo := orchWithUnpushedCheckFn(t, bundle, spy,
+		func(_ context.Context, _ *ent.Task) bool { return true },
+	)
+
+	task := seedTaskWithWorktree(t, ctx, taskRepo, "retain-unpushed", "implementation")
+	orch.NotifyTaskTerminated(ctx, task.ID, "cancelled")
+
+	require.Equal(t, int32(0), spy.calls.Load(), "RemoveWorktreeFn must NOT fire when HasUnpushedWorkFn returns true")
+
+	auditRepo := repo.NewAuditEventRepo(bundle.Client)
+	events, err := auditRepo.ListForTask(ctx, task.ID)
+	require.NoError(t, err)
+	require.True(t, hasAction(events, "worktree_retained_unpushed"),
+		"a worktree_retained_unpushed audit event must be recorded")
+}
+
+// TestTerminalCleanup_RemovesWorktreeWhenNoPendingWork proves that when
+// HasUnpushedWorkFn returns false, RemoveWorktreeFn IS called normally.
+func TestTerminalCleanup_RemovesWorktreeWhenNoPendingWork(t *testing.T) {
+	ctx := context.Background()
+	bundle := openSharedBundle(t)
+	spy := &removeWorktreeSpy{}
+	orch, taskRepo := orchWithUnpushedCheckFn(t, bundle, spy,
+		func(_ context.Context, _ *ent.Task) bool { return false },
+	)
+
+	task := seedTaskWithWorktree(t, ctx, taskRepo, "remove-clean", "implementation")
+	orch.NotifyTaskTerminated(ctx, task.ID, "cancelled")
+
+	require.Equal(t, int32(1), spy.calls.Load(), "RemoveWorktreeFn must fire when HasUnpushedWorkFn returns false")
+}
+
 func hasAction(events []*ent.AuditEvent, action string) bool {
 	for _, e := range events {
 		if e.Action == action {
