@@ -35,6 +35,7 @@ type Definition struct {
 	Apply    Apply
 	Category string
 	Enum     []string               // for TypeEnum
+	Managed  bool                   // owned by a dedicated endpoint; not editable via the generic settings API
 	validate func(raw string) error // extra constraint beyond type parsing
 }
 
@@ -106,8 +107,7 @@ func nonNegativeFloat(key string) func(string) error {
 var definitions = func() map[string]Definition {
 	list := []Definition{
 		{Key: "auth.mode", Type: TypeEnum, Enum: []string{"none", "plugin"}, Default: "none", Apply: ApplyRestart, Category: "auth"},
-		{Key: "providers.enabled", Type: TypeStringSlice, Default: "", Apply: ApplyLive, Category: "providers"},
-		{Key: "plugins.enabled", Type: TypeStringSlice, Default: "", Apply: ApplyLive, Category: "plugins"},
+		{Key: "plugins.enabled", Type: TypeStringSlice, Default: "", Apply: ApplyLive, Category: "plugins", Managed: true},
 		{Key: "git.allowPush", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "git"},
 		{Key: "worktree.force", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "worktree"},
 		{Key: "sse.intervalMs", Type: TypeInt, Default: "3000", Apply: ApplyRestart, Category: "sse", validate: positiveInt("sse.intervalMs")},

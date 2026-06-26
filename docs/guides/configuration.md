@@ -62,8 +62,7 @@ These keys live in the database `app_setting` table — the single source of tru
 | Key | Type | Default | Apply |
 |---|---|---|---|
 | `auth.mode` | enum (`none`, `plugin`) | `none` | restart |
-| `providers.enabled` | string list (comma) | — | live |
-| `plugins.enabled` | string list (comma) | — | live |
+| `plugins.enabled` | string list (comma) | — | live (managed) |
 | `git.allowPush` | bool | `false` | restart |
 | `worktree.force` | bool | `false` | restart |
 | `sse.intervalMs` | int | `3000` | restart |
@@ -81,7 +80,9 @@ These keys live in the database `app_setting` table — the single source of tru
 | `eval.rateDropPP` | float | `15` | restart |
 | `eval.stddevK` | float | `3` | restart |
 
-**Apply semantics:** plugin (`plugins.enabled`) and provider (`providers.enabled`) enablement apply **live**. Everything else — including `auth.mode` — needs a **server restart** to take effect. The UI marks restart-only changes with a warning.
+**Apply semantics:** plugin enablement (`plugins.enabled`) applies **live**. Everything else — including `auth.mode` — needs a **server restart** to take effect. The UI marks restart-only changes with a warning.
+
+**Managed keys:** `plugins.enabled` is **read-only via the generic Server panel** — it is edited through the dedicated **Plugins** panel, which starts/stops the affected plugin processes as part of the change. Provider enablement is not a settings key at all; it lives in its own `provider_setting` table and is edited through the **Providers** panel (`/api/providers`).
 
 ### CLI / lockout recovery
 
@@ -95,17 +96,15 @@ dashboard settings set <key> <value>
 
 Database resolution order: `--db <path>` flag → `DASHBOARD_DB_PATH` → default `~/.claude/dashboard-tasks.db`.
 
-`auth.mode` and the plugin/provider lists are ordinary settings keys, so the CLI doubles as lockout recovery:
+`auth.mode` is an ordinary settings key, so the CLI doubles as lockout recovery:
 
 ```bash
 # Locked out of a 'plugin' auth mode whose plugin won't load? Reset to no-auth:
 dashboard settings set auth.mode none
 # Then restart the server (auth.mode is restart-apply).
-
-# Disable a misbehaving plugin or provider (comma-separated lists):
-dashboard settings set plugins.enabled ""
-dashboard settings set providers.enabled "codex,gemini"
 ```
+
+Provider enablement is **not** a `dashboard settings` key — it lives in the `provider_setting` table and is edited through the Providers panel.
 
 ## LLM adapters
 

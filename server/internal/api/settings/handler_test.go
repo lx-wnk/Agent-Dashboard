@@ -74,3 +74,23 @@ func TestSettingsAPI_ListAndPatch(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+func TestSettingsAPI_ManagedKeyHidden(t *testing.T) {
+	r, _ := newRouter(t)
+
+	// GET does not expose managed keys
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var list []map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
+	for _, e := range list {
+		assert.NotEqual(t, "plugins.enabled", e["key"], "managed key must not appear in list")
+	}
+
+	// PATCH a managed key -> 400
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/settings/plugins.enabled", strings.NewReader(`{"value":"foo"}`))
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}

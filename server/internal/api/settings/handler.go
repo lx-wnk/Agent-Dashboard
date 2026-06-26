@@ -38,6 +38,9 @@ func (h *Handler) list(w http.ResponseWriter, _ *http.Request) error {
 	defs := settingssvc.All()
 	out := make([]settingView, 0, len(defs))
 	for _, d := range defs {
+		if d.Managed {
+			continue
+		}
 		out = append(out, settingView{
 			Key:      d.Key,
 			Type:     string(d.Type),
@@ -54,8 +57,12 @@ func (h *Handler) list(w http.ResponseWriter, _ *http.Request) error {
 
 func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
 	key := chi.URLParam(r, "key")
-	if _, ok := settingssvc.Lookup(key); !ok {
+	def, ok := settingssvc.Lookup(key)
+	if !ok {
 		return fmt.Errorf("%w: unknown setting %q", apierr.ErrBadRequest, key)
+	}
+	if def.Managed {
+		return fmt.Errorf("%w: setting %q is managed via a dedicated endpoint", apierr.ErrBadRequest, key)
 	}
 	var body struct {
 		Value string `json:"value"`
