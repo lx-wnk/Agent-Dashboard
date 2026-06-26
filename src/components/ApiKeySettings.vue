@@ -21,13 +21,14 @@ const emit = defineEmits<{ close: [] }>()
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 const ProviderSettings = defineAsyncComponent(() => import('./ProviderSettings.vue'))
+const AppSettings = defineAsyncComponent(() => import('./AppSettings.vue'))
 
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 const { mcpServerName, mcpEndpoint, loadServerConfig } = useServerConfig()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'projects' | 'spawners' | 'pipelineConfig'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'projects' | 'spawners' | 'pipelineConfig' | 'server'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -554,6 +555,19 @@ async function startImport() {
               <span class="text-sm flex-shrink-0">⛓</span> Pipeline
             </button>
           </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'server'
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'server' ? 'page' : undefined"
+              @click="activeSection = 'server'"
+            >
+              <span class="text-sm flex-shrink-0">🖳</span> Server
+            </button>
+          </li>
         </ul>
         <div class="mt-auto pt-3 border-t border-line">
           <a
@@ -864,6 +878,11 @@ async function startImport() {
         <!-- Pipeline Configuration -->
         <section v-else-if="activeSection === 'pipelineConfig'">
           <PipelineConfigSettings />
+        </section>
+
+        <!-- Server -->
+        <section v-else-if="activeSection === 'server'">
+          <AppSettings />
         </section>
 
         <!-- Analytics -->
