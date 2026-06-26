@@ -170,6 +170,68 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 	return nil
 }
 
+// StartOne starts a single plugin by id (reads its plugin.json fresh from the
+// dir). Used by the live-enable path. No-op if already running.
+func (r *Registry) StartOne(ctx context.Context, id string) error {
+	if !pluginIDRe.MatchString(id) {
+		return fmt.Errorf("plugin: invalid id %q", id)
+	}
+	r.mu.RLock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			r.mu.RUnlock()
+			return nil // already running
+		}
+	}
+	serverCtx, hooks := r.serverCtx, r.hooks
+	r.mu.RUnlock()
+	if serverCtx == nil {
+		serverCtx = ctx
+	}
+	descPath := filepath.Join(r.dir, id, "plugin.json")
+	data, err := os.ReadFile(descPath)
+	if err != nil {
+		return fmt.Errorf("plugin: read %s: %w", descPath, err)
+	}
+	var desc Descriptor
+	if err := json.Unmarshal(data, &desc); err != nil {
+		return fmt.Errorf("plugin: invalid plugin.json for %q: %w", id, err)
+	}
+	if desc.ID != id {
+		return fmt.Errorf("plugin: id mismatch in %s", descPath)
+	}
+	r.mu.Lock()
+	for _, c := range desc.Capabilities {
+		r.attemptedCapabilities[c] = true
+	}
+	r.mu.Unlock()
+	startupCtx, cancel := context.WithTimeout(serverCtx, 30*time.Second)
+	defer cancel()
+	return r.startEntry(serverCtx, startupCtx, filepath.Join(r.dir, id), desc, hooks)
+}
+
+// StopOne stops and deregisters a single plugin by id. No-op if not running.
+func (r *Registry) StopOne(id string) error {
+	r.mu.Lock()
+	var target *Entry
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			e := r.plugins[i]
+			target = &e
+			break
+		}
+	}
+	r.mu.Unlock()
+	if target == nil {
+		return nil
+	}
+	if target.cmd != nil {
+		gracefulStop(target.cmd, target.cmdDone)
+	}
+	r.removeByID(id)
+	return nil
+}
+
 // Shutdown stops all plugin processes that were started by Load.
 // gracefulStop sends SIGTERM and waits up to 5s before killing. See gracefulStop for details.
 func (r *Registry) Shutdown() {
