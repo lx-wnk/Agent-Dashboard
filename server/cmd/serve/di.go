@@ -31,6 +31,7 @@ import (
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
+	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	apivisualizations "github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
@@ -145,14 +146,15 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 
 	var settingsSvc *settings.Service
+	var settingsHandler *settingsapi.Handler
 	if entClient != nil {
 		appSettingRepo := repo.NewAppSettingRepo(entClient)
 		settingsSvc = settings.New(settingsRepoAdapter{inner: appSettingRepo})
 		if err := settingsSvc.Load(ctx); err != nil {
 			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("settings load: %w", err)
 		}
+		settingsHandler = settingsapi.NewHandler(settingsSvc)
 	}
-	_ = settingsSvc // consumed in later tasks
 
 	agentMerger := merger.New(
 		merger.WithRegistry(providerRegistry),
@@ -454,6 +456,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		SystemPromptsHandler:  systemPromptsHandler,
 		AdapterHandler:        adapterHandler,
 		ProvidersHandler:      providersHandler,
+		SettingsHandler:       settingsHandler,
 		SearchHandler:         searchHandler,
 		HistoryHandler:        historyHandler,
 		RefineHandler:         refineHandler,

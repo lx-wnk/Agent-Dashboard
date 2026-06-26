@@ -37,6 +37,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/schedules"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
+	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
@@ -149,6 +150,7 @@ type RouterDeps struct {
 	VisualizationsHandler *visualizations.Handler
 	AdapterHandler        *adapters.Handler
 	ProvidersHandler      *providersapi.Handler
+	SettingsHandler       *settingsapi.Handler
 	MCPHandler            http.Handler
 	ChannelReply          *agents.ChannelReplyHandler
 	ChannelStageOutput    *agents.ChannelStageOutputHandler
@@ -277,6 +279,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.ProvidersHandler != nil {
 			r.Get("/api/providers", ErrorMiddleware(deps.ProvidersHandler.List))
 			r.Patch("/api/providers/{id}", ErrorMiddleware(deps.ProvidersHandler.Patch))
+		}
+
+		if deps.SettingsHandler != nil {
+			deps.SettingsHandler.Mount(r)
 		}
 
 		// Projects + ProjectFolders — JWT-protected (no admin gate required).
