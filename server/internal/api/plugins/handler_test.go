@@ -118,7 +118,7 @@ func TestList_ShapeAndLeakGuard(t *testing.T) {
 
 func TestPatch_Live(t *testing.T) {
 	ctl := &fakeController{applied: pluginsctl.AppliedLive}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/voice-whisper", strings.NewReader(`{"enabled":true}`)))
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice-whisper", strings.NewReader(`{"enabled":true}`)))
 	rr := httptest.NewRecorder()
 	mount(t, ctl).ServeHTTP(rr, req)
 
@@ -139,7 +139,7 @@ func TestPatch_Live(t *testing.T) {
 
 func TestPatch_Restart(t *testing.T) {
 	ctl := &fakeController{applied: pluginsctl.AppliedRestart}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/github-auth", strings.NewReader(`{"enabled":true}`)))
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/github-auth", strings.NewReader(`{"enabled":true}`)))
 	rr := httptest.NewRecorder()
 	mount(t, ctl).ServeHTTP(rr, req)
 
@@ -156,7 +156,7 @@ func TestPatch_Restart(t *testing.T) {
 func TestPatch_UnknownID_400(t *testing.T) {
 	// Wrap the sentinel so the handler's errors.Is check matches.
 	ctl := &fakeController{setErr: fmt.Errorf("pluginsctl: %w: %q", pluginsctl.ErrUnknownPlugin, "nope")}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/nope", strings.NewReader(`{"enabled":true}`)))
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/nope", strings.NewReader(`{"enabled":true}`)))
 	rr := httptest.NewRecorder()
 	mount(t, ctl).ServeHTTP(rr, req)
 
@@ -167,7 +167,7 @@ func TestPatch_UnknownID_400(t *testing.T) {
 
 func TestPatch_LiveFailure_500(t *testing.T) {
 	ctl := &fakeController{setErr: errors.New("start failed: connection refused")}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/voice-whisper", strings.NewReader(`{"enabled":true}`)))
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice-whisper", strings.NewReader(`{"enabled":true}`)))
 	rr := httptest.NewRecorder()
 	mount(t, ctl).ServeHTTP(rr, req)
 
@@ -178,7 +178,7 @@ func TestPatch_LiveFailure_500(t *testing.T) {
 
 func TestPatch_InvalidJSON_400(t *testing.T) {
 	ctl := &fakeController{}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/voice-whisper", strings.NewReader(`not json`)))
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice-whisper", strings.NewReader(`not json`)))
 	rr := httptest.NewRecorder()
 	mount(t, ctl).ServeHTTP(rr, req)
 

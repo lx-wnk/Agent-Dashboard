@@ -33,7 +33,9 @@ func New(ctl Controller) *Handler {
 // Mount registers plugin routes on r.
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/settings/plugins", apierr.ErrorMiddleware(h.list))
-	r.Patch("/api/settings/plugins/{id}", apierr.ErrorMiddleware(h.patch))
+	// Distinct segment to avoid the proxy mount at /api/settings/plugins/{id},
+	// which greedily owns that prefix for healthy route/ui extensions.
+	r.Patch("/api/settings/plugins-enabled/{id}", apierr.ErrorMiddleware(h.patch))
 }
 
 // pluginInfo is intentionally a narrow DTO. Do NOT add Entry/Descriptor fields —
