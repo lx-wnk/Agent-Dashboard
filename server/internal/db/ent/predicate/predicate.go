@@ -12,6 +12,9 @@ type AgentCostTrend func(*sql.Selector)
 // ApiKey is the predicate function for apikey builders.
 type ApiKey func(*sql.Selector)
 
+// AppSetting is the predicate function for appsetting builders.
+type AppSetting func(*sql.Selector)
+
 // AuditEvent is the predicate function for auditevent builders.
 type AuditEvent func(*sql.Selector)
 
