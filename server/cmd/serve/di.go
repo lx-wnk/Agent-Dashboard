@@ -26,6 +26,7 @@ import (
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
+	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	providersapi "github.com/lx-wnk/agent-dashboard/server/internal/api/providers"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
@@ -48,6 +49,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/providersettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
@@ -203,6 +205,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if oauthProvider == nil {
 		slog.Info("auth: no auth_provider plugin found — bypass-auth active for loopback")
 	}
+
+	// Plugin enable/disable control plane. settingsSvc may be nil (no DB): the
+	// controller then reports nothing enabled and rejects writes.
+	pluginsHandler := apiplugins.New(pluginsctl.New(pluginRegistry, settingsSvc, cfg.PluginDir))
 
 	routerConfig := provideRouterConfig(cfg, oauthProvider, pluginLoginURL)
 
@@ -470,6 +476,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo, repo.NewStageRunRepo(entClient)),
 		ChannelStageOutput:    channelStageOutputHandler,
 		PluginRegistry:        pluginRegistry,
+		PluginsHandler:        pluginsHandler,
 		AuditEventRepo:        auditEventRepo,
 	}
 	router := api.NewRouter(routerDeps)

@@ -3,20 +3,39 @@ package plugins_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
-	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 )
 
 const testJWTSecret = "test-secret-plugins"
+
+// fakeController stands in for *pluginsctl.Controller.
+type fakeController struct {
+	states  []pluginsctl.PluginState
+	applied pluginsctl.Applied
+	setErr  error
+	gotID   string
+	gotEn   bool
+}
+
+func (f *fakeController) List() ([]pluginsctl.PluginState, error) { return f.states, nil }
+
+func (f *fakeController) SetEnabled(_ context.Context, id string, enable bool) (pluginsctl.Applied, error) {
+	f.gotID, f.gotEn = id, enable
+	if f.setErr != nil {
+		return "", f.setErr
+	}
+	return f.applied, nil
+}
 
 // withAuth adds a valid JWT session cookie so auth.RequireAuth passes.
 func withAuth(t *testing.T, r *http.Request) *http.Request {
@@ -29,125 +48,141 @@ func withAuth(t *testing.T, r *http.Request) *http.Request {
 	return r
 }
 
-// buildFakePlugin starts an httptest server acting as a plugin and writes a
-// plugin.json into a subdirectory of dir. Returns the registry (already
-// loaded) and the plugin's base URL so callers can assert it is not leaked.
-func buildFakePlugin(t *testing.T) (*plugin.Registry, string) {
+func mount(t *testing.T, ctl plugins.Controller) http.Handler {
 	t.Helper()
-
-	// Stand up an HTTP server that satisfies the health check.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
-
-	addr := srv.Listener.Addr().String()
-	baseURL := "http://" + addr
-
-	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, "fake-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-
-	// Include env and addr so we can assert neither leaks into the API response.
-	desc := plugin.Descriptor{
-		ID:           "fake-plugin",
-		Version:      "1.0.0",
-		Capabilities: []string{plugin.CapRouteExtension},
-		Addr:         addr,
-		Env:          []string{"SUPER_SECRET_TOKEN"},
-	}
-	data, err := json.Marshal(desc)
-	if err != nil {
-		t.Fatalf("marshal descriptor: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644); err != nil {
-		t.Fatalf("write plugin.json: %v", err)
-	}
-
-	reg := plugin.New(dir)
-	if err := reg.Load(context.Background(), plugin.Hooks{}); err != nil {
-		t.Fatalf("reg.Load: %v", err)
-	}
-
-	return reg, baseURL
-}
-
-// TestList_ExposesOnlyIDAndCapabilities verifies:
-//  1. GET /api/settings/plugins returns 200 for an authenticated request.
-//  2. Each JSON element contains EXACTLY the keys "id" and "capabilities" —
-//     no "env", "baseURL", "descriptor", or any other field.
-//  3. The values match the fake plugin.
-//  4. The raw response body does not contain the plugin's baseURL host or the
-//     env var name (defense-in-depth string guard for F028/F034).
-func TestList_ExposesOnlyIDAndCapabilities(t *testing.T) {
-	reg, baseURL := buildFakePlugin(t)
-
-	// Mount handler behind auth middleware, mirroring the production router.
-	h := plugins.New(reg)
+	h := plugins.New(ctl)
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))
 	h.Mount(r)
+	return r
+}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/settings/plugins", nil)
-	req = withAuth(t, req)
+// TestList_ShapeAndLeakGuard verifies the list DTO carries exactly the allowed
+// keys (incl. enabled/healthy/authProvider) and never leaks baseURL or env.
+func TestList_ShapeAndLeakGuard(t *testing.T) {
+	ctl := &fakeController{states: []pluginsctl.PluginState{{
+		ID:           "fake-plugin",
+		Capabilities: []string{"route_extension"},
+		Enabled:      false,
+		Healthy:      true,
+		AuthProvider: false,
+	}}}
+
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/settings/plugins", nil))
 	rr := httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
+	mount(t, ctl).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-
 	rawBody := rr.Body.String()
 
-	// --- Structural key-set assertion ---
 	var items []map[string]any
 	if err := json.Unmarshal([]byte(rawBody), &items); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
+		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(items) != 1 {
-		t.Fatalf("expected 1 plugin in response, got %d", len(items))
+		t.Fatalf("expected 1 plugin, got %d", len(items))
 	}
-
 	item := items[0]
 
-	// Assert exactly the two allowed keys are present.
-	for _, required := range []string{"id", "capabilities"} {
+	for _, required := range []string{"id", "capabilities", "enabled", "healthy", "authProvider"} {
 		if _, ok := item[required]; !ok {
 			t.Errorf("response item missing required key %q", required)
 		}
 	}
-
-	// Assert no forbidden keys are present.
 	for _, forbidden := range []string{"env", "baseURL", "descriptor", "addr", "command", "version"} {
 		if _, ok := item[forbidden]; ok {
 			t.Errorf("response item must not contain key %q (F028/F034 leak guard)", forbidden)
 		}
 	}
-
-	// Assert exactly two keys total — catches future additions that aren't yet named above.
-	if len(item) != 2 {
-		t.Errorf("response item has %d keys, want exactly 2 (id + capabilities); got: %v", len(item), item)
+	if len(item) != 5 {
+		t.Errorf("response item has %d keys, want exactly 5; got: %v", len(item), item)
 	}
 
-	// --- Value correctness ---
 	if item["id"] != "fake-plugin" {
 		t.Errorf("id: got %v, want fake-plugin", item["id"])
 	}
+	if item["enabled"] != false || item["healthy"] != true || item["authProvider"] != false {
+		t.Errorf("flags wrong: %v", item)
+	}
 	caps, _ := item["capabilities"].([]any)
-	if len(caps) != 1 || caps[0] != plugin.CapRouteExtension {
-		t.Errorf("capabilities: got %v, want [%s]", caps, plugin.CapRouteExtension)
+	if len(caps) != 1 || caps[0] != "route_extension" {
+		t.Errorf("capabilities: got %v", caps)
 	}
 
-	// --- Defense-in-depth: raw body must not contain the baseURL host or env key name ---
-	// The addr host is the httptest server's loopback address; if it appears in
-	// the body the handler leaked the internal plugin address (F028 violation).
-	host := strings.TrimPrefix(baseURL, "http://")
-	if strings.Contains(rawBody, host) {
-		t.Errorf("response body contains baseURL host %q — internal plugin address must not be exposed (F028)", host)
+	if strings.Contains(rawBody, "127.0.0.1") || strings.Contains(rawBody, "SUPER_SECRET_TOKEN") {
+		t.Errorf("response body leaked internal plugin data: %s", rawBody)
 	}
-	if strings.Contains(rawBody, "SUPER_SECRET_TOKEN") {
-		t.Errorf("response body contains env var name SUPER_SECRET_TOKEN — env must not be exposed (F034)")
+}
+
+func TestPatch_Live(t *testing.T) {
+	ctl := &fakeController{applied: pluginsctl.AppliedLive}
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/voice-whisper", strings.NewReader(`{"enabled":true}`)))
+	rr := httptest.NewRecorder()
+	mount(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if ctl.gotID != "voice-whisper" || !ctl.gotEn {
+		t.Errorf("controller got id=%q enabled=%v", ctl.gotID, ctl.gotEn)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp["id"] != "voice-whisper" || resp["enabled"] != true || resp["applied"] != "live" {
+		t.Errorf("response wrong: %v", resp)
+	}
+}
+
+func TestPatch_Restart(t *testing.T) {
+	ctl := &fakeController{applied: pluginsctl.AppliedRestart}
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/github-auth", strings.NewReader(`{"enabled":true}`)))
+	rr := httptest.NewRecorder()
+	mount(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
+	if resp["applied"] != "restart" {
+		t.Errorf("applied: got %v, want restart", resp["applied"])
+	}
+}
+
+func TestPatch_UnknownID_400(t *testing.T) {
+	// Wrap the sentinel so the handler's errors.Is check matches.
+	ctl := &fakeController{setErr: fmt.Errorf("pluginsctl: %w: %q", pluginsctl.ErrUnknownPlugin, "nope")}
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/nope", strings.NewReader(`{"enabled":true}`)))
+	rr := httptest.NewRecorder()
+	mount(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPatch_LiveFailure_500(t *testing.T) {
+	ctl := &fakeController{setErr: errors.New("start failed: connection refused")}
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/voice-whisper", strings.NewReader(`{"enabled":true}`)))
+	rr := httptest.NewRecorder()
+	mount(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPatch_InvalidJSON_400(t *testing.T) {
+	ctl := &fakeController{}
+	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins/voice-whisper", strings.NewReader(`not json`)))
+	rr := httptest.NewRecorder()
+	mount(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }

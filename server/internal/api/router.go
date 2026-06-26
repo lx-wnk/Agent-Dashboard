@@ -156,6 +156,7 @@ type RouterDeps struct {
 	ChannelStageOutput    *agents.ChannelStageOutputHandler
 	PermissionPresetRepo  repo.PermissionPresetRepo
 	PluginRegistry        *plugin.Registry
+	PluginsHandler        *apiplugins.Handler
 	AuditEventRepo        repo.AuditEventRepo
 }
 
@@ -431,9 +432,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// their assets (route handlers, ui-manifest + slot modules) through the same
 		// per-plugin proxy mount; All() yields each entry once, so the union is
 		// deduplicated by construction.
+		if deps.PluginsHandler != nil {
+			deps.PluginsHandler.Mount(r)
+		}
 		if deps.PluginRegistry != nil {
-			pluginsHandler := apiplugins.New(deps.PluginRegistry)
-			pluginsHandler.Mount(r)
 			for _, entry := range deps.PluginRegistry.All() {
 				d := entry.Descriptor
 				if !d.HasCapability(plugin.CapRouteExtension) && !d.HasCapability(plugin.CapUIExtension) {
