@@ -221,7 +221,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// controller then reports nothing enabled and rejects writes.
 	pluginsHandler := apiplugins.New(pluginsctl.New(pluginRegistry, settingsSvc, cfg.PluginDir))
 
-	routerConfig := provideRouterConfig(cfg, oauthProvider, pluginLoginURL)
+	routerConfig := provideRouterConfig(cfg, settingsSvc, oauthProvider, pluginLoginURL)
 
 	var systemPromptRepo repo.SystemPromptRepo
 	if entClient != nil {
