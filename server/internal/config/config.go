@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/env"
@@ -99,6 +100,15 @@ func Defaults() Config {
 // Load returns a Config merged from defaults → optional JSON file → env vars.
 // Env vars are prefixed with DASHBOARD_ and case-insensitive.
 func Load(cfgFile string) (Config, error) {
+	// Load a .env file from the working directory into the process environment
+	// so both `task dev` (air) and `./bin/agent-dashboard serve` pick it up — the
+	// .env uses the same DASHBOARD_ keys, so the env provider below reads them
+	// through the identical prefix transform. Non-overriding: an explicit shell
+	// export always wins over the file. Absence is fine — the file is optional.
+	if err := godotenv.Load(); err == nil {
+		slog.Info("loaded configuration from .env file")
+	}
+
 	k := koanf.New(".")
 	cfg := Defaults()
 

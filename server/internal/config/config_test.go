@@ -198,3 +198,44 @@ func TestLoad_ProvidersEnabled_SingleValue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"codex"}, cfg.ProvidersEnabled)
 }
+
+// -------------------------------------------------------------------
+// Native .env file loading (covers `task dev` via air and
+// `./bin/agent-dashboard serve`, both of which call config.Load)
+// -------------------------------------------------------------------
+
+func TestLoad_DotEnvFileLoaded(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(dir+"/.env", []byte("DASHBOARD_FORCE_WORKTREES=true\nDASHBOARD_PORT=9191\n"), 0o600))
+	t.Chdir(dir)
+	// godotenv mutates the global process env permanently (unlike t.Setenv),
+	// so undo it to keep later tests in the same process clean.
+	t.Cleanup(func() {
+		os.Unsetenv("DASHBOARD_FORCE_WORKTREES") //nolint:errcheck
+		os.Unsetenv("DASHBOARD_PORT")            //nolint:errcheck
+	})
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.True(t, cfg.ForceWorktrees, ".env value must be loaded into config")
+	assert.Equal(t, 9191, cfg.Port)
+}
+
+func TestLoad_ProcessEnvOverridesDotEnv(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(dir+"/.env", []byte("DASHBOARD_PORT=9191\n"), 0o600))
+	t.Chdir(dir)
+	t.Setenv("DASHBOARD_PORT", "7777")
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, 7777, cfg.Port, "explicit process env must win over .env")
+}
+
+func TestLoad_NoDotEnvFile_NoError(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, 13120, cfg.Port, "absent .env is fine — defaults apply")
+}

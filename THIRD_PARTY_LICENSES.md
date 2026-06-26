@@ -31,6 +31,7 @@ The following third-party packages are used as transitive dependencies.
 | github.com/google/uuid | BSD-3-Clause | https://github.com/google/uuid/blob/v1.6.0/LICENSE |
 | github.com/hashicorp/hcl/v2 | MPL-2.0 | https://github.com/hashicorp/hcl/blob/v2.18.1/LICENSE |
 | github.com/invopop/jsonschema | MIT | https://github.com/invopop/jsonschema/blob/v0.14.0/COPYING |
+| github.com/joho/godotenv | MIT | https://github.com/joho/godotenv/blob/v1.5.1/LICENCE |
 | github.com/knadh/koanf/maps | MIT | https://github.com/knadh/koanf/blob/maps/v0.1.2/maps/LICENSE |
 | github.com/knadh/koanf/parsers/json | MIT | https://github.com/knadh/koanf/blob/parsers/json/v1.0.0/parsers/json/LICENSE |
 | github.com/knadh/koanf/providers/confmap | MIT | https://github.com/knadh/koanf/blob/providers/confmap/v1.0.0/providers/confmap/LICENSE |
