@@ -1,0 +1,61 @@
+package repo
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
+)
+
+// AppSettingRepo persists generic key/value configuration.
+type AppSettingRepo interface {
+	Get(ctx context.Context, key string) (string, bool, error)
+	List(ctx context.Context) ([]*ent.AppSetting, error)
+	Upsert(ctx context.Context, key, value string) (*ent.AppSetting, error)
+}
+
+type entAppSettingRepo struct{ client *ent.Client }
+
+// NewAppSettingRepo returns an AppSettingRepo backed by the ent client.
+func NewAppSettingRepo(client *ent.Client) AppSettingRepo {
+	return &entAppSettingRepo{client: client}
+}
+
+func (r *entAppSettingRepo) Get(ctx context.Context, key string) (string, bool, error) {
+	row, err := r.client.AppSetting.Query().Where(appsetting.KeyEQ(key)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("appsetting.Get: %w", err)
+	}
+	return row.Value, true, nil
+}
+
+func (r *entAppSettingRepo) List(ctx context.Context) ([]*ent.AppSetting, error) {
+	rows, err := r.client.AppSetting.Query().All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("appsetting.List: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *entAppSettingRepo) Upsert(ctx context.Context, key, value string) (*ent.AppSetting, error) {
+	err := r.client.AppSetting.Create().
+		SetID(uuid.New().String()).
+		SetKey(key).
+		SetValue(value).
+		OnConflictColumns(appsetting.FieldKey).
+		UpdateNewValues().
+		Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("appsetting.Upsert: %w", err)
+	}
+	row, err := r.client.AppSetting.Query().Where(appsetting.KeyEQ(key)).Only(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("appsetting.Upsert reload: %w", err)
+	}
+	return row, nil
+}
