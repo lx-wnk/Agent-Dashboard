@@ -3,7 +3,6 @@ package pipeline
 import (
 	"fmt"
 	"maps"
-	"os"
 	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -160,6 +159,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		Spawner:         resolved,
 		Model:           nativeModel,
 		AdditionalDirs:  ctx.AdditionalDirs,
+		AllowGitPush:    ctx.AllowGitPush,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agentStageHandler.Execute(%s): %w", h.stage, err)
@@ -179,7 +179,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 // mirroring the logic in BuildAllowList so non-Claude adapters receive the
 // same tool constraints.
 func buildAllowedToolsList(ctx *StageContext) []string {
-	raw := BuildAllowList(ctx.Task.Autonomy, ctx.Permissions, false, isGitPushAllowedFromEnv())
+	raw := BuildAllowList(ctx.Task.Autonomy, ctx.Permissions, false, ctx.AllowGitPush)
 	// Strip the Bash(...) wrapper — non-Claude adapters receive plain tool names.
 	tools := make([]string, 0, len(raw))
 	for _, entry := range raw {
@@ -195,10 +195,6 @@ func buildAllowedToolsList(ctx *StageContext) []string {
 		tools = append(tools, entry)
 	}
 	return tools
-}
-
-func isGitPushAllowedFromEnv() bool {
-	return os.Getenv("DASHBOARD_ALLOW_GIT_PUSH") == "true"
 }
 
 // resumeContinueInstruction replaces the full task spec on resume spawns to
@@ -268,7 +264,7 @@ func implementationBuilder(ctx *StageContext) PromptBundle {
 	}
 	conceptOutput := map[string]any{}
 	maps.Copy(conceptOutput, ctx.Task.Metadata)
-	return ImplementationPrompt(ctx.Task, conceptOutput, feedback)
+	return ImplementationPrompt(ctx.Task, conceptOutput, feedback, ctx.AllowGitPush)
 }
 
 func selfReviewBuilder(ctx *StageContext) PromptBundle {

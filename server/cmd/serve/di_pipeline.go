@@ -73,6 +73,7 @@ func provideOrchestrator(
 		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		WorktreeRoot:     cfg.WorktreeRoot,
 		ForceWorktrees:   settingsSvc.Bool("worktree.force"),
+		AllowGitPush:     settingsSvc.Bool("git.allowPush"),
 		SpawnFn:          pipeline.SpawnStageAgent,
 		EnsureWorktreeFn: pipeline.EnsureTaskWorktree,
 		RemoveWorktreeFn: func(ctx context.Context, task *ent.Task, force bool) error {
