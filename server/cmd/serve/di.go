@@ -85,10 +85,22 @@ func (a settingsRepoAdapter) ListAll(ctx context.Context) (map[string]string, er
 	return m, nil
 }
 
-func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *merger.Merger, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, func(), error) {
+// noopSettingsRepo backs the settings service when no database is configured,
+// so accessors always resolve to registry defaults and consumers never nil-check.
+type noopSettingsRepo struct{}
+
+func (noopSettingsRepo) Get(context.Context, string) (string, bool, error) { return "", false, nil }
+func (noopSettingsRepo) Set(context.Context, string, string) error {
+	return fmt.Errorf("settings: no database configured")
+}
+func (noopSettingsRepo) ListAll(context.Context) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *merger.Merger, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, *settings.Service, func(), error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 	var entClient *ent.Client
 	if bundle != nil {
@@ -125,7 +137,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		Pricing: merger.PricingAdapter(),
 	})
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("provider registry: %w", err)
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("provider registry: %w", err)
 	}
 	var providerSettingRepo repo.ProviderSettingRepo
 	if entClient != nil {
@@ -137,7 +149,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	)
 	if providerSettingRepo != nil {
 		if err := providerSettingsSvc.Load(ctx); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("provider settings load: %w", err)
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("provider settings load: %w", err)
 		}
 	}
 	providerRegistry.SetEnabled(providerSettingsSvc.EnabledFunc())
@@ -153,9 +165,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		appSettingRepo := repo.NewAppSettingRepo(entClient)
 		settingsSvc = settings.New(settingsRepoAdapter{inner: appSettingRepo})
 		if err := settingsSvc.Load(ctx); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("settings load: %w", err)
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("settings load: %w", err)
 		}
 		settingsHandler = settingsapi.NewHandler(settingsSvc)
+	} else {
+		settingsSvc = settings.New(noopSettingsRepo{})
+		if err := settingsSvc.Load(ctx); err != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("settings load: %w", err)
+		}
 	}
 
 	agentMerger := merger.New(
@@ -197,7 +214,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 			slog.Info("auth: using plugin provider", "loginURL", loginURL)
 		},
 	}); err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
 	cleanup := func() { pluginRegistry.Shutdown() }
 
@@ -208,7 +225,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if pluginRegistry.HasDir() &&
 		pluginRegistry.HasAttemptedCapability(plugin.CapAuthProvider) &&
 		pluginRegistry.FindByCapability(plugin.CapAuthProvider) == nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf(
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf(
 			"auth_provider plugin configured but failed health-check — refusing to start with auth disabled",
 		)
 	}
@@ -244,22 +261,22 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		spawnerRepo = repo.NewSpawnerRepo(entClient)
 		if bundle != nil {
 			if err := repairSpawnerAdapterConfig(ctx, bundle.DB); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
+				return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
 			}
 		}
 		if err := seedSpawners(ctx, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
 		}
 		if err := migrateAdapterConfigToSpawners(ctx, cfg, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
 		}
 		pipelineConfigRepo := repo.NewPipelineConfigRepo(entClient)
 		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo, pipelineConfigRepo)
 	}
 
-	orch, err := provideOrchestrator(cfg, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver)
+	orch, err := provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, err
 	}
 
 	// Construct the detached refinement runner before the task handler so the
@@ -312,8 +329,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 			collector,
 			evalMetricRepo,
 			driftAlertRepo,
-			eval.Thresholds{RateDropPP: cfg.EvalRateDropPP, StddevK: cfg.EvalStddevK, MinSamples: cfg.EvalMinSamples},
-			cfg.EvalWindowHours,
+			eval.Thresholds{RateDropPP: settingsSvc.Float("eval.rateDropPP"), StddevK: settingsSvc.Float("eval.stddevK"), MinSamples: settingsSvc.Int("eval.minSamples")},
+			settingsSvc.Int("eval.windowHours"),
 		).WithOnDrift(func(findings []eval.DriftFinding) {
 			for _, f := range findings {
 				slog.Warn("eval: agent drift detected",
@@ -398,7 +415,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// Hook-event store + enricher: the opt-in receiver records per-event hook
 	// granularity here (write side in the hooks API), and this enricher reads it
 	// back onto each agent. Always constructed — hooks work without a database.
-	hookStore := hookstore.New(cfg.HookEventsPerSession, hookstore.DefaultTTL)
+	hookStore := hookstore.New(settingsSvc.Int("hooks.eventsPerSession"), hookstore.DefaultTTL)
 
 	// Combine the read-only crossings into one enricher applied at every GetAgents
 	// call site. A nil pipelineEnricher (no DB) composes away.
@@ -491,6 +508,6 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		AuditEventRepo:        auditEventRepo,
 	}
 	router := api.NewRouter(routerDeps)
-	server := provideServer(cfg, router)
-	return server, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, agentEnricher, evalService, cleanup, nil
+	server := provideServer(cfg, settingsSvc, router)
+	return server, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, agentEnricher, evalService, settingsSvc, cleanup, nil
 }

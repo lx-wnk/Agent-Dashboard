@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -33,16 +34,17 @@ func provideRouterConfig(cfg config.Config, settingsSvc *settings.Service, oauth
 		IsLoopback:         cfg.IsLoopback(),
 		BypassAuth:         bypassAuth,
 		HooksSecret:        cfg.HooksSecret,
-		HooksDebounceMs:    cfg.HooksDebounceMs,
-		SpawnRateLimit:     cfg.SpawnRateLimit,
-		SpawnRateWindowMs:  cfg.SpawnRateWindowMs,
-		InjectRateLimit:    cfg.InjectRateLimit,
-		InjectRateWindowMs: cfg.InjectRateWindowMs,
+		HooksDebounceMs:    settingsSvc.Int("hooks.debounceMs"),
+		SpawnRateLimit:     settingsSvc.Int("spawn.rateLimit"),
+		SpawnRateWindowMs:  settingsSvc.Int("spawn.rateWindowMs"),
+		InjectRateLimit:    settingsSvc.Int("inject.rateLimit"),
+		InjectRateWindowMs: settingsSvc.Int("inject.rateWindowMs"),
 		AuthPluginSecret:   cfg.AuthPluginSecret,
 		PluginLoginURL:     pluginLoginURL,
 	}
 }
 
-func provideServer(cfg config.Config, handler http.Handler) *api.Server {
-	return api.NewServer(cfg.Addr(), handler, cfg.ShutdownTimeout())
+func provideServer(cfg config.Config, settingsSvc *settings.Service, handler http.Handler) *api.Server {
+	shutdownTimeout := time.Duration(settingsSvc.Int("shutdown.timeoutSeconds")) * time.Second
+	return api.NewServer(cfg.Addr(), handler, shutdownTimeout)
 }

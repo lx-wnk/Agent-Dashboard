@@ -45,7 +45,7 @@ func main() {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			srv, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, enricher, evalService, cleanup, err := initializeServer(ctx, cfg, cfgFile)
+			srv, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, enricher, evalService, settingsSvc, cleanup, err := initializeServer(ctx, cfg, cfgFile)
 			if err != nil {
 				return err
 			}
@@ -53,7 +53,7 @@ func main() {
 
 			g, ctx := errgroup.WithContext(ctx)
 
-			interval := time.Duration(cfg.SSEIntervalMs) * time.Millisecond
+			interval := time.Duration(settingsSvc.Int("sse.intervalMs")) * time.Millisecond
 			g.Go(func() error {
 				agentbroadcast.Run(ctx, agentMerger, broadcaster, interval, baselineProvider, enricher)
 				return nil
@@ -75,14 +75,14 @@ func main() {
 
 			if histImporter != nil {
 				g.Go(func() error {
-					histImporter.RunScheduled(ctx, time.Duration(cfg.CostScanIntervalMs)*time.Millisecond)
+					histImporter.RunScheduled(ctx, time.Duration(settingsSvc.Int("cost.scanIntervalMs"))*time.Millisecond)
 					return nil
 				})
 			}
 
 			if evalService != nil {
 				g.Go(func() error {
-					evalService.RunLoop(ctx, time.Duration(cfg.EvalScanIntervalMs)*time.Millisecond)
+					evalService.RunLoop(ctx, time.Duration(settingsSvc.Int("eval.scanIntervalMs"))*time.Millisecond)
 					return nil
 				})
 			}
