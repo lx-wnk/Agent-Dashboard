@@ -133,7 +133,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 	providerSettingsSvc := providersettings.New(
 		providerSettingRepo,
-		provider.DefaultEnabled(providerRegistry.Descriptors(), cfg.ProvidersEnabled),
+		provider.DefaultEnabled(providerRegistry.Descriptors(), nil),
 	)
 	if providerSettingRepo != nil {
 		if err := providerSettingsSvc.Load(ctx); err != nil {
