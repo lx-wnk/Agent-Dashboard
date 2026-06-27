@@ -36,9 +36,7 @@ A few operational env vars are read directly by their subsystems and are **not**
 | Variable | Default | Description |
 |---|---|---|
 | `DASHBOARD_CLAUDE_CONFIG_DIRS` | — | Comma-separated extra Claude config dirs to scan for sessions, e.g. `~/.claude-personal,~/.claude-work` |
-| `DASHBOARD_INJECT_TOKEN_ROTATE_MS` | `300000` | Discovery bearer-token rotation interval (ms); `<= 0` disables. Previous token honored one extra interval (grace) |
-| `DASHBOARD_ALLOW_GIT_PULL` | `false` | Enable `POST /api/tasks/:id/git-action` with `action:'pull'` (ff-only). Note: `git push` enablement is now the `git.allowPush` runtime setting |
-| `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` | — | Comma-separated extension of the `spawners.command` allow-list: bare entries add permitted bare names, absolute entries add trusted bin directories |
+| `DASHBOARD_INJECT_TOKEN_ROTATE_MS` | `300000` | Discovery bearer-token rotation interval (ms); `<= 0` disables. Previous token honored one extra interval (grace). Read by the `channel`/`live`/`pty-host` child processes (which have no DB access), so it stays a child-process env var rather than a runtime setting |
 | `DASHBOARD_SPAWN_COMMAND` | — | Path to a custom spawner binary for the `custom` LLM adapter |
 
 ### Injected automatically (do not set by hand)
@@ -64,12 +62,14 @@ These keys live in the database `app_setting` table — the single source of tru
 | `auth.mode` | enum (`none`, `plugin`) | `none` | restart |
 | `plugins.enabled` | string list (comma) | — | live (managed) |
 | `git.allowPush` | bool | `false` | restart |
+| `git.allowPull` | bool | `false` | restart |
 | `worktree.force` | bool | `false` | restart |
 | `sse.intervalMs` | int | `3000` | restart |
 | `shutdown.timeoutSeconds` | int | `10` | restart |
 | `hooks.debounceMs` | int | `100` | restart |
 | `hooks.eventsPerSession` | int | `50` | restart |
 | `spawn.rateLimit` | int | `5` | restart |
+| `spawn.allowedCommands` | string list (comma) | — | restart |
 | `spawn.rateWindowMs` | int | `60000` | restart |
 | `inject.rateLimit` | int | `30` | restart |
 | `inject.rateWindowMs` | int | `60000` | restart |

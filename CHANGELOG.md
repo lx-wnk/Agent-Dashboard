@@ -85,7 +85,8 @@ Preparing the first public release.
   and `FUNDING.yml`.
 - Settings → Providers panel to enable or disable Codex/Gemini/Junie monitoring per provider, persisted in the database and applied within one scan tick.
 - **DB-backed settings store**: operational config (auth mode, rate limits, scan
-  intervals, plugin/provider enablement, `git.allowPush`, `worktree.force`,
+  intervals, plugin/provider enablement, `git.allowPush`, `git.allowPull`,
+  `spawn.allowedCommands`, `worktree.force`,
   eval/drift tuning, …) now lives in the database `app_setting` table — the single
   source of truth is `server/internal/settings/registry.go`. Edit it in the new
   generic **Server** settings panel (registry-driven) or via the new direct-DB
@@ -113,6 +114,7 @@ Preparing the first public release.
   logs a warning on boot): `DASHBOARD_AUTH` → `auth.mode`,
   `DASHBOARD_PROVIDERS_ENABLED` → `providers.enabled`,
   `DASHBOARD_ALLOW_GIT_PUSH` → `git.allowPush`,
+  `DASHBOARD_ALLOW_GIT_PULL` → `git.allowPull`,
   `DASHBOARD_FORCE_WORKTREES` → `worktree.force`,
   `DASHBOARD_SSE_INTERVAL_MS` → `sse.intervalMs`,
   `DASHBOARD_SHUTDOWN_TIMEOUT_SECONDS` → `shutdown.timeoutSeconds`,
@@ -120,6 +122,7 @@ Preparing the first public release.
   `DASHBOARD_HOOK_EVENTS_PER_SESSION` → `hooks.eventsPerSession`,
   `DASHBOARD_SPAWN_RATE_LIMIT` / `DASHBOARD_SPAWN_RATE_WINDOW_MS` →
   `spawn.rateLimit` / `spawn.rateWindowMs`,
+  `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` → `spawn.allowedCommands`,
   `DASHBOARD_INJECT_RATE_LIMIT` / `DASHBOARD_INJECT_RATE_WINDOW_MS` →
   `inject.rateLimit` / `inject.rateWindowMs`,
   `DASHBOARD_COST_SCAN_INTERVAL_MS` → `cost.scanIntervalMs`, and the

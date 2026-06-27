@@ -29,12 +29,18 @@ const groups = computed(() => {
     .sort((a, b) => a.category.localeCompare(b.category))
 })
 
+function restartNoticeText(key: string, value: string): string {
+  if (key === 'auth.mode' && value === 'plugin')
+    return `${key}: applies after a server restart — and 'plugin' will require login`
+  return `${key}: applies after a server restart`
+}
+
 async function apply(item: SettingView, value: string) {
   saving.value = item.key
   try {
     const applied = await update(item.key, value)
     if (applied === 'restart')
-      showNotice('warning', `${item.key}: applies after a server restart`)
+      showNotice('warning', restartNoticeText(item.key, value))
     else
       showNotice('success', `${item.key} updated`)
   }
