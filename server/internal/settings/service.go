@@ -16,29 +16,24 @@ type Repo interface {
 	ListAll(ctx context.Context) (map[string]string, error)
 }
 
-// LiveHook is invoked after a successful Set of an ApplyLive key, so a
-// subsystem (e.g. the plugin registry) can apply the change without a restart.
-type LiveHook func(ctx context.Context, key, value string) error
+// ValidationError marks a Set failure caused by an invalid value or unknown key
+// (client error), as opposed to a persistence/apply failure (server error).
+type ValidationError struct{ Err error }
+
+func (e *ValidationError) Error() string { return e.Err.Error() }
+func (e *ValidationError) Unwrap() error { return e.Err }
 
 // Service reads settings DB-first with registry-default fallback.
 type Service struct {
 	repo Repo
 
-	mu        sync.RWMutex
-	snapshot  map[string]string // key -> raw DB value (present only if a row exists)
-	liveHooks map[string]LiveHook
+	mu       sync.RWMutex
+	snapshot map[string]string // key -> raw DB value (present only if a row exists)
 }
 
 // New builds a Service.
 func New(repo Repo) *Service {
-	return &Service{repo: repo, snapshot: map[string]string{}, liveHooks: map[string]LiveHook{}}
-}
-
-// RegisterLiveHook attaches a hook for an ApplyLive key.
-func (s *Service) RegisterLiveHook(key string, fn LiveHook) {
-	s.mu.Lock()
-	s.liveHooks[key] = fn
-	s.mu.Unlock()
+	return &Service{repo: repo, snapshot: map[string]string{}}
 }
 
 // Load reads all rows into the snapshot. Call once at startup.
@@ -69,9 +64,9 @@ func (s *Service) raw(key string) string {
 
 // Typed accessors. They assume the key exists in the registry (programmer error otherwise).
 func (s *Service) String(key string) string { return s.raw(key) }
-func (s *Service) Bool(key string) bool      { b, _ := strconv.ParseBool(s.raw(key)); return b }
-func (s *Service) Int(key string) int        { n, _ := strconv.Atoi(s.raw(key)); return n }
-func (s *Service) Float(key string) float64  { f, _ := strconv.ParseFloat(s.raw(key), 64); return f }
+func (s *Service) Bool(key string) bool     { b, _ := strconv.ParseBool(s.raw(key)); return b }
+func (s *Service) Int(key string) int       { n, _ := strconv.Atoi(s.raw(key)); return n }
+func (s *Service) Float(key string) float64 { f, _ := strconv.ParseFloat(s.raw(key), 64); return f }
 
 func (s *Service) StringSlice(key string) []string {
 	raw := s.raw(key)
@@ -98,28 +93,23 @@ func (s *Service) Effective() map[string]string {
 	return out
 }
 
-// Set validates against the registry, persists, updates the snapshot, and runs
-// the live hook (if any). Returns the definition's Apply semantics.
+// Set validates against the registry, persists, and updates the snapshot.
+// Validation failures are wrapped as *ValidationError (client error);
+// persistence failures are returned as plain wrapped errors (server error).
 func (s *Service) Set(ctx context.Context, key, value string) error {
 	def, ok := Lookup(key)
 	if !ok {
-		return fmt.Errorf("settings.Set: unknown key %q", key)
+		return &ValidationError{Err: fmt.Errorf("settings.Set: unknown key %q", key)}
 	}
 	if err := def.Validate(value); err != nil {
-		return fmt.Errorf("settings.Set: %w", err)
+		return &ValidationError{Err: fmt.Errorf("settings.Set: %w", err)}
 	}
 	if err := s.repo.Set(ctx, key, value); err != nil {
 		return fmt.Errorf("settings.Set: %w", err)
 	}
 	s.mu.Lock()
 	s.snapshot[key] = value
-	hook := s.liveHooks[key]
 	s.mu.Unlock()
-	if def.Apply == ApplyLive && hook != nil {
-		if err := hook(ctx, key, value); err != nil {
-			return fmt.Errorf("settings.Set live-apply: %w", err)
-		}
-	}
 	return nil
 }
 

@@ -2,6 +2,7 @@ package settings
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -71,7 +72,11 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("%w: invalid JSON", apierr.ErrBadRequest)
 	}
 	if err := h.svc.Set(r.Context(), key, body.Value); err != nil {
-		return fmt.Errorf("%w: %s", apierr.ErrBadRequest, err.Error())
+		var verr *settingssvc.ValidationError
+		if errors.As(err, &verr) {
+			return fmt.Errorf("%w: %s", apierr.ErrBadRequest, err.Error())
+		}
+		return fmt.Errorf("settings.patch: %w", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(map[string]string{

@@ -3,6 +3,7 @@ package settings_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,18 +17,32 @@ import (
 	settingssvc "github.com/lx-wnk/agent-dashboard/server/internal/settings"
 )
 
-type memRepo struct{ m map[string]string }
+type memRepo struct {
+	m      map[string]string
+	setErr error
+}
 
 func (r *memRepo) Get(_ context.Context, k string) (string, bool, error) {
 	v, ok := r.m[k]
 	return v, ok, nil
 }
-func (r *memRepo) Set(_ context.Context, k, v string) error             { r.m[k] = v; return nil }
+func (r *memRepo) Set(_ context.Context, k, v string) error {
+	if r.setErr != nil {
+		return r.setErr
+	}
+	r.m[k] = v
+	return nil
+}
 func (r *memRepo) ListAll(_ context.Context) (map[string]string, error) { return r.m, nil }
 
 func newRouter(t *testing.T) (http.Handler, *settingssvc.Service) {
 	t.Helper()
-	svc := settingssvc.New(&memRepo{m: map[string]string{}})
+	return newRouterWithRepo(t, &memRepo{m: map[string]string{}})
+}
+
+func newRouterWithRepo(t *testing.T, repo settingssvc.Repo) (http.Handler, *settingssvc.Service) {
+	t.Helper()
+	svc := settingssvc.New(repo)
 	require.NoError(t, svc.Load(context.Background()))
 	h := settingsapi.NewHandler(svc)
 	r := chi.NewRouter()
@@ -73,6 +88,16 @@ func TestSettingsAPI_ListAndPatch(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPatch, "/api/settings/nope", strings.NewReader(`{"value":"1"}`))
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestSettingsAPI_PatchPersistenceFailure(t *testing.T) {
+	r, _ := newRouterWithRepo(t, &memRepo{m: map[string]string{}, setErr: errors.New("db down")})
+
+	// valid key/value but the repo fails to persist -> 500, not 400
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/settings/spawn.rateLimit", strings.NewReader(`{"value":"9"}`))
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
 func TestSettingsAPI_ManagedKeyHidden(t *testing.T) {
