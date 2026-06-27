@@ -10,21 +10,45 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
 // DefaultAllowedCommands are the bare command names always permitted in the
 // spawners.command field. Extra entries can be appended via the
-// DASHBOARD_SPAWNER_ALLOWED_COMMANDS env var (comma-separated; each entry is
-// either a bare name or an absolute trusted bin directory).
+// spawn.allowedCommands setting (each entry is either a bare name or an absolute
+// trusted bin directory).
 var DefaultAllowedCommands = []string{"claude", "claude-code", "npx"}
+
+// extraAllowedCommands holds the configured extra spawner allow-list (bare names
+// and absolute trusted bin dirs), set from the spawn.allowedCommands setting at
+// startup. Guarded by extraAllowedMu.
+var (
+	extraAllowedMu       sync.RWMutex
+	extraAllowedCommands []string
+)
+
+// SetSpawnerAllowedCommands replaces the configured extra spawner allow-list.
+// Whitespace is trimmed and empty entries dropped. Call at startup (ApplyRestart).
+// Safe for concurrent use.
+func SetSpawnerAllowedCommands(cmds []string) {
+	next := make([]string, 0, len(cmds))
+	for _, c := range cmds {
+		if s := strings.TrimSpace(c); s != "" {
+			next = append(next, s)
+		}
+	}
+	extraAllowedMu.Lock()
+	extraAllowedCommands = next
+	extraAllowedMu.Unlock()
+}
 
 // ValidateSpawnerCommand reports whether command is permitted for a spawner row
 // and, when not, returns a human-readable reason for a 400 response.
 //
 // Bare names: allowed only when listed in DefaultAllowedCommands or as a bare
-// entry of DASHBOARD_SPAWNER_ALLOWED_COMMANDS.
+// entry of the spawn.allowedCommands setting.
 //
 // Absolute paths: must EvalSymlinks-resolve (the file must exist) and the
 // resolved binary's parent directory must lie under a trusted bin directory
@@ -56,7 +80,7 @@ func ValidateSpawnerCommand(command string) (bool, string) {
 	if slices.Contains(DefaultAllowedCommands, command) {
 		return true, ""
 	}
-	for _, extra := range extraAllowedCommandsFromEnv() {
+	for _, extra := range configuredExtraAllowedCommands() {
 		if !strings.HasPrefix(extra, "/") && command == extra {
 			return true, ""
 		}
@@ -67,7 +91,7 @@ func ValidateSpawnerCommand(command string) (bool, string) {
 // trustedBinDirs returns the set of directories under which an absolute spawner
 // command is permitted: the standard system/Homebrew bin dirs, the user's
 // ~/.local/bin, the resolved directory of the `claude` binary on PATH, and any
-// absolute-path entries of DASHBOARD_SPAWNER_ALLOWED_COMMANDS.
+// absolute-path entries of the spawn.allowedCommands setting.
 func trustedBinDirs() []string {
 	dirs := []string{"/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin"}
 	if home, err := os.UserHomeDir(); err == nil {
@@ -79,7 +103,7 @@ func trustedBinDirs() []string {
 		}
 		dirs = append(dirs, filepath.Dir(p))
 	}
-	for _, extra := range extraAllowedCommandsFromEnv() {
+	for _, extra := range configuredExtraAllowedCommands() {
 		if strings.HasPrefix(extra, "/") {
 			dirs = append(dirs, extra)
 		}
@@ -87,20 +111,16 @@ func trustedBinDirs() []string {
 	return dirs
 }
 
-// extraAllowedCommandsFromEnv reads and parses DASHBOARD_SPAWNER_ALLOWED_COMMANDS
-// into a slice (trims whitespace, drops empty entries).
-func extraAllowedCommandsFromEnv() []string {
-	raw := os.Getenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS")
-	if raw == "" {
+// configuredExtraAllowedCommands returns a copy of the configured extra spawner
+// allow-list set via SetSpawnerAllowedCommands. Safe for concurrent use.
+func configuredExtraAllowedCommands() []string {
+	extraAllowedMu.RLock()
+	defer extraAllowedMu.RUnlock()
+	if len(extraAllowedCommands) == 0 {
 		return nil
 	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if s := strings.TrimSpace(p); s != "" {
-			out = append(out, s)
-		}
-	}
+	out := make([]string, len(extraAllowedCommands))
+	copy(out, extraAllowedCommands)
 	return out
 }
 

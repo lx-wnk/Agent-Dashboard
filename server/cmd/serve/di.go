@@ -175,6 +175,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		}
 	}
 
+	// Seed the spawner command allow-list from settings (ApplyRestart).
+	services.SetSpawnerAllowedCommands(settingsSvc.StringSlice("spawn.allowedCommands"))
+
 	agentMerger := merger.New(
 		merger.WithRegistry(providerRegistry),
 		merger.WithScanFn(func(ctx context.Context) ([]scanner.ProcessInfo, error) {
@@ -300,7 +303,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	if bundle != nil {
 		rawDB = bundle.DB
 	}
-	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg)
+	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg, settingsSvc.Bool("git.allowPull"))
 
 	// Scheduler: recurring task firing engine + its REST handler. Reuses the task
 	// handler's create core, so it must be built after taskHandler. nil when no DB.

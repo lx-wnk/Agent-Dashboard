@@ -6,6 +6,14 @@ import (
 	"testing"
 )
 
+// setAllowedCommands sets the spawner extra allow-list for the duration of the
+// test, resetting it afterwards.
+func setAllowedCommands(t *testing.T, cmds ...string) {
+	t.Helper()
+	SetSpawnerAllowedCommands(cmds)
+	t.Cleanup(func() { SetSpawnerAllowedCommands(nil) })
+}
+
 // writeExecutable creates an empty file at path with 0o755 and returns path.
 func writeExecutable(t *testing.T, path string) string {
 	t.Helper()
@@ -45,7 +53,7 @@ func TestValidateSpawnerCommand_Empty(t *testing.T) {
 }
 
 func TestValidateSpawnerCommand_EnvExtraBareAllowed(t *testing.T) {
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "mytool, othertool")
+	setAllowedCommands(t, "mytool", "othertool")
 	if ok, reason := ValidateSpawnerCommand("mytool"); !ok {
 		t.Errorf("expected env-extra bare name allowed, got reason %q", reason)
 	}
@@ -88,7 +96,7 @@ func TestValidateSpawnerCommand_SymlinkIntoTempDenied(t *testing.T) {
 func TestValidateSpawnerCommand_EnvTrustedDirAllowed(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeExecutable(t, filepath.Join(dir, "claude"))
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", dir)
+	setAllowedCommands(t, dir)
 	if ok, reason := ValidateSpawnerCommand(bin); !ok {
 		t.Errorf("expected command under env-trusted dir allowed, got reason %q", reason)
 	}
