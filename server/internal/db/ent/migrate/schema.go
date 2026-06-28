@@ -320,6 +320,30 @@ var (
 			},
 		},
 	}
+	// PluginSettingsColumns holds the columns for the "plugin_settings" table.
+	PluginSettingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "plugin_id", Type: field.TypeString},
+		{Name: "key", Type: field.TypeString},
+		{Name: "value", Type: field.TypeString, Default: ""},
+		{Name: "secret", Type: field.TypeBool, Default: false},
+		{Name: "nonce", Type: field.TypeString, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// PluginSettingsTable holds the schema information for the "plugin_settings" table.
+	PluginSettingsTable = &schema.Table{
+		Name:       "plugin_settings",
+		Columns:    PluginSettingsColumns,
+		PrimaryKey: []*schema.Column{PluginSettingsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "pluginsetting_plugin_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{PluginSettingsColumns[1], PluginSettingsColumns[2]},
+			},
+		},
+	}
 	// ProjectsColumns holds the columns for the "projects" table.
 	ProjectsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -789,6 +813,7 @@ var (
 		PermissionRequestsTable,
 		PipelineConfigsTable,
 		PluginsTable,
+		PluginSettingsTable,
 		ProjectsTable,
 		ProjectFoldersTable,
 		ProviderSettingsTable,

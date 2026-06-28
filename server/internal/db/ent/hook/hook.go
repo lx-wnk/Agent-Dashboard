@@ -141,6 +141,18 @@ func (f PluginFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, erro
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PluginMutation", m)
 }
 
+// The PluginSettingFunc type is an adapter to allow the use of ordinary
+// function as PluginSetting mutator.
+type PluginSettingFunc func(context.Context, *ent.PluginSettingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PluginSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PluginSettingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PluginSettingMutation", m)
+}
+
 // The ProjectFunc type is an adapter to allow the use of ordinary
 // function as Project mutator.
 type ProjectFunc func(context.Context, *ent.ProjectMutation) (ent.Value, error)

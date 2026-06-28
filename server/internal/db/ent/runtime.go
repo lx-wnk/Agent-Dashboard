@@ -15,6 +15,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pluginsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
@@ -156,6 +157,30 @@ func init() {
 	plugin.DefaultUpdatedAt = pluginDescUpdatedAt.Default.(func() time.Time)
 	// plugin.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	plugin.UpdateDefaultUpdatedAt = pluginDescUpdatedAt.UpdateDefault.(func() time.Time)
+	pluginsettingFields := schema.PluginSetting{}.Fields()
+	_ = pluginsettingFields
+	// pluginsettingDescValue is the schema descriptor for value field.
+	pluginsettingDescValue := pluginsettingFields[3].Descriptor()
+	// pluginsetting.DefaultValue holds the default value on creation for the value field.
+	pluginsetting.DefaultValue = pluginsettingDescValue.Default.(string)
+	// pluginsettingDescSecret is the schema descriptor for secret field.
+	pluginsettingDescSecret := pluginsettingFields[4].Descriptor()
+	// pluginsetting.DefaultSecret holds the default value on creation for the secret field.
+	pluginsetting.DefaultSecret = pluginsettingDescSecret.Default.(bool)
+	// pluginsettingDescNonce is the schema descriptor for nonce field.
+	pluginsettingDescNonce := pluginsettingFields[5].Descriptor()
+	// pluginsetting.DefaultNonce holds the default value on creation for the nonce field.
+	pluginsetting.DefaultNonce = pluginsettingDescNonce.Default.(string)
+	// pluginsettingDescCreatedAt is the schema descriptor for created_at field.
+	pluginsettingDescCreatedAt := pluginsettingFields[6].Descriptor()
+	// pluginsetting.DefaultCreatedAt holds the default value on creation for the created_at field.
+	pluginsetting.DefaultCreatedAt = pluginsettingDescCreatedAt.Default.(func() time.Time)
+	// pluginsettingDescUpdatedAt is the schema descriptor for updated_at field.
+	pluginsettingDescUpdatedAt := pluginsettingFields[7].Descriptor()
+	// pluginsetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	pluginsetting.DefaultUpdatedAt = pluginsettingDescUpdatedAt.Default.(func() time.Time)
+	// pluginsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	pluginsetting.UpdateDefaultUpdatedAt = pluginsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	projectFields := schema.Project{}.Fields()
 	_ = projectFields
 	// projectDescCreatedAt is the schema descriptor for created_at field.
