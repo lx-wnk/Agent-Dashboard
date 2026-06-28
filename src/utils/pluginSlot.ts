@@ -55,6 +55,11 @@ export const PLUGIN_UI_CAPABILITY = 'ui_extension'
 
 export type UnmountFn = () => void
 
+/** A composed lower-priority chain an `extend` addon may mount/wrap. */
+export interface SlotParent {
+  mount: (el: HTMLElement) => UnmountFn
+}
+
 /**
  * Author-facing addon type: precise per-slot context. A plugin targeting one slot
  * declares `SlotAddon<'task-modal-footer'>` and gets a typed `ctx`.
@@ -65,8 +70,12 @@ export interface SlotAddon<S extends SlotName = SlotName> {
    * predate the UI manifest may omit it (the loader infers the slot from context).
    */
   slot?: S
+  /** Higher renders outer/first. Default 0. */
+  priority?: number
+  /** 'override' = own the slot exclusively; 'extend' = wrap the parent chain. Undefined = sibling. */
+  mode?: 'override' | 'extend'
   /** Mount the addon UI into `el`; return a teardown fn. */
-  mount: (el: HTMLElement, ctx: SlotContracts[S]) => UnmountFn
+  mount: (el: HTMLElement, ctx: SlotContracts[S], parent?: SlotParent | null) => UnmountFn
 }
 
 /**
@@ -76,7 +85,9 @@ export interface SlotAddon<S extends SlotName = SlotName> {
  */
 export interface LoadedAddon {
   slot?: string
-  mount: (el: HTMLElement, ctx: any) => UnmountFn
+  priority?: number
+  mode?: 'override' | 'extend'
+  mount: (el: HTMLElement, ctx: any, parent?: SlotParent | null) => UnmountFn
 }
 
 export interface SlotAddonModule {

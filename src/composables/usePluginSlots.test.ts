@@ -17,9 +17,9 @@ describe('loadSlotAddons — legacy addon.js path', () => {
     ])
     const fetchManifest = vi.fn().mockResolvedValue(null)
     const importAddon = vi.fn(async (url: string) => {
-      if (url === '/api/settings/plugins/voice-whisper/addon.js')
+      if (url === '/api/plugins/voice-whisper/proxy/addon.js')
         return addonFor('refinement-input-addon')
-      if (url === '/api/settings/plugins/other/addon.js')
+      if (url === '/api/plugins/other/proxy/addon.js')
         return addonFor('some-other-slot')
       throw new Error('404')
     })
@@ -28,7 +28,7 @@ describe('loadSlotAddons — legacy addon.js path', () => {
 
     expect(addons).toHaveLength(1)
     expect(addons[0].slot).toBe('refinement-input-addon')
-    expect(importAddon).not.toHaveBeenCalledWith('/api/settings/plugins/auth/addon.js')
+    expect(importAddon).not.toHaveBeenCalledWith('/api/plugins/auth/proxy/addon.js')
   })
 
   it('skips plugins whose addon.js import fails', async () => {
@@ -60,7 +60,7 @@ describe('loadSlotAddons — legacy addon.js path', () => {
 
     const addons = await loadSlotAddons('refinement-input-addon', { fetchPlugins, fetchManifest, importAddon })
 
-    expect(importAddon).toHaveBeenCalledWith('/api/settings/plugins/voice/addon.js')
+    expect(importAddon).toHaveBeenCalledWith('/api/plugins/voice/proxy/addon.js')
     expect(addons).toHaveLength(1)
   })
 })
@@ -81,8 +81,8 @@ describe('loadSlotAddons — UI manifest path', () => {
     const addons = await loadSlotAddons('task-modal-footer', { fetchPlugins, fetchManifest, importAddon })
 
     expect(importAddon).toHaveBeenCalledTimes(1)
-    expect(importAddon).toHaveBeenCalledWith('/api/settings/plugins/rich/footer.js')
-    expect(importAddon).not.toHaveBeenCalledWith('/api/settings/plugins/rich/badge.js')
+    expect(importAddon).toHaveBeenCalledWith('/api/plugins/rich/proxy/footer.js')
+    expect(importAddon).not.toHaveBeenCalledWith('/api/plugins/rich/proxy/badge.js')
     expect(addons).toHaveLength(1)
     expect(addons[0].slot).toBe('task-modal-footer')
   })
@@ -140,6 +140,18 @@ describe('loadSlotAddons — UI manifest path', () => {
     const addons = await loadSlotAddons('settings-panel', { fetchPlugins, fetchManifest, importAddon })
 
     expect(addons).toHaveLength(2)
-    expect(importAddon).not.toHaveBeenCalledWith('/api/settings/plugins/auth/addon.js')
+    expect(importAddon).not.toHaveBeenCalledWith('/api/plugins/auth/proxy/addon.js')
+  })
+
+  it('propagates priority and mode from the manifest entry', async () => {
+    resetSlotCaches()
+    const addons = await loadSlotAddons('task-modal-footer', {
+      fetchPlugins: async () => [{ id: 'p1', capabilities: ['ui_extension'] }],
+      fetchManifest: async () => ({ slots: [{ slot: 'task-modal-footer', module: 'a.js', priority: 50, mode: 'extend' }] }),
+      importAddon: async () => ({ default: { mount: () => () => {} } }),
+    })
+    expect(addons).toHaveLength(1)
+    expect(addons[0].priority).toBe(50)
+    expect(addons[0].mode).toBe('extend')
   })
 })

@@ -5,9 +5,9 @@ import { PLUGIN_UI_CAPABILITY } from '../utils/pluginSlot'
 
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i
 
-/** Per-plugin UI manifest served at `/api/settings/plugins/{id}/ui-manifest.json`. */
+/** Per-plugin UI manifest served at `/api/plugins/{id}/proxy/ui-manifest.json`. */
 export interface UiManifest {
-  slots: { slot: string, module: string }[]
+  slots: { slot: string, module: string, priority?: number, mode?: 'override' | 'extend' }[]
 }
 
 interface LoadDeps {
@@ -37,7 +37,7 @@ function defaultImportAddon(url: string): Promise<SlotAddonModule> {
 }
 
 async function defaultFetchManifest(pluginId: string): Promise<UiManifest | null> {
-  const res = await fetch(`/api/settings/plugins/${pluginId}/ui-manifest.json`, { credentials: 'same-origin' })
+  const res = await fetch(`/api/plugins/${pluginId}/proxy/ui-manifest.json`, { credentials: 'same-origin' })
   if (!res.ok)
     return null
   return res.json()
@@ -72,7 +72,7 @@ function getManifest(
 }
 
 // A manifest-supplied module path must resolve within the plugin's own
-// /api/settings/plugins/{id}/ namespace: no traversal, absolute path, or scheme.
+// /api/plugins/{id}/proxy/ namespace: no traversal, absolute path, or scheme.
 function isSafeModulePath(module: string): boolean {
   if (!module || module.startsWith('/'))
     return false
@@ -131,14 +131,14 @@ export async function loadSlotAddons(slot: SlotName, deps: LoadDeps = {}): Promi
             continue
           if (!isSafeModulePath(entry.module))
             continue
-          const mod = await importModule(`/api/settings/plugins/${p.id}/${entry.module}`, importAddon)
+          const mod = await importModule(`/api/plugins/${p.id}/proxy/${entry.module}`, importAddon)
           if (mod.default)
-            addons.push({ ...mod.default, slot })
+            addons.push({ ...mod.default, slot, priority: entry.priority, mode: entry.mode })
         }
         continue
       }
       // Legacy fallback: addon.js declares its own slot.
-      const mod = await importModule(`/api/settings/plugins/${p.id}/addon.js`, importAddon)
+      const mod = await importModule(`/api/plugins/${p.id}/proxy/addon.js`, importAddon)
       if (mod.default?.slot === slot)
         addons.push(mod.default)
     }
