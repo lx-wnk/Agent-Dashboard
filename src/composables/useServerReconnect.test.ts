@@ -28,16 +28,48 @@ describe('useServerReconnect', () => {
     expect(isReconnecting.value).toBe(false)
   })
 
-  it('polls health and reloads on first 200', async () => {
+  it('does not reload on a 200 before the server has been seen down', async () => {
     const reload = vi.fn()
     vi.stubGlobal('location', { reload } as any)
-    const { isReconnecting, beginReconnect } = useServerReconnect()
-    ;(fetch as any).mockRejectedValueOnce(new Error('down')) // first poll: server still down
-    ;(fetch as any).mockResolvedValueOnce({ ok: true, status: 200 }) // second poll: back
+    const { stalled, beginReconnect } = useServerReconnect()
+    // Old server still alive on first poll — must not reload
+    ;(fetch as any).mockResolvedValue({ ok: true, status: 200 })
     beginReconnect()
-    expect(isReconnecting.value).toBe(true)
+    await vi.advanceTimersByTimeAsync(1_500)
+    expect(reload).not.toHaveBeenCalled()
+    expect(stalled.value).toBe(false)
+  })
+
+  it('reloads only after a failure has been seen (down→up gate)', async () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { reload } as any)
+    const { beginReconnect } = useServerReconnect()
+    ;(fetch as any).mockRejectedValueOnce(new Error('down')) // first poll: server unreachable
+    ;(fetch as any).mockResolvedValueOnce({ ok: true, status: 200 }) // second poll: back up
+    beginReconnect()
     await vi.advanceTimersByTimeAsync(1_500) // first poll fails
     await vi.advanceTimersByTimeAsync(1_500) // second poll → reload
     expect(reload).toHaveBeenCalledOnce()
+  })
+
+  it('stalls after STALL_THRESHOLD consecutive failures', async () => {
+    ;(fetch as any).mockRejectedValue(new Error('down'))
+    const { stalled, beginReconnect } = useServerReconnect()
+    beginReconnect()
+    // 20 polls × 1500ms = 30s
+    await vi.advanceTimersByTimeAsync(1_500 * 20)
+    expect(stalled.value).toBe(true)
+  })
+
+  it('stops polling after stall threshold is reached', async () => {
+    ;(fetch as any).mockRejectedValue(new Error('down'))
+    const { stalled, beginReconnect } = useServerReconnect()
+    beginReconnect()
+    await vi.advanceTimersByTimeAsync(1_500 * 20)
+    expect(stalled.value).toBe(true)
+    const callsBefore = (fetch as any).mock.calls.length
+    // No further polls should fire
+    await vi.advanceTimersByTimeAsync(1_500 * 5)
+    expect((fetch as any).mock.calls.length).toBe(callsBefore)
   })
 })

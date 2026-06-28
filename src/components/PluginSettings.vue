@@ -108,9 +108,6 @@ async function handleToggle(id: string, next: boolean) {
             />
             {{ p.id }}
           </p>
-          <p class="text-fg-faint text-[10px]">
-            Requires restart to apply
-          </p>
           <template v-if="isBootWired(p.capabilities)">
             <span class="inline-flex items-center gap-1 text-[10px] font-medium text-warning-text bg-warning-soft px-1.5 py-0.5 rounded">
               Restart required to apply

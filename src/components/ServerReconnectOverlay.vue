@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { useServerReconnect } from '../composables/useServerReconnect'
 
-const { isReconnecting } = useServerReconnect()
+const { isReconnecting, stalled } = useServerReconnect()
+
+function manualReload() {
+  window.location.reload()
+}
 </script>
 
 <template>
@@ -12,13 +16,30 @@ const { isReconnecting } = useServerReconnect()
     aria-live="assertive"
   >
     <div class="flex flex-col items-center gap-3 rounded-xl bg-card p-8 shadow-modal">
-      <div class="server-reconnect-spinner" aria-hidden="true" />
-      <p class="text-base font-semibold text-fg">
-        Server is restarting…
-      </p>
-      <p class="text-sm text-fg-mute">
-        Reconnecting automatically.
-      </p>
+      <template v-if="stalled">
+        <p class="text-base font-semibold text-fg">
+          Still waiting for server…
+        </p>
+        <p class="text-sm text-fg-mute">
+          The server is taking longer than expected.
+        </p>
+        <button
+          type="button"
+          class="mt-1 rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+          @click="manualReload"
+        >
+          Reload
+        </button>
+      </template>
+      <template v-else>
+        <div class="server-reconnect-spinner" aria-hidden="true" />
+        <p class="text-base font-semibold text-fg">
+          Server is restarting…
+        </p>
+        <p class="text-sm text-fg-mute">
+          Reconnecting automatically.
+        </p>
+      </template>
     </div>
   </div>
 </template>
