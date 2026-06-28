@@ -1,4 +1,5 @@
 {
+  "$schema": "../../plugin-sdk/plugin.schema.json",
   "id": "office365-oauth",
   "version": "1.0.0",
   "capabilities": ["auth_provider"],
