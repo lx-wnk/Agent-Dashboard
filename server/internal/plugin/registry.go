@@ -457,6 +457,11 @@ func NewHealthyEntryForTest(d Descriptor) Entry {
 	return Entry{Descriptor: d, BaseURL: "http://" + d.Addr, healthy: true}
 }
 
+// NewEntryForTest builds an Entry with configurable health for tests in other packages.
+func NewEntryForTest(d Descriptor, healthy bool) Entry {
+	return Entry{Descriptor: d, BaseURL: "http://" + d.Addr, healthy: healthy}
+}
+
 // All returns a snapshot of all loaded plugin entries.
 func (r *Registry) All() []Entry {
 	r.mu.RLock()
