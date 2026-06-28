@@ -79,3 +79,17 @@ func TestDiscover_ReconcilesRemovedPlugins(t *testing.T) {
 	assert.NotContains(t, repo.rows, "p2")
 	assert.Contains(t, repo.rows, "p1")
 }
+
+func TestDiscover_EmptyDirDoesNotDeleteRows(t *testing.T) {
+	emptyDir := t.TempDir() // no manifests inside
+	repo := &memDiscoverRepo{rows: map[string]DiscoverRow{
+		"p1": {Version: "1.0.0", ManifestHash: "abc"},
+	}}
+	d := NewDiscoverer(emptyDir, repo)
+
+	res, err := d.Discover(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.Found)
+	assert.Empty(t, res.Removed)
+	assert.Contains(t, repo.rows, "p1") // row must survive
+}

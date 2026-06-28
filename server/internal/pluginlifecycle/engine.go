@@ -114,8 +114,8 @@ func (e *Engine) Uninstall(ctx context.Context, d plugin.Descriptor) error {
 	if err := e.callHook(ctx, d, d.Lifecycle.Uninstall); err != nil {
 		return fmt.Errorf("uninstall hook: %w", err)
 	}
-	if err := e.settings.Clear(ctx, d.ID); err != nil {
+	if err := e.repo.SetInstalledAt(ctx, d.ID, nil); err != nil {
 		return err
 	}
-	return e.repo.SetInstalledAt(ctx, d.ID, nil)
+	return e.settings.Clear(ctx, d.ID)
 }

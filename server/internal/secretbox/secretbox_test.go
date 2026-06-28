@@ -1,6 +1,8 @@
 package secretbox
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,4 +38,19 @@ func TestBox_WrongKeyFails(t *testing.T) {
 func TestNew_RejectsBadKeyLen(t *testing.T) {
 	_, err := New(make([]byte, 16))
 	require.Error(t, err)
+}
+
+func TestLoadOrGenerateMasterKey_InvalidKeyFileReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "dashboard-secret.key")
+	require.NoError(t, os.WriteFile(keyPath, []byte("not-a-valid-hex-key\n"), 0o600))
+
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	_, err := LoadOrGenerateMasterKey("")
+	require.Error(t, err)
+
+	// file must not have been overwritten
+	content, readErr := os.ReadFile(keyPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, "not-a-valid-hex-key\n", string(content))
 }

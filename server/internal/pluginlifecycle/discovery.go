@@ -84,6 +84,11 @@ func (d *Discoverer) Discover(ctx context.Context) (Result, error) {
 	if err != nil {
 		return res, fmt.Errorf("discover: existing ids: %w", err)
 	}
+	// Guard: zero manifests found means the plugin dir is absent or misconfigured,
+	// not that all plugins were removed — skip reconciliation to prevent data loss.
+	if len(found) == 0 {
+		return res, nil
+	}
 	for _, id := range existing {
 		if found[id] {
 			continue

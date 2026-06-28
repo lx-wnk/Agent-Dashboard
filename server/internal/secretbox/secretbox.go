@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-const secretKeyFile = ".claude/dashboard-secret.key"
+const secretKeyFileName = "dashboard-secret.key"
 
 // Box encrypts/decrypts strings with AES-256-GCM.
 type Box struct{ aead cipher.AEAD }
@@ -66,8 +66,8 @@ func (b *Box) Decrypt(ciphertextB64, nonceB64 string) (string, error) {
 
 // LoadOrGenerateMasterKey resolves the 32-byte master key: from `existing`
 // (DASHBOARD_SECRET_KEY hex) if set; else the persisted file; else generated +
-// persisted to ~/.claude/dashboard-secret.key (0600). Mirrors the hooks-secret
-// bootstrap.
+// persisted to $CLAUDE_CONFIG_DIR/dashboard-secret.key (0600). Mirrors the
+// hooks-secret bootstrap.
 func LoadOrGenerateMasterKey(existing string) ([]byte, error) {
 	if existing != "" {
 		key, err := hex.DecodeString(strings.TrimSpace(existing))
@@ -76,18 +76,29 @@ func LoadOrGenerateMasterKey(existing string) ([]byte, error) {
 		}
 		return key, nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
+
+	baseDir := os.Getenv("CLAUDE_CONFIG_DIR")
+	if baseDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		baseDir = filepath.Join(home, ".claude")
 	}
-	path := filepath.Join(home, secretKeyFile)
+	path := filepath.Join(baseDir, secretKeyFileName)
+
 	data, err := os.ReadFile(path)
 	if err == nil {
-		key, derr := hex.DecodeString(strings.TrimSpace(string(data)))
-		if derr == nil && len(key) == 32 {
-			return key, nil
+		trimmed := strings.TrimSpace(string(data))
+		if trimmed != "" {
+			key, derr := hex.DecodeString(trimmed)
+			if derr == nil && len(key) == 32 {
+				return key, nil
+			}
+			// Non-empty but invalid — fail hard; overwriting would destroy all existing secrets.
+			return nil, fmt.Errorf("secretbox: key file %s is non-empty but invalid; remove it manually to regenerate", path)
 		}
-		slog.Warn("dashboard-secret.key invalid, regenerating", "path", path)
+		// empty file — fall through to generate
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("secretbox: read key file %s: %w", path, err)
 	}
