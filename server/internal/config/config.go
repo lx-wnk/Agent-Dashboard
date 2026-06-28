@@ -43,6 +43,10 @@ type Config struct {
 	// so an external auth plugin can establish sessions after completing OAuth.
 	AuthPluginSecret string        `koanf:"auth_plugin_secret"`
 	Adapters         AdapterConfig `koanf:"adapters"`
+	// RestartMode controls how POST /api/admin/restart relaunches the server:
+	// "reexec" (default) replaces the process image in place (no supervisor needed);
+	// "exit" exits 0 so an external supervisor (systemd/launchd/wrapper) restarts it.
+	RestartMode string `koanf:"restart_mode"`
 }
 
 // Defaults returns a Config populated with safe defaults.
@@ -53,6 +57,7 @@ func Defaults() Config {
 		Port:         13120,
 		DBPath:       home + "/.claude/dashboard-tasks.db",
 		WorktreeRoot: home + "/" + worktree.DefaultRootDirName,
+		RestartMode:  "reexec",
 	}
 }
 
@@ -103,6 +108,13 @@ func Load(cfgFile string) (Config, error) {
 	}
 
 	warnOnMovedEnvKeys()
+
+	if cfg.RestartMode != "reexec" && cfg.RestartMode != "exit" {
+		if cfg.RestartMode != "" {
+			slog.Warn("invalid DASHBOARD_RESTART_MODE — falling back to reexec", "value", cfg.RestartMode)
+		}
+		cfg.RestartMode = "reexec"
+	}
 
 	// Reject operator-set JWT secrets that are too short (< 32 chars).
 	// The auto-generated secret is always 64 hex chars so this only fires for short manually-set values.

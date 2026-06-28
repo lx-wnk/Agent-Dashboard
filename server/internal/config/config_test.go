@@ -184,3 +184,24 @@ func TestLoad_NoDotEnvFile_NoError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 13120, cfg.Port, "absent .env is fine — defaults apply")
 }
+
+func TestRestartModeDefaultsToReexec(t *testing.T) {
+	cfg := Defaults()
+	require.Equal(t, "reexec", cfg.RestartMode)
+}
+
+func TestRestartModeInvalidFallsBackToReexec(t *testing.T) {
+	t.Setenv("DASHBOARD_RESTART_MODE", "invalid")
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, "reexec", cfg.RestartMode)
+}
+
+func TestRestartModeExitAccepted(t *testing.T) {
+	t.Setenv("DASHBOARD_RESTART_MODE", "exit")
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, "exit", cfg.RestartMode)
+}
