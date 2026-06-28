@@ -18,6 +18,15 @@ Preparing the first public release.
 - `dashboard plugins list` / `disable <id>` / `enable <id>` CLI commands operate directly on the SQLite database (no HTTP, no auth gate), so a broken `auth_provider` plugin that prevents boot can be disabled offline. The change applies on next server start; lifecycle hooks are skipped (it is a recovery tool, not the normal activate path).
 - Disabling a **UI-extension plugin** now prompts a page reload so the browser fully unloads its ES module code (browser ES modules persist in the registry until the page is reloaded).
 - **Per-plugin settings UI**: a schema-driven form (`Settings → Plugins`) lets you view and edit each plugin's settings inline. Fields are rendered per type (`string`, `url`, `int`, `bool`, `enum`); secret fields are masked and unchanged secrets are preserved on save (the masked sentinel is sent to the server, which keeps the stored value).
+- Plugin author SDK (`plugin-sdk/`): a `plugin.json` JSON Schema (draft-07) for editor
+  autocomplete and validation, TypeScript UI-addon types (`addon.d.ts`) mirroring the
+  host slot contracts, and a quickstart README covering the backend contract, lifecycle
+  hooks, UI addon authoring, and per-capability liveness.
+- Consolidated plugin developer guide (`docs/plugin-guide.md`): full manifest v2
+  reference (slots with priority/mode, settings with encrypted-secret masking,
+  lifecycle hooks, permissions), capability liveness table, slot composition modes
+  (sibling/override/extend + parent handle), per-plugin settings UI, enable/disable
+  lifecycle endpoints, offline CLI hatch, and a "Build your first plugin" walkthrough.
 - Plugin process groups with group-kill (no orphaned child processes), suppression of
   restarts for intentionally stopped plugins, and crash supervision that marks a plugin
   unhealthy (HTTP 503) instead of silently removing it from the dispatcher.
