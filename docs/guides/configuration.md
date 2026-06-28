@@ -34,6 +34,7 @@ These are the only environment variables still read by the core server. They can
 | `DASHBOARD_MCP_TOKEN` | — | Bearer token for dashboard MCP access |
 | `DASHBOARD_AUTH_PLUGIN_SECRET` | — | Shared secret between the core server and an auth plugin (`POST /api/auth/session`). Required when using an auth plugin. Min 32 chars |
 | `DASHBOARD_REMOTES_ENABLED` | `false` | Opt-in to binding on a non-loopback address. The dashboard reads sensitive Claude session data — only enable behind a VPN or SSH tunnel |
+| `DASHBOARD_RESTART_MODE` | `reexec` | How `POST /api/admin/restart` relaunches the server: `reexec` replaces the process image in-place (no supervisor needed); `exit` exits 0 so an external supervisor (systemd/launchd) restarts it |
 
 **Flag:** `--config <path>` — load a JSON config file whose keys mirror the variables above (without the `DASHBOARD_` prefix, lowercased). Precedence: defaults → JSON file → environment variables.
 
