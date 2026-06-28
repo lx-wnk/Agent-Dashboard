@@ -10,6 +10,7 @@ import AutoApprovingStrip from './components/AutoApprovingStrip.vue'
 import BacklogForm from './components/BacklogForm.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import LoginPage from './components/LoginPage.vue'
+import ServerReconnectOverlay from './components/ServerReconnectOverlay.vue'
 import SessionList from './components/SessionList.vue'
 import AppShell from './components/shell/AppShell.vue'
 import AppSidebar from './components/shell/AppSidebar.vue'
@@ -536,6 +537,7 @@ onMounted(fetchQuota)
     <SessionList :open="showSessions" :home-dir="homedir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
     <EditGateModal />
+    <ServerReconnectOverlay />
     <SpotlightSearch
       @navigate-task="task => openTask(task)"
       @navigate-agent="agent => selectAgent(agent)"
