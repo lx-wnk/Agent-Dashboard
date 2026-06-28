@@ -19,11 +19,9 @@ import (
 // Controller is the behaviour the handler needs from pluginsctl; faked in tests.
 type Controller interface {
 	List() ([]pluginsctl.PluginState, error)
-	SetEnabled(ctx context.Context, id string, enable bool) (pluginsctl.Applied, error)
 }
 
-// Handler serves the plugin listing and enable/disable endpoints under
-// /api/settings/plugins.
+// Handler serves the plugin listing endpoint under /api/settings/plugins.
 type Handler struct {
 	ctl Controller
 }
@@ -33,12 +31,10 @@ func New(ctl Controller) *Handler {
 	return &Handler{ctl: ctl}
 }
 
-// Mount registers plugin routes on r.
+// Mount registers the read-only plugin listing on r. Enable/disable is handled
+// live by the lifecycle endpoints (/api/plugins/{id}/activate|deactivate).
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/settings/plugins", apierr.ErrorMiddleware(h.list))
-	// Distinct segment to avoid the proxy mount at /api/settings/plugins/{id},
-	// which greedily owns that prefix for healthy route/ui extensions.
-	r.Patch("/api/settings/plugins-enabled/{id}", apierr.ErrorMiddleware(h.patch))
 }
 
 // pluginInfo is intentionally a narrow DTO. Do NOT add Entry/Descriptor fields —
@@ -74,34 +70,6 @@ func (h *Handler) list(w http.ResponseWriter, _ *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache") // F034: prevents stale plugin list after restart
 	return json.NewEncoder(w).Encode(out)
-}
-
-type patchResponse struct {
-	ID      string `json:"id"`
-	Enabled bool   `json:"enabled"`
-	Applied string `json:"applied"`
-}
-
-func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		return fmt.Errorf("%w: plugin id is required", apierr.ErrBadRequest)
-	}
-	var body struct {
-		Enabled bool `json:"enabled"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return fmt.Errorf("%w: invalid JSON", apierr.ErrBadRequest)
-	}
-	applied, err := h.ctl.SetEnabled(r.Context(), id, body.Enabled)
-	if err != nil {
-		if errors.Is(err, pluginsctl.ErrUnknownPlugin) {
-			return fmt.Errorf("%w: unknown plugin %q", apierr.ErrBadRequest, id)
-		}
-		return fmt.Errorf("plugins.patch: %w", err)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(patchResponse{ID: id, Enabled: body.Enabled, Applied: string(applied)})
 }
 
 // PluginView is the narrow lifecycle DTO served under /api/plugins. As with

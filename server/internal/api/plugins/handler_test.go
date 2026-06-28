@@ -21,24 +21,19 @@ import (
 
 const testJWTSecret = "test-secret-plugins"
 
-// fakeController stands in for *pluginsctl.Controller.
+// stubController satisfies the trimmed Controller interface (List only).
+type stubController struct {
+	states []pluginsctl.PluginState
+}
+
+func (s stubController) List() ([]pluginsctl.PluginState, error) { return s.states, nil }
+
+// fakeController stands in for *pluginsctl.Controller (list-only now).
 type fakeController struct {
-	states  []pluginsctl.PluginState
-	applied pluginsctl.Applied
-	setErr  error
-	gotID   string
-	gotEn   bool
+	states []pluginsctl.PluginState
 }
 
 func (f *fakeController) List() ([]pluginsctl.PluginState, error) { return f.states, nil }
-
-func (f *fakeController) SetEnabled(_ context.Context, id string, enable bool) (pluginsctl.Applied, error) {
-	f.gotID, f.gotEn = id, enable
-	if f.setErr != nil {
-		return "", f.setErr
-	}
-	return f.applied, nil
-}
 
 // withAuth adds a valid JWT session cookie so auth.RequireAuth passes.
 func withAuth(t *testing.T, r *http.Request) *http.Request {
@@ -119,58 +114,19 @@ func TestList_ShapeAndLeakGuard(t *testing.T) {
 	}
 }
 
-func TestPatch_PersistsAndEchoesRestart(t *testing.T) {
-	ctl := &fakeController{applied: pluginsctl.AppliedRestart}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice-whisper", strings.NewReader(`{"enabled":true}`)))
-	rr := httptest.NewRecorder()
-	mount(t, ctl).ServeHTTP(rr, req)
+// TestPluginsEnabledPatchRouteRemoved asserts the interim PATCH route is gone.
+func TestPluginsEnabledPatchRouteRemoved(t *testing.T) {
+	r := chi.NewRouter()
+	plugins.New(stubController{}).Mount(r)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if ctl.gotID != "voice-whisper" || !ctl.gotEn {
-		t.Errorf("controller got id=%q enabled=%v", ctl.gotID, ctl.gotEn)
-	}
-	var resp map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp["id"] != "voice-whisper" || resp["enabled"] != true || resp["applied"] != "restart" {
-		t.Errorf("response wrong: %v", resp)
-	}
-}
+	rec := httptest.NewRecorder()
+	body := strings.NewReader(`{"enabled":true}`)
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice", body))
 
-func TestPatch_UnknownID_400(t *testing.T) {
-	// Wrap the sentinel so the handler's errors.Is check matches.
-	ctl := &fakeController{setErr: fmt.Errorf("pluginsctl: %w: %q", pluginsctl.ErrUnknownPlugin, "nope")}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/nope", strings.NewReader(`{"enabled":true}`)))
-	rr := httptest.NewRecorder()
-	mount(t, ctl).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
-	}
-}
-
-func TestPatch_PersistFailure_500(t *testing.T) {
-	ctl := &fakeController{setErr: errors.New("persist failed: settings unavailable")}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice-whisper", strings.NewReader(`{"enabled":true}`)))
-	rr := httptest.NewRecorder()
-	mount(t, ctl).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
-	}
-}
-
-func TestPatch_InvalidJSON_400(t *testing.T) {
-	ctl := &fakeController{}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice-whisper", strings.NewReader(`not json`)))
-	rr := httptest.NewRecorder()
-	mount(t, ctl).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	// chi returns 405 when the path exists but the method doesn't, or 404 when
+	// neither path nor method matches — both confirm the route is absent.
+	if rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 or 405, got %d", rec.Code)
 	}
 }
 
