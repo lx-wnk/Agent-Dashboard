@@ -115,6 +115,27 @@ dashboard settings set auth.mode none
 
 Provider enablement is **not** a `dashboard settings` key — it lives in the `provider_setting` table and is edited through the Providers panel.
 
+### Plugin CLI / lockout recovery
+
+The `dashboard plugins` CLI also operates directly on the SQLite database — no HTTP, no auth gate, no running server required.
+
+```bash
+dashboard plugins list              # list all discovered plugins with active state
+dashboard plugins disable <id>      # set active=false
+dashboard plugins enable <id>       # set active=true
+```
+
+Database resolution uses the same `--db` flag / `DASHBOARD_DB_PATH` / default path as the settings CLI.
+
+Use `disable` to recover when a broken `auth_provider` plugin prevents the server from booting:
+
+```bash
+dashboard plugins disable my-auth-plugin
+# Then restart — the change applies on next boot.
+```
+
+Lifecycle hooks (activate/deactivate) are **not** run by the CLI — it is a recovery tool, not the normal activate path. `enable` only flips the DB flag; the plugin's full start sequence runs on the next server start.
+
 ## LLM adapters
 
 Spawners can use different `adapter_type` values to route stage-agent calls to different LLM backends:
