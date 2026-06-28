@@ -63,6 +63,8 @@ async function handleToggle(id: string, next: boolean) {
     }
     if (!next && plugin?.capabilities.includes('ui_extension'))
       reloadNotice.value = 'Plugin UI disabled — reload the page to fully unload its code'
+    else if (next)
+      reloadNotice.value = null
   }
   catch (e) {
     error.value = errorMessage(e, 'Toggle failed')

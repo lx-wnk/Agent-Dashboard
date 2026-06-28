@@ -38,6 +38,22 @@ it('shows a reload notice when a ui_extension plugin is deactivated', async () =
   expect(reload).toHaveBeenCalledOnce()
 })
 
+it('clears the reload notice when a ui_extension plugin is re-activated', async () => {
+  stubFetch([makePlugin('p1', ['ui_extension'])])
+  const wrapper = mount(PluginSettings)
+  await flushPromises()
+
+  // deactivate → notice appears
+  await wrapper.find('button[role="switch"]').trigger('click')
+  await flushPromises()
+  expect(wrapper.find('[data-action="reload-now"]').exists()).toBe(true)
+
+  // re-activate → notice clears
+  await wrapper.find('button[role="switch"]').trigger('click')
+  await flushPromises()
+  expect(wrapper.find('[data-action="reload-now"]').exists()).toBe(false)
+})
+
 it('does not show the reload notice for a non-ui_extension plugin', async () => {
   stubFetch([makePlugin('p1', ['route_extension'])])
   const wrapper = mount(PluginSettings)
