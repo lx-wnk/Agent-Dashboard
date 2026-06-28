@@ -107,7 +107,6 @@ func nonNegativeFloat(key string) func(string) error {
 var definitions = func() map[string]Definition {
 	list := []Definition{
 		{Key: "auth.mode", Type: TypeEnum, Enum: []string{"none", "plugin"}, Default: "none", Apply: ApplyRestart, Category: "auth"},
-		{Key: "plugins.enabled", Type: TypeStringSlice, Default: "", Apply: ApplyLive, Category: "plugins", Managed: true},
 		{Key: "git.allowPush", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "git"},
 		{Key: "git.allowPull", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "git"},
 		{Key: "worktree.force", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "worktree"},

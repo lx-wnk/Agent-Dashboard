@@ -195,20 +195,31 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	spawnerBroadcaster := sse.NewSpawnerBroadcaster(sse.NewBroadcaster())
 	projectBroadcaster := sse.NewProjectBroadcaster(sse.NewBroadcaster())
 
+	// The plugin table is the source of truth for enablement. Build the repo
+	// early so the boot predicate can read it, and migrate the legacy #230
+	// "plugins.enabled" setting into the table once (idempotent).
+	var pluginRepo repo.PluginRepo
+	if entClient != nil {
+		pluginRepo = repo.NewPluginRepo(entClient)
+		if err := seedPluginsFromEnabledList(ctx, settingsSvc, pluginRepo); err != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("seed plugins from enabled list: %w", err)
+		}
+	}
+
 	// Load plugins from configured plugin_dir. ctx is the server-lifetime context
 	// (cancelled on SIGTERM/SIGINT). Load derives a 30-second startup timeout internally.
 	pluginRegistry := plugin.New(cfg.PluginDir)
-	pluginRegistry.SetEnabled(func(id string) bool {
-		if settingsSvc == nil {
-			return false
+	activePlugins := map[string]bool{}
+	if pluginRepo != nil {
+		rows, listErr := pluginRepo.List(ctx)
+		if listErr != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin enablement snapshot: %w", listErr)
 		}
-		for _, e := range settingsSvc.StringSlice("plugins.enabled") {
-			if e == id {
-				return true
-			}
+		for _, p := range rows {
+			activePlugins[p.ID] = p.Active
 		}
-		return false
-	})
+	}
+	pluginRegistry.SetEnabled(func(id string) bool { return activePlugins[id] })
 
 	// oauthProvider and pluginLoginURL are set by the SetAuth hook when an auth_provider
 	// plugin passes health-check. If no auth_provider plugin is configured both stay at
@@ -242,9 +253,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		slog.Info("auth: no auth_provider plugin found — bypass-auth active for loopback")
 	}
 
-	// Plugin enable/disable control plane. settingsSvc may be nil (no DB): the
+	// Plugin enable/disable control plane. pluginRepo may be nil (no DB): the
 	// controller then reports nothing enabled and rejects writes.
-	pluginsHandler := apiplugins.New(pluginsctl.New(pluginRegistry, settingsSvc, cfg.PluginDir))
+	pluginsHandler := apiplugins.New(pluginsctl.New(pluginRegistry, pluginRepo, cfg.PluginDir))
 
 	// SP1 plugin lifecycle: DB-backed plugin state, per-plugin settings (secret
 	// fields encrypted at rest), lifecycle transitions, and on-disk discovery.
@@ -259,7 +270,6 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		if boxErr != nil {
 			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("plugin secretbox: %w", boxErr)
 		}
-		pluginRepo := repo.NewPluginRepo(entClient)
 		pluginSettingRepo := repo.NewPluginSettingRepo(entClient)
 		pluginSettingsSvc := pluginsettings.New(pluginSettingRepoAdapter{inner: pluginSettingRepo}, box)
 		lifecycleEngine := pluginlifecycle.New(
