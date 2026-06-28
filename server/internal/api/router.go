@@ -17,6 +17,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/frontend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/admin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
@@ -132,33 +133,34 @@ type RouterDeps struct {
 	// TaskProjectOps lets the projects handler check for active tasks and
 	// clear project_id on done/cancelled tasks during DELETE /api/projects/{id}.
 	// May be nil; when nil the project handler skips the active-task check.
-	TaskProjectOps        projects.TaskProjectOps
-	CoordHandler          *coordapi.Handler
-	TaskHandler           *tasks.Handler
-	SchedulesHandler      *schedules.Handler
-	WebPushHandler        *apiwp.Handler
-	RemotesHandler        *remotes.Handler
-	PresetsHandler        *presets.Handler
-	SystemPromptsHandler  *systemprompts.Handler
-	SearchHandler         *search.Handler
-	HistoryHandler        *apihistory.Handler
-	RefineHandler         *refineapi.Handler
-	PlanHandler           *planapi.Handler
-	AnalyticsHandler      *apianalytics.Handler
-	CostHandler           *apicost.Handler
-	EvalHandler           *apieval.Handler
-	VisualizationsHandler *visualizations.Handler
-	AdapterHandler        *adapters.Handler
-	ProvidersHandler      *providersapi.Handler
-	SettingsHandler       *settingsapi.Handler
-	MCPHandler            http.Handler
-	ChannelReply          *agents.ChannelReplyHandler
-	ChannelStageOutput    *agents.ChannelStageOutputHandler
-	PermissionPresetRepo  repo.PermissionPresetRepo
+	TaskProjectOps         projects.TaskProjectOps
+	CoordHandler           *coordapi.Handler
+	TaskHandler            *tasks.Handler
+	SchedulesHandler       *schedules.Handler
+	WebPushHandler         *apiwp.Handler
+	RemotesHandler         *remotes.Handler
+	PresetsHandler         *presets.Handler
+	SystemPromptsHandler   *systemprompts.Handler
+	SearchHandler          *search.Handler
+	HistoryHandler         *apihistory.Handler
+	RefineHandler          *refineapi.Handler
+	PlanHandler            *planapi.Handler
+	AnalyticsHandler       *apianalytics.Handler
+	CostHandler            *apicost.Handler
+	EvalHandler            *apieval.Handler
+	VisualizationsHandler  *visualizations.Handler
+	AdapterHandler         *adapters.Handler
+	ProvidersHandler       *providersapi.Handler
+	SettingsHandler        *settingsapi.Handler
+	MCPHandler             http.Handler
+	ChannelReply           *agents.ChannelReplyHandler
+	ChannelStageOutput     *agents.ChannelStageOutputHandler
+	PermissionPresetRepo   repo.PermissionPresetRepo
 	PluginRegistry         *plugin.Registry
 	PluginsHandler         *apiplugins.Handler
 	PluginLifecycleHandler *apiplugins.LifecycleHandler
 	AuditEventRepo         repo.AuditEventRepo
+	AdminHandler           *admin.Handler
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -448,6 +450,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// before forwarding to the plugin.
 		if deps.PluginRegistry != nil {
 			r.Handle("/api/plugins/{id}/proxy/*", plugin.NewDispatcher(deps.PluginRegistry))
+		}
+		if deps.AdminHandler != nil {
+			deps.AdminHandler.Mount(r)
 		}
 	})
 

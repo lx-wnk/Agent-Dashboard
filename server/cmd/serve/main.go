@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
+	"github.com/lx-wnk/agent-dashboard/server/internal/restart"
 )
 
 // version is the dashboard version. It defaults to "dev" for local builds and is
@@ -45,11 +46,14 @@ func main() {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			srv, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, enricher, evalService, settingsSvc, cleanup, err := initializeServer(ctx, cfg, cfgFile)
+			restartCtl := restart.NewController(cfg.RestartMode)
+			srv, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, enricher, evalService, settingsSvc, cleanup, err := initializeServer(ctx, cfg, cfgFile, restartCtl)
 			if err != nil {
+				if cleanup != nil {
+					cleanup()
+				}
 				return err
 			}
-			defer cleanup()
 
 			g, ctx := errgroup.WithContext(ctx)
 
@@ -87,7 +91,25 @@ func main() {
 				})
 			}
 
-			return g.Wait()
+			restarting := false
+			g.Go(func() error {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-restartCtl.C():
+					restarting = true
+					stop() // cancel the signal context → graceful shutdown of all g.Go members
+					return nil
+				}
+			})
+
+			err = g.Wait()
+			cleanup() // stop plugins etc. BEFORE any re-exec (deferred funcs won't run after Exec)
+			if restarting {
+				slog.Info("restart: relaunching", "mode", restartCtl.Mode())
+				restart.Execute(restartCtl.Mode(), restart.OSRestarter{})
+			}
+			return err
 		},
 	}
 	serve.Flags().StringVar(&cfgFile, "config", "", "path to JSON config file")

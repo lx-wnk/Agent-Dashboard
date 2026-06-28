@@ -20,6 +20,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/admin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
@@ -57,6 +58,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/providersettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
+	"github.com/lx-wnk/agent-dashboard/server/internal/restart"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
 	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
@@ -102,7 +104,7 @@ func (noopSettingsRepo) ListAll(context.Context) (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
-func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *merger.Merger, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, *settings.Service, func(), error) {
+func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *restart.Controller) (*api.Server, *sse.Broadcaster, *merger.Merger, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, *settings.Service, func(), error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, err
@@ -566,8 +568,35 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		PluginsHandler:         pluginsHandler,
 		PluginLifecycleHandler: pluginLifecycleHandler,
 		AuditEventRepo:         auditEventRepo,
+		AdminHandler: admin.New(
+			restart.NewAuthProviderValidator(pluginRegistry, activePluginIDs(pluginRepo), cfg.PluginDir),
+			string(restartCtl.Mode()),
+			restartCtl.Trigger,
+		),
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, settingsSvc, router)
 	return server, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, agentEnricher, evalService, settingsSvc, cleanup, nil
+}
+
+// activePluginIDs returns a closure listing the IDs of plugins currently marked
+// active in the DB. Used by the restart validator to predict the next boot's
+// auth_provider set. Nil repo (no DB) -> no active plugins.
+func activePluginIDs(pluginRepo repo.PluginRepo) func(context.Context) ([]string, error) {
+	return func(ctx context.Context) ([]string, error) {
+		if pluginRepo == nil {
+			return nil, nil
+		}
+		rows, err := pluginRepo.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var out []string
+		for _, p := range rows {
+			if p.Active {
+				out = append(out, p.ID)
+			}
+		}
+		return out, nil
+	}
 }

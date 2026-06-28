@@ -76,6 +76,22 @@ DASHBOARD_JWT_SECRET=<32+ chars> ./bin/agent-dashboard serve
 
 Build the SPA **before** the binary — `go:embed` bakes the compiled frontend into `bin/agent-dashboard`. The result is self-contained: no Node.js needed at runtime. Deploy by copying the binary.
 
+## Restart
+
+`POST /api/admin/restart` triggers a validated, graceful restart. The endpoint refuses with **409** if an active `auth_provider` plugin is currently unhealthy — restarting in that state would cause an auth lockout on the next boot.
+
+**Activating an `auth_provider` plugin requires a restart to apply** (auth is boot-wired, not live-reloadable).
+
+**Default (`DASHBOARD_RESTART_MODE=reexec`):** the process re-execs itself in place — same PID, no supervisor needed. Works with plain `./bin/agent-dashboard serve`.
+
+**Supervised (`DASHBOARD_RESTART_MODE=exit`):** the process exits cleanly so the supervisor relaunches it.
+
+| Supervisor | Required config |
+|---|---|
+| systemd | `Restart=always` in the service unit |
+| launchd | `KeepAlive` in the plist |
+| Wrapper loop | `while true; do ./bin/agent-dashboard serve; done` |
+
 ## Documentation
 
 | Topic | |
