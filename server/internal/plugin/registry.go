@@ -169,6 +169,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 		entry.cmdDone = done
 		go r.watchPlugin(serverCtx, entry.pluginDir, desc, entry.cmd, done)
 	}
+	entry.healthy = true
 	r.mu.Lock()
 	r.plugins = append(r.plugins, entry)
 	r.mu.Unlock()
@@ -463,6 +464,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 			if r.plugins[i].Descriptor.ID == desc.ID {
 				r.plugins[i].cmd = newCmd
 				r.plugins[i].restartCount = restartCount
+				r.plugins[i].healthy = true
 				break
 			}
 		}

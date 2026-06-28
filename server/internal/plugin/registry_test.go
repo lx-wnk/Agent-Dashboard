@@ -189,6 +189,29 @@ func TestRegistry_StartOneStopOne(t *testing.T) {
 	require.Nil(t, r.FindByCapability(plugin.CapRouteExtension))
 }
 
+// writeHealthyPlugin creates a plugin dir under dir/{id}/plugin.json backed by
+// a real in-process HTTP server that returns 200 on every path including /health.
+// Reused by Tasks 2, 5, 6, 7, 8.
+func writeHealthyPlugin(t *testing.T, dir, id string) {
+	t.Helper()
+	ts := startHealthStub(t)
+	addr := strings.TrimPrefix(ts.URL, "http://")
+	writePluginJSONAddr(t, dir, id, []string{plugin.CapRouteExtension}, addr)
+}
+
+func TestStartedPluginIsHealthy(t *testing.T) {
+	dir := t.TempDir()
+	writeHealthyPlugin(t, dir, "alive")
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	t.Cleanup(r.Shutdown)
+
+	got, ok := r.Lookup("alive")
+	require.True(t, ok)
+	require.True(t, got.Healthy())
+}
+
 func TestLookupReturnsHealthyEntryCopy(t *testing.T) {
 	r := plugin.New("")
 	require.False(t, exists(r, "missing"))
