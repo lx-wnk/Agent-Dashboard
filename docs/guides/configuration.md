@@ -9,6 +9,13 @@ Configuration comes from two places:
 cp .env.dist .env
 ```
 
+A `.env` file in the working directory is loaded automatically at startup for both
+`task dev` and `./bin/agent-dashboard serve` — no manual sourcing needed. An explicit
+shell `export` always wins over a value in `.env`. The file is read from the current
+working directory (the repository root in the standard layout); run the binary from
+there, or export the variables, if you keep `.env` elsewhere. Only the bootstrap
+variables below are read from `.env`/env; runtime settings live in the database.
+
 ## Bootstrap configuration (env / flags)
 
 These are the only environment variables still read by the core server. They cannot be set through the Settings UI because they are needed before (or independently of) the database.

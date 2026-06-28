@@ -14,6 +14,12 @@ Preparing the first public release.
 
 ### Added
 
+- Automatic **`.env` file loading**: a `.env` in the working directory is now read at
+  startup for both `task dev` (via air) and `./bin/agent-dashboard serve`. It uses the
+  same `DASHBOARD_*` keys as the environment, and an explicit shell `export` always
+  takes precedence over a file value. Previously `.env` was only a template for manual
+  `export`/`cp` and was ignored by the server process — so settings like
+  `DASHBOARD_FORCE_WORKTREES` had no effect unless exported by hand.
 - Task **dependency enforcement**: the orchestrator now actually gates on `add_dependency`/`POST /api/tasks/{id}/dependencies` relationships. A task is not started until every upstream dependency reaches its `required_stage` (lazy picker-gate — no extra state, picked up automatically once the upstream finishes). When an upstream is **cancelled**, the downstream's `on_cancel_action` decides the outcome (`cancel` cascades the cancellation down the chain, `start` lets it proceed, `on_hold` leaves it parked). Enriched tasks now report `isBlocked` (waiting on an unfinished upstream) and `isUnsatisfiable` (an upstream reached a terminal stage it can never satisfy), which the board and task cards already surface. The REST create default for `onCancelAction` is aligned to `on_hold` to match the MCP tool and schema.
 - Coordination primitives: shared **scratchpads** and lease-based **locks** via a new `agent:coord` MCP scope (`write_scratchpad`/`read_scratchpad`/`list_scratchpad`/`acquire_lock`/`release_lock`), with a read-only Coordination tab in the task modal. Locks use lazy lease expiry (no background sweep).
 - Opt-in **plan-review** pipeline stage (`planMode`, default off): after the concept is approved, a planning agent auto-generates the execution plan and self-reviews it in one pass; the vetted plan is surfaced for your approval (Approve / Reject + feedback) before the implementation stage edits any files. Configurable per-task and as a per-project default.
