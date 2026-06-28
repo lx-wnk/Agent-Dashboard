@@ -15,6 +15,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
@@ -49,12 +50,16 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecycle"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecyclectl"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/providersettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
+	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -240,6 +245,38 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	// Plugin enable/disable control plane. settingsSvc may be nil (no DB): the
 	// controller then reports nothing enabled and rejects writes.
 	pluginsHandler := apiplugins.New(pluginsctl.New(pluginRegistry, settingsSvc, cfg.PluginDir))
+
+	// SP1 plugin lifecycle: DB-backed plugin state, per-plugin settings (secret
+	// fields encrypted at rest), lifecycle transitions, and on-disk discovery.
+	// Constructed only with a database — the handler stays nil otherwise.
+	var pluginLifecycleHandler *apiplugins.LifecycleHandler
+	if entClient != nil {
+		masterKey, keyErr := secretbox.LoadOrGenerateMasterKey(os.Getenv("DASHBOARD_SECRET_KEY"))
+		if keyErr != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("plugin secret key: %w", keyErr)
+		}
+		box, boxErr := secretbox.New(masterKey)
+		if boxErr != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("plugin secretbox: %w", boxErr)
+		}
+		pluginRepo := repo.NewPluginRepo(entClient)
+		pluginSettingRepo := repo.NewPluginSettingRepo(entClient)
+		pluginSettingsSvc := pluginsettings.New(pluginSettingRepoAdapter{inner: pluginSettingRepo}, box)
+		lifecycleEngine := pluginlifecycle.New(
+			pluginStateRepoAdapter{inner: pluginRepo},
+			pluginlifecycle.NewHTTPHookCaller(),
+			pluginSettingsSvc,
+		)
+		discoverer := pluginlifecycle.NewDiscoverer(cfg.PluginDir, pluginDiscoverRepoAdapter{inner: pluginRepo})
+		lifecycleController := pluginlifecyclectl.New(pluginRepo, lifecycleEngine, pluginSettingsSvc, cfg.PluginDir)
+		pluginLifecycleHandler = apiplugins.NewLifecycle(lifecycleController)
+
+		if res, discErr := discoverer.Discover(ctx); discErr != nil {
+			slog.Warn("plugin discovery failed", "error", discErr)
+		} else {
+			slog.Info("plugin discovery", "found", res.Found, "updatesAvailable", res.UpdatesAvailable)
+		}
+	}
 
 	routerConfig := provideRouterConfig(cfg, settingsSvc, oauthProvider, pluginLoginURL)
 
@@ -469,46 +506,47 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	}
 
 	routerDeps := api.RouterDeps{
-		Ctx:                   ctx,
-		Config:                routerConfig,
-		AgentBroadcaster:      broadcaster,
-		Merger:                agentMerger,
-		Enricher:              agentEnricher,
-		HookStore:             hookStore,
-		OAuthProvider:         oauthProvider,
-		UserRepo:              userRepo,
-		ApiKeyRepo:            apiKeyRepo,
-		ProjectRepo:           projectRepo,
-		ProjectFolderRepo:     projectFolderRepo,
-		SpawnerRepo:           spawnerRepo,
-		SpawnerBroadcaster:    spawnerBroadcaster,
-		ProjectBroadcaster:    projectBroadcaster,
-		TaskProjectOps:        newTaskProjectOps(entClient),
-		TaskHandler:           taskHandler,
-		CoordHandler:          coordapi.New(repo.NewScratchpadRepo(entClient), repo.NewCoordLockRepo(entClient)),
-		WebPushHandler:        webPushHandler,
-		RemotesHandler:        remotesHandler,
-		PresetsHandler:        presetsHandler,
-		PermissionPresetRepo:  permissionPresetRepo,
-		SystemPromptsHandler:  systemPromptsHandler,
-		AdapterHandler:        adapterHandler,
-		ProvidersHandler:      providersHandler,
-		SettingsHandler:       settingsHandler,
-		SearchHandler:         searchHandler,
-		HistoryHandler:        historyHandler,
-		RefineHandler:         refineHandler,
-		PlanHandler:           planHandler,
-		AnalyticsHandler:      analyticsHandler,
-		CostHandler:           costHandler,
-		EvalHandler:           evalHandler,
-		VisualizationsHandler: apivisualizations.NewHandler(),
-		MCPHandler:            mcpHandler,
-		SchedulesHandler:      schedulesHandler,
-		ChannelReply:          agents.NewChannelReplyHandler(replyStore, apiKeyRepo, repo.NewStageRunRepo(entClient)),
-		ChannelStageOutput:    channelStageOutputHandler,
-		PluginRegistry:        pluginRegistry,
-		PluginsHandler:        pluginsHandler,
-		AuditEventRepo:        auditEventRepo,
+		Ctx:                    ctx,
+		Config:                 routerConfig,
+		AgentBroadcaster:       broadcaster,
+		Merger:                 agentMerger,
+		Enricher:               agentEnricher,
+		HookStore:              hookStore,
+		OAuthProvider:          oauthProvider,
+		UserRepo:               userRepo,
+		ApiKeyRepo:             apiKeyRepo,
+		ProjectRepo:            projectRepo,
+		ProjectFolderRepo:      projectFolderRepo,
+		SpawnerRepo:            spawnerRepo,
+		SpawnerBroadcaster:     spawnerBroadcaster,
+		ProjectBroadcaster:     projectBroadcaster,
+		TaskProjectOps:         newTaskProjectOps(entClient),
+		TaskHandler:            taskHandler,
+		CoordHandler:           coordapi.New(repo.NewScratchpadRepo(entClient), repo.NewCoordLockRepo(entClient)),
+		WebPushHandler:         webPushHandler,
+		RemotesHandler:         remotesHandler,
+		PresetsHandler:         presetsHandler,
+		PermissionPresetRepo:   permissionPresetRepo,
+		SystemPromptsHandler:   systemPromptsHandler,
+		AdapterHandler:         adapterHandler,
+		ProvidersHandler:       providersHandler,
+		SettingsHandler:        settingsHandler,
+		SearchHandler:          searchHandler,
+		HistoryHandler:         historyHandler,
+		RefineHandler:          refineHandler,
+		PlanHandler:            planHandler,
+		AnalyticsHandler:       analyticsHandler,
+		CostHandler:            costHandler,
+		EvalHandler:            evalHandler,
+		VisualizationsHandler:  apivisualizations.NewHandler(),
+		MCPHandler:             mcpHandler,
+		SchedulesHandler:       schedulesHandler,
+		ChannelReply:           agents.NewChannelReplyHandler(replyStore, apiKeyRepo, repo.NewStageRunRepo(entClient)),
+		ChannelStageOutput:     channelStageOutputHandler,
+		PluginRegistry:         pluginRegistry,
+		PluginsHandler:         pluginsHandler,
+		PluginLifecycleHandler: pluginLifecycleHandler,
+		AuditEventRepo:         auditEventRepo,
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, settingsSvc, router)
