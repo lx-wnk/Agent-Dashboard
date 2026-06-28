@@ -23,6 +23,9 @@ type DiscoveredPlugin struct {
 type DiscoverRepo interface {
 	UpsertDiscovered(ctx context.Context, in DiscoveredPlugin) (updateAvailable bool, err error)
 	ExistingIDs(ctx context.Context) ([]string, error)
+	// IsInstalled reports whether the plugin has been installed (installed_at != nil).
+	// Installed plugins whose manifest vanishes are orphaned, not deleted.
+	IsInstalled(ctx context.Context, id string) (bool, error)
 	Remove(ctx context.Context, id string) error
 }
 
@@ -91,6 +94,14 @@ func (d *Discoverer) Discover(ctx context.Context) (Result, error) {
 	}
 	for _, id := range existing {
 		if found[id] {
+			continue
+		}
+		installed, err := d.repo.IsInstalled(ctx, id)
+		if err != nil {
+			return res, fmt.Errorf("discover: check installed %q: %w", id, err)
+		}
+		if installed {
+			// Retain the row and its settings; the plugin is orphaned until manually uninstalled.
 			continue
 		}
 		if err := d.repo.Remove(ctx, id); err != nil {

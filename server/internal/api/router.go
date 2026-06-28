@@ -437,8 +437,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 			deps.PluginsHandler.Mount(r)
 		}
 		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.
+		// Admin-gated: install/activate/deactivate/uninstall/settings are operator
+		// actions equivalent in risk to spawner CRUD.
 		if deps.PluginLifecycleHandler != nil {
-			deps.PluginLifecycleHandler.Mount(r)
+			r.Group(func(r chi.Router) {
+				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
+				deps.PluginLifecycleHandler.Mount(r)
+			})
 		}
 		if deps.PluginRegistry != nil {
 			for _, entry := range deps.PluginRegistry.All() {

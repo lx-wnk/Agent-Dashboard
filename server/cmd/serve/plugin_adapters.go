@@ -95,6 +95,17 @@ func (a pluginDiscoverRepoAdapter) ExistingIDs(ctx context.Context) ([]string, e
 	return ids, nil
 }
 
+func (a pluginDiscoverRepoAdapter) IsInstalled(ctx context.Context, id string) (bool, error) {
+	p, err := a.inner.Get(ctx, id)
+	if err != nil {
+		if repo.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return p.InstalledAt != nil, nil
+}
+
 func (a pluginDiscoverRepoAdapter) Remove(ctx context.Context, id string) error {
 	if err := a.settings.DeleteByPlugin(ctx, id); err != nil {
 		return err

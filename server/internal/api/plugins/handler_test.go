@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecycle"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 )
@@ -309,6 +310,17 @@ func TestLifecycleTransition_InvalidAction_400(t *testing.T) {
 	}
 	if ctl.gotAction != "" {
 		t.Errorf("invalid action must not reach controller, got %q", ctl.gotAction)
+	}
+}
+
+func TestLifecycleTransition_IllegalTransition_409(t *testing.T) {
+	ctl := &fakeLifecycle{transErr: fmt.Errorf("%w: p1 already installed", pluginlifecycle.ErrIllegalTransition)}
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/p1/install", nil))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 

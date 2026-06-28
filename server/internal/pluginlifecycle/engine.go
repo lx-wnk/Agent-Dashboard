@@ -5,11 +5,16 @@ package pluginlifecycle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 )
+
+// ErrIllegalTransition is returned when a lifecycle action cannot be applied in
+// the plugin's current state (e.g. install-when-already-installed).
+var ErrIllegalTransition = errors.New("pluginlifecycle: illegal transition")
 
 // State is a plugin's persisted lifecycle state.
 type State struct {
@@ -61,7 +66,7 @@ func (e *Engine) Install(ctx context.Context, d plugin.Descriptor) error {
 		return err
 	}
 	if st.InstalledAt != nil {
-		return fmt.Errorf("pluginlifecycle: %s already installed", d.ID)
+		return fmt.Errorf("%w: %s already installed", ErrIllegalTransition, d.ID)
 	}
 	if err := e.callHook(ctx, d, d.Lifecycle.Install); err != nil {
 		return fmt.Errorf("install hook: %w", err)
@@ -79,7 +84,7 @@ func (e *Engine) Activate(ctx context.Context, d plugin.Descriptor) error {
 		return err
 	}
 	if st.InstalledAt == nil {
-		return fmt.Errorf("pluginlifecycle: %s must be installed before activate", d.ID)
+		return fmt.Errorf("%w: %s must be installed before activate", ErrIllegalTransition, d.ID)
 	}
 	if err := e.callHook(ctx, d, d.Lifecycle.Activate); err != nil {
 		return fmt.Errorf("activate hook: %w", err)

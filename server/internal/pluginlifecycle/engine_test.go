@@ -83,7 +83,17 @@ func TestEngine_InstallActivateDeactivateUninstall(t *testing.T) {
 
 func TestEngine_ActivateBeforeInstallRejected(t *testing.T) {
 	e := New(&fakePluginRepo{}, &recordingHooks{}, &fakeClearer{})
-	require.Error(t, e.Activate(context.Background(), desc()))
+	err := e.Activate(context.Background(), desc())
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrIllegalTransition)
+}
+
+func TestEngine_InstallWhenAlreadyInstalledRejected(t *testing.T) {
+	now := time.Now()
+	e := New(&fakePluginRepo{installedAt: &now}, &recordingHooks{}, &fakeClearer{})
+	err := e.Install(context.Background(), desc())
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrIllegalTransition)
 }
 
 func TestEngine_HookFailureAbortsTransition(t *testing.T) {

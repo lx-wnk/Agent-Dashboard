@@ -10,7 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type memDiscoverRepo struct{ rows map[string]DiscoverRow }
+type memDiscoverRepo struct {
+	rows      map[string]DiscoverRow
+	installed map[string]bool // ids with installed_at set
+}
 type DiscoverRow struct{ Version, ManifestHash string }
 
 func (m *memDiscoverRepo) UpsertDiscovered(_ context.Context, in DiscoveredPlugin) (bool, error) {
@@ -26,6 +29,10 @@ func (m *memDiscoverRepo) ExistingIDs(_ context.Context) ([]string, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+func (m *memDiscoverRepo) IsInstalled(_ context.Context, id string) (bool, error) {
+	return m.installed[id], nil
 }
 
 func (m *memDiscoverRepo) Remove(_ context.Context, id string) error {
@@ -92,4 +99,35 @@ func TestDiscover_EmptyDirDoesNotDeleteRows(t *testing.T) {
 	assert.Equal(t, 0, res.Found)
 	assert.Empty(t, res.Removed)
 	assert.Contains(t, repo.rows, "p1") // row must survive
+}
+
+// TestDiscover_InstalledPluginOrphanedNotDeleted verifies that a plugin whose
+// manifest disappears from disk is retained when it has been installed
+// (installed_at != nil). A discovered-only (uninstalled) absent plugin is still
+// removed. Settings rows are implied by the plugin row surviving.
+func TestDiscover_InstalledPluginOrphanedNotDeleted(t *testing.T) {
+	dir := t.TempDir()
+	// Only p1 has a manifest on disk; p2 (installed) and p3 (not installed) are absent.
+	writeManifest(t, dir, "p1", "1.0.0")
+	repo := &memDiscoverRepo{
+		rows: map[string]DiscoverRow{
+			"p1": {Version: "1.0.0", ManifestHash: "old"},
+			"p2": {Version: "2.0.0", ManifestHash: "old"}, // installed, manifest gone
+			"p3": {Version: "3.0.0", ManifestHash: "old"}, // not installed, manifest gone
+		},
+		installed: map[string]bool{"p2": true},
+	}
+	d := NewDiscoverer(dir, repo)
+
+	res, err := d.Discover(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, res.Found)
+	assert.Contains(t, repo.rows, "p1")
+	assert.Contains(t, repo.rows, "p2",
+		"installed plugin must survive discovery pass even when manifest is absent")
+	assert.NotContains(t, repo.rows, "p3",
+		"non-installed absent plugin must be removed")
+	assert.Contains(t, res.Removed, "p3")
+	assert.NotContains(t, res.Removed, "p2")
 }
