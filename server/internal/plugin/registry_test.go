@@ -3,12 +3,17 @@ package plugin_test
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -247,4 +252,116 @@ func TestRegistry_LoadSkipsDisabled(t *testing.T) {
 
 	assert.False(t, r.HasAttemptedCapability(plugin.CapAuthProvider),
 		"disabled auth_provider plugin must not be recorded as attempted")
+}
+
+// writeForkingPlugin builds a real plugin binary under dir/{id}/ that:
+//  1. Starts a /health HTTP server on a free port.
+//  2. Spawns `sleep 600` as a child WITHOUT a new pgid (inherits the plugin's group).
+//  3. Writes the child PID to childPidFile so the test can assert it was reaped.
+//
+// The binary is pre-compiled via `go build` so it starts fast enough to pass
+// the registry's 5-second health-check window.
+// Returns the absolute path of the child-PID file.
+func writeForkingPlugin(t *testing.T, dir, id string) (childPidFile string) {
+	t.Helper()
+	pluginDir := filepath.Join(dir, id)
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+
+	// Pick a free port once; close the listener before binding in the plugin.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
+	childPidFile = filepath.Join(pluginDir, "childpid")
+
+	mainGo := `package main
+
+import (
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+)
+
+func main() {
+	addr := os.Args[1]
+	pidFile := os.Args[2]
+
+	// Spawn a long-lived child in the SAME process group (no Setpgid on child).
+	child := exec.Command("sleep", "600")
+	if err := child.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, "child start:", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", child.Process.Pid)), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "write pid:", err)
+		os.Exit(1)
+	}
+
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		fmt.Fprintln(os.Stderr, "server:", err)
+		os.Exit(1)
+	}
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.go"), []byte(mainGo), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "go.mod"), []byte("module forker-plugin\n\ngo 1.21\n"), 0o644))
+
+	// Pre-compile so the binary starts instantly and health check passes well within 5s.
+	binPath := filepath.Join(pluginDir, "plugin-bin")
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	build.Dir = pluginDir
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, buildErr := build.CombinedOutput()
+	require.NoError(t, buildErr, "go build failed:\n%s", out)
+
+	desc := plugin.Descriptor{
+		ID:           id,
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         addr,
+		Command:      []string{"./plugin-bin", addr, childPidFile},
+	}
+	data, _ := json.Marshal(desc)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
+
+	return childPidFile
+}
+
+func readPidFile(t *testing.T, path string) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	require.NoError(t, err)
+	return pid
+}
+
+func processAlive(pid int) bool {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return p.Signal(syscall.Signal(0)) == nil
+}
+
+func TestGroupKillReapsChildren(t *testing.T) {
+	dir := t.TempDir()
+	childPidFile := writeForkingPlugin(t, dir, "forker")
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	_, ok := r.Lookup("forker")
+	require.True(t, ok, "plugin must be registered after load")
+
+	r.Shutdown()
+
+	childPid := readPidFile(t, childPidFile)
+	require.Eventually(t, func() bool {
+		return !processAlive(childPid)
+	}, 10*time.Second, 100*time.Millisecond, "group-kill must reap the plugin's child process")
 }

@@ -150,6 +150,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 		cmd.Dir = pluginDir
 		cmd.Env = buildPluginEnv(desc.Env)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("start: %w", err)
 		}
@@ -256,21 +257,20 @@ func (r *Registry) Shutdown() {
 	}
 }
 
-// gracefulStop sends SIGTERM to cmd's process and waits for it to exit.
-// If watcherDone is non-nil, it is the channel closed by the goroutine that
-// owns cmd.Wait() (the watchPlugin goroutine); gracefulStop waits on it rather
-// than calling cmd.Wait() itself, avoiding a double-Wait race.
-// If watcherDone is nil, gracefulStop owns the Wait() call.
-// Either way, if the process has not exited within 5 seconds it is force-killed.
+// gracefulStop sends SIGTERM to the process group led by cmd's PID and waits
+// for the process to exit. Setpgid on spawn makes the plugin the group leader
+// (pgid == pid), so the negative-pid kill reaches the plugin and all descendants.
+// If the process has not exited within 5 seconds, SIGKILL is sent to the group.
+// If watcherDone is non-nil it is the channel closed by the watchPlugin goroutine
+// that owns cmd.Wait(); gracefulStop waits on it to avoid a double-Wait race.
 func gracefulStop(cmd *exec.Cmd, watcherDone <-chan struct{}) {
 	if cmd.Process == nil {
 		return
 	}
-	_ = cmd.Process.Signal(syscall.SIGTERM)
+	signalGroup(cmd.Process.Pid, syscall.SIGTERM)
 
 	done := watcherDone
 	if done == nil {
-		// No watcher goroutine — own the Wait() call here.
 		ownDone := make(chan struct{})
 		go func() {
 			_ = cmd.Wait()
@@ -284,9 +284,19 @@ func gracefulStop(cmd *exec.Cmd, watcherDone <-chan struct{}) {
 		case <-done:
 			// process exited — nothing to do
 		case <-time.After(5 * time.Second):
-			_ = cmd.Process.Kill()
+			signalGroup(cmd.Process.Pid, syscall.SIGKILL)
 		}
 	}()
+}
+
+// signalGroup sends sig to the process group led by pid (Setpgid makes the child
+// its own group leader, so its pgid == pid). The negative target reaches the
+// leader and all descendants, so a plugin's child processes die with it.
+// Falls back to the single process if the group send fails.
+func signalGroup(pid int, sig syscall.Signal) {
+	if err := syscall.Kill(-pid, sig); err != nil {
+		_ = syscall.Kill(pid, sig)
+	}
 }
 
 // FindByCapability returns the first plugin with the given capability, or nil.
@@ -445,6 +455,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		newCmd.Env = buildPluginEnv(desc.Env)
 		newCmd.Stdout = os.Stdout
 		newCmd.Stderr = os.Stderr
+		newCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 		if startErr := newCmd.Start(); startErr != nil {
 			slog.Error("plugin: restart failed — could not start process", "id", desc.ID, "err", startErr)
