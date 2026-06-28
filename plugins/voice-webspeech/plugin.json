@@ -1,4 +1,5 @@
 {
+  "$schema": "../../plugin-sdk/plugin.schema.json",
   "id": "voice-webspeech",
   "version": "0.1.0",
   "capabilities": ["route_extension"],

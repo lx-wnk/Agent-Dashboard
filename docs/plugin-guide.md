@@ -1,6 +1,17 @@
 # Plugin Developer Guide
 
-Agent-dashboard supports a lightweight sidecar plugin system. Each plugin is an independent HTTP server that the dashboard discovers at startup, health-checks, and optionally spawns as a child process.
+Agent-dashboard supports a lightweight sidecar plugin system. Each plugin is an
+independent HTTP server that the dashboard discovers at startup, health-checks, and
+optionally spawns as a child process.
+
+---
+
+## Build your first plugin
+
+The fastest path: read the [plugin SDK quickstart](../plugin-sdk/README.md), copy
+`plugins/voice-whisper` as a template, add your `plugin.json`, and point
+`DASHBOARD_PLUGIN_DIR` at the parent directory. The sections below cover every
+field and capability in detail.
 
 ---
 
@@ -13,31 +24,97 @@ A plugin is a standalone HTTP server that:
 3. Serves `GET /health` returning `{"ok":true}`.
 4. Implements one or more **capability** contract(s).
 
-The dashboard registry (`server/internal/plugin/`) reads `plugin.json`, starts the process (if `command` is set), waits up to 5 seconds for `/health` to return 200, then makes the plugin's capabilities available to the rest of the server.
+The dashboard registry (`server/internal/plugin/`) reads `plugin.json`, starts the
+process (if `command` is set), waits up to 5 seconds for `/health` to return 200, then
+makes the plugin's capabilities available to the rest of the server.
 
 ---
 
-## The `plugin.json` descriptor
+## The `plugin.json` descriptor (v2)
 
 ```json
 {
+  "$schema": "../../plugin-sdk/plugin.schema.json",
   "id":           "my-plugin",
+  "name":         "My Plugin",
   "version":      "1.0.0",
-  "capabilities": ["auth_provider"],
-  "addr":         "127.0.0.1:19001",
+  "capabilities": ["route_extension"],
+  "addr":         "127.0.0.1:19010",
   "command":      ["./my-plugin"],
-  "env":          ["MY_CLIENT_ID", "MY_CLIENT_SECRET"]
+  "env":          ["MY_API_KEY"],
+  "slots": [
+    { "slot": "agent-modal-footer", "priority": 0, "mode": "extend" }
+  ],
+  "settings": [
+    { "key": "api_key", "type": "string", "label": "API Key", "secret": true },
+    { "key": "mode",    "type": "enum",   "label": "Mode", "enum": ["fast", "slow"] }
+  ],
+  "lifecycle": {
+    "activate":   "/hooks/activate",
+    "deactivate": "/hooks/deactivate"
+  },
+  "permissions": ["network:outbound"]
 }
 ```
 
+Add `"$schema": "../../plugin-sdk/plugin.schema.json"` for editor autocomplete against
+[`plugin-sdk/plugin.schema.json`](../plugin-sdk/plugin.schema.json). The relative path
+assumes `plugins/<name>/plugin.json`.
+
+### Core fields
+
 | Field          | Required | Description |
 |----------------|----------|-------------|
-| `id`           | yes      | Unique plugin identifier (slug, no spaces). |
-| `version`      | yes      | Semver string. |
-| `capabilities` | yes      | Array of capability strings the plugin implements (see below). |
+| `id`           | yes      | Unique plugin slug (`[a-z0-9][a-z0-9-]*`). |
+| `version`      | no       | Semver string. |
+| `capabilities` | no       | Capability strings the plugin implements (see below). |
 | `addr`         | yes      | `127.0.0.1:<port>` the plugin HTTP server binds to. |
-| `command`      | no       | Executable + args to launch the plugin. Omit if the process is already running. |
-| `env`          | no       | Env var names to forward from the dashboard's environment. Only a fixed base set (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus any names listed here are forwarded. Any secret a plugin needs must be named in this array. |
+| `command`      | no       | Executable + args to launch. Omit if the process is already running. |
+| `env`          | no       | Env var names to forward from the dashboard process. Only a fixed base set (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus names listed here are forwarded. |
+
+### `slots` — UI slot bindings
+
+Declares which dashboard UI slots the plugin contributes to. Consumed by the frontend when
+`ui_extension` is active.
+
+| Field      | Description |
+|------------|-------------|
+| `slot`     | Target slot name (see the slot table under `ui_extension`). |
+| `priority` | Render order — higher renders outer/first. Default `0`. |
+| `mode`     | `"override"` (exclusive — replaces all others), `"extend"` (wraps the parent chain, receives `parent` handle), or omit for sibling (default — rendered alongside others). |
+
+### `settings` — per-plugin settings
+
+Declared settings appear in the plugin's settings panel in the dashboard UI. Values are
+stored per-plugin in the database.
+
+| Field    | Description |
+|----------|-------------|
+| `key`    | Setting identifier (used in the API). |
+| `type`   | `string` \| `url` \| `int` \| `bool` \| `enum`. |
+| `label`  | Display label shown in the UI. |
+| `secret` | `true` — value is encrypted at rest (AES-256-GCM) and masked (`***`) in the API. |
+| `enum`   | Required when `type` is `"enum"` — array of allowed string values. |
+
+Read/write settings: `GET /api/plugins/{id}/settings` and `PUT /api/plugins/{id}/settings`.
+
+### `lifecycle` — hook paths
+
+Optional HTTP paths (relative to `addr`) that the dashboard calls as `POST <addr><path>`
+on each state transition. Any 2xx response means success; an empty string means no hook.
+
+| Key           | Called when |
+|---------------|-------------|
+| `install`     | Plugin first registered. |
+| `postInstall` | After install completes. |
+| `activate`    | Plugin activated (enabled). |
+| `deactivate`  | Plugin deactivated (disabled). |
+| `update`      | Descriptor version changed. |
+| `uninstall`   | Plugin removed from the registry. |
+
+### `permissions`
+
+Declared permission strings surfaced in the UI for user review before activation.
 
 ---
 
@@ -45,9 +122,16 @@ The dashboard registry (`server/internal/plugin/`) reads `plugin.json`, starts t
 
 ### `auth_provider`
 
-Replaces the built-in bypass-auth with a real OAuth provider. Only the first discovered `auth_provider` plugin is used.
+Replaces the built-in bypass-auth with a real OAuth provider. Only the first discovered
+`auth_provider` plugin is used.
 
-The plugin implements a **standalone OAuth dance** and creates dashboard sessions by calling core's `POST /api/auth/session`. Core has zero provider-specific knowledge — it only issues JWT session cookies when a trusted plugin presents a verified user profile.
+**Liveness:** `auth_provider` is boot-wired — activating or deactivating it requires a
+server restart. The dashboard UI surfaces a restart button when this capability changes
+state.
+
+The plugin implements a **standalone OAuth dance** and creates dashboard sessions by
+calling core's `POST /api/auth/session`. Core has zero provider-specific knowledge — it
+only issues JWT session cookies when a trusted plugin presents a verified user profile.
 
 #### Standalone flow (primary)
 
@@ -82,12 +166,18 @@ Response: `{"ok":true}`
 
 **`GET /login?nonce=<jwt>`** — entry point; core forwards here with a one-time nonce.
 
-Redirects to the OAuth provider's authorization URL. Must embed the nonce in the CSRF state value as `<csrfState>.<nonce>` — pass this combined value both as the state cookie and as the OAuth `state` parameter. The nonce is recovered in the callback by splitting the cookie value on the first `.` (the nonce is a JWT that may contain dots, so split only on the first one).
+Redirects to the OAuth provider's authorization URL. Must embed the nonce in the CSRF
+state value as `<csrfState>.<nonce>` — pass this combined value both as the state cookie
+and as the OAuth `state` parameter. The nonce is recovered in the callback by splitting
+the cookie value on the first `.` (the nonce is a JWT that may contain dots, so split
+only on the first one).
 
 **`GET /callback?code=<code>&state=<state>`** — OAuth callback.
 
-1. Compare the `state` query parameter against the `github_oauth_state` cookie value — reject if they differ.
-2. Extract nonce: split the cookie value on the first `.` only — everything after is the nonce (a JWT that may itself contain dots).
+1. Compare the `state` query parameter against the `github_oauth_state` cookie value —
+   reject if they differ.
+2. Extract nonce: split the cookie value on the first `.` only — everything after is the
+   nonce (a JWT that may itself contain dots).
 3. Exchange code for access token.
 4. Fetch user profile from provider.
 5. Call `POST /api/auth/session` (see below).
@@ -97,12 +187,14 @@ Redirects to the OAuth provider's authorization URL. Must embed the nonce in the
 **Calling core to create a session: `POST /api/auth/session`**
 
 Request headers:
+
 ```
 Authorization: Bearer <DASHBOARD_AUTH_PLUGIN_SECRET>
 Content-Type: application/json
 ```
 
 Request body:
+
 ```json
 {
   "github_id":    "12345",
@@ -124,27 +216,27 @@ Response: `200 OK` with `Set-Cookie: auth_token=<jwt>`.
 | `GITHUB_CLIENT_ID` | GitHub OAuth app client ID (github-oauth specific; name in `plugin.json` `env` array) |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret (github-oauth specific; name in `plugin.json` `env` array) |
 
-#### Legacy capability routes (deprecated)
-
-The following routes were used by the old in-core proxy flow and are retained for backwards compatibility. New plugins should implement the standalone flow above instead.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET`  | `/capabilities/auth/authorize-url?state=&redirect_uri=` | Returns provider authorization URL |
-| `POST` | `/capabilities/auth/exchange` | Exchanges OAuth code for access token |
-| `GET`  | `/capabilities/auth/user` | Returns user profile for Bearer token |
-
 ---
 
-### `route_extension` (future)
+### `route_extension`
 
-Reserved for plugins that mount additional HTTP routes into the dashboard router. Not yet implemented.
+Plugins with `route_extension` have all requests to `/api/plugins/{id}/proxy/*`
+reverse-proxied to the plugin's own `addr`. The plugin can serve any HTTP content —
+JSON APIs, static assets, ES modules — under that prefix.
+
+**Liveness:** live — no server restart needed. Routes are registered when the plugin is
+activated and removed when it is deactivated.
+
+---
 
 ### `ui_extension`
 
 Lets a plugin contribute frontend UI into named slots of the dashboard SPA. The plugin
-serves a **UI manifest** plus one JS module per slot through its own reverse-proxied
-file space; the dashboard imports a module only when a host renders that slot.
+serves a **UI manifest** plus one JS module per slot through the proxy path; the
+dashboard imports a module only when a host slot renders.
+
+**Liveness:** live — modules are loaded on demand when a slot renders. On disable,
+a browser refresh unloads the addon (the dashboard prompts the user to refresh).
 
 **1. Declare the capability** in `plugin.json`:
 
@@ -179,7 +271,10 @@ a `SlotAddon`. The dashboard imports it from `/api/plugins/{id}/proxy/{module}`.
 
 ```js
 export default {
-  mount(el, ctx) {
+  slot: 'task-modal-footer',
+  priority: 0,
+  // mode: 'override' | 'extend' — omit for sibling (default)
+  mount(el, ctx, parent) {
     // ctx shape depends on the slot (see the contract table below)
     el.textContent = ctx.task.slug
     return () => { /* teardown */ }
@@ -221,33 +316,85 @@ If an `override` appears in the chain, `parent` is `null` for it -- it does not 
 further. Siblings (no mode) are always mounted after the chain, regardless of priority,
 unless an `override` is present (which suppresses them entirely).
 
+Addons are framework-agnostic — bundle any framework into the module. Reference
+[`plugin-sdk/addon.d.ts`](../plugin-sdk/addon.d.ts) for TypeScript types.
+
 **Available slots and their `ctx` contract** (SSOT: `src/utils/pluginSlot.ts`):
 
-| Slot name                | Host             | `ctx` (props in)                                  |
-| ------------------------ | ---------------- | ------------------------------------------------- |
-| `refinement-input-addon` | RefinementChat   | `{ insertText(text), setBusy(bool) }` (callbacks) |
-| `task-modal-footer`      | TaskModal footer | `{ task }`                                         |
-| `agent-modal-footer`     | AgentModal footer| `{ agent }`                                        |
-| `kanban-card-badge`      | TaskCard         | `{ task }`                                         |
-| `settings-panel`         | PluginSettings   | `{}` (no entity context)                          |
+#### Slot composition
+
+| `mode`     | Behaviour |
+|------------|-----------|
+| *(omit)*   | **Sibling** — rendered alongside other addons for the same slot, in priority order. |
+| `"extend"` | **Extend** — wraps the parent chain. Receives a `SlotParent` handle as the third `mount` argument; call `parent.mount(el)` to include the parent content. |
+| `"override"` | **Override** — replaces all other addons for the slot. Only the highest-priority override runs. |
+
+#### Available slots and their `ctx` contract
+
+SSOT: `src/utils/pluginSlot.ts` and [`plugin-sdk/addon.d.ts`](../plugin-sdk/addon.d.ts).
+
+| Slot name                | Host              | `ctx` (props in)                                   |
+|--------------------------|-------------------|----------------------------------------------------|
+| `refinement-input-addon` | RefinementChat    | `{ insertText(text), setBusy(bool) }` (callbacks) |
+| `task-modal-footer`      | TaskModal footer  | `{ task }`                                         |
+| `agent-modal-footer`     | AgentModal footer | `{ agent }`                                        |
+| `kanban-card-badge`      | TaskCard          | `{ task }`                                         |
+| `settings-panel`         | PluginSettings    | `{}` (no entity context)                          |
 
 The addon's only callback *out* is the `UnmountFn` it returns from `mount`, invoked when
 the host unmounts.
 
-**Lifecycle (v1):** `discover` (boot-static registry) → `health-check` → `load-manifest`
-→ `import module` → `mount(el, ctx)` → `unmount` when the host component unmounts. Imports
-are memoized per page load (plugin list + each manifest + each module fetched once).
+#### Module loading
 
-**Legacy fallback:** a `route_extension` plugin that ships **no** manifest but serves an
-`addon.js` whose `default.slot` matches the requested slot still works — this keeps the
-original voice-input plugins functioning unchanged.
-
-**Non-goal (v1):** hot plugin add/remove without a page reload. The plugin registry is
-boot-static; adding or removing a plugin requires a server restart and a browser reload.
-
-**Security:** modules are imported **only** from `/api/plugins/{id}/proxy/*`, served by
-the registry-discovered, health-checked, SSRF-guarded plugin proxy — never an arbitrary
+Imports are memoized per page load (plugin list + each manifest + each module fetched
+once). Modules are imported only from `/api/plugins/{id}/proxy/*` — never an arbitrary
 URL. A plugin must be discovered and healthy before any of its UI can load.
+
+**Legacy fallback:** a `route_extension` plugin that ships no manifest but serves an
+`addon.js` whose `default.slot` matches the requested slot still works — this keeps
+existing plugins functioning unchanged.
+
+---
+
+## Plugin settings UI
+
+Plugins with `settings` entries in their manifest get a dedicated settings panel in the
+dashboard. The panel renders each field according to its `type` and `label`. Secret
+fields (`"secret": true`) are stored encrypted at rest and displayed as `***` in the UI
+— the raw value is never sent back to the frontend.
+
+Read and write plugin settings via the REST API:
+
+```
+GET /api/plugins/{id}/settings
+PUT /api/plugins/{id}/settings
+```
+
+---
+
+## Enable, disable, and lifecycle management
+
+The dashboard manages plugin state (`discovered` → `inactive` → `active`) via lifecycle
+endpoints:
+
+```
+POST /api/plugins/{id}/install
+POST /api/plugins/{id}/activate
+POST /api/plugins/{id}/deactivate
+POST /api/plugins/{id}/uninstall
+```
+
+Each call invokes the corresponding hook declared in `lifecycle` (if any) and updates the
+plugin's DB state.
+
+**Offline hatch:** if the server will not start because an `auth_provider` plugin is
+broken, disable auth from the CLI without a running server:
+
+```bash
+dashboard settings set auth.mode none
+```
+
+This writes directly to the database and takes effect on next boot.
 
 ---
 
@@ -255,20 +402,26 @@ URL. A plugin must be discovered and healthy before any of its UI can load.
 
 1. Build your plugin binary.
 2. Create a directory under your plugin dir:
+
    ```
    /path/to/plugins/
    └── my-plugin/
        ├── plugin.json
        └── my-plugin   ← compiled binary
    ```
+
 3. Set the env var (or config key) before starting the dashboard:
+
    ```bash
    export DASHBOARD_PLUGIN_DIR=/path/to/plugins
    ./agent-dashboard serve
    ```
+
    Or add `"plugin_dir": "/path/to/plugins"` to your JSON config file.
 
-The registry scans every subdirectory of `plugin_dir` for `plugin.json` at startup. Missing or malformed descriptors are skipped with a warning; a failed health check kills the process and skips the plugin.
+The registry scans every subdirectory of `plugin_dir` for `plugin.json` at startup.
+Missing or malformed descriptors are skipped with a warning; a failed health check marks
+the plugin unhealthy and skips it.
 
 ---
 
@@ -276,15 +429,20 @@ The registry scans every subdirectory of `plugin_dir` for `plugin.json` at start
 
 - Plugins **must** bind to `127.0.0.1` only — never a public address.
 - The dashboard kills any plugin process it started on shutdown (`Registry.Shutdown()`).
-- Only a fixed base set of env vars (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus any var names listed in the `env` array in `plugin.json` are forwarded to the plugin process.
-- `DASHBOARD_AUTH_PLUGIN_SECRET` must be at least 32 characters. Store it in a `.env` file, never commit it.
+- Only a fixed base set of env vars (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus
+  names listed in the `env` array in `plugin.json` are forwarded to the plugin process.
+- `DASHBOARD_AUTH_PLUGIN_SECRET` must be at least 32 characters. Store it in a `.env`
+  file, never commit it.
 - Health check timeout is **5 seconds**. Plugins that do not respond in time are skipped.
+- Addon modules are imported only from `/api/plugins/{id}/proxy/*`, served by the
+  registry-discovered, health-checked, SSRF-guarded plugin proxy.
 
 ---
 
 ## Reference: github-oauth plugin
 
-`plugins/github-oauth/` is the canonical reference implementation of the `auth_provider` capability.
+`plugins/github-oauth/` is the canonical reference implementation of the `auth_provider`
+capability.
 
 ### Files
 
@@ -292,7 +450,7 @@ The registry scans every subdirectory of `plugin_dir` for `plugin.json` at start
 |---------------|---------|
 | `plugin.json` | Descriptor — capability `auth_provider`, addr `127.0.0.1:19001`, command `./github-oauth` |
 | `go.mod`      | Standalone Go module (`github.com/lx-wnk/agent-dashboard-plugin-github-oauth`) |
-| `main.go`     | HTTP server implementing standalone OAuth flow + legacy capability routes + `/health` |
+| `main.go`     | HTTP server implementing standalone OAuth flow + `/health` |
 
 ### Setup
 
@@ -312,7 +470,8 @@ export DASHBOARD_PLUGIN_DIR=/path/to/plugins   # directory containing github-oau
 ./agent-dashboard serve
 ```
 
-The dashboard logs `plugin: loaded id=github-oauth capabilities=[auth_provider]` on success.
+The dashboard logs `plugin: loaded id=github-oauth capabilities=[auth_provider]` on
+success.
 
 ### Endpoint summary
 
@@ -321,15 +480,13 @@ The dashboard logs `plugin: loaded id=github-oauth capabilities=[auth_provider]`
 | `GET`  | `/health` | Health check — returns `{"ok":true}` |
 | `GET`  | `/login?nonce=<jwt>` | Start OAuth dance (primary entry point) |
 | `GET`  | `/callback?code=<code>&state=<state>` | OAuth callback — creates session, redirects to dashboard |
-| `GET`  | `/capabilities/auth/authorize-url` | Legacy: returns GitHub authorization URL |
-| `POST` | `/capabilities/auth/exchange` | Legacy: exchanges OAuth code for access token |
-| `GET`  | `/capabilities/auth/user` | Legacy: returns user profile for Bearer token |
 
 ---
 
 ## Reference: office365-oauth plugin
 
-`plugins/office365-oauth/` implements the `auth_provider` capability for Microsoft single-tenant Azure AD.
+`plugins/office365-oauth/` implements the `auth_provider` capability for Microsoft
+single-tenant Azure AD.
 
 ### Files
 
@@ -341,10 +498,12 @@ The dashboard logs `plugin: loaded id=github-oauth capabilities=[auth_provider]`
 
 ### Azure App Registration
 
-1. Go to [Azure portal](https://portal.azure.com) → **Azure Active Directory** → **App registrations** → **New registration**.
+1. Go to [Azure portal](https://portal.azure.com) → **Azure Active Directory** →
+   **App registrations** → **New registration**.
 2. Set redirect URI to `http://127.0.0.1:19002/callback` (type: Web).
 3. Under **Certificates & secrets**, create a new client secret.
-4. Under **API permissions**, add `User.Read` (delegated). If using group restriction, also add `GroupMember.Read.All` (delegated). Grant admin consent.
+4. Under **API permissions**, add `User.Read` (delegated). If using group restriction,
+   also add `GroupMember.Read.All` (delegated). Grant admin consent.
 
 ### Setup
 
@@ -367,11 +526,3 @@ export OFFICE365_ALLOWED_GROUP_ID=your_group_object_id
 export PLUGIN_DIR=/path/to/plugins   # directory containing office365-oauth/
 ./agent-dashboard serve
 ```
-
-### Endpoint summary
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check — returns `{"ok":true}` |
-| `GET` | `/login?nonce=<jwt>` | Start OAuth dance (primary entry point) |
-| `GET` | `/callback?code=&state=` | OAuth callback — creates session, redirects to dashboard |
