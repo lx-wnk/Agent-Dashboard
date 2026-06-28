@@ -1,11 +1,26 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { usePluginSettings } from '../composables/usePluginSettings'
+import { useServerReconnect } from '../composables/useServerReconnect'
 import { errorMessage } from '../utils/errorMessage'
 import PluginSlot from './PluginSlot.vue'
 
 const { plugins, loading, error, toggle } = usePluginSettings()
+const { triggerRestart } = useServerReconnect()
 const saving = ref<string | null>(null)
+
+function isBootWired(caps: string[]) {
+  return caps.includes('auth_provider')
+}
+
+async function onRestart() {
+  try {
+    await triggerRestart()
+  }
+  catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+  }
+}
 
 const notice = ref<{ kind: 'success' | 'warning', text: string } | null>(null)
 let noticeTimer: ReturnType<typeof setTimeout> | null = null
@@ -93,9 +108,18 @@ async function handleToggle(id: string, next: boolean) {
             />
             {{ p.id }}
           </p>
-          <p class="text-fg-faint text-[10px]">
-            Requires restart to apply
-          </p>
+          <template v-if="isBootWired(p.capabilities)">
+            <span class="inline-flex items-center gap-1 text-[10px] font-medium text-warning-text bg-warning-soft px-1.5 py-0.5 rounded">
+              Restart required to apply
+            </span>
+            <button
+              type="button"
+              class="text-[10px] text-accent underline hover:no-underline focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+              @click="onRestart"
+            >
+              Restart server
+            </button>
+          </template>
         </div>
         <div class="flex items-center gap-3 shrink-0">
           <div class="flex flex-wrap gap-1 justify-end">

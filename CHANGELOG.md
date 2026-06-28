@@ -109,6 +109,14 @@ Preparing the first public release.
   to **all-off** and are activated individually via the backend lifecycle endpoints
   (`POST /api/plugins/{id}/activate|deactivate`), applied live without a server restart.
   The Plugins settings-panel toggle that drives these endpoints is wired in SP4b.
+- **Server reconnect overlay** — a full-screen blocking overlay appears automatically
+  whenever the server goes down (e.g. during a restart). The UI polls
+  `/api/system/health` every 1.5 s and reloads the page on the first successful
+  response, recovering without any user action. Plugins with the `auth_provider`
+  capability are **boot-wired** (they affect server startup) and cannot apply live:
+  after toggling an `auth_provider` plugin the settings panel shows a
+  "Restart required to apply" badge and a **Restart server** button, which triggers
+  the restart and hands off to the reconnect overlay automatically.
 
 ### Changed
 
