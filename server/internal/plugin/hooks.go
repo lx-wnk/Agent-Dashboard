@@ -12,5 +12,9 @@ type Hooks struct {
 	// loginURL is the plugin's login endpoint (base URL + /login) that
 	// core redirects to when starting the OAuth flow.
 	SetAuth func(provider authpkg.OAuthProvider, loginURL string)
+	// OnUnhealthy is called when a plugin exhausts its restart budget. The entry
+	// is retained (so the dispatcher can answer 503); the callback lets the
+	// server persist the dead state (e.g. mark the plugin inactive in the DB).
+	OnUnhealthy func(id string)
 	// future capabilities: SetLLM, SetStorage, SetNotify, etc.
 }

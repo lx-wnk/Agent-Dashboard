@@ -227,6 +227,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 	var oauthProvider authpkg.OAuthProvider
 	var pluginLoginURL string
 	if err := pluginRegistry.Load(ctx, plugin.Hooks{
+		OnUnhealthy: func(id string) {
+			if pluginRepo == nil {
+				return
+			}
+			if err := pluginRepo.SetActive(ctx, id, false); err != nil {
+				slog.Error("plugin: failed to persist unhealthy state", "id", id, "err", err)
+			}
+		},
 		SetAuth: func(p authpkg.OAuthProvider, loginURL string) {
 			oauthProvider = p
 			pluginLoginURL = loginURL
@@ -276,6 +284,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 			pluginStateRepoAdapter{inner: pluginRepo},
 			pluginlifecycle.NewHTTPHookCaller(),
 			pluginSettingsSvc,
+			pluginProcessAdapter{reg: pluginRegistry},
 		)
 		discoverer := pluginlifecycle.NewDiscoverer(cfg.PluginDir, pluginDiscoverRepoAdapter{inner: pluginRepo, settings: pluginSettingRepo})
 		lifecycleController := pluginlifecyclectl.New(pluginRepo, lifecycleEngine, pluginSettingsSvc, cfg.PluginDir)

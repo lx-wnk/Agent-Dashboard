@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -74,6 +75,9 @@ type Controller struct {
 	engine   Engine
 	settings Settings
 	loader   ManifestLoader
+
+	locksMu        sync.Mutex
+	perPluginLocks map[string]*sync.Mutex
 }
 
 // New builds a Controller that reads manifests from the filesystem, with dir as
@@ -84,7 +88,23 @@ func New(r Repo, engine Engine, settings Settings, dir string) *Controller {
 
 // NewWithLoader builds a Controller with an explicit manifest loader (tests).
 func NewWithLoader(r Repo, engine Engine, settings Settings, loader ManifestLoader) *Controller {
-	return &Controller{repo: r, engine: engine, settings: settings, loader: loader}
+	return &Controller{
+		repo:           r,
+		engine:         engine,
+		settings:       settings,
+		loader:         loader,
+		perPluginLocks: make(map[string]*sync.Mutex),
+	}
+}
+
+// pluginLock returns the per-plugin mutex for id, creating it on first use.
+func (c *Controller) pluginLock(id string) *sync.Mutex {
+	c.locksMu.Lock()
+	defer c.locksMu.Unlock()
+	if _, ok := c.perPluginLocks[id]; !ok {
+		c.perPluginLocks[id] = &sync.Mutex{}
+	}
+	return c.perPluginLocks[id]
 }
 
 // deriveState maps the persisted columns to the public state string. No
@@ -158,7 +178,13 @@ func (c *Controller) descriptorFor(ctx context.Context, id string) (plugin.Descr
 
 // Transition loads the descriptor, dispatches to the engine, and returns the
 // refreshed view. An unsupported action yields pluginsctl.ErrInvalidAction.
+// Transitions on the same plugin ID are serialized via a per-plugin lock to
+// prevent concurrent Activate/Deactivate from racing on process and DB state.
 func (c *Controller) Transition(ctx context.Context, id, action string) (plugins.PluginView, error) {
+	mu := c.pluginLock(id)
+	mu.Lock()
+	defer mu.Unlock()
+
 	desc, hash, err := c.descriptorFor(ctx, id)
 	if err != nil {
 		return plugins.PluginView{}, err

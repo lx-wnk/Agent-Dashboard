@@ -14,12 +14,13 @@ cd plugins/voice-webspeech && GOWORK=off go build -o voice-webspeech .
 ```
 
 ## Install
-Copy this directory into `DASHBOARD_PLUGIN_DIR`, restart the dashboard. Listens on
-`127.0.0.1:19011` (override via `VOICE_WEBSPEECH_ADDR`); reached via
-`/api/settings/plugins/voice-webspeech/*`.
+Copy this directory into `DASHBOARD_PLUGIN_DIR`. Activate it via the Plugins settings
+panel (or `POST /api/plugins/voice-webspeech/activate`) — no restart required. Listens
+on `127.0.0.1:19011` (override via `VOICE_WEBSPEECH_ADDR`); reached via
+`/api/plugins/voice-webspeech/proxy/*`.
 
 ## How it works
-The dashboard reverse-proxies `/api/settings/plugins/voice-webspeech/*` to this
+The dashboard reverse-proxies `/api/plugins/voice-webspeech/proxy/*` to this
 process (prefix stripped → it serves `/health` + `/addon.js`). The browser loads
 `addon.js`, which uses the Web Speech `SpeechRecognition` API to transcribe speech
 client-side and inserts the result into the refinement textarea. No audio passes

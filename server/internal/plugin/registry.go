@@ -28,9 +28,13 @@ type Registry struct {
 	dir                   string
 	plugins               []Entry
 	attemptedCapabilities map[string]bool // capabilities seen in any plugin.json, regardless of health
-	enabled               func(id string) bool
-	serverCtx             context.Context
-	hooks                 Hooks
+	// generationByID tracks a monotonically increasing counter per plugin ID.
+	// It survives removeByID so a watcher from a previous lifecycle can detect
+	// that a fresh entry (at a higher generation) now owns the ID.
+	generationByID map[string]int
+	enabled        func(id string) bool
+	serverCtx      context.Context
+	hooks          Hooks
 }
 
 // Entry is a loaded plugin with its descriptor and running process (if started by us).
@@ -41,11 +45,24 @@ type Entry struct {
 	// It is nil when no watcher runs (no Command field in descriptor).
 	// Shutdown waits on this channel instead of calling cmd.Wait() itself,
 	// preventing two goroutines from calling Wait() on the same *exec.Cmd
-	// (which is undefined behavior in Go).
+	// (which is undefined behavior in Go). On each restart a fresh channel is
+	// installed so gracefulStop waits on the live process, not the original one.
 	cmdDone      chan struct{}
 	BaseURL      string // http://{addr}
 	restartCount int
 	pluginDir    string // directory containing plugin.json, needed for restarts
+	// generation is incremented by startEntry on every (re)start of this id.
+	// Watchers capture their generation at spawn; a mismatch means a newer
+	// lifecycle now owns the id, and the stale watcher must not touch the entry.
+	generation int
+
+	// healthy is true once the process passed its health check and false once a
+	// give-up path (exhausted restarts / failed restart) marks it dead. The
+	// dispatcher serves 503 for an unhealthy entry.
+	healthy bool
+	// intentionalStop is set by StopOne before signalling so the watcher knows
+	// the exit was deliberate and must NOT respawn (the real orphan-restart fix).
+	intentionalStop bool
 }
 
 // New creates a Registry that will discover plugins in dir.
@@ -54,6 +71,7 @@ func New(dir string) *Registry {
 	return &Registry{
 		dir:                   dir,
 		attemptedCapabilities: make(map[string]bool),
+		generationByID:        make(map[string]int),
 	}
 }
 
@@ -142,6 +160,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 		cmd.Dir = pluginDir
 		cmd.Env = buildPluginEnv(desc.Env)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("start: %w", err)
 		}
@@ -153,14 +172,24 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 		}
 		return fmt.Errorf("health: %w", err)
 	}
+	// Assign generation before spawning the watcher so the watcher can capture
+	// it atomically. The generation survives removeByID and advances on every
+	// (re)start, letting stale watchers detect they are no longer the owner.
+	r.mu.Lock()
+	r.generationByID[desc.ID]++
+	gen := r.generationByID[desc.ID]
+	r.mu.Unlock()
+	entry.generation = gen
+
 	if entry.cmd != nil {
 		// Health check passed — safe to launch the watcher now. Starting it
 		// before the health check would race with gracefulStop (both call
 		// cmd.Wait). Exponential backoff: 1s → 5s → 30s, max 3 retries.
 		done := make(chan struct{})
 		entry.cmdDone = done
-		go r.watchPlugin(serverCtx, entry.pluginDir, desc, entry.cmd, done)
+		go r.watchPlugin(serverCtx, entry.pluginDir, desc, entry.cmd, done, gen)
 	}
+	entry.healthy = true
 	r.mu.Lock()
 	r.plugins = append(r.plugins, entry)
 	r.mu.Unlock()
@@ -177,14 +206,29 @@ func (r *Registry) StartOne(ctx context.Context, id string) error {
 		return fmt.Errorf("plugin: invalid id %q", id)
 	}
 	r.mu.RLock()
+	var (
+		found     bool
+		isHealthy bool
+	)
 	for i := range r.plugins {
 		if r.plugins[i].Descriptor.ID == id {
-			r.mu.RUnlock()
-			return nil // already running
+			found = true
+			isHealthy = r.plugins[i].healthy
+			break
 		}
 	}
 	serverCtx, hooks := r.serverCtx, r.hooks
 	r.mu.RUnlock()
+
+	if found {
+		if isHealthy {
+			return nil // already running and healthy
+		}
+		// Entry exists but is unhealthy — evict before restarting so the fresh
+		// process replaces the dead one rather than being treated as a no-op.
+		r.removeByID(id)
+	}
+
 	if serverCtx == nil {
 		serverCtx = ctx
 	}
@@ -225,11 +269,65 @@ func (r *Registry) StopOne(id string) error {
 	if target == nil {
 		return nil
 	}
+	r.setIntentionalStop(id)
 	if target.cmd != nil {
 		gracefulStop(target.cmd, target.cmdDone)
 	}
 	r.removeByID(id)
 	return nil
+}
+
+// setIntentionalStop marks the entry's pending exit as deliberate so watchPlugin
+// will not respawn it.
+func (r *Registry) setIntentionalStop(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			r.plugins[i].intentionalStop = true
+			return
+		}
+	}
+}
+
+// isRunning reports whether the plugin with the given id has an entry AND is healthy.
+func (r *Registry) isRunning(id string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			return r.plugins[i].healthy
+		}
+	}
+	return false
+}
+
+// isIntentionalStop reports whether the watcher should refrain from restarting.
+// An absent entry counts as intentional: by the time the watcher checks, StopOne
+// may already have deregistered it, and a removed plugin must never respawn.
+func (r *Registry) isIntentionalStop(id string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			return r.plugins[i].intentionalStop
+		}
+	}
+	return true
+}
+
+// isStaleGeneration reports whether the registry no longer holds an entry for id
+// at the given generation. An absent entry or a newer generation both return true,
+// meaning the watcher that owns myGen must not touch the registry for this id.
+func (r *Registry) isStaleGeneration(id string, myGen int) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			return r.plugins[i].generation != myGen
+		}
+	}
+	return true // absent = stale
 }
 
 // Shutdown stops all plugin processes that were started by Load.
@@ -247,21 +345,20 @@ func (r *Registry) Shutdown() {
 	}
 }
 
-// gracefulStop sends SIGTERM to cmd's process and waits for it to exit.
-// If watcherDone is non-nil, it is the channel closed by the goroutine that
-// owns cmd.Wait() (the watchPlugin goroutine); gracefulStop waits on it rather
-// than calling cmd.Wait() itself, avoiding a double-Wait race.
-// If watcherDone is nil, gracefulStop owns the Wait() call.
-// Either way, if the process has not exited within 5 seconds it is force-killed.
+// gracefulStop sends SIGTERM to the process group led by cmd's PID and waits
+// for the process to exit. Setpgid on spawn makes the plugin the group leader
+// (pgid == pid), so the negative-pid kill reaches the plugin and all descendants.
+// If the process has not exited within 5 seconds, SIGKILL is sent to the group.
+// If watcherDone is non-nil it is the channel closed by the watchPlugin goroutine
+// that owns cmd.Wait(); gracefulStop waits on it to avoid a double-Wait race.
 func gracefulStop(cmd *exec.Cmd, watcherDone <-chan struct{}) {
 	if cmd.Process == nil {
 		return
 	}
-	_ = cmd.Process.Signal(syscall.SIGTERM)
+	signalGroup(cmd.Process.Pid, syscall.SIGTERM)
 
 	done := watcherDone
 	if done == nil {
-		// No watcher goroutine — own the Wait() call here.
 		ownDone := make(chan struct{})
 		go func() {
 			_ = cmd.Wait()
@@ -275,9 +372,19 @@ func gracefulStop(cmd *exec.Cmd, watcherDone <-chan struct{}) {
 		case <-done:
 			// process exited — nothing to do
 		case <-time.After(5 * time.Second):
-			_ = cmd.Process.Kill()
+			signalGroup(cmd.Process.Pid, syscall.SIGKILL)
 		}
 	}()
+}
+
+// signalGroup sends sig to the process group led by pid (Setpgid makes the child
+// its own group leader, so its pgid == pid). The negative target reaches the
+// leader and all descendants, so a plugin's child processes die with it.
+// Falls back to the single process if the group send fails.
+func signalGroup(pid int, sig syscall.Signal) {
+	if err := syscall.Kill(-pid, sig); err != nil {
+		_ = syscall.Kill(pid, sig)
+	}
 }
 
 // FindByCapability returns the first plugin with the given capability, or nil.
@@ -317,6 +424,37 @@ func (r *Registry) HasAttemptedCapability(capability string) bool {
 // HasDir reports whether the registry was constructed with a non-empty plugin directory.
 func (r *Registry) HasDir() bool {
 	return r.dir != ""
+}
+
+// Healthy reports whether this entry's process is currently considered healthy.
+func (e Entry) Healthy() bool { return e.healthy }
+
+// Lookup returns a copy of the entry for id and whether it is present. The copy
+// avoids handing out a pointer into the value-backed plugins slice (which
+// reallocates on append/remove). Plugin count is single-digit, so the linear
+// scan under RLock matches the existing All/FindByCapability patterns.
+func (r *Registry) Lookup(id string) (Entry, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			return r.plugins[i], true
+		}
+	}
+	return Entry{}, false
+}
+
+// InjectEntryForTest registers a synthetic entry without starting a process.
+// Test-only seam; production code paths go through startEntry.
+func (r *Registry) InjectEntryForTest(d Descriptor, healthy bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.plugins = append(r.plugins, Entry{Descriptor: d, BaseURL: "http://" + d.Addr, healthy: healthy})
+}
+
+// NewHealthyEntryForTest builds a healthy Entry for tests in other packages.
+func NewHealthyEntryForTest(d Descriptor) Entry {
+	return Entry{Descriptor: d, BaseURL: "http://" + d.Addr, healthy: true}
 }
 
 // All returns a snapshot of all loaded plugin entries.
@@ -360,18 +498,23 @@ const maxPluginRestarts = 3
 
 var restartBackoff = []time.Duration{1 * time.Second, 5 * time.Second, 30 * time.Second}
 
-func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descriptor, cmd *exec.Cmd, done chan<- struct{}) {
+func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descriptor, cmd *exec.Cmd, done chan<- struct{}, myGen int) {
 	restartCount := 0
 	current := cmd
+	// currentDone is the channel we close when the current process exits.
+	// Starts as the initial done from startEntry; updated to a fresh channel on
+	// each restart so gracefulStop always waits on the live process (fix P3).
+	currentDone := done
 
-	firstWait := true
 	for {
 		err := current.Wait()
-		if firstWait {
-			// Signal Shutdown that the initial cmd has exited. Must happen exactly
-			// once so Shutdown's gracefulStop doesn't hang on a never-closed channel.
-			close(done)
-			firstWait = false
+		// Close the done channel for this process so Shutdown/StopOne can unblock.
+		// On the first iteration this closes the original done from startEntry;
+		// on subsequent iterations it closes the per-restart channel stored on the entry.
+		close(currentDone)
+
+		if r.isIntentionalStop(desc.ID) {
+			return
 		}
 		// A nil error means the plugin exited cleanly (e.g. during Shutdown).
 		// Only attempt restarts on non-nil errors.
@@ -386,8 +529,8 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		slog.Error("plugin: process exited unexpectedly", "id", desc.ID, "err", err)
 
 		if restartCount >= maxPluginRestarts {
-			slog.Error("plugin: exceeded restart limit — removing from registry", "id", desc.ID, "restarts", restartCount)
-			r.removeByID(desc.ID)
+			slog.Error("plugin: exceeded restart limit — marking unhealthy", "id", desc.ID, "restarts", restartCount)
+			r.markUnhealthy(desc.ID)
 			return
 		}
 
@@ -400,15 +543,25 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		case <-time.After(delay):
 		}
 
+		// Re-check after backoff: a concurrent deactivate+reactivate (fix P2) or a
+		// plain StopOne may have raced while we slept.
+		if r.isStaleGeneration(desc.ID, myGen) {
+			return
+		}
+		if r.isIntentionalStop(desc.ID) {
+			return
+		}
+
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
 		newCmd.Dir = pluginDir
 		newCmd.Env = buildPluginEnv(desc.Env)
 		newCmd.Stdout = os.Stdout
 		newCmd.Stderr = os.Stderr
+		newCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 		if startErr := newCmd.Start(); startErr != nil {
 			slog.Error("plugin: restart failed — could not start process", "id", desc.ID, "err", startErr)
-			r.removeByID(desc.ID)
+			r.markUnhealthy(desc.ID)
 			return
 		}
 
@@ -417,25 +570,80 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 			slog.Error("plugin: restart failed — health check did not pass", "id", desc.ID, "err", healthErr)
 			// newCmd has no watcher goroutine; pass nil so gracefulStop owns Wait().
 			gracefulStop(newCmd, nil)
-			r.removeByID(desc.ID)
+			r.markUnhealthy(desc.ID)
 			return
 		}
 
 		restartCount++
 		slog.Info("plugin: restarted successfully", "id", desc.ID, "restartCount", restartCount)
 
+		// Fresh done channel for the restarted process (fix P3): gracefulStop must
+		// wait on the live channel, not the already-closed original one.
+		rawNewDone := make(chan struct{})
+
 		r.mu.Lock()
+		recordedNewCmd := false
 		for i := range r.plugins {
 			if r.plugins[i].Descriptor.ID == desc.ID {
+				// Bail if a fresh lifecycle has taken over (fix P2) or if StopOne
+				// was called during the backoff window.
+				if r.plugins[i].generation != myGen || r.plugins[i].intentionalStop {
+					r.mu.Unlock()
+					gracefulStop(newCmd, nil)
+					return
+				}
 				r.plugins[i].cmd = newCmd
 				r.plugins[i].restartCount = restartCount
+				r.plugins[i].healthy = true
+				r.plugins[i].cmdDone = rawNewDone
+				recordedNewCmd = true
 				break
 			}
 		}
 		r.mu.Unlock()
 
+		if !recordedNewCmd {
+			// Entry was evicted by StopOne during backoff — clean up to avoid a leak.
+			gracefulStop(newCmd, nil)
+			return
+		}
+
 		current = newCmd
+		currentDone = rawNewDone
 	}
+}
+
+// markUnhealthy flips the entry to unhealthy and notifies the OnUnhealthy hook.
+// The entry is kept so the dispatcher serves a knowing 503 rather than the
+// ambiguous 503 of a missing plugin.
+func (r *Registry) markUnhealthy(id string) {
+	r.mu.Lock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			r.plugins[i].healthy = false
+			break
+		}
+	}
+	hook := r.hooks.OnUnhealthy
+	r.mu.Unlock()
+	if hook != nil {
+		hook(id)
+	}
+}
+
+// WithTransient ensures the plugin is running for the duration of fn. If it was
+// not already up, WithTransient starts it, runs fn, then stops it; if it was
+// already running, fn runs and the process is left untouched. Used to deliver
+// lifecycle hooks to an installed-but-stopped plugin.
+func (r *Registry) WithTransient(ctx context.Context, id string, fn func() error) error {
+	if r.isRunning(id) {
+		return fn()
+	}
+	if err := r.StartOne(ctx, id); err != nil {
+		return fmt.Errorf("transient start %s: %w", id, err)
+	}
+	defer func() { _ = r.StopOne(id) }()
+	return fn()
 }
 
 // removeByID removes a plugin entry from the registry by plugin ID.

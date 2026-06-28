@@ -153,7 +153,7 @@ file space; the dashboard imports a module only when a host renders that slot.
 ```
 
 **2. Serve a UI manifest** at `/<plugin-root>/ui-manifest.json` (reached by the dashboard
-at `/api/settings/plugins/{id}/ui-manifest.json`):
+at `/api/plugins/{id}/proxy/ui-manifest.json`):
 
 ```json
 {
@@ -201,7 +201,7 @@ original voice-input plugins functioning unchanged.
 **Non-goal (v1):** hot plugin add/remove without a page reload. The plugin registry is
 boot-static; adding or removing a plugin requires a server restart and a browser reload.
 
-**Security:** modules are imported **only** from `/api/settings/plugins/{id}/*`, served by
+**Security:** modules are imported **only** from `/api/plugins/{id}/proxy/*`, served by
 the registry-discovered, health-checked, SSRF-guarded plugin proxy — never an arbitrary
 URL. A plugin must be discovered and healthy before any of its UI can load.
 

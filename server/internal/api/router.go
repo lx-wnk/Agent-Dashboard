@@ -429,10 +429,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/hooks/pending", hooksHandler.Pending)
 		r.Post("/api/hooks/respond", hooksHandler.Respond)
 
-		// Mount the proxy for route_extension and ui_extension plugins. Both serve
-		// their assets (route handlers, ui-manifest + slot modules) through the same
-		// per-plugin proxy mount; All() yields each entry once, so the union is
-		// deduplicated by construction.
 		if deps.PluginsHandler != nil {
 			deps.PluginsHandler.Mount(r)
 		}
@@ -445,16 +441,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 				deps.PluginLifecycleHandler.Mount(r)
 			})
 		}
+		// Live route/ui-extension dispatch. One catch-all resolves the registry per
+		// request: chi freezes routes after serve (chi #480), so enable/disable
+		// cannot mutate the route tree. Mounted inside the authed group so it
+		// inherits JWT + same-origin guards; the proxy strips Cookie/Authorization
+		// before forwarding to the plugin.
 		if deps.PluginRegistry != nil {
-			for _, entry := range deps.PluginRegistry.All() {
-				d := entry.Descriptor
-				if !d.HasCapability(plugin.CapRouteExtension) && !d.HasCapability(plugin.CapUIExtension) {
-					continue
-				}
-				id := d.ID
-				r.Mount("/api/settings/plugins/"+id, plugin.NewReverseProxy(entry, "/api/settings/plugins/"+id))
-				slog.Info("router: mounted plugin route", "id", id, "path", "/api/settings/plugins/"+id)
-			}
+			r.Handle("/api/plugins/{id}/proxy/*", plugin.NewDispatcher(deps.PluginRegistry))
 		}
 	})
 
