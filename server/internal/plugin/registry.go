@@ -28,9 +28,13 @@ type Registry struct {
 	dir                   string
 	plugins               []Entry
 	attemptedCapabilities map[string]bool // capabilities seen in any plugin.json, regardless of health
-	enabled               func(id string) bool
-	serverCtx             context.Context
-	hooks                 Hooks
+	// generationByID tracks a monotonically increasing counter per plugin ID.
+	// It survives removeByID so a watcher from a previous lifecycle can detect
+	// that a fresh entry (at a higher generation) now owns the ID.
+	generationByID map[string]int
+	enabled        func(id string) bool
+	serverCtx      context.Context
+	hooks          Hooks
 }
 
 // Entry is a loaded plugin with its descriptor and running process (if started by us).
@@ -41,11 +45,16 @@ type Entry struct {
 	// It is nil when no watcher runs (no Command field in descriptor).
 	// Shutdown waits on this channel instead of calling cmd.Wait() itself,
 	// preventing two goroutines from calling Wait() on the same *exec.Cmd
-	// (which is undefined behavior in Go).
+	// (which is undefined behavior in Go). On each restart a fresh channel is
+	// installed so gracefulStop waits on the live process, not the original one.
 	cmdDone      chan struct{}
 	BaseURL      string // http://{addr}
 	restartCount int
 	pluginDir    string // directory containing plugin.json, needed for restarts
+	// generation is incremented by startEntry on every (re)start of this id.
+	// Watchers capture their generation at spawn; a mismatch means a newer
+	// lifecycle now owns the id, and the stale watcher must not touch the entry.
+	generation int
 
 	// healthy is true once the process passed its health check and false once a
 	// give-up path (exhausted restarts / failed restart) marks it dead. The
@@ -62,6 +71,7 @@ func New(dir string) *Registry {
 	return &Registry{
 		dir:                   dir,
 		attemptedCapabilities: make(map[string]bool),
+		generationByID:        make(map[string]int),
 	}
 }
 
@@ -162,13 +172,22 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 		}
 		return fmt.Errorf("health: %w", err)
 	}
+	// Assign generation before spawning the watcher so the watcher can capture
+	// it atomically. The generation survives removeByID and advances on every
+	// (re)start, letting stale watchers detect they are no longer the owner.
+	r.mu.Lock()
+	r.generationByID[desc.ID]++
+	gen := r.generationByID[desc.ID]
+	r.mu.Unlock()
+	entry.generation = gen
+
 	if entry.cmd != nil {
 		// Health check passed — safe to launch the watcher now. Starting it
 		// before the health check would race with gracefulStop (both call
 		// cmd.Wait). Exponential backoff: 1s → 5s → 30s, max 3 retries.
 		done := make(chan struct{})
 		entry.cmdDone = done
-		go r.watchPlugin(serverCtx, entry.pluginDir, desc, entry.cmd, done)
+		go r.watchPlugin(serverCtx, entry.pluginDir, desc, entry.cmd, done, gen)
 	}
 	entry.healthy = true
 	r.mu.Lock()
@@ -295,6 +314,20 @@ func (r *Registry) isIntentionalStop(id string) bool {
 		}
 	}
 	return true
+}
+
+// isStaleGeneration reports whether the registry no longer holds an entry for id
+// at the given generation. An absent entry or a newer generation both return true,
+// meaning the watcher that owns myGen must not touch the registry for this id.
+func (r *Registry) isStaleGeneration(id string, myGen int) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			return r.plugins[i].generation != myGen
+		}
+	}
+	return true // absent = stale
 }
 
 // Shutdown stops all plugin processes that were started by Load.
@@ -465,19 +498,21 @@ const maxPluginRestarts = 3
 
 var restartBackoff = []time.Duration{1 * time.Second, 5 * time.Second, 30 * time.Second}
 
-func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descriptor, cmd *exec.Cmd, done chan<- struct{}) {
+func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descriptor, cmd *exec.Cmd, done chan<- struct{}, myGen int) {
 	restartCount := 0
 	current := cmd
+	// currentDone is the channel we close when the current process exits.
+	// Starts as the initial done from startEntry; updated to a fresh channel on
+	// each restart so gracefulStop always waits on the live process (fix P3).
+	currentDone := done
 
-	firstWait := true
 	for {
 		err := current.Wait()
-		if firstWait {
-			// Signal Shutdown that the initial cmd has exited. Must happen exactly
-			// once so Shutdown's gracefulStop doesn't hang on a never-closed channel.
-			close(done)
-			firstWait = false
-		}
+		// Close the done channel for this process so Shutdown/StopOne can unblock.
+		// On the first iteration this closes the original done from startEntry;
+		// on subsequent iterations it closes the per-restart channel stored on the entry.
+		close(currentDone)
+
 		if r.isIntentionalStop(desc.ID) {
 			return
 		}
@@ -508,7 +543,11 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		case <-time.After(delay):
 		}
 
-		// Re-check after backoff — StopOne may have been called while sleeping.
+		// Re-check after backoff: a concurrent deactivate+reactivate (fix P2) or a
+		// plain StopOne may have raced while we slept.
+		if r.isStaleGeneration(desc.ID, myGen) {
+			return
+		}
 		if r.isIntentionalStop(desc.ID) {
 			return
 		}
@@ -538,12 +577,17 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		restartCount++
 		slog.Info("plugin: restarted successfully", "id", desc.ID, "restartCount", restartCount)
 
+		// Fresh done channel for the restarted process (fix P3): gracefulStop must
+		// wait on the live channel, not the already-closed original one.
+		rawNewDone := make(chan struct{})
+
 		r.mu.Lock()
 		recordedNewCmd := false
 		for i := range r.plugins {
 			if r.plugins[i].Descriptor.ID == desc.ID {
-				if r.plugins[i].intentionalStop {
-					// StopOne was called during the backoff window — clean up the new process.
+				// Bail if a fresh lifecycle has taken over (fix P2) or if StopOne
+				// was called during the backoff window.
+				if r.plugins[i].generation != myGen || r.plugins[i].intentionalStop {
 					r.mu.Unlock()
 					gracefulStop(newCmd, nil)
 					return
@@ -551,6 +595,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 				r.plugins[i].cmd = newCmd
 				r.plugins[i].restartCount = restartCount
 				r.plugins[i].healthy = true
+				r.plugins[i].cmdDone = rawNewDone
 				recordedNewCmd = true
 				break
 			}
@@ -564,6 +609,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		}
 
 		current = newCmd
+		currentDone = rawNewDone
 	}
 }
 

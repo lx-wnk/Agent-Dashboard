@@ -104,9 +104,10 @@ Preparing the first public release.
   it works while the server is down and is the **lockout-safe recovery path** (e.g.
   `dashboard settings set auth.mode none`). DB resolution: `--db` → `DASHBOARD_DB_PATH`
   → `~/.claude/dashboard-tasks.db`.
-- Live **plugin enable/disable** from the Plugins settings panel — discovered plugins
-  now default to **all-off** and are activated individually via the lifecycle endpoints
-  (`POST /api/plugins/{id}/activate|deactivate`), applied live without a restart.
+- Live **plugin enable/disable** via the lifecycle API — discovered plugins now default
+  to **all-off** and are activated individually via the backend lifecycle endpoints
+  (`POST /api/plugins/{id}/activate|deactivate`), applied live without a server restart.
+  The Plugins settings-panel toggle that drives these endpoints is wired in SP4b.
 
 ### Changed
 
