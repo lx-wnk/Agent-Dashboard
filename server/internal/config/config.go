@@ -107,6 +107,8 @@ func Load(cfgFile string) (Config, error) {
 	// export always wins over the file. Absence is fine — the file is optional.
 	if err := godotenv.Load(); err == nil {
 		slog.Info("loaded configuration from .env file")
+	} else if !os.IsNotExist(err) {
+		slog.Warn("failed to parse .env file — its values were ignored", "err", err)
 	}
 
 	k := koanf.New(".")
