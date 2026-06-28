@@ -45,7 +45,7 @@ type Entry struct {
 	cmdDone      chan struct{}
 	BaseURL      string // http://{addr}
 	restartCount int
-	pluginDir string // directory containing plugin.json, needed for restarts
+	pluginDir    string // directory containing plugin.json, needed for restarts
 
 	// healthy is true once the process passed its health check and false once a
 	// give-up path (exhausted restarts / failed restart) marks it dead. The

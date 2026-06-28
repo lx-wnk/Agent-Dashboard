@@ -126,7 +126,7 @@ func newInstalledRepo(events *[]string) *eventRepo {
 
 func (r *eventRepo) SetActive(_ context.Context, _ string, active bool) error {
 	*r.events = append(*r.events, fmt.Sprintf("setActive:%v", active))
-	r.fakePluginRepo.active = active
+	r.active = active
 	return nil
 }
 

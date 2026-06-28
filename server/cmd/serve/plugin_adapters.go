@@ -118,8 +118,10 @@ func (a pluginDiscoverRepoAdapter) Remove(ctx context.Context, id string) error 
 // process lifecycle without the plugin package importing pluginlifecycle.
 type pluginProcessAdapter struct{ reg *plugin.Registry }
 
-func (a pluginProcessAdapter) Start(ctx context.Context, id string) error { return a.reg.StartOne(ctx, id) }
-func (a pluginProcessAdapter) Stop(_ context.Context, id string) error    { return a.reg.StopOne(id) }
+func (a pluginProcessAdapter) Start(ctx context.Context, id string) error {
+	return a.reg.StartOne(ctx, id)
+}
+func (a pluginProcessAdapter) Stop(_ context.Context, id string) error { return a.reg.StopOne(id) }
 func (a pluginProcessAdapter) WithTransient(ctx context.Context, id string, fn func() error) error {
 	return a.reg.WithTransient(ctx, id, fn)
 }
