@@ -28,6 +28,9 @@ type Registry struct {
 	dir                   string
 	plugins               []Entry
 	attemptedCapabilities map[string]bool // capabilities seen in any plugin.json, regardless of health
+	enabled               func(id string) bool
+	serverCtx             context.Context
+	hooks                 Hooks
 }
 
 // Entry is a loaded plugin with its descriptor and running process (if started by us).
@@ -54,6 +57,17 @@ func New(dir string) *Registry {
 	}
 }
 
+// SetEnabled installs the predicate that decides which plugins Load starts and
+// records. Defaults to all-enabled if never set (callers should set it).
+func (r *Registry) SetEnabled(fn func(id string) bool) { r.enabled = fn }
+
+func (r *Registry) isEnabled(id string) bool {
+	if r.enabled == nil {
+		return true
+	}
+	return r.enabled(id)
+}
+
 // Load scans dir, starts each plugin process, and performs health checks.
 // Call once during server startup. serverCtx is the server's lifetime context
 // and is cancelled on SIGTERM/SIGINT. Health checks run with an internal
@@ -61,6 +75,8 @@ func New(dir string) *Registry {
 func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 	startupCtx, cancel := context.WithTimeout(serverCtx, 30*time.Second)
 	defer cancel()
+	r.serverCtx = serverCtx
+	r.hooks = hooks
 	if r.dir == "" {
 		return nil
 	}
@@ -90,65 +106,129 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 			slog.Warn("plugin: skip — id must match ^[a-z0-9][a-z0-9-]*$", "dir", entry.Name(), "id", desc.ID)
 			continue
 		}
+		if !r.isEnabled(desc.ID) {
+			slog.Info("plugin: skip — disabled", "id", desc.ID)
+			continue
+		}
 		// Record every capability seen in plugin.json regardless of whether the
 		// plugin passes health-check. Used by HasAttemptedCapability so callers
 		// can distinguish "no plugin configured" from "plugin configured but broken".
 		for _, cap := range desc.Capabilities {
 			r.attemptedCapabilities[cap] = true
 		}
-		host, _, err := net.SplitHostPort(desc.Addr)
-		if err != nil {
-			slog.Warn("plugin: invalid addr format, skipping", "id", desc.ID, "addr", desc.Addr, "err", err)
-			continue
-		}
-		ip := net.ParseIP(host)
-		if ip == nil || !ip.IsLoopback() {
-			slog.Warn("plugin: addr must be loopback, skipping", "id", desc.ID, "addr", desc.Addr)
-			continue
-		}
-		pluginEntry := Entry{
-			Descriptor: desc,
-			BaseURL:    "http://" + desc.Addr,
-			pluginDir:  filepath.Join(r.dir, entry.Name()),
-		}
-		if len(desc.Command) > 0 {
-			cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
-			cmd.Dir = pluginEntry.pluginDir
-			cmd.Env = buildPluginEnv(desc.Env)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Start(); err != nil {
-				slog.Error("plugin: failed to start", "id", desc.ID, "err", err)
-				continue
-			}
-			pluginEntry.cmd = cmd
-		}
-		if err := r.waitHealthy(startupCtx, pluginEntry.BaseURL); err != nil {
-			slog.Error("plugin: health check failed", "id", desc.ID, "err", err)
-			if pluginEntry.cmd != nil {
-				gracefulStop(pluginEntry.cmd, nil)
-			}
+		pluginDir := filepath.Join(r.dir, entry.Name())
+		if err := r.startEntry(serverCtx, startupCtx, pluginDir, desc, hooks); err != nil {
+			slog.Error("plugin: skip — startup failed", "id", desc.ID, "err", err)
 			continue
 		}
 		slog.Info("plugin: loaded", "id", desc.ID, "capabilities", desc.Capabilities)
-		if pluginEntry.cmd != nil {
-			// Health check passed — safe to launch the watcher now. Starting it
-			// before the health check would race with gracefulStop (both call
-			// cmd.Wait). Exponential backoff: 1s → 5s → 30s, max 3 retries.
-			done := make(chan struct{})
-			pluginEntry.cmdDone = done
-			go r.watchPlugin(serverCtx, pluginEntry.pluginDir, desc, pluginEntry.cmd, done)
-		}
-		r.mu.Lock()
-		r.plugins = append(r.plugins, pluginEntry)
-		r.mu.Unlock()
+	}
+	return nil
+}
 
-		// Self-registration via hooks — notify callers about newly discovered capabilities.
-		if desc.HasCapability(CapAuthProvider) && hooks.SetAuth != nil {
-			loginURL := pluginEntry.BaseURL + "/login"
-			hooks.SetAuth(NewAuthProvider(pluginEntry), loginURL)
+// startEntry starts (if it has a Command), health-checks, registers, and wires
+// hooks for one descriptor. The caller holds no lock.
+func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir string, desc Descriptor, hooks Hooks) error {
+	host, _, err := net.SplitHostPort(desc.Addr)
+	if err != nil {
+		return fmt.Errorf("invalid addr %q: %w", desc.Addr, err)
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("addr %q must be loopback", desc.Addr)
+	}
+	entry := Entry{Descriptor: desc, BaseURL: "http://" + desc.Addr, pluginDir: pluginDir}
+	if len(desc.Command) > 0 {
+		cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
+		cmd.Dir = pluginDir
+		cmd.Env = buildPluginEnv(desc.Env)
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("start: %w", err)
+		}
+		entry.cmd = cmd
+	}
+	if err := r.waitHealthy(startupCtx, entry.BaseURL); err != nil {
+		if entry.cmd != nil {
+			gracefulStop(entry.cmd, nil)
+		}
+		return fmt.Errorf("health: %w", err)
+	}
+	if entry.cmd != nil {
+		// Health check passed — safe to launch the watcher now. Starting it
+		// before the health check would race with gracefulStop (both call
+		// cmd.Wait). Exponential backoff: 1s → 5s → 30s, max 3 retries.
+		done := make(chan struct{})
+		entry.cmdDone = done
+		go r.watchPlugin(serverCtx, entry.pluginDir, desc, entry.cmd, done)
+	}
+	r.mu.Lock()
+	r.plugins = append(r.plugins, entry)
+	r.mu.Unlock()
+	if desc.HasCapability(CapAuthProvider) && hooks.SetAuth != nil {
+		hooks.SetAuth(NewAuthProvider(entry), entry.BaseURL+"/login")
+	}
+	return nil
+}
+
+// StartOne starts a single plugin by id (reads its plugin.json fresh from the
+// dir). Used by the live-enable path. No-op if already running.
+func (r *Registry) StartOne(ctx context.Context, id string) error {
+	if !pluginIDRe.MatchString(id) {
+		return fmt.Errorf("plugin: invalid id %q", id)
+	}
+	r.mu.RLock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			r.mu.RUnlock()
+			return nil // already running
 		}
 	}
+	serverCtx, hooks := r.serverCtx, r.hooks
+	r.mu.RUnlock()
+	if serverCtx == nil {
+		serverCtx = ctx
+	}
+	descPath := filepath.Join(r.dir, id, "plugin.json")
+	data, err := os.ReadFile(descPath)
+	if err != nil {
+		return fmt.Errorf("plugin: read %s: %w", descPath, err)
+	}
+	var desc Descriptor
+	if err := json.Unmarshal(data, &desc); err != nil {
+		return fmt.Errorf("plugin: invalid plugin.json for %q: %w", id, err)
+	}
+	if desc.ID != id {
+		return fmt.Errorf("plugin: id mismatch in %s", descPath)
+	}
+	r.mu.Lock()
+	for _, c := range desc.Capabilities {
+		r.attemptedCapabilities[c] = true
+	}
+	r.mu.Unlock()
+	startupCtx, cancel := context.WithTimeout(serverCtx, 30*time.Second)
+	defer cancel()
+	return r.startEntry(serverCtx, startupCtx, filepath.Join(r.dir, id), desc, hooks)
+}
+
+// StopOne stops and deregisters a single plugin by id. No-op if not running.
+func (r *Registry) StopOne(id string) error {
+	r.mu.Lock()
+	var target *Entry
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			e := r.plugins[i]
+			target = &e
+			break
+		}
+	}
+	r.mu.Unlock()
+	if target == nil {
+		return nil
+	}
+	if target.cmd != nil {
+		gracefulStop(target.cmd, target.cmdDone)
+	}
+	r.removeByID(id)
 	return nil
 }
 

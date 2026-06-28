@@ -14,21 +14,8 @@ func TestLoad_ValidDefaultConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "127.0.0.1", cfg.Host)
 	assert.Equal(t, 13120, cfg.Port)
-	assert.Equal(t, 5, cfg.SpawnRateLimit)
-	assert.Equal(t, 60000, cfg.SpawnRateWindowMs)
-	assert.Equal(t, 3000, cfg.SSEIntervalMs)
-	assert.Equal(t, 100, cfg.HooksDebounceMs)
-	assert.Equal(t, 50, cfg.HookEventsPerSession)
 	// Auto-generated JWT secret must be 64 hex chars (32 bytes).
 	assert.Len(t, cfg.JWTSecret, 64)
-}
-
-func TestLoad_HookEventsPerSessionMustBePositive(t *testing.T) {
-	t.Setenv("DASHBOARD_HOOK_EVENTS_PER_SESSION", "0")
-
-	_, err := Load("")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "DASHBOARD_HOOK_EVENTS_PER_SESSION must be positive")
 }
 
 func TestLoad_DefaultsAppliedWhenEnvAbsent(t *testing.T) {
@@ -37,27 +24,26 @@ func TestLoad_DefaultsAppliedWhenEnvAbsent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, defaults.Host, cfg.Host)
 	assert.Equal(t, defaults.Port, cfg.Port)
-	assert.Equal(t, defaults.SSEIntervalMs, cfg.SSEIntervalMs)
-	assert.Equal(t, defaults.ShutdownTimeoutSeconds, cfg.ShutdownTimeoutSeconds)
-	assert.Equal(t, defaults.HooksDebounceMs, cfg.HooksDebounceMs)
-	assert.Equal(t, defaults.SpawnRateLimit, cfg.SpawnRateLimit)
-	assert.Equal(t, defaults.SpawnRateWindowMs, cfg.SpawnRateWindowMs)
 }
 
 func TestLoad_CustomValuesFromEnv(t *testing.T) {
 	t.Setenv("DASHBOARD_HOST", "localhost")
 	t.Setenv("DASHBOARD_PORT", "9090")
-	t.Setenv("DASHBOARD_SSE_INTERVAL_MS", "5000")
-	t.Setenv("DASHBOARD_SPAWN_RATE_LIMIT", "10")
-	t.Setenv("DASHBOARD_SPAWN_RATE_WINDOW_MS", "30000")
 
 	cfg, err := Load("")
 	require.NoError(t, err)
 	assert.Equal(t, "localhost", cfg.Host)
 	assert.Equal(t, 9090, cfg.Port)
-	assert.Equal(t, 5000, cfg.SSEIntervalMs)
-	assert.Equal(t, 10, cfg.SpawnRateLimit)
-	assert.Equal(t, 30000, cfg.SpawnRateWindowMs)
+}
+
+// A moved operational key set in the environment is ignored: Load still
+// succeeds and the field no longer exists on Config.
+func TestLoad_MovedKeyInEnvIsIgnoredAndWarned(t *testing.T) {
+	t.Setenv("DASHBOARD_SPAWN_RATE_LIMIT", "999")
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, "127.0.0.1", cfg.Host)
 }
 
 func TestLoad_JWTSecretTooShort(t *testing.T) {
@@ -160,45 +146,6 @@ func TestLoad_HooksSecretFromEnv_UsedAsIs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, secret, cfg.HooksSecret)
 }
-
-// -------------------------------------------------------------------
-// Eval config defaults and validation
-// -------------------------------------------------------------------
-
-func TestLoad_EvalDefaults(t *testing.T) {
-	cfg, err := Load("")
-	require.NoError(t, err)
-	assert.Equal(t, 3600000, cfg.EvalScanIntervalMs)
-	assert.Equal(t, 168, cfg.EvalWindowHours)
-	assert.Equal(t, 20, cfg.EvalMinSamples)
-	assert.InDelta(t, 15.0, cfg.EvalRateDropPP, 1e-9)
-	assert.InDelta(t, 3.0, cfg.EvalStddevK, 1e-9)
-}
-
-func TestLoad_EvalWindowHoursZero_ReturnsError(t *testing.T) {
-	t.Setenv("DASHBOARD_EVAL_WINDOW_HOURS", "0")
-
-	_, err := Load("")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "DASHBOARD_EVAL_WINDOW_HOURS must be > 0")
-}
-
-func TestLoad_ProvidersEnabled_CommaSplit(t *testing.T) {
-	t.Setenv("DASHBOARD_PROVIDERS_ENABLED", "codex,junie")
-
-	cfg, err := Load("")
-	require.NoError(t, err)
-	assert.Equal(t, []string{"codex", "junie"}, cfg.ProvidersEnabled)
-}
-
-func TestLoad_ProvidersEnabled_SingleValue(t *testing.T) {
-	t.Setenv("DASHBOARD_PROVIDERS_ENABLED", "codex")
-
-	cfg, err := Load("")
-	require.NoError(t, err)
-	assert.Equal(t, []string{"codex"}, cfg.ProvidersEnabled)
-}
-
 // -------------------------------------------------------------------
 // Native .env file loading (covers `task dev` via air and
 // `./bin/agent-dashboard serve`, both of which call config.Load)
@@ -206,19 +153,17 @@ func TestLoad_ProvidersEnabled_SingleValue(t *testing.T) {
 
 func TestLoad_DotEnvFileLoaded(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(dir+"/.env", []byte("DASHBOARD_FORCE_WORKTREES=true\nDASHBOARD_PORT=9191\n"), 0o600))
+	require.NoError(t, os.WriteFile(dir+"/.env", []byte("DASHBOARD_PORT=9191\n"), 0o600))
 	t.Chdir(dir)
 	// godotenv mutates the global process env permanently (unlike t.Setenv),
 	// so undo it to keep later tests in the same process clean.
 	t.Cleanup(func() {
-		os.Unsetenv("DASHBOARD_FORCE_WORKTREES") //nolint:errcheck
-		os.Unsetenv("DASHBOARD_PORT")            //nolint:errcheck
+		os.Unsetenv("DASHBOARD_PORT") //nolint:errcheck
 	})
 
 	cfg, err := Load("")
 	require.NoError(t, err)
-	assert.True(t, cfg.ForceWorktrees, ".env value must be loaded into config")
-	assert.Equal(t, 9191, cfg.Port)
+	assert.Equal(t, 9191, cfg.Port, ".env value must be loaded into config")
 }
 
 func TestLoad_ProcessEnvOverridesDotEnv(t *testing.T) {

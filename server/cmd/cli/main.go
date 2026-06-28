@@ -51,6 +51,7 @@ authenticate against POST /api/mcp.`,
 		newTasksCmd(&cfg),
 		newPipelineCmd(&cfg),
 		newConfigCmd(&cfg),
+		newSettingsCmd(),
 	)
 
 	if err := root.Execute(); err != nil {

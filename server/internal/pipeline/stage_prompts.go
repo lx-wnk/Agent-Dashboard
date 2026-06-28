@@ -20,8 +20,8 @@ Then call the ` + "`request_permission`" + ` MCP tool ONCE with the full ` + "`p
 NEVER write prose like "please grant me X" — only ` + "`request_permission`" + ` is actionable.`
 
 // ImplementationPrompt builds the system+user prompt for the implementation stage.
-func ImplementationPrompt(t *ent.Task, conceptOutput map[string]any, reviewFeedback string) PromptBundle {
-	allowGitPush := IsGitPushAllowed(t)
+func ImplementationPrompt(t *ent.Task, conceptOutput map[string]any, reviewFeedback string, allowGitPushGlobal bool) PromptBundle {
+	allowGitPush := IsGitPushAllowed(t, allowGitPushGlobal)
 	pushLine := "Commit your work via git when done — but NEVER `git push`; pushing is the user's responsibility."
 	if allowGitPush {
 		pushLine = "Commit AND push (`git push`) are permitted for this task — push your feature branch when work is complete."

@@ -68,6 +68,7 @@ type Handler struct {
 	broadcaster       *sse.TaskBroadcaster
 	worktreeMgr       WorktreeStatusProvider
 	refineReader      RefineStatusReader
+	allowGitPull      bool
 }
 
 // Deps groups all constructor dependencies.
@@ -93,6 +94,9 @@ type Deps struct {
 	Broadcaster       *sse.TaskBroadcaster
 	WorktreeMgr       WorktreeStatusProvider
 	RefineReader      RefineStatusReader
+	// AllowGitPull permits the git "pull" action; resolved from the git.allowPull
+	// setting at startup (ApplyRestart).
+	AllowGitPull bool
 }
 
 func NewHandler(deps Deps) *Handler {
@@ -114,6 +118,7 @@ func NewHandler(deps Deps) *Handler {
 		broadcaster:       deps.Broadcaster,
 		worktreeMgr:       deps.WorktreeMgr,
 		refineReader:      deps.RefineReader,
+		allowGitPull:      deps.AllowGitPull,
 	}
 }
 

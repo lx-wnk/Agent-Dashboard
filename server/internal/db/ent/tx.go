@@ -16,6 +16,8 @@ type Tx struct {
 	AgentCostTrend *AgentCostTrendClient
 	// ApiKey is the client for interacting with the ApiKey builders.
 	ApiKey *ApiKeyClient
+	// AppSetting is the client for interacting with the AppSetting builders.
+	AppSetting *AppSettingClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
 	// CoordLock is the client for interacting with the CoordLock builders.
@@ -191,6 +193,7 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.AgentCostTrend = NewAgentCostTrendClient(tx.config)
 	tx.ApiKey = NewApiKeyClient(tx.config)
+	tx.AppSetting = NewAppSettingClient(tx.config)
 	tx.AuditEvent = NewAuditEventClient(tx.config)
 	tx.CoordLock = NewCoordLockClient(tx.config)
 	tx.DriftAlert = NewDriftAlertClient(tx.config)

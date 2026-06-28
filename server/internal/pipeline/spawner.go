@@ -62,6 +62,10 @@ type SpawnAgentOptions struct {
 	// to the `claude` CLI as `--add-dir <path>`. The default folder is already
 	// the cwd and must NOT appear here.
 	AdditionalDirs []string
+
+	// AllowGitPush is the global git-push setting ("git.allowPush"). Combined with
+	// the per-task metadata override inside IsGitPushAllowed.
+	AllowGitPush bool
 }
 
 type SpawnResult struct {
@@ -477,13 +481,16 @@ func (l *stderrLogger) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func IsGitPushAllowed(t *ent.Task) bool {
+// IsGitPushAllowed reports whether the task may run `git push`: true when the
+// task opts in via metadata["allowGitPush"], or when the global setting
+// (git.allowPush) is enabled.
+func IsGitPushAllowed(t *ent.Task, allowGitPushGlobal bool) bool {
 	if t.Metadata != nil {
 		if v, ok := t.Metadata["allowGitPush"].(bool); ok && v {
 			return true
 		}
 	}
-	return os.Getenv("DASHBOARD_ALLOW_GIT_PUSH") == "true"
+	return allowGitPushGlobal
 }
 
 func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
@@ -491,7 +498,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	if opts.Task.WorktreePath != nil && *opts.Task.WorktreePath != "" {
 		cwd = *opts.Task.WorktreePath
 	}
-	allowGitPush := IsGitPushAllowed(opts.Task)
+	allowGitPush := IsGitPushAllowed(opts.Task, opts.AllowGitPush)
 	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush)
 	if err != nil {
 		slog.Warn("writeSettingsFile failed — continuing without pre-approved allow-list", "err", err)

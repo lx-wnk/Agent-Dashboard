@@ -30,7 +30,7 @@ Preparing the first public release.
   the highest-priority non-empty group is expanded (Active, else Waiting, else Idle,
   else Finished); the rest start collapsed. Collapsed state is remembered per grouping
   mode in localStorage and survives live re-renders.
-- Opt-in monitoring of Codex CLI, Gemini CLI, Junie CLI, and pi.dev agents via a declarative provider registry (off by default; enable with DASHBOARD_PROVIDERS_ENABLED or custom descriptors in DASHBOARD_PROVIDER_DIR). pi.dev's per-session JSONL (`~/.pi/agent/sessions/`) carries token usage, model, provider, and cost per turn.
+- Opt-in monitoring of Codex CLI, Gemini CLI, Junie CLI, and pi.dev agents via a declarative provider registry (off by default; enable via the `providers.enabled` runtime setting or custom descriptors in `DASHBOARD_PROVIDER_DIR`). pi.dev's per-session JSONL (`~/.pi/agent/sessions/`) carries token usage, model, provider, and cost per turn.
 - Ollama-backed local models are now reported at $0 cost instead of unknown.
 - Agents now show an animated **Working** badge while actively generating — derived from conversation turn-state plus live tmux/pty output — distinct from the idle/waiting staleness states.
 - Agents spawned from the dashboard now run as interactive **live** sessions (tmux when available, headless pty broker otherwise) so you can converse with them live, instead of a one-shot run. The spawned agent's chat opens automatically once it appears.
@@ -90,6 +90,19 @@ Preparing the first public release.
 - Community health files: `SECURITY.md`, `CODE_OF_CONDUCT.md`, Dependabot config,
   and `FUNDING.yml`.
 - Settings → Providers panel to enable or disable Codex/Gemini/Junie monitoring per provider, persisted in the database and applied within one scan tick.
+- **DB-backed settings store**: operational config (auth mode, rate limits, scan
+  intervals, plugin/provider enablement, `git.allowPush`, `git.allowPull`,
+  `spawn.allowedCommands`, `worktree.force`,
+  eval/drift tuning, …) now lives in the database `app_setting` table — the single
+  source of truth is `server/internal/settings/registry.go`. Edit it in the new
+  generic **Server** settings panel (registry-driven) or via the new direct-DB
+  `dashboard settings list|get|set` CLI. The CLI edits the SQLite file directly, so
+  it works while the server is down and is the **lockout-safe recovery path** (e.g.
+  `dashboard settings set auth.mode none`). DB resolution: `--db` → `DASHBOARD_DB_PATH`
+  → `~/.claude/dashboard-tasks.db`.
+- Live **plugin enable/disable** from the Plugins settings panel — discovered plugins
+  now default to **all-off** and are toggled individually (`plugins.enabled`), applied
+  live without a restart.
 
 ### Changed
 
@@ -101,6 +114,31 @@ Preparing the first public release.
   agent-modal summary uses a higher-contrast token.
 - SSE poll and retry intervals are centralized in `src/utils/sse.ts` instead of
   being hard-coded at call sites.
+- **BREAKING — env vars moved to DB-backed settings.** These `DASHBOARD_*` variables
+  are **no longer read** from the environment; configure them in the Settings UI or
+  with `dashboard settings set <key> <value>` (a still-set env var is ignored and
+  logs a warning on boot): `DASHBOARD_AUTH` → `auth.mode`,
+  `DASHBOARD_PROVIDERS_ENABLED` → `providers.enabled`,
+  `DASHBOARD_ALLOW_GIT_PUSH` → `git.allowPush`,
+  `DASHBOARD_ALLOW_GIT_PULL` → `git.allowPull`,
+  `DASHBOARD_FORCE_WORKTREES` → `worktree.force`,
+  `DASHBOARD_SSE_INTERVAL_MS` → `sse.intervalMs`,
+  `DASHBOARD_SHUTDOWN_TIMEOUT_SECONDS` → `shutdown.timeoutSeconds`,
+  `DASHBOARD_HOOKS_DEBOUNCE_MS` → `hooks.debounceMs`,
+  `DASHBOARD_HOOK_EVENTS_PER_SESSION` → `hooks.eventsPerSession`,
+  `DASHBOARD_SPAWN_RATE_LIMIT` / `DASHBOARD_SPAWN_RATE_WINDOW_MS` →
+  `spawn.rateLimit` / `spawn.rateWindowMs`,
+  `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` → `spawn.allowedCommands`,
+  `DASHBOARD_INJECT_RATE_LIMIT` / `DASHBOARD_INJECT_RATE_WINDOW_MS` →
+  `inject.rateLimit` / `inject.rateWindowMs`,
+  `DASHBOARD_COST_SCAN_INTERVAL_MS` → `cost.scanIntervalMs`, and the
+  `DASHBOARD_EVAL_*` family → `eval.scanIntervalMs` / `eval.windowHours` /
+  `eval.minSamples` / `eval.rateDropPP` / `eval.stddevK`.
+- **BREAKING — plugins now default to all-off.** Previously every plugin found in the
+  plugin directory loaded automatically; you must now enable each plugin explicitly
+  (Plugins settings panel or `plugins.enabled`).
+- Apply semantics: plugin and provider enablement apply **live**; all other settings —
+  **including `auth.mode`** — require a **server restart** to take effect.
 
 ### Removed
 

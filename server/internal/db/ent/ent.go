@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
@@ -97,6 +98,7 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			agentcosttrend.Table:     agentcosttrend.ValidColumn,
 			apikey.Table:             apikey.ValidColumn,
+			appsetting.Table:         appsetting.ValidColumn,
 			auditevent.Table:         auditevent.ValidColumn,
 			coordlock.Table:          coordlock.ValidColumn,
 			driftalert.Table:         driftalert.ValidColumn,

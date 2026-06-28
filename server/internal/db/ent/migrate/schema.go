@@ -69,6 +69,20 @@ var (
 			},
 		},
 	}
+	// AppSettingsColumns holds the columns for the "app_settings" table.
+	AppSettingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "key", Type: field.TypeString, Unique: true},
+		{Name: "value", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// AppSettingsTable holds the schema information for the "app_settings" table.
+	AppSettingsTable = &schema.Table{
+		Name:       "app_settings",
+		Columns:    AppSettingsColumns,
+		PrimaryKey: []*schema.Column{AppSettingsColumns[0]},
+	}
 	// AuditEventsColumns holds the columns for the "audit_events" table.
 	AuditEventsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -741,6 +755,7 @@ var (
 	Tables = []*schema.Table{
 		AgentCostTrendsTable,
 		APIKeysTable,
+		AppSettingsTable,
 		AuditEventsTable,
 		CoordLocksTable,
 		DriftAlertsTable,

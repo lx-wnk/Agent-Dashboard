@@ -37,6 +37,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/schedules"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
+	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
@@ -149,11 +150,13 @@ type RouterDeps struct {
 	VisualizationsHandler *visualizations.Handler
 	AdapterHandler        *adapters.Handler
 	ProvidersHandler      *providersapi.Handler
+	SettingsHandler       *settingsapi.Handler
 	MCPHandler            http.Handler
 	ChannelReply          *agents.ChannelReplyHandler
 	ChannelStageOutput    *agents.ChannelStageOutputHandler
 	PermissionPresetRepo  repo.PermissionPresetRepo
 	PluginRegistry        *plugin.Registry
+	PluginsHandler        *apiplugins.Handler
 	AuditEventRepo        repo.AuditEventRepo
 }
 
@@ -277,6 +280,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.ProvidersHandler != nil {
 			r.Get("/api/providers", ErrorMiddleware(deps.ProvidersHandler.List))
 			r.Patch("/api/providers/{id}", ErrorMiddleware(deps.ProvidersHandler.Patch))
+		}
+
+		if deps.SettingsHandler != nil {
+			deps.SettingsHandler.Mount(r)
 		}
 
 		// Projects + ProjectFolders — JWT-protected (no admin gate required).
@@ -425,9 +432,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// their assets (route handlers, ui-manifest + slot modules) through the same
 		// per-plugin proxy mount; All() yields each entry once, so the union is
 		// deduplicated by construction.
+		if deps.PluginsHandler != nil {
+			deps.PluginsHandler.Mount(r)
+		}
 		if deps.PluginRegistry != nil {
-			pluginsHandler := apiplugins.New(deps.PluginRegistry)
-			pluginsHandler.Mount(r)
 			for _, entry := range deps.PluginRegistry.All() {
 				d := entry.Descriptor
 				if !d.HasCapability(plugin.CapRouteExtension) && !d.HasCapability(plugin.CapUIExtension) {

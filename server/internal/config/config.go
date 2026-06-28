@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/knadh/koanf/parsers/json"
@@ -20,50 +19,25 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/worktree"
 )
 
-// Config holds all server configuration. Keys match environment variable
-// names after stripping the DASHBOARD_ prefix and lowercasing.
+// Config holds bootstrap and secret configuration. Operational config now lives
+// in the DB-backed settings registry; these keys are the only ones still read
+// from the environment. Keys match environment variable names after stripping
+// the DASHBOARD_ prefix and lowercasing.
 type Config struct {
-	Host                   string  `koanf:"host"`
-	Port                   int     `koanf:"port"`
-	JWTSecret              string  `koanf:"jwt_secret"`
-	DBPath                 string  `koanf:"db_path"`
-	SSEIntervalMs          int     `koanf:"sse_interval_ms"`
-	ShutdownTimeoutSeconds int     `koanf:"shutdown_timeout_seconds"`
-	PluginDir              string  `koanf:"plugin_dir"`
+	Host      string `koanf:"host"`
+	Port      int    `koanf:"port"`
+	JWTSecret string `koanf:"jwt_secret"`
+	DBPath    string `koanf:"db_path"`
+	PluginDir string `koanf:"plugin_dir"`
 	// ProviderDir is an optional directory of user provider descriptors merged
 	// over the built-ins. Set via DASHBOARD_PROVIDER_DIR.
-	ProviderDir string `koanf:"provider_dir"`
-	// ProvidersEnabled is the explicit allowlist of enabled provider ids until
-	// the DB-backed Settings UI lands. Set via DASHBOARD_PROVIDERS_ENABLED as a
-	// comma list, e.g. "codex,junie".
-	ProvidersEnabled []string `koanf:"providers_enabled"`
-	AllowGitPush           bool    `koanf:"allow_git_push"`
-	HooksSecret            string  `koanf:"hooks_secret"`
-	HooksDebounceMs        int     `koanf:"hooks_debounce_ms"`
-	// HookEventsPerSession caps how many recent lifecycle-hook events the
-	// in-memory receiver retains per session. Set via DASHBOARD_HOOK_EVENTS_PER_SESSION.
-	HookEventsPerSession   int     `koanf:"hook_events_per_session"`
-	SpawnRateLimit         int     `koanf:"spawn_rate_limit"`
-	SpawnRateWindowMs      int     `koanf:"spawn_rate_window_ms"`
-	InjectRateLimit        int     `koanf:"inject_rate_limit"`
-	InjectRateWindowMs     int     `koanf:"inject_rate_window_ms"`
-	CostScanIntervalMs     int     `koanf:"cost_scan_interval_ms"`
-	EvalScanIntervalMs     int     `koanf:"eval_scan_interval_ms"`
-	EvalWindowHours        int     `koanf:"eval_window_hours"`
-	EvalMinSamples         int     `koanf:"eval_min_samples"`
-	EvalRateDropPP         float64 `koanf:"eval_rate_drop_pp"`
-	EvalStddevK            float64 `koanf:"eval_stddev_k"`
-	MCPToken               string  `koanf:"mcp_token"`
-	WorktreeRoot           string  `koanf:"worktree_root"`
-	ForceWorktrees         bool    `koanf:"force_worktrees"`
+	ProviderDir  string `koanf:"provider_dir"`
+	WorktreeRoot string `koanf:"worktree_root"`
+	HooksSecret  string `koanf:"hooks_secret"`
+	MCPToken     string `koanf:"mcp_token"`
 	// RemotesEnabled allows binding to a non-loopback address. Set via DASHBOARD_REMOTES_ENABLED=true.
 	// Must be explicitly opted in because the dashboard exposes sensitive Claude session data.
 	RemotesEnabled bool `koanf:"remotes_enabled"`
-	// Auth controls authentication mode.
-	// "none" (default) — bypass auth, no login required.
-	// "plugin" — require OAuth via an auth_provider plugin (GitHub, Office365, etc.).
-	// "github" — deprecated alias for "plugin"; accepted for backwards compatibility.
-	Auth string `koanf:"auth"`
 	// AuthPluginSecret is the shared secret between core and auth plugins.
 	// Set via DASHBOARD_AUTH_PLUGIN_SECRET. When set, enables POST /api/auth/session
 	// so an external auth plugin can establish sessions after completing OAuth.
@@ -75,25 +49,10 @@ type Config struct {
 func Defaults() Config {
 	home, _ := os.UserHomeDir()
 	return Config{
-		Host:                   "127.0.0.1",
-		Port:                   13120,
-		DBPath:                 home + "/.claude/dashboard-tasks.db",
-		WorktreeRoot:           home + "/" + worktree.DefaultRootDirName,
-		SSEIntervalMs:          3000,
-		CostScanIntervalMs:     300000,
-		EvalScanIntervalMs:     3600000,
-		EvalWindowHours:        168,
-		EvalMinSamples:         20,
-		EvalRateDropPP:         15,
-		EvalStddevK:            3,
-		ShutdownTimeoutSeconds: 10,
-		HooksDebounceMs:        100,
-		HookEventsPerSession:   50,
-		SpawnRateLimit:         5,
-		SpawnRateWindowMs:      60000,
-		InjectRateLimit:        30,
-		InjectRateWindowMs:     60000,
-		Auth:                   "none",
+		Host:         "127.0.0.1",
+		Port:         13120,
+		DBPath:       home + "/.claude/dashboard-tasks.db",
+		WorktreeRoot: home + "/" + worktree.DefaultRootDirName,
 	}
 }
 
@@ -116,23 +75,10 @@ func Load(cfgFile string) (Config, error) {
 
 	// Load defaults as base
 	defaults := map[string]any{
-		"host":                     cfg.Host,
-		"port":                     cfg.Port,
-		"db_path":                  cfg.DBPath,
-		"sse_interval_ms":          cfg.SSEIntervalMs,
-		"cost_scan_interval_ms":    cfg.CostScanIntervalMs,
-		"eval_scan_interval_ms":    cfg.EvalScanIntervalMs,
-		"eval_window_hours":        cfg.EvalWindowHours,
-		"eval_min_samples":         cfg.EvalMinSamples,
-		"eval_rate_drop_pp":        cfg.EvalRateDropPP,
-		"eval_stddev_k":            cfg.EvalStddevK,
-		"shutdown_timeout_seconds": cfg.ShutdownTimeoutSeconds,
-		"hooks_debounce_ms":        cfg.HooksDebounceMs,
-		"hook_events_per_session":  cfg.HookEventsPerSession,
-		"spawn_rate_limit":         cfg.SpawnRateLimit,
-		"spawn_rate_window_ms":     cfg.SpawnRateWindowMs,
-		"inject_rate_limit":        cfg.InjectRateLimit,
-		"inject_rate_window_ms":    cfg.InjectRateWindowMs,
+		"host":          cfg.Host,
+		"port":          cfg.Port,
+		"db_path":       cfg.DBPath,
+		"worktree_root": cfg.WorktreeRoot,
 	}
 	if err := k.Load(confmap.Provider(defaults, "."), nil); err != nil {
 		return Config{}, fmt.Errorf("config defaults: %w", err)
@@ -156,46 +102,7 @@ func Load(cfgFile string) (Config, error) {
 		return Config{}, fmt.Errorf("config unmarshal: %w", err)
 	}
 
-	// koanf does not split comma env vars into []string automatically; split here.
-	if len(cfg.ProvidersEnabled) == 1 && strings.Contains(cfg.ProvidersEnabled[0], ",") {
-		parts := strings.Split(cfg.ProvidersEnabled[0], ",")
-		cfg.ProvidersEnabled = make([]string, 0, len(parts))
-		for _, p := range parts {
-			if s := strings.TrimSpace(p); s != "" {
-				cfg.ProvidersEnabled = append(cfg.ProvidersEnabled, s)
-			}
-		}
-	}
-
-	// Validate auth mode. "github" is a deprecated alias for "plugin".
-	switch cfg.Auth {
-	case "none", "plugin":
-		// valid
-	case "github":
-		slog.Warn("DASHBOARD_AUTH=github is deprecated — use DASHBOARD_AUTH=plugin instead")
-		cfg.Auth = "plugin"
-	default:
-		return Config{}, fmt.Errorf("config: DASHBOARD_AUTH must be \"none\" or \"plugin\", got %q", cfg.Auth)
-	}
-
-	if cfg.EvalWindowHours <= 0 {
-		return Config{}, fmt.Errorf("config: DASHBOARD_EVAL_WINDOW_HOURS must be > 0, got %d", cfg.EvalWindowHours)
-	}
-	if cfg.EvalMinSamples < 0 {
-		return Config{}, fmt.Errorf("config: DASHBOARD_EVAL_MIN_SAMPLES must be >= 0, got %d", cfg.EvalMinSamples)
-	}
-	if cfg.EvalRateDropPP < 0 {
-		return Config{}, fmt.Errorf("config: DASHBOARD_EVAL_RATE_DROP_PP must be >= 0, got %g", cfg.EvalRateDropPP)
-	}
-	if cfg.EvalStddevK < 0 {
-		return Config{}, fmt.Errorf("config: DASHBOARD_EVAL_STDDEV_K must be >= 0, got %g", cfg.EvalStddevK)
-	}
-
-	// Reject a non-positive per-session hook cap — a zero or negative ring would
-	// drop every event or behave unpredictably.
-	if cfg.HookEventsPerSession < 1 {
-		return Config{}, fmt.Errorf("config: DASHBOARD_HOOK_EVENTS_PER_SESSION must be positive, got %d", cfg.HookEventsPerSession)
-	}
+	warnOnMovedEnvKeys()
 
 	// Reject operator-set JWT secrets that are too short (< 32 chars).
 	// The auto-generated secret is always 64 hex chars so this only fires for short manually-set values.
@@ -249,11 +156,6 @@ func (c Config) IsLoopback() bool {
 	return c.Host == "127.0.0.1" || c.Host == "::1" || c.Host == "localhost"
 }
 
-// ShutdownTimeout returns the graceful shutdown duration.
-func (c Config) ShutdownTimeout() time.Duration {
-	return time.Duration(c.ShutdownTimeoutSeconds) * time.Second
-}
-
 // Addr returns the bind address string.
 func (c Config) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
@@ -267,6 +169,27 @@ func (c Config) CallbackURL() string {
 		scheme = "https"
 	}
 	return fmt.Sprintf("%s://%s/api/auth/callback", scheme, c.Addr())
+}
+
+// warnOnMovedEnvKeys logs a warning for any DASHBOARD_ env var whose value moved
+// to the DB-backed settings registry and is therefore no longer read here.
+func warnOnMovedEnvKeys() {
+	movedKeys := []string{
+		"DASHBOARD_AUTH", "DASHBOARD_PROVIDERS_ENABLED", "DASHBOARD_ALLOW_GIT_PUSH",
+		"DASHBOARD_ALLOW_GIT_PULL", "DASHBOARD_SPAWNER_ALLOWED_COMMANDS",
+		"DASHBOARD_FORCE_WORKTREES", "DASHBOARD_SSE_INTERVAL_MS", "DASHBOARD_SHUTDOWN_TIMEOUT_SECONDS",
+		"DASHBOARD_HOOKS_DEBOUNCE_MS", "DASHBOARD_HOOK_EVENTS_PER_SESSION",
+		"DASHBOARD_SPAWN_RATE_LIMIT", "DASHBOARD_SPAWN_RATE_WINDOW_MS",
+		"DASHBOARD_INJECT_RATE_LIMIT", "DASHBOARD_INJECT_RATE_WINDOW_MS",
+		"DASHBOARD_COST_SCAN_INTERVAL_MS", "DASHBOARD_EVAL_SCAN_INTERVAL_MS",
+		"DASHBOARD_EVAL_WINDOW_HOURS", "DASHBOARD_EVAL_MIN_SAMPLES",
+		"DASHBOARD_EVAL_RATE_DROP_PP", "DASHBOARD_EVAL_STDDEV_K",
+	}
+	for _, key := range movedKeys {
+		if _, ok := os.LookupEnv(key); ok {
+			slog.Warn("config: env var is no longer read — manage it via the Settings UI or 'dashboard settings set'", "key", key)
+		}
+	}
 }
 
 func randomHex(n int) (string, error) {

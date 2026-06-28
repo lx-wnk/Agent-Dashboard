@@ -189,8 +189,8 @@ func (h *Handler) gitActionHandler(w http.ResponseWriter, r *http.Request) error
 	if body.Action != "fetch" && body.Action != "pull" {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid action")
 	}
-	if body.Action == "pull" && os.Getenv("DASHBOARD_ALLOW_GIT_PULL") != "true" {
-		return apierr.NewAppError(http.StatusForbidden, "pull is disabled. Set DASHBOARD_ALLOW_GIT_PULL=true to enable.")
+	if body.Action == "pull" && !h.allowGitPull {
+		return apierr.NewAppError(http.StatusForbidden, "pull is disabled. Enable the git.allowPull setting to allow it.")
 	}
 	cwd := task.Cwd
 	if task.WorktreePath != nil && *task.WorktreePath != "" {

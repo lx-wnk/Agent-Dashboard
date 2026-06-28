@@ -3,18 +3,30 @@ package main
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
+	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 )
 
-func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider, pluginLoginURL string) api.RouterConfig {
-	bypassAuth := cfg.Auth == "none"
+// resolveBypassAuth derives the auth-bypass decision from settings.
+// A nil service (no DB) falls back to "none", which keeps bypass active.
+func resolveBypassAuth(settingsSvc *settings.Service) bool {
+	authMode := "none"
+	if settingsSvc != nil {
+		authMode = settingsSvc.String("auth.mode")
+	}
+	return authMode == "none"
+}
+
+func provideRouterConfig(cfg config.Config, settingsSvc *settings.Service, oauthProvider authpkg.OAuthProvider, pluginLoginURL string) api.RouterConfig {
+	bypassAuth := resolveBypassAuth(settingsSvc)
 	if bypassAuth {
-		slog.Info("auth bypass active — DASHBOARD_AUTH=none; all API requests allowed without login")
+		slog.Info("auth bypass active — auth.mode=none; all API requests allowed without login")
 	} else if oauthProvider == nil && pluginLoginURL == "" {
-		slog.Warn("DASHBOARD_AUTH=github but no auth provider configured — login will fail; configure DASHBOARD_PLUGIN_DIR with an auth plugin")
+		slog.Warn("auth.mode=plugin but no auth provider configured — login will fail; configure DASHBOARD_PLUGIN_DIR with an auth plugin")
 	}
 	return api.RouterConfig{
 		JWTSecret:          cfg.JWTSecret,
@@ -22,16 +34,17 @@ func provideRouterConfig(cfg config.Config, oauthProvider authpkg.OAuthProvider,
 		IsLoopback:         cfg.IsLoopback(),
 		BypassAuth:         bypassAuth,
 		HooksSecret:        cfg.HooksSecret,
-		HooksDebounceMs:    cfg.HooksDebounceMs,
-		SpawnRateLimit:     cfg.SpawnRateLimit,
-		SpawnRateWindowMs:  cfg.SpawnRateWindowMs,
-		InjectRateLimit:    cfg.InjectRateLimit,
-		InjectRateWindowMs: cfg.InjectRateWindowMs,
+		HooksDebounceMs:    settingsSvc.Int("hooks.debounceMs"),
+		SpawnRateLimit:     settingsSvc.Int("spawn.rateLimit"),
+		SpawnRateWindowMs:  settingsSvc.Int("spawn.rateWindowMs"),
+		InjectRateLimit:    settingsSvc.Int("inject.rateLimit"),
+		InjectRateWindowMs: settingsSvc.Int("inject.rateWindowMs"),
 		AuthPluginSecret:   cfg.AuthPluginSecret,
 		PluginLoginURL:     pluginLoginURL,
 	}
 }
 
-func provideServer(cfg config.Config, handler http.Handler) *api.Server {
-	return api.NewServer(cfg.Addr(), handler, cfg.ShutdownTimeout())
+func provideServer(cfg config.Config, settingsSvc *settings.Service, handler http.Handler) *api.Server {
+	shutdownTimeout := time.Duration(settingsSvc.Int("shutdown.timeoutSeconds")) * time.Second
+	return api.NewServer(cfg.Addr(), handler, shutdownTimeout)
 }

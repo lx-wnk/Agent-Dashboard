@@ -25,6 +25,14 @@ import (
 )
 
 // containsConsecutive returns true if args contains a followed immediately by b.
+// setAllowedCommands sets the spawner extra allow-list for the duration of the
+// test, resetting it afterwards.
+func setAllowedCommands(t *testing.T, cmds ...string) {
+	t.Helper()
+	services.SetSpawnerAllowedCommands(cmds)
+	t.Cleanup(func() { services.SetSpawnerAllowedCommands(nil) })
+}
+
 func containsConsecutive(args []string, a, b string) bool {
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == a && args[i+1] == b {
@@ -385,7 +393,7 @@ func TestSpawn_BodyModelOverridesSpawnerModelOverride(t *testing.T) {
 func TestSpawn_CustomAdapter_UsesSpawnerCommand(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "npx")
+	setAllowedCommands(t, "npx")
 	prevLook := lookTmuxPath
 	lookTmuxPath = func() string { return "" }
 	t.Cleanup(func() { lookTmuxPath = prevLook })
@@ -425,7 +433,7 @@ func TestSpawn_CustomAdapter_UsesSpawnerCommand(t *testing.T) {
 func TestSpawn_CustomAdapter_DisallowedCommandRejected(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "")
+	setAllowedCommands(t)
 
 	row := &ent.Spawner{
 		ID:          "spwn_bad",
@@ -448,7 +456,7 @@ func TestSpawn_EnvMerge_DashboardWins(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
 	t.Setenv("DASHBOARD_MCP_TOKEN", "from-dashboard")
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	setAllowedCommands(t, "claude")
 	prevLook := lookTmuxPath
 	lookTmuxPath = func() string { return "" }
 	t.Cleanup(func() { lookTmuxPath = prevLook })
@@ -498,7 +506,7 @@ func TestMergeEnv_NilSpawner_StripsSecrets(t *testing.T) {
 }
 
 func TestSpawn_CustomAdapter_ReservedFlagRejected(t *testing.T) {
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "npx")
+	setAllowedCommands(t, "npx")
 	row := &ent.Spawner{
 		ID: "spwn_bad", AdapterType: "custom", Command: "npx",
 		Args: []string{"--model", "anything"}, // reserved
@@ -519,7 +527,7 @@ func TestSpawn_CustomAdapter_ReservedFlagRejected(t *testing.T) {
 }
 
 func TestSpawn_CustomAdapter_ChannelArgOverride(t *testing.T) {
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "npx")
+	setAllowedCommands(t, "npx")
 	row := &ent.Spawner{
 		ID: "spwn_arg", AdapterType: "custom", Command: "npx",
 		AdapterConfig: map[string]string{"channel_arg": "--config"},
@@ -947,7 +955,7 @@ func TestSpawn_PermissionMode_SpawnerOwnsPermissionMode_NotDoubled(t *testing.T)
 	base := t.TempDir()
 	cwd, _ := filepath.EvalSymlinks(base)
 	t.Setenv("HOME", base)
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	setAllowedCommands(t, "claude")
 	prevLook := lookTmuxPath
 	lookTmuxPath = func() string { return "" }
 	t.Cleanup(func() { lookTmuxPath = prevLook })
@@ -984,7 +992,7 @@ func TestSpawn_PermissionMode_SpawnerDangerouslySkip_NotDoubled(t *testing.T) {
 	base := t.TempDir()
 	cwd, _ := filepath.EvalSymlinks(base)
 	t.Setenv("HOME", base)
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	setAllowedCommands(t, "claude")
 	prevLook := lookTmuxPath
 	lookTmuxPath = func() string { return "" }
 	t.Cleanup(func() { lookTmuxPath = prevLook })
@@ -1015,7 +1023,7 @@ func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {
 	t.Setenv("HOME", tmp)
 	t.Setenv("DASHBOARD_JWT_SECRET", "x")
 	t.Setenv("DASHBOARD_HOOKS_SECRET", "y")
-	t.Setenv("DASHBOARD_SPAWNER_ALLOWED_COMMANDS", "claude")
+	setAllowedCommands(t, "claude")
 	prevLook := lookTmuxPath
 	lookTmuxPath = func() string { return "" }
 	t.Cleanup(func() { lookTmuxPath = prevLook })

@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
+	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -34,6 +35,7 @@ func resolveAdditionalDirs(folderRepo repo.ProjectFolderRepo) func(ctx context.C
 
 func provideOrchestrator(
 	cfg config.Config,
+	settingsSvc *settings.Service,
 	client *ent.Client,
 	tb *sse.TaskBroadcaster,
 	systemPromptRepo repo.SystemPromptRepo,
@@ -70,7 +72,8 @@ func provideOrchestrator(
 		MCPToken:         cfg.MCPToken,
 		MCPUrl:           fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
 		WorktreeRoot:     cfg.WorktreeRoot,
-		ForceWorktrees:   cfg.ForceWorktrees,
+		ForceWorktrees:   settingsSvc.Bool("worktree.force"),
+		AllowGitPush:     settingsSvc.Bool("git.allowPush"),
 		SpawnFn:          pipeline.SpawnStageAgent,
 		EnsureWorktreeFn: pipeline.EnsureTaskWorktree,
 		RemoveWorktreeFn: func(ctx context.Context, task *ent.Task, force bool) error {

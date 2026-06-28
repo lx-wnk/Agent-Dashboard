@@ -1,6 +1,9 @@
 # Configuration
 
-All configuration is via environment variables. A documented template lives in [`.env.dist`](../../.env.dist) — copy it to `.env` and edit, or export the variables directly.
+Configuration comes from two places:
+
+1. **Bootstrap configuration** — host, port, secrets, and filesystem paths the server needs before it can read its own database. These live in environment variables (or a JSON config file). A documented template lives in [`.env.dist`](../../.env.dist).
+2. **Runtime settings** — operational config (auth mode, rate limits, scan intervals, plugin/provider enablement, …) stored in the database `app_setting` table. Edit these in the **Settings UI** or with the `dashboard settings` CLI. They are **no longer read from the environment** — a still-set env var for a moved key is ignored and logs a warning on boot.
 
 ```bash
 cp .env.dist .env
@@ -10,55 +13,105 @@ A `.env` file in the working directory is loaded automatically at startup for bo
 `task dev` and `./bin/agent-dashboard serve` — no manual sourcing needed. An explicit
 shell `export` always wins over a value in `.env`. The file is read from the current
 working directory (the repository root in the standard layout); run the binary from
-there, or export the variables, if you keep `.env` elsewhere.
+there, or export the variables, if you keep `.env` elsewhere. Only the bootstrap
+variables below are read from `.env`/env; runtime settings live in the database.
 
-## Core
+## Bootstrap configuration (env / flags)
+
+These are the only environment variables still read by the core server. They cannot be set through the Settings UI because they are needed before (or independently of) the database.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DASHBOARD_PORT` | `13120` | HTTP server port |
 | `DASHBOARD_HOST` | `127.0.0.1` | Bind address. A non-loopback address fails to boot unless `DASHBOARD_REMOTES_ENABLED=true` |
-| `DASHBOARD_DB_PATH` | `~/.claude/dashboard-tasks.db` | SQLite path for the task pipeline |
-| `DASHBOARD_WORKTREE_ROOT` | `~/.claude/dashboard-worktrees` | Per-task git worktree root |
-| `DASHBOARD_SSE_INTERVAL_MS` | `3000` | Agent SSE broadcast interval (ms) |
-| `DASHBOARD_CLAUDE_CONFIG_DIRS` | — | Comma-separated extra Claude config dirs to scan for sessions, e.g. `~/.claude-personal,~/.claude-work` |
-
-## Authentication
-
-| Variable | Default | Description |
-|---|---|---|
+| `DASHBOARD_PORT` | `13120` | HTTP server port |
 | `DASHBOARD_JWT_SECRET` | auto-generated (ephemeral) | Secret for signing JWT session tokens (min 32 chars). Set a stable value to survive restarts |
-| `DASHBOARD_GITHUB_CLIENT_ID` | — | GitHub OAuth app client ID. Omit for loopback dev — auth bypass activates automatically |
-| `DASHBOARD_GITHUB_CLIENT_SECRET` | — | GitHub OAuth app client secret |
-
-> When no GitHub OAuth is configured **and** the server is on loopback (the default), all API requests are allowed without login. This is safe for a single-user developer machine but means full local trust. For shared or multi-user machines, configure GitHub OAuth to enforce per-user authentication. See [Security](security.md).
-
-## Spawning & permissions
-
-| Variable | Default | Description |
-|---|---|---|
-| `DASHBOARD_SPAWN_RATE_LIMIT` | `5` | Max user-initiated spawns per window |
-| `DASHBOARD_SPAWN_RATE_WINDOW_MS` | `60000` | Spawn rate-limit window (ms) |
-| `DASHBOARD_INJECT_RATE_LIMIT` | `30` | Max live message injections per user per window (`429` on exceed) |
-| `DASHBOARD_INJECT_RATE_WINDOW_MS` | `60000` | Inject rate-limit window (ms) |
-| `DASHBOARD_INJECT_TOKEN_ROTATE_MS` | `300000` | Discovery bearer-token rotation interval (ms); `<= 0` disables. Previous token honored one extra interval (grace) |
-| `DASHBOARD_ALLOW_GIT_PUSH` | `false` | Allow `git push` in spawned agents. Per-task override: `metadata.allowGitPush=true` |
-| `DASHBOARD_ALLOW_GIT_PULL` | `false` | Enable `POST /api/tasks/:id/git-action` with `action:'pull'` (ff-only) |
-| `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` | — | Comma-separated extension of the `spawners.command` allow-list: bare entries add permitted bare names, absolute entries add trusted bin directories. Absolute commands must resolve (via `EvalSymlinks`) under a trusted dir — the old "outside /tmp" rule is replaced by this allow-list |
-
-## Channel & hooks (injected automatically)
-
-These are normally injected into spawned stage agents by the orchestrator — you rarely set them by hand.
-
-| Variable | Default | Description |
-|---|---|---|
-| `DASHBOARD_MCP_TOKEN` | — | Bearer token for dashboard MCP access |
-| `DASHBOARD_MCP_URL` | — | Dashboard MCP URL injected into stage agents |
-| `DASHBOARD_STAGE_RUN_ID` | — | Stage-run ID injected into stage agents |
-| `DASHBOARD_TASK_ID` | — | Task ID injected into stage agents |
+| `DASHBOARD_DB_PATH` | `~/.claude/dashboard-tasks.db` | SQLite path for the task pipeline and the settings store |
+| `DASHBOARD_PLUGIN_DIR` | — | Directory of auth/route-extension plugins to load. Empty disables plugin loading. (Which discovered plugins are *enabled* is a runtime setting — see `plugins.enabled` below) |
+| `DASHBOARD_PROVIDER_DIR` | — | Optional directory of user provider descriptors merged over the built-ins |
+| `DASHBOARD_WORKTREE_ROOT` | `~/.claude/dashboard-worktrees` | Per-task git worktree root |
 | `DASHBOARD_HOOKS_SECRET` | auto-generated & persisted | Shared bearer token for `/api/hooks/*`. Persisted to `~/.claude/dashboard-hooks-secret` if unset |
-| `DASHBOARD_HOOKS_DEBOUNCE_MS` | `100` | Debounce before SSE rescan after a hook event |
-| `DASHBOARD_HOOK_EVENTS_PER_SESSION` | `50` | Max recent lifecycle-hook events kept in memory per session for the agent-modal **Hook events** view. Must be positive |
+| `DASHBOARD_MCP_TOKEN` | — | Bearer token for dashboard MCP access |
+| `DASHBOARD_AUTH_PLUGIN_SECRET` | — | Shared secret between the core server and an auth plugin (`POST /api/auth/session`). Required when using an auth plugin. Min 32 chars |
+| `DASHBOARD_REMOTES_ENABLED` | `false` | Opt-in to binding on a non-loopback address. The dashboard reads sensitive Claude session data — only enable behind a VPN or SSH tunnel |
+
+**Flag:** `--config <path>` — load a JSON config file whose keys mirror the variables above (without the `DASHBOARD_` prefix, lowercased). Precedence: defaults → JSON file → environment variables.
+
+### Other env vars (not migrated)
+
+A few operational env vars are read directly by their subsystems and are **not** part of the runtime settings store:
+
+| Variable | Default | Description |
+|---|---|---|
+| `DASHBOARD_CLAUDE_CONFIG_DIRS` | — | Comma-separated extra Claude config dirs to scan for sessions, e.g. `~/.claude-personal,~/.claude-work` |
+| `DASHBOARD_INJECT_TOKEN_ROTATE_MS` | `300000` | Discovery bearer-token rotation interval (ms); `<= 0` disables. Previous token honored one extra interval (grace). Read by the `channel`/`live`/`pty-host` child processes (which have no DB access), so it stays a child-process env var rather than a runtime setting |
+| `DASHBOARD_SPAWN_COMMAND` | — | Path to a custom spawner binary for the `custom` LLM adapter |
+
+### Injected automatically (do not set by hand)
+
+The orchestrator injects these into spawned stage agents; you rarely set them yourself:
+
+| Variable | Description |
+|---|---|
+| `DASHBOARD_MCP_URL` | Dashboard MCP URL injected into stage agents |
+| `DASHBOARD_STAGE_RUN_ID` | Stage-run ID injected into stage agents |
+| `DASHBOARD_TASK_ID` | Task ID injected into stage agents |
+
+## Runtime settings (Settings UI or `dashboard settings` CLI)
+
+These keys live in the database `app_setting` table — the single source of truth is `server/internal/settings/registry.go`. Edit them in the **Settings** UI (the generic **Server** panel, plus the **Plugins** and **Providers** panels) or with the `dashboard settings` CLI.
+
+> The matching `DASHBOARD_*` environment variables that used to set these are **no longer read**. If one is still set, it is ignored and the server logs a warning on boot.
+
+**Apply** is when a change takes effect: `live` applies without a restart; `restart` requires a server restart. Auth mode is `restart` even though it lives here.
+
+| Key | Type | Default | Apply |
+|---|---|---|---|
+| `auth.mode` | enum (`none`, `plugin`) | `none` | restart |
+| `plugins.enabled` | string list (comma) | — | live (managed) |
+| `git.allowPush` | bool | `false` | restart |
+| `git.allowPull` | bool | `false` | restart |
+| `worktree.force` | bool | `false` | restart |
+| `sse.intervalMs` | int | `3000` | restart |
+| `shutdown.timeoutSeconds` | int | `10` | restart |
+| `hooks.debounceMs` | int | `100` | restart |
+| `hooks.eventsPerSession` | int | `50` | restart |
+| `spawn.rateLimit` | int | `5` | restart |
+| `spawn.allowedCommands` | string list (comma) | — | restart |
+| `spawn.rateWindowMs` | int | `60000` | restart |
+| `inject.rateLimit` | int | `30` | restart |
+| `inject.rateWindowMs` | int | `60000` | restart |
+| `cost.scanIntervalMs` | int | `300000` | restart |
+| `eval.scanIntervalMs` | int | `3600000` | restart |
+| `eval.windowHours` | int | `168` | restart |
+| `eval.minSamples` | int | `20` | restart |
+| `eval.rateDropPP` | float | `15` | restart |
+| `eval.stddevK` | float | `3` | restart |
+
+**Apply semantics:** plugin enablement (`plugins.enabled`) applies **live**. Everything else — including `auth.mode` — needs a **server restart** to take effect. The UI marks restart-only changes with a warning.
+
+**Managed keys:** `plugins.enabled` is **read-only via the generic Server panel** — it is edited through the dedicated **Plugins** panel, which starts/stops the affected plugin processes as part of the change. Provider enablement is not a settings key at all; it lives in its own `provider_setting` table and is edited through the **Providers** panel (`/api/providers`).
+
+### CLI / lockout recovery
+
+The `dashboard settings` CLI edits the SQLite database **directly**, so it works even while the server is down — the recovery path when a setting (e.g. an auth mode that requires a plugin you can no longer load) locks you out of the UI.
+
+```bash
+dashboard settings list            # all keys with effective values, type, and apply mode
+dashboard settings get <key>       # one value (falls back to the registry default)
+dashboard settings set <key> <value>
+```
+
+Database resolution order: `--db <path>` flag → `DASHBOARD_DB_PATH` → default `~/.claude/dashboard-tasks.db`.
+
+`auth.mode` is an ordinary settings key, so the CLI doubles as lockout recovery:
+
+```bash
+# Locked out of a 'plugin' auth mode whose plugin won't load? Reset to no-auth:
+dashboard settings set auth.mode none
+# Then restart the server (auth.mode is restart-apply).
+```
+
+Provider enablement is **not** a `dashboard settings` key — it lives in the `provider_setting` table and is edited through the Providers panel.
 
 ## LLM adapters
 
@@ -158,10 +211,7 @@ These keys live in the `pipeline_config` table, not in environment variables. Wr
 
 ## Multi-machine (advanced)
 
-| Variable | Default | Description |
-|---|---|---|
-| `DASHBOARD_REMOTES_ENABLED` | `false` | Opt-in to binding on a non-loopback address |
-| `DASHBOARD_REMOTES` | — | Remote dashboard instances to aggregate |
+Binding to a non-loopback address is gated by the `DASHBOARD_REMOTES_ENABLED` bootstrap variable (see [Bootstrap configuration](#bootstrap-configuration-env--flags)). Remote dashboard instances to aggregate are registered through the API and stored in the database — there is no longer a `DASHBOARD_REMOTES` env var.
 
 > Multi-machine mode requires remote instances to be network-accessible. Use a VPN or SSH tunnel — **never** bind to `0.0.0.0` on an untrusted network. The dashboard reads sensitive Claude session data.
 
@@ -169,12 +219,6 @@ These keys live in the `pipeline_config` table, not in environment variables. Wr
 
 Passive drift detection measures agent execution quality over time per `(spawner, model, stage)` from the data the pipeline already persists in `stage_run`, and flags degradation against a rolling baseline. No agents are spawned — it only reads existing rows.
 
-| Variable | Default | Description |
-|---|---|---|
-| `DASHBOARD_EVAL_SCAN_INTERVAL_MS` | `3600000` | Drift-scan interval (ms). `<= 0` runs a single boot scan only |
-| `DASHBOARD_EVAL_WINDOW_HOURS` | `168` | Length of the recent window (hours). The baseline window is the preceding window of equal length, so `2 × window` of history must accumulate before any alert can fire |
-| `DASHBOARD_EVAL_MIN_SAMPLES` | `20` | Minimum stage-run sample count on both the recent and baseline side; thinner data is suppressed |
-| `DASHBOARD_EVAL_RATE_DROP_PP` | `15` | Percentage-point worsening of a rate metric (e.g. success rate) required to raise an alert |
-| `DASHBOARD_EVAL_STDDEV_K` | `3` | Standard-deviation multiplier for continuous metrics: a recent mean above `baseline_mean + k × baseline_stddev` raises an alert |
+Its tuning knobs are runtime settings (`eval.scanIntervalMs`, `eval.windowHours`, `eval.minSamples`, `eval.rateDropPP`, `eval.stddevK`) — see the [Runtime settings](#runtime-settings-settings-ui-or-dashboard-settings-cli) table.
 
-> Drift is detected by comparing the recent window against the immediately preceding baseline window. Because the baseline is built from prior metric snapshots, no alerts fire until roughly `2 × DASHBOARD_EVAL_WINDOW_HOURS` of history exists — this cold-start gap is expected. Alerts surface at `GET /api/eval/drift` and in the dashboard's Eval view.
+> Drift is detected by comparing the recent window against the immediately preceding baseline window. Because the baseline is built from prior metric snapshots, no alerts fire until roughly `2 × eval.windowHours` of history exists — this cold-start gap is expected. Alerts surface at `GET /api/eval/drift` and in the dashboard's Eval view.

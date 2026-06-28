@@ -96,6 +96,10 @@ type StageContext struct {
 	MCPToken             string
 	MCPUrl               string
 
+	// AllowGitPush mirrors OrchestratorOptions.AllowGitPush for the current stage,
+	// gating whether spawned agents may run `git push`.
+	AllowGitPush bool
+
 	// AdditionalDirs holds the paths of project folders beyond the task cwd
 	// that the spawned agent should be able to access. Each path is forwarded
 	// to the `claude` CLI as a --add-dir flag. Populated from
@@ -198,6 +202,11 @@ type OrchestratorOptions struct {
 	// even when task.SourceBranch is not set. The branch is derived as "feat/<slug>".
 	// Set via DASHBOARD_FORCE_WORKTREES=true.
 	ForceWorktrees bool
+
+	// AllowGitPush permits spawned agents to run `git push` globally. Sourced from
+	// the "git.allowPush" DB setting; per-task metadata["allowGitPush"] can still
+	// opt in individually even when this is false.
+	AllowGitPush bool
 
 	// SpawnFn launches the agent process for native (claude) stages. Production
 	// wires pipeline.SpawnStageAgent at the DI root; when nil the orchestrator
