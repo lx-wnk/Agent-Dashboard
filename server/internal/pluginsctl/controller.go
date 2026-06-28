@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
@@ -53,6 +54,9 @@ type Controller struct {
 	reg      Registry
 	settings *settings.Service
 	dir      string
+	// mu serializes the read-modify-write of plugins.enabled in SetEnabled so
+	// concurrent toggles cannot lose an update.
+	mu sync.Mutex
 }
 
 // New builds a Controller. settings may be nil (no DB); in that case nothing is
@@ -97,6 +101,9 @@ func (c *Controller) SetEnabled(ctx context.Context, id string, enable bool) (Ap
 	if !ok {
 		return "", fmt.Errorf("%w: %q", ErrUnknownPlugin, id)
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if desc.HasCapability(plugin.CapAuthProvider) {
 		if err := c.persist(ctx, id, enable); err != nil {

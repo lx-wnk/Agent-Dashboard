@@ -112,7 +112,7 @@ var definitions = func() map[string]Definition {
 		{Key: "git.allowPull", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "git"},
 		{Key: "worktree.force", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "worktree"},
 		{Key: "sse.intervalMs", Type: TypeInt, Default: "3000", Apply: ApplyRestart, Category: "sse", validate: positiveInt("sse.intervalMs")},
-		{Key: "shutdown.timeoutSeconds", Type: TypeInt, Default: "10", Apply: ApplyRestart, Category: "server"},
+		{Key: "shutdown.timeoutSeconds", Type: TypeInt, Default: "10", Apply: ApplyRestart, Category: "server", validate: positiveInt("shutdown.timeoutSeconds")},
 		{Key: "hooks.debounceMs", Type: TypeInt, Default: "100", Apply: ApplyRestart, Category: "hooks", validate: positiveInt("hooks.debounceMs")},
 		{Key: "hooks.eventsPerSession", Type: TypeInt, Default: "50", Apply: ApplyRestart, Category: "hooks", validate: positiveInt("hooks.eventsPerSession")},
 		{Key: "spawn.rateLimit", Type: TypeInt, Default: "5", Apply: ApplyRestart, Category: "spawn"},
