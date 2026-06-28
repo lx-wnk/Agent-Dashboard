@@ -467,8 +467,8 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		slog.Error("plugin: process exited unexpectedly", "id", desc.ID, "err", err)
 
 		if restartCount >= maxPluginRestarts {
-			slog.Error("plugin: exceeded restart limit — removing from registry", "id", desc.ID, "restarts", restartCount)
-			r.removeByID(desc.ID)
+			slog.Error("plugin: exceeded restart limit — marking unhealthy", "id", desc.ID, "restarts", restartCount)
+			r.markUnhealthy(desc.ID)
 			return
 		}
 
@@ -490,7 +490,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 
 		if startErr := newCmd.Start(); startErr != nil {
 			slog.Error("plugin: restart failed — could not start process", "id", desc.ID, "err", startErr)
-			r.removeByID(desc.ID)
+			r.markUnhealthy(desc.ID)
 			return
 		}
 
@@ -499,7 +499,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 			slog.Error("plugin: restart failed — health check did not pass", "id", desc.ID, "err", healthErr)
 			// newCmd has no watcher goroutine; pass nil so gracefulStop owns Wait().
 			gracefulStop(newCmd, nil)
-			r.removeByID(desc.ID)
+			r.markUnhealthy(desc.ID)
 			return
 		}
 
@@ -518,6 +518,24 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		r.mu.Unlock()
 
 		current = newCmd
+	}
+}
+
+// markUnhealthy flips the entry to unhealthy and notifies the OnUnhealthy hook.
+// The entry is kept so the dispatcher serves a knowing 503 rather than the
+// ambiguous 503 of a missing plugin.
+func (r *Registry) markUnhealthy(id string) {
+	r.mu.Lock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			r.plugins[i].healthy = false
+			break
+		}
+	}
+	hook := r.hooks.OnUnhealthy
+	r.mu.Unlock()
+	if hook != nil {
+		hook(id)
 	}
 }
 

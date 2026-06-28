@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -452,4 +453,81 @@ func TestGroupKillReapsChildren(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return !processAlive(childPid)
 	}, 10*time.Second, 100*time.Millisecond, "group-kill must reap the plugin's child process")
+}
+
+// writeCrashingPlugin builds a real plugin binary under dir/{id}/ that serves
+// GET /health → 200 briefly, then exits non-zero ~400ms after start. Every
+// restart attempt will crash the same way, exhausting the registry restart budget.
+func writeCrashingPlugin(t *testing.T, dir, id string) {
+	t.Helper()
+	pluginDir := filepath.Join(dir, id)
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
+	mainGo := `package main
+
+import (
+	"net/http"
+	"os"
+	"time"
+)
+
+func main() {
+	addr := os.Args[1]
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	srv := &http.Server{Addr: addr, Handler: mux}
+	go func() { _ = srv.ListenAndServe() }()
+	time.Sleep(400 * time.Millisecond)
+	os.Exit(1)
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.go"), []byte(mainGo), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "go.mod"), []byte("module crashing-plugin\n\ngo 1.21\n"), 0o644))
+
+	binPath := filepath.Join(pluginDir, "plugin-bin")
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	build.Dir = pluginDir
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, buildErr := build.CombinedOutput()
+	require.NoError(t, buildErr, "go build failed:\n%s", out)
+
+	desc := plugin.Descriptor{
+		ID:           id,
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         addr,
+		Command:      []string{"./plugin-bin", addr},
+	}
+	data, _ := json.Marshal(desc)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
+}
+
+func TestExhaustedRestartsMarkUnhealthy(t *testing.T) {
+	dir := t.TempDir()
+	writeCrashingPlugin(t, dir, "flaky")
+
+	var unhealthyID string
+	var mu sync.Mutex
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{
+		OnUnhealthy: func(id string) { mu.Lock(); unhealthyID = id; mu.Unlock() },
+	}))
+	t.Cleanup(r.Shutdown)
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return unhealthyID == "flaky"
+	}, 60*time.Second, 200*time.Millisecond, "OnUnhealthy must fire after exhausted restarts")
+
+	entry, ok := r.Lookup("flaky")
+	require.True(t, ok, "entry must be retained so the dispatcher can answer 503")
+	require.False(t, entry.Healthy())
 }
