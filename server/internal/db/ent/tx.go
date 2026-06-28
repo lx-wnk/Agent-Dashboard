@@ -32,6 +32,8 @@ type Tx struct {
 	PermissionRequest *PermissionRequestClient
 	// PipelineConfig is the client for interacting with the PipelineConfig builders.
 	PipelineConfig *PipelineConfigClient
+	// Plugin is the client for interacting with the Plugin builders.
+	Plugin *PluginClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
 	// ProjectFolder is the client for interacting with the ProjectFolder builders.
@@ -201,6 +203,7 @@ func (tx *Tx) init() {
 	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
 	tx.PermissionRequest = NewPermissionRequestClient(tx.config)
 	tx.PipelineConfig = NewPipelineConfigClient(tx.config)
+	tx.Plugin = NewPluginClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
 	tx.ProjectFolder = NewProjectFolderClient(tx.config)
 	tx.ProviderSetting = NewProviderSettingClient(tx.config)
