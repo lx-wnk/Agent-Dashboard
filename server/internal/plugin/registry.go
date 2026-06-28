@@ -354,6 +354,11 @@ func (r *Registry) InjectEntryForTest(d Descriptor, healthy bool) {
 	r.plugins = append(r.plugins, Entry{Descriptor: d, BaseURL: "http://" + d.Addr, healthy: healthy})
 }
 
+// NewHealthyEntryForTest builds a healthy Entry for tests in other packages.
+func NewHealthyEntryForTest(d Descriptor) Entry {
+	return Entry{Descriptor: d, BaseURL: "http://" + d.Addr, healthy: true}
+}
+
 // All returns a snapshot of all loaded plugin entries.
 func (r *Registry) All() []Entry {
 	r.mu.RLock()
