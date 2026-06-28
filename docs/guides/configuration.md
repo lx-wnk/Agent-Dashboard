@@ -6,6 +6,12 @@ All configuration is via environment variables. A documented template lives in [
 cp .env.dist .env
 ```
 
+A `.env` file in the working directory is loaded automatically at startup for both
+`task dev` and `./bin/agent-dashboard serve` — no manual sourcing needed. An explicit
+shell `export` always wins over a value in `.env`. The file is read from the current
+working directory (the repository root in the standard layout); run the binary from
+there, or export the variables, if you keep `.env` elsewhere.
+
 ## Core
 
 | Variable | Default | Description |
