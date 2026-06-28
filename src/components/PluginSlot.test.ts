@@ -63,3 +63,90 @@ describe('pluginSlot', () => {
     expect(mountFn).not.toHaveBeenCalled()
   })
 })
+
+function addon(opts: any) {
+  return { mount: opts.mount, priority: opts.priority, mode: opts.mode }
+}
+
+describe('pluginSlot composition', () => {
+  it('mounts siblings (mode-less) in load order', async () => {
+    const calls: string[] = []
+    const loader = async () => [
+      addon({
+        mount: () => {
+          calls.push('a')
+          return () => {}
+        },
+      }),
+      addon({
+        mount: () => {
+          calls.push('b')
+          return () => {}
+        },
+      }),
+    ]
+    mount(PluginSlot, { props: { name: 'task-modal-footer', ctx: { task: {} as any }, loader } })
+    await new Promise(r => setTimeout(r))
+    expect(calls).toEqual(['a', 'b'])
+  })
+
+  it('override (highest priority) suppresses lower chain addons and siblings', async () => {
+    const calls: string[] = []
+    const loader = async () => [
+      addon({
+        mode: 'override',
+        priority: 100,
+        mount: () => {
+          calls.push('override')
+          return () => {}
+        },
+      }),
+      addon({
+        mode: 'extend',
+        priority: 50,
+        mount: () => {
+          calls.push('lower')
+          return () => {}
+        },
+      }),
+      addon({
+        mount: () => {
+          calls.push('sibling')
+          return () => {}
+        },
+      }),
+    ]
+    mount(PluginSlot, { props: { name: 'task-modal-footer', ctx: { task: {} as any }, loader } })
+    await new Promise(r => setTimeout(r))
+    expect(calls).toEqual(['override'])
+  })
+
+  it('extend receives a parent it can mount', async () => {
+    const events: string[] = []
+    const loader = async () => [
+      addon({
+        mode: 'extend',
+        priority: 100,
+        mount: (_el: HTMLElement, _ctx: any, parent: any) => {
+          events.push('outer')
+          if (parent) {
+            const child = document.createElement('div')
+            parent.mount(child)
+          }
+          return () => {}
+        },
+      }),
+      addon({
+        mode: 'extend',
+        priority: 10,
+        mount: () => {
+          events.push('inner')
+          return () => {}
+        },
+      }),
+    ]
+    mount(PluginSlot, { props: { name: 'task-modal-footer', ctx: { task: {} as any }, loader } })
+    await new Promise(r => setTimeout(r))
+    expect(events).toEqual(['outer', 'inner']) // outer mounts, then mounts its parent (inner)
+  })
+})
