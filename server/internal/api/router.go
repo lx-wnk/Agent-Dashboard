@@ -155,9 +155,10 @@ type RouterDeps struct {
 	ChannelReply          *agents.ChannelReplyHandler
 	ChannelStageOutput    *agents.ChannelStageOutputHandler
 	PermissionPresetRepo  repo.PermissionPresetRepo
-	PluginRegistry        *plugin.Registry
-	PluginsHandler        *apiplugins.Handler
-	AuditEventRepo        repo.AuditEventRepo
+	PluginRegistry         *plugin.Registry
+	PluginsHandler         *apiplugins.Handler
+	PluginLifecycleHandler *apiplugins.LifecycleHandler
+	AuditEventRepo         repo.AuditEventRepo
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -434,6 +435,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// deduplicated by construction.
 		if deps.PluginsHandler != nil {
 			deps.PluginsHandler.Mount(r)
+		}
+		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.
+		if deps.PluginLifecycleHandler != nil {
+			deps.PluginLifecycleHandler.Mount(r)
 		}
 		if deps.PluginRegistry != nil {
 			for _, entry := range deps.PluginRegistry.All() {
