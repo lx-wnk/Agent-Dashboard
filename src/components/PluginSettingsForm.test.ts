@@ -31,3 +31,32 @@ it('put omits an untouched secret and sends changed fields', async () => {
   expect(sent.endpoint).toBe('http://y')
   expect('apiKey' in sent).toBe(false) // untouched secret omitted
 })
+
+const schemaWithInt = [
+  { key: 'port', type: 'int', label: 'Port', secret: false },
+  { key: 'name', type: 'string', label: 'Name', secret: false },
+]
+
+it('int field: edited value is sent as a string, not a number', async () => {
+  const put = vi.fn().mockResolvedValue(undefined)
+  const w = mountForm(async () => ({ schema: schemaWithInt, values: { port: '3000', name: 'x' } }), put)
+  await flushPromises()
+  await w.find('[data-field="port"]').setValue('8080')
+  await w.find('[data-action="save"]').trigger('click')
+  await flushPromises()
+  const sent = put.mock.calls[0][1]
+  expect(sent.port).toBe('8080')
+  expect(typeof sent.port).toBe('string')
+})
+
+it('int field: untouched int is not re-sent on save', async () => {
+  const put = vi.fn().mockResolvedValue(undefined)
+  const w = mountForm(async () => ({ schema: schemaWithInt, values: { port: '3000', name: 'x' } }), put)
+  await flushPromises()
+  await w.find('[data-field="name"]').setValue('changed')
+  await w.find('[data-action="save"]').trigger('click')
+  await flushPromises()
+  const sent = put.mock.calls[0][1]
+  expect('port' in sent).toBe(false)
+  expect(sent.name).toBe('changed')
+})

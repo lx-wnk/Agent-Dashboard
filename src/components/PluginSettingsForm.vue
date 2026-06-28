@@ -80,7 +80,9 @@ async function save() {
         v-else-if="f.type === 'int'"
         :id="`pf-${pluginId}-${f.key}`"
         v-model="model[f.key]"
-        type="number"
+        type="text"
+        inputmode="numeric"
+        pattern="[0-9]*"
         :data-field="f.key"
       >
       <input
