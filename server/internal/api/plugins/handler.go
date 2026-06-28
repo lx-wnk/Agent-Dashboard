@@ -12,6 +12,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 )
 
 // Controller is the behaviour the handler needs from pluginsctl; faked in tests.
@@ -153,7 +154,8 @@ func (h *LifecycleHandler) Mount(r chi.Router) {
 // classify maps the controller sentinels to 400 and everything else to a plain
 // 500 wrap.
 func classify(err error, wrap string) error {
-	if errors.Is(err, pluginsctl.ErrUnknownPlugin) || errors.Is(err, pluginsctl.ErrInvalidAction) {
+	if errors.Is(err, pluginsctl.ErrUnknownPlugin) || errors.Is(err, pluginsctl.ErrInvalidAction) ||
+		errors.Is(err, pluginsettings.ErrUnknownKey) {
 		return fmt.Errorf("%w: %s", apierr.ErrBadRequest, err.Error())
 	}
 	return fmt.Errorf("%s: %w", wrap, err)

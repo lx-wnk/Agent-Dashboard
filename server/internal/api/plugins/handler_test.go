@@ -15,6 +15,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 )
 
 const testJWTSecret = "test-secret-plugins"
@@ -373,6 +374,16 @@ func TestLifecyclePutSettings_Persists(t *testing.T) {
 	}
 }
 
-// pluginsettingsMasked mirrors pluginsettings.MaskedSentinel without importing it
-// (the handler is transport-only; masking is the service's job).
-const pluginsettingsMasked = "********"
+func TestLifecyclePutSettings_UnknownKey_400(t *testing.T) {
+	ctl := &fakeLifecycle{putErr: fmt.Errorf("%w: %q", pluginsettings.ErrUnknownKey, "bogus")}
+	body := `{"values":{"bogus":"x"}}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/plugins/p1/settings", strings.NewReader(body)))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+const pluginsettingsMasked = pluginsettings.MaskedSentinel

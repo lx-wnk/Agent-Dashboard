@@ -4,6 +4,7 @@ package pluginsettings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
@@ -13,6 +14,9 @@ import (
 // MaskedSentinel is returned for secret values and, when sent back on Put,
 // signals "leave unchanged".
 const MaskedSentinel = "********"
+
+// ErrUnknownKey is returned by Put when a submitted key is not in the schema.
+var ErrUnknownKey = errors.New("pluginsettings: unknown setting key")
 
 // Stored is one persisted setting row (storage-agnostic).
 type Stored struct {
@@ -78,7 +82,7 @@ func (s *Service) Put(ctx context.Context, pluginID string, schema []plugin.Sett
 	}
 	for k := range values {
 		if !known[k] {
-			return fmt.Errorf("pluginsettings: unknown key %q", k)
+			return fmt.Errorf("%w: %q", ErrUnknownKey, k)
 		}
 	}
 	for _, f := range schema {
