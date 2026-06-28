@@ -63,7 +63,10 @@ func (a pluginStateRepoAdapter) SetVersion(ctx context.Context, id, version stri
 // pluginDiscoverRepoAdapter maps the ent-backed PluginRepo onto the
 // pluginlifecycle.DiscoverRepo interface. It reads the prior manifest hash to
 // report update-available, then upserts (the upsert preserves installed_at/active).
-type pluginDiscoverRepoAdapter struct{ inner repo.PluginRepo }
+type pluginDiscoverRepoAdapter struct {
+	inner    repo.PluginRepo
+	settings repo.PluginSettingRepo
+}
 
 func (a pluginDiscoverRepoAdapter) UpsertDiscovered(ctx context.Context, in pluginlifecycle.DiscoveredPlugin) (bool, error) {
 	var oldHash string
@@ -78,4 +81,23 @@ func (a pluginDiscoverRepoAdapter) UpsertDiscovered(ctx context.Context, in plug
 		return false, err
 	}
 	return oldHash != in.ManifestHash, nil
+}
+
+func (a pluginDiscoverRepoAdapter) ExistingIDs(ctx context.Context) ([]string, error) {
+	rows, err := a.inner.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, len(rows))
+	for i, p := range rows {
+		ids[i] = p.ID
+	}
+	return ids, nil
+}
+
+func (a pluginDiscoverRepoAdapter) Remove(ctx context.Context, id string) error {
+	if err := a.settings.DeleteByPlugin(ctx, id); err != nil {
+		return err
+	}
+	return a.inner.Delete(ctx, id)
 }

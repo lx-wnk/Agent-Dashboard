@@ -20,6 +20,19 @@ func (m *memDiscoverRepo) UpsertDiscovered(_ context.Context, in DiscoveredPlugi
 	return updateAvailable, nil
 }
 
+func (m *memDiscoverRepo) ExistingIDs(_ context.Context) ([]string, error) {
+	ids := make([]string, 0, len(m.rows))
+	for id := range m.rows {
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (m *memDiscoverRepo) Remove(_ context.Context, id string) error {
+	delete(m.rows, id)
+	return nil
+}
+
 func writeManifest(t *testing.T, dir, id, version string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, id), 0o755))
@@ -43,4 +56,26 @@ func TestDiscover_UpsertsAndDetectsChange(t *testing.T) {
 	res, err = d.Discover(context.Background())
 	require.NoError(t, err)
 	assert.Contains(t, res.UpdatesAvailable, "p1")
+}
+
+func TestDiscover_ReconcilesRemovedPlugins(t *testing.T) {
+	dir := t.TempDir()
+	writeManifest(t, dir, "p1", "1.0.0")
+	writeManifest(t, dir, "p2", "1.0.0")
+	repo := &memDiscoverRepo{rows: map[string]DiscoverRow{}}
+	d := NewDiscoverer(dir, repo)
+
+	res, err := d.Discover(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 2, res.Found)
+	assert.Empty(t, res.Removed)
+
+	// p2's directory disappears → second pass reconciles it away
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, "p2")))
+	res, err = d.Discover(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Found)
+	assert.Contains(t, res.Removed, "p2")
+	assert.NotContains(t, repo.rows, "p2")
+	assert.Contains(t, repo.rows, "p1")
 }

@@ -18,9 +18,12 @@ type DiscoveredPlugin struct {
 }
 
 // DiscoverRepo upserts a discovered plugin and reports whether its manifest
-// changed since the stored row (update-available).
+// changed since the stored row (update-available). It also exposes the stored
+// ids and a removal hook so discovery can reconcile rows whose manifest is gone.
 type DiscoverRepo interface {
 	UpsertDiscovered(ctx context.Context, in DiscoveredPlugin) (updateAvailable bool, err error)
+	ExistingIDs(ctx context.Context) ([]string, error)
+	Remove(ctx context.Context, id string) error
 }
 
 type Discoverer struct {
@@ -34,6 +37,7 @@ func NewDiscoverer(dir string, repo DiscoverRepo) *Discoverer { return &Discover
 type Result struct {
 	Found            int
 	UpdatesAvailable []string
+	Removed          []string
 }
 
 func (d *Discoverer) Discover(ctx context.Context) (Result, error) {
@@ -41,6 +45,7 @@ func (d *Discoverer) Discover(ctx context.Context) (Result, error) {
 	if d.dir == "" {
 		return res, nil
 	}
+	found := map[string]bool{}
 	entries, err := os.ReadDir(d.dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -69,10 +74,24 @@ func (d *Discoverer) Discover(ctx context.Context) (Result, error) {
 		if err != nil {
 			return res, err
 		}
+		found[desc.ID] = true
 		res.Found++
 		if upd {
 			res.UpdatesAvailable = append(res.UpdatesAvailable, desc.ID)
 		}
+	}
+	existing, err := d.repo.ExistingIDs(ctx)
+	if err != nil {
+		return res, fmt.Errorf("discover: existing ids: %w", err)
+	}
+	for _, id := range existing {
+		if found[id] {
+			continue
+		}
+		if err := d.repo.Remove(ctx, id); err != nil {
+			return res, fmt.Errorf("discover: remove %q: %w", id, err)
+		}
+		res.Removed = append(res.Removed, id)
 	}
 	return res, nil
 }
