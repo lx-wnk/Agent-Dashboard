@@ -49,6 +49,9 @@ func main() {
 			restartCtl := restart.NewController(cfg.RestartMode)
 			srv, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, enricher, evalService, settingsSvc, cleanup, err := initializeServer(ctx, cfg, cfgFile, restartCtl)
 			if err != nil {
+				if cleanup != nil {
+					cleanup()
+				}
 				return err
 			}
 
