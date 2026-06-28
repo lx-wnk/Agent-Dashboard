@@ -42,7 +42,11 @@ func (r *entPluginSettingRepo) Upsert(ctx context.Context, in PluginSettingInput
 		SetPluginID(in.PluginID).SetKey(in.Key).SetValue(in.Value).
 		SetSecret(in.Secret).SetNonce(in.Nonce).
 		OnConflictColumns(pluginsetting.FieldPluginID, pluginsetting.FieldKey).
-		UpdateNewValues().
+		// Refresh only the mutable columns; id/created_at stay untouched.
+		UpdateValue().
+		UpdateSecret().
+		UpdateNonce().
+		UpdateUpdatedAt().
 		Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("pluginsetting.Upsert: %w", err)
