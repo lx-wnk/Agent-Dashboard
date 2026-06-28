@@ -35,7 +35,6 @@ type Definition struct {
 	Apply    Apply
 	Category string
 	Enum     []string               // for TypeEnum
-	Managed  bool                   // owned by a dedicated endpoint; not editable via the generic settings API
 	validate func(raw string) error // extra constraint beyond type parsing
 }
 
