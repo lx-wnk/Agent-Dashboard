@@ -3,6 +3,8 @@ package pluginlifecyclectl_test
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -203,6 +205,80 @@ func TestGetSettings_DelegatesWithSchema(t *testing.T) {
 	}
 	if values["k"] != "v" {
 		t.Errorf("values not delegated: %v", values)
+	}
+}
+
+// slowEngine records start/end events with a configurable delay, used to verify
+// per-plugin lock serialization.
+type slowEngine struct {
+	mu    sync.Mutex
+	order []string
+	delay time.Duration
+}
+
+func (e *slowEngine) record(s string) {
+	e.mu.Lock()
+	e.order = append(e.order, s)
+	e.mu.Unlock()
+}
+
+func (e *slowEngine) Install(_ context.Context, d plugin.Descriptor) error {
+	e.record("start:install:" + d.ID)
+	time.Sleep(e.delay)
+	e.record("end:install:" + d.ID)
+	return nil
+}
+func (e *slowEngine) Activate(_ context.Context, d plugin.Descriptor) error {
+	e.record("start:activate:" + d.ID)
+	time.Sleep(e.delay)
+	e.record("end:activate:" + d.ID)
+	return nil
+}
+func (e *slowEngine) Deactivate(_ context.Context, d plugin.Descriptor) error {
+	e.record("start:deactivate:" + d.ID)
+	time.Sleep(e.delay)
+	e.record("end:deactivate:" + d.ID)
+	return nil
+}
+func (e *slowEngine) Uninstall(_ context.Context, d plugin.Descriptor) error {
+	e.record("start:uninstall:" + d.ID)
+	time.Sleep(e.delay)
+	e.record("end:uninstall:" + d.ID)
+	return nil
+}
+
+func TestTransition_SamePluginSerializes(t *testing.T) {
+	now := time.Now()
+	repo := &fakeRepo{rows: map[string]*ent.Plugin{
+		"p1": {ID: "p1", InstalledAt: ptrTime(now), Active: true, ManifestHash: "h"},
+	}}
+	eng := &slowEngine{delay: 50 * time.Millisecond}
+	loader := &fakeLoader{
+		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1"}},
+		hashes:    map[string]string{"p1": "h"},
+	}
+	c := pluginlifecyclectl.NewWithLoader(repo, eng, &fakeSettings{}, loader)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); _, _ = c.Transition(context.Background(), "p1", "activate") }()
+	// Small stagger so the first goroutine acquires the per-plugin lock before the second.
+	time.Sleep(5 * time.Millisecond)
+	go func() { defer wg.Done(); _, _ = c.Transition(context.Background(), "p1", "deactivate") }()
+	wg.Wait()
+
+	eng.mu.Lock()
+	order := make([]string, len(eng.order))
+	copy(order, eng.order)
+	eng.mu.Unlock()
+
+	if len(order) < 4 {
+		t.Fatalf("expected 4 events, got %v", order)
+	}
+	// Serialized: end of first action must precede start of second.
+	// Interleaved would look like: start:X, start:Y, end:X, end:Y.
+	if !strings.HasPrefix(order[1], "end:") {
+		t.Errorf("transitions interleaved: %v", order)
 	}
 }
 

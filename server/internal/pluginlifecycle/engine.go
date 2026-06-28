@@ -126,7 +126,11 @@ func (e *Engine) Activate(ctx context.Context, d plugin.Descriptor) error {
 		_ = e.stop(ctx, d.ID)
 		return fmt.Errorf("activate hook: %w", err)
 	}
-	return e.repo.SetActive(ctx, d.ID, true)
+	if err := e.repo.SetActive(ctx, d.ID, true); err != nil {
+		_ = e.stop(ctx, d.ID)
+		return err
+	}
+	return nil
 }
 
 func (e *Engine) Deactivate(ctx context.Context, d plugin.Descriptor) error {

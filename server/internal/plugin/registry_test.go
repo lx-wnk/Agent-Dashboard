@@ -551,6 +551,64 @@ func TestWithTransientLeavesRunningPluginUp(t *testing.T) {
 	require.True(t, up, "an already-running plugin must stay up after WithTransient")
 }
 
+func TestStartOneRestartsUnhealthyPlugin(t *testing.T) {
+	dir := t.TempDir()
+	writeHealthyPlugin(t, dir, "dead-plugin")
+
+	r := plugin.New(dir)
+	r.SetEnabled(func(string) bool { return false }) // don't start at Load
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	t.Cleanup(r.Shutdown)
+
+	// Inject a synthetic unhealthy entry (simulates a crashed plugin that exhausted restarts).
+	r.InjectEntryForTest(plugin.Descriptor{
+		ID:           "dead-plugin",
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         "127.0.0.1:19997",
+	}, false)
+
+	e, ok := r.Lookup("dead-plugin")
+	require.True(t, ok, "precondition: entry is present")
+	require.False(t, e.Healthy(), "precondition: entry is unhealthy")
+
+	// StartOne must evict the dead entry and start a fresh healthy process.
+	require.NoError(t, r.StartOne(context.Background(), "dead-plugin"))
+
+	e, ok = r.Lookup("dead-plugin")
+	require.True(t, ok, "entry must be present after restart")
+	require.True(t, e.Healthy(), "restarted plugin must be healthy")
+}
+
+func TestWithTransientAgainstUnhealthyEntryRestarts(t *testing.T) {
+	dir := t.TempDir()
+	writeHealthyPlugin(t, dir, "trans-dead")
+
+	r := plugin.New(dir)
+	r.SetEnabled(func(string) bool { return false })
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	t.Cleanup(r.Shutdown)
+
+	// Inject a synthetic unhealthy entry.
+	r.InjectEntryForTest(plugin.Descriptor{
+		ID:           "trans-dead",
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         "127.0.0.1:19996",
+	}, false)
+
+	ran := false
+	err := r.WithTransient(context.Background(), "trans-dead", func() error {
+		e, ok := r.Lookup("trans-dead")
+		require.True(t, ok, "plugin must be present inside callback")
+		require.True(t, e.Healthy(), "plugin must be healthy inside callback")
+		ran = true
+		return nil
+	})
+	require.NoError(t, err)
+	require.True(t, ran, "callback must have executed")
+}
+
 func TestExhaustedRestartsMarkUnhealthy(t *testing.T) {
 	dir := t.TempDir()
 	writeCrashingPlugin(t, dir, "flaky")

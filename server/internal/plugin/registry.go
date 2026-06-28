@@ -187,14 +187,29 @@ func (r *Registry) StartOne(ctx context.Context, id string) error {
 		return fmt.Errorf("plugin: invalid id %q", id)
 	}
 	r.mu.RLock()
+	var (
+		found     bool
+		isHealthy bool
+	)
 	for i := range r.plugins {
 		if r.plugins[i].Descriptor.ID == id {
-			r.mu.RUnlock()
-			return nil // already running
+			found = true
+			isHealthy = r.plugins[i].healthy
+			break
 		}
 	}
 	serverCtx, hooks := r.serverCtx, r.hooks
 	r.mu.RUnlock()
+
+	if found {
+		if isHealthy {
+			return nil // already running and healthy
+		}
+		// Entry exists but is unhealthy — evict before restarting so the fresh
+		// process replaces the dead one rather than being treated as a no-op.
+		r.removeByID(id)
+	}
+
 	if serverCtx == nil {
 		serverCtx = ctx
 	}
@@ -254,6 +269,18 @@ func (r *Registry) setIntentionalStop(id string) {
 			return
 		}
 	}
+}
+
+// isRunning reports whether the plugin with the given id has an entry AND is healthy.
+func (r *Registry) isRunning(id string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			return r.plugins[i].healthy
+		}
+	}
+	return false
 }
 
 // isIntentionalStop reports whether the watcher should refrain from restarting.
@@ -481,6 +508,11 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		case <-time.After(delay):
 		}
 
+		// Re-check after backoff — StopOne may have been called while sleeping.
+		if r.isIntentionalStop(desc.ID) {
+			return
+		}
+
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
 		newCmd.Dir = pluginDir
 		newCmd.Env = buildPluginEnv(desc.Env)
@@ -507,15 +539,29 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		slog.Info("plugin: restarted successfully", "id", desc.ID, "restartCount", restartCount)
 
 		r.mu.Lock()
+		recordedNewCmd := false
 		for i := range r.plugins {
 			if r.plugins[i].Descriptor.ID == desc.ID {
+				if r.plugins[i].intentionalStop {
+					// StopOne was called during the backoff window — clean up the new process.
+					r.mu.Unlock()
+					gracefulStop(newCmd, nil)
+					return
+				}
 				r.plugins[i].cmd = newCmd
 				r.plugins[i].restartCount = restartCount
 				r.plugins[i].healthy = true
+				recordedNewCmd = true
 				break
 			}
 		}
 		r.mu.Unlock()
+
+		if !recordedNewCmd {
+			// Entry was evicted by StopOne during backoff — clean up to avoid a leak.
+			gracefulStop(newCmd, nil)
+			return
+		}
 
 		current = newCmd
 	}
@@ -544,7 +590,7 @@ func (r *Registry) markUnhealthy(id string) {
 // already running, fn runs and the process is left untouched. Used to deliver
 // lifecycle hooks to an installed-but-stopped plugin.
 func (r *Registry) WithTransient(ctx context.Context, id string, fn func() error) error {
-	if _, running := r.Lookup(id); running {
+	if r.isRunning(id) {
 		return fn()
 	}
 	if err := r.StartOne(ctx, id); err != nil {
