@@ -22,6 +22,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pluginsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
@@ -106,6 +108,8 @@ func checkColumn(t, c string) error {
 			permissionpreset.Table:   permissionpreset.ValidColumn,
 			permissionrequest.Table:  permissionrequest.ValidColumn,
 			pipelineconfig.Table:     pipelineconfig.ValidColumn,
+			plugin.Table:             plugin.ValidColumn,
+			pluginsetting.Table:      pluginsetting.ValidColumn,
 			project.Table:            project.ValidColumn,
 			projectfolder.Table:      projectfolder.ValidColumn,
 			providersetting.Table:    providersetting.ValidColumn,

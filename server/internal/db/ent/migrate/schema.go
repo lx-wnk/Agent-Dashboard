@@ -295,6 +295,55 @@ var (
 			},
 		},
 	}
+	// PluginsColumns holds the columns for the "plugins" table.
+	PluginsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString, Default: ""},
+		{Name: "version", Type: field.TypeString, Default: ""},
+		{Name: "installed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "active", Type: field.TypeBool, Default: false},
+		{Name: "path", Type: field.TypeString, Default: ""},
+		{Name: "manifest_hash", Type: field.TypeString, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// PluginsTable holds the schema information for the "plugins" table.
+	PluginsTable = &schema.Table{
+		Name:       "plugins",
+		Columns:    PluginsColumns,
+		PrimaryKey: []*schema.Column{PluginsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "plugin_active",
+				Unique:  false,
+				Columns: []*schema.Column{PluginsColumns[4]},
+			},
+		},
+	}
+	// PluginSettingsColumns holds the columns for the "plugin_settings" table.
+	PluginSettingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "plugin_id", Type: field.TypeString},
+		{Name: "key", Type: field.TypeString},
+		{Name: "value", Type: field.TypeString, Default: ""},
+		{Name: "secret", Type: field.TypeBool, Default: false},
+		{Name: "nonce", Type: field.TypeString, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// PluginSettingsTable holds the schema information for the "plugin_settings" table.
+	PluginSettingsTable = &schema.Table{
+		Name:       "plugin_settings",
+		Columns:    PluginSettingsColumns,
+		PrimaryKey: []*schema.Column{PluginSettingsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "pluginsetting_plugin_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{PluginSettingsColumns[1], PluginSettingsColumns[2]},
+			},
+		},
+	}
 	// ProjectsColumns holds the columns for the "projects" table.
 	ProjectsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -763,6 +812,8 @@ var (
 		PermissionPresetsTable,
 		PermissionRequestsTable,
 		PipelineConfigsTable,
+		PluginsTable,
+		PluginSettingsTable,
 		ProjectsTable,
 		ProjectFoldersTable,
 		ProviderSettingsTable,

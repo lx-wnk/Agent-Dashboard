@@ -25,7 +25,7 @@ func TestService_DefaultsAndTypedAccess(t *testing.T) {
 	assert.Equal(t, 5, svc.Int("spawn.rateLimit"))
 	assert.False(t, svc.Bool("worktree.force"))
 	assert.Equal(t, "none", svc.String("auth.mode"))
-	assert.Empty(t, svc.StringSlice("plugins.enabled"))
+	assert.Empty(t, svc.StringSlice("spawn.allowedCommands"))
 
 	// Set persists + updates snapshot, validated
 	require.NoError(t, svc.Set(context.Background(), "worktree.force", "true"))
@@ -37,6 +37,6 @@ func TestService_DefaultsAndTypedAccess(t *testing.T) {
 	require.Error(t, svc.Set(context.Background(), "nope", "1"))
 
 	// stringSlice round-trips
-	require.NoError(t, svc.Set(context.Background(), "plugins.enabled", "voice-whisper,voice-webspeech"))
-	assert.Equal(t, []string{"voice-whisper", "voice-webspeech"}, svc.StringSlice("plugins.enabled"))
+	require.NoError(t, svc.Set(context.Background(), "spawn.allowedCommands", "voice-whisper,voice-webspeech"))
+	assert.Equal(t, []string{"voice-whisper", "voice-webspeech"}, svc.StringSlice("spawn.allowedCommands"))
 }

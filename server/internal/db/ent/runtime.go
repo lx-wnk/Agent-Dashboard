@@ -14,6 +14,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pluginsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
@@ -123,6 +125,62 @@ func init() {
 	pipelineconfigDescProjectID := pipelineconfigFields[2].Descriptor()
 	// pipelineconfig.DefaultProjectID holds the default value on creation for the project_id field.
 	pipelineconfig.DefaultProjectID = pipelineconfigDescProjectID.Default.(string)
+	pluginFields := schema.Plugin{}.Fields()
+	_ = pluginFields
+	// pluginDescName is the schema descriptor for name field.
+	pluginDescName := pluginFields[1].Descriptor()
+	// plugin.DefaultName holds the default value on creation for the name field.
+	plugin.DefaultName = pluginDescName.Default.(string)
+	// pluginDescVersion is the schema descriptor for version field.
+	pluginDescVersion := pluginFields[2].Descriptor()
+	// plugin.DefaultVersion holds the default value on creation for the version field.
+	plugin.DefaultVersion = pluginDescVersion.Default.(string)
+	// pluginDescActive is the schema descriptor for active field.
+	pluginDescActive := pluginFields[4].Descriptor()
+	// plugin.DefaultActive holds the default value on creation for the active field.
+	plugin.DefaultActive = pluginDescActive.Default.(bool)
+	// pluginDescPath is the schema descriptor for path field.
+	pluginDescPath := pluginFields[5].Descriptor()
+	// plugin.DefaultPath holds the default value on creation for the path field.
+	plugin.DefaultPath = pluginDescPath.Default.(string)
+	// pluginDescManifestHash is the schema descriptor for manifest_hash field.
+	pluginDescManifestHash := pluginFields[6].Descriptor()
+	// plugin.DefaultManifestHash holds the default value on creation for the manifest_hash field.
+	plugin.DefaultManifestHash = pluginDescManifestHash.Default.(string)
+	// pluginDescCreatedAt is the schema descriptor for created_at field.
+	pluginDescCreatedAt := pluginFields[7].Descriptor()
+	// plugin.DefaultCreatedAt holds the default value on creation for the created_at field.
+	plugin.DefaultCreatedAt = pluginDescCreatedAt.Default.(func() time.Time)
+	// pluginDescUpdatedAt is the schema descriptor for updated_at field.
+	pluginDescUpdatedAt := pluginFields[8].Descriptor()
+	// plugin.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	plugin.DefaultUpdatedAt = pluginDescUpdatedAt.Default.(func() time.Time)
+	// plugin.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	plugin.UpdateDefaultUpdatedAt = pluginDescUpdatedAt.UpdateDefault.(func() time.Time)
+	pluginsettingFields := schema.PluginSetting{}.Fields()
+	_ = pluginsettingFields
+	// pluginsettingDescValue is the schema descriptor for value field.
+	pluginsettingDescValue := pluginsettingFields[3].Descriptor()
+	// pluginsetting.DefaultValue holds the default value on creation for the value field.
+	pluginsetting.DefaultValue = pluginsettingDescValue.Default.(string)
+	// pluginsettingDescSecret is the schema descriptor for secret field.
+	pluginsettingDescSecret := pluginsettingFields[4].Descriptor()
+	// pluginsetting.DefaultSecret holds the default value on creation for the secret field.
+	pluginsetting.DefaultSecret = pluginsettingDescSecret.Default.(bool)
+	// pluginsettingDescNonce is the schema descriptor for nonce field.
+	pluginsettingDescNonce := pluginsettingFields[5].Descriptor()
+	// pluginsetting.DefaultNonce holds the default value on creation for the nonce field.
+	pluginsetting.DefaultNonce = pluginsettingDescNonce.Default.(string)
+	// pluginsettingDescCreatedAt is the schema descriptor for created_at field.
+	pluginsettingDescCreatedAt := pluginsettingFields[6].Descriptor()
+	// pluginsetting.DefaultCreatedAt holds the default value on creation for the created_at field.
+	pluginsetting.DefaultCreatedAt = pluginsettingDescCreatedAt.Default.(func() time.Time)
+	// pluginsettingDescUpdatedAt is the schema descriptor for updated_at field.
+	pluginsettingDescUpdatedAt := pluginsettingFields[7].Descriptor()
+	// pluginsetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	pluginsetting.DefaultUpdatedAt = pluginsettingDescUpdatedAt.Default.(func() time.Time)
+	// pluginsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	pluginsetting.UpdateDefaultUpdatedAt = pluginsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	projectFields := schema.Project{}.Fields()
 	_ = projectFields
 	// projectDescCreatedAt is the schema descriptor for created_at field.

@@ -7,10 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
-	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 )
 
 // fakeRegistry records start/stop calls so tests can assert the controller never
@@ -33,25 +35,16 @@ func (f *fakeRegistry) StopOne(id string) error {
 
 func (f *fakeRegistry) Infos() []plugin.Info { return f.healthy }
 
-// fakeRepo is an in-memory settings.Repo.
-type fakeRepo struct{ m map[string]string }
-
-func (f *fakeRepo) Get(_ context.Context, k string) (string, bool, error) {
-	v, ok := f.m[k]
-	return v, ok, nil
-}
-func (f *fakeRepo) Set(_ context.Context, k, v string) error { f.m[k] = v; return nil }
-func (f *fakeRepo) ListAll(_ context.Context) (map[string]string, error) {
-	return f.m, nil
-}
-
-func newSettings(t *testing.T) *settings.Service {
+// newPluginRepo opens an in-memory DB and returns a real PluginRepo so tests
+// exercise the actual table-backed persistence.
+func newPluginRepo(t *testing.T) repo.PluginRepo {
 	t.Helper()
-	svc := settings.New(&fakeRepo{m: map[string]string{}})
-	if err := svc.Load(context.Background()); err != nil {
-		t.Fatalf("settings load: %v", err)
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db open: %v", err)
 	}
-	return svc
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	return repo.NewPluginRepo(bundle.Client)
 }
 
 // writeDescriptor writes a plugin.json into dir/<id>/.
@@ -74,8 +67,8 @@ func TestSetEnabled_EnableNonAuth_PersistsRestartNoStartStop(t *testing.T) {
 	dir := t.TempDir()
 	writeDescriptor(t, dir, plugin.Descriptor{ID: "voice-whisper", Capabilities: []string{plugin.CapRouteExtension}})
 	reg := &fakeRegistry{}
-	svc := newSettings(t)
-	ctl := pluginsctl.New(reg, svc, dir)
+	pr := newPluginRepo(t)
+	ctl := pluginsctl.New(reg, pr, dir)
 
 	applied, err := ctl.SetEnabled(context.Background(), "voice-whisper", true)
 	if err != nil {
@@ -87,8 +80,15 @@ func TestSetEnabled_EnableNonAuth_PersistsRestartNoStartStop(t *testing.T) {
 	if len(reg.started) != 0 || len(reg.stopped) != 0 {
 		t.Errorf("restart-to-apply must not start/stop live: started=%v stopped=%v", reg.started, reg.stopped)
 	}
-	if got := svc.StringSlice("plugins.enabled"); len(got) != 1 || got[0] != "voice-whisper" {
-		t.Errorf("plugins.enabled = %v, want [voice-whisper]", got)
+	got, err := pr.Get(context.Background(), "voice-whisper")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !got.Active {
+		t.Errorf("active = false, want true")
+	}
+	if got.InstalledAt == nil {
+		t.Errorf("installed_at = nil, want set")
 	}
 }
 
@@ -96,13 +96,21 @@ func TestSetEnabled_DisableNonAuth_PersistsRestartNoStartStop(t *testing.T) {
 	dir := t.TempDir()
 	writeDescriptor(t, dir, plugin.Descriptor{ID: "voice-whisper", Capabilities: []string{plugin.CapRouteExtension}})
 	reg := &fakeRegistry{}
-	svc := newSettings(t)
-	if err := svc.Set(context.Background(), "plugins.enabled", "voice-whisper"); err != nil {
-		t.Fatalf("seed: %v", err)
+	pr := newPluginRepo(t)
+	ctx := context.Background()
+	if _, err := pr.Upsert(ctx, repo.UpsertPluginInput{ID: "voice-whisper"}); err != nil {
+		t.Fatalf("seed upsert: %v", err)
 	}
-	ctl := pluginsctl.New(reg, svc, dir)
+	now := time.Now()
+	if err := pr.SetInstalledAt(ctx, "voice-whisper", &now); err != nil {
+		t.Fatalf("seed installed_at: %v", err)
+	}
+	if err := pr.SetActive(ctx, "voice-whisper", true); err != nil {
+		t.Fatalf("seed active: %v", err)
+	}
+	ctl := pluginsctl.New(reg, pr, dir)
 
-	applied, err := ctl.SetEnabled(context.Background(), "voice-whisper", false)
+	applied, err := ctl.SetEnabled(ctx, "voice-whisper", false)
 	if err != nil {
 		t.Fatalf("SetEnabled: %v", err)
 	}
@@ -112,8 +120,12 @@ func TestSetEnabled_DisableNonAuth_PersistsRestartNoStartStop(t *testing.T) {
 	if len(reg.started) != 0 || len(reg.stopped) != 0 {
 		t.Errorf("restart-to-apply must not start/stop live: started=%v stopped=%v", reg.started, reg.stopped)
 	}
-	if got := svc.StringSlice("plugins.enabled"); len(got) != 0 {
-		t.Errorf("plugins.enabled = %v, want empty", got)
+	got, err := pr.Get(ctx, "voice-whisper")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Active {
+		t.Errorf("active = true, want false")
 	}
 }
 
@@ -121,8 +133,8 @@ func TestSetEnabled_AuthProvider_PersistsRestartNoStartStop(t *testing.T) {
 	dir := t.TempDir()
 	writeDescriptor(t, dir, plugin.Descriptor{ID: "github-auth", Capabilities: []string{plugin.CapAuthProvider}})
 	reg := &fakeRegistry{}
-	svc := newSettings(t)
-	ctl := pluginsctl.New(reg, svc, dir)
+	pr := newPluginRepo(t)
+	ctl := pluginsctl.New(reg, pr, dir)
 
 	applied, err := ctl.SetEnabled(context.Background(), "github-auth", true)
 	if err != nil {
@@ -134,14 +146,18 @@ func TestSetEnabled_AuthProvider_PersistsRestartNoStartStop(t *testing.T) {
 	if len(reg.started) != 0 || len(reg.stopped) != 0 {
 		t.Errorf("auth_provider must not start/stop live: started=%v stopped=%v", reg.started, reg.stopped)
 	}
-	if got := svc.StringSlice("plugins.enabled"); len(got) != 1 || got[0] != "github-auth" {
-		t.Errorf("plugins.enabled = %v, want [github-auth]", got)
+	got, err := pr.Get(context.Background(), "github-auth")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !got.Active {
+		t.Errorf("active = false, want true")
 	}
 }
 
 func TestSetEnabled_UnknownID(t *testing.T) {
 	dir := t.TempDir()
-	ctl := pluginsctl.New(&fakeRegistry{}, newSettings(t), dir)
+	ctl := pluginsctl.New(&fakeRegistry{}, newPluginRepo(t), dir)
 	_, err := ctl.SetEnabled(context.Background(), "does-not-exist", true)
 	if err == nil {
 		t.Fatal("expected ErrUnknownPlugin")
@@ -156,11 +172,15 @@ func TestList_FlagsReflectDiscoveryEnabledAndHealth(t *testing.T) {
 	writeDescriptor(t, dir, plugin.Descriptor{ID: "voice-whisper", Capabilities: []string{plugin.CapRouteExtension}})
 	writeDescriptor(t, dir, plugin.Descriptor{ID: "github-auth", Capabilities: []string{plugin.CapAuthProvider}})
 	reg := &fakeRegistry{healthy: []plugin.Info{{ID: "voice-whisper"}}}
-	svc := newSettings(t)
-	if err := svc.Set(context.Background(), "plugins.enabled", "voice-whisper"); err != nil {
-		t.Fatalf("seed: %v", err)
+	pr := newPluginRepo(t)
+	ctx := context.Background()
+	if _, err := pr.Upsert(ctx, repo.UpsertPluginInput{ID: "voice-whisper"}); err != nil {
+		t.Fatalf("seed upsert: %v", err)
 	}
-	ctl := pluginsctl.New(reg, svc, dir)
+	if err := pr.SetActive(ctx, "voice-whisper", true); err != nil {
+		t.Fatalf("seed active: %v", err)
+	}
+	ctl := pluginsctl.New(reg, pr, dir)
 
 	states, err := ctl.List()
 	if err != nil {

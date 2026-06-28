@@ -30,6 +30,7 @@ These are the only environment variables still read by the core server. They can
 | `DASHBOARD_PROVIDER_DIR` | — | Optional directory of user provider descriptors merged over the built-ins |
 | `DASHBOARD_WORKTREE_ROOT` | `~/.claude/dashboard-worktrees` | Per-task git worktree root |
 | `DASHBOARD_HOOKS_SECRET` | auto-generated & persisted | Shared bearer token for `/api/hooks/*`. Persisted to `~/.claude/dashboard-hooks-secret` if unset |
+| `DASHBOARD_SECRET_KEY` | auto-generated & persisted | Master key (64 hex chars / 32 bytes) that encrypts plugin **secret** settings at rest (AES-256-GCM). If unset, a key is generated and persisted to `~/.claude/dashboard-secret.key` (mode `0600`). Set a stable value to share encrypted secrets across machines. **Losing it makes stored plugin secrets unreadable — you must re-enter them** |
 | `DASHBOARD_MCP_TOKEN` | — | Bearer token for dashboard MCP access |
 | `DASHBOARD_AUTH_PLUGIN_SECRET` | — | Shared secret between the core server and an auth plugin (`POST /api/auth/session`). Required when using an auth plugin. Min 32 chars |
 | `DASHBOARD_REMOTES_ENABLED` | `false` | Opt-in to binding on a non-loopback address. The dashboard reads sensitive Claude session data — only enable behind a VPN or SSH tunnel |
@@ -208,6 +209,61 @@ These keys live in the `pipeline_config` table, not in environment variables. Wr
 |---|---|---|
 | `scheduleTickIntervalMs` | `30000` | How often the scheduler checks for due schedules (ms). Minimum enforced: 1000 ms |
 | `scheduleCatchup` | `none` | Global fallback catchup policy after downtime. `none` = skip missed windows; `once` = fire a single catch-up run. Overridable per schedule via its `catchup` field |
+
+## Plugin lifecycle
+
+Plugins are discovered from `DASHBOARD_PLUGIN_DIR` and tracked in the database `plugin`
+table, which is the source of truth for each plugin's state. The legacy `plugins.enabled`
+runtime setting is **superseded** by this table; on first boot the server migrates any
+existing `plugins.enabled` value into it automatically.
+
+### Manifest v2 (`plugin.json`)
+
+Alongside the v1 fields (`id`, `name`, `version`, `capabilities`, `addr`, `command`,
+`env`), a v2 manifest may declare four optional sections. v1 manifests still load
+unchanged.
+
+| Field | Shape | Purpose |
+|---|---|---|
+| `slots` | list of `{ slot, priority, mode }` | UI contributions into a named host slot. `mode` is `override` (replace) or `extend` (wrap the parent); higher `priority` renders first. Consumed by the frontend in **SP4** |
+| `settings` | list of `{ key, type, label, secret, enum? }` | Per-plugin configurable settings. `type` is `string\|url\|int\|bool\|enum`. `secret: true` fields are encrypted at rest and masked in the API |
+| `lifecycle` | `{ install, postInstall, activate, deactivate, update, uninstall }` | Optional HTTP hook paths (on the plugin's `addr`) invoked on the matching state transition. An empty path means the transition runs without a hook |
+| `permissions` | list of strings | Permissions the plugin requests |
+
+### States
+
+A plugin moves through three states, persisted in the `plugin` table:
+
+- `discovered` — found on disk, not yet installed
+- `inactive` — installed but not serving
+- `active` — installed and activated
+
+> In SP1 the state machine and its hooks are wired, but **activation's serving effects
+> (route mounting and UI slot rendering) are not yet live** — those land with **SP2**
+> (route/dispatch) and **SP4** (frontend slots). Activating a plugin today records the
+> state transition and runs any configured lifecycle hook, nothing more.
+
+### Lifecycle API
+
+All endpoints live under `/api/plugins` and require the usual session auth. Plugin
+addresses, commands, and secrets are never returned to the client.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/plugins` | List plugins with `state`, capabilities, and `hasSettings` |
+| `POST /api/plugins/{id}/install` | `discovered` → `inactive` |
+| `POST /api/plugins/{id}/activate` | `inactive` → `active` |
+| `POST /api/plugins/{id}/deactivate` | `active` → `inactive` |
+| `POST /api/plugins/{id}/uninstall` | back to `discovered` |
+| `GET /api/plugins/{id}/settings` | Schema + current values; secret values are returned masked as `********` |
+| `PUT /api/plugins/{id}/settings` | Update values; sending the `********` sentinel for a secret leaves the stored value unchanged |
+
+### Secret settings at rest
+
+Settings marked `secret: true` are encrypted with AES-256-GCM using the
+`DASHBOARD_SECRET_KEY` master key (see [Bootstrap configuration](#bootstrap-configuration-env--flags))
+before they touch the database, and are masked in every API response. Losing the master
+key makes existing secrets undecryptable — you must re-enter them.
 
 ## Multi-machine (advanced)
 

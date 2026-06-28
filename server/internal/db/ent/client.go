@@ -25,6 +25,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pluginsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
@@ -66,6 +68,10 @@ type Client struct {
 	PermissionRequest *PermissionRequestClient
 	// PipelineConfig is the client for interacting with the PipelineConfig builders.
 	PipelineConfig *PipelineConfigClient
+	// Plugin is the client for interacting with the Plugin builders.
+	Plugin *PluginClient
+	// PluginSetting is the client for interacting with the PluginSetting builders.
+	PluginSetting *PluginSettingClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
 	// ProjectFolder is the client for interacting with the ProjectFolder builders.
@@ -115,6 +121,8 @@ func (c *Client) init() {
 	c.PermissionPreset = NewPermissionPresetClient(c.config)
 	c.PermissionRequest = NewPermissionRequestClient(c.config)
 	c.PipelineConfig = NewPipelineConfigClient(c.config)
+	c.Plugin = NewPluginClient(c.config)
+	c.PluginSetting = NewPluginSettingClient(c.config)
 	c.Project = NewProjectClient(c.config)
 	c.ProjectFolder = NewProjectFolderClient(c.config)
 	c.ProviderSetting = NewProviderSettingClient(c.config)
@@ -231,6 +239,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
+		Plugin:             NewPluginClient(cfg),
+		PluginSetting:      NewPluginSettingClient(cfg),
 		Project:            NewProjectClient(cfg),
 		ProjectFolder:      NewProjectFolderClient(cfg),
 		ProviderSetting:    NewProviderSettingClient(cfg),
@@ -274,6 +284,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
+		Plugin:             NewPluginClient(cfg),
+		PluginSetting:      NewPluginSettingClient(cfg),
 		Project:            NewProjectClient(cfg),
 		ProjectFolder:      NewProjectFolderClient(cfg),
 		ProviderSetting:    NewProviderSettingClient(cfg),
@@ -319,10 +331,10 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.CoordLock,
 		c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset, c.PermissionRequest,
-		c.PipelineConfig, c.Project, c.ProjectFolder, c.ProviderSetting,
-		c.RefinementTurn, c.RemoteRegistration, c.Scratchpad, c.Spawner, c.StageRun,
-		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
-		c.User,
+		c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder,
+		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Scratchpad,
+		c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
+		c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -334,10 +346,10 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.CoordLock,
 		c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset, c.PermissionRequest,
-		c.PipelineConfig, c.Project, c.ProjectFolder, c.ProviderSetting,
-		c.RefinementTurn, c.RemoteRegistration, c.Scratchpad, c.Spawner, c.StageRun,
-		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
-		c.User,
+		c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder,
+		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Scratchpad,
+		c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
+		c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -366,6 +378,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PermissionRequest.mutate(ctx, m)
 	case *PipelineConfigMutation:
 		return c.PipelineConfig.mutate(ctx, m)
+	case *PluginMutation:
+		return c.Plugin.mutate(ctx, m)
+	case *PluginSettingMutation:
+		return c.PluginSetting.mutate(ctx, m)
 	case *ProjectMutation:
 		return c.Project.mutate(ctx, m)
 	case *ProjectFolderMutation:
@@ -1742,6 +1758,272 @@ func (c *PipelineConfigClient) mutate(ctx context.Context, m *PipelineConfigMuta
 		return (&PipelineConfigDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown PipelineConfig mutation op: %q", m.Op())
+	}
+}
+
+// PluginClient is a client for the Plugin schema.
+type PluginClient struct {
+	config
+}
+
+// NewPluginClient returns a client for the Plugin from the given config.
+func NewPluginClient(c config) *PluginClient {
+	return &PluginClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `plugin.Hooks(f(g(h())))`.
+func (c *PluginClient) Use(hooks ...Hook) {
+	c.hooks.Plugin = append(c.hooks.Plugin, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `plugin.Intercept(f(g(h())))`.
+func (c *PluginClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Plugin = append(c.inters.Plugin, interceptors...)
+}
+
+// Create returns a builder for creating a Plugin entity.
+func (c *PluginClient) Create() *PluginCreate {
+	mutation := newPluginMutation(c.config, OpCreate)
+	return &PluginCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Plugin entities.
+func (c *PluginClient) CreateBulk(builders ...*PluginCreate) *PluginCreateBulk {
+	return &PluginCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PluginClient) MapCreateBulk(slice any, setFunc func(*PluginCreate, int)) *PluginCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PluginCreateBulk{err: fmt.Errorf("calling to PluginClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PluginCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PluginCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Plugin.
+func (c *PluginClient) Update() *PluginUpdate {
+	mutation := newPluginMutation(c.config, OpUpdate)
+	return &PluginUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PluginClient) UpdateOne(_m *Plugin) *PluginUpdateOne {
+	mutation := newPluginMutation(c.config, OpUpdateOne, withPlugin(_m))
+	return &PluginUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PluginClient) UpdateOneID(id string) *PluginUpdateOne {
+	mutation := newPluginMutation(c.config, OpUpdateOne, withPluginID(id))
+	return &PluginUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Plugin.
+func (c *PluginClient) Delete() *PluginDelete {
+	mutation := newPluginMutation(c.config, OpDelete)
+	return &PluginDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PluginClient) DeleteOne(_m *Plugin) *PluginDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PluginClient) DeleteOneID(id string) *PluginDeleteOne {
+	builder := c.Delete().Where(plugin.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PluginDeleteOne{builder}
+}
+
+// Query returns a query builder for Plugin.
+func (c *PluginClient) Query() *PluginQuery {
+	return &PluginQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePlugin},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Plugin entity by its id.
+func (c *PluginClient) Get(ctx context.Context, id string) (*Plugin, error) {
+	return c.Query().Where(plugin.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PluginClient) GetX(ctx context.Context, id string) *Plugin {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PluginClient) Hooks() []Hook {
+	return c.hooks.Plugin
+}
+
+// Interceptors returns the client interceptors.
+func (c *PluginClient) Interceptors() []Interceptor {
+	return c.inters.Plugin
+}
+
+func (c *PluginClient) mutate(ctx context.Context, m *PluginMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PluginCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PluginUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PluginUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PluginDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Plugin mutation op: %q", m.Op())
+	}
+}
+
+// PluginSettingClient is a client for the PluginSetting schema.
+type PluginSettingClient struct {
+	config
+}
+
+// NewPluginSettingClient returns a client for the PluginSetting from the given config.
+func NewPluginSettingClient(c config) *PluginSettingClient {
+	return &PluginSettingClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `pluginsetting.Hooks(f(g(h())))`.
+func (c *PluginSettingClient) Use(hooks ...Hook) {
+	c.hooks.PluginSetting = append(c.hooks.PluginSetting, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `pluginsetting.Intercept(f(g(h())))`.
+func (c *PluginSettingClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PluginSetting = append(c.inters.PluginSetting, interceptors...)
+}
+
+// Create returns a builder for creating a PluginSetting entity.
+func (c *PluginSettingClient) Create() *PluginSettingCreate {
+	mutation := newPluginSettingMutation(c.config, OpCreate)
+	return &PluginSettingCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PluginSetting entities.
+func (c *PluginSettingClient) CreateBulk(builders ...*PluginSettingCreate) *PluginSettingCreateBulk {
+	return &PluginSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PluginSettingClient) MapCreateBulk(slice any, setFunc func(*PluginSettingCreate, int)) *PluginSettingCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PluginSettingCreateBulk{err: fmt.Errorf("calling to PluginSettingClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PluginSettingCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PluginSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PluginSetting.
+func (c *PluginSettingClient) Update() *PluginSettingUpdate {
+	mutation := newPluginSettingMutation(c.config, OpUpdate)
+	return &PluginSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PluginSettingClient) UpdateOne(_m *PluginSetting) *PluginSettingUpdateOne {
+	mutation := newPluginSettingMutation(c.config, OpUpdateOne, withPluginSetting(_m))
+	return &PluginSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PluginSettingClient) UpdateOneID(id string) *PluginSettingUpdateOne {
+	mutation := newPluginSettingMutation(c.config, OpUpdateOne, withPluginSettingID(id))
+	return &PluginSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PluginSetting.
+func (c *PluginSettingClient) Delete() *PluginSettingDelete {
+	mutation := newPluginSettingMutation(c.config, OpDelete)
+	return &PluginSettingDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PluginSettingClient) DeleteOne(_m *PluginSetting) *PluginSettingDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PluginSettingClient) DeleteOneID(id string) *PluginSettingDeleteOne {
+	builder := c.Delete().Where(pluginsetting.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PluginSettingDeleteOne{builder}
+}
+
+// Query returns a query builder for PluginSetting.
+func (c *PluginSettingClient) Query() *PluginSettingQuery {
+	return &PluginSettingQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePluginSetting},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PluginSetting entity by its id.
+func (c *PluginSettingClient) Get(ctx context.Context, id string) (*PluginSetting, error) {
+	return c.Query().Where(pluginsetting.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PluginSettingClient) GetX(ctx context.Context, id string) *PluginSetting {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PluginSettingClient) Hooks() []Hook {
+	return c.hooks.PluginSetting
+}
+
+// Interceptors returns the client interceptors.
+func (c *PluginSettingClient) Interceptors() []Interceptor {
+	return c.inters.PluginSetting
+}
+
+func (c *PluginSettingClient) mutate(ctx context.Context, m *PluginSettingMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PluginSettingCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PluginSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PluginSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PluginSettingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PluginSetting mutation op: %q", m.Op())
 	}
 }
 
@@ -3788,15 +4070,15 @@ type (
 	hooks struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, CoordLock, DriftAlert,
 		EvalMetricSnapshot, PermissionPreset, PermissionRequest, PipelineConfig,
-		Project, ProjectFolder, ProviderSetting, RefinementTurn, RemoteRegistration,
-		Scratchpad, Spawner, StageRun, SystemPrompt, Task, TaskDependency,
-		TaskPermission, TaskSchedule, User []ent.Hook
+		Plugin, PluginSetting, Project, ProjectFolder, ProviderSetting, RefinementTurn,
+		RemoteRegistration, Scratchpad, Spawner, StageRun, SystemPrompt, Task,
+		TaskDependency, TaskPermission, TaskSchedule, User []ent.Hook
 	}
 	inters struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, CoordLock, DriftAlert,
 		EvalMetricSnapshot, PermissionPreset, PermissionRequest, PipelineConfig,
-		Project, ProjectFolder, ProviderSetting, RefinementTurn, RemoteRegistration,
-		Scratchpad, Spawner, StageRun, SystemPrompt, Task, TaskDependency,
-		TaskPermission, TaskSchedule, User []ent.Interceptor
+		Plugin, PluginSetting, Project, ProjectFolder, ProviderSetting, RefinementTurn,
+		RemoteRegistration, Scratchpad, Spawner, StageRun, SystemPrompt, Task,
+		TaskDependency, TaskPermission, TaskSchedule, User []ent.Interceptor
 	}
 )

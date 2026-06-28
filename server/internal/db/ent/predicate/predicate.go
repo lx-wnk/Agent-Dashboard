@@ -36,6 +36,12 @@ type PermissionRequest func(*sql.Selector)
 // PipelineConfig is the predicate function for pipelineconfig builders.
 type PipelineConfig func(*sql.Selector)
 
+// Plugin is the predicate function for plugin builders.
+type Plugin func(*sql.Selector)
+
+// PluginSetting is the predicate function for pluginsetting builders.
+type PluginSetting func(*sql.Selector)
+
 // Project is the predicate function for project builders.
 type Project func(*sql.Selector)
 

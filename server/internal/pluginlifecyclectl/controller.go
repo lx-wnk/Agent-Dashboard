@@ -1,0 +1,219 @@
+// Package pluginlifecyclectl is the control plane behind the /api/plugins
+// lifecycle + settings endpoints. It wires the discovery state (plugin repo),
+// the lifecycle engine, and the settings service, reading each plugin's manifest
+// from disk for its descriptor + settings schema.
+package pluginlifecyclectl
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
+)
+
+// Repo is the subset of repo.PluginRepo the controller reads.
+type Repo interface {
+	List(ctx context.Context) ([]*ent.Plugin, error)
+	Get(ctx context.Context, id string) (*ent.Plugin, error)
+}
+
+// Engine is the lifecycle transition surface (satisfied by *pluginlifecycle.Engine).
+type Engine interface {
+	Install(ctx context.Context, d plugin.Descriptor) error
+	Activate(ctx context.Context, d plugin.Descriptor) error
+	Deactivate(ctx context.Context, d plugin.Descriptor) error
+	Uninstall(ctx context.Context, d plugin.Descriptor) error
+}
+
+// Settings is the per-plugin settings surface (satisfied by *pluginsettings.Service).
+type Settings interface {
+	Get(ctx context.Context, pluginID string, schema []plugin.SettingField) (map[string]string, error)
+	Put(ctx context.Context, pluginID string, schema []plugin.SettingField, values map[string]string) error
+}
+
+// ManifestLoader resolves a plugin's on-disk descriptor and the hash of its
+// manifest bytes. path is the stored plugin directory; when empty, the loader
+// falls back to <dir>/<id>.
+type ManifestLoader interface {
+	Load(id, path string) (desc plugin.Descriptor, hash string, err error)
+}
+
+// FileManifestLoader reads plugin.json from disk.
+type FileManifestLoader struct{ Dir string }
+
+func (l FileManifestLoader) Load(id, path string) (plugin.Descriptor, string, error) {
+	dir := path
+	if dir == "" {
+		dir = filepath.Join(l.Dir, id)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "plugin.json"))
+	if err != nil {
+		return plugin.Descriptor{}, "", err
+	}
+	var d plugin.Descriptor
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return plugin.Descriptor{}, "", fmt.Errorf("pluginlifecyclectl: parse manifest %s: %w", id, err)
+	}
+	sum := sha256.Sum256(raw)
+	return d, hex.EncodeToString(sum[:]), nil
+}
+
+// Controller derives plugin state, dispatches lifecycle transitions, and proxies
+// settings reads/writes.
+type Controller struct {
+	repo     Repo
+	engine   Engine
+	settings Settings
+	loader   ManifestLoader
+}
+
+// New builds a Controller that reads manifests from the filesystem, with dir as
+// the fallback plugin directory when a row has no stored path.
+func New(r Repo, engine Engine, settings Settings, dir string) *Controller {
+	return NewWithLoader(r, engine, settings, FileManifestLoader{Dir: dir})
+}
+
+// NewWithLoader builds a Controller with an explicit manifest loader (tests).
+func NewWithLoader(r Repo, engine Engine, settings Settings, loader ManifestLoader) *Controller {
+	return &Controller{repo: r, engine: engine, settings: settings, loader: loader}
+}
+
+// deriveState maps the persisted columns to the public state string. No
+// installed_at = discovered; installed + inactive = inactive; active = active.
+func deriveState(p *ent.Plugin) string {
+	if p.InstalledAt == nil {
+		return "discovered"
+	}
+	if p.Active {
+		return "active"
+	}
+	return "inactive"
+}
+
+func nonNilCaps(caps []string) []string {
+	if caps == nil {
+		return []string{}
+	}
+	return caps
+}
+
+// List returns the lifecycle view for every persisted plugin. State comes from
+// the DB row; capabilities/hasSettings/updateAvailable come from the on-disk
+// manifest (a manifest read failure degrades to DB-only fields).
+func (c *Controller) List(ctx context.Context) ([]plugins.PluginView, error) {
+	rows, err := c.repo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("pluginlifecyclectl.List: %w", err)
+	}
+	out := make([]plugins.PluginView, 0, len(rows))
+	for _, p := range rows {
+		view := plugins.PluginView{
+			ID:           p.ID,
+			Name:         p.Name,
+			Version:      p.Version,
+			State:        deriveState(p),
+			Capabilities: []string{},
+		}
+		if desc, hash, lerr := c.loader.Load(p.ID, p.Path); lerr == nil {
+			view.Capabilities = nonNilCaps(desc.Capabilities)
+			view.HasSettings = len(desc.Settings) > 0
+			view.UpdateAvailable = hash != "" && hash != p.ManifestHash
+		}
+		out = append(out, view)
+	}
+	return out, nil
+}
+
+// descriptorFor resolves a plugin's descriptor + manifest hash, mapping a
+// missing plugin to pluginsctl.ErrUnknownPlugin.
+func (c *Controller) descriptorFor(ctx context.Context, id string) (plugin.Descriptor, string, error) {
+	path := ""
+	row, err := c.repo.Get(ctx, id)
+	switch {
+	case err == nil:
+		path = row.Path
+	case repo.IsNotFound(err):
+		// fall through: loader fallback dir may still resolve it
+	default:
+		return plugin.Descriptor{}, "", fmt.Errorf("pluginlifecyclectl: get %q: %w", id, err)
+	}
+	desc, hash, lerr := c.loader.Load(id, path)
+	if lerr != nil {
+		return plugin.Descriptor{}, "", fmt.Errorf("%w: %q", pluginsctl.ErrUnknownPlugin, id)
+	}
+	if desc.ID == "" {
+		desc.ID = id
+	}
+	return desc, hash, nil
+}
+
+// Transition loads the descriptor, dispatches to the engine, and returns the
+// refreshed view. An unsupported action yields pluginsctl.ErrInvalidAction.
+func (c *Controller) Transition(ctx context.Context, id, action string) (plugins.PluginView, error) {
+	desc, hash, err := c.descriptorFor(ctx, id)
+	if err != nil {
+		return plugins.PluginView{}, err
+	}
+	switch action {
+	case "install":
+		err = c.engine.Install(ctx, desc)
+	case "activate":
+		err = c.engine.Activate(ctx, desc)
+	case "deactivate":
+		err = c.engine.Deactivate(ctx, desc)
+	case "uninstall":
+		err = c.engine.Uninstall(ctx, desc)
+	default:
+		return plugins.PluginView{}, fmt.Errorf("%w: %q", pluginsctl.ErrInvalidAction, action)
+	}
+	if err != nil {
+		return plugins.PluginView{}, fmt.Errorf("pluginlifecyclectl: %s %q: %w", action, id, err)
+	}
+	row, err := c.repo.Get(ctx, id)
+	if err != nil {
+		return plugins.PluginView{}, fmt.Errorf("pluginlifecyclectl: reload %q: %w", id, err)
+	}
+	return plugins.PluginView{
+		ID:              row.ID,
+		Name:            row.Name,
+		Version:         row.Version,
+		State:           deriveState(row),
+		UpdateAvailable: hash != "" && hash != row.ManifestHash,
+		Capabilities:    nonNilCaps(desc.Capabilities),
+		HasSettings:     len(desc.Settings) > 0,
+	}, nil
+}
+
+// GetSettings returns the manifest schema and the (masked) stored values.
+func (c *Controller) GetSettings(ctx context.Context, id string) ([]plugin.SettingField, map[string]string, error) {
+	desc, _, err := c.descriptorFor(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	values, err := c.settings.Get(ctx, id, desc.Settings)
+	if err != nil {
+		return nil, nil, fmt.Errorf("pluginlifecyclectl: get settings %q: %w", id, err)
+	}
+	return desc.Settings, values, nil
+}
+
+// PutSettings persists values against the manifest schema.
+func (c *Controller) PutSettings(ctx context.Context, id string, values map[string]string) error {
+	desc, _, err := c.descriptorFor(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := c.settings.Put(ctx, id, desc.Settings, values); err != nil {
+		return fmt.Errorf("pluginlifecyclectl: put settings %q: %w", id, err)
+	}
+	return nil
+}

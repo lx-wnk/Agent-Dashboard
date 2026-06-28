@@ -1,6 +1,7 @@
 // Package pluginsctl is the control plane for plugin enable/disable. Toggling a
-// plugin persists the new enable-list in settings and takes effect on the next
-// server restart; the registry is read-only here (health/info for listing).
+// plugin persists the new active-state in the plugin table and takes effect on
+// the next server restart; the registry is read-only here (health/info for
+// listing).
 package pluginsctl
 
 import (
@@ -10,19 +11,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
+	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 )
-
-// enabledKey is the settings key holding the comma-joined list of enabled plugin IDs.
-const enabledKey = "plugins.enabled"
 
 // ErrUnknownPlugin signals that an ID matched no discovered plugin. The handler
 // maps it to 400; any other error is a persistence failure mapped to 500.
 var ErrUnknownPlugin = errors.New("pluginsctl: unknown plugin")
+
+// ErrInvalidAction signals an unsupported lifecycle action (not one of
+// install|activate|deactivate|uninstall). The handler maps it to 400.
+var ErrInvalidAction = errors.New("pluginsctl: invalid action")
 
 // Applied describes whether a change took effect immediately or needs a restart.
 type Applied string
@@ -50,18 +52,18 @@ type PluginState struct {
 
 // Controller resolves discovered plugins and toggles their enable-state.
 type Controller struct {
-	reg      Registry
-	settings *settings.Service
-	dir      string
-	// mu serializes the read-modify-write of plugins.enabled in SetEnabled so
+	reg     Registry
+	plugins repo.PluginRepo
+	dir     string
+	// mu serializes the read-modify-write of a plugin row in SetEnabled so
 	// concurrent toggles cannot lose an update.
 	mu sync.Mutex
 }
 
-// New builds a Controller. settings may be nil (no DB); in that case nothing is
+// New builds a Controller. plugins may be nil (no DB); in that case nothing is
 // reported enabled and SetEnabled fails because the state cannot be persisted.
-func New(reg Registry, svc *settings.Service, dir string) *Controller {
-	return &Controller{reg: reg, settings: svc, dir: dir}
+func New(reg Registry, plugins repo.PluginRepo, dir string) *Controller {
+	return &Controller{reg: reg, plugins: plugins, dir: dir}
 }
 
 // List returns every discovered plugin with its enable/health/auth flags.
@@ -109,37 +111,48 @@ func (c *Controller) SetEnabled(ctx context.Context, id string, enable bool) (Ap
 	return AppliedRestart, nil
 }
 
-// persist updates plugins.enabled to add or remove id, preserving order.
+// persist writes the active-state into the plugin table. Enabling ensures the
+// row exists, stamps installed_at when first installed, and sets active=true;
+// disabling sets active=false (a no-op for a plugin that was never installed).
 func (c *Controller) persist(ctx context.Context, id string, enable bool) error {
-	if c.settings == nil {
-		return fmt.Errorf("pluginsctl: settings unavailable, cannot persist enable-state")
+	if c.plugins == nil {
+		return fmt.Errorf("pluginsctl: plugin repo unavailable, cannot persist enable-state")
 	}
-	current := c.settings.StringSlice(enabledKey)
-	next := make([]string, 0, len(current)+1)
-	seen := false
-	for _, e := range current {
-		if e == id {
-			seen = true
-			if enable {
-				next = append(next, e)
-			}
-			continue
+	existing, err := c.plugins.Get(ctx, id)
+	if err != nil && !repo.IsNotFound(err) {
+		return err
+	}
+	if !enable {
+		if existing == nil {
+			return nil
 		}
-		next = append(next, e)
+		return c.plugins.SetActive(ctx, id, false)
 	}
-	if enable && !seen {
-		next = append(next, id)
+	if _, err := c.plugins.Upsert(ctx, repo.UpsertPluginInput{ID: id}); err != nil {
+		return err
 	}
-	return c.settings.Set(ctx, enabledKey, strings.Join(next, ","))
+	if existing == nil || existing.InstalledAt == nil {
+		now := time.Now()
+		if err := c.plugins.SetInstalledAt(ctx, id, &now); err != nil {
+			return err
+		}
+	}
+	return c.plugins.SetActive(ctx, id, true)
 }
 
 func (c *Controller) enabledSet() map[string]bool {
 	set := make(map[string]bool)
-	if c.settings == nil {
+	if c.plugins == nil {
 		return set
 	}
-	for _, id := range c.settings.StringSlice(enabledKey) {
-		set[id] = true
+	rows, err := c.plugins.List(context.Background())
+	if err != nil {
+		return set
+	}
+	for _, p := range rows {
+		if p.Active {
+			set[p.ID] = true
+		}
 	}
 	return set
 }
