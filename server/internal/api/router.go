@@ -16,6 +16,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/frontend"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/admin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
@@ -159,6 +160,7 @@ type RouterDeps struct {
 	PluginsHandler         *apiplugins.Handler
 	PluginLifecycleHandler *apiplugins.LifecycleHandler
 	AuditEventRepo         repo.AuditEventRepo
+	AdminHandler          *admin.Handler
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -448,6 +450,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// before forwarding to the plugin.
 		if deps.PluginRegistry != nil {
 			r.Handle("/api/plugins/{id}/proxy/*", plugin.NewDispatcher(deps.PluginRegistry))
+		}
+		if deps.AdminHandler != nil {
+			deps.AdminHandler.Mount(r)
 		}
 	})
 

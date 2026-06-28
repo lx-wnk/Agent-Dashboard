@@ -57,6 +57,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/providersettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/admin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/restart"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
 	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
@@ -102,7 +104,7 @@ func (noopSettingsRepo) ListAll(context.Context) (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
-func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*api.Server, *sse.Broadcaster, *merger.Merger, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, *settings.Service, func(), error) {
+func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *restart.Controller) (*api.Server, *sse.Broadcaster, *merger.Merger, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, *settings.Service, func(), error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, err
@@ -566,6 +568,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 		PluginsHandler:         pluginsHandler,
 		PluginLifecycleHandler: pluginLifecycleHandler,
 		AuditEventRepo:         auditEventRepo,
+		AdminHandler: admin.New(
+			restart.NewAuthProviderValidator(pluginRegistry),
+			string(restartCtl.Mode()),
+			restartCtl.Trigger,
+		),
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, settingsSvc, router)
