@@ -844,6 +844,8 @@ func (o *PipelineOrchestrator) afterCommitTerminalCleanup(ctx context.Context, t
 // best-effort: a missing worktree is a no-op and any removal error is logged and
 // swallowed so terminal-state handling never fails on git. On success it records
 // a "worktree_removed" audit event (force=true discards uncommitted work).
+// When HasUnpushedWorkFn reports unpushed work it instead retains the worktree and
+// records a "worktree_retained_unpushed" audit event rather than removing it.
 func (o *PipelineOrchestrator) cleanupTerminalWorktree(ctx context.Context, task *ent.Task, force bool) {
 	if task == nil || task.WorktreePath == nil || *task.WorktreePath == "" {
 		return
