@@ -16,6 +16,7 @@ Preparing the first public release.
 
 - `POST /api/admin/restart` triggers a validated, graceful restart. The endpoint refuses with **409** if an active `auth_provider` plugin is currently unhealthy (restarting in that state would cause an auth lockout on the next boot). Default `DASHBOARD_RESTART_MODE=reexec` replaces the process image in place (no supervisor needed); set `DASHBOARD_RESTART_MODE=exit` and run under systemd (`Restart=always`), launchd (`KeepAlive`), or a wrapper loop (`while true; do ./bin/agent-dashboard serve; done`) for supervised setups. Activating an `auth_provider` plugin requires a restart to apply — auth is boot-wired.
 - `dashboard plugins list` / `disable <id>` / `enable <id>` CLI commands operate directly on the SQLite database (no HTTP, no auth gate), so a broken `auth_provider` plugin that prevents boot can be disabled offline. The change applies on next server start; lifecycle hooks are skipped (it is a recovery tool, not the normal activate path).
+- **Per-plugin settings UI**: a schema-driven form (`Settings → Plugins`) lets you view and edit each plugin's settings inline. Fields are rendered per type (`string`, `url`, `int`, `bool`, `enum`); secret fields are masked and unchanged secrets are preserved on save (the masked sentinel is sent to the server, which keeps the stored value).
 - Plugin process groups with group-kill (no orphaned child processes), suppression of
   restarts for intentionally stopped plugins, and crash supervision that marks a plugin
   unhealthy (HTTP 503) instead of silently removing it from the dispatcher.
@@ -178,6 +179,7 @@ Preparing the first public release.
 
 ### Fixed
 
+- Plugin enable/disable in the UI now calls the live lifecycle endpoints (`POST /api/plugins/{id}/activate` and `/deactivate`) instead of the `PATCH /api/settings/plugins-enabled/{id}` endpoint that was removed in SP2. Plugins with the `auth_provider` capability still require a server restart after activation; the UI surfaces this with a notice.
 - Plan-review gate: opening a `plan_review` task via deep-link, Spotlight, or
   cross-modal navigation now routes to the plan-approval panel instead of the
   generic task modal — the routing rule that previously lived only in the
