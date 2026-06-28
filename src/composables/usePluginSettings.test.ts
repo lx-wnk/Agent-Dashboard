@@ -1,7 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { usePluginSettings } from './usePluginSettings'
 
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 it('setActive posts activate and updates state', async () => {
   const fetchMock = vi.fn()

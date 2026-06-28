@@ -46,11 +46,15 @@ export function usePluginSettings() {
     const verb = active ? 'activate' : 'deactivate'
     const res = await fetch(`/api/plugins/${id}/${verb}`, {
       method: 'POST',
-      headers: { 'Origin': window.location.origin },
+      headers: { Origin: window.location.origin },
     })
     if (!res.ok) {
       let detail = `HTTP ${res.status}`
-      try { const b = await res.json(); if (b?.error) detail = b.error }
+      try {
+        const b = await res.json()
+        if (b?.error)
+          detail = b.error
+      }
       catch { /* no body */ }
       throw new Error(detail)
     }

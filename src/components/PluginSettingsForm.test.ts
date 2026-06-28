@@ -20,7 +20,7 @@ it('renders a control per field and masks secrets', async () => {
   expect((w.find('[data-field="apiKey"]').element as HTMLInputElement).value).toBe('********')
 })
 
-it('PUT omits an untouched secret and sends changed fields', async () => {
+it('put omits an untouched secret and sends changed fields', async () => {
   const put = vi.fn().mockResolvedValue(undefined)
   const w = mountForm(async () => ({ schema, values: { endpoint: 'http://x', apiKey: '********', mode: 'a' } }), put)
   await flushPromises()
