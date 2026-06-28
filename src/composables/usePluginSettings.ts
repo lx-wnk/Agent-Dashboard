@@ -1,16 +1,26 @@
 import { onMounted, ref } from 'vue'
 import { errorMessage } from '../utils/errorMessage'
 
-export interface PluginInfo {
+export interface SettingField {
+  key: string
+  type: 'string' | 'url' | 'int' | 'bool' | 'enum'
+  label: string
+  secret: boolean
+  enum?: string[]
+}
+
+export interface PluginView {
   id: string
+  name: string
+  version: string
+  state: 'discovered' | 'inactive' | 'active'
+  updateAvailable: boolean
   capabilities: string[]
-  enabled: boolean
-  healthy: boolean
-  authProvider: boolean
+  hasSettings: boolean
 }
 
 export function usePluginSettings() {
-  const plugins = ref<PluginInfo[]>([])
+  const plugins = ref<PluginView[]>([])
   const loading = ref(true)
   const error = ref<string | null>(null)
 
@@ -18,7 +28,7 @@ export function usePluginSettings() {
     loading.value = true
     error.value = null
     try {
-      const res = await fetch('/api/settings/plugins')
+      const res = await fetch('/api/plugins', { credentials: 'same-origin' })
       if (!res.ok)
         throw new Error(`Failed to load plugins (HTTP ${res.status})`)
       plugins.value = await res.json()
@@ -31,22 +41,43 @@ export function usePluginSettings() {
     }
   }
 
-  // Plugin enablement is restart-to-apply for every plugin: the server persists
-  // the new state and applies it on the next boot.
-  async function toggle(id: string, enabled: boolean): Promise<'restart'> {
-    const res = await fetch(`/api/settings/plugins-enabled/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
+  // Live for route/ui extensions; auth_provider needs a restart (SP3b badge).
+  async function setActive(id: string, active: boolean): Promise<void> {
+    const verb = active ? 'activate' : 'deactivate'
+    const res = await fetch(`/api/plugins/${id}/${verb}`, {
+      method: 'POST',
+      headers: { Origin: window.location.origin },
+    })
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`
+      try {
+        const b = await res.json()
+        if (b?.error)
+          detail = b.error
+      }
+      catch { /* no body */ }
+      throw new Error(detail)
+    }
+    plugins.value = plugins.value.map(p => (p.id === id ? { ...p, state: active ? 'active' : 'inactive' } : p))
+  }
+
+  async function getSettings(id: string): Promise<{ schema: SettingField[], values: Record<string, string> }> {
+    const res = await fetch(`/api/plugins/${id}/settings`, { credentials: 'same-origin' })
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    return res.json()
+  }
+
+  async function putSettings(id: string, values: Record<string, string>): Promise<void> {
+    const res = await fetch(`/api/plugins/${id}/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Origin': window.location.origin },
+      body: JSON.stringify({ values }),
     })
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
-    const saved: { id: string, enabled: boolean, applied: 'restart' } = await res.json()
-    plugins.value = plugins.value.map(p => (p.id === saved.id ? { ...p, enabled: saved.enabled } : p))
-    return saved.applied
   }
 
   onMounted(fetchPlugins)
-
-  return { plugins, loading, error, refetch: fetchPlugins, toggle }
+  return { plugins, loading, error, refetch: fetchPlugins, setActive, getSettings, putSettings }
 }
