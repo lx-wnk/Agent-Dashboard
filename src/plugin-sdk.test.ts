@@ -2,6 +2,7 @@ import type { SlotAddon } from '../plugin-sdk/addon'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { SLOT_NAMES } from './utils/pluginSlot'
 
 const ROOT = process.cwd()
 const SCHEMA_PATH = join(ROOT, 'plugin-sdk', 'plugin.schema.json')
@@ -69,6 +70,13 @@ describe('plugin-sdk', () => {
       const m = JSON.parse(readFileSync(p, 'utf8'))
       expect(validateManifest(m), `${d.name}/plugin.json`).toEqual([])
       expect(m.$schema, `${d.name} should reference the schema`).toBeTruthy()
+    }
+  })
+
+  it('slot names in addon.d.ts stay in parity with pluginSlot.ts', () => {
+    const addonText = readFileSync(join(ROOT, 'plugin-sdk', 'addon.d.ts'), 'utf8')
+    for (const name of SLOT_NAMES) {
+      expect(addonText, `slot "${name}" missing from plugin-sdk/addon.d.ts`).toContain(`'${name}'`)
     }
   })
 
