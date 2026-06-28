@@ -539,6 +539,21 @@ func (r *Registry) markUnhealthy(id string) {
 	}
 }
 
+// WithTransient ensures the plugin is running for the duration of fn. If it was
+// not already up, WithTransient starts it, runs fn, then stops it; if it was
+// already running, fn runs and the process is left untouched. Used to deliver
+// lifecycle hooks to an installed-but-stopped plugin.
+func (r *Registry) WithTransient(ctx context.Context, id string, fn func() error) error {
+	if _, running := r.Lookup(id); running {
+		return fn()
+	}
+	if err := r.StartOne(ctx, id); err != nil {
+		return fmt.Errorf("transient start %s: %w", id, err)
+	}
+	defer func() { _ = r.StopOne(id) }()
+	return fn()
+}
+
 // removeByID removes a plugin entry from the registry by plugin ID.
 func (r *Registry) removeByID(id string) {
 	r.mu.Lock()

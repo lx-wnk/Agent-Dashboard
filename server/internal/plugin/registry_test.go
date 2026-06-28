@@ -509,6 +509,48 @@ func main() {
 	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
 }
 
+func TestWithTransientStartsStoppedPluginAndStops(t *testing.T) {
+	dir := t.TempDir()
+	writeHealthyPlugin(t, dir, "trans")
+
+	r := plugin.New(dir)
+	r.SetEnabled(func(string) bool { return false }) // not started at Load
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	t.Cleanup(r.Shutdown)
+
+	_, ok := r.Lookup("trans")
+	require.False(t, ok, "precondition: plugin not running")
+
+	ran := false
+	err := r.WithTransient(context.Background(), "trans", func() error {
+		_, up := r.Lookup("trans")
+		require.True(t, up, "plugin must be running inside the callback")
+		ran = true
+		return nil
+	})
+	require.NoError(t, err)
+	require.True(t, ran)
+
+	require.Eventually(t, func() bool {
+		_, up := r.Lookup("trans")
+		return !up
+	}, 3*time.Second, 50*time.Millisecond, "transient plugin must be stopped after the callback")
+}
+
+func TestWithTransientLeavesRunningPluginUp(t *testing.T) {
+	dir := t.TempDir()
+	writeHealthyPlugin(t, dir, "persistent")
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	t.Cleanup(r.Shutdown)
+
+	require.NoError(t, r.WithTransient(context.Background(), "persistent", func() error { return nil }))
+
+	_, up := r.Lookup("persistent")
+	require.True(t, up, "an already-running plugin must stay up after WithTransient")
+}
+
 func TestExhaustedRestartsMarkUnhealthy(t *testing.T) {
 	dir := t.TempDir()
 	writeCrashingPlugin(t, dir, "flaky")
