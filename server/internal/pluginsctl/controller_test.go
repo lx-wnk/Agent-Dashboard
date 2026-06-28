@@ -13,18 +13,15 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 )
 
-// fakeRegistry records start/stop calls and reports a fixed healthy set.
+// fakeRegistry records start/stop calls so tests can assert the controller never
+// invokes the live path, and reports a fixed healthy set for listing.
 type fakeRegistry struct {
-	started  []string
-	stopped  []string
-	startErr error
-	healthy  []plugin.Info
+	started []string
+	stopped []string
+	healthy []plugin.Info
 }
 
 func (f *fakeRegistry) StartOne(_ context.Context, id string) error {
-	if f.startErr != nil {
-		return f.startErr
-	}
 	f.started = append(f.started, id)
 	return nil
 }
@@ -73,7 +70,7 @@ func writeDescriptor(t *testing.T, dir string, desc plugin.Descriptor) {
 	}
 }
 
-func TestSetEnabled_EnableNonAuth_StartsThenPersists(t *testing.T) {
+func TestSetEnabled_EnableNonAuth_PersistsRestartNoStartStop(t *testing.T) {
 	dir := t.TempDir()
 	writeDescriptor(t, dir, plugin.Descriptor{ID: "voice-whisper", Capabilities: []string{plugin.CapRouteExtension}})
 	reg := &fakeRegistry{}
@@ -84,33 +81,18 @@ func TestSetEnabled_EnableNonAuth_StartsThenPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetEnabled: %v", err)
 	}
-	if applied != pluginsctl.AppliedLive {
-		t.Errorf("applied = %q, want live", applied)
+	if applied != pluginsctl.AppliedRestart {
+		t.Errorf("applied = %q, want restart", applied)
 	}
-	if len(reg.started) != 1 || reg.started[0] != "voice-whisper" {
-		t.Errorf("StartOne not called: %v", reg.started)
+	if len(reg.started) != 0 || len(reg.stopped) != 0 {
+		t.Errorf("restart-to-apply must not start/stop live: started=%v stopped=%v", reg.started, reg.stopped)
 	}
 	if got := svc.StringSlice("plugins.enabled"); len(got) != 1 || got[0] != "voice-whisper" {
 		t.Errorf("plugins.enabled = %v, want [voice-whisper]", got)
 	}
 }
 
-func TestSetEnabled_StartFails_NotPersisted(t *testing.T) {
-	dir := t.TempDir()
-	writeDescriptor(t, dir, plugin.Descriptor{ID: "voice-whisper", Capabilities: []string{plugin.CapRouteExtension}})
-	reg := &fakeRegistry{startErr: context.DeadlineExceeded}
-	svc := newSettings(t)
-	ctl := pluginsctl.New(reg, svc, dir)
-
-	if _, err := ctl.SetEnabled(context.Background(), "voice-whisper", true); err == nil {
-		t.Fatal("expected error from failed StartOne")
-	}
-	if got := svc.StringSlice("plugins.enabled"); len(got) != 0 {
-		t.Errorf("plugins.enabled = %v, want empty (effect-first: start failure must not persist)", got)
-	}
-}
-
-func TestSetEnabled_Disable_StopsThenPersists(t *testing.T) {
+func TestSetEnabled_DisableNonAuth_PersistsRestartNoStartStop(t *testing.T) {
 	dir := t.TempDir()
 	writeDescriptor(t, dir, plugin.Descriptor{ID: "voice-whisper", Capabilities: []string{plugin.CapRouteExtension}})
 	reg := &fakeRegistry{}
@@ -124,11 +106,11 @@ func TestSetEnabled_Disable_StopsThenPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetEnabled: %v", err)
 	}
-	if applied != pluginsctl.AppliedLive {
-		t.Errorf("applied = %q, want live", applied)
+	if applied != pluginsctl.AppliedRestart {
+		t.Errorf("applied = %q, want restart", applied)
 	}
-	if len(reg.stopped) != 1 || reg.stopped[0] != "voice-whisper" {
-		t.Errorf("StopOne not called: %v", reg.stopped)
+	if len(reg.started) != 0 || len(reg.stopped) != 0 {
+		t.Errorf("restart-to-apply must not start/stop live: started=%v stopped=%v", reg.started, reg.stopped)
 	}
 	if got := svc.StringSlice("plugins.enabled"); len(got) != 0 {
 		t.Errorf("plugins.enabled = %v, want empty", got)

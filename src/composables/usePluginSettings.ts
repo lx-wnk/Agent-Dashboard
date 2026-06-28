@@ -31,7 +31,9 @@ export function usePluginSettings() {
     }
   }
 
-  async function toggle(id: string, enabled: boolean): Promise<'live' | 'restart'> {
+  // Plugin enablement is restart-to-apply for every plugin: the server persists
+  // the new state and applies it on the next boot.
+  async function toggle(id: string, enabled: boolean): Promise<'restart'> {
     const res = await fetch(`/api/settings/plugins-enabled/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -39,7 +41,7 @@ export function usePluginSettings() {
     })
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
-    const saved: { id: string, enabled: boolean, applied: 'live' | 'restart' } = await res.json()
+    const saved: { id: string, enabled: boolean, applied: 'restart' } = await res.json()
     plugins.value = plugins.value.map(p => (p.id === saved.id ? { ...p, enabled: saved.enabled } : p))
     return saved.applied
   }

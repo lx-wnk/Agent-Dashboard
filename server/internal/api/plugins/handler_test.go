@@ -116,8 +116,8 @@ func TestList_ShapeAndLeakGuard(t *testing.T) {
 	}
 }
 
-func TestPatch_Live(t *testing.T) {
-	ctl := &fakeController{applied: pluginsctl.AppliedLive}
+func TestPatch_PersistsAndEchoesRestart(t *testing.T) {
+	ctl := &fakeController{applied: pluginsctl.AppliedRestart}
 	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice-whisper", strings.NewReader(`{"enabled":true}`)))
 	rr := httptest.NewRecorder()
 	mount(t, ctl).ServeHTTP(rr, req)
@@ -132,24 +132,8 @@ func TestPatch_Live(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp["id"] != "voice-whisper" || resp["enabled"] != true || resp["applied"] != "live" {
+	if resp["id"] != "voice-whisper" || resp["enabled"] != true || resp["applied"] != "restart" {
 		t.Errorf("response wrong: %v", resp)
-	}
-}
-
-func TestPatch_Restart(t *testing.T) {
-	ctl := &fakeController{applied: pluginsctl.AppliedRestart}
-	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/github-auth", strings.NewReader(`{"enabled":true}`)))
-	rr := httptest.NewRecorder()
-	mount(t, ctl).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	var resp map[string]any
-	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
-	if resp["applied"] != "restart" {
-		t.Errorf("applied: got %v, want restart", resp["applied"])
 	}
 }
 
@@ -165,8 +149,8 @@ func TestPatch_UnknownID_400(t *testing.T) {
 	}
 }
 
-func TestPatch_LiveFailure_500(t *testing.T) {
-	ctl := &fakeController{setErr: errors.New("start failed: connection refused")}
+func TestPatch_PersistFailure_500(t *testing.T) {
+	ctl := &fakeController{setErr: errors.New("persist failed: settings unavailable")}
 	req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice-whisper", strings.NewReader(`{"enabled":true}`)))
 	rr := httptest.NewRecorder()
 	mount(t, ctl).ServeHTTP(rr, req)

@@ -26,11 +26,10 @@ const CAP_LABELS: Record<string, string> = {
 async function handleToggle(id: string, next: boolean) {
   saving.value = id
   try {
-    const applied = await toggle(id, next)
-    if (applied === 'restart')
-      showNotice('warning', 'Takes effect after a server restart — enabling will require login')
-    else
-      showNotice('success', `Plugin ${next ? 'enabled' : 'disabled'}`)
+    await toggle(id, next)
+    const plugin = plugins.value.find(p => p.id === id)
+    const base = `Plugin ${next ? 'enabled' : 'disabled'} — restart the server to apply`
+    showNotice('warning', plugin?.authProvider ? `${base}; enabling will require login` : base)
   }
   catch (e) {
     error.value = errorMessage(e, 'Toggle failed')
@@ -94,7 +93,7 @@ async function handleToggle(id: string, next: boolean) {
             />
             {{ p.id }}
           </p>
-          <p v-if="p.authProvider" class="text-fg-faint text-[10px]">
+          <p class="text-fg-faint text-[10px]">
             Requires restart to apply
           </p>
         </div>

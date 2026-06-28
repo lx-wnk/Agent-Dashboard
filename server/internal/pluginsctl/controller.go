@@ -1,6 +1,6 @@
-// Package pluginsctl is the control plane for plugin enable/disable. It bridges
-// the live plugin Registry (start/stop) and the persisted enable-list in
-// settings, applying changes effect-first so a failed live start never persists.
+// Package pluginsctl is the control plane for plugin enable/disable. Toggling a
+// plugin persists the new enable-list in settings and takes effect on the next
+// server restart; the registry is read-only here (health/info for listing).
 package pluginsctl
 
 import (
@@ -21,7 +21,7 @@ import (
 const enabledKey = "plugins.enabled"
 
 // ErrUnknownPlugin signals that an ID matched no discovered plugin. The handler
-// maps it to 400; any other error is a live start/stop failure mapped to 500.
+// maps it to 400; any other error is a persistence failure mapped to 500.
 var ErrUnknownPlugin = errors.New("pluginsctl: unknown plugin")
 
 // Applied describes whether a change took effect immediately or needs a restart.
@@ -33,10 +33,9 @@ const (
 )
 
 // Registry is the minimal subset of *plugin.Registry the controller needs,
-// declared locally so tests can fake it.
+// declared locally so tests can fake it. Toggling is restart-to-apply, so only
+// the read-only health/info view is used here.
 type Registry interface {
-	StartOne(ctx context.Context, id string) error
-	StopOne(id string) error
 	Infos() []plugin.Info
 }
 
@@ -89,12 +88,11 @@ func (c *Controller) List() ([]PluginState, error) {
 	return out, nil
 }
 
-// SetEnabled toggles a plugin. Effect-first ordering: for non-auth plugins the
-// live start/stop runs before persisting, so a failed start is not recorded as
-// enabled. auth_provider plugins are wired at boot only, so they persist without
-// a live effect and report AppliedRestart.
+// SetEnabled toggles a plugin. Enablement is restart-to-apply for every plugin:
+// the new state is persisted and takes effect on the next server boot. Always
+// reports AppliedRestart.
 func (c *Controller) SetEnabled(ctx context.Context, id string, enable bool) (Applied, error) {
-	desc, ok, err := c.findDescriptor(id)
+	_, ok, err := c.findDescriptor(id)
 	if err != nil {
 		return "", err
 	}
@@ -105,24 +103,10 @@ func (c *Controller) SetEnabled(ctx context.Context, id string, enable bool) (Ap
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if desc.HasCapability(plugin.CapAuthProvider) {
-		if err := c.persist(ctx, id, enable); err != nil {
-			return "", err
-		}
-		return AppliedRestart, nil
-	}
-
-	if enable {
-		if err := c.reg.StartOne(ctx, id); err != nil {
-			return "", fmt.Errorf("pluginsctl: start %q: %w", id, err)
-		}
-	} else if err := c.reg.StopOne(id); err != nil {
-		return "", fmt.Errorf("pluginsctl: stop %q: %w", id, err)
-	}
 	if err := c.persist(ctx, id, enable); err != nil {
 		return "", err
 	}
-	return AppliedLive, nil
+	return AppliedRestart, nil
 }
 
 // persist updates plugins.enabled to add or remove id, preserving order.
