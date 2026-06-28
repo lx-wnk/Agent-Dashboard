@@ -30,7 +30,7 @@ function beginReconnect() {
 async function triggerRestart() {
   const res = await fetch('/api/admin/restart', {
     method: 'POST',
-    headers: { 'Origin': window.location.origin },
+    headers: { Origin: window.location.origin },
   })
   if (!res.ok) {
     let detail = `restart failed (${res.status})`
