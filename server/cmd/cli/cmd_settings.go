@@ -34,7 +34,7 @@ func withStore(cmd *cobra.Command, fn func(ctx context.Context, s *dbStore) erro
 	if err != nil {
 		return fmt.Errorf("open db %s: %w", path, err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	return fn(cmd.Context(), store)
 }
 
