@@ -1,30 +1,28 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { usePluginSettings } from './usePluginSettings'
 
-describe('usePluginSettings', () => {
-  it('toggle returns "restart" for auth-provider plugins and updates local state', async () => {
-    const plugins = [{ id: 'github-oauth', capabilities: ['auth_provider'], enabled: false, healthy: true, authProvider: true }]
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => plugins }) // initial GET
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'github-oauth', enabled: true, applied: 'restart' }) })
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
-    const s = usePluginSettings()
-    await s.refetch()
-    const applied = await s.toggle('github-oauth', true)
-    expect(applied).toBe('restart')
-    expect(s.plugins.value.find(p => p.id === 'github-oauth')?.enabled).toBe(true)
-  })
+it('setActive posts activate and updates state', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'p1', name: 'P1', version: '1', state: 'inactive', updateAvailable: false, capabilities: ['ui_extension'], hasSettings: true }] })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'p1', state: 'active' }) })
+  vi.stubGlobal('fetch', fetchMock)
+  const s = usePluginSettings()
+  await s.refetch()
+  await s.setActive('p1', true)
+  expect(fetchMock).toHaveBeenLastCalledWith('/api/plugins/p1/activate', expect.objectContaining({ method: 'POST' }))
+  expect(s.plugins.value[0].state).toBe('active')
+})
 
-  it('toggle returns "restart" for non-auth plugins and updates local state', async () => {
-    const plugins = [{ id: 'metrics', capabilities: ['route_extension'], enabled: true, healthy: true, authProvider: false }]
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => plugins }) // initial GET
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'metrics', enabled: false, applied: 'restart' }) })
-
-    const s = usePluginSettings()
-    await s.refetch()
-    const applied = await s.toggle('metrics', false)
-    expect(applied).toBe('restart')
-    expect(s.plugins.value.find(p => p.id === 'metrics')?.enabled).toBe(false)
-  })
+it('getSettings + putSettings hit the settings endpoints', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ schema: [{ key: 'apiKey', type: 'string', label: 'API Key', secret: true }], values: { apiKey: '********' } }) })
+    .mockResolvedValueOnce({ ok: true, status: 204 })
+  vi.stubGlobal('fetch', fetchMock)
+  const s = usePluginSettings()
+  const got = await s.getSettings('p1')
+  expect(got.schema[0].key).toBe('apiKey')
+  await s.putSettings('p1', { apiKey: 'new-secret' })
+  expect(fetchMock).toHaveBeenLastCalledWith('/api/plugins/p1/settings', expect.objectContaining({ method: 'PUT' }))
 })
