@@ -19,6 +19,17 @@ func seedPluginsFromEnabledList(ctx context.Context, settingsSvc *settings.Servi
 	if settingsSvc == nil || pluginRepo == nil {
 		return nil
 	}
+	// One-shot: only seed on the very first boot, while the plugin table is still
+	// empty (this runs before discovery populates it). On later boots the table is
+	// non-empty, so a plugin the user has since disabled is never re-activated from
+	// the frozen legacy list.
+	existingRows, err := pluginRepo.List(ctx)
+	if err != nil {
+		return fmt.Errorf("seedPluginsFromEnabledList: list: %w", err)
+	}
+	if len(existingRows) > 0 {
+		return nil
+	}
 	for _, id := range settingsSvc.StringSlice("plugins.enabled") {
 		existing, err := pluginRepo.Get(ctx, id)
 		if err != nil && !repo.IsNotFound(err) {
