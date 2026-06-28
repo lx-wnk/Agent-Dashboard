@@ -17,8 +17,9 @@ cd plugins/voice-whisper && GOWORK=off go build -o voice-whisper .
 
 ## Install
 Copy this directory into `DASHBOARD_PLUGIN_DIR` (each plugin = one subdir with
-`plugin.json` + the built binary). Restart the dashboard. The mic button appears in
-the refinement chat once the plugin's `/health` passes.
+`plugin.json` + the built binary). Activate it via the Plugins settings panel (or
+`POST /api/plugins/voice-whisper/activate`) — no restart required. The mic button
+appears in the refinement chat once the plugin's `/health` passes.
 
 ## Environment
 | Var | Default | Purpose |
@@ -30,7 +31,7 @@ the refinement chat once the plugin's `/health` passes.
 | `VOICE_WHISPER_LANG` | `auto` | spoken-language hint passed to whisper `-l` (`auto` = detect; or `de`, `en`, …) |
 
 ## How it works
-The dashboard reverse-proxies `/api/settings/plugins/voice-whisper/*` to this process
+The dashboard reverse-proxies `/api/plugins/voice-whisper/proxy/*` to this process
 (prefix stripped → the plugin sees `/health`, `/addon.js`, `/transcribe`). The browser
 records audio via MediaRecorder, POSTs it to `/transcribe`; the plugin runs
 ffmpeg→whisper.cpp locally and returns `{ "text": ... }`, which the mic addon inserts
