@@ -52,6 +52,7 @@ authenticate against POST /api/mcp.`,
 		newPipelineCmd(&cfg),
 		newConfigCmd(&cfg),
 		newSettingsCmd(),
+		newPluginsCmd(),
 	)
 
 	if err := root.Execute(); err != nil {

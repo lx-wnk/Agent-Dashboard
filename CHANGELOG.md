@@ -15,6 +15,7 @@ Preparing the first public release.
 ### Added
 
 - `POST /api/admin/restart` triggers a validated, graceful restart. The endpoint refuses with **409** if an active `auth_provider` plugin is currently unhealthy (restarting in that state would cause an auth lockout on the next boot). Default `DASHBOARD_RESTART_MODE=reexec` replaces the process image in place (no supervisor needed); set `DASHBOARD_RESTART_MODE=exit` and run under systemd (`Restart=always`), launchd (`KeepAlive`), or a wrapper loop (`while true; do ./bin/agent-dashboard serve; done`) for supervised setups. Activating an `auth_provider` plugin requires a restart to apply — auth is boot-wired.
+- `dashboard plugins list` / `disable <id>` / `enable <id>` CLI commands operate directly on the SQLite database (no HTTP, no auth gate), so a broken `auth_provider` plugin that prevents boot can be disabled offline. The change applies on next server start; lifecycle hooks are skipped (it is a recovery tool, not the normal activate path).
 - Plugin process groups with group-kill (no orphaned child processes), suppression of
   restarts for intentionally stopped plugins, and crash supervision that marks a plugin
   unhealthy (HTTP 503) instead of silently removing it from the dispatcher.
