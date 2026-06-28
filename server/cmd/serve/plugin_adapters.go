@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecycle"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 )
@@ -111,4 +112,14 @@ func (a pluginDiscoverRepoAdapter) Remove(ctx context.Context, id string) error 
 		return err
 	}
 	return a.inner.Delete(ctx, id)
+}
+
+// pluginProcessAdapter lets the lifecycle engine drive the plugin registry's
+// process lifecycle without the plugin package importing pluginlifecycle.
+type pluginProcessAdapter struct{ reg *plugin.Registry }
+
+func (a pluginProcessAdapter) Start(ctx context.Context, id string) error { return a.reg.StartOne(ctx, id) }
+func (a pluginProcessAdapter) Stop(_ context.Context, id string) error    { return a.reg.StopOne(id) }
+func (a pluginProcessAdapter) WithTransient(ctx context.Context, id string, fn func() error) error {
+	return a.reg.WithTransient(ctx, id, fn)
 }

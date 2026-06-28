@@ -42,14 +42,45 @@ type SettingsClearer interface {
 	Clear(ctx context.Context, pluginID string) error
 }
 
+// ProcessManager runs plugin processes for the engine. The registry implements
+// it (via an adapter); a nil manager makes every method a no-op so the engine
+// is testable in isolation.
+type ProcessManager interface {
+	Start(ctx context.Context, id string) error
+	Stop(ctx context.Context, id string) error
+	WithTransient(ctx context.Context, id string, fn func() error) error
+}
+
 type Engine struct {
 	repo     StateRepo
 	hooks    HookCaller
 	settings SettingsClearer
+	proc     ProcessManager
 }
 
-func New(repo StateRepo, hooks HookCaller, settings SettingsClearer) *Engine {
-	return &Engine{repo: repo, hooks: hooks, settings: settings}
+func New(repo StateRepo, hooks HookCaller, settings SettingsClearer, proc ProcessManager) *Engine {
+	return &Engine{repo: repo, hooks: hooks, settings: settings, proc: proc}
+}
+
+func (e *Engine) start(ctx context.Context, id string) error {
+	if e.proc == nil {
+		return nil
+	}
+	return e.proc.Start(ctx, id)
+}
+
+func (e *Engine) stop(ctx context.Context, id string) error {
+	if e.proc == nil {
+		return nil
+	}
+	return e.proc.Stop(ctx, id)
+}
+
+func (e *Engine) withTransient(ctx context.Context, id string, fn func() error) error {
+	if e.proc == nil {
+		return fn()
+	}
+	return e.proc.WithTransient(ctx, id, fn)
 }
 
 // callHook runs a hook only when its path is non-empty.
@@ -68,11 +99,13 @@ func (e *Engine) Install(ctx context.Context, d plugin.Descriptor) error {
 	if st.InstalledAt != nil {
 		return fmt.Errorf("%w: %s already installed", ErrIllegalTransition, d.ID)
 	}
-	if err := e.callHook(ctx, d, d.Lifecycle.Install); err != nil {
-		return fmt.Errorf("install hook: %w", err)
-	}
-	if err := e.callHook(ctx, d, d.Lifecycle.PostInstall); err != nil {
-		return fmt.Errorf("postInstall hook: %w", err)
+	if err := e.withTransient(ctx, d.ID, func() error {
+		if err := e.callHook(ctx, d, d.Lifecycle.Install); err != nil {
+			return fmt.Errorf("install hook: %w", err)
+		}
+		return e.callHook(ctx, d, d.Lifecycle.PostInstall)
+	}); err != nil {
+		return err
 	}
 	now := time.Now()
 	return e.repo.SetInstalledAt(ctx, d.ID, &now)
@@ -86,7 +119,11 @@ func (e *Engine) Activate(ctx context.Context, d plugin.Descriptor) error {
 	if st.InstalledAt == nil {
 		return fmt.Errorf("%w: %s must be installed before activate", ErrIllegalTransition, d.ID)
 	}
+	if err := e.start(ctx, d.ID); err != nil {
+		return fmt.Errorf("activate start: %w", err)
+	}
 	if err := e.callHook(ctx, d, d.Lifecycle.Activate); err != nil {
+		_ = e.stop(ctx, d.ID)
 		return fmt.Errorf("activate hook: %w", err)
 	}
 	return e.repo.SetActive(ctx, d.ID, true)
@@ -96,11 +133,16 @@ func (e *Engine) Deactivate(ctx context.Context, d plugin.Descriptor) error {
 	if err := e.callHook(ctx, d, d.Lifecycle.Deactivate); err != nil {
 		return fmt.Errorf("deactivate hook: %w", err)
 	}
-	return e.repo.SetActive(ctx, d.ID, false)
+	if err := e.repo.SetActive(ctx, d.ID, false); err != nil {
+		return err
+	}
+	return e.stop(ctx, d.ID)
 }
 
 func (e *Engine) Update(ctx context.Context, d plugin.Descriptor) error {
-	if err := e.callHook(ctx, d, d.Lifecycle.Update); err != nil {
+	if err := e.withTransient(ctx, d.ID, func() error {
+		return e.callHook(ctx, d, d.Lifecycle.Update)
+	}); err != nil {
 		return fmt.Errorf("update hook: %w", err)
 	}
 	return e.repo.SetVersion(ctx, d.ID, d.Version)
@@ -116,7 +158,9 @@ func (e *Engine) Uninstall(ctx context.Context, d plugin.Descriptor) error {
 			return err
 		}
 	}
-	if err := e.callHook(ctx, d, d.Lifecycle.Uninstall); err != nil {
+	if err := e.withTransient(ctx, d.ID, func() error {
+		return e.callHook(ctx, d, d.Lifecycle.Uninstall)
+	}); err != nil {
 		return fmt.Errorf("uninstall hook: %w", err)
 	}
 	if err := e.repo.SetInstalledAt(ctx, d.ID, nil); err != nil {

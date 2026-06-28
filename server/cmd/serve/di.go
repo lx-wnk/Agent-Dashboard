@@ -276,6 +276,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string) (*
 			pluginStateRepoAdapter{inner: pluginRepo},
 			pluginlifecycle.NewHTTPHookCaller(),
 			pluginSettingsSvc,
+			pluginProcessAdapter{reg: pluginRegistry},
 		)
 		discoverer := pluginlifecycle.NewDiscoverer(cfg.PluginDir, pluginDiscoverRepoAdapter{inner: pluginRepo, settings: pluginSettingRepo})
 		lifecycleController := pluginlifecyclectl.New(pluginRepo, lifecycleEngine, pluginSettingsSvc, cfg.PluginDir)
