@@ -45,7 +45,15 @@ type Entry struct {
 	cmdDone      chan struct{}
 	BaseURL      string // http://{addr}
 	restartCount int
-	pluginDir    string // directory containing plugin.json, needed for restarts
+	pluginDir string // directory containing plugin.json, needed for restarts
+
+	// healthy is true once the process passed its health check and false once a
+	// give-up path (exhausted restarts / failed restart) marks it dead. The
+	// dispatcher serves 503 for an unhealthy entry.
+	healthy bool
+	// intentionalStop is set by StopOne before signalling so the watcher knows
+	// the exit was deliberate and must NOT respawn (the real orphan-restart fix).
+	intentionalStop bool
 }
 
 // New creates a Registry that will discover plugins in dir.
@@ -317,6 +325,32 @@ func (r *Registry) HasAttemptedCapability(capability string) bool {
 // HasDir reports whether the registry was constructed with a non-empty plugin directory.
 func (r *Registry) HasDir() bool {
 	return r.dir != ""
+}
+
+// Healthy reports whether this entry's process is currently considered healthy.
+func (e Entry) Healthy() bool { return e.healthy }
+
+// Lookup returns a copy of the entry for id and whether it is present. The copy
+// avoids handing out a pointer into the value-backed plugins slice (which
+// reallocates on append/remove). Plugin count is single-digit, so the linear
+// scan under RLock matches the existing All/FindByCapability patterns.
+func (r *Registry) Lookup(id string) (Entry, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			return r.plugins[i], true
+		}
+	}
+	return Entry{}, false
+}
+
+// InjectEntryForTest registers a synthetic entry without starting a process.
+// Test-only seam; production code paths go through startEntry.
+func (r *Registry) InjectEntryForTest(d Descriptor, healthy bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.plugins = append(r.plugins, Entry{Descriptor: d, BaseURL: "http://" + d.Addr, healthy: healthy})
 }
 
 // All returns a snapshot of all loaded plugin entries.

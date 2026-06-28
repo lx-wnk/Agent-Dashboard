@@ -189,6 +189,27 @@ func TestRegistry_StartOneStopOne(t *testing.T) {
 	require.Nil(t, r.FindByCapability(plugin.CapRouteExtension))
 }
 
+func TestLookupReturnsHealthyEntryCopy(t *testing.T) {
+	r := plugin.New("")
+	require.False(t, exists(r, "missing"))
+
+	// Inject a running, healthy entry through the exported test seam.
+	r.InjectEntryForTest(plugin.Descriptor{ID: "voice", Addr: "127.0.0.1:19010"}, true)
+
+	got, ok := r.Lookup("voice")
+	require.True(t, ok)
+	require.Equal(t, "voice", got.Descriptor.ID)
+	require.True(t, got.Healthy())
+
+	_, ok = r.Lookup("nope")
+	require.False(t, ok)
+}
+
+func exists(r *plugin.Registry, id string) bool {
+	_, ok := r.Lookup(id)
+	return ok
+}
+
 func TestRegistry_LoadSkipsDisabled(t *testing.T) {
 	dir := t.TempDir()
 	writePluginJSON(t, dir, "enabled-one", []string{plugin.CapRouteExtension})
