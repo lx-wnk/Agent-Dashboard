@@ -370,6 +370,22 @@ func TestHasUnpushedWork_UnpushedCommit(t *testing.T) {
 	}
 }
 
+func TestHasUnpushedWork_VanishedDirectory(t *testing.T) {
+	mgr, taskRepo := newWTManager(t)
+	id := createTestTask(t, taskRepo, "vanished-wt", "/tmp")
+
+	// Point WorktreePath at a directory that never exists.
+	nonExistentPath := filepath.Join(t.TempDir(), "does-not-exist")
+	task, err := taskRepo.Update(t.Context(), id, repo.UpdateTaskInput{WorktreePath: &nonExistentPath})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	if mgr.HasUnpushedWork(t.Context(), task) {
+		t.Fatal("expected false: directory does not exist on disk, nothing to retain")
+	}
+}
+
 func TestHasUnpushedWork_DirtyWorktree(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not found")

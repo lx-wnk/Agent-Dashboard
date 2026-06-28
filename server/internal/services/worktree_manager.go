@@ -132,6 +132,10 @@ func (m *WorktreeManager) HasUnpushedWork(ctx context.Context, task *ent.Task) b
 		return false
 	}
 	cwd := *task.WorktreePath
+	// Directory already gone — nothing to retain; let the caller clear the stale path.
+	if _, err := os.Stat(cwd); os.IsNotExist(err) {
+		return false
+	}
 	if dirty, _ := m.dirtyState(ctx, cwd); dirty {
 		return true
 	}
