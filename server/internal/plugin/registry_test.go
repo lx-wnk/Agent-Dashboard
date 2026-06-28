@@ -349,6 +349,94 @@ func processAlive(pid int) bool {
 	return p.Signal(syscall.Signal(0)) == nil
 }
 
+// writeRealHealthyPlugin builds a real plugin binary under dir/{id}/ that serves
+// GET /health → 200 and runs until killed. No child processes are spawned.
+// Returns the addr the plugin listens on, so callers can probe for orphan processes.
+func writeRealHealthyPlugin(t *testing.T, dir, id string) string {
+	t.Helper()
+	pluginDir := filepath.Join(dir, id)
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
+	mainGo := `package main
+
+import (
+	"net/http"
+	"os"
+)
+
+func main() {
+	addr := os.Args[1]
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	_ = http.ListenAndServe(addr, nil)
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.go"), []byte(mainGo), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "go.mod"), []byte("module healthy-plugin\n\ngo 1.21\n"), 0o644))
+
+	binPath := filepath.Join(pluginDir, "plugin-bin")
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	build.Dir = pluginDir
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, buildErr := build.CombinedOutput()
+	require.NoError(t, buildErr, "go build failed:\n%s", out)
+
+	desc := plugin.Descriptor{
+		ID:           id,
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         addr,
+		Command:      []string{"./plugin-bin", addr},
+	}
+	data, _ := json.Marshal(desc)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
+	return addr
+}
+
+func TestStopOneDoesNotRespawn(t *testing.T) {
+	dir := t.TempDir()
+	addr := writeRealHealthyPlugin(t, dir, "stoppable")
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	t.Cleanup(r.Shutdown)
+
+	_, ok := r.Lookup("stoppable")
+	require.True(t, ok, "plugin must be registered after load")
+
+	require.NoError(t, r.StopOne("stoppable"))
+
+	// Phase 1: wait for the plugin process to actually exit.
+	require.Eventually(t, func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+		if err != nil {
+			return true // port is closed — process has exited
+		}
+		conn.Close()
+		return false
+	}, 3*time.Second, 50*time.Millisecond, "plugin process must exit after StopOne")
+
+	// Phase 2: verify the watcher does not restart the process (watcher's 1s
+	// backoff is within the 3s window, so any spurious restart will be caught).
+	require.Never(t, func() bool {
+		if _, ok := r.Lookup("stoppable"); ok {
+			return true // entry reappeared in registry
+		}
+		conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return true // orphan process is listening
+		}
+		return false
+	}, 3*time.Second, 50*time.Millisecond, "intentional stop must not respawn")
+}
+
 func TestGroupKillReapsChildren(t *testing.T) {
 	dir := t.TempDir()
 	childPidFile := writeForkingPlugin(t, dir, "forker")

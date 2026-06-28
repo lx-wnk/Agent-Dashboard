@@ -235,11 +235,39 @@ func (r *Registry) StopOne(id string) error {
 	if target == nil {
 		return nil
 	}
+	r.setIntentionalStop(id)
 	if target.cmd != nil {
 		gracefulStop(target.cmd, target.cmdDone)
 	}
 	r.removeByID(id)
 	return nil
+}
+
+// setIntentionalStop marks the entry's pending exit as deliberate so watchPlugin
+// will not respawn it.
+func (r *Registry) setIntentionalStop(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			r.plugins[i].intentionalStop = true
+			return
+		}
+	}
+}
+
+// isIntentionalStop reports whether the watcher should refrain from restarting.
+// An absent entry counts as intentional: by the time the watcher checks, StopOne
+// may already have deregistered it, and a removed plugin must never respawn.
+func (r *Registry) isIntentionalStop(id string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for i := range r.plugins {
+		if r.plugins[i].Descriptor.ID == id {
+			return r.plugins[i].intentionalStop
+		}
+	}
+	return true
 }
 
 // Shutdown stops all plugin processes that were started by Load.
@@ -422,6 +450,9 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 			// once so Shutdown's gracefulStop doesn't hang on a never-closed channel.
 			close(done)
 			firstWait = false
+		}
+		if r.isIntentionalStop(desc.ID) {
+			return
 		}
 		// A nil error means the plugin exited cleanly (e.g. during Shutdown).
 		// Only attempt restarts on non-nil errors.
