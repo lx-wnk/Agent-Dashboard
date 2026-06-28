@@ -118,6 +118,18 @@ Preparing the first public release.
   after toggling an `auth_provider` plugin the settings panel shows a
   "Restart required to apply" badge and a **Restart server** button, which triggers
   the restart and hands off to the reconnect overlay automatically.
+- Plugin slot composition -- multiple addons targeting the same slot can now declare a
+  `priority` (number; higher renders outer/first) and a `mode` (`override` to own the
+  slot exclusively, `extend` to wrap the lower-priority chain). An `extend` addon's
+  `mount(el, ctx, parent)` receives a `parent` handle it may invoke to compose the addons
+  below it. Addons with no mode remain independent siblings and are unaffected.
+
+### Fixed
+
+- Plugin UI slots now correctly load manifests and modules from the SP2 proxy path
+  (`/api/plugins/{id}/proxy/ui-manifest.json`, `/api/plugins/{id}/proxy/{module}`).
+  The loader was still pointing at the pre-SP2 settings path after the route migration,
+  causing all `ui_extension` addons to silently fail to load.
 
 ### Changed
 

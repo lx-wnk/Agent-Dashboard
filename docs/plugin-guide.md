@@ -152,20 +152,30 @@ file space; the dashboard imports a module only when a host renders that slot.
 { "capabilities": ["ui_extension"] }
 ```
 
-**2. Serve a UI manifest** at `/<plugin-root>/ui-manifest.json` (reached by the dashboard
-at `/api/plugins/{id}/proxy/ui-manifest.json`):
+**2. Serve a UI manifest** at `/ui-manifest.json` within your plugin's HTTP server. The
+dashboard fetches it via the reverse proxy at `/api/plugins/{id}/proxy/ui-manifest.json`.
+
+Each slot entry has one required field (`slot`, `module`) and two optional ones:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `slot` | string | Slot name to target (see contract table below). |
+| `module` | string | Relative path to the ES module served by your plugin (e.g. `task-footer.js`). Must not start with `/` and must not traverse `..`. |
+| `priority` | number | Render order within a slot. Higher priority renders outer/first. Omit for default (0). |
+| `mode` | `"override"` \| `"extend"` | Composition mode (see below). Omit to register as an independent sibling. |
 
 ```json
 {
   "slots": [
     { "slot": "task-modal-footer", "module": "task-footer.js" },
-    { "slot": "kanban-card-badge", "module": "badge.js" }
+    { "slot": "task-modal-footer", "module": "task-footer-wrapper.js", "priority": 10, "mode": "extend" },
+    { "slot": "kanban-card-badge", "module": "badge.js", "priority": 100, "mode": "override" }
   ]
 }
 ```
 
 **3. Serve each module** (e.g. `task-footer.js`) as an ES module whose `default` export is
-a `SlotAddon`:
+a `SlotAddon`. The dashboard imports it from `/api/plugins/{id}/proxy/{module}`.
 
 ```js
 export default {
@@ -176,6 +186,40 @@ export default {
   },
 }
 ```
+
+**Composition modes** -- when multiple addons target the same slot, the dashboard resolves
+them as follows:
+
+- **No mode (sibling, default):** each addon is mounted into its own independent host
+  element, in load order. All siblings coexist.
+- **`override`:** the highest-priority `override` addon owns the slot exclusively. Every
+  addon in the priority-sorted chain below it -- including other `extend` entries and all
+  siblings -- is suppressed and never mounted.
+- **`extend`:** addons with `mode: "extend"` are sorted by `priority` (descending) into a
+  composition chain. The outermost (highest priority) is mounted first; its `mount`
+  function receives a `parent` handle it may use to mount the next addon in the chain:
+
+```js
+export default {
+  mount(el, ctx, parent) {
+    // render this addon's own content
+    const label = document.createElement('span')
+    label.textContent = 'wrapper'
+    el.appendChild(label)
+    // compose the lower-priority chain below
+    if (parent) {
+      const child = document.createElement('div')
+      el.appendChild(child)
+      parent.mount(child)
+    }
+    return () => { /* teardown */ }
+  },
+}
+```
+
+If an `override` appears in the chain, `parent` is `null` for it -- it does not delegate
+further. Siblings (no mode) are always mounted after the chain, regardless of priority,
+unless an `override` is present (which suppresses them entirely).
 
 **Available slots and their `ctx` contract** (SSOT: `src/utils/pluginSlot.ts`):
 
