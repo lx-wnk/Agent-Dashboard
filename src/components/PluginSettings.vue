@@ -34,6 +34,11 @@ function showNotice(kind: 'success' | 'warning', text: string) {
   noticeTimer = setTimeout(() => (notice.value = null), 5000)
 }
 
+const reloadNotice = ref<string | null>(null)
+function reloadPage() {
+  window.location.reload()
+}
+
 const CAP_LABELS: Record<string, string> = {
   auth_provider: 'Auth Provider',
   route_extension: 'Route Extension',
@@ -56,6 +61,10 @@ async function handleToggle(id: string, next: boolean) {
     else {
       showNotice('success', `Plugin ${next ? 'enabled' : 'disabled'}`)
     }
+    if (!next && plugin?.capabilities.includes('ui_extension'))
+      reloadNotice.value = 'Plugin UI disabled — reload the page to fully unload its code'
+    else if (next)
+      reloadNotice.value = null
   }
   catch (e) {
     error.value = errorMessage(e, 'Toggle failed')
@@ -86,6 +95,16 @@ async function handleToggle(id: string, next: boolean) {
       :class="notice.kind === 'warning' ? 'bg-warning-soft text-warning-text' : 'bg-success-soft text-success-text'"
     >
       {{ notice.text }}
+    </div>
+
+    <div v-if="reloadNotice" class="flex items-center gap-3 text-xs rounded-md px-3 py-2 bg-warning-soft text-warning-text" role="status">
+      <span class="grow">{{ reloadNotice }}</span>
+      <button type="button" data-action="reload-now" class="shrink-0 underline underline-offset-2" @click="reloadPage">
+        Reload now
+      </button>
+      <button type="button" class="shrink-0" aria-label="Dismiss" @click="reloadNotice = null">
+        ×
+      </button>
     </div>
 
     <div v-if="loading" class="text-xs text-slate-400" role="status" aria-live="polite">
