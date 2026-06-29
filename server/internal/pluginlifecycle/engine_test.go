@@ -13,9 +13,10 @@ import (
 )
 
 type fakePluginRepo struct {
-	installedAt *time.Time
-	active      bool
-	version     string
+	installedAt  *time.Time
+	active       bool
+	version      string
+	manifestHash string
 }
 
 func (f *fakePluginRepo) GetState(_ context.Context, _ string) (State, error) {
@@ -31,6 +32,10 @@ func (f *fakePluginRepo) SetActive(_ context.Context, _ string, a bool) error {
 }
 func (f *fakePluginRepo) SetVersion(_ context.Context, _ string, v string) error {
 	f.version = v
+	return nil
+}
+func (f *fakePluginRepo) SetManifestHash(_ context.Context, _ string, h string) error {
+	f.manifestHash = h
 	return nil
 }
 
@@ -184,6 +189,18 @@ func TestActivateHookFailureStopsAndDoesNotActivate(t *testing.T) {
 	require.Error(t, eng.Activate(context.Background(), d))
 	require.Equal(t, []string{"start:voice", "hook:/lifecycle/activate", "stop:voice"}, events)
 	require.False(t, repo.active)
+}
+
+func TestEngine_UpdateRefreshesManifestHash(t *testing.T) {
+	pr := &fakePluginRepo{}
+	e := New(pr, &recordingHooks{}, &fakeClearer{}, nil)
+	d := plugin.Descriptor{
+		ID: "p1", Version: "2.0.0",
+		Lifecycle: plugin.LifecycleHooks{Update: "/update"},
+	}
+	require.NoError(t, e.Update(context.Background(), d, "hash-v2"))
+	assert.Equal(t, "2.0.0", pr.version)
+	assert.Equal(t, "hash-v2", pr.manifestHash)
 }
 
 func TestInstallWrapsHooksInTransient(t *testing.T) {

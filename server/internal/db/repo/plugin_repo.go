@@ -20,6 +20,7 @@ type PluginRepo interface {
 	SetInstalledAt(ctx context.Context, id string, at *time.Time) error
 	SetActive(ctx context.Context, id string, active bool) error
 	SetVersion(ctx context.Context, id, version string) error
+	SetManifestHash(ctx context.Context, id, hash string) error
 	Delete(ctx context.Context, id string) error
 }
 
@@ -76,6 +77,10 @@ func (r *entPluginRepo) SetActive(ctx context.Context, id string, active bool) e
 
 func (r *entPluginRepo) SetVersion(ctx context.Context, id, version string) error {
 	return r.client.Plugin.UpdateOneID(id).SetVersion(version).Exec(ctx)
+}
+
+func (r *entPluginRepo) SetManifestHash(ctx context.Context, id, hash string) error {
+	return r.client.Plugin.UpdateOneID(id).SetManifestHash(hash).Exec(ctx)
 }
 
 func (r *entPluginRepo) Delete(ctx context.Context, id string) error {

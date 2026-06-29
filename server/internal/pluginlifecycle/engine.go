@@ -29,6 +29,7 @@ type StateRepo interface {
 	SetInstalledAt(ctx context.Context, id string, at *time.Time) error
 	SetActive(ctx context.Context, id string, active bool) error
 	SetVersion(ctx context.Context, id, version string) error
+	SetManifestHash(ctx context.Context, id, hash string) error
 }
 
 // HookCaller POSTs a lifecycle hook to a plugin. hook is the path (may be empty
@@ -143,13 +144,16 @@ func (e *Engine) Deactivate(ctx context.Context, d plugin.Descriptor) error {
 	return e.stop(ctx, d.ID)
 }
 
-func (e *Engine) Update(ctx context.Context, d plugin.Descriptor) error {
+func (e *Engine) Update(ctx context.Context, d plugin.Descriptor, manifestHash string) error {
 	if err := e.withTransient(ctx, d.ID, func() error {
 		return e.callHook(ctx, d, d.Lifecycle.Update)
 	}); err != nil {
 		return fmt.Errorf("update hook: %w", err)
 	}
-	return e.repo.SetVersion(ctx, d.ID, d.Version)
+	if err := e.repo.SetVersion(ctx, d.ID, d.Version); err != nil {
+		return err
+	}
+	return e.repo.SetManifestHash(ctx, d.ID, manifestHash)
 }
 
 func (e *Engine) Uninstall(ctx context.Context, d plugin.Descriptor) error {
