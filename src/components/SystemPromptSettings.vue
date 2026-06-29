@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import AppButton from './ui/AppButton.vue'
@@ -26,9 +27,7 @@ const STAGES = ['', 'implementation', 'self_review', 'finalization'] as const
 
 const prompts = ref<SystemPrompt[]>([])
 const loading = ref(true)
-const loadError = ref<string | null>(null)
 const saving = ref(false)
-const saveError = ref<string | null>(null)
 
 const showDialog = ref(false)
 const editing = ref<SystemPrompt | null>(null)
@@ -38,7 +37,6 @@ const form = ref<PromptForm>({ stage: '', priority: 0, content: '' })
 
 async function fetchPrompts() {
   loading.value = true
-  loadError.value = null
   try {
     const res = await fetch('/api/settings/system-prompts')
     if (!res.ok)
@@ -46,7 +44,7 @@ async function fetchPrompts() {
     prompts.value = await res.json()
   }
   catch (e) {
-    loadError.value = errorMessage(e, 'Failed to load')
+    toast.error(errorMessage(e, 'Failed to load'))
   }
   finally {
     loading.value = false
@@ -56,14 +54,12 @@ async function fetchPrompts() {
 function openCreate() {
   editing.value = null
   form.value = { stage: '', priority: 0, content: '' }
-  saveError.value = null
   showDialog.value = true
 }
 
 function openEdit(p: SystemPrompt) {
   editing.value = p
   form.value = { stage: p.stage ?? '', priority: p.priority, content: p.content }
-  saveError.value = null
   showDialog.value = true
 }
 
@@ -75,9 +71,8 @@ function closeDialog() {
 async function save() {
   if (saving.value)
     return
-  saveError.value = null
   if (!form.value.content.trim()) {
-    saveError.value = 'Content is required'
+    toast.error('Content is required')
     return
   }
 
@@ -112,7 +107,7 @@ async function save() {
     await fetchPrompts()
   }
   catch (e) {
-    saveError.value = errorMessage(e, 'Save failed')
+    toast.error(errorMessage(e, 'Save failed'))
   }
   finally {
     saving.value = false
@@ -128,7 +123,7 @@ async function deletePrompt(id: string) {
     await fetchPrompts()
   }
   catch (e) {
-    loadError.value = errorMessage(e, 'Delete failed')
+    toast.error(errorMessage(e, 'Delete failed'))
   }
 }
 
@@ -157,15 +152,11 @@ onMounted(fetchPrompts)
       </AppButton>
     </div>
 
-    <p v-if="loadError" class="text-xs text-danger-text mb-3">
-      {{ loadError }}
-    </p>
-
     <div v-if="loading" class="text-center py-12 text-fg-mute text-sm">
       Loading...
     </div>
 
-    <div v-else-if="prompts.length === 0 && !loadError" class="text-center py-8 text-fg-mute text-sm">
+    <div v-else-if="prompts.length === 0" class="text-center py-8 text-fg-mute text-sm">
       No custom system prompts configured yet.
     </div>
 
@@ -278,9 +269,6 @@ onMounted(fetchPrompts)
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent font-mono resize-y"
           />
         </div>
-        <p v-if="saveError" class="text-xs text-danger-text">
-          {{ saveError }}
-        </p>
       </form>
       <footer class="shrink-0 flex justify-end gap-2 px-5 py-3 border-t border-line">
         <AppButton variant="secondary" @click="closeDialog">

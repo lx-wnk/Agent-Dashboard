@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SettingField } from '../composables/usePluginSettings'
 import { onMounted, reactive, ref } from 'vue'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 
 const props = defineProps<{
@@ -13,7 +14,6 @@ const SECRET_SENTINEL = '********'
 const schema = ref<SettingField[]>([])
 const model = reactive<Record<string, string>>({})
 const initial = reactive<Record<string, string>>({})
-const error = ref<string | null>(null)
 const saving = ref(false)
 
 onMounted(async () => {
@@ -26,13 +26,12 @@ onMounted(async () => {
     }
   }
   catch (e) {
-    error.value = errorMessage(e, 'Failed to load settings')
+    toast.error(errorMessage(e, 'Failed to load settings'))
   }
 })
 
 async function save() {
   saving.value = true
-  error.value = null
   try {
     const changed: Record<string, string> = {}
     for (const f of schema.value) {
@@ -47,7 +46,7 @@ async function save() {
       initial[k] = model[k]
   }
   catch (e) {
-    error.value = errorMessage(e, 'Failed to save settings')
+    toast.error(errorMessage(e, 'Failed to save settings'))
   }
   finally {
     saving.value = false
@@ -57,9 +56,6 @@ async function save() {
 
 <template>
   <form class="plugin-settings-form" @submit.prevent="save">
-    <p v-if="error" class="plugin-settings-form__error">
-      {{ error }}
-    </p>
     <div v-for="f in schema" :key="f.key" class="plugin-settings-form__field">
       <label :for="`pf-${pluginId}-${f.key}`">{{ f.label }}</label>
       <select v-if="f.type === 'enum'" :id="`pf-${pluginId}-${f.key}`" v-model="model[f.key]" :data-field="f.key">

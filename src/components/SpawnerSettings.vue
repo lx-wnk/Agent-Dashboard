@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Spawner, SpawnerAdapterType } from '../types'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAdapterCatalog } from '../composables/useAdapterCatalog'
 import {
   createSpawner,
@@ -9,6 +9,7 @@ import {
   updateSpawner,
   useSpawners,
 } from '../composables/useSpawners'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import { isAllowedSpawnerCommand } from '../utils/validation'
 import SpawnerDetailView from './SpawnerDetailView.vue'
@@ -18,6 +19,12 @@ withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
 
 const { spawners, isLoading, error, refetch } = useSpawners()
 const { catalog, getByType } = useAdapterCatalog()
+
+// Surface async load failures as toasts; the view keeps its empty/loading state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 
 // ── Adapter-type display helpers ────────────────────────────────────────────
 const ADAPTER_TYPE_BADGE: Record<SpawnerAdapterType, string> = {
@@ -73,7 +80,6 @@ const viewingSpawner = computed(() => spawners.value.find(s => s.id === viewingS
 const isCreating = ref(false)
 const formVisible = ref(false)
 const formSaving = ref(false)
-const formError = ref<string | null>(null)
 const form = ref<SpawnerFormState>(emptyForm())
 
 const currentAdapterMeta = computed(() => getByType(form.value.adapterType))
@@ -136,7 +142,6 @@ function openCreate() {
   isCreating.value = true
   form.value = emptyForm()
   onAdapterTypeChange()
-  formError.value = null
   formVisible.value = true
 }
 
@@ -158,7 +163,6 @@ function openEdit(spawner: Spawner) {
     adapterConfig: { ...(spawner.adapterConfig ?? {}) },
   }
   onAdapterTypeChange()
-  formError.value = null
   formVisible.value = true
 }
 
@@ -199,19 +203,18 @@ function buildAdapterConfig(): Record<string, string> {
 }
 
 async function handleSave() {
-  formError.value = null
   if (!form.value.name.trim() || !form.value.slug.trim()) {
-    formError.value = 'Name and slug are required.'
+    toast.error('Name and slug are required.')
     return
   }
   const type = form.value.adapterType
   if (usesCommandFields(type)) {
     if (!form.value.command.trim()) {
-      formError.value = 'Command is required for claude/custom adapters.'
+      toast.error('Command is required for claude/custom adapters.')
       return
     }
     if (!isAllowedSpawnerCommand(form.value.command.trim())) {
-      formError.value = 'Command must be one of: claude, claude-code, npx — or an absolute path not under /tmp or /var/tmp.'
+      toast.error('Command must be one of: claude, claude-code, npx — or an absolute path not under /tmp or /var/tmp.')
       return
     }
   }
@@ -220,7 +223,7 @@ async function handleSave() {
   if (meta) {
     for (const k of meta.configKeys) {
       if (k.required && !(form.value.adapterConfig[k.key] ?? '').trim()) {
-        formError.value = `Adapter config "${k.key}" is required for ${type}.`
+        toast.error(`Adapter config "${k.key}" is required for ${type}.`)
         return
       }
     }
@@ -257,7 +260,7 @@ async function handleSave() {
     closeForm()
   }
   catch (e) {
-    formError.value = errorMessage(e)
+    toast.error(errorMessage(e))
   }
   finally {
     formSaving.value = false
@@ -266,10 +269,8 @@ async function handleSave() {
 
 // ── Delete ──────────────────────────────────────────────────────────────────
 const confirmDeleteId = ref<string | null>(null)
-const deleteError = ref<string | null>(null)
 
 async function handleDelete(id: string) {
-  deleteError.value = null
   try {
     await deleteSpawner(id)
     confirmDeleteId.value = null
@@ -278,24 +279,22 @@ async function handleDelete(id: string) {
       closeForm()
   }
   catch (e) {
-    deleteError.value = errorMessage(e)
+    toast.error(errorMessage(e))
     confirmDeleteId.value = null
   }
 }
 
 // ── Set default ───────────────────────────────────────────────────────────────
 const settingDefaultId = ref<string | null>(null)
-const defaultError = ref<string | null>(null)
 
 async function handleSetDefault(id: string) {
-  defaultError.value = null
   settingDefaultId.value = id
   try {
     await setDefaultSpawner(id)
     await refetch()
   }
   catch (e) {
-    defaultError.value = errorMessage(e)
+    toast.error(errorMessage(e))
   }
   finally {
     settingDefaultId.value = null
@@ -319,16 +318,6 @@ async function handleSetDefault(id: string) {
         + New Spawner
       </AppButton>
     </div>
-
-    <p v-if="error" class="text-xs text-danger-text">
-      {{ error }}
-    </p>
-    <p v-if="deleteError" class="text-xs text-danger-text">
-      {{ deleteError }}
-    </p>
-    <p v-if="defaultError" class="text-xs text-danger-text">
-      {{ defaultError }}
-    </p>
 
     <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
       Loading spawners...
@@ -614,10 +603,6 @@ async function handleSetDefault(id: string) {
             </div>
           </div>
         </div>
-
-        <p v-if="formError" class="text-xs text-danger-text">
-          {{ formError }}
-        </p>
 
         <div class="flex gap-2">
           <AppButton variant="info" :disabled="formSaving" @click="handleSave">

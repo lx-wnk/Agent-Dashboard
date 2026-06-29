@@ -2,9 +2,10 @@
 import type { SettingView } from '../composables/useSettings'
 import { computed, onMounted, ref } from 'vue'
 import { useSettings } from '../composables/useSettings'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 
-const { items, loading, error, refetch, update } = useSettings()
+const { items, loading, refetch, update } = useSettings()
 const saving = ref<string | null>(null)
 
 const notice = ref<{ kind: 'success' | 'warning', text: string } | null>(null)
@@ -45,7 +46,7 @@ async function apply(item: SettingView, value: string) {
       showNotice('success', `${item.key} updated`)
   }
   catch (e) {
-    error.value = errorMessage(e, 'Failed to save setting')
+    toast.error(errorMessage(e, 'Failed to save setting'))
   }
   finally {
     saving.value = null
@@ -88,11 +89,8 @@ onMounted(refetch)
     <div role="status" aria-live="polite" aria-atomic="true" class="text-xs text-fg-faint" :class="{ 'sr-only': !loading }">
       {{ loading ? 'Loading…' : '' }}
     </div>
-    <div role="alert" aria-atomic="true" class="text-xs text-danger-text" :class="{ 'sr-only': !error || loading }">
-      {{ !loading ? (error ?? '') : '' }}
-    </div>
 
-    <div v-if="!loading && !error" class="space-y-6">
+    <div v-if="!loading" class="space-y-6">
       <div v-for="group in groups" :key="group.category">
         <h4 class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-2">
           {{ group.category }}

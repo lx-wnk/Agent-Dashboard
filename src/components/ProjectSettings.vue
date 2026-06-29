@@ -15,6 +15,7 @@ import {
   useProjects,
 } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import { AVAILABLE_MODELS } from '../utils/models'
 import { STAGE_LABELS } from '../utils/stageLabels'
@@ -31,12 +32,21 @@ const { spawners } = useSpawners()
 // Per-project pipeline config composable (instantiated once; re-fetched on project open)
 const { config: projectPipelineConfig, loading: pipelineLoading, error: pipelineError, fetch: fetchProjectPipeline, save: saveProjectPipeline } = useProjectPipelineConfig()
 
+// Surface async load/save failures as toasts; the view keeps its empty/loading state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
+watch(pipelineError, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
+
 const PIPELINE_STAGES = ['implementation', 'self_review', 'finalization'] as const
 
 // Draft for per-project pipeline settings
 const pipelineDraft = ref<{ stageModels: Record<string, string>, stageSpawners: Record<string, string> } | null>(null)
 const pipelineSaved = ref(false)
-const pipelineSaveError = ref<string | null>(null)
 
 watch(projectPipelineConfig, (val) => {
   if (val)
@@ -46,7 +56,6 @@ watch(projectPipelineConfig, (val) => {
 async function handlePipelineSave(projectId: string) {
   if (!pipelineDraft.value)
     return
-  pipelineSaveError.value = null
   pipelineSaved.value = false
   await saveProjectPipeline(projectId, {
     stageModels: { ...pipelineDraft.value.stageModels } as Record<'implementation' | 'self_review' | 'finalization', string>,
@@ -57,9 +66,6 @@ async function handlePipelineSave(projectId: string) {
     setTimeout(() => {
       pipelineSaved.value = false
     }, 2500)
-  }
-  else {
-    pipelineSaveError.value = pipelineError.value
   }
 }
 
@@ -76,15 +82,12 @@ const editingProject = ref<Project | null>(null)
 const isCreating = ref(false)
 const formVisible = ref(false)
 const formSaving = ref(false)
-const formError = ref<string | null>(null)
 const form = ref<ProjectFormState>({ slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '' })
 const folderRows = ref<FolderRow[]>([])
-const folderError = ref<string | null>(null)
 
 function openCreate() {
   editingProject.value = null
   form.value = { slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '' }
-  formError.value = null
   formVisible.value = true
   isCreating.value = true
 }
@@ -98,7 +101,6 @@ function openEdit(project: Project) {
     color: project.color ?? '#3b82f6',
     defaultSpawnerId: project.defaultSpawnerId ?? '',
   }
-  formError.value = null
   formVisible.value = true
   isCreating.value = false
   void loadFolders(project.id)
@@ -110,14 +112,12 @@ function closeForm() {
   formVisible.value = false
   editingProject.value = null
   folderRows.value = []
-  folderError.value = null
   pipelineDraft.value = null
 }
 
 async function handleSave() {
-  formError.value = null
   if (!form.value.name.trim() || !form.value.slug.trim()) {
-    formError.value = 'Name and slug are required.'
+    toast.error('Name and slug are required.')
     return
   }
   formSaving.value = true
@@ -147,7 +147,7 @@ async function handleSave() {
     }
   }
   catch (e) {
-    formError.value = errorMessage(e)
+    toast.error(errorMessage(e))
   }
   finally {
     formSaving.value = false
@@ -156,10 +156,8 @@ async function handleSave() {
 
 // ── Delete confirmation ─────────────────────────────────────────────────────
 const confirmDeleteId = ref<string | null>(null)
-const deleteError = ref<string | null>(null)
 
 async function handleDelete(id: string) {
-  deleteError.value = null
   try {
     await deleteProject(id)
     confirmDeleteId.value = null
@@ -168,7 +166,7 @@ async function handleDelete(id: string) {
       closeForm()
   }
   catch (e) {
-    deleteError.value = errorMessage(e)
+    toast.error(errorMessage(e))
     confirmDeleteId.value = null
   }
 }
@@ -190,7 +188,6 @@ let _rowKey = 0
 
 async function loadFolders(projectId: string) {
   folderLoading.value = true
-  folderError.value = null
   try {
     const folders = await fetchProjectFolders(projectId)
     folderRows.value = folders.map(f => ({
@@ -204,7 +201,7 @@ async function loadFolders(projectId: string) {
     }))
   }
   catch (e) {
-    folderError.value = errorMessage(e)
+    toast.error(errorMessage(e))
   }
   finally {
     folderLoading.value = false
@@ -300,14 +297,6 @@ watch(folderRows, () => {}, { deep: true })
         + New Project
       </AppButton>
     </div>
-
-    <!-- Global error -->
-    <p v-if="error" class="text-xs text-danger-text">
-      {{ error }}
-    </p>
-    <p v-if="deleteError" class="text-xs text-danger-text">
-      {{ deleteError }}
-    </p>
 
     <!-- Loading -->
     <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
@@ -462,10 +451,6 @@ watch(folderRows, () => {}, { deep: true })
         </div>
       </div>
 
-      <p v-if="formError" class="text-xs text-danger-text">
-        {{ formError }}
-      </p>
-
       <div class="flex gap-2">
         <AppButton variant="info" :disabled="formSaving" @click="handleSave">
           {{ formSaving ? 'Saving…' : (isCreating ? 'Create Project' : 'Save Changes') }}
@@ -536,16 +521,11 @@ watch(folderRows, () => {}, { deep: true })
             </div>
           </div>
 
-          <p v-if="pipelineError" class="text-xs text-danger-text mt-2">
-            {{ pipelineError }}
-          </p>
-
           <div class="flex items-center gap-3 mt-3">
             <AppButton variant="secondary" size="sm" :disabled="pipelineLoading || !pipelineDraft" @click="handlePipelineSave(editingProject.id)">
               {{ pipelineLoading ? 'Saving…' : 'Pipeline-Config speichern' }}
             </AppButton>
             <span v-if="pipelineSaved" class="text-xs text-emerald-600 dark:text-emerald-400">Gespeichert.</span>
-            <span v-if="pipelineSaveError" class="text-xs text-red-600 dark:text-red-400">{{ pipelineSaveError }}</span>
           </div>
         </div>
       </template>
@@ -561,9 +541,6 @@ watch(folderRows, () => {}, { deep: true })
               + Add Folder
             </AppButton>
           </div>
-          <p v-if="folderError" class="text-xs text-danger-text mb-2">
-            {{ folderError }}
-          </p>
           <div v-if="folderLoading" class="text-xs text-fg-mute py-3">
             Loading folders...
           </div>

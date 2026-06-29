@@ -2,6 +2,7 @@
 import type { NotifPref } from '../composables/useNotificationConfig'
 import { onBeforeUnmount, ref } from 'vue'
 import { useNotificationConfig } from '../composables/useNotificationConfig'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import AppButton from './ui/AppButton.vue'
 
@@ -17,7 +18,7 @@ const KNOWN_EVENTS: { type: string, label: string, description: string }[] = [
 const CHANNELS = ['webhook', 'email', 'browser', 'system'] as const
 type Channel = typeof CHANNELS[number]
 
-const { prefs, config, loading, error, savePref, saveConfig } = useNotificationConfig()
+const { prefs, config, loading, savePref, saveConfig } = useNotificationConfig()
 
 const savingPref = ref<string | null>(null)
 const savingConfig = ref(false)
@@ -66,7 +67,7 @@ async function handleSavePref(eventType: string, updated: NotifPref) {
     }, 1500)
   }
   catch (e) {
-    error.value = errorMessage(e, 'Save failed')
+    toast.error(errorMessage(e, 'Save failed'))
   }
   finally {
     savingPref.value = null
@@ -76,7 +77,6 @@ async function handleSavePref(eventType: string, updated: NotifPref) {
 async function handleSaveConfig() {
   savingConfig.value = true
   configSaveOk.value = false
-  error.value = null
   try {
     await saveConfig(config.value)
     configSaveOk.value = true
@@ -86,7 +86,7 @@ async function handleSaveConfig() {
     }, 2000)
   }
   catch (e) {
-    error.value = errorMessage(e, 'Save failed')
+    toast.error(errorMessage(e, 'Save failed'))
   }
   finally {
     savingConfig.value = false
@@ -105,13 +105,9 @@ async function handleSaveConfig() {
       </p>
     </div>
 
-    <!-- F011 — role="status"/role="alert" rendered unconditionally so announcements
-         fire when content changes (ARIA live regions must exist before content mutates). -->
+    <!-- F011 — role="status" rendered unconditionally so announcements fire when content changes -->
     <div role="status" aria-live="polite" aria-atomic="true" class="text-xs text-fg-faint" :class="{ 'sr-only': !loading }">
       {{ loading ? 'Loading…' : '' }}
-    </div>
-    <div role="alert" aria-atomic="true" class="text-xs text-danger-text" :class="{ 'sr-only': !error || loading }">
-      {{ !loading ? (error ?? '') : '' }}
     </div>
 
     <template v-if="!loading">
