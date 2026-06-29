@@ -35,6 +35,9 @@ type Registry struct {
 	enabled        func(id string) bool
 	serverCtx      context.Context
 	hooks          Hooks
+	// settings is the optional provider that fetches decrypted per-plugin values
+	// for env injection at every spawn. Nil means no settings are injected.
+	settings SettingsProvider
 }
 
 // Entry is a loaded plugin with its descriptor and running process (if started by us).
@@ -78,6 +81,10 @@ func New(dir string) *Registry {
 // SetEnabled installs the predicate that decides which plugins Load starts and
 // records. Defaults to all-enabled if never set (callers should set it).
 func (r *Registry) SetEnabled(fn func(id string) bool) { r.enabled = fn }
+
+// SetSettingsProvider installs the provider that fetches decrypted settings
+// for env injection at every spawn. Call before Load.
+func (r *Registry) SetSettingsProvider(fn SettingsProvider) { r.settings = fn }
 
 func (r *Registry) isEnabled(id string) bool {
 	if r.enabled == nil {

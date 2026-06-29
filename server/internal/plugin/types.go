@@ -1,6 +1,8 @@
 // Package plugin provides runtime plugin discovery and lifecycle management.
 package plugin
 
+import "context"
+
 // Descriptor is read from plugin.json in each plugin directory.
 type Descriptor struct {
 	ID           string   `json:"id"`
@@ -57,3 +59,8 @@ const (
 	// via a ui-manifest.json + per-slot JS modules served by the plugin proxy.
 	CapUIExtension = "ui_extension"
 )
+
+// SettingsProvider fetches decrypted settings for a plugin by ID.
+// Called at every subprocess spawn; errors are logged and the plugin starts
+// without settings so a DB failure never blocks plugin availability.
+type SettingsProvider func(ctx context.Context, id string) (map[string]string, error)
