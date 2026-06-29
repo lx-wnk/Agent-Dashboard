@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -62,7 +63,7 @@ func registerWaitForPort(registry mcp.ToolRegistry) {
 				return nil, mcp.Fail(fmt.Sprintf("timeoutSeconds must be between 1 and %d", maxTimeoutSeconds))
 			}
 
-			addr := fmt.Sprintf("%s:%d", host, port)
+			addr := net.JoinHostPort(host, strconv.Itoa(port))
 			deadline := time.Now().Add(time.Duration(timeoutSecs) * time.Second)
 			for time.Now().Before(deadline) {
 				conn, dialErr := net.DialTimeout("tcp", addr, time.Second)
