@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { TaskRefKey } from '../../../composables/taskModalContext'
+import { toast } from '../../../composables/useToast'
 import CoordinationTab from '../CoordinationTab.vue'
 
 function makeTask(overrides: Record<string, unknown> = {}) {
@@ -178,11 +179,13 @@ describe('coordinationTab', () => {
     expect(wrapper.text()).toContain('Loading')
   })
 
-  it('shows error state when fetch fails', async () => {
+  it('surfaces a toast when fetch fails', async () => {
+    const errorSpy = vi.spyOn(toast, 'error')
     vi.mocked(fetch).mockRejectedValue(new Error('network error'))
     const wrapper = mountTab()
     await flushPromises()
-    expect(wrapper.text().toLowerCase()).toContain('failed')
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Failed'))
+    expect(wrapper.find('.text-danger-text').exists()).toBe(false)
   })
 
   it('shows empty state when no scratchpads or locks', async () => {

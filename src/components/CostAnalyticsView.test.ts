@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from '../composables/useToast'
 import CostAnalyticsView from './CostAnalyticsView.vue'
 
 // Minimal EventSource stub — jsdom has no native EventSource.
@@ -209,7 +210,8 @@ describe('costAnalyticsView', () => {
     expect(text).toMatch(/\$1\.80|\$1\.8/)
   })
 
-  it('renders error state when fetch fails', async () => {
+  it('surfaces a toast when fetch fails', async () => {
+    const errorSpy = vi.spyOn(toast, 'error')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
@@ -217,7 +219,8 @@ describe('costAnalyticsView', () => {
     }))
     const wrapper = mount(CostAnalyticsView)
     await flushPromises()
-    expect(wrapper.text()).toContain('HTTP 500')
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('500'))
+    expect(wrapper.find('.text-danger-text').exists()).toBe(false)
   })
 
   // New tests for tokens, project breakdown, and range filter
