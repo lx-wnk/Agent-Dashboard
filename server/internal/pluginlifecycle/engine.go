@@ -145,6 +145,13 @@ func (e *Engine) Deactivate(ctx context.Context, d plugin.Descriptor) error {
 }
 
 func (e *Engine) Update(ctx context.Context, d plugin.Descriptor, manifestHash string) error {
+	st, err := e.repo.GetState(ctx, d.ID)
+	if err != nil {
+		return err
+	}
+	if st.InstalledAt == nil {
+		return fmt.Errorf("%w: %s must be installed before update", ErrIllegalTransition, d.ID)
+	}
 	if err := e.withTransient(ctx, d.ID, func() error {
 		return e.callHook(ctx, d, d.Lifecycle.Update)
 	}); err != nil {

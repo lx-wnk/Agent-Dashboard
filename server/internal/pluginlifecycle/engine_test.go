@@ -192,7 +192,8 @@ func TestActivateHookFailureStopsAndDoesNotActivate(t *testing.T) {
 }
 
 func TestEngine_UpdateRefreshesManifestHash(t *testing.T) {
-	pr := &fakePluginRepo{}
+	now := time.Now()
+	pr := &fakePluginRepo{installedAt: &now}
 	e := New(pr, &recordingHooks{}, &fakeClearer{}, nil)
 	d := plugin.Descriptor{
 		ID: "p1", Version: "2.0.0",
@@ -201,6 +202,22 @@ func TestEngine_UpdateRefreshesManifestHash(t *testing.T) {
 	require.NoError(t, e.Update(context.Background(), d, "hash-v2"))
 	assert.Equal(t, "2.0.0", pr.version)
 	assert.Equal(t, "hash-v2", pr.manifestHash)
+}
+
+func TestEngine_UpdateBeforeInstallRejected(t *testing.T) {
+	pr := &fakePluginRepo{version: "1.0.0", manifestHash: "hash-v1"}
+	hk := &recordingHooks{}
+	e := New(pr, hk, &fakeClearer{}, nil)
+	d := plugin.Descriptor{
+		ID: "p1", Version: "2.0.0",
+		Lifecycle: plugin.LifecycleHooks{Update: "/update"},
+	}
+	err := e.Update(context.Background(), d, "hash-v2")
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrIllegalTransition)
+	assert.NotContains(t, hk.called, "/update")
+	assert.Equal(t, "1.0.0", pr.version)
+	assert.Equal(t, "hash-v1", pr.manifestHash)
 }
 
 func TestInstallWrapsHooksInTransient(t *testing.T) {
