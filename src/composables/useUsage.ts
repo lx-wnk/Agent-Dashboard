@@ -1,4 +1,4 @@
-import { computed, onUnmounted, ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1_000
 
@@ -33,22 +33,14 @@ export function useUsage() {
       const res = await fetch('/api/usage', { signal: aborter.signal })
       if (!res.ok)
         return
-      data.value = await res.json() as UsageData
+      const json = await res.json() as UsageData
+      // accounts is omitted from the response for single-account users; guarantee an array.
+      data.value = { ...json, accounts: json.accounts ?? [] }
     }
     catch {
       // AbortError and transient failures: leave last known value
     }
   }
-
-  // worst is the budgeted window with the highest pct; null when no budgets are set.
-  const worst = computed<WindowData | null>(() => {
-    if (!data.value)
-      return null
-    const budgeted = data.value.windows.filter(w => w.pct !== null)
-    if (budgeted.length === 0)
-      return null
-    return budgeted.reduce((a, b) => (b.pct! > a.pct! ? b : a))
-  })
 
   function start() {
     if (intervalId !== null)
@@ -68,5 +60,5 @@ export function useUsage() {
 
   onUnmounted(stop)
 
-  return { data, worst, refresh, start, stop }
+  return { data, refresh, start, stop }
 }

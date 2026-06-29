@@ -105,7 +105,7 @@ function formatDelta(d: number | null): string {
           {{ formatM(win.tokens) }} tokens · ${{ (win.costCents / 100).toFixed(2) }}
           <span v-if="win.pct !== null"> · {{ Math.round(win.pct * 100) }}%</span>
         </div>
-        <template v-if="usageData.accounts.length > 1">
+        <template v-if="(usageData.accounts?.length ?? 0) > 1">
           <div class="mt-1 text-fg-faint">
             Accounts:
           </div>

@@ -101,6 +101,17 @@ describe('appStatusBar', () => {
     expect(panel.text()).toContain('7d')
   })
 
+  it('opens usage popover without throwing when accounts key is absent', async () => {
+    // Single-account server response omits accounts entirely.
+    const noAccounts = { windows: noBudgetUsage.windows } as unknown as UsageData
+    const Bar = await load()
+    const w = mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: noAccounts } })
+    await w.get('[data-testid="seg-usage"]').trigger('click')
+    const panel = w.get('[data-testid="panel-usage"]')
+    expect(panel.text()).toContain('5h')
+    expect(panel.text()).toContain('7d')
+  })
+
   it('shows per-account breakdown in popover when >1 account', async () => {
     const Bar = await load()
     const w = mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: budgetUsage } })

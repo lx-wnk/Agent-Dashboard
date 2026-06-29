@@ -72,26 +72,11 @@ describe('useUsage', () => {
     expect(fetch).toHaveBeenCalledTimes(1) // only the initial fetch
   })
 
-  it('computes worst as nil when no budget', async () => {
-    const { useUsage } = await import('./useUsage')
-    const Host = defineComponent({
-      setup() {
-        const u = useUsage()
-        u.start()
-        return u
-      },
-      template: '<div />',
-    })
-    const w = mount(Host)
-    await flushPromises()
-    expect((w.vm as any).worst).toBeNull()
-    w.unmount()
-  })
-
-  it('computes worst as the budgeted window with the highest pct', async () => {
+  it('normalizes a single-account response (no accounts key) to an empty array', async () => {
+    // Single-account server omits the accounts key entirely (json:"accounts,omitempty").
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(mockWithBudget),
+      json: () => Promise.resolve({ windows: mockWithBudget.windows }),
     }))
     vi.resetModules()
     const { useUsage } = await import('./useUsage')
@@ -105,9 +90,7 @@ describe('useUsage', () => {
     })
     const w = mount(Host)
     await flushPromises()
-    const worst = (w.vm as any).worst
-    expect(worst).not.toBeNull()
-    expect(worst.key).toBe('7d') // pct 0.5 > 0.1
+    expect((w.vm as any).data.accounts).toEqual([])
     w.unmount()
   })
 })
