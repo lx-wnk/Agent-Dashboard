@@ -354,6 +354,18 @@ func TestLifecyclePutSettings_UnknownKey_400(t *testing.T) {
 	}
 }
 
+func TestLifecyclePutSettings_InvalidValue_400(t *testing.T) {
+	ctl := &fakeLifecycle{putErr: fmt.Errorf("%w: field %q requires an integer", pluginsettings.ErrInvalidValue, "count")}
+	body := `{"values":{"count":"abc"}}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/plugins/p1/settings", strings.NewReader(body)))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 const pluginsettingsMasked = pluginsettings.MaskedSentinel
 
 func TestLifecycleTransition_MalformedID_400(t *testing.T) {

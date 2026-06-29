@@ -127,7 +127,7 @@ func classify(err error, wrap string) error {
 		return fmt.Errorf("%w: %s", apierr.ErrConflict, err.Error())
 	}
 	if errors.Is(err, pluginsctl.ErrUnknownPlugin) || errors.Is(err, pluginsctl.ErrInvalidAction) ||
-		errors.Is(err, pluginsettings.ErrUnknownKey) {
+		errors.Is(err, pluginsettings.ErrUnknownKey) || errors.Is(err, pluginsettings.ErrInvalidValue) {
 		return fmt.Errorf("%w: %s", apierr.ErrBadRequest, err.Error())
 	}
 	return fmt.Errorf("%s: %w", wrap, err)
