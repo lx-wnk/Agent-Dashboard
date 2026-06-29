@@ -113,7 +113,7 @@ func (a *Aggregator) scan(now time.Time) (*Result, error) {
 	var total Result
 	for _, dir := range a.opts.ConfigDirs() {
 		acc := Account{Label: filepath.Base(dir)}
-		if err := scanConfigDir(dir, cutoff7d, cutoff5h, &acc.W5h, &acc.W7d); err != nil {
+		if err := scanConfigDir(dir, now, cutoff7d, cutoff5h, &acc.W5h, &acc.W7d); err != nil {
 			slog.Debug("usage: scan dir skipped", "dir", dir, "err", err)
 			continue
 		}
@@ -126,7 +126,7 @@ func (a *Aggregator) scan(now time.Time) (*Result, error) {
 	return &total, nil
 }
 
-func scanConfigDir(configDir string, cutoff7d, cutoff5h time.Time, w5h, w7d *WindowUsage) error {
+func scanConfigDir(configDir string, now, cutoff7d, cutoff5h time.Time, w5h, w7d *WindowUsage) error {
 	projectsDir := filepath.Join(configDir, "projects")
 	projectDirs, err := os.ReadDir(projectsDir)
 	if err != nil {
@@ -155,7 +155,7 @@ func scanConfigDir(configDir string, cutoff7d, cutoff5h time.Time, w5h, w7d *Win
 				continue // mtime prefilter: skip files untouched in >7d
 			}
 			path := filepath.Join(dirPath, name)
-			if err := scanJSONLFile(path, cutoff7d, cutoff5h, w5h, w7d); err != nil {
+			if err := scanJSONLFile(path, now, cutoff7d, cutoff5h, w5h, w7d); err != nil {
 				slog.Debug("usage: skip file", "path", path, "err", err)
 			}
 		}
@@ -180,7 +180,7 @@ type usageCnts struct {
 	CacheRead   int `json:"cache_read_input_tokens"`
 }
 
-func scanJSONLFile(path string, cutoff7d, cutoff5h time.Time, w5h, w7d *WindowUsage) error {
+func scanJSONLFile(path string, now, cutoff7d, cutoff5h time.Time, w5h, w7d *WindowUsage) error {
 	rc, err := parser.OpenJSONLReader(path, 0) // 0 = read whole file
 	if err != nil {
 		return err
@@ -204,6 +204,9 @@ func scanJSONLFile(path string, cutoff7d, cutoff5h time.Time, w5h, w7d *WindowUs
 		}
 		if ts.IsZero() {
 			return nil // no timestamp: cannot place in window
+		}
+		if ts.After(now) {
+			return nil // future timestamp (clock skew): out of range
 		}
 
 		u := e.Message.Usage

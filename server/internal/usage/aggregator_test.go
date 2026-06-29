@@ -150,6 +150,34 @@ func TestAggregate_MultiDir(t *testing.T) {
 	}
 }
 
+// TestAggregate_FutureTimestamp asserts that a message dated after now (clock skew)
+// is excluded from both windows.
+func TestAggregate_FutureTimestamp(t *testing.T) {
+	now := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	projDir := makeProjectDir(t, dir)
+
+	writeJSONL(t, filepath.Join(projDir, "aaaaaaaa-0000-0000-0000-00000000000f.jsonl"), []string{
+		assistantLine(now.Add(-1*time.Hour), "claude-sonnet-4-6", 1000, 0), // counted
+		assistantLine(now.Add(2*time.Hour), "claude-sonnet-4-6", 5000, 0),  // future: excluded
+	})
+
+	agg := usage.NewAggregator(usage.Options{
+		ConfigDirs: func() []string { return []string{dir} },
+		Now:        func() time.Time { return now },
+	})
+	res, err := agg.Aggregate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(1000); res.W5h.Tokens != want {
+		t.Errorf("w5h tokens: got %d, want %d (future ts must be excluded)", res.W5h.Tokens, want)
+	}
+	if want := int64(1000); res.W7d.Tokens != want {
+		t.Errorf("w7d tokens: got %d, want %d (future ts must be excluded)", res.W7d.Tokens, want)
+	}
+}
+
 // TestAggregate_MtimeFilter asserts that JSONL files older than 7d are skipped.
 func TestAggregate_MtimeFilter(t *testing.T) {
 	now := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
