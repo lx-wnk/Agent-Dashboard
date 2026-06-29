@@ -3,6 +3,7 @@ import type { Project, Spawner } from '../types'
 import { computed, ref, watch } from 'vue'
 import { createFolder } from '../composables/useProjectFolders'
 import { createProject, deleteProject } from '../composables/useProjects'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import { slugify } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
@@ -18,7 +19,6 @@ const description = ref('')
 const color = ref('')
 const defaultSpawnerId = ref<string>('')
 const isSubmitting = ref(false)
-const errorMsg = ref('')
 
 const defaultSpawnerSlug = 'claude-default'
 const defaultClaudeSpawner = computed(() =>
@@ -46,11 +46,10 @@ async function submit(): Promise<void> {
   if (isSubmitting.value)
     return
   if (!name.value.trim() || !path.value.trim()) {
-    errorMsg.value = 'Name and Path are required.'
+    toast.error('Name and Path are required.')
     return
   }
   isSubmitting.value = true
-  errorMsg.value = ''
 
   const projectInput = {
     name: name.value.trim(),
@@ -65,7 +64,7 @@ async function submit(): Promise<void> {
     project = await createProject(projectInput)
   }
   catch (e) {
-    errorMsg.value = errorMessage(e)
+    toast.error(errorMessage(e))
     isSubmitting.value = false
     return
   }
@@ -75,7 +74,7 @@ async function submit(): Promise<void> {
     emit('created', { ...project, folders: [folder] })
   }
   catch (e) {
-    errorMsg.value = errorMessage(e)
+    toast.error(errorMessage(e))
     await deleteProject(project.id).catch(() => {})
   }
   finally {
@@ -156,9 +155,6 @@ async function submit(): Promise<void> {
           >
         </div>
       </div>
-      <p v-if="errorMsg" class="text-xs text-danger-text mb-2 leading-snug">
-        {{ errorMsg }}
-      </p>
       <div class="flex justify-end gap-2">
         <AppButton type="button" variant="secondary" @click="emit('cancel')">
           Cancel
