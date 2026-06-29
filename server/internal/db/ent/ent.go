@@ -26,6 +26,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pluginsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/prompttemplate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
@@ -112,6 +113,7 @@ func checkColumn(t, c string) error {
 			pluginsetting.Table:      pluginsetting.ValidColumn,
 			project.Table:            project.ValidColumn,
 			projectfolder.Table:      projectfolder.ValidColumn,
+			prompttemplate.Table:     prompttemplate.ValidColumn,
 			providersetting.Table:    providersetting.ValidColumn,
 			refinementturn.Table:     refinementturn.ValidColumn,
 			remoteregistration.Table: remoteregistration.ValidColumn,

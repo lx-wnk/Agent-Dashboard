@@ -86,6 +86,12 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 				FailTransition{Reason: fmt.Sprintf("persisting worktree path failed: %v", err)})
 		}
 		slog.Info("orchestrator: created worktree", "taskID", taskID, "path", wtPath, "branch", wtBranch)
+
+		if o.opts.SetupWorktreeFn != nil {
+			if setupErr := o.opts.SetupWorktreeFn(ctx, task.ProjectID, wtPath); setupErr != nil {
+				slog.Warn("orchestrator: setup_command failed (task continues)", "taskID", taskID, "err", setupErr)
+			}
+		}
 	}
 
 	// Re-entry guard: if the run is already running with a live PID, return without spawning.

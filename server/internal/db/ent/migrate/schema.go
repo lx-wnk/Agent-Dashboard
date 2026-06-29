@@ -352,6 +352,7 @@ var (
 		{Name: "description", Type: field.TypeString, Nullable: true},
 		{Name: "color", Type: field.TypeString, Nullable: true},
 		{Name: "default_spawner_id", Type: field.TypeString, Nullable: true},
+		{Name: "setup_command", Type: field.TypeString, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
@@ -395,6 +396,26 @@ var (
 				Name:    "projectfolder_path_project_folders",
 				Unique:  true,
 				Columns: []*schema.Column{ProjectFoldersColumns[1], ProjectFoldersColumns[5]},
+			},
+		},
+	}
+	// PromptTemplatesColumns holds the columns for the "prompt_templates" table.
+	PromptTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "body", Type: field.TypeString, Size: 2147483647},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// PromptTemplatesTable holds the schema information for the "prompt_templates" table.
+	PromptTemplatesTable = &schema.Table{
+		Name:       "prompt_templates",
+		Columns:    PromptTemplatesColumns,
+		PrimaryKey: []*schema.Column{PromptTemplatesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "prompttemplate_name",
+				Unique:  false,
+				Columns: []*schema.Column{PromptTemplatesColumns[1]},
 			},
 		},
 	}
@@ -816,6 +837,7 @@ var (
 		PluginSettingsTable,
 		ProjectsTable,
 		ProjectFoldersTable,
+		PromptTemplatesTable,
 		ProviderSettingsTable,
 		RefinementTurnsTable,
 		RemoteRegistrationsTable,

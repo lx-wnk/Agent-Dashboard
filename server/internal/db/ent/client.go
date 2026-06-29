@@ -29,6 +29,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pluginsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/prompttemplate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
@@ -76,6 +77,8 @@ type Client struct {
 	Project *ProjectClient
 	// ProjectFolder is the client for interacting with the ProjectFolder builders.
 	ProjectFolder *ProjectFolderClient
+	// PromptTemplate is the client for interacting with the PromptTemplate builders.
+	PromptTemplate *PromptTemplateClient
 	// ProviderSetting is the client for interacting with the ProviderSetting builders.
 	ProviderSetting *ProviderSettingClient
 	// RefinementTurn is the client for interacting with the RefinementTurn builders.
@@ -125,6 +128,7 @@ func (c *Client) init() {
 	c.PluginSetting = NewPluginSettingClient(c.config)
 	c.Project = NewProjectClient(c.config)
 	c.ProjectFolder = NewProjectFolderClient(c.config)
+	c.PromptTemplate = NewPromptTemplateClient(c.config)
 	c.ProviderSetting = NewProviderSettingClient(c.config)
 	c.RefinementTurn = NewRefinementTurnClient(c.config)
 	c.RemoteRegistration = NewRemoteRegistrationClient(c.config)
@@ -243,6 +247,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		PluginSetting:      NewPluginSettingClient(cfg),
 		Project:            NewProjectClient(cfg),
 		ProjectFolder:      NewProjectFolderClient(cfg),
+		PromptTemplate:     NewPromptTemplateClient(cfg),
 		ProviderSetting:    NewProviderSettingClient(cfg),
 		RefinementTurn:     NewRefinementTurnClient(cfg),
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
@@ -288,6 +293,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		PluginSetting:      NewPluginSettingClient(cfg),
 		Project:            NewProjectClient(cfg),
 		ProjectFolder:      NewProjectFolderClient(cfg),
+		PromptTemplate:     NewPromptTemplateClient(cfg),
 		ProviderSetting:    NewProviderSettingClient(cfg),
 		RefinementTurn:     NewRefinementTurnClient(cfg),
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
@@ -332,8 +338,8 @@ func (c *Client) Use(hooks ...Hook) {
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.CoordLock,
 		c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset, c.PermissionRequest,
 		c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder,
-		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Scratchpad,
-		c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
+		c.PromptTemplate, c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration,
+		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
 		c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Use(hooks...)
@@ -347,8 +353,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.CoordLock,
 		c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset, c.PermissionRequest,
 		c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder,
-		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Scratchpad,
-		c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
+		c.PromptTemplate, c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration,
+		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
 		c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Intercept(interceptors...)
@@ -386,6 +392,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Project.mutate(ctx, m)
 	case *ProjectFolderMutation:
 		return c.ProjectFolder.mutate(ctx, m)
+	case *PromptTemplateMutation:
+		return c.PromptTemplate.mutate(ctx, m)
 	case *ProviderSettingMutation:
 		return c.ProviderSetting.mutate(ctx, m)
 	case *RefinementTurnMutation:
@@ -2325,6 +2333,139 @@ func (c *ProjectFolderClient) mutate(ctx context.Context, m *ProjectFolderMutati
 	}
 }
 
+// PromptTemplateClient is a client for the PromptTemplate schema.
+type PromptTemplateClient struct {
+	config
+}
+
+// NewPromptTemplateClient returns a client for the PromptTemplate from the given config.
+func NewPromptTemplateClient(c config) *PromptTemplateClient {
+	return &PromptTemplateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `prompttemplate.Hooks(f(g(h())))`.
+func (c *PromptTemplateClient) Use(hooks ...Hook) {
+	c.hooks.PromptTemplate = append(c.hooks.PromptTemplate, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `prompttemplate.Intercept(f(g(h())))`.
+func (c *PromptTemplateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PromptTemplate = append(c.inters.PromptTemplate, interceptors...)
+}
+
+// Create returns a builder for creating a PromptTemplate entity.
+func (c *PromptTemplateClient) Create() *PromptTemplateCreate {
+	mutation := newPromptTemplateMutation(c.config, OpCreate)
+	return &PromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PromptTemplate entities.
+func (c *PromptTemplateClient) CreateBulk(builders ...*PromptTemplateCreate) *PromptTemplateCreateBulk {
+	return &PromptTemplateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PromptTemplateClient) MapCreateBulk(slice any, setFunc func(*PromptTemplateCreate, int)) *PromptTemplateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PromptTemplateCreateBulk{err: fmt.Errorf("calling to PromptTemplateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PromptTemplateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PromptTemplateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PromptTemplate.
+func (c *PromptTemplateClient) Update() *PromptTemplateUpdate {
+	mutation := newPromptTemplateMutation(c.config, OpUpdate)
+	return &PromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PromptTemplateClient) UpdateOne(_m *PromptTemplate) *PromptTemplateUpdateOne {
+	mutation := newPromptTemplateMutation(c.config, OpUpdateOne, withPromptTemplate(_m))
+	return &PromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PromptTemplateClient) UpdateOneID(id string) *PromptTemplateUpdateOne {
+	mutation := newPromptTemplateMutation(c.config, OpUpdateOne, withPromptTemplateID(id))
+	return &PromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PromptTemplate.
+func (c *PromptTemplateClient) Delete() *PromptTemplateDelete {
+	mutation := newPromptTemplateMutation(c.config, OpDelete)
+	return &PromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PromptTemplateClient) DeleteOne(_m *PromptTemplate) *PromptTemplateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PromptTemplateClient) DeleteOneID(id string) *PromptTemplateDeleteOne {
+	builder := c.Delete().Where(prompttemplate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PromptTemplateDeleteOne{builder}
+}
+
+// Query returns a query builder for PromptTemplate.
+func (c *PromptTemplateClient) Query() *PromptTemplateQuery {
+	return &PromptTemplateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePromptTemplate},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PromptTemplate entity by its id.
+func (c *PromptTemplateClient) Get(ctx context.Context, id string) (*PromptTemplate, error) {
+	return c.Query().Where(prompttemplate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PromptTemplateClient) GetX(ctx context.Context, id string) *PromptTemplate {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PromptTemplateClient) Hooks() []Hook {
+	return c.hooks.PromptTemplate
+}
+
+// Interceptors returns the client interceptors.
+func (c *PromptTemplateClient) Interceptors() []Interceptor {
+	return c.inters.PromptTemplate
+}
+
+func (c *PromptTemplateClient) mutate(ctx context.Context, m *PromptTemplateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PromptTemplate mutation op: %q", m.Op())
+	}
+}
+
 // ProviderSettingClient is a client for the ProviderSetting schema.
 type ProviderSettingClient struct {
 	config
@@ -4070,15 +4211,17 @@ type (
 	hooks struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, CoordLock, DriftAlert,
 		EvalMetricSnapshot, PermissionPreset, PermissionRequest, PipelineConfig,
-		Plugin, PluginSetting, Project, ProjectFolder, ProviderSetting, RefinementTurn,
-		RemoteRegistration, Scratchpad, Spawner, StageRun, SystemPrompt, Task,
-		TaskDependency, TaskPermission, TaskSchedule, User []ent.Hook
+		Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate, ProviderSetting,
+		RefinementTurn, RemoteRegistration, Scratchpad, Spawner, StageRun,
+		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
+		User []ent.Hook
 	}
 	inters struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, CoordLock, DriftAlert,
 		EvalMetricSnapshot, PermissionPreset, PermissionRequest, PipelineConfig,
-		Plugin, PluginSetting, Project, ProjectFolder, ProviderSetting, RefinementTurn,
-		RemoteRegistration, Scratchpad, Spawner, StageRun, SystemPrompt, Task,
-		TaskDependency, TaskPermission, TaskSchedule, User []ent.Interceptor
+		Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate, ProviderSetting,
+		RefinementTurn, RemoteRegistration, Scratchpad, Spawner, StageRun,
+		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
+		User []ent.Interceptor
 	}
 )

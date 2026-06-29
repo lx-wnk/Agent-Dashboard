@@ -78,6 +78,20 @@ func (_c *ProjectCreate) SetNillableDefaultSpawnerID(v *string) *ProjectCreate {
 	return _c
 }
 
+// SetSetupCommand sets the "setup_command" field.
+func (_c *ProjectCreate) SetSetupCommand(v string) *ProjectCreate {
+	_c.mutation.SetSetupCommand(v)
+	return _c
+}
+
+// SetNillableSetupCommand sets the "setup_command" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableSetupCommand(v *string) *ProjectCreate {
+	if v != nil {
+		_c.SetSetupCommand(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *ProjectCreate) SetCreatedAt(v time.Time) *ProjectCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -242,6 +256,10 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 		_spec.SetField(project.FieldDefaultSpawnerID, field.TypeString, value)
 		_node.DefaultSpawnerID = &value
 	}
+	if value, ok := _c.mutation.SetupCommand(); ok {
+		_spec.SetField(project.FieldSetupCommand, field.TypeString, value)
+		_node.SetupCommand = &value
+	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(project.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
@@ -396,6 +414,24 @@ func (u *ProjectUpsert) ClearDefaultSpawnerID() *ProjectUpsert {
 	return u
 }
 
+// SetSetupCommand sets the "setup_command" field.
+func (u *ProjectUpsert) SetSetupCommand(v string) *ProjectUpsert {
+	u.Set(project.FieldSetupCommand, v)
+	return u
+}
+
+// UpdateSetupCommand sets the "setup_command" field to the value that was provided on create.
+func (u *ProjectUpsert) UpdateSetupCommand() *ProjectUpsert {
+	u.SetExcluded(project.FieldSetupCommand)
+	return u
+}
+
+// ClearSetupCommand clears the value of the "setup_command" field.
+func (u *ProjectUpsert) ClearSetupCommand() *ProjectUpsert {
+	u.SetNull(project.FieldSetupCommand)
+	return u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (u *ProjectUpsert) SetUpdatedAt(v time.Time) *ProjectUpsert {
 	u.Set(project.FieldUpdatedAt, v)
@@ -547,6 +583,27 @@ func (u *ProjectUpsertOne) UpdateDefaultSpawnerID() *ProjectUpsertOne {
 func (u *ProjectUpsertOne) ClearDefaultSpawnerID() *ProjectUpsertOne {
 	return u.Update(func(s *ProjectUpsert) {
 		s.ClearDefaultSpawnerID()
+	})
+}
+
+// SetSetupCommand sets the "setup_command" field.
+func (u *ProjectUpsertOne) SetSetupCommand(v string) *ProjectUpsertOne {
+	return u.Update(func(s *ProjectUpsert) {
+		s.SetSetupCommand(v)
+	})
+}
+
+// UpdateSetupCommand sets the "setup_command" field to the value that was provided on create.
+func (u *ProjectUpsertOne) UpdateSetupCommand() *ProjectUpsertOne {
+	return u.Update(func(s *ProjectUpsert) {
+		s.UpdateSetupCommand()
+	})
+}
+
+// ClearSetupCommand clears the value of the "setup_command" field.
+func (u *ProjectUpsertOne) ClearSetupCommand() *ProjectUpsertOne {
+	return u.Update(func(s *ProjectUpsert) {
+		s.ClearSetupCommand()
 	})
 }
 
@@ -870,6 +927,27 @@ func (u *ProjectUpsertBulk) UpdateDefaultSpawnerID() *ProjectUpsertBulk {
 func (u *ProjectUpsertBulk) ClearDefaultSpawnerID() *ProjectUpsertBulk {
 	return u.Update(func(s *ProjectUpsert) {
 		s.ClearDefaultSpawnerID()
+	})
+}
+
+// SetSetupCommand sets the "setup_command" field.
+func (u *ProjectUpsertBulk) SetSetupCommand(v string) *ProjectUpsertBulk {
+	return u.Update(func(s *ProjectUpsert) {
+		s.SetSetupCommand(v)
+	})
+}
+
+// UpdateSetupCommand sets the "setup_command" field to the value that was provided on create.
+func (u *ProjectUpsertBulk) UpdateSetupCommand() *ProjectUpsertBulk {
+	return u.Update(func(s *ProjectUpsert) {
+		s.UpdateSetupCommand()
+	})
+}
+
+// ClearSetupCommand clears the value of the "setup_command" field.
+func (u *ProjectUpsertBulk) ClearSetupCommand() *ProjectUpsertBulk {
+	return u.Update(func(s *ProjectUpsert) {
+		s.ClearSetupCommand()
 	})
 }
 

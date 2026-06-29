@@ -4,6 +4,7 @@ import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useAgentPrompt } from '../composables/useAgentPrompt'
 import { fetchDynamicCommands, SLASH_COMMAND_DEFS } from '../composables/useSlashCommands'
+import TemplatePicker from './TemplatePicker.vue'
 
 const props = withDefaults(defineProps<{
   agent: Agent | null
@@ -211,6 +212,12 @@ defineExpose({ focus })
       multiple
       class="hidden"
     >
+    <TemplatePicker
+      v-if="variant === 'full'"
+      model-value=""
+      class="px-4 pt-2"
+      @update:model-value="(val) => { promptInput = val; nextTick(autoResize) }"
+    />
     <div
       class="border-t border-line flex items-end focus-within:ring-[3px] focus-within:ring-accent"
       :class="variant === 'full' ? 'px-4 py-2.5 gap-2 flex-shrink-0' : 'px-3 py-2 gap-1.5 items-center'"

@@ -24,6 +24,8 @@ const (
 	FieldColor = "color"
 	// FieldDefaultSpawnerID holds the string denoting the default_spawner_id field in the database.
 	FieldDefaultSpawnerID = "default_spawner_id"
+	// FieldSetupCommand holds the string denoting the setup_command field in the database.
+	FieldSetupCommand = "setup_command"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -49,6 +51,7 @@ var Columns = []string{
 	FieldDescription,
 	FieldColor,
 	FieldDefaultSpawnerID,
+	FieldSetupCommand,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -103,6 +106,11 @@ func ByColor(opts ...sql.OrderTermOption) OrderOption {
 // ByDefaultSpawnerID orders the results by the default_spawner_id field.
 func ByDefaultSpawnerID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDefaultSpawnerID, opts...).ToFunc()
+}
+
+// BySetupCommand orders the results by the setup_command field.
+func BySetupCommand(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSetupCommand, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

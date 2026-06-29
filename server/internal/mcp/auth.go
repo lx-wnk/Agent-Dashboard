@@ -32,6 +32,7 @@ var ToolScopeMap = map[string]string{
 	"write_scratchpad": "agent:coord", "read_scratchpad": "agent:coord",
 	"list_scratchpad":  "agent:coord",
 	"acquire_lock":     "agent:coord", "release_lock": "agent:coord",
+	"wait_for_port":    "agent:coord",
 	// pipeline:control
 	"advance_task": "pipeline:control", "hold_task": "pipeline:control",
 	"resume_task":   "pipeline:control",

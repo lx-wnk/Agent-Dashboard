@@ -18,6 +18,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pluginsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/prompttemplate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
@@ -184,11 +185,11 @@ func init() {
 	projectFields := schema.Project{}.Fields()
 	_ = projectFields
 	// projectDescCreatedAt is the schema descriptor for created_at field.
-	projectDescCreatedAt := projectFields[6].Descriptor()
+	projectDescCreatedAt := projectFields[7].Descriptor()
 	// project.DefaultCreatedAt holds the default value on creation for the created_at field.
 	project.DefaultCreatedAt = projectDescCreatedAt.Default.(func() time.Time)
 	// projectDescUpdatedAt is the schema descriptor for updated_at field.
-	projectDescUpdatedAt := projectFields[7].Descriptor()
+	projectDescUpdatedAt := projectFields[8].Descriptor()
 	// project.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	project.DefaultUpdatedAt = projectDescUpdatedAt.Default.(func() time.Time)
 	// project.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -207,6 +208,12 @@ func init() {
 	projectfolderDescCreatedAt := projectfolderFields[4].Descriptor()
 	// projectfolder.DefaultCreatedAt holds the default value on creation for the created_at field.
 	projectfolder.DefaultCreatedAt = projectfolderDescCreatedAt.Default.(func() time.Time)
+	prompttemplateFields := schema.PromptTemplate{}.Fields()
+	_ = prompttemplateFields
+	// prompttemplateDescCreatedAt is the schema descriptor for created_at field.
+	prompttemplateDescCreatedAt := prompttemplateFields[3].Descriptor()
+	// prompttemplate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	prompttemplate.DefaultCreatedAt = prompttemplateDescCreatedAt.Default.(func() time.Time)
 	providersettingFields := schema.ProviderSetting{}.Fields()
 	_ = providersettingFields
 	// providersettingDescEnabled is the schema descriptor for enabled field.

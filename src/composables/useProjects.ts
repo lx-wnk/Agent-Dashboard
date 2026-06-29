@@ -73,6 +73,7 @@ export interface CreateProjectInput {
   description?: string
   color?: string
   defaultSpawnerId?: string | null
+  setupCommand?: string | null
 }
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {

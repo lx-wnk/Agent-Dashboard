@@ -14,6 +14,9 @@ Preparing the first public release.
 
 ### Added
 
+- `wait_for_port` MCP coordination tool — agents can block until a TCP service is reachable (max 300 s, returns `reached`/`timedOut`).
+- Per-project `setup_command` field — run once in the worktree after creation; failure logs and continues.
+- Prompt templates with `{{placeholder}}` fill-in — picker in the full prompt input, CRUD at `/api/prompt-templates`.
 - Natural-language schedule phrases that the built-in rule set can't parse now fall back to an LLM translator (`claude -p`), so expressions like "first weekday of every month at 7am" resolve to a cron instead of failing. The LLM's output is re-validated as a 5-field cron before use.
 - Token pricing for `gpt-5`, `gpt-5-codex`, `gemini-2.5-pro`, and `gemini-2.5-flash` so Codex and Gemini agents report a real cost instead of "unknown".
 - Eval drift alerts are pushed live to the dashboard over SSE (`eval_drift` event) the moment a drift is detected, instead of only appearing on the next 60-second poll.
@@ -151,6 +154,7 @@ Preparing the first public release.
 
 ### Changed
 
+- `ProjectRepo.Create` and `Update` accept `setup_command` (nullable).
 - `worktree.force` setting now defaults to `true` — pipeline tasks automatically create a git worktree per task without requiring explicit `SourceBranch`. Set to `false` to restore the previous opt-in behaviour.
 - Plugin route extensions now serve under `/api/plugins/{id}/proxy/*` and enable/disable
   live via the lifecycle endpoints (`POST /api/plugins/{id}/activate|deactivate` — no

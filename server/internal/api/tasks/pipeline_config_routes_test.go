@@ -398,7 +398,7 @@ func TestPutPipelineConfig_UnknownSpawnerRejected(t *testing.T) {
 func TestProjectPipelineConfig_RoundTrip(t *testing.T) {
 	client, r, spawnerID := newTestHandlerWithSpawner(t)
 	projectRepo := repo.NewProjectRepo(client)
-	proj, err := projectRepo.Create(testCtx(t), "Test Project", "test-project", nil, nil, nil)
+	proj, err := projectRepo.Create(testCtx(t), "Test Project", "test-project", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
@@ -479,7 +479,7 @@ func TestProjectPipelineConfig_RoundTrip(t *testing.T) {
 func TestProjectPipelineConfig_UnknownSpawnerRejected(t *testing.T) {
 	client, r, _ := newTestHandlerWithSpawner(t)
 	projectRepo := repo.NewProjectRepo(client)
-	proj, err := projectRepo.Create(testCtx(t), "P2", "p2", nil, nil, nil)
+	proj, err := projectRepo.Create(testCtx(t), "P2", "p2", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
@@ -662,7 +662,7 @@ func TestPipelineConfig_PlanModeGlobalRoundTrip(t *testing.T) {
 func TestPipelineConfig_PlanModeProjectRoundTrip(t *testing.T) {
 	client, r, _ := newTestHandlerWithSpawner(t)
 	projectRepo := repo.NewProjectRepo(client)
-	proj, err := projectRepo.Create(testCtx(t), "PM Project", "pm-project", nil, nil, nil)
+	proj, err := projectRepo.Create(testCtx(t), "PM Project", "pm-project", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}

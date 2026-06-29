@@ -226,6 +226,11 @@ type OrchestratorOptions struct {
 	// non-fatal — callers log and continue.
 	RemoveWorktreeFn func(ctx context.Context, task *ent.Task, force bool) error
 
+	// SetupWorktreeFn, when non-nil, is called after a worktree is successfully created.
+	// projectID may be nil for tasks without a project. Errors are logged as warnings;
+	// they do NOT fail the task (soft-failure policy).
+	SetupWorktreeFn func(ctx context.Context, projectID *string, worktreePath string) error
+
 	// ResolveSpawner returns the effective DB spawner row for a task right
 	// before the native Claude path is taken. When nil, stage handlers spawn
 	// with the legacy `claude` CLI (current behaviour).

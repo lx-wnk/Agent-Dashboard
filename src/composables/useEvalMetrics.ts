@@ -78,6 +78,9 @@ export function useEvalMetrics() {
   function startDriftStream(): void {
     if (driftEventSource)
       return
+    // EventSource is absent in non-browser environments (jsdom/SSR); the 60s poll covers data freshness there.
+    if (typeof EventSource === 'undefined')
+      return
     driftEventSource = new EventSource('/api/tasks/stream')
     driftEventSource.onmessage = (e) => {
       try {
