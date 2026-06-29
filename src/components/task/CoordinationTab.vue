@@ -1,18 +1,23 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { useInjectedTask } from '../../composables/taskModalContext'
 import { useTaskCoordination } from '../../composables/useTaskCoordination'
+import { toast } from '../../composables/useToast'
 
 const task = useInjectedTask()
 const { scratchpads, locks, loading, error } = useTaskCoordination(task)
+
+// Surface async load failures as toasts; the panel keeps its empty/loading state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 </script>
 
 <template>
   <section class="p-5 space-y-6">
     <div v-if="loading" class="text-sm text-fg-mute">
       Loading...
-    </div>
-    <div v-else-if="error" class="text-sm text-danger-text">
-      {{ error }}
     </div>
     <template v-else>
       <div>

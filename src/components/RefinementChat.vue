@@ -4,6 +4,7 @@ import type { PipelineTask } from '../types'
 import type { LoadedAddon, SlotContext } from '../utils/pluginSlot'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRefinementChat } from '../composables/useRefinementChat'
+import { toast } from '../composables/useToast'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
 import PluginSlot from './PluginSlot.vue'
 
@@ -85,6 +86,12 @@ const {
   confirm,
   phaseLabel,
 } = useRefinementChat(() => currentTask.value?.id ?? null)
+
+// Surface refinement stream/load failures as toasts.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 
 // Live working indicator: show the dots whenever a run is streaming but the
 // last bubble is not yet assistant content — covers both the initial send and
@@ -312,11 +319,6 @@ function isPhaseMarker(idx: number): string | null {
         >
           <span class="dot-pulse"><span /><span /><span /></span>
         </div>
-      </div>
-
-      <!-- Error -->
-      <div v-if="error" class="px-5 py-2 text-danger-text text-[0.82rem] shrink-0">
-        {{ error }}
       </div>
 
       <!-- Confirm bar — stays available while you keep refining; the input below

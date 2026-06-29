@@ -1,13 +1,20 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useInjectedTask, useInjectedTaskActions, useInjectedTaskDetails } from '../../composables/taskModalContext'
 import { actionLabel, actionVariant, renderableActions, runAction } from '../../composables/useRunAction'
+import { toast } from '../../composables/useToast'
 import TaskSlashCommandMenu from '../TaskSlashCommandMenu.vue'
 import AppButton from '../ui/AppButton.vue'
 
 const task = useInjectedTask()
 const { isActing, actionError, actionSuccess, handleAction } = useInjectedTaskDetails()
 const { additionalPrompt, analysisInfo, cancelConfirm, slashCommands, onCancelClick, onAnalyze, onSlashSelect } = useInjectedTaskActions()
+
+// Surface task-action failures as toasts; success still shows inline.
+watch(actionError, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 
 const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
 
@@ -52,9 +59,6 @@ const showLegacyCancel = computed(() =>
 
 <template>
   <footer class="px-5 py-3 border-t border-line flex-shrink-0">
-    <p v-if="actionError" class="text-danger-text text-xs mb-2">
-      {{ actionError }}
-    </p>
     <p v-if="actionSuccess" class="text-info-text text-xs mb-2">
       {{ actionSuccess }}
     </p>
