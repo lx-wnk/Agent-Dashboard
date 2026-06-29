@@ -86,6 +86,24 @@ func (r *Registry) SetEnabled(fn func(id string) bool) { r.enabled = fn }
 // for env injection at every spawn. Call before Load.
 func (r *Registry) SetSettingsProvider(fn SettingsProvider) { r.settings = fn }
 
+// appendSettingsEnv returns base with PLUGIN_SETTING_<KEY> vars from the settings
+// provider appended. A nil provider or a provider error leaves base unchanged
+// (the plugin starts without settings rather than not at all).
+func (r *Registry) appendSettingsEnv(ctx context.Context, base []string, id string) []string {
+	if r.settings == nil {
+		return base
+	}
+	vals, err := r.settings(ctx, id)
+	if err != nil {
+		slog.Warn("plugin: settings fetch failed — starting without settings", "id", id, "err", err)
+		return base
+	}
+	for k, v := range vals {
+		base = append(base, "PLUGIN_SETTING_"+sanitizeSettingKey(k)+"="+v)
+	}
+	return base
+}
+
 func (r *Registry) isEnabled(id string) bool {
 	if r.enabled == nil {
 		return true
@@ -165,17 +183,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 	if len(desc.Command) > 0 {
 		cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
 		cmd.Dir = pluginDir
-		cmd.Env = buildPluginEnv(desc.Env)
-		if r.settings != nil {
-			if vals, sErr := r.settings(serverCtx, desc.ID); sErr != nil {
-				slog.Warn("plugin: settings fetch failed — starting without settings",
-					"id", desc.ID, "err", sErr)
-			} else {
-				for k, v := range vals {
-					cmd.Env = append(cmd.Env, "PLUGIN_SETTING_"+sanitizeSettingKey(k)+"="+v)
-				}
-			}
-		}
+		cmd.Env = r.appendSettingsEnv(serverCtx, buildPluginEnv(desc.Env), desc.ID)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if err := cmd.Start(); err != nil {
@@ -563,17 +571,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
 		newCmd.Dir = pluginDir
-		newCmd.Env = buildPluginEnv(desc.Env)
-		if r.settings != nil {
-			if vals, sErr := r.settings(ctx, desc.ID); sErr != nil {
-				slog.Warn("plugin: settings fetch failed on restart — continuing without settings",
-					"id", desc.ID, "err", sErr)
-			} else {
-				for k, v := range vals {
-					newCmd.Env = append(newCmd.Env, "PLUGIN_SETTING_"+sanitizeSettingKey(k)+"="+v)
-				}
-			}
-		}
+		newCmd.Env = r.appendSettingsEnv(ctx, buildPluginEnv(desc.Env), desc.ID)
 		newCmd.Stdout = os.Stdout
 		newCmd.Stderr = os.Stderr
 		newCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
