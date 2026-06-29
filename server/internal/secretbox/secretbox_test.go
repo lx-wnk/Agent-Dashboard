@@ -54,3 +54,24 @@ func TestLoadOrGenerateMasterKey_InvalidKeyFileReturnsError(t *testing.T) {
 	require.NoError(t, readErr)
 	assert.Equal(t, "not-a-valid-hex-key\n", string(content))
 }
+
+func TestLoadOrGenerateMasterKey_GeneratesPersistsAndReuses(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+
+	// First call: no key file exists — must generate and persist.
+	key1, err := LoadOrGenerateMasterKey("")
+	require.NoError(t, err)
+	require.Len(t, key1, 32, "master key must be 32 bytes")
+
+	// Key file must be persisted with owner-only permissions.
+	keyPath := filepath.Join(dir, secretKeyFileName)
+	info, err := os.Stat(keyPath)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "key file must be 0600")
+
+	// Second call: must read and return the same key (idempotent bootstrap).
+	key2, err := LoadOrGenerateMasterKey("")
+	require.NoError(t, err)
+	require.Equal(t, key1, key2, "second call must return the same persisted key")
+}
