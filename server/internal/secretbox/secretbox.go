@@ -101,6 +101,11 @@ func LoadOrGenerateMasterKey(existing string) ([]byte, error) {
 		// empty file — fall through to generate
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("secretbox: read key file %s: %w", path, err)
+	} else if legacyKey, ok := readLegacyKey(baseDir, path); ok {
+		// Primary path has no key but the legacy ~/.claude path does (key was
+		// generated before CLAUDE_CONFIG_DIR was set). Use it so existing encrypted
+		// settings stay readable; do not write it to the new path.
+		return legacyKey, nil
 	}
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -114,4 +119,30 @@ func LoadOrGenerateMasterKey(existing string) ([]byte, error) {
 	}
 	slog.Info("Generated plugin secret master key — set DASHBOARD_SECRET_KEY to use across machines", "path", path)
 	return key, nil
+}
+
+// readLegacyKey returns the key persisted at the default ~/.claude path when the
+// configured baseDir differs from it. Back-compat only: covers machines where
+// CLAUDE_CONFIG_DIR is set but the key was originally generated under ~/.claude.
+func readLegacyKey(baseDir, configuredPath string) ([]byte, bool) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, false
+	}
+	legacyBase := filepath.Join(home, ".claude")
+	if legacyBase == baseDir {
+		return nil, false
+	}
+	legacyPath := filepath.Join(legacyBase, secretKeyFileName)
+	raw, err := os.ReadFile(legacyPath)
+	if err != nil {
+		return nil, false
+	}
+	key, err := hex.DecodeString(strings.TrimSpace(string(raw)))
+	if err != nil || len(key) != 32 {
+		return nil, false
+	}
+	slog.Warn("plugin secret key loaded from legacy path; consider migrating it to CLAUDE_CONFIG_DIR",
+		"legacy", legacyPath, "configured", configuredPath)
+	return key, true
 }

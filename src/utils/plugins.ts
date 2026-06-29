@@ -5,7 +5,7 @@ export interface PluginInfo {
 }
 
 export async function fetchPluginList(): Promise<PluginInfo[]> {
-  const res = await fetch('/api/settings/plugins', { credentials: 'same-origin' })
+  const res = await fetch('/api/plugins', { credentials: 'same-origin' })
   if (!res.ok)
     throw new Error(`Failed to load plugins (HTTP ${res.status}: ${res.statusText})`)
   const data = await res.json()

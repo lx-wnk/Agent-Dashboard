@@ -16,65 +16,9 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 )
 
-// Controller is the behaviour the handler needs from pluginsctl; faked in tests.
-type Controller interface {
-	List() ([]pluginsctl.PluginState, error)
-}
-
-// Handler serves the plugin listing endpoint under /api/settings/plugins.
-type Handler struct {
-	ctl Controller
-}
-
-// New creates a Handler backed by the given controller.
-func New(ctl Controller) *Handler {
-	return &Handler{ctl: ctl}
-}
-
-// Mount registers the read-only plugin listing on r. Enable/disable is handled
-// live by the lifecycle endpoints (/api/plugins/{id}/activate|deactivate).
-func (h *Handler) Mount(r chi.Router) {
-	r.Get("/api/settings/plugins", apierr.ErrorMiddleware(h.list))
-}
-
-// pluginInfo is intentionally a narrow DTO. Do NOT add Entry/Descriptor fields —
-// Descriptor.Env may carry plugin auth secrets and BaseURL must never be exposed
-// (F028: leaks internal plugin address — clients must not proxy directly to plugins).
-type pluginInfo struct {
-	ID           string   `json:"id"`
-	Capabilities []string `json:"capabilities"`
-	Enabled      bool     `json:"enabled"`
-	Healthy      bool     `json:"healthy"`
-	AuthProvider bool     `json:"authProvider"`
-}
-
-func (h *Handler) list(w http.ResponseWriter, _ *http.Request) error {
-	states, err := h.ctl.List()
-	if err != nil {
-		return fmt.Errorf("plugins.list: %w", err)
-	}
-	out := make([]pluginInfo, 0, len(states))
-	for _, s := range states {
-		caps := s.Capabilities
-		if caps == nil {
-			caps = []string{}
-		}
-		out = append(out, pluginInfo{
-			ID:           s.ID,
-			Capabilities: caps,
-			Enabled:      s.Enabled,
-			Healthy:      s.Healthy,
-			AuthProvider: s.AuthProvider,
-		})
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache") // F034: prevents stale plugin list after restart
-	return json.NewEncoder(w).Encode(out)
-}
-
-// PluginView is the narrow lifecycle DTO served under /api/plugins. As with
-// pluginInfo it intentionally omits BaseURL/Addr/Command/Env — plugin auth
-// secrets and internal addresses must never reach the client (F028).
+// PluginView is the narrow lifecycle DTO served under /api/plugins. It
+// intentionally omits BaseURL/Addr/Command/Env — plugin auth secrets and
+// internal addresses must never reach the client (F028).
 type PluginView struct {
 	ID              string   `json:"id"`
 	Name            string   `json:"name"`
@@ -114,9 +58,16 @@ type LifecycleHandler struct {
 // NewLifecycle creates a LifecycleHandler backed by the given controller.
 func NewLifecycle(ctl controller) *LifecycleHandler { return &LifecycleHandler{ctl: ctl} }
 
-// Mount registers the lifecycle + settings routes on r.
-func (h *LifecycleHandler) Mount(r chi.Router) {
+// MountList registers GET /api/plugins for any authenticated user. The list is
+// read-only and needed by non-admin users for slot discovery. Mount the write
+// endpoints separately under an admin gate.
+func (h *LifecycleHandler) MountList(r chi.Router) {
 	r.Get("/api/plugins", apierr.ErrorMiddleware(h.list))
+}
+
+// Mount registers the lifecycle + settings write routes on r. Callers must apply
+// an admin gate before calling Mount.
+func (h *LifecycleHandler) Mount(r chi.Router) {
 	r.Post("/api/plugins/{id}/{action}", apierr.ErrorMiddleware(h.transition))
 	r.Get("/api/plugins/{id}/settings", apierr.ErrorMiddleware(h.getSettings))
 	r.Put("/api/plugins/{id}/settings", apierr.ErrorMiddleware(h.putSettings))

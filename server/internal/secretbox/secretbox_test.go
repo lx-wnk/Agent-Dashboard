@@ -1,6 +1,7 @@
 package secretbox
 
 import (
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -58,6 +59,9 @@ func TestLoadOrGenerateMasterKey_InvalidKeyFileReturnsError(t *testing.T) {
 func TestLoadOrGenerateMasterKey_GeneratesPersistsAndReuses(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	// Isolate HOME so a real ~/.claude key on this machine can't trigger the
+	// legacy fallback and short-circuit generation.
+	t.Setenv("HOME", t.TempDir())
 
 	// First call: no key file exists — must generate and persist.
 	key1, err := LoadOrGenerateMasterKey("")
@@ -74,4 +78,31 @@ func TestLoadOrGenerateMasterKey_GeneratesPersistsAndReuses(t *testing.T) {
 	key2, err := LoadOrGenerateMasterKey("")
 	require.NoError(t, err)
 	require.Equal(t, key1, key2, "second call must return the same persisted key")
+}
+
+func TestLoadOrGenerateMasterKey_LegacyFallback(t *testing.T) {
+	// Redirect HOME so UserHomeDir() resolves to a controlled temp directory.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Create a valid key at the legacy ~/.claude path.
+	legacyDir := filepath.Join(home, ".claude")
+	require.NoError(t, os.MkdirAll(legacyDir, 0o700))
+	const legacyKeyHex = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+	wantKey, err := hex.DecodeString(legacyKeyHex)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(legacyDir, secretKeyFileName)
+	require.NoError(t, os.WriteFile(legacyPath, []byte(legacyKeyHex+"\n"), 0o600))
+
+	// CLAUDE_CONFIG_DIR points to a different, empty directory.
+	newDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", newDir)
+
+	got, err := LoadOrGenerateMasterKey("")
+	require.NoError(t, err)
+	require.Equal(t, wantKey, got, "must return legacy ~/.claude key, not generate a new one")
+
+	// No new key file must appear at the configured path.
+	_, statErr := os.Stat(filepath.Join(newDir, secretKeyFileName))
+	require.True(t, os.IsNotExist(statErr), "must not generate a new key when legacy key exists")
 }

@@ -43,6 +43,11 @@ describe('usePlugins', () => {
 
     expect(result.plugins.value).toHaveLength(1)
     expect(result.plugins.value[0].id).toBe('my-auth-plugin')
+    // Must call the lifecycle list endpoint, not the legacy settings endpoint.
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      '/api/plugins',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    )
   })
 
   it('refetch re-fetches plugins', async () => {

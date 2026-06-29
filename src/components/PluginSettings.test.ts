@@ -13,7 +13,6 @@ function stubFetch(pluginList: object[]) {
       return Promise.resolve({ ok: true, json: async () => pluginList })
     if (String(url).includes('/deactivate') || String(url).includes('/activate'))
       return Promise.resolve({ ok: true, json: async () => ({}) })
-    // /api/settings/plugins → empty list for PluginSlot's loadSlotAddons
     return Promise.resolve({ ok: true, json: async () => [] })
   }))
 }

@@ -54,7 +54,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecycle"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecyclectl"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/providersettings"
@@ -282,10 +281,6 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if oauthProvider == nil {
 		slog.Info("auth: no auth_provider plugin found — bypass-auth active for loopback")
 	}
-
-	// Plugin enable/disable control plane. pluginRepo may be nil (no DB): the
-	// controller then reports nothing enabled and rejects writes.
-	pluginsHandler := apiplugins.New(pluginsctl.New(pluginRegistry, pluginRepo, cfg.PluginDir))
 
 	// SP1 plugin lifecycle: DB-backed plugin state, per-plugin settings (secret
 	// fields encrypted at rest), lifecycle transitions, and on-disk discovery.
@@ -582,7 +577,6 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		ChannelReply:           agents.NewChannelReplyHandler(replyStore, apiKeyRepo, repo.NewStageRunRepo(entClient)),
 		ChannelStageOutput:     channelStageOutputHandler,
 		PluginRegistry:         pluginRegistry,
-		PluginsHandler:         pluginsHandler,
 		PluginLifecycleHandler: pluginLifecycleHandler,
 		AuditEventRepo:         auditEventRepo,
 		UsageHandler:           usageHandler,
