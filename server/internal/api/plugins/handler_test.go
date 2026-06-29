@@ -205,7 +205,7 @@ func TestLifecycleList_ShapeAndLeakGuard(t *testing.T) {
 		t.Fatalf("expected 1 plugin, got %d", len(items))
 	}
 	item := items[0]
-	for _, required := range []string{"id", "name", "version", "state", "updateAvailable", "capabilities", "hasSettings"} {
+	for _, required := range []string{"id", "name", "version", "state", "updateAvailable", "healthy", "capabilities", "hasSettings"} {
 		if _, ok := item[required]; !ok {
 			t.Errorf("response item missing required key %q", required)
 		}
@@ -215,8 +215,8 @@ func TestLifecycleList_ShapeAndLeakGuard(t *testing.T) {
 			t.Errorf("response item must not contain key %q (F028 leak guard)", forbidden)
 		}
 	}
-	if len(item) != 7 {
-		t.Errorf("response item has %d keys, want exactly 7; got: %v", len(item), item)
+	if len(item) != 8 {
+		t.Errorf("response item has %d keys, want exactly 8; got: %v", len(item), item)
 	}
 	if item["id"] != "fake-plugin" || item["state"] != "active" || item["updateAvailable"] != true || item["hasSettings"] != true {
 		t.Errorf("fields wrong: %v", item)

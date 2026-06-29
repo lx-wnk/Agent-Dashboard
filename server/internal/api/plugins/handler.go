@@ -81,6 +81,7 @@ type PluginView struct {
 	Version         string   `json:"version"`
 	State           string   `json:"state"` // discovered|inactive|active
 	UpdateAvailable bool     `json:"updateAvailable"`
+	Healthy         bool     `json:"healthy"`
 	Capabilities    []string `json:"capabilities"`
 	HasSettings     bool     `json:"hasSettings"`
 }
