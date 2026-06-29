@@ -12,7 +12,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [agent: Agent]
-  toast: [message: string]
 }>()
 
 // Groups with non-null labels trigger the grouped rendering path.
@@ -32,7 +31,6 @@ const useGroups = computed(() =>
           :key="agent.pid"
           :agent="agent"
           @select="emit('select', agent)"
-          @toast="emit('toast', $event)"
         />
       </div>
     </template>
@@ -44,7 +42,6 @@ const useGroups = computed(() =>
         :key="agent.pid"
         :agent="agent"
         @select="emit('select', agent)"
-        @toast="emit('toast', $event)"
       />
       <p v-if="agents.length === 0" class="text-center py-12 text-fg-mute text-sm">
         No running Claude agents found.

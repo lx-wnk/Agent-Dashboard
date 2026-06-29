@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
 import { usePermissionResolve } from '../composables/usePermissionResolve'
+import { toast } from '../composables/useToast'
 import { attentionFor } from '../utils/attention'
 import { formatBurnRate, formatCost, formatRelativeActivity, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
 import { friendlyProjectName } from '../utils/friendlyProjectName'
@@ -13,7 +14,6 @@ import AppButton from './ui/AppButton.vue'
 const props = defineProps<{ agent: Agent }>()
 const emit = defineEmits<{
   select: [agent: Agent]
-  toast: [message: string]
 }>()
 
 const { getIdentity } = useAgentIdentity()
@@ -56,7 +56,7 @@ const borderClass = computed(() => {
 async function handleResolve(outcome: 'granted' | 'denied') {
   const err = await resolveAgent(props.agent, outcome, false)
   if (err)
-    emit('toast', err)
+    toast.error(err)
 }
 </script>
 

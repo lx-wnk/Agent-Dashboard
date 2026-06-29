@@ -21,6 +21,7 @@ import DashboardToolbar from './components/shell/DashboardToolbar.vue'
 import SkeletonCard from './components/shell/SkeletonCard.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
+import ToastHost from './components/ToastHost.vue'
 import AppModal from './components/ui/AppModal.vue'
 import AppModalHeader from './components/ui/AppModalHeader.vue'
 import { useAgents } from './composables/useAgents'
@@ -34,6 +35,7 @@ import { useSidebar } from './composables/useSidebar'
 import { useSpawners } from './composables/useSpawners'
 import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
+import { toast } from './composables/useToast'
 import { useTodayCost } from './composables/useTodayCost'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
@@ -73,20 +75,9 @@ const { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardPro
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
 const { resolveAgent, approveAll } = usePermissionResolve()
 
-// F-UIUX-011: 5 s default duration; hover pause/resume keeps toast visible while pointer rests on it
-const TOAST_DURATION_MS = 5000
-const toastMessage = ref<string | null>(null)
-let toastTimer: ReturnType<typeof setTimeout> | null = null
-let toastPaused = false
-
 onMounted(() => {
   loadUser()
   void loadServerConfig()
-})
-
-onUnmounted(() => {
-  if (toastTimer)
-    clearTimeout(toastTimer)
 })
 
 const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, dismissAgent, selectAgentWhenAvailable, startStream: startAgents } = useAgents({ autoStart: false })
@@ -198,33 +189,6 @@ function onCreateTaskAndRefine(task: PipelineTask) {
   showRefinementChat.value = true
 }
 
-function startToastTimer() {
-  if (toastTimer)
-    clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => {
-    if (!toastPaused)
-      toastMessage.value = null
-  }, TOAST_DURATION_MS)
-}
-
-function pauseToast() {
-  toastPaused = true
-  if (toastTimer)
-    clearTimeout(toastTimer)
-}
-
-function resumeToast() {
-  toastPaused = false
-  if (toastMessage.value)
-    startToastTimer()
-}
-
-function showToast(msg: string) {
-  toastMessage.value = msg
-  toastPaused = false
-  startToastTimer()
-}
-
 // Keyboard focus for the triage band: `n` cycles attention agents (wrapping).
 const focusedSessionId = ref<string | null>(null)
 // Guards the keyboard resolve shortcuts (a/d/⇧A) against rapid double-fire.
@@ -247,7 +211,7 @@ function resolveFocused(outcome: 'granted' | 'denied') {
   kbResolving.value = true
   void resolveAgent(focused, outcome).then((err) => {
     if (err)
-      showToast(err)
+      toast.error(err)
   }).finally(() => { kbResolving.value = false })
 }
 
@@ -284,7 +248,7 @@ function handleKeydown(e: KeyboardEvent) {
     kbResolving.value = true
     void approveAll(attentionAgents.value.filter(a => a.pipelineTaskId && a.pendingPermissions?.length)).then((err) => {
       if (err)
-        showToast(err)
+        toast.error(err)
     }).finally(() => { kbResolving.value = false })
   }
   else if (key === 'a') {
@@ -317,7 +281,7 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
       }
       else {
         console.warn('[navigateTo] task not found locally:', target.taskId)
-        showToast('Task not found — it may belong to a different machine.')
+        toast.error('Task not found — it may belong to a different machine.')
       }
     }
   })
@@ -417,7 +381,6 @@ onMounted(fetchQuota)
             :permission-items="permissionItems"
             :focused-session-id="focusedSessionId"
             @select="selectAgent"
-            @toast="showToast"
             @remembered="autoApprovingStrip?.load()"
             @approve="(taskId, ids, remember) => approvePermission(taskId, ids, remember)"
             @deny="(taskId, ids) => denyPermission(taskId, ids)"
@@ -500,20 +463,7 @@ onMounted(fetchQuota)
         </div>
       </Transition>
     </div>
-    <!-- F-UIUX-011: pointer-events enabled so hover pause works; timer resumes on mouseleave.
-         Live region rendered unconditionally; content cleared to empty string when no toast. -->
-    <div role="status" aria-live="polite" aria-atomic="true" class="pointer-events-none">
-      <Transition name="toast">
-        <div
-          v-if="toastMessage"
-          class="pointer-events-auto fixed bottom-6 left-1/2 -translate-x-1/2 bg-raised border border-line text-fg px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
-          @mouseenter="pauseToast"
-          @mouseleave="resumeToast"
-        >
-          {{ toastMessage }}
-        </div>
-      </Transition>
-    </div>
+    <ToastHost />
     <SpawnDialog :open="showSpawnDialog" @close="showSpawnDialog = false" @spawned="selectAgentWhenAvailable" />
     <RefinementChat
       :open="showRefinementChat"

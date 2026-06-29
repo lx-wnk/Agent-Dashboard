@@ -5,6 +5,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
 import { usePermissionResolve } from '../composables/usePermissionResolve'
+import { toast } from '../composables/useToast'
 import { attentionFor } from '../utils/attention'
 import { formatErrorState, formatRelativeActivity, secondsSince, shortModel } from '../utils/format'
 import { friendlyProjectName } from '../utils/friendlyProjectName'
@@ -17,7 +18,6 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   select: [agent: Agent]
-  toast: [message: string]
   remembered: []
   approve: [taskId: string, ids: string[], remember: boolean]
   deny: [taskId: string, ids: string[]]
@@ -204,7 +204,7 @@ async function handleResolveAgent(agent: Agent, outcome: 'granted' | 'denied') {
   const remember = rememberPerAgent.value[agent.sessionId] ?? false
   const err = await resolveAgent(agent, outcome, remember)
   if (err) {
-    emit('toast', err)
+    toast.error(err)
   }
   else if (remember && outcome === 'granted') {
     emit('remembered')
@@ -225,11 +225,11 @@ async function allowTool(agent: Agent) {
     })
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
-    emit('toast', `Allowed ${pending.tool} for ${friendlyProjectName(agent.projectName)} — future runs won't ask (the paused run still needs your reply in its terminal)`)
+    toast.success(`Allowed ${pending.tool} for ${friendlyProjectName(agent.projectName)} — future runs won't ask (the paused run still needs your reply in its terminal)`)
     emit('remembered')
   }
   catch (err) {
-    emit('toast', `Couldn't save allow rule: ${err instanceof Error ? err.message : String(err)}`)
+    toast.error(`Couldn't save allow rule: ${err instanceof Error ? err.message : String(err)}`)
   }
   finally {
     allowing.value[agent.sessionId] = false
