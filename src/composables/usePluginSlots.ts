@@ -97,7 +97,7 @@ function importModule(url: string, importAddon: (url: string) => Promise<SlotAdd
 /**
  * Discover plugin addons that target `slot`.
  *
- * Security: only plugins enumerated by `/api/settings/plugins` (registry-discovered,
+ * Security: only plugins enumerated by `/api/plugins` (registry-discovered,
  * health-checked) are considered, and modules are imported only from that plugin's
  * SSRF-guarded proxy path — never an arbitrary URL.
  *
