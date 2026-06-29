@@ -156,6 +156,9 @@ func (h *LifecycleHandler) transition(w http.ResponseWriter, r *http.Request) er
 	if id == "" {
 		return fmt.Errorf("%w: plugin id is required", apierr.ErrBadRequest)
 	}
+	if !plugin.ValidID(id) {
+		return fmt.Errorf("%w: invalid plugin id %q", apierr.ErrBadRequest, id)
+	}
 	action := chi.URLParam(r, "action")
 	if !lifecycleActions[action] {
 		return fmt.Errorf("%w: invalid action %q", apierr.ErrBadRequest, action)
@@ -178,6 +181,9 @@ func (h *LifecycleHandler) getSettings(w http.ResponseWriter, r *http.Request) e
 	if id == "" {
 		return fmt.Errorf("%w: plugin id is required", apierr.ErrBadRequest)
 	}
+	if !plugin.ValidID(id) {
+		return fmt.Errorf("%w: invalid plugin id %q", apierr.ErrBadRequest, id)
+	}
 	schema, values, err := h.ctl.GetSettings(r.Context(), id)
 	if err != nil {
 		return classify(err, "plugins.lifecycle.getSettings")
@@ -196,6 +202,9 @@ func (h *LifecycleHandler) putSettings(w http.ResponseWriter, r *http.Request) e
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		return fmt.Errorf("%w: plugin id is required", apierr.ErrBadRequest)
+	}
+	if !plugin.ValidID(id) {
+		return fmt.Errorf("%w: invalid plugin id %q", apierr.ErrBadRequest, id)
 	}
 	var body struct {
 		Values map[string]string `json:"values"`

@@ -355,3 +355,40 @@ func TestLifecyclePutSettings_UnknownKey_400(t *testing.T) {
 }
 
 const pluginsettingsMasked = pluginsettings.MaskedSentinel
+
+func TestLifecycleTransition_MalformedID_400(t *testing.T) {
+	ctl := &fakeLifecycle{}
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/My-PLUGIN/activate", nil))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed id, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if ctl.gotID != "" {
+		t.Errorf("malformed id must not reach controller, got %q", ctl.gotID)
+	}
+}
+
+func TestLifecycleGetSettings_MalformedID_400(t *testing.T) {
+	ctl := &fakeLifecycle{}
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/plugins/UPPER/settings", nil))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed id, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestLifecyclePutSettings_MalformedID_400(t *testing.T) {
+	ctl := &fakeLifecycle{}
+	body := `{"values":{}}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/plugins/BAD_ID/settings", strings.NewReader(body)))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed id, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
