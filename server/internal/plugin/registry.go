@@ -399,19 +399,6 @@ func (r *Registry) FindByCapability(capability string) *Entry {
 	return nil
 }
 
-// AllWithCapability returns all plugins with the given capability.
-func (r *Registry) AllWithCapability(capability string) []Entry {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	var out []Entry
-	for _, p := range r.plugins {
-		if p.Descriptor.HasCapability(capability) {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 // HasAttemptedCapability reports whether any plugin.json in the directory
 // declared the given capability, regardless of whether that plugin passed
 // the health-check and ended up in the registry.
