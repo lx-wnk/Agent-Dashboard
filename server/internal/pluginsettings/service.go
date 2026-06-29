@@ -90,8 +90,8 @@ func validateValue(f plugin.SettingField, v string) error {
 		}
 	case "url":
 		u, parseErr := url.ParseRequestURI(v)
-		if parseErr != nil || u.Scheme == "" || u.Host == "" {
-			return fmt.Errorf("%w: field %q requires a URL with scheme and host, got %q", ErrInvalidValue, f.Key, v)
+		if parseErr != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("%w: field %q requires an http(s) URL with host, got %q", ErrInvalidValue, f.Key, v)
 		}
 	case "enum":
 		for _, opt := range f.Enum {
