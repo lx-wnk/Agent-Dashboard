@@ -161,6 +161,7 @@ type RouterDeps struct {
 	PluginLifecycleHandler *apiplugins.LifecycleHandler
 	AuditEventRepo         repo.AuditEventRepo
 	AdminHandler           *admin.Handler
+	UsageHandler           http.Handler
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -263,7 +264,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 		commandsHandler := sessions.NewCommandsHandler(deps.SpawnerRepo, getAgents)
 		r.Get("/api/slash-commands", commandsHandler.SlashCommands)
 
-		r.Get("/api/quota", system.Quota)
+		if deps.UsageHandler != nil {
+			r.Get("/api/usage", deps.UsageHandler.ServeHTTP)
+		}
 		r.Get("/api/config", system.Config)        // frontend expects /api/config
 		r.Get("/api/system/config", system.Config) // keep old path for compatibility
 		r.Get("/api/system", system.System)        // frontend expects /api/system

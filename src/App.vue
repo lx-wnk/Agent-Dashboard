@@ -37,6 +37,7 @@ import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { toast } from './composables/useToast'
 import { useTodayCost } from './composables/useTodayCost'
+import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
 import { groupAgents, sortAgents } from './utils/agentGroup'
@@ -297,28 +298,8 @@ function openTask(t: PipelineTask) {
   selectTask(t)
 }
 
-interface QuotaInfo {
-  periodStart: string | null
-  periodEnd: string | null
-  tokensUsed: number
-  limit: number | null
-}
-
-const quota = ref<QuotaInfo | null>(null)
-
-const quotaPct = computed<number | null>(() => {
-  if (!quota.value?.limit)
-    return null
-  return Math.min(100, Math.round(quota.value.tokensUsed / quota.value.limit * 100))
-})
-
-async function fetchQuota() {
-  const res = await fetch('/api/quota')
-  if (res.ok)
-    quota.value = await res.json() as QuotaInfo
-}
-
-onMounted(fetchQuota)
+const usageComposable = useUsage()
+onMounted(() => usageComposable.start())
 </script>
 
 <template>
@@ -428,7 +409,7 @@ onMounted(fetchQuota)
       </div>
 
       <template #statusbar>
-        <AppStatusBar :cost-delta="costDelta" :today-cost-label="todayCostLabel" :quota-pct="quotaPct" />
+        <AppStatusBar :cost-delta="costDelta" :today-cost-label="todayCostLabel" :usage-data="usageComposable.data.value" />
       </template>
     </AppShell>
 

@@ -37,6 +37,7 @@ import (
 	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	apiusage "github.com/lx-wnk/agent-dashboard/server/internal/api/usage"
 	apivisualizations "github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -540,6 +541,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		auditEventRepo = repo.NewAuditEventRepo(entClient)
 	}
 
+	usageHandler := apiusage.NewHandler(settingsSvc, nil) // nil agg = uses default scanner
+
 	routerDeps := api.RouterDeps{
 		Ctx:                    ctx,
 		Config:                 routerConfig,
@@ -582,6 +585,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		PluginsHandler:         pluginsHandler,
 		PluginLifecycleHandler: pluginLifecycleHandler,
 		AuditEventRepo:         auditEventRepo,
+		UsageHandler:           usageHandler,
 		AdminHandler: admin.New(
 			restart.NewAuthProviderValidator(pluginRegistry, activePluginIDs(pluginRepo), cfg.PluginDir),
 			string(restartCtl.Mode()),

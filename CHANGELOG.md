@@ -14,6 +14,9 @@ Preparing the first public release.
 
 ### Added
 
+- `GET /api/usage` — rolling-window token and cost aggregator (5h session-equivalent, 7d weekly-equivalent) derived from session JSONLs across all configured Claude config dirs; replaces the permanently dead `/api/quota` endpoint.
+- `usage.budget.session` and `usage.budget.weekly` settings (token counts; 0 = unset) to optionally derive a % bar in the status bar.
+- Status-bar USAGE segment: worst-case % bar when a budget is set, compact consumption text otherwise; popover shows both windows, per-account breakdown when multiple accounts exist.
 - `POST /api/admin/restart` triggers a validated, graceful restart. The endpoint refuses with **409** if an active `auth_provider` plugin is currently unhealthy (restarting in that state would cause an auth lockout on the next boot). Default `DASHBOARD_RESTART_MODE=reexec` replaces the process image in place (no supervisor needed); set `DASHBOARD_RESTART_MODE=exit` and run under systemd (`Restart=always`), launchd (`KeepAlive`), or a wrapper loop (`while true; do ./bin/agent-dashboard serve; done`) for supervised setups. Activating an `auth_provider` plugin requires a restart to apply — auth is boot-wired.
 - `dashboard plugins list` / `disable <id>` / `enable <id>` CLI commands operate directly on the SQLite database (no HTTP, no auth gate), so a broken `auth_provider` plugin that prevents boot can be disabled offline. The change applies on next server start; lifecycle hooks are skipped (it is a recovery tool, not the normal activate path).
 - Disabling a **UI-extension plugin** now prompts a page reload so the browser fully unloads its ES module code (browser ES modules persist in the registry until the page is reloaded).
@@ -185,6 +188,7 @@ Preparing the first public release.
 
 ### Removed
 
+- `/api/quota` handler and `usage-data/*.json` file reader (Claude Code never writes that file; the endpoint always returned null).
 - Pruned unused TS-era dependencies never imported by the shipped app: `express`,
   `nodemailer`, `web-push`, `cookie-parser`, `supertest`, and their `@types/*`.
 - Inert `permissions` and `plugin.json slots[]` manifest fields removed from the `Descriptor` Go type and `plugin.schema.json`. Both were parsed but never enforced or consumed — a security-shaped field with no enforcement is misleading. Slot bindings for UI extensions are declared in `ui-manifest.json` (authoritative since SP4a); the `plugin.json` copy was a divergeable duplicate. Old manifests carrying these fields still load correctly (`additionalProperties: true`). The unused `Registry.AllWithCapability` method is also removed.
