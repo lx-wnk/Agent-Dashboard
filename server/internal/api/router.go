@@ -452,7 +452,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Handle("/api/plugins/{id}/proxy/*", plugin.NewDispatcher(deps.PluginRegistry))
 		}
 		if deps.AdminHandler != nil {
-			deps.AdminHandler.Mount(r)
+			r.Group(func(r chi.Router) {
+				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
+				deps.AdminHandler.Mount(r)
+			})
 		}
 	})
 
