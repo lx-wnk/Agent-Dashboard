@@ -7,11 +7,18 @@ import { area, curveMonotoneX, line, stack } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
 import { useTheme } from '../composables/useTheme'
+import { toast } from '../composables/useToast'
 import { chartColors, chartPalette } from '../utils/chartColors'
 import { formatCost, formatTokens } from '../utils/format'
 import AppCard from './ui/AppCard.vue'
 
 const { summary, isLoading, error, from, to, setRange, start, refresh } = useCostAnalytics()
+
+// Surface async load failures as toasts; the view keeps its empty/loading state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 
 const { theme } = useTheme()
 
@@ -412,9 +419,6 @@ watch([summary, theme], () => {
 
     <p v-if="isLoading && !hasData" class="text-sm text-fg-mute">
       Loading cost summary…
-    </p>
-    <p v-else-if="error" class="text-sm text-danger-text">
-      {{ error }}
     </p>
     <div v-else-if="!hasData" class="flex flex-col gap-2">
       <p class="text-sm text-fg-mute">

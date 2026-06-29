@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { toast } from '../composables/useToast'
 import { useWorktreeStatus } from '../composables/useWorktreeStatus'
 import { EDITOR_SCHEMES, editorHref, loadEditorScheme, saveEditorScheme } from '../utils/worktree'
 
@@ -22,6 +23,12 @@ watch(() => props.active, (v) => {
 })
 
 const { status, isLoading, error, refresh, create, remove } = useWorktreeStatus(taskIdRef, activeRef)
+
+// Surface async worktree load/action failures as toasts; the panel keeps its state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 
 const editorScheme = ref(loadEditorScheme())
 watch(editorScheme, v => saveEditorScheme(v))
@@ -82,10 +89,6 @@ async function handleCreate(): Promise<void> {
         {{ isLoading ? 'Refreshing…' : 'Refresh' }}
       </button>
     </div>
-
-    <p v-if="error" class="text-[11px] text-danger-text">
-      {{ error }}
-    </p>
 
     <!-- No worktree yet — offer to create one -->
     <template v-if="!worktreePath">

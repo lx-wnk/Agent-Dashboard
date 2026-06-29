@@ -7,23 +7,28 @@ import { select } from 'd3-selection'
 import { curveMonotoneX, line as d3line } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useEvalMetrics } from '../composables/useEvalMetrics'
+import { toast } from '../composables/useToast'
 import { METRIC_KEYS, metricLabel } from '../utils/evalMetrics'
 
 const { snapshots, openAlerts, isLoading, error, acknowledge, runScan, start } = useEvalMetrics()
 
+// Surface async load failures as toasts; the view keeps its empty/loading state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
+
 const isScanning = ref(false)
-const scanError = ref<string | null>(null)
 
 async function handleRunScan() {
   if (isScanning.value)
     return
   isScanning.value = true
-  scanError.value = null
   try {
     await runScan()
   }
   catch (e: unknown) {
-    scanError.value = e instanceof Error ? e.message : 'Scan failed'
+    toast.error(e instanceof Error ? e.message : 'Scan failed')
   }
   finally {
     isScanning.value = false
@@ -146,7 +151,6 @@ onUnmounted(() => {
         Eval / Drift Detection
       </h2>
       <div class="flex items-center gap-3">
-        <span v-if="scanError" class="text-xs text-red-600 dark:text-red-400">{{ scanError }}</span>
         <button
           type="button"
           :disabled="isScanning"
@@ -160,9 +164,6 @@ onUnmounted(() => {
 
     <p v-if="isLoading" class="text-sm text-fg-mute">
       Loading eval metrics…
-    </p>
-    <p v-else-if="error" class="text-sm text-red-600 dark:text-red-400">
-      {{ error }}
     </p>
 
     <!-- Metric trend charts -->

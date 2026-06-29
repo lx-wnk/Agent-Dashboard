@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ConflictError, useConfigExplorer } from '../composables/useConfigExplorer'
+import { toast } from '../composables/useToast'
 import AppInput from './ui/AppInput.vue'
 
 type Tab = 'skills' | 'commands' | 'memory'
@@ -30,6 +31,12 @@ const {
 // first paint already reflects the requested scope rather than the singleton's
 // last-loaded one.
 watch(() => props.spawnerId, id => setSpawner(id), { immediate: true })
+
+// Surface config-enumeration load failures as toasts; the view keeps its empty state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 
 const activeTab = ref<Tab>('skills')
 const searchQuery = ref('')
@@ -236,9 +243,6 @@ function closeEditor(): void {
 
     <p v-if="isLoading && skills.length === 0 && commands.length === 0 && memory.length === 0" class="text-fg-mute text-sm py-8 text-center">
       Loading configuration...
-    </p>
-    <p v-else-if="error" class="text-danger-text text-sm py-4 text-center">
-      Error: {{ error }}
     </p>
 
     <!-- Skills tab -->

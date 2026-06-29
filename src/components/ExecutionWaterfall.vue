@@ -6,6 +6,7 @@ import { scaleOrdinal, scaleTime } from 'd3-scale'
 import { select } from 'd3-selection'
 import { nextTick, onMounted, ref, useId, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
+import { toast } from '../composables/useToast'
 import { chartPalette } from '../utils/chartColors'
 import { errorMessage } from '../utils/errorMessage'
 
@@ -13,7 +14,6 @@ const props = defineProps<{ sessionId: string }>()
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const loading = ref(true)
-const error = ref<string | null>(null)
 const { theme } = useTheme()
 
 const titleId = useId()
@@ -30,7 +30,6 @@ async function fetchAndRender() {
   if (!props.sessionId)
     return
   loading.value = true
-  error.value = null
   try {
     const res = await fetch(`/api/sessions/${props.sessionId}/timeline`)
     if (!res.ok)
@@ -43,7 +42,7 @@ async function fetchAndRender() {
     renderGantt(toolCalls)
   }
   catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load timeline')
+    toast.error(errorMessage(e, 'Failed to load timeline'))
     loading.value = false
   }
 }
@@ -128,9 +127,6 @@ watch(theme, fetchAndRender)
   <div class="execution-waterfall">
     <div v-if="loading" class="text-sm text-slate-500 p-4">
       Loading timeline...
-    </div>
-    <div v-else-if="error" class="text-sm text-danger-text p-4">
-      {{ error }}
     </div>
     <div v-else class="overflow-x-auto">
       <svg
