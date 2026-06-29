@@ -133,6 +133,16 @@ func nonNilCaps(caps []string) []string {
 	return caps
 }
 
+// fillHealthy sets view.Healthy from the probe (running && healthy). A nil probe
+// leaves Healthy at its zero value.
+func (c *Controller) fillHealthy(view *plugins.PluginView, id string) {
+	if c.probe == nil {
+		return
+	}
+	running, healthy := c.probe(id)
+	view.Healthy = running && healthy
+}
+
 // List returns the lifecycle view for every persisted plugin. State comes from
 // the DB row; capabilities/hasSettings/updateAvailable come from the on-disk
 // manifest (a manifest read failure degrades to DB-only fields).
@@ -155,10 +165,7 @@ func (c *Controller) List(ctx context.Context) ([]plugins.PluginView, error) {
 			view.HasSettings = len(desc.Settings) > 0
 			view.UpdateAvailable = hash != "" && hash != p.ManifestHash
 		}
-		if c.probe != nil {
-			running, healthy := c.probe(p.ID)
-			view.Healthy = running && healthy
-		}
+		c.fillHealthy(&view, p.ID)
 		out = append(out, view)
 	}
 	return out, nil
@@ -221,7 +228,7 @@ func (c *Controller) Transition(ctx context.Context, id, action string) (plugins
 	if err != nil {
 		return plugins.PluginView{}, fmt.Errorf("pluginlifecyclectl: reload %q: %w", id, err)
 	}
-	return plugins.PluginView{
+	view := plugins.PluginView{
 		ID:              row.ID,
 		Name:            row.Name,
 		Version:         row.Version,
@@ -229,7 +236,9 @@ func (c *Controller) Transition(ctx context.Context, id, action string) (plugins
 		UpdateAvailable: hash != "" && hash != row.ManifestHash,
 		Capabilities:    nonNilCaps(desc.Capabilities),
 		HasSettings:     len(desc.Settings) > 0,
-	}, nil
+	}
+	c.fillHealthy(&view, row.ID)
+	return view, nil
 }
 
 // GetSettings returns the manifest schema and the (masked) stored values.

@@ -215,6 +215,27 @@ func TestTransition_UnknownPlugin(t *testing.T) {
 	}
 }
 
+func TestTransition_SetsHealthyFromProbe(t *testing.T) {
+	now := time.Now()
+	repo := &fakeRepo{rows: map[string]*ent.Plugin{
+		"p1": {ID: "p1", Name: "P1", Version: "1.0", InstalledAt: ptrTime(now), Active: true, ManifestHash: "h"},
+	}}
+	loader := &fakeLoader{
+		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1"}},
+		hashes:    map[string]string{"p1": "h"},
+	}
+	probe := func(id string) (bool, bool) { return id == "p1", id == "p1" }
+	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, probe)
+
+	view, err := c.Transition(context.Background(), "p1", "activate")
+	if err != nil {
+		t.Fatalf("Transition: %v", err)
+	}
+	if !view.Healthy {
+		t.Error("Transition should set Healthy=true when probe reports running+healthy")
+	}
+}
+
 func TestGetSettings_DelegatesWithSchema(t *testing.T) {
 	schema := []plugin.SettingField{{Key: "token", Secret: true}}
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{"p1": {ID: "p1"}}}
