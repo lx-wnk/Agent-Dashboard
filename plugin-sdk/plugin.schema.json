@@ -17,18 +17,6 @@
     "addr": { "type": "string", "description": "loopback host:port the plugin listens on" },
     "command": { "type": "array", "items": { "type": "string" } },
     "env": { "type": "array", "items": { "type": "string" } },
-    "slots": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["slot"],
-        "properties": {
-          "slot": { "type": "string" },
-          "priority": { "type": "integer" },
-          "mode": { "enum": ["override", "extend"] }
-        }
-      }
-    },
     "settings": {
       "type": "array",
       "items": {
@@ -53,7 +41,6 @@
         "update": { "type": "string" },
         "uninstall": { "type": "string" }
       }
-    },
-    "permissions": { "type": "array", "items": { "type": "string" } }
+    }
   }
 }
