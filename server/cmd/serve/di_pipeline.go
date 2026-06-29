@@ -44,7 +44,11 @@ func makeSetupWorktreeFn(projectRepo repo.ProjectRepo) func(ctx context.Context,
 			return nil
 		}
 		proj, err := projectRepo.GetByID(ctx, *projectID)
-		if err != nil || proj.SetupCommand == nil || *proj.SetupCommand == "" {
+		if err != nil {
+			slog.Warn("setup worktree: project lookup failed", "projectID", *projectID, "err", err)
+			return nil
+		}
+		if proj.SetupCommand == nil || *proj.SetupCommand == "" {
 			return nil
 		}
 		return runSetupCommand(ctx, worktreePath, *proj.SetupCommand)
