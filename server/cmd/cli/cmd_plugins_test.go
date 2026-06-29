@@ -60,3 +60,12 @@ func TestPluginsDisableUnknownErrors(t *testing.T) {
 	cmd.SetArgs([]string{"disable", "nope", "--db", dbPath})
 	require.Error(t, cmd.Execute())
 }
+
+func TestPluginsEnableUnknownErrors(t *testing.T) {
+	dbPath := t.TempDir() + "/test.db"
+	seedPlugin(t, dbPath, "other", false) // ensures DB is initialised
+
+	cmd := newPluginsCmd()
+	cmd.SetArgs([]string{"enable", "nope", "--db", dbPath})
+	require.Error(t, cmd.Execute())
+}
