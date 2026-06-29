@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import type { SystemInfo } from '../../composables/useSystemResources'
+import type { UsageData, WindowData } from '../../composables/useUsage'
 import { computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useSystemResources } from '../../composables/useSystemResources'
 
-defineProps<{ costDelta: number | null, todayCostLabel: string, quotaPct: number | null }>()
+const props = defineProps<{
+  costDelta: number | null
+  todayCostLabel: string
+  usageData: UsageData | null
+}>()
 
 const { collapsed, openSegment, toggleSegment, toggleCollapsed } = useStatusBar()
 const resources = useSystemResources()
@@ -12,14 +17,51 @@ const resources = useSystemResources()
 // and a plain { value: SystemInfo } object returned by the test mock.
 const systemInfo = computed<SystemInfo | null>(() => resources.info.value)
 
+// worst is the budgeted window with the highest pct; null when no budgets exist.
+const worst = computed<WindowData | null>(() => {
+  if (!props.usageData)
+    return null
+  const budgeted = props.usageData.windows.filter(w => w.pct !== null)
+  if (budgeted.length === 0)
+    return null
+  return budgeted.reduce((a, b) => (b.pct! > a.pct! ? b : a))
+})
+
+const usageLabel = computed<string>(() => {
+  if (!worst.value)
+    return ''
+  return worst.value.key === '5h' ? 'SESSION' : 'WEEKLY'
+})
+
+const usagePctDisplay = computed<string>(() => {
+  if (!worst.value || worst.value.pct === null)
+    return ''
+  return `${Math.round(worst.value.pct * 100)}%`
+})
+
+function formatM(tokens: number): string {
+  return `${(tokens / 1_000_000).toFixed(1)}M`
+}
+
+const usageConsumptionText = computed<string>(() => {
+  if (!props.usageData)
+    return '—'
+  const w5h = props.usageData.windows.find(w => w.key === '5h')
+  const w7d = props.usageData.windows.find(w => w.key === '7d')
+  if (!w5h || !w7d)
+    return '—'
+  return `5h ${formatM(w5h.tokens)} · 7d ${formatM(w7d.tokens)}`
+})
+
 function barColor(pct: number): string {
   return pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warning' : 'bg-success'
 }
 
-function quotaBarColor(pct: number | null): string {
-  if (pct === null)
+function usageBarColor(): string {
+  if (!worst.value || worst.value.pct === null)
     return 'bg-raised'
-  return pct >= 90 ? 'bg-danger' : pct >= 75 ? 'bg-warning' : 'bg-success'
+  const p = worst.value.pct * 100
+  return p >= 90 ? 'bg-danger' : p >= 75 ? 'bg-warning' : 'bg-success'
 }
 
 function formatDelta(d: number | null): string {
@@ -56,15 +98,52 @@ function formatDelta(d: number | null): string {
       <span>Today's spend: {{ todayCostLabel }}</span>
       <span>Burn rate (last 5 min): {{ formatDelta(costDelta) }}</span>
     </div>
+    <div v-if="openSegment === 'usage'" data-testid="panel-usage" class="px-4 py-3 border-b border-line text-[12px] text-fg-mute font-mono">
+      <div v-if="usageData" class="flex flex-col gap-1">
+        <div v-for="win in usageData.windows" :key="win.key">
+          {{ win.key === '5h' ? 'Session (5h)' : 'Weekly (7d)' }}:
+          {{ formatM(win.tokens) }} tokens · ${{ (win.costCents / 100).toFixed(2) }}
+          <span v-if="win.pct !== null"> · {{ Math.round(win.pct * 100) }}%</span>
+        </div>
+        <template v-if="usageData.accounts.length > 1">
+          <div class="mt-1 text-fg-faint">
+            Accounts:
+          </div>
+          <div v-for="acc in usageData.accounts" :key="acc.label" class="pl-2">
+            {{ acc.label }}: 5h {{ formatM(acc.w5h.tokens) }} · 7d {{ formatM(acc.w7d.tokens) }}
+          </div>
+        </template>
+      </div>
+      <div v-else>
+        No data yet
+      </div>
+    </div>
 
     <div class="flex items-center gap-3 px-3 h-7 text-[11px] font-mono text-fg-mute">
-      <span class="flex items-center gap-1.5" data-testid="seg-quota">
-        <span class="text-fg-faint">QUOTA</span>
-        <span class="inline-block w-16 h-1.5 bg-raised rounded-full overflow-hidden align-middle">
-          <span class="block h-full rounded-full" :class="quotaBarColor(quotaPct)" :style="{ width: quotaPct === null ? '0%' : `${quotaPct}%` }" />
-        </span>
-        <span class="text-fg">{{ quotaPct === null ? '—' : `${quotaPct}%` }}</span>
-      </span>
+      <button
+        type="button"
+        data-testid="seg-usage"
+        class="flex items-center gap-1.5 hover:text-fg rounded px-1 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
+        :aria-expanded="openSegment === 'usage'"
+        aria-label="Toggle usage detail"
+        @click="toggleSegment('usage')"
+      >
+        <template v-if="worst">
+          <span class="text-fg-faint">{{ usageLabel }}</span>
+          <span class="inline-block w-16 h-1.5 bg-raised rounded-full overflow-hidden align-middle">
+            <span
+              class="block h-full rounded-full"
+              :class="usageBarColor()"
+              :style="{ width: `${Math.round((worst.pct ?? 0) * 100)}%` }"
+            />
+          </span>
+          <span class="text-fg">{{ usagePctDisplay }}</span>
+        </template>
+        <template v-else>
+          <span class="text-fg-faint">USAGE</span>
+          <span class="text-fg">{{ usageConsumptionText }}</span>
+        </template>
+      </button>
       <span class="w-px h-3.5 bg-line" aria-hidden="true" />
       <button
         type="button"

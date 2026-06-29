@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue'
 
-export type StatusSegment = 'system' | 'cost'
+export type StatusSegment = 'system' | 'cost' | 'usage'
 
 const collapsed = ref<boolean>(
   typeof localStorage !== 'undefined' && localStorage.getItem('agent-statusbar-collapsed') === 'true',
