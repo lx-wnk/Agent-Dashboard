@@ -564,6 +564,16 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
 		newCmd.Dir = pluginDir
 		newCmd.Env = buildPluginEnv(desc.Env)
+		if r.settings != nil {
+			if vals, sErr := r.settings(ctx, desc.ID); sErr != nil {
+				slog.Warn("plugin: settings fetch failed on restart — continuing without settings",
+					"id", desc.ID, "err", sErr)
+			} else {
+				for k, v := range vals {
+					newCmd.Env = append(newCmd.Env, "PLUGIN_SETTING_"+sanitizeSettingKey(k)+"="+v)
+				}
+			}
+		}
 		newCmd.Stdout = os.Stdout
 		newCmd.Stderr = os.Stderr
 		newCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
