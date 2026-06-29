@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pricing"
 )
@@ -61,6 +63,7 @@ type Aggregator struct {
 	mu       sync.Mutex
 	cached   *Result
 	cachedAt time.Time
+	group    singleflight.Group
 }
 
 // NewAggregator constructs an Aggregator with optional overrides.
@@ -78,6 +81,7 @@ func NewAggregator(opts Options) *Aggregator {
 }
 
 // Aggregate returns cached results if within the 60 s TTL, else re-scans.
+// Concurrent cold-cache callers share one in-flight scan via singleflight.
 func (a *Aggregator) Aggregate() (*Result, error) {
 	now := a.opts.Now()
 
@@ -89,19 +93,22 @@ func (a *Aggregator) Aggregate() (*Result, error) {
 	}
 	a.mu.Unlock()
 
-	a.opts.OnScan()
-
-	res, err := a.scan(now)
+	v, err, _ := a.group.Do("scan", func() (any, error) {
+		a.opts.OnScan()
+		res, err := a.scan(now)
+		if err != nil {
+			return nil, err
+		}
+		a.mu.Lock()
+		a.cached = res
+		a.cachedAt = now
+		a.mu.Unlock()
+		return res, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	a.mu.Lock()
-	a.cached = res
-	a.cachedAt = now
-	a.mu.Unlock()
-
-	return res, nil
+	return v.(*Result), nil
 }
 
 func (a *Aggregator) scan(now time.Time) (*Result, error) {
