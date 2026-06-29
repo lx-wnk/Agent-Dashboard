@@ -41,6 +41,7 @@ import (
 	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/prompttemplates"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
@@ -141,6 +142,7 @@ type RouterDeps struct {
 	RemotesHandler         *remotes.Handler
 	PresetsHandler         *presets.Handler
 	SystemPromptsHandler   *systemprompts.Handler
+	PromptTemplatesHandler *prompttemplates.Handler
 	SearchHandler          *search.Handler
 	HistoryHandler         *apihistory.Handler
 	RefineHandler          *refineapi.Handler
@@ -340,6 +342,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
 				deps.SystemPromptsHandler.Mount(r)
 			})
+		}
+
+		if deps.PromptTemplatesHandler != nil {
+			deps.PromptTemplatesHandler.Mount(r)
 		}
 
 		if deps.SearchHandler != nil {

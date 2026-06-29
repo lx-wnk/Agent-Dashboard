@@ -35,6 +35,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/prompttemplates"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	apiusage "github.com/lx-wnk/agent-dashboard/server/internal/api/usage"
@@ -520,6 +521,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if entClient != nil {
 		systemPromptsHandler = systemprompts.NewHandler(systemPromptRepo)
 	}
+	var promptTemplatesHandler *prompttemplates.Handler
+	if entClient != nil {
+		promptTemplatesHandler = prompttemplates.NewHandler(repo.NewPromptTemplateRepo(entClient))
+	}
 	adapterHandler := adapters.NewHandler()
 	replyStore := agents.NewReplyStore()
 	var channelStageOutputHandler *agents.ChannelStageOutputHandler
@@ -554,6 +559,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		PresetsHandler:         presetsHandler,
 		PermissionPresetRepo:   permissionPresetRepo,
 		SystemPromptsHandler:   systemPromptsHandler,
+		PromptTemplatesHandler: promptTemplatesHandler,
 		AdapterHandler:         adapterHandler,
 		ProvidersHandler:       providersHandler,
 		SettingsHandler:        settingsHandler,
