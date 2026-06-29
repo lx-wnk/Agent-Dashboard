@@ -16,5 +16,6 @@ parse:
     output: [tokens.output]
     cacheRead: [tokens.cached]
   model: [model]
+  timestamp: [timestamp]
 cost:
   rule: byModel

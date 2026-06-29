@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/sdk"
@@ -32,6 +33,7 @@ func parseJSONL(d Descriptor, path string) (*EngineResult, error) {
 	var in, out, cr, cc float64
 	var model, prov string
 	var cost float64
+	var lastActivity time.Time
 
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 1024*1024), 8*1024*1024)
@@ -49,6 +51,15 @@ func parseJSONL(d Descriptor, path string) (*EngineResult, error) {
 		}
 		if p := firstString(obj, d.Parse.Provider); p != "" {
 			prov = p
+		}
+		// Timestamps live on every line (including non-event headers), so track the
+		// newest before the event filter gate — otherwise LastActivity stays zero.
+		if len(d.Parse.Timestamp) > 0 {
+			if vals := resolveFirst(obj, d.Parse.Timestamp); len(vals) > 0 {
+				if ts := parseActivityTimestamp(vals[0]); !ts.IsZero() && ts.After(lastActivity) {
+					lastActivity = ts
+				}
+			}
 		}
 		if !matchesFilter(obj, d.Parse.EventFilter) {
 			continue
@@ -75,11 +86,30 @@ func parseJSONL(d Descriptor, path string) (*EngineResult, error) {
 				CacheReadTokens:     int(cr),
 				CacheCreationTokens: int(cc),
 			},
-			Model: model,
+			Model:        model,
+			LastActivity: lastActivity,
 		},
 		Provider:   prov,
 		InFileCost: cost,
 	}, nil
+}
+
+// parseActivityTimestamp coerces a JSON value to a time.Time. Accepts
+// RFC3339/RFC3339Nano strings and millisecond-epoch float64 values (e.g. Junie).
+func parseActivityTimestamp(v any) time.Time {
+	switch t := v.(type) {
+	case string:
+		if ts, err := time.Parse(time.RFC3339Nano, t); err == nil {
+			return ts.UTC()
+		}
+		if ts, err := time.Parse(time.RFC3339, t); err == nil {
+			return ts.UTC()
+		}
+	case float64:
+		// millisecond epoch (json.Unmarshal decodes all JSON numbers as float64)
+		return time.UnixMilli(int64(t)).UTC()
+	}
+	return time.Time{}
 }
 
 // accumulate folds the values at paths into acc per mode: cumulative keeps the

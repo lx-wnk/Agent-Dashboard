@@ -19,6 +19,7 @@ parse:
     cacheCreate: ['event.agentEvent.modelUsage[].cacheCreateTokens', 'event.agentEvent.modelUsage[].cacheCreationInputTokens']
   model: ['event.agentEvent.modelUsage[].model']
   provider: ['event.agentEvent.modelUsage[].provider']
+  timestamp: [timestampMs]
 cost:
   rule: inFile
   inFilePath: ['event.agentEvent.modelUsage[].cost']

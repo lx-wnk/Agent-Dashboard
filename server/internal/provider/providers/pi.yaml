@@ -19,6 +19,7 @@ parse:
     cacheCreate: [message.usage.cacheWrite]
   model: [message.model]
   provider: [message.provider]
+  timestamp: [timestamp]
 cost:
   rule: inFile
   inFilePath: [message.usage.cost.total]

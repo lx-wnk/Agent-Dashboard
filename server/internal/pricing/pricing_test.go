@@ -1,12 +1,43 @@
 package pricing_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pricing"
 	"github.com/stretchr/testify/require"
 )
+
+// TestHasPricing_ThirdPartyModels verifies third-party models are priced, not defaulted.
+func TestHasPricing_ThirdPartyModels(t *testing.T) {
+	for _, m := range []string{"gpt-5", "gpt-5-codex", "gemini-2.5-pro", "gemini-2.5-flash"} {
+		if !pricing.HasPricing(m) {
+			t.Errorf("HasPricing(%q) = false, want true", m)
+		}
+	}
+}
+
+func TestEstimateCost_CodexNonZeroAndDistinctFromDefault(t *testing.T) {
+	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	got := pricing.EstimateCost(usage, "gpt-5-codex")
+	require.Greater(t, got, 0.0)
+	// Must NOT silently fall back to the claude-sonnet-4-6 default.
+	sonnet := pricing.EstimateCost(usage, "claude-sonnet-4-6")
+	if math.Abs(got-sonnet) < 0.001 {
+		t.Errorf("gpt-5-codex cost (%f) equals sonnet default (%f) — entry missing?", got, sonnet)
+	}
+}
+
+func TestEstimateCost_GeminiProNonZeroAndDistinctFromDefault(t *testing.T) {
+	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	got := pricing.EstimateCost(usage, "gemini-2.5-pro")
+	require.Greater(t, got, 0.0)
+	sonnet := pricing.EstimateCost(usage, "claude-sonnet-4-6")
+	if math.Abs(got-sonnet) < 0.001 {
+		t.Errorf("gemini-2.5-pro cost (%f) equals sonnet default (%f) — entry missing?", got, sonnet)
+	}
+}
 
 // TestEstimateCost_ZeroUsage verifies that zero tokens produce zero cost.
 func TestEstimateCost_ZeroUsage(t *testing.T) {

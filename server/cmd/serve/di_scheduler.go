@@ -61,9 +61,9 @@ func provideScheduler(client *ent.Client, taskHandler *tasks.Handler, tb *sse.Ta
 		OnChange:     onChange,
 	})
 
-	// Rule-based translator; an LLMTranslator can be injected here without
-	// touching firing, which is deterministic and offline by design.
-	translator := scheduler.NewNLCron(nil)
+	// Rule-based fast-path with a one-shot LLM fallback for the long tail;
+	// firing stays deterministic and offline (it reads only the stored cron).
+	translator := scheduler.NewNLCron(scheduler.NewExecLLMTranslator())
 	handler := schedules.NewHandler(schedRepo, translator, sched)
 	return sched, handler
 }
