@@ -135,81 +135,39 @@ func readToolCallsFromFile(path, sessionID string, from, to time.Time) ([]ToolCa
 		slog.Warn("analytics: session file exceeds cap, tailing", "path", path, "size", info.Size())
 	}
 
-	rc, err := parser.OpenJSONLReader(path, maxFileSize)
-	if err != nil {
-		return nil, err
-	}
-	defer rc.Close() //nolint:errcheck
-
 	var calls []ToolCall
-	err = parser.ScanJSONLLines(rc, func(line []byte) error {
-		var env scanEntry
-		if err := json.Unmarshal(line, &env); err != nil {
+	err = parser.ScanMessages(path, maxFileSize, func(m parser.Message) error {
+		if m.Role != "assistant" {
 			return nil
 		}
-		if env.Type != "assistant" && env.Type != "message" {
-			return nil
-		}
-		var ts time.Time
-		if env.Timestamp != "" {
-			if parsed, perr := time.Parse(time.RFC3339Nano, env.Timestamp); perr == nil {
-				ts = parsed
-			}
-		}
-		if !ts.IsZero() {
-			if !from.IsZero() && ts.Before(from) {
+		if !m.Timestamp.IsZero() {
+			if !from.IsZero() && m.Timestamp.Before(from) {
 				return nil
 			}
-			if !to.IsZero() && ts.After(to) {
+			if !to.IsZero() && m.Timestamp.After(to) {
 				return nil
 			}
 		}
-		var msg scanMessage
-		if err := json.Unmarshal(env.Message, &msg); err != nil {
+		var blocks []struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+			ID   string `json:"id"`
+		}
+		if err := json.Unmarshal(m.Content, &blocks); err != nil {
 			return nil
 		}
-		if msg.Role != "assistant" {
-			return nil
-		}
-		for _, raw := range msg.Content {
-			var block scanBlock
-			if err := json.Unmarshal(raw, &block); err != nil {
-				continue
-			}
-			if block.Type != "tool_use" || !ToolNameRE.MatchString(block.Name) {
+		for _, b := range blocks {
+			if b.Type != "tool_use" || !ToolNameRE.MatchString(b.Name) {
 				continue
 			}
 			calls = append(calls, ToolCall{
 				SessionID: sessionID,
-				Name:      block.Name,
-				ID:        block.ID,
-				Timestamp: ts,
+				Name:      b.Name,
+				ID:        b.ID,
+				Timestamp: m.Timestamp,
 			})
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return calls, nil
-}
-
-// scanEntry / scanMessage / scanBlock are private decode targets so we do
-// not depend on parser internals or accidentally couple the visualization
-// scan to the agent-monitoring tail parse.
-type scanEntry struct {
-	Type      string          `json:"type"`
-	Timestamp string          `json:"timestamp"`
-	Message   json.RawMessage `json:"message"`
-}
-
-type scanMessage struct {
-	Role    string            `json:"role"`
-	Content []json.RawMessage `json:"content"`
-}
-
-type scanBlock struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
-	ID   string `json:"id"`
+	return calls, err
 }
