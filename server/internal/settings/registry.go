@@ -124,6 +124,8 @@ var definitions = func() map[string]Definition {
 		{Key: "eval.minSamples", Type: TypeInt, Default: "20", Apply: ApplyRestart, Category: "eval", validate: nonNegativeInt("eval.minSamples")},
 		{Key: "eval.rateDropPP", Type: TypeFloat, Default: "15", Apply: ApplyRestart, Category: "eval", validate: nonNegativeFloat("eval.rateDropPP")},
 		{Key: "eval.stddevK", Type: TypeFloat, Default: "3", Apply: ApplyRestart, Category: "eval", validate: nonNegativeFloat("eval.stddevK")},
+		{Key: "usage.budget.session", Type: TypeInt, Default: "0", Apply: ApplyLive, Category: "usage", validate: nonNegativeInt("usage.budget.session")},
+		{Key: "usage.budget.weekly", Type: TypeInt, Default: "0", Apply: ApplyLive, Category: "usage", validate: nonNegativeInt("usage.budget.weekly")},
 	}
 	m := make(map[string]Definition, len(list))
 	for _, d := range list {
