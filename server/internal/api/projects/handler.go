@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -33,6 +34,7 @@ type Handler struct {
 	folders     folderRepo
 	tasks       TaskProjectOps
 	broadcaster *sse.ProjectBroadcaster
+	bypassAuth  bool
 }
 
 // projectRepo is the subset of repo.ProjectRepo this handler needs.
@@ -57,8 +59,22 @@ type folderRepo interface {
 
 // NewHandler returns a Handler wired with the given repos and task ops.
 // broadcaster may be nil (e.g. in tests); emit becomes a no-op then.
-func NewHandler(p repo.ProjectRepo, f repo.ProjectFolderRepo, tasks TaskProjectOps, broadcaster *sse.ProjectBroadcaster) *Handler {
-	return &Handler{projects: p, folders: f, tasks: tasks, broadcaster: broadcaster}
+// bypassAuth mirrors the loopback single-user mode in which every request is
+// already treated as a local admin (see auth.RequireAdminOrBypass).
+func NewHandler(p repo.ProjectRepo, f repo.ProjectFolderRepo, tasks TaskProjectOps, broadcaster *sse.ProjectBroadcaster, bypassAuth bool) *Handler {
+	return &Handler{projects: p, folders: f, tasks: tasks, broadcaster: broadcaster, bypassAuth: bypassAuth}
+}
+
+// canSetSetupCommand reports whether the request may write the per-project
+// setup_command. That command runs an arbitrary server-side `sh -c` after
+// worktree creation (RCE-equivalent), so it is gated to admins — mirroring the
+// admin-only spawner CRUD. Bypass mode (loopback single-user) passes through.
+func (h *Handler) canSetSetupCommand(r *http.Request) bool {
+	if h.bypassAuth {
+		return true
+	}
+	payload, ok := auth.PayloadFromContext(r.Context())
+	return ok && payload.IsAdmin
 }
 
 // emit broadcasts a typed project event. No-op when broadcaster is nil.
@@ -230,6 +246,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 	if body.Color != nil && *body.Color != "" && !ValidateColor(*body.Color) {
 		return apierr.NewAppError(http.StatusBadRequest, "color must be #rgb or #rrggbb hex")
 	}
+	if body.SetupCommand != nil && !h.canSetSetupCommand(r) {
+		return apierr.NewAppError(http.StatusForbidden, "setupCommand requires admin privileges")
+	}
 	p, err := h.projects.Create(r.Context(), body.Name, body.Slug, body.Description, body.Color, body.DefaultSpawnerID, body.SetupCommand)
 	if err != nil {
 		if ent.IsConstraintError(err) {
@@ -280,6 +299,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 	}
 	if body.Slug != nil && !ValidateSlug(*body.Slug) {
 		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
+	}
+	if len(body.SetupCommand) != 0 && !h.canSetSetupCommand(r) {
+		return apierr.NewAppError(http.StatusForbidden, "setupCommand requires admin privileges")
 	}
 
 	description, clearDescription, err := parseNullableString(body.Description)

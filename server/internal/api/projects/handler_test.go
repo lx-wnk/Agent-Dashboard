@@ -2,17 +2,118 @@ package projects
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
+
+const testJWTSecret = "test-secret-projects"
+
+// authedRouter mounts h behind RequireAuth so PayloadFromContext is populated
+// from the request's JWT cookie — matching production auth wiring.
+func authedRouter(h *Handler) chi.Router {
+	r := chi.NewRouter()
+	r.Use(auth.RequireAuth(testJWTSecret))
+	h.Mount(r)
+	return r
+}
+
+// withJWT attaches a signed session cookie with the given admin flag.
+func withJWT(t *testing.T, req *http.Request, isAdmin bool) *http.Request {
+	t.Helper()
+	token, err := auth.SignJWT(auth.JWTPayload{Sub: "u1", Login: "tester", IsAdmin: isAdmin}, testJWTSecret, 3600)
+	if err != nil {
+		t.Fatalf("sign jwt: %v", err)
+	}
+	req.AddCookie(&http.Cookie{Name: "auth_token", Value: token})
+	return req
+}
+
+// seedProject inserts a project directly via the repo and returns its id.
+func seedProject(t *testing.T, h *Handler) string {
+	t.Helper()
+	p, err := h.projects.Create(context.Background(), "Proj", "proj", nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	return p.ID
+}
+
+func TestUpdate_NonAdminSetupCommand_Forbidden(t *testing.T) {
+	h := newTestHandler(t, false)
+	id := seedProject(t, h)
+	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(`{"setupCommand":"rm -rf /"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = withJWT(t, req, false)
+	rr := httptest.NewRecorder()
+	authedRouter(h).ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("non-admin setupCommand: got %d, want 403, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdate_AdminSetupCommand_Allowed(t *testing.T) {
+	h := newTestHandler(t, false)
+	id := seedProject(t, h)
+	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(`{"setupCommand":"echo hi"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = withJWT(t, req, true)
+	rr := httptest.NewRecorder()
+	authedRouter(h).ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("admin setupCommand: got %d, want 200, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdate_BypassSetupCommand_Allowed(t *testing.T) {
+	h := newTestHandler(t, true)
+	id := seedProject(t, h)
+	// Bypass mode skips RequireAuth, so mount directly without a JWT.
+	r := chi.NewRouter()
+	h.Mount(r)
+	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(`{"setupCommand":"echo hi"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("bypass setupCommand: got %d, want 200, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdate_NonAdminNoSetupCommand_Allowed(t *testing.T) {
+	h := newTestHandler(t, false)
+	id := seedProject(t, h)
+	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(`{"name":"Renamed"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = withJWT(t, req, false)
+	rr := httptest.NewRecorder()
+	authedRouter(h).ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("non-admin non-setupCommand update: got %d, want 200, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestCreate_NonAdminSetupCommand_Forbidden(t *testing.T) {
+	h := newTestHandler(t, false)
+	req := httptest.NewRequest("POST", "/api/projects", bytes.NewBufferString(`{"name":"P","slug":"p","setupCommand":"rm -rf /"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = withJWT(t, req, false)
+	rr := httptest.NewRecorder()
+	authedRouter(h).ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("non-admin create setupCommand: got %d, want 403, body=%s", rr.Code, rr.Body.String())
+	}
+}
 
 // stripSSEFrame strips the "data: " prefix and "\n\n" suffix added by Broadcaster.
 func stripSSEFrame(raw []byte) []byte {
@@ -21,20 +122,21 @@ func stripSSEFrame(raw []byte) []byte {
 	return raw
 }
 
-// newTestHandler creates a Handler backed by an in-memory SQLite DB with no TaskProjectOps.
-func newTestHandler(t *testing.T) *Handler {
+// newTestHandler creates a Handler backed by an in-memory SQLite DB with no
+// TaskProjectOps. bypassAuth controls the per-field setup_command admin gate.
+func newTestHandler(t *testing.T, bypassAuth bool) *Handler {
 	t.Helper()
 	bundle, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = bundle.Client.Close() })
-	return NewHandler(repo.NewProjectRepo(bundle.Client), repo.NewProjectFolderRepo(bundle.Client), nil, nil)
+	return NewHandler(repo.NewProjectRepo(bundle.Client), repo.NewProjectFolderRepo(bundle.Client), nil, nil, bypassAuth)
 }
 
 func TestCreate_BroadcastsProjectCreated(t *testing.T) {
 	bc := sse.NewProjectBroadcaster(sse.NewBroadcaster())
-	h := newTestHandler(t)
+	h := newTestHandler(t, true)
 	h.broadcaster = bc
 	ch := bc.Subscribe()
 	defer bc.Unsubscribe(ch)

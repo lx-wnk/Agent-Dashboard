@@ -293,9 +293,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 			deps.SettingsHandler.Mount(r)
 		}
 
-		// Projects + ProjectFolders — JWT-protected (no admin gate required).
+		// Projects + ProjectFolders — JWT-protected. No whole-route admin gate
+		// (non-admins legitimately edit name/color/folders); the RCE-equivalent
+		// setup_command field is admin-gated per-field inside the handler.
 		if deps.ProjectRepo != nil && deps.ProjectFolderRepo != nil {
-			projectsHandler := projects.NewHandler(deps.ProjectRepo, deps.ProjectFolderRepo, deps.TaskProjectOps, deps.ProjectBroadcaster)
+			projectsHandler := projects.NewHandler(deps.ProjectRepo, deps.ProjectFolderRepo, deps.TaskProjectOps, deps.ProjectBroadcaster, deps.Config.BypassAuth)
 			projectsHandler.Mount(r)
 			r.Get("/api/projects/stream", projectsHandler.Stream)
 		}
