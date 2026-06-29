@@ -108,9 +108,23 @@ func (a *Aggregator) scan(now time.Time) (*Result, error) {
 	cutoff7d := now.Add(-window7d)
 	cutoff5h := now.Add(-window5h)
 
+	dirs := a.opts.ConfigDirs()
+
+	// Count how many dirs share each basename so collisions can be disambiguated.
+	baseCount := make(map[string]int, len(dirs))
+	for _, dir := range dirs {
+		baseCount[filepath.Base(dir)]++
+	}
+
 	var total Result
-	for _, dir := range a.opts.ConfigDirs() {
-		acc := Account{Label: filepath.Base(dir)}
+	for _, dir := range dirs {
+		base := filepath.Base(dir)
+		label := base
+		if baseCount[base] > 1 {
+			// Prefix the parent segment to make colliding basenames unique.
+			label = filepath.Base(filepath.Dir(dir)) + "/" + base
+		}
+		acc := Account{Label: label}
 		if err := scanConfigDir(dir, now, cutoff7d, cutoff5h, &acc.W5h, &acc.W7d); err != nil {
 			slog.Debug("usage: scan dir skipped", "dir", dir, "err", err)
 			continue

@@ -237,3 +237,53 @@ func TestAggregate_Cache(t *testing.T) {
 		t.Errorf("expected 2 scans after cache expiry, got %d", scanCount)
 	}
 }
+
+// TestAggregate_BasenameCollision asserts that two config dirs sharing a basename
+// receive distinct account labels.
+func TestAggregate_BasenameCollision(t *testing.T) {
+	now := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	dirA := filepath.Join(t.TempDir(), ".claude")
+	dirB := filepath.Join(t.TempDir(), ".claude")
+	for _, d := range []string{dirA, dirB} {
+		if err := os.MkdirAll(filepath.Join(d, "projects"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	agg := usage.NewAggregator(usage.Options{
+		ConfigDirs: func() []string { return []string{dirA, dirB} },
+		Now:        func() time.Time { return now },
+	})
+	res, err := agg.Aggregate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Accounts) != 2 {
+		t.Fatalf("want 2 accounts, got %d", len(res.Accounts))
+	}
+	if res.Accounts[0].Label == res.Accounts[1].Label {
+		t.Errorf("accounts share label %q after basename collision", res.Accounts[0].Label)
+	}
+}
+
+// TestAggregate_BasenameUnique asserts that a single dir keeps the bare basename.
+func TestAggregate_BasenameUnique(t *testing.T) {
+	now := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	dir := filepath.Join(t.TempDir(), ".claude")
+	os.MkdirAll(filepath.Join(dir, "projects"), 0o755) //nolint:errcheck
+
+	agg := usage.NewAggregator(usage.Options{
+		ConfigDirs: func() []string { return []string{dir} },
+		Now:        func() time.Time { return now },
+	})
+	res, err := agg.Aggregate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Accounts) != 1 {
+		t.Fatalf("want 1 account, got %d", len(res.Accounts))
+	}
+	if res.Accounts[0].Label != ".claude" {
+		t.Errorf("want bare basename .claude, got %q", res.Accounts[0].Label)
+	}
+}
