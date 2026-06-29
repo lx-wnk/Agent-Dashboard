@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OutputMessage } from '../types'
 import { nextTick, onUnmounted, ref, watch } from 'vue'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import { formatCost, shortModel } from '../utils/format'
 import AppModal from './ui/AppModal.vue'
@@ -29,7 +30,6 @@ const emit = defineEmits<{ close: [], resumed: [] }>()
 
 const messages = ref<OutputMessage[]>([])
 const isLoading = ref(false)
-const fetchError = ref('')
 const resumePrompt = ref('')
 const spawning = ref(false)
 const statusMsg = ref('')
@@ -67,7 +67,6 @@ async function fetchMessages(sessionId: string) {
   const { signal } = abortCtrl
 
   isLoading.value = true
-  fetchError.value = ''
   messages.value = []
 
   try {
@@ -87,7 +86,7 @@ async function fetchMessages(sessionId: string) {
   catch (err: unknown) {
     if (signal.aborted)
       return
-    fetchError.value = errorMessage(err, 'Failed to load transcript')
+    toast.error(errorMessage(err, 'Failed to load transcript'))
   }
   finally {
     if (!signal.aborted)
@@ -108,7 +107,6 @@ watch(
       abortCtrl?.abort()
       abortCtrl = null
       messages.value = []
-      fetchError.value = ''
       isLoading.value = false
     }
   },
@@ -199,9 +197,6 @@ async function resumeSession() {
     <div ref="scrollContainer" class="flex-1 min-h-0 overflow-y-auto px-4 py-3">
       <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
         Loading transcript...
-      </div>
-      <div v-else-if="fetchError" class="text-center py-12 text-danger-text text-sm">
-        {{ fetchError }}
       </div>
       <div v-else-if="messages.length === 0" class="text-center py-12 text-fg-mute text-sm">
         No messages available.

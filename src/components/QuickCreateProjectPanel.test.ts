@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from '../composables/useToast'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 
 const sampleProject = {
@@ -56,6 +57,7 @@ describe('quickCreateProjectPanel', () => {
   })
 
   it('rolls back project create when folder create fails', async () => {
+    const errorSpy = vi.spyOn(toast, 'error')
     fetchMock
       .mockResolvedValueOnce({ ok: true, status: 201, json: async () => sampleProject })
       .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'disk full' }) })
@@ -76,10 +78,11 @@ describe('quickCreateProjectPanel', () => {
       expect.objectContaining({ method: 'DELETE' }),
     )
     expect(wrapper.emitted('created')).toBeFalsy()
-    expect(wrapper.text()).toContain('disk full')
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('disk full'))
   })
 
   it('surfaces slug conflict without firing folder request', async () => {
+    const errorSpy = vi.spyOn(toast, 'error')
     fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 409,
@@ -95,6 +98,6 @@ describe('quickCreateProjectPanel', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('slug already exists')
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('slug already exists'))
   })
 })

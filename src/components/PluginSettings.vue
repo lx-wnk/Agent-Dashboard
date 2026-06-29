@@ -2,11 +2,12 @@
 import { ref } from 'vue'
 import { usePluginSettings } from '../composables/usePluginSettings'
 import { useServerReconnect } from '../composables/useServerReconnect'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import PluginSettingsForm from './PluginSettingsForm.vue'
 import PluginSlot from './PluginSlot.vue'
 
-const { plugins, loading, error, setActive, getSettings, putSettings, update } = usePluginSettings()
+const { plugins, loading, setActive, getSettings, putSettings, update } = usePluginSettings()
 const { triggerRestart } = useServerReconnect()
 const saving = ref<string | null>(null)
 const expanded = ref<string | null>(null)
@@ -20,7 +21,7 @@ async function onRestart() {
     await triggerRestart()
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    toast.error(e instanceof Error ? e.message : String(e))
   }
 }
 
@@ -67,7 +68,7 @@ async function handleToggle(id: string, next: boolean) {
       reloadNotice.value = null
   }
   catch (e) {
-    error.value = errorMessage(e, 'Toggle failed')
+    toast.error(errorMessage(e, 'Toggle failed'))
   }
   finally {
     saving.value = null
@@ -81,7 +82,7 @@ async function handleUpdate(id: string) {
     showNotice('success', 'Plugin updated successfully')
   }
   catch (e) {
-    error.value = errorMessage(e, 'Update failed')
+    toast.error(errorMessage(e, 'Update failed'))
   }
   finally {
     saving.value = null
@@ -123,9 +124,6 @@ async function handleUpdate(id: string) {
 
     <div v-if="loading" class="text-xs text-slate-400" role="status" aria-live="polite">
       Loading plugins…
-    </div>
-    <div v-else-if="error" class="text-xs text-danger-text" role="alert">
-      {{ error }}
     </div>
     <div v-else-if="plugins.length === 0" class="text-xs text-slate-400 italic space-y-1">
       <p>No plugins loaded.</p>

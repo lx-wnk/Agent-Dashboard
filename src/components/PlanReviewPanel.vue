@@ -2,6 +2,7 @@
 import type { PipelineTask } from '../types'
 import { onUnmounted, ref, watch } from 'vue'
 import { usePlanReview } from '../composables/usePlanReview'
+import { toast } from '../composables/useToast'
 import { renderMarkdown } from '../utils/markdown'
 
 defineOptions({ name: 'PlanReviewPanel' })
@@ -24,6 +25,12 @@ const isActing = ref(false)
 const { gateState, approvedPlan, loading, error, start, stop, approve, reject } = usePlanReview(
   () => props.task?.id ?? null,
 )
+
+// Surface plan-review load/action failures as toasts; the panel keeps its state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 
 watch(
   () => [props.open, props.task?.id] as const,
@@ -111,11 +118,6 @@ function renderedPlan(): string {
             No plan output available yet.
           </p>
         </template>
-      </div>
-
-      <!-- Error -->
-      <div v-if="error" class="px-5 py-2 text-danger-text text-[0.82rem] shrink-0">
-        {{ error }}
       </div>
 
       <!-- Reject feedback form -->

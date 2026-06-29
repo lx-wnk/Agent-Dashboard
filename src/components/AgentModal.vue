@@ -5,6 +5,7 @@ import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
 import { usePermissionResolve } from '../composables/usePermissionResolve'
 import { useRovingTabList } from '../composables/useRovingTabList'
+import { toast } from '../composables/useToast'
 import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, secondsSince, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
@@ -20,7 +21,7 @@ import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
 
-const emit = defineEmits<{ close: [], navigate: [taskId: string], toast: [message: string] }>()
+const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
 
 // Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
 const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
@@ -46,7 +47,7 @@ async function handleApprove() {
     return
   const err = await resolveAgent(props.agent, 'granted')
   if (err)
-    emit('toast', err)
+    toast.error(err)
 }
 
 const approveHandler = computed(() =>

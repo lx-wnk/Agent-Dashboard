@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import type { ScheduleView } from '../composables/useSchedules'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { deleteSchedule, runScheduleNow, updateSchedule, useSchedules } from '../composables/useSchedules'
+import { toast } from '../composables/useToast'
 import ScheduleForm from './ScheduleForm.vue'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
 
 const { schedules, isLoading, error } = useSchedules()
 
+// Surface async load failures as toasts; the view keeps its empty/loading state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
+
 const showForm = ref(false)
 const editTarget = ref<ScheduleView | null>(null)
-const actionError = ref<string | null>(null)
 
 function openCreate() {
   editTarget.value = null
@@ -33,27 +39,24 @@ function onCancel() {
 }
 
 async function onToggleEnabled(s: ScheduleView) {
-  actionError.value = null
   try {
     await updateSchedule(s.id, { enabled: !s.enabled })
   }
   catch (err) {
-    actionError.value = (err as Error).message
+    toast.error((err as Error).message)
   }
 }
 
 async function onRunNow(s: ScheduleView) {
-  actionError.value = null
   try {
     await runScheduleNow(s.id)
   }
   catch (err) {
-    actionError.value = (err as Error).message
+    toast.error((err as Error).message)
   }
 }
 
 async function onDelete(s: ScheduleView) {
-  actionError.value = null
   // eslint-disable-next-line no-alert -- native confirm guard for a destructive delete
   if (!globalThis.confirm(`Delete schedule "${s.name}"?`))
     return
@@ -61,7 +64,7 @@ async function onDelete(s: ScheduleView) {
     await deleteSchedule(s.id)
   }
   catch (err) {
-    actionError.value = (err as Error).message
+    toast.error((err as Error).message)
   }
 }
 
@@ -86,22 +89,6 @@ function formatDate(iso: string | null | undefined): string {
       <AppButton variant="primary" @click="openCreate">
         + New Schedule
       </AppButton>
-    </div>
-
-    <div
-      v-if="error"
-      role="alert"
-      class="text-red-500 text-sm"
-    >
-      {{ error }}
-    </div>
-
-    <div
-      v-if="actionError"
-      role="alert"
-      class="text-red-500 text-sm"
-    >
-      {{ actionError }}
     </div>
 
     <div v-if="isLoading" class="text-fg-faint text-sm">

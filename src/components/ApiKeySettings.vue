@@ -4,6 +4,7 @@ import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } fr
 import { usePermissionPresets } from '../composables/usePermissionPresets'
 import { useServerConfig } from '../composables/useServerConfig'
 import { useTheme } from '../composables/useTheme'
+import { toast } from '../composables/useToast'
 import { useUser } from '../composables/useUser'
 import { errorMessage } from '../utils/errorMessage'
 import { maskToken } from '../utils/format'
@@ -35,14 +36,12 @@ const activeSection = ref<Section>('appearance')
 // --- State ---
 const keys = ref<ApiKey[]>([])
 const isLoading = ref(true)
-const errorMsg = ref('')
 
 // Create key dialog
 const showCreateDialog = ref(false)
 const newKeyName = ref('')
 const newKeyGroup = ref<'viewer' | 'operator' | 'developer' | 'admin'>('viewer')
 const isCreating = ref(false)
-const createError = ref('')
 
 // Token reveal modal
 const revealedToken = ref<string | null>(null)
@@ -71,7 +70,6 @@ const isRegenerating = ref(false)
 // Permission presets
 const { presets, load: loadPresetsData, revoke: revokePreset } = usePermissionPresets()
 const presetsLoading = ref(false)
-const presetsError = ref<string | null>(null)
 const confirmResetCwd = ref<string | null>(null)
 
 // --- Group → scopes mapping ---
@@ -85,7 +83,6 @@ const GROUP_SCOPES: Record<string, McpScope[]> = {
 // --- Load keys ---
 async function loadKeys() {
   isLoading.value = true
-  errorMsg.value = ''
   try {
     const res = await fetch('/api/settings/api-keys')
     if (!res.ok)
@@ -93,7 +90,7 @@ async function loadKeys() {
     keys.value = await res.json()
   }
   catch (e) {
-    errorMsg.value = errorMessage(e)
+    toast.error(errorMessage(e))
   }
   finally {
     isLoading.value = false
@@ -108,12 +105,11 @@ watch(() => props.open, (val) => {
 // --- Permission presets ---
 async function loadPresets() {
   presetsLoading.value = true
-  presetsError.value = null
   try {
     await loadPresetsData()
   }
   catch (e) {
-    presetsError.value = errorMessage(e, 'Failed to load')
+    toast.error(errorMessage(e, 'Failed to load'))
   }
   finally {
     presetsLoading.value = false
@@ -126,7 +122,7 @@ async function resetPresets(projectCwd: string) {
     confirmResetCwd.value = null
   }
   catch (e) {
-    presetsError.value = errorMessage(e, 'Failed to reset')
+    toast.error(errorMessage(e, 'Failed to reset'))
   }
 }
 
@@ -146,10 +142,8 @@ watch(activeSection, (val, oldVal) => {
 // --- Analytics patterns ---
 const patterns = ref<Array<{ tools: string, frequency: number }>>([])
 const patternsLoading = ref(false)
-const patternsError = ref<string | null>(null)
 
 async function loadPatterns() {
-  patternsError.value = null
   try {
     const res = await fetch('/api/analytics/patterns')
     if (!res.ok)
@@ -158,13 +152,12 @@ async function loadPatterns() {
     patterns.value = data.patterns
   }
   catch (e) {
-    patternsError.value = errorMessage(e, 'Failed to load')
+    toast.error(errorMessage(e, 'Failed to load'))
   }
 }
 
 async function refreshPatterns() {
   patternsLoading.value = true
-  patternsError.value = null
   try {
     const res = await fetch('/api/analytics/patterns/refresh', { method: 'POST' })
     if (!res.ok)
@@ -172,7 +165,7 @@ async function refreshPatterns() {
     await loadPatterns()
   }
   catch (e) {
-    patternsError.value = errorMessage(e, 'Failed to refresh')
+    toast.error(errorMessage(e, 'Failed to refresh'))
   }
   finally {
     patternsLoading.value = false
@@ -211,12 +204,12 @@ async function revokeKey(key: ApiKey) {
     if (!res.ok) {
       // Rollback on failure
       key.active = true
-      errorMsg.value = `Failed to revoke key: HTTP ${res.status}`
+      toast.error(`Failed to revoke key: HTTP ${res.status}`)
     }
   }
   catch (e) {
     key.active = true
-    errorMsg.value = errorMessage(e)
+    toast.error(errorMessage(e))
   }
 }
 
@@ -240,7 +233,7 @@ async function regenerateKey(key: ApiKey) {
     revealedScopes.value = data.key.scopes
   }
   catch (e) {
-    errorMsg.value = errorMessage(e)
+    toast.error(errorMessage(e))
   }
   finally {
     isRegenerating.value = false
@@ -251,7 +244,6 @@ async function regenerateKey(key: ApiKey) {
 function openCreateDialog() {
   newKeyName.value = ''
   newKeyGroup.value = 'viewer'
-  createError.value = ''
   showCreateDialog.value = true
 }
 
@@ -262,10 +254,9 @@ function closeCreateDialog() {
 async function handleCreate() {
   if (isCreating.value)
     return
-  createError.value = ''
 
   if (!newKeyName.value.trim()) {
-    createError.value = 'Name is required'
+    toast.error('Name is required')
     return
   }
 
@@ -290,7 +281,7 @@ async function handleCreate() {
     closeCreateDialog()
   }
   catch (e) {
-    createError.value = errorMessage(e)
+    toast.error(errorMessage(e))
   }
   finally {
     isCreating.value = false
@@ -677,13 +668,10 @@ async function startImport() {
               + Add Key
             </AppButton>
           </div>
-          <p v-if="errorMsg" class="text-xs text-danger-text mb-3">
-            {{ errorMsg }}
-          </p>
           <div v-if="isLoading" class="text-center py-12 text-fg-mute text-sm">
             Loading keys...
           </div>
-          <div v-else-if="keys.length === 0 && !errorMsg" class="text-center py-8 text-fg-mute text-sm">
+          <div v-else-if="keys.length === 0" class="text-center py-8 text-fg-mute text-sm">
             No API keys yet. Create one to allow MCP clients to connect.
           </div>
           <table v-else class="w-full border-collapse text-[13px]">
@@ -794,9 +782,6 @@ async function startImport() {
           <div v-if="presetsLoading" class="text-center py-12 text-fg-mute text-sm">
             Loading...
           </div>
-          <p v-else-if="presetsError" class="text-xs text-danger-text mb-3">
-            {{ presetsError }}
-          </p>
           <div v-else-if="presets.length === 0" class="text-center py-8 text-fg-mute text-sm">
             No saved permissions.
           </div>
@@ -888,10 +873,7 @@ async function startImport() {
           <p class="text-xs text-fg-mute mb-5">
             Top 3-tool sequences discovered across all sessions.
           </p>
-          <p v-if="patternsError" class="text-xs text-danger-text mb-3">
-            {{ patternsError }}
-          </p>
-          <div v-else-if="patterns.length === 0" class="text-sm text-fg-mute">
+          <div v-if="patterns.length === 0" class="text-sm text-fg-mute">
             No patterns discovered yet.
           </div>
           <ul v-else class="space-y-1 mb-4">
@@ -971,9 +953,6 @@ async function startImport() {
               </option>
             </select>
           </div>
-          <p v-if="createError" class="text-xs text-danger-text mb-2">
-            {{ createError }}
-          </p>
         </form>
         <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">
           <AppButton variant="secondary" @click="closeCreateDialog">

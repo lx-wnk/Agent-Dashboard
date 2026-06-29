@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { SpawnTreeData } from '../../sdk.generated'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useTheme } from '../../composables/useTheme'
+import { toast } from '../../composables/useToast'
 import { paletteColor } from '../../utils/chartColors'
 
 const props = defineProps<{
@@ -16,6 +17,12 @@ const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
 
 // Ordinal color from design-system palette for model dots.
 const { theme } = useTheme()
+
+// Surface data-fetch errors (from the parent view) as toasts.
+watch(() => props.error, (msg) => {
+  if (msg)
+    toast.error(msg)
+}, { immediate: true })
 
 interface SessionRow {
   id: string
@@ -180,9 +187,6 @@ function onSessionKeydown(event: KeyboardEvent, id: string) {
   <div class="spawn-tree-chart">
     <div v-if="loading" class="text-sm text-fg-mute p-4">
       Loading spawn tree…
-    </div>
-    <div v-else-if="error" class="text-sm text-danger-text p-4">
-      {{ error }}
     </div>
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">
       No sessions found in this window.

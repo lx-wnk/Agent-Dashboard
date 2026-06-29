@@ -5,6 +5,7 @@ import { suggestFolders } from '../composables/useProjectFolders'
 import { useProjects } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
 import { createTask } from '../composables/useTasks'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import { slugify } from '../utils/validation'
 import PermissionTemplatePicker from './PermissionTemplatePicker.vue'
@@ -34,7 +35,6 @@ const selectedSpawnerId = ref<string>('')
 const autonomy = ref<'manual' | 'spec_gated' | 'full'>('spec_gated')
 const folderSuggestions = ref<ProjectFolder[]>([])
 const isSubmitting = ref(false)
-const errorMsg = ref('')
 
 const fieldClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
 
@@ -103,15 +103,14 @@ async function buildTask(): Promise<PipelineTask | null> {
   const s = slug.value.trim()
   const c = cwd.value.trim()
   if (!t || !s) {
-    errorMsg.value = 'Title and slug are required, and a project must be selected.'
+    toast.error('Title and slug are required, and a project must be selected.')
     return null
   }
   if (!c) {
-    errorMsg.value = 'Selected project has no folder configured.'
+    toast.error('Selected project has no folder configured.')
     return null
   }
   isSubmitting.value = true
-  errorMsg.value = ''
   try {
     const projectId = projectChoice.value
     return await createTask({
@@ -127,7 +126,7 @@ async function buildTask(): Promise<PipelineTask | null> {
     })
   }
   catch (err: unknown) {
-    errorMsg.value = errorMessage(err, 'Failed to create task')
+    toast.error(errorMessage(err, 'Failed to create task'))
     return null
   }
   finally {
@@ -260,10 +259,6 @@ async function onCreateAndRefine(): Promise<void> {
     </div>
 
     <PermissionTemplatePicker v-model="selectedTemplate" />
-
-    <p v-if="errorMsg" class="text-xs text-danger-text">
-      {{ errorMsg }}
-    </p>
 
     <div class="flex justify-end">
       <AppButton

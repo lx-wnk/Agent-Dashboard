@@ -4,6 +4,7 @@ import { scaleLinear } from 'd3-scale'
 import { select } from 'd3-selection'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../../composables/useTheme'
+import { toast } from '../../composables/useToast'
 import { chartColors } from '../../utils/chartColors'
 
 const props = defineProps<{
@@ -14,6 +15,12 @@ const props = defineProps<{
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const { theme } = useTheme()
+
+// Surface data-fetch errors (from the parent view) as toasts.
+watch(() => props.error, (msg) => {
+  if (msg)
+    toast.error(msg)
+}, { immediate: true })
 
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
 
@@ -237,9 +244,6 @@ onUnmounted(() => {
   <div class="session-dag-chart">
     <div v-if="loading" class="text-sm text-fg-mute p-4">
       Loading session DAG…
-    </div>
-    <div v-else-if="error" class="text-sm text-danger-text p-4">
-      {{ error }}
     </div>
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">
       Pick a session to view its DAG.

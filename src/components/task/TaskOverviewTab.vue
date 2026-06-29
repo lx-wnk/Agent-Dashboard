@@ -5,6 +5,7 @@ import { useInjectedTask, useInjectedTaskDetails } from '../../composables/taskM
 import { runAction } from '../../composables/useRunAction'
 import { useTaskAssignment } from '../../composables/useTaskAssignment'
 import { refreshTask } from '../../composables/useTasks'
+import { toast } from '../../composables/useToast'
 import { STAGE_LABELS } from '../../utils/stageLabels'
 import { runStatusLabel, runStatusTone } from '../../utils/statusColors'
 import { activeRuntime, formatCents, formatTaskDate, taskRuntime } from '../../utils/taskFormat'
@@ -53,16 +54,19 @@ const {
   onSpawnerChange,
 } = useTaskAssignment(task)
 
+// Surface project/spawner assignment failures as toasts.
+watch(assignError, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
+
 const runtime = computed(() => (task.value ? taskRuntime(task.value) : '—'))
 const active = computed(() => activeRuntime(stageRuns.value))
-
-const autonomyPatchError = ref('')
 
 async function onAutonomyChange(e: Event): Promise<void> {
   if (!task.value)
     return
   const value = (e.target as HTMLSelectElement).value as 'manual' | 'spec_gated' | 'full'
-  autonomyPatchError.value = ''
   try {
     const res = await fetch(`/api/tasks/${task.value.id}`, {
       method: 'PATCH',
@@ -71,11 +75,11 @@ async function onAutonomyChange(e: Event): Promise<void> {
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-      autonomyPatchError.value = (err as { error?: string }).error || 'Failed to update autonomy'
+      toast.error((err as { error?: string }).error || 'Failed to update autonomy')
     }
   }
   catch {
-    autonomyPatchError.value = 'Failed to update autonomy'
+    toast.error('Failed to update autonomy')
   }
 }
 
@@ -89,18 +93,16 @@ const hasConcept = computed(() => !!conceptSpec.value || !!conceptPlan.value)
 const showApproveSpec = computed(() => task.value?.refineStatus === 'draft_ready')
 
 const isApprovingSpec = ref(false)
-const approveSpecError = ref('')
 
 async function onApproveSpec(): Promise<void> {
   if (!task.value)
     return
   isApprovingSpec.value = true
-  approveSpecError.value = ''
   try {
     await runAction(task.value.id, 'approve_spec')
   }
   catch (e) {
-    approveSpecError.value = (e as Error).message
+    toast.error((e as Error).message)
   }
   finally {
     isApprovingSpec.value = false
@@ -261,9 +263,6 @@ watch(
       <label class="text-[11px] uppercase tracking-[0.5px] text-fg-mute font-semibold" :for="`task-modal-autonomy-${task.id}`">
         Autonomy
       </label>
-      <p v-if="autonomyPatchError" class="text-[11px] text-danger-text">
-        {{ autonomyPatchError }}
-      </p>
       <select
         :id="`task-modal-autonomy-${task.id}`"
         :value="task.autonomy ?? 'spec_gated'"
@@ -289,9 +288,6 @@ watch(
           Concept
         </h4>
         <div v-if="showApproveSpec" class="flex items-center gap-2">
-          <p v-if="approveSpecError" class="text-[11px] text-danger-text">
-            {{ approveSpecError }}
-          </p>
           <AppButton
             variant="primary"
             size="sm"
@@ -328,9 +324,6 @@ watch(
       <h4 class="text-[11px] font-semibold uppercase tracking-[0.5px] text-fg-mute">
         Project &amp; Spawner
       </h4>
-      <p v-if="assignError" class="text-[11px] text-danger-text">
-        {{ assignError }}
-      </p>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-[10px] uppercase tracking-[0.5px] text-fg-mute mb-1" :for="`task-modal-project-${task.id}`">

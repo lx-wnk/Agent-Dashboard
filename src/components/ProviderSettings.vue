@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useProviderSettings } from '../composables/useProviderSettings'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 
-const { providers, loading, error, toggle } = useProviderSettings()
+const { providers, loading, toggle } = useProviderSettings()
 const saving = ref<string | null>(null)
 
 async function handleToggle(id: string, next: boolean) {
@@ -12,7 +13,7 @@ async function handleToggle(id: string, next: boolean) {
     await toggle(id, next)
   }
   catch (e) {
-    error.value = errorMessage(e, 'Toggle failed')
+    toast.error(errorMessage(e, 'Toggle failed'))
   }
   finally {
     saving.value = null
@@ -35,11 +36,8 @@ async function handleToggle(id: string, next: boolean) {
     <div role="status" aria-live="polite" aria-atomic="true" class="text-xs text-fg-faint" :class="{ 'sr-only': !loading }">
       {{ loading ? 'Loading…' : '' }}
     </div>
-    <div role="alert" aria-atomic="true" class="text-xs text-danger-text" :class="{ 'sr-only': !error || loading }">
-      {{ !loading ? (error ?? '') : '' }}
-    </div>
 
-    <ul v-if="!loading && !error" class="border border-line rounded-lg divide-y divide-line text-xs">
+    <ul v-if="!loading" class="border border-line rounded-lg divide-y divide-line text-xs">
       <li
         v-for="p in providers"
         :key="p.id"

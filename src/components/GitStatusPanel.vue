@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import type { GitStatus } from '../types'
 import { onMounted, ref, watch } from 'vue'
+import { toast } from '../composables/useToast'
 
 const props = defineProps<{ taskId: string }>()
 
 const status = ref<GitStatus | null>(null)
 const loading = ref(false)
-const error = ref<string | null>(null)
 const actionInFlight = ref(false)
 const actionSuccess = ref<string | null>(null)
-const actionError = ref<string | null>(null)
 
 function formatRelativeDate(dateStr: string): string {
   const now = Date.now()
@@ -32,17 +31,16 @@ function formatRelativeDate(dateStr: string): string {
 
 async function fetchStatus(): Promise<void> {
   loading.value = true
-  error.value = null
   try {
     const res = await fetch(`/api/tasks/${props.taskId}/git-status`)
     if (!res.ok) {
-      error.value = `Failed to load git status (${res.status})`
+      toast.error(`Failed to load git status (${res.status})`)
       return
     }
     status.value = await res.json()
   }
   catch {
-    error.value = 'Failed to load git status'
+    toast.error('Failed to load git status')
   }
   finally {
     loading.value = false
@@ -54,7 +52,6 @@ async function runAction(action: 'fetch' | 'pull'): Promise<void> {
     return
   actionInFlight.value = true
   actionSuccess.value = null
-  actionError.value = null
   try {
     const res = await fetch(`/api/tasks/${props.taskId}/git-action`, {
       method: 'POST',
@@ -63,7 +60,7 @@ async function runAction(action: 'fetch' | 'pull'): Promise<void> {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      actionError.value = (body as { error?: string }).error ?? `Action failed (${res.status})`
+      toast.error((body as { error?: string }).error ?? `Action failed (${res.status})`)
       return
     }
     actionSuccess.value = action === 'fetch' ? 'Fetched' : 'Pulled'
@@ -73,7 +70,7 @@ async function runAction(action: 'fetch' | 'pull'): Promise<void> {
     }, 2000)
   }
   catch {
-    actionError.value = `${action} failed`
+    toast.error(`${action} failed`)
   }
   finally {
     actionInFlight.value = false
@@ -89,11 +86,6 @@ watch(() => props.taskId, fetchStatus)
     <!-- Loading state -->
     <div v-if="loading && !status" class="text-fg-mute text-xs animate-pulse">
       Loading git status…
-    </div>
-
-    <!-- Error state -->
-    <div v-else-if="error && !status" class="text-danger-text text-xs">
-      {{ error }}
     </div>
 
     <!-- Content -->
@@ -173,9 +165,6 @@ watch(() => props.taskId, fetchStatus)
       <!-- Action feedback -->
       <div v-if="actionSuccess" class="mt-2 text-[11px] text-success-text">
         {{ actionSuccess }}
-      </div>
-      <div v-if="actionError" class="mt-2 text-[11px] text-danger-text">
-        {{ actionError }}
       </div>
     </template>
   </div>

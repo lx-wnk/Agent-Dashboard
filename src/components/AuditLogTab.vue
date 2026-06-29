@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AuditEntry } from '../types'
 import { onMounted, ref, watch } from 'vue'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 
 const props = withDefaults(defineProps<{
@@ -11,7 +12,6 @@ const props = withDefaults(defineProps<{
 
 const entries = ref<AuditEntry[]>([])
 const loading = ref(false)
-const error = ref<string | null>(null)
 const expandedId = ref<string | null>(null)
 
 const ACTOR_COLORS: Record<AuditEntry['actor'], string> = {
@@ -23,20 +23,19 @@ const ACTOR_COLORS: Record<AuditEntry['actor'], string> = {
 
 async function load() {
   loading.value = true
-  error.value = null
   try {
     const url = props.taskId
       ? `/api/tasks/${props.taskId}/audit`
       : `/api/audit?limit=${props.limit ?? 100}`
     const res = await fetch(url)
     if (!res.ok) {
-      error.value = `HTTP ${res.status}`
+      toast.error(`HTTP ${res.status}`)
       return
     }
     entries.value = await res.json()
   }
   catch (e) {
-    error.value = errorMessage(e, 'Network error')
+    toast.error(errorMessage(e, 'Network error'))
   }
   finally {
     loading.value = false
@@ -67,9 +66,6 @@ watch(() => props.taskId, load)
 
     <div v-if="loading" class="text-fg-mute text-center py-6">
       Loading...
-    </div>
-    <div v-else-if="error" class="text-danger-text">
-      {{ error }}
     </div>
     <div v-else-if="entries.length === 0" class="text-fg-mute text-center py-6">
       No audit entries.

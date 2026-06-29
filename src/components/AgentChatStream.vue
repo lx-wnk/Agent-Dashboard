@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { toast } from '../composables/useToast'
 import { renderMarkdown } from '../utils/markdown'
 import { CHAT_REFRESH_MS } from '../utils/sse'
 
@@ -28,7 +29,6 @@ type ChatEntry = { kind: 'message', msg: OutputMessage } | ToolGroup | TaskGroup
 
 const sessionMessages = ref<OutputMessage[]>([])
 const isLoadingOutput = ref(false)
-const fetchError = ref(false)
 const outputEl = ref<HTMLElement | null>(null)
 let lastReplyTimestamp: string | null = null
 let fetchingReplies = false
@@ -146,19 +146,17 @@ function scrollToBottom() {
 
 async function fetchOutput(sessionId: string) {
   isLoadingOutput.value = true
-  fetchError.value = false
   try {
     const res = await fetch(`/api/agents/${sessionId}/output`)
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
-    fetchError.value = false
     sessionMessages.value = data.messages
     await nextTick()
     scrollToBottom()
   }
   catch {
-    fetchError.value = true
+    toast.error('Failed to load session output. Reconnect or refresh.')
     sessionMessages.value = []
   }
   finally {
@@ -366,9 +364,6 @@ defineExpose({ scrollToBottom })
         </div>
       </template>
     </template>
-    <div v-else-if="fetchError" class="text-danger-text text-sm text-center py-12">
-      Failed to load session output. Reconnect or refresh.
-    </div>
     <div v-else class="text-fg-mute text-center py-12">
       No output available for this session.
     </div>

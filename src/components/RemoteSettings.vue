@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRemotes } from '../composables/useRemotes'
+import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 
-const { remotes, error, addRemote, removeRemote } = useRemotes()
+const { remotes, addRemote, removeRemote } = useRemotes()
 
 const form = ref({ url: '', name: '', bearerKey: '' })
 const saving = ref(false)
@@ -12,13 +13,12 @@ async function add() {
   if (!form.value.url)
     return
   saving.value = true
-  error.value = null
   try {
     await addRemote(form.value.url, form.value.name || null, form.value.bearerKey || null)
     form.value = { url: '', name: '', bearerKey: '' }
   }
   catch (e) {
-    error.value = errorMessage(e)
+    toast.error(errorMessage(e))
   }
   finally {
     saving.value = false
@@ -98,9 +98,6 @@ async function remove(id: string) {
         placeholder="DASHBOARD_API_TOKEN (optional)"
         class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
       >
-      <p v-if="error" class="text-xs text-red-400">
-        {{ error }}
-      </p>
       <button type="submit" :disabled="saving" class="btn-primary text-sm self-start">
         {{ saving ? 'Saving…' : 'Add & test' }}
       </button>

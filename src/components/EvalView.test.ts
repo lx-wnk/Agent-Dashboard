@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from '../composables/useToast'
 import EvalView from './EvalView.vue'
 
 const emptyAlerts: unknown[] = []
@@ -122,11 +123,13 @@ describe('evalView', () => {
     expect(scanCall).toBeTruthy()
   })
 
-  it('renders error state when fetch fails', async () => {
+  it('surfaces a toast when fetch fails', async () => {
+    const errorSpy = vi.spyOn(toast, 'error')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }))
     const wrapper = mount(EvalView)
     await flushPromises()
-    expect(wrapper.text()).toContain('HTTP 503')
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('503'))
+    expect(wrapper.find('.text-danger-text').exists()).toBe(false)
   })
 
   it('renders dimension label grouping for alerts', async () => {

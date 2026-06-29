@@ -7,10 +7,17 @@ import { line } from 'd3-shape'
 import { ref, watch } from 'vue'
 import { useCostForecast } from '../composables/useCostForecast'
 import { useTheme } from '../composables/useTheme'
+import { toast } from '../composables/useToast'
 import { chartColors } from '../utils/chartColors'
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const { trend, forecast, alerts, loading, error } = useCostForecast()
+
+// Surface async load failures as toasts; the view keeps its empty/loading state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 
 const { theme } = useTheme()
 
@@ -85,9 +92,6 @@ watch([trend, forecast, theme], ([t, f]) => {
     </h3>
     <div v-if="loading" class="text-sm text-slate-500">
       Loading forecast…
-    </div>
-    <div v-else-if="error" class="text-sm text-danger-text">
-      {{ error }}
     </div>
     <template v-else>
       <div

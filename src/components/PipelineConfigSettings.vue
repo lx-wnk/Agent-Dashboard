@@ -3,6 +3,7 @@ import type { PipelineConfig } from '../composables/usePipelineConfig'
 import { computed, onMounted, ref, watch } from 'vue'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { useSpawners } from '../composables/useSpawners'
+import { toast } from '../composables/useToast'
 import { AVAILABLE_MODELS } from '../utils/models'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import AppButton from './ui/AppButton.vue'
@@ -17,7 +18,6 @@ onMounted(() => {
 // Local draft — only written back on save
 const draft = ref<PipelineConfig | null>(null)
 const saved = ref(false)
-const saveError = ref<string | null>(null)
 
 const effectiveConfig = computed(() => draft.value ?? config.value)
 
@@ -27,10 +27,15 @@ watch(config, (val) => {
     draft.value = JSON.parse(JSON.stringify(val)) as PipelineConfig
 }, { immediate: true })
 
+// Surface load/save failures as toasts; the view shows empty/loading state instead.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
+
 async function handleSave() {
   if (!draft.value)
     return
-  saveError.value = null
   saved.value = false
   await saveConfig({
     maxParallelOrchestrators: draft.value.maxParallelOrchestrators,
@@ -43,9 +48,6 @@ async function handleSave() {
     setTimeout(() => {
       saved.value = false
     }, 2500)
-  }
-  else {
-    saveError.value = error.value
   }
 }
 
@@ -176,12 +178,7 @@ const STAGES = ['implementation', 'self_review', 'finalization'] as const
           {{ loading ? 'Saving…' : 'Save Changes' }}
         </AppButton>
         <span v-if="saved" class="text-xs text-emerald-600 dark:text-emerald-400">Saved.</span>
-        <span v-if="saveError" class="text-xs text-red-600 dark:text-red-400">{{ saveError }}</span>
       </div>
     </template>
-
-    <p v-else-if="error" class="text-xs text-red-600 dark:text-red-400">
-      {{ error }}
-    </p>
   </div>
 </template>
