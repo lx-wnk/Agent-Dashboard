@@ -667,6 +667,22 @@ var dashboardSecretEnv = map[string]bool{
 	"DASHBOARD_HOOKS_SECRET":       true,
 }
 
+// sanitizeSettingKey uppercases key and replaces every character that is not
+// A-Z, 0-9, or _ with '_', producing a valid env var suffix.
+func sanitizeSettingKey(key string) string {
+	upper := strings.ToUpper(key)
+	var b strings.Builder
+	b.Grow(len(upper))
+	for _, c := range upper {
+		if (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+			b.WriteRune(c)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
+}
+
 // buildPluginEnv constructs a minimal environment for a plugin process.
 // It exposes only a safe base set of env vars plus any keys explicitly
 // allow-listed in the plugin's descriptor (desc.Env).
