@@ -650,6 +650,16 @@ func (r *Registry) removeByID(id string) {
 	}
 }
 
+// dashboardSecretEnv names env vars that carry dashboard secrets.
+// These are never forwarded to plugins even if listed in desc.Env.
+var dashboardSecretEnv = map[string]bool{
+	"DASHBOARD_SECRET_KEY":         true,
+	"DASHBOARD_JWT_SECRET":         true,
+	"DASHBOARD_AUTH_PLUGIN_SECRET": true,
+	"DASHBOARD_MCP_TOKEN":          true,
+	"DASHBOARD_HOOKS_SECRET":       true,
+}
+
 // buildPluginEnv constructs a minimal environment for a plugin process.
 // It exposes only a safe base set of env vars plus any keys explicitly
 // allow-listed in the plugin's descriptor (desc.Env).
@@ -660,7 +670,9 @@ func buildPluginEnv(allowedKeys []string) []string {
 		allowed[k] = true
 	}
 	for _, k := range allowedKeys {
-		allowed[k] = true
+		if !dashboardSecretEnv[k] { // blocklist wins over allow-list
+			allowed[k] = true
+		}
 	}
 	var env []string
 	for _, kv := range os.Environ() {
