@@ -6,7 +6,7 @@ import { errorMessage } from '../utils/errorMessage'
 import PluginSettingsForm from './PluginSettingsForm.vue'
 import PluginSlot from './PluginSlot.vue'
 
-const { plugins, loading, error, setActive, getSettings, putSettings } = usePluginSettings()
+const { plugins, loading, error, setActive, getSettings, putSettings, update } = usePluginSettings()
 const { triggerRestart } = useServerReconnect()
 const saving = ref<string | null>(null)
 const expanded = ref<string | null>(null)
@@ -73,6 +73,20 @@ async function handleToggle(id: string, next: boolean) {
     saving.value = null
   }
 }
+
+async function handleUpdate(id: string) {
+  saving.value = id
+  try {
+    await update(id)
+    showNotice('success', 'Plugin updated successfully')
+  }
+  catch (e) {
+    error.value = errorMessage(e, 'Update failed')
+  }
+  finally {
+    saving.value = null
+  }
+}
 </script>
 
 <template>
@@ -133,9 +147,21 @@ async function handleToggle(id: string, next: boolean) {
             <p class="font-mono font-medium text-fg flex items-center gap-1.5">
               <span
                 class="inline-block h-2 w-2 rounded-full shrink-0"
-                :class="p.state === 'active' ? 'bg-success-text' : 'bg-line-strong'"
-                :title="p.state === 'active' ? 'Active' : p.state"
-                :aria-label="p.state === 'active' ? 'Active' : p.state"
+                :class="p.state === 'active' && p.healthy
+                  ? 'bg-success-text'
+                  : p.state === 'active'
+                    ? 'bg-warning-text'
+                    : 'bg-line-strong'"
+                :title="p.state === 'active' && !p.healthy
+                  ? 'Active — not currently running'
+                  : p.state === 'active'
+                    ? 'Active'
+                    : p.state"
+                :aria-label="p.state === 'active' && !p.healthy
+                  ? 'Active — not currently running'
+                  : p.state === 'active'
+                    ? 'Active'
+                    : p.state"
               />
               {{ p.id }}
               <span v-if="isBootWired(p.capabilities)" class="ml-1 px-1.5 py-0.5 text-[10px] bg-warning-soft text-warning-text rounded">
@@ -164,6 +190,15 @@ async function handleToggle(id: string, next: boolean) {
                 {{ CAP_LABELS[cap] ?? cap }}
               </span>
             </div>
+            <button
+              v-if="p.updateAvailable"
+              type="button"
+              class="text-xs text-accent underline-offset-2 hover:underline disabled:opacity-50"
+              :disabled="saving === p.id"
+              @click="handleUpdate(p.id)"
+            >
+              Update
+            </button>
             <button
               v-if="p.hasSettings"
               type="button"
