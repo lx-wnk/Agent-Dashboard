@@ -18,6 +18,11 @@ func TestRegistry_DefaultsAndValidation(t *testing.T) {
 	require.Error(t, d.Validate("abc"))
 	require.NoError(t, d.Validate("10"))
 
+	wt, ok := Lookup("worktree.force")
+	require.True(t, ok)
+	assert.Equal(t, TypeBool, wt.Type)
+	assert.Equal(t, "true", wt.Default)
+
 	// enum auth.mode
 	a, _ := Lookup("auth.mode")
 	require.NoError(t, a.Validate("none"))

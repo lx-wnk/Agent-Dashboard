@@ -72,7 +72,7 @@ These keys live in the database `app_setting` table — the single source of tru
 | `plugins.enabled` | string list (comma) | — | live (managed) |
 | `git.allowPush` | bool | `false` | restart |
 | `git.allowPull` | bool | `false` | restart |
-| `worktree.force` | bool | `false` | restart |
+| `worktree.force` | bool | `true` | restart |
 | `sse.intervalMs` | int | `3000` | restart |
 | `shutdown.timeoutSeconds` | int | `10` | restart |
 | `hooks.debounceMs` | int | `100` | restart |
