@@ -49,4 +49,11 @@ describe('byActivityDesc', () => {
     ]
     expect([...tasks].sort(byActivityDesc).map(t => t.id)).toEqual(['newest', 'mid', 'oldest'])
   })
+
+  it('does not throw on a missing updatedAt and orders the valid timestamp first', () => {
+    const valid = makeTask('valid', '2026-06-01T00:00:00Z')
+    const missing = makeTask('missing', undefined as unknown as string)
+    expect(() => [missing, valid].sort(byActivityDesc)).not.toThrow()
+    expect([missing, valid].sort(byActivityDesc).map(t => t.id)).toEqual(['valid', 'missing'])
+  })
 })

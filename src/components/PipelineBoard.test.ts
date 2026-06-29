@@ -26,6 +26,8 @@ vi.mock('../composables/useTasks', () => ({
   reorderTask: vi.fn(),
   byActivityDesc: (a: PipelineTask, b: PipelineTask) =>
     new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  byRank: (a: PipelineTask, b: PipelineTask) =>
+    (a.rank ?? new Date(a.createdAt).getTime() * 1000) - (b.rank ?? new Date(b.createdAt).getTime() * 1000),
 }))
 
 vi.mock('../composables/useProjects', () => ({
@@ -130,6 +132,23 @@ describe('pipelineBoard — column task ordering', () => {
     const tasks = wrapper.findAllComponents(SortableTaskList)[2].props('tasks') as PipelineTask[]
     expect(tasks[0].id).toBe('rank-first')
     expect(tasks[1].id).toBe('rank-second')
+    wrapper.unmount()
+  })
+
+  it('orders needs-you tasks from different stages by rank, not stage grouping', () => {
+    // needsUser tasks aggregated from two stages; ranks interleave the stages
+    const conceptHigh = makeTask('concept-high', { currentStage: 'concept', needsUser: true, rank: 300 })
+    const backlogLow = makeTask('backlog-low', { currentStage: 'backlog', needsUser: true, rank: 100 })
+    const conceptLow = makeTask('concept-low', { currentStage: 'concept', needsUser: true, rank: 200 })
+    mockStageMap = {
+      concept: [conceptLow, conceptHigh],
+      backlog: [backlogLow],
+    }
+
+    const wrapper = shallowMount(PipelineBoard)
+    // needs-you column is at index 0
+    const tasks = wrapper.findAllComponents(SortableTaskList)[0].props('tasks') as PipelineTask[]
+    expect(tasks.map((t: PipelineTask) => t.id)).toEqual(['backlog-low', 'concept-low', 'concept-high'])
     wrapper.unmount()
   })
 

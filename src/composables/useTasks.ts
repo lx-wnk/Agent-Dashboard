@@ -28,12 +28,12 @@ export function effectiveRank(t: PipelineTask): number {
   return t.rank ?? new Date(t.createdAt).getTime() * 1000
 }
 
-function byRank(a: PipelineTask, b: PipelineTask): number {
+export function byRank(a: PipelineTask, b: PipelineTask): number {
   return effectiveRank(a) - effectiveRank(b)
 }
 
 export function byActivityDesc(a: PipelineTask, b: PipelineTask): number {
-  return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  return (new Date(b.updatedAt).getTime() || 0) - (new Date(a.updatedAt).getTime() || 0)
 }
 
 /**

@@ -2,7 +2,7 @@
 import type { Agent, PipelineStage, PipelineTask } from '../types'
 import { computed, ref } from 'vue'
 import { useProjects } from '../composables/useProjects'
-import { byActivityDesc, useTasks } from '../composables/useTasks'
+import { byActivityDesc, byRank, useTasks } from '../composables/useTasks'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import SortableTaskList from './SortableTaskList.vue'
 import TaskCard from './TaskCard.vue'
@@ -140,7 +140,8 @@ function tasksForColumn(col: ColumnDef): PipelineTask[] {
           all.push(task)
       }
     }
-    return all
+    // Aggregated across stages — re-sort by rank so manual drag order persists.
+    return all.sort(byRank)
   }
   // Normal stage-based columns exclude needsUser tasks so they don't
   // appear in two columns at once.
