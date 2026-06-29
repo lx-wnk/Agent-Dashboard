@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -101,5 +102,62 @@ func TestCoordTools(t *testing.T) {
 		})
 		require.Equal(t, true, out["acquired"])
 		require.Equal(t, "task-B", out["owner"])
+	})
+}
+
+func TestWaitForPort(t *testing.T) {
+	registry := mcp.ToolRegistry{}
+	RegisterCoordTools(registry, CoordDeps{})
+
+	t.Run("reaches a live listener", func(t *testing.T) {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		defer ln.Close()
+		port := ln.Addr().(*net.TCPAddr).Port
+
+		out := invokeCoordTool(t, registry, context.Background(), "wait_for_port", map[string]any{
+			"host":           "127.0.0.1",
+			"port":           float64(port),
+			"timeoutSeconds": float64(3),
+		})
+		require.Equal(t, true, out["reached"])
+		require.Equal(t, false, out["timedOut"])
+	})
+
+	t.Run("times out when nothing listens", func(t *testing.T) {
+		// Use an ephemeral port that was just released — closed before dial.
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		port := ln.Addr().(*net.TCPAddr).Port
+		ln.Close()
+
+		out := invokeCoordTool(t, registry, context.Background(), "wait_for_port", map[string]any{
+			"host":           "127.0.0.1",
+			"port":           float64(port),
+			"timeoutSeconds": float64(1),
+		})
+		require.Equal(t, false, out["reached"])
+		require.Equal(t, true, out["timedOut"])
+	})
+
+	t.Run("rejects port out of range", func(t *testing.T) {
+		tool := registry["wait_for_port"]
+		require.NotNil(t, tool)
+		_, err := tool.Handler(context.Background(), map[string]any{
+			"host": "127.0.0.1",
+			"port": float64(99999),
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("rejects timeout above cap", func(t *testing.T) {
+		tool := registry["wait_for_port"]
+		require.NotNil(t, tool)
+		_, err := tool.Handler(context.Background(), map[string]any{
+			"host":           "127.0.0.1",
+			"port":           float64(8080),
+			"timeoutSeconds": float64(301),
+		})
+		require.Error(t, err)
 	})
 }

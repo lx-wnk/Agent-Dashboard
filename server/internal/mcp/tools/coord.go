@@ -2,10 +2,12 @@ package tools
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"time"
 
-	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 )
 
 // CoordDeps holds the repositories required by the coordination tools.
@@ -21,6 +23,62 @@ func RegisterCoordTools(registry mcp.ToolRegistry, d CoordDeps) {
 	registerListScratchpad(registry, d)
 	registerAcquireLock(registry, d)
 	registerReleaseLock(registry, d)
+	registerWaitForPort(registry)
+}
+
+func registerWaitForPort(registry mcp.ToolRegistry) {
+	const maxTimeoutSeconds = 300
+	registry.Register(&mcp.ToolDef{
+		Name:        "wait_for_port",
+		Description: "Poll a TCP endpoint until it accepts connections or the timeout elapses. Localhost-oriented; bounded to 300 s.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"host":           map[string]any{"type": "string", "description": "Hostname or IP (typically 127.0.0.1)"},
+				"port":           map[string]any{"type": "number", "description": "TCP port (1–65535)"},
+				"timeoutSeconds": map[string]any{"type": "number", "description": "Max seconds to wait (1–300, default 60)"},
+			},
+			"required": []string{"host", "port"},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
+			host, err := mcp.StringArg(args, "host")
+			if err != nil {
+				return nil, err
+			}
+			portF, ok := mcp.OptionalFloat64(args, "port")
+			if !ok {
+				return nil, mcp.Fail("port is required")
+			}
+			port := int(portF)
+			if port < 1 || port > 65535 {
+				return nil, mcp.Fail("port must be between 1 and 65535")
+			}
+
+			timeoutSecs := float64(60)
+			if f, ok := mcp.OptionalFloat64(args, "timeoutSeconds"); ok {
+				timeoutSecs = f
+			}
+			if timeoutSecs < 1 || timeoutSecs > maxTimeoutSeconds {
+				return nil, mcp.Fail(fmt.Sprintf("timeoutSeconds must be between 1 and %d", maxTimeoutSeconds))
+			}
+
+			addr := fmt.Sprintf("%s:%d", host, port)
+			deadline := time.Now().Add(time.Duration(timeoutSecs) * time.Second)
+			for time.Now().Before(deadline) {
+				conn, dialErr := net.DialTimeout("tcp", addr, time.Second)
+				if dialErr == nil {
+					_ = conn.Close()
+					return mcp.OK(map[string]any{"reached": true, "timedOut": false})
+				}
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(500 * time.Millisecond):
+				}
+			}
+			return mcp.OK(map[string]any{"reached": false, "timedOut": true})
+		},
+	})
 }
 
 // ownerFromCtx resolves the calling task's identity: auth KeyID takes precedence,
