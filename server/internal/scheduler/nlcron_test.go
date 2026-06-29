@@ -49,28 +49,45 @@ func TestTranslate_Rejection(t *testing.T) {
 }
 
 type stubLLM struct {
-	resp string
-	err  error
+	called bool
+	resp   string
+	err    error
 }
 
-func (s stubLLM) TranslateToCron(_ context.Context, _ string) (string, error) {
+func (s *stubLLM) TranslateToCron(_ context.Context, _ string) (string, error) {
+	s.called = true
 	return s.resp, s.err
 }
 
 func TestTranslate_LLMFallback(t *testing.T) {
 	// Rule-based misses, LLM returns a valid expression.
-	n := NewNLCron(stubLLM{resp: "30 6 1 * *"})
+	stub := &stubLLM{resp: "30 6 1 * *"}
+	n := NewNLCron(stub)
 	got, err := n.Translate(context.Background(), "first of the month at 6:30 sharp please")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if !stub.called {
+		t.Error("LLM must be called when rule-based path declines the phrase")
 	}
 	if got != "30 6 1 * *" {
 		t.Fatalf("got %q, want %q", got, "30 6 1 * *")
 	}
 }
 
+func TestTranslate_LLMNotCalledForRuleHit(t *testing.T) {
+	stub := &stubLLM{}
+	n := NewNLCron(stub)
+	if _, err := n.Translate(context.Background(), "every hour"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.called {
+		t.Error("LLM must not be called when rule-based path succeeds")
+	}
+}
+
 func TestTranslate_LLMInvalidStillRejects(t *testing.T) {
-	n := NewNLCron(stubLLM{resp: "not a cron"})
+	n := NewNLCron(&stubLLM{resp: "not a cron"})
 	if _, err := n.Translate(context.Background(), "some weird phrase"); !errors.Is(err, ErrUnparseable) {
 		t.Fatalf("expected ErrUnparseable, got %v", err)
 	}
