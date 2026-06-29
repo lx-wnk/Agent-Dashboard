@@ -15,6 +15,7 @@ export interface PluginView {
   version: string
   state: 'discovered' | 'inactive' | 'active'
   updateAvailable: boolean
+  healthy: boolean
   capabilities: string[]
   hasSettings: boolean
 }
@@ -78,6 +79,24 @@ export function usePluginSettings() {
       throw new Error(`HTTP ${res.status}`)
   }
 
+  async function update(id: string): Promise<void> {
+    const res = await fetch(`/api/plugins/${id}/update`, {
+      method: 'POST',
+      headers: { Origin: window.location.origin },
+    })
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`
+      try {
+        const b = await res.json()
+        if (b?.error)
+          detail = b.error
+      }
+      catch { /* no body */ }
+      throw new Error(detail)
+    }
+    await fetchPlugins()
+  }
+
   onMounted(fetchPlugins)
-  return { plugins, loading, error, refetch: fetchPlugins, setActive, getSettings, putSettings }
+  return { plugins, loading, error, refetch: fetchPlugins, setActive, getSettings, putSettings, update }
 }

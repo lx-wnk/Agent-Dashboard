@@ -48,6 +48,10 @@ func (f *fakeEngine) Uninstall(_ context.Context, d plugin.Descriptor) error {
 	f.calls = append(f.calls, "uninstall:"+d.ID)
 	return nil
 }
+func (f *fakeEngine) Update(_ context.Context, d plugin.Descriptor, hash string) error {
+	f.calls = append(f.calls, "update:"+d.ID+":"+hash)
+	return nil
+}
 
 type fakeSettings struct {
 	getSchema []plugin.SettingField
@@ -96,7 +100,7 @@ func TestList_DerivesStateAndFlags(t *testing.T) {
 		},
 		hashes: map[string]string{"disc": "h-disc", "inact": "h-new", "act": "h-act"},
 	}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader)
+	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
 
 	views, err := c.List(context.Background())
 	if err != nil {
@@ -150,7 +154,7 @@ func TestTransition_DispatchesAndReturnsState(t *testing.T) {
 		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1", Capabilities: []string{"auth_provider"}}},
 		hashes:    map[string]string{"p1": "h"},
 	}
-	c := pluginlifecyclectl.NewWithLoader(repo, engine, &fakeSettings{}, loader)
+	c := pluginlifecyclectl.NewWithLoader(repo, engine, &fakeSettings{}, loader, nil)
 
 	view, err := c.Transition(context.Background(), "p1", "activate")
 	if err != nil {
@@ -164,10 +168,35 @@ func TestTransition_DispatchesAndReturnsState(t *testing.T) {
 	}
 }
 
+func TestTransition_UpdateDispatchesToEngine(t *testing.T) {
+	now := time.Now()
+	// ManifestHash == loader hash → updateAvailable=false after update
+	repo := &fakeRepo{rows: map[string]*ent.Plugin{
+		"p1": {ID: "p1", Name: "P1", Version: "1.0", InstalledAt: ptrTime(now), ManifestHash: "h-new"},
+	}}
+	engine := &fakeEngine{}
+	loader := &fakeLoader{
+		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1", Version: "2.0"}},
+		hashes:    map[string]string{"p1": "h-new"},
+	}
+	c := pluginlifecyclectl.NewWithLoader(repo, engine, &fakeSettings{}, loader, nil)
+
+	view, err := c.Transition(context.Background(), "p1", "update")
+	if err != nil {
+		t.Fatalf("Transition update: %v", err)
+	}
+	if len(engine.calls) != 1 || engine.calls[0] != "update:p1:h-new" {
+		t.Errorf("engine calls: %v", engine.calls)
+	}
+	if view.UpdateAvailable {
+		t.Error("updateAvailable should be false after update (stored hash now matches manifest hash)")
+	}
+}
+
 func TestTransition_InvalidAction(t *testing.T) {
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{"p1": {ID: "p1"}}}
 	loader := &fakeLoader{manifests: map[string]plugin.Descriptor{"p1": {ID: "p1"}}, hashes: map[string]string{"p1": "h"}}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader)
+	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
 
 	_, err := c.Transition(context.Background(), "p1", "frobnicate")
 	if !errors.Is(err, pluginsctl.ErrInvalidAction) {
@@ -178,11 +207,32 @@ func TestTransition_InvalidAction(t *testing.T) {
 func TestTransition_UnknownPlugin(t *testing.T) {
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{}}
 	loader := &fakeLoader{manifests: map[string]plugin.Descriptor{}}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader)
+	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
 
 	_, err := c.Transition(context.Background(), "ghost", "activate")
 	if !errors.Is(err, pluginsctl.ErrUnknownPlugin) {
 		t.Fatalf("expected ErrUnknownPlugin, got %v", err)
+	}
+}
+
+func TestTransition_SetsHealthyFromProbe(t *testing.T) {
+	now := time.Now()
+	repo := &fakeRepo{rows: map[string]*ent.Plugin{
+		"p1": {ID: "p1", Name: "P1", Version: "1.0", InstalledAt: ptrTime(now), Active: true, ManifestHash: "h"},
+	}}
+	loader := &fakeLoader{
+		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1"}},
+		hashes:    map[string]string{"p1": "h"},
+	}
+	probe := func(id string) (bool, bool) { return id == "p1", id == "p1" }
+	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, probe)
+
+	view, err := c.Transition(context.Background(), "p1", "activate")
+	if err != nil {
+		t.Fatalf("Transition: %v", err)
+	}
+	if !view.Healthy {
+		t.Error("Transition should set Healthy=true when probe reports running+healthy")
 	}
 }
 
@@ -191,7 +241,7 @@ func TestGetSettings_DelegatesWithSchema(t *testing.T) {
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{"p1": {ID: "p1"}}}
 	loader := &fakeLoader{manifests: map[string]plugin.Descriptor{"p1": {ID: "p1", Settings: schema}}, hashes: map[string]string{"p1": "h"}}
 	settings := &fakeSettings{}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, settings, loader)
+	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, settings, loader, nil)
 
 	gotSchema, values, err := c.GetSettings(context.Background(), "p1")
 	if err != nil {
@@ -246,6 +296,12 @@ func (e *slowEngine) Uninstall(_ context.Context, d plugin.Descriptor) error {
 	e.record("end:uninstall:" + d.ID)
 	return nil
 }
+func (e *slowEngine) Update(_ context.Context, d plugin.Descriptor, _ string) error {
+	e.record("start:update:" + d.ID)
+	time.Sleep(e.delay)
+	e.record("end:update:" + d.ID)
+	return nil
+}
 
 func TestTransition_SamePluginSerializes(t *testing.T) {
 	now := time.Now()
@@ -257,7 +313,7 @@ func TestTransition_SamePluginSerializes(t *testing.T) {
 		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1"}},
 		hashes:    map[string]string{"p1": "h"},
 	}
-	c := pluginlifecyclectl.NewWithLoader(repo, eng, &fakeSettings{}, loader)
+	c := pluginlifecyclectl.NewWithLoader(repo, eng, &fakeSettings{}, loader, nil)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -287,7 +343,7 @@ func TestPutSettings_DelegatesWithSchema(t *testing.T) {
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{"p1": {ID: "p1"}}}
 	loader := &fakeLoader{manifests: map[string]plugin.Descriptor{"p1": {ID: "p1", Settings: schema}}, hashes: map[string]string{"p1": "h"}}
 	settings := &fakeSettings{}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, settings, loader)
+	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, settings, loader, nil)
 
 	err := c.PutSettings(context.Background(), "p1", map[string]string{"endpoint": "https://x"})
 	if err != nil {
@@ -301,5 +357,47 @@ func TestPutSettings_DelegatesWithSchema(t *testing.T) {
 	}
 	if settings.putValues["endpoint"] != "https://x" {
 		t.Errorf("put values wrong: %v", settings.putValues)
+	}
+}
+
+func TestList_HealthProbeSetHealthy(t *testing.T) {
+	now := time.Now()
+	repo := &fakeRepo{list: []*ent.Plugin{
+		{ID: "p1", InstalledAt: ptrTime(now), Active: true, ManifestHash: "h"},
+		{ID: "p2", InstalledAt: ptrTime(now), Active: true, ManifestHash: "h"},
+		{ID: "p3"},
+	}}
+	loader := &fakeLoader{
+		manifests: map[string]plugin.Descriptor{"p1": {}, "p2": {}, "p3": {}},
+		hashes:    map[string]string{"p1": "h", "p2": "h", "p3": "h"},
+	}
+	// p1 running+healthy, p2 and p3 not running
+	probe := func(id string) (bool, bool) {
+		if id == "p1" {
+			return true, true
+		}
+		return false, false
+	}
+	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, probe)
+
+	views, err := c.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(views) != 3 {
+		t.Fatalf("expected 3 views, got %d", len(views))
+	}
+	healthy := map[string]bool{}
+	for _, v := range views {
+		healthy[v.ID] = v.Healthy
+	}
+	if !healthy["p1"] {
+		t.Error("p1: running+healthy probe should yield Healthy=true")
+	}
+	if healthy["p2"] {
+		t.Error("p2: not running should yield Healthy=false")
+	}
+	if healthy["p3"] {
+		t.Error("p3: absent from registry should yield Healthy=false")
 	}
 }

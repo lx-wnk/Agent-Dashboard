@@ -81,6 +81,7 @@ type PluginView struct {
 	Version         string   `json:"version"`
 	State           string   `json:"state"` // discovered|inactive|active
 	UpdateAvailable bool     `json:"updateAvailable"`
+	Healthy         bool     `json:"healthy"`
 	Capabilities    []string `json:"capabilities"`
 	HasSettings     bool     `json:"hasSettings"`
 }
@@ -101,6 +102,7 @@ var lifecycleActions = map[string]bool{
 	"activate":   true,
 	"deactivate": true,
 	"uninstall":  true,
+	"update":     true,
 }
 
 // LifecycleHandler serves the SP1 lifecycle + settings endpoints under
@@ -127,7 +129,7 @@ func classify(err error, wrap string) error {
 		return fmt.Errorf("%w: %s", apierr.ErrConflict, err.Error())
 	}
 	if errors.Is(err, pluginsctl.ErrUnknownPlugin) || errors.Is(err, pluginsctl.ErrInvalidAction) ||
-		errors.Is(err, pluginsettings.ErrUnknownKey) {
+		errors.Is(err, pluginsettings.ErrUnknownKey) || errors.Is(err, pluginsettings.ErrInvalidValue) {
 		return fmt.Errorf("%w: %s", apierr.ErrBadRequest, err.Error())
 	}
 	return fmt.Errorf("%s: %w", wrap, err)
@@ -156,6 +158,9 @@ func (h *LifecycleHandler) transition(w http.ResponseWriter, r *http.Request) er
 	if id == "" {
 		return fmt.Errorf("%w: plugin id is required", apierr.ErrBadRequest)
 	}
+	if !plugin.ValidID(id) {
+		return fmt.Errorf("%w: invalid plugin id %q", apierr.ErrBadRequest, id)
+	}
 	action := chi.URLParam(r, "action")
 	if !lifecycleActions[action] {
 		return fmt.Errorf("%w: invalid action %q", apierr.ErrBadRequest, action)
@@ -178,6 +183,9 @@ func (h *LifecycleHandler) getSettings(w http.ResponseWriter, r *http.Request) e
 	if id == "" {
 		return fmt.Errorf("%w: plugin id is required", apierr.ErrBadRequest)
 	}
+	if !plugin.ValidID(id) {
+		return fmt.Errorf("%w: invalid plugin id %q", apierr.ErrBadRequest, id)
+	}
 	schema, values, err := h.ctl.GetSettings(r.Context(), id)
 	if err != nil {
 		return classify(err, "plugins.lifecycle.getSettings")
@@ -196,6 +204,9 @@ func (h *LifecycleHandler) putSettings(w http.ResponseWriter, r *http.Request) e
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		return fmt.Errorf("%w: plugin id is required", apierr.ErrBadRequest)
+	}
+	if !plugin.ValidID(id) {
+		return fmt.Errorf("%w: invalid plugin id %q", apierr.ErrBadRequest, id)
 	}
 	var body struct {
 		Values map[string]string `json:"values"`

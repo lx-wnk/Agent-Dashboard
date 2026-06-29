@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -67,6 +68,10 @@ func (d *Discoverer) Discover(ctx context.Context) (Result, error) {
 		}
 		var desc plugin.Descriptor
 		if err := json.Unmarshal(raw, &desc); err != nil || desc.ID == "" {
+			continue
+		}
+		if !plugin.ValidID(desc.ID) {
+			slog.Warn("discover: skip — plugin id is malformed", "dir", e.Name(), "id", desc.ID)
 			continue
 		}
 		sum := sha256.Sum256(raw)

@@ -131,3 +131,20 @@ func TestDiscover_InstalledPluginOrphanedNotDeleted(t *testing.T) {
 	assert.Contains(t, res.Removed, "p3")
 	assert.NotContains(t, res.Removed, "p2")
 }
+
+func TestDiscover_SkipsMalformedID(t *testing.T) {
+	dir := t.TempDir()
+	writeManifest(t, dir, "valid-plugin", "1.0.0")
+	// Malformed ID: uppercase letters fail pluginIDRe.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "Bad-Plugin"), 0o755))
+	badBody := `{"id":"Bad-Plugin","version":"1.0.0","capabilities":["route_extension"],"addr":"127.0.0.1:1"}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Bad-Plugin", "plugin.json"), []byte(badBody), 0o644))
+
+	repo := &memDiscoverRepo{rows: map[string]DiscoverRow{}}
+	res, err := NewDiscoverer(dir, repo).Discover(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, res.Found, "only the valid plugin should be counted")
+	assert.Contains(t, repo.rows, "valid-plugin")
+	assert.NotContains(t, repo.rows, "Bad-Plugin")
+}

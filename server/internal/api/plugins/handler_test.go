@@ -205,7 +205,7 @@ func TestLifecycleList_ShapeAndLeakGuard(t *testing.T) {
 		t.Fatalf("expected 1 plugin, got %d", len(items))
 	}
 	item := items[0]
-	for _, required := range []string{"id", "name", "version", "state", "updateAvailable", "capabilities", "hasSettings"} {
+	for _, required := range []string{"id", "name", "version", "state", "updateAvailable", "healthy", "capabilities", "hasSettings"} {
 		if _, ok := item[required]; !ok {
 			t.Errorf("response item missing required key %q", required)
 		}
@@ -215,8 +215,8 @@ func TestLifecycleList_ShapeAndLeakGuard(t *testing.T) {
 			t.Errorf("response item must not contain key %q (F028 leak guard)", forbidden)
 		}
 	}
-	if len(item) != 7 {
-		t.Errorf("response item has %d keys, want exactly 7; got: %v", len(item), item)
+	if len(item) != 8 {
+		t.Errorf("response item has %d keys, want exactly 8; got: %v", len(item), item)
 	}
 	if item["id"] != "fake-plugin" || item["state"] != "active" || item["updateAvailable"] != true || item["hasSettings"] != true {
 		t.Errorf("fields wrong: %v", item)
@@ -277,6 +277,31 @@ func TestLifecycleTransition_IllegalTransition_409(t *testing.T) {
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestLifecycleTransition_UpdateAccepted(t *testing.T) {
+	ctl := &fakeLifecycle{transition: plugins.PluginView{ID: "p1", State: "active", Capabilities: []string{}}}
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/p1/update", nil))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for update action, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if ctl.gotAction != "update" {
+		t.Errorf("controller action: got %q, want update", ctl.gotAction)
+	}
+}
+
+func TestLifecycleTransition_UpdateIllegalTransition_409(t *testing.T) {
+	ctl := &fakeLifecycle{transErr: fmt.Errorf("%w: p1 not installed", pluginlifecycle.ErrIllegalTransition)}
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/p1/update", nil))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for illegal update, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -354,4 +379,53 @@ func TestLifecyclePutSettings_UnknownKey_400(t *testing.T) {
 	}
 }
 
+func TestLifecyclePutSettings_InvalidValue_400(t *testing.T) {
+	ctl := &fakeLifecycle{putErr: fmt.Errorf("%w: field %q requires an integer", pluginsettings.ErrInvalidValue, "count")}
+	body := `{"values":{"count":"abc"}}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/plugins/p1/settings", strings.NewReader(body)))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 const pluginsettingsMasked = pluginsettings.MaskedSentinel
+
+func TestLifecycleTransition_MalformedID_400(t *testing.T) {
+	ctl := &fakeLifecycle{}
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/My-PLUGIN/activate", nil))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed id, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if ctl.gotID != "" {
+		t.Errorf("malformed id must not reach controller, got %q", ctl.gotID)
+	}
+}
+
+func TestLifecycleGetSettings_MalformedID_400(t *testing.T) {
+	ctl := &fakeLifecycle{}
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/plugins/UPPER/settings", nil))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed id, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestLifecyclePutSettings_MalformedID_400(t *testing.T) {
+	ctl := &fakeLifecycle{}
+	body := `{"values":{}}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/plugins/BAD_ID/settings", strings.NewReader(body)))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed id, got %d: %s", rr.Code, rr.Body.String())
+	}
+}

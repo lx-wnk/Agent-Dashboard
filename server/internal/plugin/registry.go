@@ -35,6 +35,9 @@ type Registry struct {
 	enabled        func(id string) bool
 	serverCtx      context.Context
 	hooks          Hooks
+	// settings is the optional provider that fetches decrypted per-plugin values
+	// for env injection at every spawn. Nil means no settings are injected.
+	settings SettingsProvider
 }
 
 // Entry is a loaded plugin with its descriptor and running process (if started by us).
@@ -78,6 +81,38 @@ func New(dir string) *Registry {
 // SetEnabled installs the predicate that decides which plugins Load starts and
 // records. Defaults to all-enabled if never set (callers should set it).
 func (r *Registry) SetEnabled(fn func(id string) bool) { r.enabled = fn }
+
+// SetSettingsProvider installs the provider that fetches decrypted settings
+// for env injection at every spawn. Call before Load.
+func (r *Registry) SetSettingsProvider(fn SettingsProvider) { r.settings = fn }
+
+// appendSettingsEnv returns base with PLUGIN_SETTING_<KEY> vars from the settings
+// provider appended. A nil provider or a provider error leaves base unchanged
+// (the plugin starts without settings rather than not at all).
+func (r *Registry) appendSettingsEnv(ctx context.Context, base []string, id string) []string {
+	if r.settings == nil {
+		return base
+	}
+	vals, err := r.settings(ctx, id)
+	if err != nil {
+		slog.Warn("plugin: settings fetch failed — starting without settings", "id", id, "err", err)
+		return base
+	}
+	// Two distinct setting keys can sanitize to the same env name (e.g. "api-key"
+	// and "api.key" both → API_KEY); map iteration makes the winner arbitrary.
+	// Warn so the collision is observable; the winning value stays arbitrary.
+	seen := make(map[string]string, len(vals))
+	for k, v := range vals {
+		envName := "PLUGIN_SETTING_" + sanitizeSettingKey(k)
+		if prev, dup := seen[envName]; dup {
+			slog.Warn("plugin: setting key collision after sanitization — one value silently wins",
+				"id", id, "key", k, "collidesWith", prev, "envName", envName)
+		}
+		seen[envName] = k
+		base = append(base, envName+"="+v)
+	}
+	return base
+}
 
 func (r *Registry) isEnabled(id string) bool {
 	if r.enabled == nil {
@@ -158,7 +193,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 	if len(desc.Command) > 0 {
 		cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
 		cmd.Dir = pluginDir
-		cmd.Env = buildPluginEnv(desc.Env)
+		cmd.Env = r.appendSettingsEnv(serverCtx, buildPluginEnv(desc.Env), desc.ID)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if err := cmd.Start(); err != nil {
@@ -399,19 +434,6 @@ func (r *Registry) FindByCapability(capability string) *Entry {
 	return nil
 }
 
-// AllWithCapability returns all plugins with the given capability.
-func (r *Registry) AllWithCapability(capability string) []Entry {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	var out []Entry
-	for _, p := range r.plugins {
-		if p.Descriptor.HasCapability(capability) {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 // HasAttemptedCapability reports whether any plugin.json in the directory
 // declared the given capability, regardless of whether that plugin passed
 // the health-check and ended up in the registry.
@@ -559,7 +581,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
 		newCmd.Dir = pluginDir
-		newCmd.Env = buildPluginEnv(desc.Env)
+		newCmd.Env = r.appendSettingsEnv(ctx, buildPluginEnv(desc.Env), desc.ID)
 		newCmd.Stdout = os.Stdout
 		newCmd.Stderr = os.Stderr
 		newCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -663,6 +685,32 @@ func (r *Registry) removeByID(id string) {
 	}
 }
 
+// dashboardSecretEnv names env vars that carry dashboard secrets.
+// These are never forwarded to plugins even if listed in desc.Env.
+var dashboardSecretEnv = map[string]bool{
+	"DASHBOARD_SECRET_KEY":         true,
+	"DASHBOARD_JWT_SECRET":         true,
+	"DASHBOARD_AUTH_PLUGIN_SECRET": true,
+	"DASHBOARD_MCP_TOKEN":          true,
+	"DASHBOARD_HOOKS_SECRET":       true,
+}
+
+// sanitizeSettingKey uppercases key and replaces every character that is not
+// A-Z, 0-9, or _ with '_', producing a valid env var suffix.
+func sanitizeSettingKey(key string) string {
+	upper := strings.ToUpper(key)
+	var b strings.Builder
+	b.Grow(len(upper))
+	for _, c := range upper {
+		if (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+			b.WriteRune(c)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
+}
+
 // buildPluginEnv constructs a minimal environment for a plugin process.
 // It exposes only a safe base set of env vars plus any keys explicitly
 // allow-listed in the plugin's descriptor (desc.Env).
@@ -673,7 +721,9 @@ func buildPluginEnv(allowedKeys []string) []string {
 		allowed[k] = true
 	}
 	for _, k := range allowedKeys {
-		allowed[k] = true
+		if !dashboardSecretEnv[k] { // blocklist wins over allow-list
+			allowed[k] = true
+		}
 	}
 	var env []string
 	for _, kv := range os.Environ() {

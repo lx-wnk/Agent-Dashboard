@@ -631,3 +631,110 @@ func TestExhaustedRestartsMarkUnhealthy(t *testing.T) {
 	require.True(t, ok, "entry must be retained so the dispatcher can answer 503")
 	require.False(t, entry.Healthy())
 }
+
+// writeEnvDumpPlugin builds a plugin binary that writes all PLUGIN_SETTING_*
+// env vars to envFile before serving GET /health → 200.
+// The env file is written synchronously before ListenAndServe so it exists
+// by the time the registry health-check returns.
+func writeEnvDumpPlugin(t *testing.T, dir, id string) (addr, envFile string) {
+	t.Helper()
+	pluginDir := filepath.Join(dir, id)
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr = ln.Addr().String()
+	require.NoError(t, ln.Close())
+
+	envFile = filepath.Join(pluginDir, "plugin-env.txt")
+
+	mainGo := `package main
+
+import (
+	"net/http"
+	"os"
+	"strings"
+)
+
+func main() {
+	addr := os.Args[1]
+	envFile := os.Args[2]
+
+	var lines []string
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "PLUGIN_SETTING_") {
+			lines = append(lines, kv)
+		}
+	}
+	_ = os.WriteFile(envFile, []byte(strings.Join(lines, "\n")), 0o644)
+
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	_ = http.ListenAndServe(addr, nil)
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.go"), []byte(mainGo), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "go.mod"),
+		[]byte("module env-dump-plugin\n\ngo 1.21\n"), 0o644))
+
+	binPath := filepath.Join(pluginDir, "plugin-bin")
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	build.Dir = pluginDir
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, buildErr := build.CombinedOutput()
+	require.NoError(t, buildErr, "go build failed:\n%s", out)
+
+	desc := plugin.Descriptor{
+		ID:           id,
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         addr,
+		Settings: []plugin.SettingField{
+			{Key: "api-key", Type: "string", Secret: true},
+			{Key: "endpoint", Type: "url"},
+		},
+		Command: []string{"./plugin-bin", addr, envFile},
+	}
+	data, _ := json.Marshal(desc)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
+	return addr, envFile
+}
+
+func TestRegistry_SettingsInjectedAtStart(t *testing.T) {
+	dir := t.TempDir()
+	_, envFile := writeEnvDumpPlugin(t, dir, "env-plugin")
+
+	r := plugin.New(dir)
+	r.SetSettingsProvider(func(_ context.Context, _ string) (map[string]string, error) {
+		return map[string]string{
+			"api-key":  "s3cr3t",
+			"endpoint": "https://example.com",
+		}, nil
+	})
+
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	t.Cleanup(r.Shutdown)
+
+	data, err := os.ReadFile(envFile)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "PLUGIN_SETTING_API_KEY=s3cr3t",
+		"hyphen in key must be sanitized to underscore and uppercased")
+	assert.Contains(t, content, "PLUGIN_SETTING_ENDPOINT=https://example.com")
+}
+
+func TestRegistry_NoProvider_NoSettingVars(t *testing.T) {
+	dir := t.TempDir()
+	_, envFile := writeEnvDumpPlugin(t, dir, "env-plugin-noprovider")
+
+	r := plugin.New(dir) // no SetSettingsProvider
+
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	t.Cleanup(r.Shutdown)
+
+	data, err := os.ReadFile(envFile)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "PLUGIN_SETTING_",
+		"no provider means no PLUGIN_SETTING_ vars injected")
+}

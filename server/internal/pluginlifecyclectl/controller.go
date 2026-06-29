@@ -33,6 +33,7 @@ type Engine interface {
 	Activate(ctx context.Context, d plugin.Descriptor) error
 	Deactivate(ctx context.Context, d plugin.Descriptor) error
 	Uninstall(ctx context.Context, d plugin.Descriptor) error
+	Update(ctx context.Context, d plugin.Descriptor, manifestHash string) error
 }
 
 // Settings is the per-plugin settings surface (satisfied by *pluginsettings.Service).
@@ -68,6 +69,10 @@ func (l FileManifestLoader) Load(id, path string) (plugin.Descriptor, string, er
 	return d, hex.EncodeToString(sum[:]), nil
 }
 
+// HealthProbe reports the runtime status of a plugin. A nil probe always
+// returns false, false (plugin considered not running / not healthy).
+type HealthProbe func(id string) (running bool, healthy bool)
+
 // Controller derives plugin state, dispatches lifecycle transitions, and proxies
 // settings reads/writes.
 type Controller struct {
@@ -75,6 +80,7 @@ type Controller struct {
 	engine   Engine
 	settings Settings
 	loader   ManifestLoader
+	probe    HealthProbe
 
 	locksMu        sync.Mutex
 	perPluginLocks map[string]*sync.Mutex
@@ -82,17 +88,18 @@ type Controller struct {
 
 // New builds a Controller that reads manifests from the filesystem, with dir as
 // the fallback plugin directory when a row has no stored path.
-func New(r Repo, engine Engine, settings Settings, dir string) *Controller {
-	return NewWithLoader(r, engine, settings, FileManifestLoader{Dir: dir})
+func New(r Repo, engine Engine, settings Settings, dir string, probe HealthProbe) *Controller {
+	return NewWithLoader(r, engine, settings, FileManifestLoader{Dir: dir}, probe)
 }
 
 // NewWithLoader builds a Controller with an explicit manifest loader (tests).
-func NewWithLoader(r Repo, engine Engine, settings Settings, loader ManifestLoader) *Controller {
+func NewWithLoader(r Repo, engine Engine, settings Settings, loader ManifestLoader, probe HealthProbe) *Controller {
 	return &Controller{
 		repo:           r,
 		engine:         engine,
 		settings:       settings,
 		loader:         loader,
+		probe:          probe,
 		perPluginLocks: make(map[string]*sync.Mutex),
 	}
 }
@@ -126,6 +133,16 @@ func nonNilCaps(caps []string) []string {
 	return caps
 }
 
+// fillHealthy sets view.Healthy from the probe (running && healthy). A nil probe
+// leaves Healthy at its zero value.
+func (c *Controller) fillHealthy(view *plugins.PluginView, id string) {
+	if c.probe == nil {
+		return
+	}
+	running, healthy := c.probe(id)
+	view.Healthy = running && healthy
+}
+
 // List returns the lifecycle view for every persisted plugin. State comes from
 // the DB row; capabilities/hasSettings/updateAvailable come from the on-disk
 // manifest (a manifest read failure degrades to DB-only fields).
@@ -148,6 +165,7 @@ func (c *Controller) List(ctx context.Context) ([]plugins.PluginView, error) {
 			view.HasSettings = len(desc.Settings) > 0
 			view.UpdateAvailable = hash != "" && hash != p.ManifestHash
 		}
+		c.fillHealthy(&view, p.ID)
 		out = append(out, view)
 	}
 	return out, nil
@@ -198,6 +216,8 @@ func (c *Controller) Transition(ctx context.Context, id, action string) (plugins
 		err = c.engine.Deactivate(ctx, desc)
 	case "uninstall":
 		err = c.engine.Uninstall(ctx, desc)
+	case "update":
+		err = c.engine.Update(ctx, desc, hash)
 	default:
 		return plugins.PluginView{}, fmt.Errorf("%w: %q", pluginsctl.ErrInvalidAction, action)
 	}
@@ -208,7 +228,7 @@ func (c *Controller) Transition(ctx context.Context, id, action string) (plugins
 	if err != nil {
 		return plugins.PluginView{}, fmt.Errorf("pluginlifecyclectl: reload %q: %w", id, err)
 	}
-	return plugins.PluginView{
+	view := plugins.PluginView{
 		ID:              row.ID,
 		Name:            row.Name,
 		Version:         row.Version,
@@ -216,7 +236,9 @@ func (c *Controller) Transition(ctx context.Context, id, action string) (plugins
 		UpdateAvailable: hash != "" && hash != row.ManifestHash,
 		Capabilities:    nonNilCaps(desc.Capabilities),
 		HasSettings:     len(desc.Settings) > 0,
-	}, nil
+	}
+	c.fillHealthy(&view, row.ID)
+	return view, nil
 }
 
 // GetSettings returns the manifest schema and the (masked) stored values.

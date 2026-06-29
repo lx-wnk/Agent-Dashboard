@@ -86,6 +86,13 @@ async function save() {
         :data-field="f.key"
       >
       <input
+        v-else-if="f.type === 'url'"
+        :id="`pf-${pluginId}-${f.key}`"
+        v-model="model[f.key]"
+        type="url"
+        :data-field="f.key"
+      >
+      <input
         v-else
         :id="`pf-${pluginId}-${f.key}`"
         v-model="model[f.key]"

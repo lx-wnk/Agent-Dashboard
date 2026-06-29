@@ -32,10 +32,8 @@ Key fields — see the schema for the full reference:
 | `addr`         | `127.0.0.1:<port>` the plugin listens on. |
 | `command`      | Executable to spawn. Omit if the process is already running. |
 | `env`          | Env var names to forward from the dashboard process. |
-| `slots`        | UI slot bindings — `[{ "slot": "...", "priority": 0, "mode": "override"\|"extend" }]`. |
 | `settings`     | User-configurable fields — `[{ "key", "type", "label", "secret" }]`. |
 | `lifecycle`    | Optional HTTP paths for lifecycle hooks (see below). |
-| `permissions`  | Declared permission strings shown in the UI. |
 
 ---
 
@@ -103,17 +101,8 @@ full `SlotAddon<S>` interface. Available slots and their context shapes are docu
 that file.
 
 The dashboard loads addon modules via the plugin proxy — the module URL is
-`/api/plugins/{id}/proxy/<module-path>`. Declare the mapping in `plugin.json`:
-
-```json
-{
-  "slots": [
-    { "slot": "agent-modal-footer", "priority": 0 }
-  ]
-}
-```
-
-And serve a `ui-manifest.json` from the plugin root:
+`/api/plugins/{id}/proxy/<module-path>`. Slot bindings are declared exclusively in
+`ui-manifest.json` served from your plugin's root:
 
 ```json
 {

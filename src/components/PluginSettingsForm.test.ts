@@ -32,6 +32,13 @@ it('put omits an untouched secret and sends changed fields', async () => {
   expect('apiKey' in sent).toBe(false) // untouched secret omitted
 })
 
+it('url field renders as input type="url"', async () => {
+  const w = mountForm(async () => ({ schema, values: { endpoint: 'https://x', apiKey: '********', mode: 'a' } }))
+  await flushPromises()
+  const input = w.find('input[data-field="endpoint"]')
+  expect(input.attributes('type')).toBe('url')
+})
+
 const schemaWithInt = [
   { key: 'port', type: 'int', label: 'Port', secret: false },
   { key: 'name', type: 'string', label: 'Name', secret: false },

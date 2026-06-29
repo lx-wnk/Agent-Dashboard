@@ -9,13 +9,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 )
 
 type fakePluginRepo struct {
-	installedAt *time.Time
-	active      bool
-	version     string
+	installedAt  *time.Time
+	active       bool
+	version      string
+	manifestHash string
 }
 
 func (f *fakePluginRepo) GetState(_ context.Context, _ string) (State, error) {
@@ -31,6 +34,10 @@ func (f *fakePluginRepo) SetActive(_ context.Context, _ string, a bool) error {
 }
 func (f *fakePluginRepo) SetVersion(_ context.Context, _ string, v string) error {
 	f.version = v
+	return nil
+}
+func (f *fakePluginRepo) SetManifestHash(_ context.Context, _ string, h string) error {
+	f.manifestHash = h
 	return nil
 }
 
@@ -184,6 +191,51 @@ func TestActivateHookFailureStopsAndDoesNotActivate(t *testing.T) {
 	require.Error(t, eng.Activate(context.Background(), d))
 	require.Equal(t, []string{"start:voice", "hook:/lifecycle/activate", "stop:voice"}, events)
 	require.False(t, repo.active)
+}
+
+func TestEngine_UpdateRefreshesManifestHash(t *testing.T) {
+	now := time.Now()
+	pr := &fakePluginRepo{installedAt: &now}
+	e := New(pr, &recordingHooks{}, &fakeClearer{}, nil)
+	d := plugin.Descriptor{
+		ID: "p1", Version: "2.0.0",
+		Lifecycle: plugin.LifecycleHooks{Update: "/update"},
+	}
+	require.NoError(t, e.Update(context.Background(), d, "hash-v2"))
+	assert.Equal(t, "2.0.0", pr.version)
+	assert.Equal(t, "hash-v2", pr.manifestHash)
+}
+
+func TestEngine_UpdateBeforeInstallRejected(t *testing.T) {
+	pr := &fakePluginRepo{version: "1.0.0", manifestHash: "hash-v1"}
+	hk := &recordingHooks{}
+	e := New(pr, hk, &fakeClearer{}, nil)
+	d := plugin.Descriptor{
+		ID: "p1", Version: "2.0.0",
+		Lifecycle: plugin.LifecycleHooks{Update: "/update"},
+	}
+	err := e.Update(context.Background(), d, "hash-v2")
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrIllegalTransition)
+	assert.NotContains(t, hk.called, "/update")
+	assert.Equal(t, "1.0.0", pr.version)
+	assert.Equal(t, "hash-v1", pr.manifestHash)
+}
+
+// notFoundRepo embeds fakePluginRepo but reports an ent NotFound from GetState,
+// modelling a plugin present on disk but never persisted (no DB row).
+type notFoundRepo struct{ fakePluginRepo }
+
+func (notFoundRepo) GetState(_ context.Context, _ string) (State, error) {
+	return State{}, &ent.NotFoundError{}
+}
+
+func TestEngine_UpdateUndiscoveredReturnsUnknownPlugin(t *testing.T) {
+	e := New(&notFoundRepo{}, &recordingHooks{}, &fakeClearer{}, nil)
+	d := plugin.Descriptor{ID: "p1", Version: "2.0.0", Lifecycle: plugin.LifecycleHooks{Update: "/update"}}
+	err := e.Update(context.Background(), d, "hash-v2")
+	require.Error(t, err)
+	require.ErrorIs(t, err, pluginsctl.ErrUnknownPlugin)
 }
 
 func TestInstallWrapsHooksInTransient(t *testing.T) {
