@@ -18,6 +18,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pluginsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/project"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/projectfolder"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/prompttemplate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
@@ -207,6 +208,12 @@ func init() {
 	projectfolderDescCreatedAt := projectfolderFields[4].Descriptor()
 	// projectfolder.DefaultCreatedAt holds the default value on creation for the created_at field.
 	projectfolder.DefaultCreatedAt = projectfolderDescCreatedAt.Default.(func() time.Time)
+	prompttemplateFields := schema.PromptTemplate{}.Fields()
+	_ = prompttemplateFields
+	// prompttemplateDescCreatedAt is the schema descriptor for created_at field.
+	prompttemplateDescCreatedAt := prompttemplateFields[3].Descriptor()
+	// prompttemplate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	prompttemplate.DefaultCreatedAt = prompttemplateDescCreatedAt.Default.(func() time.Time)
 	providersettingFields := schema.ProviderSetting{}.Fields()
 	_ = providersettingFields
 	// providersettingDescEnabled is the schema descriptor for enabled field.

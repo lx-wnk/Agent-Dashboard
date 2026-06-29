@@ -399,6 +399,26 @@ var (
 			},
 		},
 	}
+	// PromptTemplatesColumns holds the columns for the "prompt_templates" table.
+	PromptTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "body", Type: field.TypeString, Size: 2147483647},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// PromptTemplatesTable holds the schema information for the "prompt_templates" table.
+	PromptTemplatesTable = &schema.Table{
+		Name:       "prompt_templates",
+		Columns:    PromptTemplatesColumns,
+		PrimaryKey: []*schema.Column{PromptTemplatesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "prompttemplate_name",
+				Unique:  false,
+				Columns: []*schema.Column{PromptTemplatesColumns[1]},
+			},
+		},
+	}
 	// ProviderSettingsColumns holds the columns for the "provider_settings" table.
 	ProviderSettingsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -817,6 +837,7 @@ var (
 		PluginSettingsTable,
 		ProjectsTable,
 		ProjectFoldersTable,
+		PromptTemplatesTable,
 		ProviderSettingsTable,
 		RefinementTurnsTable,
 		RemoteRegistrationsTable,

@@ -48,6 +48,9 @@ type Project func(*sql.Selector)
 // ProjectFolder is the predicate function for projectfolder builders.
 type ProjectFolder func(*sql.Selector)
 
+// PromptTemplate is the predicate function for prompttemplate builders.
+type PromptTemplate func(*sql.Selector)
+
 // ProviderSetting is the predicate function for providersetting builders.
 type ProviderSetting func(*sql.Selector)
 

@@ -40,6 +40,8 @@ type Tx struct {
 	Project *ProjectClient
 	// ProjectFolder is the client for interacting with the ProjectFolder builders.
 	ProjectFolder *ProjectFolderClient
+	// PromptTemplate is the client for interacting with the PromptTemplate builders.
+	PromptTemplate *PromptTemplateClient
 	// ProviderSetting is the client for interacting with the ProviderSetting builders.
 	ProviderSetting *ProviderSettingClient
 	// RefinementTurn is the client for interacting with the RefinementTurn builders.
@@ -209,6 +211,7 @@ func (tx *Tx) init() {
 	tx.PluginSetting = NewPluginSettingClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
 	tx.ProjectFolder = NewProjectFolderClient(tx.config)
+	tx.PromptTemplate = NewPromptTemplateClient(tx.config)
 	tx.ProviderSetting = NewProviderSettingClient(tx.config)
 	tx.RefinementTurn = NewRefinementTurnClient(tx.config)
 	tx.RemoteRegistration = NewRemoteRegistrationClient(tx.config)
