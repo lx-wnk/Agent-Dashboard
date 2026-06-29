@@ -94,14 +94,11 @@ func (e *Engine) callHook(ctx context.Context, d plugin.Descriptor, path string)
 	return e.hooks.Call(ctx, d, path)
 }
 
-func (e *Engine) Install(ctx context.Context, d plugin.Descriptor) error {
-	st, err := e.repo.GetState(ctx, d.ID)
-	if err != nil {
-		return err
-	}
-	if st.InstalledAt != nil {
-		return fmt.Errorf("%w: %s already installed", ErrIllegalTransition, d.ID)
-	}
+// performInstall runs the install/post-install hooks and stamps InstalledAt.
+// It does not guard against already-installed — callers are responsible for
+// that check. This is the shared install step used by both Install and the
+// auto-install path in Activate.
+func (e *Engine) performInstall(ctx context.Context, d plugin.Descriptor) error {
 	if err := e.withTransient(ctx, d.ID, func() error {
 		if err := e.callHook(ctx, d, d.Lifecycle.Install); err != nil {
 			return fmt.Errorf("install hook: %w", err)
@@ -114,13 +111,26 @@ func (e *Engine) Install(ctx context.Context, d plugin.Descriptor) error {
 	return e.repo.SetInstalledAt(ctx, d.ID, &now)
 }
 
+func (e *Engine) Install(ctx context.Context, d plugin.Descriptor) error {
+	st, err := e.repo.GetState(ctx, d.ID)
+	if err != nil {
+		return err
+	}
+	if st.InstalledAt != nil {
+		return fmt.Errorf("%w: %s already installed", ErrIllegalTransition, d.ID)
+	}
+	return e.performInstall(ctx, d)
+}
+
 func (e *Engine) Activate(ctx context.Context, d plugin.Descriptor) error {
 	st, err := e.repo.GetState(ctx, d.ID)
 	if err != nil {
 		return err
 	}
 	if st.InstalledAt == nil {
-		return fmt.Errorf("%w: %s must be installed before activate", ErrIllegalTransition, d.ID)
+		if err := e.performInstall(ctx, d); err != nil {
+			return fmt.Errorf("auto-install on activate: %w", err)
+		}
 	}
 	if err := e.start(ctx, d.ID); err != nil {
 		return fmt.Errorf("activate start: %w", err)
