@@ -2,6 +2,18 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
+class MockEventSource {
+  static instances: MockEventSource[] = []
+  onmessage: ((e: MessageEvent) => void) | null = null
+  onerror: ((e: Event) => void) | null = null
+  readyState = 0
+  static CONNECTING = 0
+  static OPEN = 1
+  static CLOSED = 2
+  constructor(public url: string) { MockEventSource.instances.push(this) }
+  close() { this.readyState = 2 }
+}
+
 // Minimal localStorage stub
 const store: Record<string, string> = {}
 globalThis.localStorage = {
@@ -61,6 +73,8 @@ function withSetup<T>(composable: () => T) {
 let useEvalMetrics: typeof import('../useEvalMetrics')
 
 beforeEach(async () => {
+  MockEventSource.instances = []
+  vi.stubGlobal('EventSource', MockEventSource)
   vi.resetModules()
   useEvalMetrics = await import('../useEvalMetrics')
 })
@@ -150,6 +164,29 @@ describe('useEvalMetrics', () => {
       String(url).includes('/api/eval/drift/a1/ack') && opts?.method === 'POST',
     )
     expect(ackCall).toBeTruthy()
+  })
+
+  it('re-fetches alerts on eval_drift sse event', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { start } = withSetup(() => useEvalMetrics.useEvalMetrics())
+    start()
+    await flushPromises()
+
+    const callsBefore = fetchMock.mock.calls.length
+
+    // Simulate server pushing eval_drift over /api/tasks/stream.
+    const es = MockEventSource.instances[0]
+    es.onmessage?.(new MessageEvent('message', {
+      data: JSON.stringify({ type: 'eval_drift', payload: 1 }),
+    }))
+    await flushPromises()
+
+    const driftCallsAfter = (fetchMock.mock.calls as [string][])
+      .slice(callsBefore)
+      .filter(([url]) => String(url).includes('/api/eval/drift'))
+    expect(driftCallsAfter.length).toBeGreaterThan(0)
   })
 
   it('runScan POSTs to /api/eval/scan then re-fetches', async () => {

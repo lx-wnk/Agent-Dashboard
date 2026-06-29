@@ -13,6 +13,7 @@ export function useEvalMetrics() {
 
   let intervalId: ReturnType<typeof setInterval> | null = null
   let aborter: AbortController | null = null
+  let driftEventSource: EventSource | null = null
   let active = true
 
   function emptySnapshots(): Record<MetricKey, EvalMetricSnapshot[]> {
@@ -74,6 +75,31 @@ export function useEvalMetrics() {
     }
   }
 
+  function startDriftStream(): void {
+    if (driftEventSource)
+      return
+    driftEventSource = new EventSource('/api/tasks/stream')
+    driftEventSource.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data as string) as { type: string }
+        if (event.type === 'eval_drift')
+          void fetchAlertsOnly()
+      }
+      catch { /* ignore malformed frames */ }
+    }
+    driftEventSource.onerror = () => {
+      if (driftEventSource?.readyState === EventSource.CLOSED) {
+        driftEventSource = null
+        // SSE dropped — the 60 s setInterval poll in start() keeps data fresh
+      }
+    }
+  }
+
+  function stopDriftStream(): void {
+    driftEventSource?.close()
+    driftEventSource = null
+  }
+
   async function acknowledge(id: string): Promise<void> {
     const res = await fetch(`/api/eval/drift/${id}/ack`, { method: 'POST' })
     if (!res.ok)
@@ -94,6 +120,7 @@ export function useEvalMetrics() {
     active = true
     void fetchAll()
     intervalId = setInterval(fetchAll, POLL_INTERVAL_MS)
+    startDriftStream()
   }
 
   function stop(): void {
@@ -104,6 +131,7 @@ export function useEvalMetrics() {
     }
     aborter?.abort()
     aborter = null
+    stopDriftStream()
   }
 
   onUnmounted(stop)

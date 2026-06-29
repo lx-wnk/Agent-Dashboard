@@ -402,14 +402,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			driftAlertRepo,
 			eval.Thresholds{RateDropPP: settingsSvc.Float("eval.rateDropPP"), StddevK: settingsSvc.Float("eval.stddevK"), MinSamples: settingsSvc.Int("eval.minSamples")},
 			settingsSvc.Int("eval.windowHours"),
-		).WithOnDrift(func(findings []eval.DriftFinding) {
-			for _, f := range findings {
-				slog.Warn("eval: agent drift detected",
-					"stage", f.Dim.Stage, "spawnerID", f.Dim.SpawnerID, "model", f.Dim.Model,
-					"metric", f.MetricKey, "direction", f.Direction,
-					"baseline", f.BaselineValue, "recent", f.RecentValue, "delta", f.Delta)
-			}
-		})
+		).WithOnDrift(evalOnDrift(taskBroadcaster))
 		evalHandler = apieval.NewHandler(evalMetricRepo, driftAlertRepo, evalService)
 	}
 
