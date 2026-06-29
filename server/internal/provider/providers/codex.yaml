@@ -18,6 +18,7 @@ parse:
     cacheRead: [payload.info.total_token_usage.cached_input_tokens]
   model: [payload.model]
   provider: [payload.model_provider]
+  timestamp: [timestamp]
 cost:
   rule: byModel
   localIf:

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func codexDescriptor() Descriptor {
@@ -57,6 +58,37 @@ func geminiDescriptor() Descriptor {
 			},
 			Model: []string{"model"},
 		},
+	}
+}
+
+func TestEngine_CodexLastActivity(t *testing.T) {
+	d := codexDescriptor()
+	d.Parse.Timestamp = []string{"timestamp"}
+	r, err := parseJSONL(d, filepath.Join("testdata", "codex-session.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Newest timestamp in fixture: "2026-04-19T11:23:41.622Z" (third line).
+	want, _ := time.Parse(time.RFC3339Nano, "2026-04-19T11:23:41.622Z")
+	if r.Session.LastActivity.IsZero() {
+		t.Fatal("LastActivity must not be zero for a session with timestamps")
+	}
+	if !r.Session.LastActivity.Equal(want) {
+		t.Errorf("LastActivity = %v, want %v", r.Session.LastActivity, want)
+	}
+}
+
+func TestEngine_GeminiLastActivity(t *testing.T) {
+	d := geminiDescriptor()
+	d.Parse.Timestamp = []string{"timestamp"}
+	r, err := parseJSONL(d, filepath.Join("testdata", "gemini-session.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Newest timestamp in fixture: "2026-04-19T11:00:20.000Z" (fourth line).
+	want, _ := time.Parse(time.RFC3339Nano, "2026-04-19T11:00:20.000Z")
+	if !r.Session.LastActivity.Equal(want) {
+		t.Errorf("LastActivity = %v, want %v", r.Session.LastActivity, want)
 	}
 }
 

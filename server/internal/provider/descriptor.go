@@ -49,6 +49,7 @@ type ParseSpec struct {
 	Tokens      TokenSpec    `yaml:"tokens"`
 	Model       []string     `yaml:"model"`
 	Provider    []string     `yaml:"provider"`
+	Timestamp   []string     `yaml:"timestamp"` // JSON paths to per-line timestamp field
 }
 
 // EventFilter restricts token extraction to JSONL lines where Path == Equals.
