@@ -5,11 +5,14 @@ import { ref, watch } from 'vue'
 import { reorderTask } from '../composables/useTasks'
 import TaskCard from './TaskCard.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   tasks: PipelineTask[]
   projectById: Map<string, Project>
   workingAgentByTask?: Map<string, Agent>
-}>()
+  sortable?: boolean
+}>(), {
+  sortable: true,
+})
 
 const emit = defineEmits<{
   select: [task: PipelineTask]
@@ -22,7 +25,14 @@ const listEl = ref<HTMLElement | null>(null)
 // rank-sorted list; the optimistic rank update produces the same order, so the
 // list resets cleanly when props flow back.
 const list = ref<PipelineTask[]>([...props.tasks])
-watch(() => props.tasks, v => (list.value = [...v]))
+const isDragging = ref(false)
+watch(() => props.tasks, (v) => {
+  if (isDragging.value)
+    return
+  if (v.length === list.value.length && v.every((t, i) => t.id === list.value[i]?.id))
+    return
+  list.value = [...v]
+})
 
 function projectFor(task: PipelineTask): Project | null {
   return task.projectId ? props.projectById.get(task.projectId) ?? null : null
@@ -31,7 +41,12 @@ function projectFor(task: PipelineTask): Project | null {
 useSortable(listEl, list, {
   handle: '.task-drag-handle',
   animation: 150,
+  disabled: !props.sortable,
+  onStart() {
+    isDragging.value = true
+  },
   onEnd(evt: { oldIndex?: number, newIndex?: number }) {
+    isDragging.value = false
     const { oldIndex, newIndex } = evt
     if (oldIndex == null || newIndex == null || oldIndex === newIndex)
       return
@@ -54,6 +69,7 @@ useSortable(listEl, list, {
       :task="task"
       :project="projectFor(task)"
       :working-agent="workingAgentByTask?.get(task.id) ?? null"
+      :sortable="props.sortable"
       @select="(t) => emit('select', t)"
       @open-chat="(t) => emit('openChat', t)"
       @navigate-agent="(sid) => emit('navigateAgent', sid)"
