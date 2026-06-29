@@ -226,6 +226,12 @@ type OrchestratorOptions struct {
 	// non-fatal — callers log and continue.
 	RemoveWorktreeFn func(ctx context.Context, task *ent.Task, force bool) error
 
+	// HasUnpushedWorkFn reports whether a terminal task's worktree still holds
+	// unpushed commits or uncommitted changes. When it returns true, terminal
+	// cleanup retains the worktree instead of force-removing it, so the work is
+	// not orphaned. Nil disables the check (cleanup behaves as before).
+	HasUnpushedWorkFn func(ctx context.Context, task *ent.Task) bool
+
 	// ResolveSpawner returns the effective DB spawner row for a task right
 	// before the native Claude path is taken. When nil, stage handlers spawn
 	// with the legacy `claude` CLI (current behaviour).
