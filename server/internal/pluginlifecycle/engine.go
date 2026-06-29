@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 )
 
 // ErrIllegalTransition is returned when a lifecycle action cannot be applied in
@@ -147,6 +149,9 @@ func (e *Engine) Deactivate(ctx context.Context, d plugin.Descriptor) error {
 func (e *Engine) Update(ctx context.Context, d plugin.Descriptor, manifestHash string) error {
 	st, err := e.repo.GetState(ctx, d.ID)
 	if err != nil {
+		if ent.IsNotFound(err) {
+			return fmt.Errorf("%w: %s", pluginsctl.ErrUnknownPlugin, d.ID)
+		}
 		return err
 	}
 	if st.InstalledAt == nil {
