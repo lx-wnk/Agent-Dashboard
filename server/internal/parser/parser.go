@@ -23,14 +23,6 @@ import (
 
 const tailBytes = 32768 // 32KB from end
 
-// Byte-level pre-filter markers for the full-file compaction scan. A JSONL line
-// is only worth unmarshaling if it carries token usage or is a compaction
-// boundary; everything else (user turns, tool results, meta) is skipped cheaply.
-var (
-	usageMarker           = []byte(`"usage"`)
-	compactBoundaryMarker = []byte(`"compact_boundary"`)
-)
-
 var (
 	uuidRE  = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	quotaRE = regexp.MustCompile(`(?i)quota exceeded|usage limit|monthly limit`)
@@ -289,19 +281,6 @@ type todoInput struct {
 	} `json:"todos"`
 }
 
-// scanEntry is the lean envelope used by scanFullFileTokenUsage. It decodes the
-// type/subtype discriminants and the nested message.usage in a single pass. The
-// usage shape is the shared usageCounters type, so per-message token extraction
-// stays identical to the tail parser via addUsage and cannot drift.
-type scanEntry struct {
-	Type    string `json:"type"`
-	Subtype string `json:"subtype"`
-	Message struct {
-		Role  string         `json:"role"`
-		Usage *usageCounters `json:"usage"`
-	} `json:"message"`
-}
-
 // fullScanUsage is the whole-file token total plus a flag recording whether the
 // session was ever compacted. The token total is the authoritative source for
 // SessionData.TokenUsage on a cache miss — it sums every assistant message's
@@ -327,41 +306,22 @@ type fullScanUsage struct {
 // It reuses addUsage so the per-message usage extraction can never diverge from
 // the tail parse in ParseSessionFile.
 func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
-	rc, err := OpenJSONLReader(path, 0)
-	if err != nil {
-		return fullScanUsage{}, fmt.Errorf("open %s: %w", path, err)
-	}
-	defer rc.Close()
-
 	var total fullScanUsage
-	err = ScanJSONLLines(rc, func(line []byte) error {
-		// Cheap pre-filter: a line matters only if it carries token usage or is a
-		// compaction marker. Skipping the JSON unmarshal for everything else (user
-		// turns, tool results, meta) cuts ~all per-line allocations on large files.
-		isMarkerLine := bytes.Contains(line, compactBoundaryMarker)
-		if !isMarkerLine && !bytes.Contains(line, usageMarker) {
-			return nil
-		}
-		// Single unmarshal into a lean envelope that captures the discriminants
-		// plus the nested message.usage in one pass — avoids the two-stage
-		// RawMessage decode the tail parser uses (it needs far more per line).
-		var entry scanEntry
-		if err := json.Unmarshal(line, &entry); err != nil {
-			return nil
-		}
-		if isCompactBoundaryType(entry.Type, entry.Subtype) {
+	err := ScanMessages(path, 0, func(m Message) error {
+		if isCompactBoundaryType(m.Type, m.Subtype) {
 			// Record that compaction happened (diagnostics only). The token total
 			// is the whole-file sum and is unaffected by the boundary — per-message
 			// usage does not reset, only the context-window cumulative size does.
 			total.hasCompaction = true
 			return nil
 		}
-		if entry.Type != "assistant" && entry.Type != "message" {
+		if m.Role != "assistant" || m.Usage == nil {
 			return nil
 		}
-		if entry.Message.Role == "assistant" {
-			addUsage(&total.TokenUsage, entry.Message.Usage)
-		}
+		total.TokenUsage.InputTokens += m.Usage.InputTokens
+		total.TokenUsage.OutputTokens += m.Usage.OutputTokens
+		total.TokenUsage.CacheCreationTokens += m.Usage.CacheCreationTokens
+		total.TokenUsage.CacheReadTokens += m.Usage.CacheReadTokens
 		return nil
 	})
 	if err != nil {
