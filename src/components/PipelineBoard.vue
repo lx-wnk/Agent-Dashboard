@@ -2,7 +2,7 @@
 import type { Agent, PipelineStage, PipelineTask } from '../types'
 import { computed, ref } from 'vue'
 import { useProjects } from '../composables/useProjects'
-import { useTasks } from '../composables/useTasks'
+import { byActivityDesc, byRank, useTasks } from '../composables/useTasks'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import SortableTaskList from './SortableTaskList.vue'
 import TaskCard from './TaskCard.vue'
@@ -103,6 +103,7 @@ interface ColumnDef {
   // specific stages they include.
   stages: PipelineStage[]
   group: 'needs-you' | 'active' | 'terminal'
+  sortable: boolean
 }
 
 const COLUMNS: ColumnDef[] = [
@@ -111,19 +112,21 @@ const COLUMNS: ColumnDef[] = [
     label: 'User Action Required',
     stages: [],
     group: 'needs-you',
+    sortable: true,
   },
-  { id: 'concept', label: STAGE_LABELS.concept, stages: ['concept'], group: 'active' },
-  { id: 'backlog', label: STAGE_LABELS.backlog, stages: ['backlog'], group: 'active' },
-  { id: 'plan_review', label: STAGE_LABELS.plan_review, stages: ['plan_review'], group: 'active' },
+  { id: 'concept', label: STAGE_LABELS.concept, stages: ['concept'], group: 'active', sortable: true },
+  { id: 'backlog', label: STAGE_LABELS.backlog, stages: ['backlog'], group: 'active', sortable: true },
+  { id: 'plan_review', label: STAGE_LABELS.plan_review, stages: ['plan_review'], group: 'active', sortable: false },
   {
     id: 'implementation',
     label: STAGE_LABELS.implementation,
     stages: ['implementation', 'self_review'],
     group: 'active',
+    sortable: false,
   },
-  { id: 'finalization', label: STAGE_LABELS.finalization, stages: ['finalization'], group: 'active' },
-  { id: 'done', label: STAGE_LABELS.done, stages: ['done'], group: 'terminal' },
-  { id: 'cancelled', label: STAGE_LABELS.cancelled, stages: ['cancelled'], group: 'terminal' },
+  { id: 'finalization', label: STAGE_LABELS.finalization, stages: ['finalization'], group: 'active', sortable: false },
+  { id: 'done', label: STAGE_LABELS.done, stages: ['done'], group: 'terminal', sortable: false },
+  { id: 'cancelled', label: STAGE_LABELS.cancelled, stages: ['cancelled'], group: 'terminal', sortable: false },
 ]
 
 function tasksForColumn(col: ColumnDef): PipelineTask[] {
@@ -137,7 +140,8 @@ function tasksForColumn(col: ColumnDef): PipelineTask[] {
           all.push(task)
       }
     }
-    return all
+    // Aggregated across stages — re-sort by rank so manual drag order persists.
+    return all.sort(byRank)
   }
   // Normal stage-based columns exclude needsUser tasks so they don't
   // appear in two columns at once.
@@ -149,7 +153,7 @@ function tasksForColumn(col: ColumnDef): PipelineTask[] {
         all.push(task)
     }
   }
-  return all
+  return col.sortable ? all : [...all].sort(byActivityDesc)
 }
 
 const columnsWithTasks = computed(() =>
@@ -330,6 +334,7 @@ function isHighlightCol(col: ColumnDef): boolean {
             :tasks="tasks.filter(t => !t.parentTaskId || !epicParentIds.has(t.parentTaskId))"
             :project-by-id="projectById"
             :working-agent-by-task="workingAgentByTask"
+            :sortable="col.sortable"
             @select="(t) => emit('select', t)"
             @open-chat="(t) => emit('openChat', t)"
             @navigate-agent="(sid) => emit('navigateAgent', sid)"

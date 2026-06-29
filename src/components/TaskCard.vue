@@ -15,12 +15,15 @@ import AppCard from './ui/AppCard.vue'
 import AppChip from './ui/AppChip.vue'
 import WorktreePill from './WorktreePill.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   task: PipelineTask
   project?: Project | null
   spawner?: Spawner | null
   workingAgent?: Agent | null
-}>()
+  sortable?: boolean
+}>(), {
+  sortable: true,
+})
 const emit = defineEmits<{
   select: [task: PipelineTask]
   openChat: [task: PipelineTask]
@@ -86,6 +89,7 @@ const activeChildOutputExpanded = ref(false)
     <div class="flex justify-between items-baseline gap-2">
       <span class="flex items-center gap-1 overflow-hidden">
         <span
+          v-if="props.sortable"
           class="task-drag-handle relative z-10 cursor-grab active:cursor-grabbing text-fg-mute hover:text-fg-soft select-none leading-none -ml-0.5"
           title="Drag to reorder"
           aria-hidden="true"

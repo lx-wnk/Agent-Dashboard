@@ -230,3 +230,20 @@ describe('taskCard — active child block', () => {
     expect(output.classes()).toContain('whitespace-pre-wrap')
   })
 })
+
+describe('taskCard — drag handle', () => {
+  it('renders the drag handle when sortable is not specified (default behaviour)', () => {
+    const wrapper = mount(TaskCard, { props: { task: baseTask }, global: { stubs } })
+    expect(wrapper.find('.task-drag-handle').exists()).toBe(true)
+  })
+
+  it('renders the drag handle when sortable is explicitly true', () => {
+    const wrapper = mount(TaskCard, { props: { task: baseTask, sortable: true }, global: { stubs } })
+    expect(wrapper.find('.task-drag-handle').exists()).toBe(true)
+  })
+
+  it('hides the drag handle when sortable is false', () => {
+    const wrapper = mount(TaskCard, { props: { task: baseTask, sortable: false }, global: { stubs } })
+    expect(wrapper.find('.task-drag-handle').exists()).toBe(false)
+  })
+})
