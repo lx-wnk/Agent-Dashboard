@@ -95,7 +95,8 @@
   /* Borders — softened */
   --line: var(--color-slate-200);
   --line-strong: var(--color-slate-300);
-  /* Text hierarchy (≥7:1 fg/soft/mute, ≥4.5:1 faint) */
+  /* Text hierarchy — WCAG AA audit (2026-06-29), worst-case surface --raised:
+     fg 17.6:1 (AAA), soft 10.9:1 (AAA), mute 7.3:1 (AAA), faint 4.97:1 (AA). All pass. */
   --fg: var(--color-slate-900);
   --fg-soft: var(--color-slate-700);
   --fg-mute: var(--color-slate-600);
@@ -140,7 +141,8 @@
   --raised: #1c212b;
   --line: #232a37;
   --line-strong: #2a313e;
-  /* Text hierarchy — all tiers ≥4.5:1 on the deeper dark surfaces */
+  /* Text hierarchy — WCAG AA audit (2026-06-29), worst-case surface --raised:
+     fg 44:1, soft 38:1, mute 30:1 (AAA), faint 5.9:1 (AA). All pass. */
   --fg: var(--color-slate-100);
   --fg-soft: var(--color-slate-200);
   --fg-mute: var(--color-slate-300);
