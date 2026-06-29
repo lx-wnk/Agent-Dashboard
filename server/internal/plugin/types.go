@@ -13,20 +13,9 @@ type Descriptor struct {
 	// If empty, the plugin is expected to already be running.
 	Command []string `json:"command"`
 	// Env lists env var names the plugin reads from the parent environment.
-	Env         []string       `json:"env"`
-	Slots       []SlotBinding  `json:"slots"`
-	Settings    []SettingField `json:"settings"`
-	Lifecycle   LifecycleHooks `json:"lifecycle"`
-	Permissions []string       `json:"permissions"`
-}
-
-// SlotBinding declares that the plugin contributes UI into a named host slot.
-// Mode is "override" (replace) or "extend" (wrap, receiving the parent). Higher
-// Priority renders first. Consumed by the frontend (SP4).
-type SlotBinding struct {
-	Slot     string `json:"slot"`
-	Priority int    `json:"priority"`
-	Mode     string `json:"mode"`
+	Env       []string       `json:"env"`
+	Settings  []SettingField `json:"settings"`
+	Lifecycle LifecycleHooks `json:"lifecycle"`
 }
 
 // SettingField declares one configurable setting. Secret fields are encrypted at
