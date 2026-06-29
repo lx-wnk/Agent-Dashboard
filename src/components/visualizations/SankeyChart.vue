@@ -7,6 +7,7 @@ import { scaleOrdinal } from 'd3-scale'
 import { select } from 'd3-selection'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../../composables/useTheme'
+import { toast } from '../../composables/useToast'
 import { chartColors, chartPalette } from '../../utils/chartColors'
 import { errorMessage } from '../../utils/errorMessage'
 
@@ -29,16 +30,17 @@ function nodeName(endpoint: SLink['source']): string {
 }
 
 const svgRef = ref<SVGSVGElement | null>(null)
-// Surfaces a d3-sankey layout failure (e.g. "circular link" if a cyclic
-// graph ever reaches the layout) as a visible message instead of an
-// uncaught promise rejection bubbling out of the watcher callback.
-const renderError = ref<string | null>(null)
 const { theme } = useTheme()
+
+// Surface data-fetch errors (from the parent view) as toasts.
+watch(() => props.error, (msg) => {
+  if (msg)
+    toast.error(msg)
+}, { immediate: true })
 
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
 
 function render() {
-  renderError.value = null
   if (!svgRef.value || !props.data)
     return
   const svg = select(svgRef.value)
@@ -51,8 +53,10 @@ function render() {
     drawSankey(svg)
   }
   catch (err) {
+    // Surfaces a d3-sankey layout failure (e.g. a cyclic graph reaching the
+    // layout) as a toast instead of an uncaught rejection from the watcher.
     svg.selectAll('*').remove()
-    renderError.value = `Could not lay out sankey: ${errorMessage(err)}`
+    toast.error(`Could not lay out sankey: ${errorMessage(err)}`)
   }
 }
 
@@ -134,19 +138,10 @@ onUnmounted(() => {
     <div v-if="loading" class="text-sm text-fg-mute p-4">
       Loading sankey…
     </div>
-    <div v-else-if="error" class="text-sm text-danger-text p-4">
-      {{ error }}
-    </div>
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">
       No tool calls found in this window.
     </div>
-    <!-- The <svg> stays mounted in this branch (not gated behind renderError)
-         so svgRef survives a recoverable layout error — otherwise re-rendering
-         after the data changes would hit the same null-ref mount race. -->
     <template v-else>
-      <div v-if="renderError" class="text-sm text-danger-text p-4">
-        {{ renderError }}
-      </div>
       <svg ref="svgRef" class="w-full" style="min-height: 480px;" aria-label="Tool-call sankey diagram" role="img" />
     </template>
   </div>

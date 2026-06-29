@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useCostHeatmap } from '../composables/useCostHeatmap'
 import { useTheme } from '../composables/useTheme'
+import { toast } from '../composables/useToast'
 import { chartColors } from '../utils/chartColors'
 
 const RGB_CHANNELS_RE = /^rgba?\(([^)]+?)(?:,\s*[\d.]+)?\)$/
@@ -10,6 +11,12 @@ const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`)
 
 const { grid, loading, error } = useCostHeatmap()
+
+// Surface async load failures as toasts; the view keeps its empty/loading state.
+watch(error, (msg) => {
+  if (msg)
+    toast.error(msg)
+})
 
 const { theme } = useTheme()
 
@@ -45,9 +52,6 @@ function cellLabel(dow: string, hourIdx: number, cost: number): string {
     </h3>
     <div v-if="loading" class="text-sm text-slate-500">
       Loading heatmap…
-    </div>
-    <div v-else-if="error" class="text-sm text-danger-text">
-      {{ error }}
     </div>
     <div v-else class="overflow-x-auto">
       <table class="heatmap-table border-collapse">

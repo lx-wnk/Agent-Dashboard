@@ -5,6 +5,7 @@ import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } 
 import { select } from 'd3-selection'
 import { onMounted, ref, watch } from 'vue'
 import { useTheme } from '../composables/useTheme'
+import { toast } from '../composables/useToast'
 import { chartColors, paletteColor } from '../utils/chartColors'
 import { errorMessage } from '../utils/errorMessage'
 
@@ -14,7 +15,6 @@ const { theme } = useTheme()
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const loading = ref(false)
-const error = ref<string | null>(null)
 
 interface GraphNode {
   id: string
@@ -49,7 +49,6 @@ function stageColor(stage: string): string {
 
 async function fetchAndRender() {
   loading.value = true
-  error.value = null
   try {
     const res = await fetch(`/api/tasks/${props.taskId}/dependencies`)
     if (!res.ok)
@@ -58,7 +57,7 @@ async function fetchAndRender() {
     renderGraph(data.dependencies, data.dependents)
   }
   catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load graph')
+    toast.error(errorMessage(e, 'Failed to load graph'))
   }
   finally {
     loading.value = false
@@ -206,9 +205,6 @@ watch(theme, fetchAndRender)
   <div class="dependency-graph">
     <div v-if="loading" class="text-sm text-fg-mute p-4">
       Loading dependency graph…
-    </div>
-    <div v-else-if="error" class="text-sm text-danger-text p-4">
-      {{ error }}
     </div>
     <div v-else>
       <p class="text-xs text-fg-mute px-4 pt-2">
