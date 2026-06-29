@@ -69,6 +69,10 @@ func (l FileManifestLoader) Load(id, path string) (plugin.Descriptor, string, er
 	return d, hex.EncodeToString(sum[:]), nil
 }
 
+// HealthProbe reports the runtime status of a plugin. A nil probe always
+// returns false, false (plugin considered not running / not healthy).
+type HealthProbe func(id string) (running bool, healthy bool)
+
 // Controller derives plugin state, dispatches lifecycle transitions, and proxies
 // settings reads/writes.
 type Controller struct {
@@ -76,6 +80,7 @@ type Controller struct {
 	engine   Engine
 	settings Settings
 	loader   ManifestLoader
+	probe    HealthProbe
 
 	locksMu        sync.Mutex
 	perPluginLocks map[string]*sync.Mutex
@@ -83,17 +88,18 @@ type Controller struct {
 
 // New builds a Controller that reads manifests from the filesystem, with dir as
 // the fallback plugin directory when a row has no stored path.
-func New(r Repo, engine Engine, settings Settings, dir string) *Controller {
-	return NewWithLoader(r, engine, settings, FileManifestLoader{Dir: dir})
+func New(r Repo, engine Engine, settings Settings, dir string, probe HealthProbe) *Controller {
+	return NewWithLoader(r, engine, settings, FileManifestLoader{Dir: dir}, probe)
 }
 
 // NewWithLoader builds a Controller with an explicit manifest loader (tests).
-func NewWithLoader(r Repo, engine Engine, settings Settings, loader ManifestLoader) *Controller {
+func NewWithLoader(r Repo, engine Engine, settings Settings, loader ManifestLoader, probe HealthProbe) *Controller {
 	return &Controller{
 		repo:           r,
 		engine:         engine,
 		settings:       settings,
 		loader:         loader,
+		probe:          probe,
 		perPluginLocks: make(map[string]*sync.Mutex),
 	}
 }
@@ -148,6 +154,10 @@ func (c *Controller) List(ctx context.Context) ([]plugins.PluginView, error) {
 			view.Capabilities = nonNilCaps(desc.Capabilities)
 			view.HasSettings = len(desc.Settings) > 0
 			view.UpdateAvailable = hash != "" && hash != p.ManifestHash
+		}
+		if c.probe != nil {
+			running, healthy := c.probe(p.ID)
+			view.Healthy = running && healthy
 		}
 		out = append(out, view)
 	}
