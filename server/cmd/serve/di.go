@@ -299,7 +299,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			pluginProcessAdapter{reg: pluginRegistry},
 		)
 		discoverer := pluginlifecycle.NewDiscoverer(cfg.PluginDir, pluginDiscoverRepoAdapter{inner: pluginRepo, settings: pluginSettingRepo})
-		lifecycleController := pluginlifecyclectl.New(pluginRepo, lifecycleEngine, pluginSettingsSvc, cfg.PluginDir)
+		lifecycleProbe := func(id string) (bool, bool) {
+			e, ok := pluginRegistry.Lookup(id)
+			return ok, ok && e.Healthy()
+		}
+		lifecycleController := pluginlifecyclectl.New(pluginRepo, lifecycleEngine, pluginSettingsSvc, cfg.PluginDir, lifecycleProbe)
 		pluginLifecycleHandler = apiplugins.NewLifecycle(lifecycleController)
 
 		if res, discErr := discoverer.Discover(ctx); discErr != nil {

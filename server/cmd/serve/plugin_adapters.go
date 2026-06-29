@@ -61,6 +61,10 @@ func (a pluginStateRepoAdapter) SetVersion(ctx context.Context, id, version stri
 	return a.inner.SetVersion(ctx, id, version)
 }
 
+func (a pluginStateRepoAdapter) SetManifestHash(ctx context.Context, id, hash string) error {
+	return a.inner.SetManifestHash(ctx, id, hash)
+}
+
 // pluginDiscoverRepoAdapter maps the ent-backed PluginRepo onto the
 // pluginlifecycle.DiscoverRepo interface. It reads the prior manifest hash to
 // report update-available, then upserts (the upsert preserves installed_at/active).
