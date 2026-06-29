@@ -17,6 +17,16 @@ var modelPricing = map[string]modelPricingEntry{
 	"claude-sonnet-4-6": {3, 15, 0.3, 3.75},
 	"claude-sonnet-4-5": {3, 15, 0.3, 3.75},
 	"claude-haiku-4-5":  {0.8, 4, 0.08, 1},
+
+	// OpenAI — source: platform.openai.com/pricing (verify before releasing).
+	// Cache read = 50% of input price per OpenAI caching docs; cache write = $0.
+	"gpt-5":       {5, 20, 2.5, 0},
+	"gpt-5-codex": {5, 20, 2.5, 0}, // fixture model; same rate until a separate entry is published
+
+	// Google Gemini — source: ai.google.dev/pricing (verify before releasing).
+	// Context caching prices omitted (tier-dependent); set once confirmed.
+	"gemini-2.5-pro":   {1.25, 10, 0, 0},
+	"gemini-2.5-flash": {0.075, 0.30, 0, 0},
 }
 
 const defaultModel = "claude-sonnet-4-6"
