@@ -117,6 +117,26 @@ func (_u *ProjectUpdate) ClearDefaultSpawnerID() *ProjectUpdate {
 	return _u
 }
 
+// SetSetupCommand sets the "setup_command" field.
+func (_u *ProjectUpdate) SetSetupCommand(v string) *ProjectUpdate {
+	_u.mutation.SetSetupCommand(v)
+	return _u
+}
+
+// SetNillableSetupCommand sets the "setup_command" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableSetupCommand(v *string) *ProjectUpdate {
+	if v != nil {
+		_u.SetSetupCommand(*v)
+	}
+	return _u
+}
+
+// ClearSetupCommand clears the value of the "setup_command" field.
+func (_u *ProjectUpdate) ClearSetupCommand() *ProjectUpdate {
+	_u.mutation.ClearSetupCommand()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ProjectUpdate) SetUpdatedAt(v time.Time) *ProjectUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -232,6 +252,12 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.DefaultSpawnerIDCleared() {
 		_spec.ClearField(project.FieldDefaultSpawnerID, field.TypeString)
+	}
+	if value, ok := _u.mutation.SetupCommand(); ok {
+		_spec.SetField(project.FieldSetupCommand, field.TypeString, value)
+	}
+	if _u.mutation.SetupCommandCleared() {
+		_spec.ClearField(project.FieldSetupCommand, field.TypeString)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(project.FieldUpdatedAt, field.TypeTime, value)
@@ -389,6 +415,26 @@ func (_u *ProjectUpdateOne) ClearDefaultSpawnerID() *ProjectUpdateOne {
 	return _u
 }
 
+// SetSetupCommand sets the "setup_command" field.
+func (_u *ProjectUpdateOne) SetSetupCommand(v string) *ProjectUpdateOne {
+	_u.mutation.SetSetupCommand(v)
+	return _u
+}
+
+// SetNillableSetupCommand sets the "setup_command" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableSetupCommand(v *string) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetSetupCommand(*v)
+	}
+	return _u
+}
+
+// ClearSetupCommand clears the value of the "setup_command" field.
+func (_u *ProjectUpdateOne) ClearSetupCommand() *ProjectUpdateOne {
+	_u.mutation.ClearSetupCommand()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ProjectUpdateOne) SetUpdatedAt(v time.Time) *ProjectUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -534,6 +580,12 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if _u.mutation.DefaultSpawnerIDCleared() {
 		_spec.ClearField(project.FieldDefaultSpawnerID, field.TypeString)
+	}
+	if value, ok := _u.mutation.SetupCommand(); ok {
+		_spec.SetField(project.FieldSetupCommand, field.TypeString, value)
+	}
+	if _u.mutation.SetupCommandCleared() {
+		_spec.ClearField(project.FieldSetupCommand, field.TypeString)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(project.FieldUpdatedAt, field.TypeTime, value)

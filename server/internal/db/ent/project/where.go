@@ -90,6 +90,11 @@ func DefaultSpawnerID(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldDefaultSpawnerID, v))
 }
 
+// SetupCommand applies equality check predicate on the "setup_command" field. It's identical to SetupCommandEQ.
+func SetupCommand(v string) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldSetupCommand, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldCreatedAt, v))
@@ -453,6 +458,81 @@ func DefaultSpawnerIDEqualFold(v string) predicate.Project {
 // DefaultSpawnerIDContainsFold applies the ContainsFold predicate on the "default_spawner_id" field.
 func DefaultSpawnerIDContainsFold(v string) predicate.Project {
 	return predicate.Project(sql.FieldContainsFold(FieldDefaultSpawnerID, v))
+}
+
+// SetupCommandEQ applies the EQ predicate on the "setup_command" field.
+func SetupCommandEQ(v string) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldSetupCommand, v))
+}
+
+// SetupCommandNEQ applies the NEQ predicate on the "setup_command" field.
+func SetupCommandNEQ(v string) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldSetupCommand, v))
+}
+
+// SetupCommandIn applies the In predicate on the "setup_command" field.
+func SetupCommandIn(vs ...string) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldSetupCommand, vs...))
+}
+
+// SetupCommandNotIn applies the NotIn predicate on the "setup_command" field.
+func SetupCommandNotIn(vs ...string) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldSetupCommand, vs...))
+}
+
+// SetupCommandGT applies the GT predicate on the "setup_command" field.
+func SetupCommandGT(v string) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldSetupCommand, v))
+}
+
+// SetupCommandGTE applies the GTE predicate on the "setup_command" field.
+func SetupCommandGTE(v string) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldSetupCommand, v))
+}
+
+// SetupCommandLT applies the LT predicate on the "setup_command" field.
+func SetupCommandLT(v string) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldSetupCommand, v))
+}
+
+// SetupCommandLTE applies the LTE predicate on the "setup_command" field.
+func SetupCommandLTE(v string) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldSetupCommand, v))
+}
+
+// SetupCommandContains applies the Contains predicate on the "setup_command" field.
+func SetupCommandContains(v string) predicate.Project {
+	return predicate.Project(sql.FieldContains(FieldSetupCommand, v))
+}
+
+// SetupCommandHasPrefix applies the HasPrefix predicate on the "setup_command" field.
+func SetupCommandHasPrefix(v string) predicate.Project {
+	return predicate.Project(sql.FieldHasPrefix(FieldSetupCommand, v))
+}
+
+// SetupCommandHasSuffix applies the HasSuffix predicate on the "setup_command" field.
+func SetupCommandHasSuffix(v string) predicate.Project {
+	return predicate.Project(sql.FieldHasSuffix(FieldSetupCommand, v))
+}
+
+// SetupCommandIsNil applies the IsNil predicate on the "setup_command" field.
+func SetupCommandIsNil() predicate.Project {
+	return predicate.Project(sql.FieldIsNull(FieldSetupCommand))
+}
+
+// SetupCommandNotNil applies the NotNil predicate on the "setup_command" field.
+func SetupCommandNotNil() predicate.Project {
+	return predicate.Project(sql.FieldNotNull(FieldSetupCommand))
+}
+
+// SetupCommandEqualFold applies the EqualFold predicate on the "setup_command" field.
+func SetupCommandEqualFold(v string) predicate.Project {
+	return predicate.Project(sql.FieldEqualFold(FieldSetupCommand, v))
+}
+
+// SetupCommandContainsFold applies the ContainsFold predicate on the "setup_command" field.
+func SetupCommandContainsFold(v string) predicate.Project {
+	return predicate.Project(sql.FieldContainsFold(FieldSetupCommand, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

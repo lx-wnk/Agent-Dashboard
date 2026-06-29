@@ -27,6 +27,8 @@ type Project struct {
 	Color *string `json:"color,omitempty"`
 	// DefaultSpawnerID holds the value of the "default_spawner_id" field.
 	DefaultSpawnerID *string `json:"default_spawner_id,omitempty"`
+	// SetupCommand holds the value of the "setup_command" field.
+	SetupCommand *string `json:"setup_command,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -60,7 +62,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case project.FieldID, project.FieldSlug, project.FieldName, project.FieldDescription, project.FieldColor, project.FieldDefaultSpawnerID:
+		case project.FieldID, project.FieldSlug, project.FieldName, project.FieldDescription, project.FieldColor, project.FieldDefaultSpawnerID, project.FieldSetupCommand:
 			values[i] = new(sql.NullString)
 		case project.FieldCreatedAt, project.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -117,6 +119,13 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.DefaultSpawnerID = new(string)
 				*_m.DefaultSpawnerID = value.String
+			}
+		case project.FieldSetupCommand:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field setup_command", values[i])
+			} else if value.Valid {
+				_m.SetupCommand = new(string)
+				*_m.SetupCommand = value.String
 			}
 		case project.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -189,6 +198,11 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	if v := _m.DefaultSpawnerID; v != nil {
 		builder.WriteString("default_spawner_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.SetupCommand; v != nil {
+		builder.WriteString("setup_command=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
