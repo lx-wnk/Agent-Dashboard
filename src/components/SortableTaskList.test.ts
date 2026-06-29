@@ -60,7 +60,7 @@ function makeTask(id: string, overrides: Partial<PipelineTask> = {}): PipelineTa
 
 const emptyProjectById = new Map<string, Project>()
 
-describe('SortableTaskList — drag guard', () => {
+describe('sortableTaskList — drag guard', () => {
   it('resets list normally when a prop update arrives outside a drag', async () => {
     const taskA = makeTask('a')
     const taskB = makeTask('b')
@@ -139,7 +139,7 @@ describe('SortableTaskList — drag guard', () => {
   })
 })
 
-describe('SortableTaskList — sortable prop', () => {
+describe('sortableTaskList — sortable prop', () => {
   it('passes disabled:true to useSortable when sortable is false', () => {
     shallowMount(SortableTaskList, {
       props: { tasks: [], projectById: emptyProjectById, sortable: false },
