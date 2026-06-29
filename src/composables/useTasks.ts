@@ -32,6 +32,10 @@ function byRank(a: PipelineTask, b: PipelineTask): number {
   return effectiveRank(a) - effectiveRank(b)
 }
 
+export function byActivityDesc(a: PipelineTask, b: PipelineTask): number {
+  return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+}
+
 /**
  * Reposition a task between two neighbors via drag-and-drop. Applies the
  * server-computed midpoint optimistically (so the card stays put on drop) and
