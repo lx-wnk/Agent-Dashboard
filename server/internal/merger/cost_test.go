@@ -67,7 +67,9 @@ func TestEstimateCostForProvider(t *testing.T) {
 	})
 
 	t.Run("codex with unknown model is CostUnknown", func(t *testing.T) {
-		got := merger.EstimateCostForProvider(sdk.ProviderCodex, usage, "gpt-5")
+		// A non-Claude model absent from the pricing table → cost is gated as unknown.
+		// (Known Codex models like gpt-5 are now priced — see the pricing table.)
+		got := merger.EstimateCostForProvider(sdk.ProviderCodex, usage, "codex-unpriced-model")
 		require.True(t, got.Unknown)
 		require.Equal(t, 0.0, got.Total)
 		require.Equal(t, 0.0, got.CacheCreate)
@@ -75,7 +77,7 @@ func TestEstimateCostForProvider(t *testing.T) {
 	})
 
 	t.Run("gemini with unknown model is CostUnknown", func(t *testing.T) {
-		got := merger.EstimateCostForProvider(sdk.ProviderGemini, usage, "gemini-2.5-pro")
+		got := merger.EstimateCostForProvider(sdk.ProviderGemini, usage, "gemini-unpriced-model")
 		require.True(t, got.Unknown)
 		require.Equal(t, 0.0, got.Total)
 	})
