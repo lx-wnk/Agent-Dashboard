@@ -89,3 +89,70 @@ func TestService_DecryptedAll_ReturnsPlaintext(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, empty)
 }
+
+func TestService_Put_TypeValidation(t *testing.T) {
+	box, _ := secretbox.New(make([]byte, 32))
+	ctx := context.Background()
+
+	schema := []plugin.SettingField{
+		{Key: "count", Type: "int"},
+		{Key: "enabled", Type: "bool"},
+		{Key: "endpoint", Type: "url"},
+		{Key: "mode", Type: "enum", Enum: []string{"fast", "slow"}},
+		{Key: "label", Type: "string"},
+		{Key: "token", Type: "string", Secret: true},
+	}
+
+	cases := []struct {
+		name    string
+		values  map[string]string
+		wantErr bool
+		errIs   error
+	}{
+		{"valid int", map[string]string{"count": "42"}, false, nil},
+		{"invalid int", map[string]string{"count": "abc"}, true, ErrInvalidValue},
+		{"valid bool true", map[string]string{"enabled": "true"}, false, nil},
+		{"valid bool false", map[string]string{"enabled": "false"}, false, nil},
+		{"invalid bool", map[string]string{"enabled": "yes"}, true, ErrInvalidValue},
+		{"valid url", map[string]string{"endpoint": "https://api.example.com"}, false, nil},
+		{"invalid url no scheme", map[string]string{"endpoint": "api.example.com"}, true, ErrInvalidValue},
+		{"invalid url empty", map[string]string{"endpoint": ""}, true, ErrInvalidValue},
+		{"valid enum", map[string]string{"mode": "fast"}, false, nil},
+		{"invalid enum", map[string]string{"mode": "turbo"}, true, ErrInvalidValue},
+		{"valid string any", map[string]string{"label": "anything goes"}, false, nil},
+		{"unknown key", map[string]string{"nope": "x"}, true, ErrUnknownKey},
+		{"masked sentinel skips validation", map[string]string{"token": MaskedSentinel}, false, nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &fakeRepo{rows: map[string]row{}}
+			svc := New(repo, box)
+			err := svc.Put(ctx, "p1", schema, tc.values)
+			if tc.wantErr {
+				require.Error(t, err)
+				if tc.errIs != nil {
+					require.ErrorIs(t, err, tc.errIs)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestService_Put_ValidationFailDoesNotPersist(t *testing.T) {
+	box, _ := secretbox.New(make([]byte, 32))
+	repo := &fakeRepo{rows: map[string]row{}}
+	svc := New(repo, box)
+	schema := []plugin.SettingField{
+		{Key: "count", Type: "int"},
+		{Key: "label", Type: "string"},
+	}
+	ctx := context.Background()
+
+	// count is invalid, label is valid — nothing should be persisted.
+	err := svc.Put(ctx, "p1", schema, map[string]string{"count": "bad", "label": "ok"})
+	require.ErrorIs(t, err, ErrInvalidValue)
+	assert.Empty(t, repo.rows, "no value must be persisted when validation fails")
+}
