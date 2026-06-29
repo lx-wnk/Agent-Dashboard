@@ -98,8 +98,18 @@ func (r *Registry) appendSettingsEnv(ctx context.Context, base []string, id stri
 		slog.Warn("plugin: settings fetch failed — starting without settings", "id", id, "err", err)
 		return base
 	}
+	// Two distinct setting keys can sanitize to the same env name (e.g. "api-key"
+	// and "api.key" both → API_KEY); map iteration makes the winner arbitrary.
+	// Warn so the collision is observable; the winning value stays arbitrary.
+	seen := make(map[string]string, len(vals))
 	for k, v := range vals {
-		base = append(base, "PLUGIN_SETTING_"+sanitizeSettingKey(k)+"="+v)
+		envName := "PLUGIN_SETTING_" + sanitizeSettingKey(k)
+		if prev, dup := seen[envName]; dup {
+			slog.Warn("plugin: setting key collision after sanitization — one value silently wins",
+				"id", id, "key", k, "collidesWith", prev, "envName", envName)
+		}
+		seen[envName] = k
+		base = append(base, envName+"="+v)
 	}
 	return base
 }

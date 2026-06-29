@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"context"
+	"strings"
 	"testing"
 )
 
@@ -19,5 +21,31 @@ func TestSanitizeSettingKey(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("sanitizeSettingKey(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestAppendSettingsEnv_CollidingKeysStillInject(t *testing.T) {
+	r := New("")
+	r.SetSettingsProvider(func(_ context.Context, _ string) (map[string]string, error) {
+		// "api-key" and "api.key" both sanitize to PLUGIN_SETTING_API_KEY.
+		return map[string]string{"api-key": "v1", "api.key": "v2", "plain": "p"}, nil
+	})
+
+	env := r.appendSettingsEnv(context.Background(), nil, "p1")
+
+	var apiKeyVars, plainVars int
+	for _, kv := range env {
+		switch {
+		case strings.HasPrefix(kv, "PLUGIN_SETTING_API_KEY="):
+			apiKeyVars++
+		case strings.HasPrefix(kv, "PLUGIN_SETTING_PLAIN="):
+			plainVars++
+		}
+	}
+	if plainVars != 1 {
+		t.Errorf("non-colliding key not injected: got %d PLAIN vars", plainVars)
+	}
+	if apiKeyVars == 0 {
+		t.Error("colliding keys produced no API_KEY var")
 	}
 }
