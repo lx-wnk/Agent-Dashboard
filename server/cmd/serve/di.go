@@ -223,6 +223,25 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	}
 	pluginRegistry.SetEnabled(func(id string) bool { return activePlugins[id] })
 
+	// Build settings service early so the provider is wired before Load.
+	// Nil when running without a database (no entClient).
+	var pluginSettingsSvc *pluginsettings.Service
+	if entClient != nil {
+		masterKey, keyErr := secretbox.LoadOrGenerateMasterKey(os.Getenv("DASHBOARD_SECRET_KEY"))
+		if keyErr != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin secret key: %w", keyErr)
+		}
+		box, boxErr := secretbox.New(masterKey)
+		if boxErr != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin secretbox: %w", boxErr)
+		}
+		pluginSettingRepo := repo.NewPluginSettingRepo(entClient)
+		pluginSettingsSvc = pluginsettings.New(pluginSettingRepoAdapter{inner: pluginSettingRepo}, box)
+		pluginRegistry.SetSettingsProvider(func(ctx context.Context, id string) (map[string]string, error) {
+			return pluginSettingsSvc.DecryptedAll(ctx, id)
+		})
+	}
+
 	// oauthProvider and pluginLoginURL are set by the SetAuth hook when an auth_provider
 	// plugin passes health-check. If no auth_provider plugin is configured both stay at
 	// zero values, which activates bypass-auth on loopback.
@@ -271,17 +290,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// fields encrypted at rest), lifecycle transitions, and on-disk discovery.
 	// Constructed only with a database — the handler stays nil otherwise.
 	var pluginLifecycleHandler *apiplugins.LifecycleHandler
-	if entClient != nil {
-		masterKey, keyErr := secretbox.LoadOrGenerateMasterKey(os.Getenv("DASHBOARD_SECRET_KEY"))
-		if keyErr != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("plugin secret key: %w", keyErr)
-		}
-		box, boxErr := secretbox.New(masterKey)
-		if boxErr != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("plugin secretbox: %w", boxErr)
-		}
+	if pluginSettingsSvc != nil {
 		pluginSettingRepo := repo.NewPluginSettingRepo(entClient)
-		pluginSettingsSvc := pluginsettings.New(pluginSettingRepoAdapter{inner: pluginSettingRepo}, box)
 		lifecycleEngine := pluginlifecycle.New(
 			pluginStateRepoAdapter{inner: pluginRepo},
 			pluginlifecycle.NewHTTPHookCaller(),
