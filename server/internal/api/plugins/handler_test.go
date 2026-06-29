@@ -21,20 +21,6 @@ import (
 
 const testJWTSecret = "test-secret-plugins"
 
-// stubController satisfies the trimmed Controller interface (List only).
-type stubController struct {
-	states []pluginsctl.PluginState
-}
-
-func (s stubController) List() ([]pluginsctl.PluginState, error) { return s.states, nil }
-
-// fakeController stands in for *pluginsctl.Controller (list-only now).
-type fakeController struct {
-	states []pluginsctl.PluginState
-}
-
-func (f *fakeController) List() ([]pluginsctl.PluginState, error) { return f.states, nil }
-
 // withAuth adds a valid JWT session cookie so auth.RequireAuth passes.
 func withAuth(t *testing.T, r *http.Request) *http.Request {
 	t.Helper()
@@ -46,87 +32,18 @@ func withAuth(t *testing.T, r *http.Request) *http.Request {
 	return r
 }
 
-func mount(t *testing.T, ctl plugins.Controller) http.Handler {
-	t.Helper()
-	h := plugins.New(ctl)
+// TestLegacySettingsPluginsRouteGone asserts the legacy /api/settings/plugins
+// route no longer exists after consolidation onto /api/plugins.
+func TestLegacySettingsPluginsRouteGone(t *testing.T) {
+	h := plugins.NewLifecycle(&fakeLifecycle{})
 	r := chi.NewRouter()
-	r.Use(auth.RequireAuth(testJWTSecret))
+	h.MountList(r)
 	h.Mount(r)
-	return r
-}
 
-// TestList_ShapeAndLeakGuard verifies the list DTO carries exactly the allowed
-// keys (incl. enabled/healthy/authProvider) and never leaks baseURL or env.
-func TestList_ShapeAndLeakGuard(t *testing.T) {
-	ctl := &fakeController{states: []pluginsctl.PluginState{{
-		ID:           "fake-plugin",
-		Capabilities: []string{"route_extension"},
-		Enabled:      false,
-		Healthy:      true,
-		AuthProvider: false,
-	}}}
-
-	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/settings/plugins", nil))
 	rr := httptest.NewRecorder()
-	mount(t, ctl).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	rawBody := rr.Body.String()
-
-	var items []map[string]any
-	if err := json.Unmarshal([]byte(rawBody), &items); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(items) != 1 {
-		t.Fatalf("expected 1 plugin, got %d", len(items))
-	}
-	item := items[0]
-
-	for _, required := range []string{"id", "capabilities", "enabled", "healthy", "authProvider"} {
-		if _, ok := item[required]; !ok {
-			t.Errorf("response item missing required key %q", required)
-		}
-	}
-	for _, forbidden := range []string{"env", "baseURL", "descriptor", "addr", "command", "version"} {
-		if _, ok := item[forbidden]; ok {
-			t.Errorf("response item must not contain key %q (F028/F034 leak guard)", forbidden)
-		}
-	}
-	if len(item) != 5 {
-		t.Errorf("response item has %d keys, want exactly 5; got: %v", len(item), item)
-	}
-
-	if item["id"] != "fake-plugin" {
-		t.Errorf("id: got %v, want fake-plugin", item["id"])
-	}
-	if item["enabled"] != false || item["healthy"] != true || item["authProvider"] != false {
-		t.Errorf("flags wrong: %v", item)
-	}
-	caps, _ := item["capabilities"].([]any)
-	if len(caps) != 1 || caps[0] != "route_extension" {
-		t.Errorf("capabilities: got %v", caps)
-	}
-
-	if strings.Contains(rawBody, "127.0.0.1") || strings.Contains(rawBody, "SUPER_SECRET_TOKEN") {
-		t.Errorf("response body leaked internal plugin data: %s", rawBody)
-	}
-}
-
-// TestPluginsEnabledPatchRouteRemoved asserts the interim PATCH route is gone.
-func TestPluginsEnabledPatchRouteRemoved(t *testing.T) {
-	r := chi.NewRouter()
-	plugins.New(stubController{}).Mount(r)
-
-	rec := httptest.NewRecorder()
-	body := strings.NewReader(`{"enabled":true}`)
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPatch, "/api/settings/plugins-enabled/voice", body))
-
-	// chi returns 405 when the path exists but the method doesn't, or 404 when
-	// neither path nor method matches — both confirm the route is absent.
-	if rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
-		t.Errorf("expected 404 or 405, got %d", rec.Code)
+	r.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/settings/plugins", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for removed route /api/settings/plugins, got %d", rr.Code)
 	}
 }
 
