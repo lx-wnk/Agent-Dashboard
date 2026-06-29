@@ -48,6 +48,10 @@ func (f *fakeEngine) Uninstall(_ context.Context, d plugin.Descriptor) error {
 	f.calls = append(f.calls, "uninstall:"+d.ID)
 	return nil
 }
+func (f *fakeEngine) Update(_ context.Context, d plugin.Descriptor, hash string) error {
+	f.calls = append(f.calls, "update:"+d.ID+":"+hash)
+	return nil
+}
 
 type fakeSettings struct {
 	getSchema []plugin.SettingField
@@ -164,6 +168,31 @@ func TestTransition_DispatchesAndReturnsState(t *testing.T) {
 	}
 }
 
+func TestTransition_UpdateDispatchesToEngine(t *testing.T) {
+	now := time.Now()
+	// ManifestHash == loader hash → updateAvailable=false after update
+	repo := &fakeRepo{rows: map[string]*ent.Plugin{
+		"p1": {ID: "p1", Name: "P1", Version: "1.0", InstalledAt: ptrTime(now), ManifestHash: "h-new"},
+	}}
+	engine := &fakeEngine{}
+	loader := &fakeLoader{
+		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1", Version: "2.0"}},
+		hashes:    map[string]string{"p1": "h-new"},
+	}
+	c := pluginlifecyclectl.NewWithLoader(repo, engine, &fakeSettings{}, loader)
+
+	view, err := c.Transition(context.Background(), "p1", "update")
+	if err != nil {
+		t.Fatalf("Transition update: %v", err)
+	}
+	if len(engine.calls) != 1 || engine.calls[0] != "update:p1:h-new" {
+		t.Errorf("engine calls: %v", engine.calls)
+	}
+	if view.UpdateAvailable {
+		t.Error("updateAvailable should be false after update (stored hash now matches manifest hash)")
+	}
+}
+
 func TestTransition_InvalidAction(t *testing.T) {
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{"p1": {ID: "p1"}}}
 	loader := &fakeLoader{manifests: map[string]plugin.Descriptor{"p1": {ID: "p1"}}, hashes: map[string]string{"p1": "h"}}
@@ -244,6 +273,12 @@ func (e *slowEngine) Uninstall(_ context.Context, d plugin.Descriptor) error {
 	e.record("start:uninstall:" + d.ID)
 	time.Sleep(e.delay)
 	e.record("end:uninstall:" + d.ID)
+	return nil
+}
+func (e *slowEngine) Update(_ context.Context, d plugin.Descriptor, _ string) error {
+	e.record("start:update:" + d.ID)
+	time.Sleep(e.delay)
+	e.record("end:update:" + d.ID)
 	return nil
 }
 

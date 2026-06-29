@@ -33,6 +33,7 @@ type Engine interface {
 	Activate(ctx context.Context, d plugin.Descriptor) error
 	Deactivate(ctx context.Context, d plugin.Descriptor) error
 	Uninstall(ctx context.Context, d plugin.Descriptor) error
+	Update(ctx context.Context, d plugin.Descriptor, manifestHash string) error
 }
 
 // Settings is the per-plugin settings surface (satisfied by *pluginsettings.Service).
@@ -198,6 +199,8 @@ func (c *Controller) Transition(ctx context.Context, id, action string) (plugins
 		err = c.engine.Deactivate(ctx, desc)
 	case "uninstall":
 		err = c.engine.Uninstall(ctx, desc)
+	case "update":
+		err = c.engine.Update(ctx, desc, hash)
 	default:
 		return plugins.PluginView{}, fmt.Errorf("%w: %q", pluginsctl.ErrInvalidAction, action)
 	}
