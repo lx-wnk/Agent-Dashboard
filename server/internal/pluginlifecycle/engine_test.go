@@ -89,11 +89,13 @@ func TestEngine_InstallActivateDeactivateUninstall(t *testing.T) {
 	assert.True(t, settings.cleared)
 }
 
-func TestEngine_ActivateBeforeInstallRejected(t *testing.T) {
-	e := New(&fakePluginRepo{}, &recordingHooks{}, &fakeClearer{}, nil)
+func TestEngine_ActivateOnDiscoveredPlugin_AutoInstalls(t *testing.T) {
+	pr := &fakePluginRepo{}
+	e := New(pr, &recordingHooks{}, &fakeClearer{}, nil)
 	err := e.Activate(context.Background(), desc())
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrIllegalTransition)
+	require.NoError(t, err)
+	assert.NotNil(t, pr.installedAt)
+	assert.True(t, pr.active)
 }
 
 func TestEngine_InstallWhenAlreadyInstalledRejected(t *testing.T) {
@@ -249,4 +251,77 @@ func TestInstallWrapsHooksInTransient(t *testing.T) {
 
 	require.Equal(t, "transient-begin:voice", events[0])
 	require.Equal(t, "transient-end:voice", events[len(events)-1])
+}
+
+// TestActivate_DiscoveredPlugin_AutoInstallsAndActivates verifies that calling
+// Activate on a plugin with no installed_at (state=discovered) implicitly
+// installs it first then activates it, without requiring a separate Install call.
+func TestActivate_DiscoveredPlugin_AutoInstallsAndActivates(t *testing.T) {
+	pr := &fakePluginRepo{} // installedAt=nil → discovered
+	hk := &recordingHooks{}
+	e := New(pr, hk, &fakeClearer{}, nil)
+	ctx := context.Background()
+
+	d := plugin.Descriptor{
+		ID:      "voice-whisper",
+		Version: "1.0.0",
+		Lifecycle: plugin.LifecycleHooks{
+			Install:  "/install",
+			Activate: "/activate",
+		},
+	}
+
+	require.NoError(t, e.Activate(ctx, d))
+	assert.NotNil(t, pr.installedAt, "installedAt must be set by the implicit install")
+	assert.True(t, pr.active, "plugin must be active after Activate")
+	assert.Contains(t, hk.called, "/install", "install hook must run")
+	assert.Contains(t, hk.called, "/activate", "activate hook must run")
+}
+
+// TestActivate_InactivePlugin_NoDoubleInstall verifies that calling Activate on
+// an already-installed (inactive) plugin does not re-run the install hook.
+func TestActivate_InactivePlugin_NoDoubleInstall(t *testing.T) {
+	now := time.Now()
+	pr := &fakePluginRepo{installedAt: &now, active: false}
+	hk := &recordingHooks{}
+	e := New(pr, hk, &fakeClearer{}, nil)
+	ctx := context.Background()
+
+	d := plugin.Descriptor{
+		ID:      "voice-whisper",
+		Version: "1.0.0",
+		Lifecycle: plugin.LifecycleHooks{
+			Install:  "/install",
+			Activate: "/activate",
+		},
+	}
+
+	require.NoError(t, e.Activate(ctx, d))
+	assert.True(t, pr.active)
+	assert.NotContains(t, hk.called, "/install", "install hook must NOT run for an already-installed plugin")
+	assert.Contains(t, hk.called, "/activate")
+}
+
+// TestActivate_DiscoveredPlugin_InstallHookFail_AbortsBeforeActivate verifies
+// that a failing install hook during auto-install aborts before the activate
+// hook runs and before the plugin is marked active.
+func TestActivate_DiscoveredPlugin_InstallHookFail_AbortsBeforeActivate(t *testing.T) {
+	pr := &fakePluginRepo{}
+	hk := &recordingHooks{failOn: "/install"}
+	e := New(pr, hk, &fakeClearer{}, nil)
+	ctx := context.Background()
+
+	d := plugin.Descriptor{
+		ID:      "voice-whisper",
+		Version: "1.0.0",
+		Lifecycle: plugin.LifecycleHooks{
+			Install:  "/install",
+			Activate: "/activate",
+		},
+	}
+
+	require.Error(t, e.Activate(ctx, d))
+	assert.Nil(t, pr.installedAt, "installedAt must not be set when install hook fails")
+	assert.False(t, pr.active, "plugin must not be active when install aborts")
+	assert.NotContains(t, hk.called, "/activate", "activate hook must not run when install fails")
 }

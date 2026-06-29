@@ -23,7 +23,7 @@ func TestService_DefaultsAndTypedAccess(t *testing.T) {
 
 	// registry default when no DB row
 	assert.Equal(t, 5, svc.Int("spawn.rateLimit"))
-	assert.False(t, svc.Bool("worktree.force"))
+	assert.True(t, svc.Bool("worktree.force"))
 	assert.Equal(t, "none", svc.String("auth.mode"))
 	assert.Empty(t, svc.StringSlice("spawn.allowedCommands"))
 

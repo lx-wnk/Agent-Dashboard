@@ -144,6 +144,7 @@ Preparing the first public release.
 
 ### Changed
 
+- `worktree.force` setting now defaults to `true` — pipeline tasks automatically create a git worktree per task without requiring explicit `SourceBranch`. Set to `false` to restore the previous opt-in behaviour.
 - Plugin route extensions now serve under `/api/plugins/{id}/proxy/*` and enable/disable
   live via the lifecycle endpoints (`POST /api/plugins/{id}/activate|deactivate` — no
   server restart). The interim `PATCH /api/settings/plugins-enabled/{id}` and

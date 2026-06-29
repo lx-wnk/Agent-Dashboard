@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ApiKey, McpScope } from '../types'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { usePermissionPresets } from '../composables/usePermissionPresets'
 import { useServerConfig } from '../composables/useServerConfig'
 import { useTheme } from '../composables/useTheme'
 import { useUser } from '../composables/useUser'
@@ -68,7 +69,7 @@ const confirmRegenerateId = ref<string | null>(null)
 const isRegenerating = ref(false)
 
 // Permission presets
-const presets = ref<{ cwd: string, count: number }[]>([])
+const { presets, load: loadPresetsData, revoke: revokePreset } = usePermissionPresets()
 const presetsLoading = ref(false)
 const presetsError = ref<string | null>(null)
 const confirmResetCwd = ref<string | null>(null)
@@ -109,10 +110,7 @@ async function loadPresets() {
   presetsLoading.value = true
   presetsError.value = null
   try {
-    const res = await fetch('/api/settings/permission-presets')
-    if (!res.ok)
-      throw new Error(`HTTP ${res.status}`)
-    presets.value = await res.json()
+    await loadPresetsData()
   }
   catch (e) {
     presetsError.value = errorMessage(e, 'Failed to load')
@@ -122,21 +120,18 @@ async function loadPresets() {
   }
 }
 
-async function resetPresets(cwd: string) {
+async function resetPresets(projectCwd: string) {
   try {
-    const res = await fetch('/api/settings/permission-presets', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cwd }),
-    })
-    if (!res.ok)
-      throw new Error(`HTTP ${res.status}`)
+    await revokePreset(projectCwd)
     confirmResetCwd.value = null
-    await loadPresets()
   }
   catch (e) {
     presetsError.value = errorMessage(e, 'Failed to reset')
   }
+}
+
+function basename(path: string): string {
+  return path.split('/').filter(Boolean).pop() ?? path
 }
 
 watch(activeSection, (val, oldVal) => {
@@ -820,23 +815,23 @@ async function startImport() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="p in presets" :key="p.cwd">
-                <td class="px-3 py-2.5 border-b border-line text-fg font-mono text-xs break-all">
-                  {{ p.cwd }}
+              <tr v-for="p in presets" :key="p.projectCwd">
+                <td class="px-3 py-2.5 border-b border-line text-fg font-mono text-xs" :title="p.projectCwd">
+                  {{ basename(p.projectCwd) }}
                 </td>
                 <td class="px-3 py-2.5 border-b border-line text-fg-mute whitespace-nowrap">
-                  {{ p.count }} {{ p.count === 1 ? 'Tool' : 'Tools' }}
+                  {{ p.entries.length }} {{ p.entries.length === 1 ? 'Tool' : 'Tools' }}
                 </td>
                 <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
-                  <template v-if="confirmResetCwd === p.cwd">
-                    <AppButton variant="danger" size="sm" class="mr-1" @click="resetPresets(p.cwd)">
+                  <template v-if="confirmResetCwd === p.projectCwd">
+                    <AppButton variant="danger" size="sm" class="mr-1" @click="resetPresets(p.projectCwd)">
                       Yes, reset
                     </AppButton>
                     <AppButton variant="secondary" size="sm" @click="confirmResetCwd = null">
                       Cancel
                     </AppButton>
                   </template>
-                  <button v-else type="button" class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmResetCwd = p.cwd">
+                  <button v-else type="button" class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400" @click="confirmResetCwd = p.projectCwd">
                     Reset
                   </button>
                 </td>

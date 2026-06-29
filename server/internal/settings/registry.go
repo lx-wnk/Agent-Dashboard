@@ -108,7 +108,7 @@ var definitions = func() map[string]Definition {
 		{Key: "auth.mode", Type: TypeEnum, Enum: []string{"none", "plugin"}, Default: "none", Apply: ApplyRestart, Category: "auth"},
 		{Key: "git.allowPush", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "git"},
 		{Key: "git.allowPull", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "git"},
-		{Key: "worktree.force", Type: TypeBool, Default: "false", Apply: ApplyRestart, Category: "worktree"},
+		{Key: "worktree.force", Type: TypeBool, Default: "true", Apply: ApplyRestart, Category: "worktree"},
 		{Key: "sse.intervalMs", Type: TypeInt, Default: "3000", Apply: ApplyRestart, Category: "sse", validate: positiveInt("sse.intervalMs")},
 		{Key: "shutdown.timeoutSeconds", Type: TypeInt, Default: "10", Apply: ApplyRestart, Category: "server", validate: positiveInt("shutdown.timeoutSeconds")},
 		{Key: "hooks.debounceMs", Type: TypeInt, Default: "100", Apply: ApplyRestart, Category: "hooks", validate: positiveInt("hooks.debounceMs")},
