@@ -41,6 +41,35 @@ beforeEach(() => {
   mockStageMap = {}
 })
 
+function makeTask(id: string, overrides: Partial<PipelineTask> = {}): PipelineTask {
+  return {
+    id,
+    slug: `slug-${id}`,
+    title: `Task ${id}`,
+    description: null,
+    cwd: '/repo',
+    worktreePath: null,
+    sourceBranch: null,
+    targetBranch: null,
+    currentStage: 'backlog',
+    parentTaskId: null,
+    maxIterations: 10,
+    tokenBudget: null,
+    costBudgetCents: null,
+    stageTimeoutSeconds: 300,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    metadata: null,
+    silverBullet: false,
+    planMode: false,
+    priority: 'medium',
+    userId: null,
+    rank: null,
+    needsUser: false,
+    ...overrides,
+  }
+}
+
 // COLUMNS order (from PipelineBoard.vue):
 // 0 needs-you, 1 concept, 2 backlog, 3 plan_review, 4 implementation,
 // 5 finalization, 6 done, 7 cancelled
@@ -62,6 +91,57 @@ describe('pipelineBoard — sortable prop threading', () => {
     expect(lists[5].props('sortable')).toBe(false) // finalization
     expect(lists[6].props('sortable')).toBe(false) // done
     expect(lists[7].props('sortable')).toBe(false) // cancelled
+    wrapper.unmount()
+  })
+})
+
+describe('pipelineBoard — column task ordering', () => {
+  it('sorts non-sortable column tasks by updatedAt descending', () => {
+    const older = makeTask('older', { currentStage: 'implementation', updatedAt: '2026-01-01T00:00:00Z' })
+    const newer = makeTask('newer', { currentStage: 'implementation', updatedAt: '2026-06-01T00:00:00Z' })
+    // tasksByStageMap delivers them in rank order (both rank=null → creation order)
+    mockStageMap = { implementation: [older, newer] }
+
+    const wrapper = shallowMount(PipelineBoard)
+    // implementation column is at index 4
+    const tasks = wrapper.findAllComponents(SortableTaskList)[4].props('tasks') as PipelineTask[]
+    expect(tasks[0].id).toBe('newer')
+    expect(tasks[1].id).toBe('older')
+    wrapper.unmount()
+  })
+
+  it('preserves rank order for sortable columns (does not re-sort by activity)', () => {
+    // rank-first has earlier updatedAt but lower rank → should stay first in backlog
+    const rankFirst = makeTask('rank-first', {
+      currentStage: 'backlog',
+      rank: 100,
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    const rankSecond = makeTask('rank-second', {
+      currentStage: 'backlog',
+      rank: 200,
+      updatedAt: '2026-06-01T00:00:00Z',
+    })
+    // tasksByStageMap delivers them already rank-sorted
+    mockStageMap = { backlog: [rankFirst, rankSecond] }
+
+    const wrapper = shallowMount(PipelineBoard)
+    // backlog column is at index 2
+    const tasks = wrapper.findAllComponents(SortableTaskList)[2].props('tasks') as PipelineTask[]
+    expect(tasks[0].id).toBe('rank-first')
+    expect(tasks[1].id).toBe('rank-second')
+    wrapper.unmount()
+  })
+
+  it('sorts implementation column tasks with three tasks newest-first', () => {
+    const t1 = makeTask('t1', { currentStage: 'implementation', updatedAt: '2026-03-01T00:00:00Z' })
+    const t2 = makeTask('t2', { currentStage: 'implementation', updatedAt: '2026-06-01T00:00:00Z' })
+    const t3 = makeTask('t3', { currentStage: 'implementation', updatedAt: '2026-01-01T00:00:00Z' })
+    mockStageMap = { implementation: [t1, t2, t3] }
+
+    const wrapper = shallowMount(PipelineBoard)
+    const tasks = wrapper.findAllComponents(SortableTaskList)[4].props('tasks') as PipelineTask[]
+    expect(tasks.map((t: PipelineTask) => t.id)).toEqual(['t2', 't1', 't3'])
     wrapper.unmount()
   })
 })

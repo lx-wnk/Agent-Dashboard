@@ -2,7 +2,7 @@
 import type { Agent, PipelineStage, PipelineTask } from '../types'
 import { computed, ref } from 'vue'
 import { useProjects } from '../composables/useProjects'
-import { useTasks } from '../composables/useTasks'
+import { byActivityDesc, useTasks } from '../composables/useTasks'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import SortableTaskList from './SortableTaskList.vue'
 import TaskCard from './TaskCard.vue'
@@ -152,7 +152,7 @@ function tasksForColumn(col: ColumnDef): PipelineTask[] {
         all.push(task)
     }
   }
-  return all
+  return col.sortable ? all : [...all].sort(byActivityDesc)
 }
 
 const columnsWithTasks = computed(() =>
