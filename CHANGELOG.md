@@ -14,6 +14,9 @@ Preparing the first public release.
 
 ### Added
 
+- Natural-language schedule phrases that the built-in rule set can't parse now fall back to an LLM translator (`claude -p`), so expressions like "first weekday of every month at 7am" resolve to a cron instead of failing. The LLM's output is re-validated as a 5-field cron before use.
+- Token pricing for `gpt-5`, `gpt-5-codex`, `gemini-2.5-pro`, and `gemini-2.5-flash` so Codex and Gemini agents report a real cost instead of "unknown".
+- Eval drift alerts are pushed live to the dashboard over SSE (`eval_drift` event) the moment a drift is detected, instead of only appearing on the next 60-second poll.
 - `GET /api/usage` — rolling-window token and cost aggregator (5h session-equivalent, 7d weekly-equivalent) derived from session JSONLs across all configured Claude config dirs; replaces the permanently dead `/api/quota` endpoint.
 - `usage.budget.session` and `usage.budget.weekly` settings (token counts; 0 = unset) to optionally derive a % bar in the status bar.
 - Status-bar USAGE segment: worst-case % bar when a budget is set, compact consumption text otherwise; popover shows both windows, per-account breakdown when multiple accounts exist.
@@ -140,6 +143,7 @@ Preparing the first public release.
 
 ### Fixed
 
+- Non-Claude provider agents (Codex, Gemini, Junie, pi) no longer always show as `idle`: the provider parser now reads each session's activity timestamp, so their status reflects real activity.
 - Plugin UI slots now correctly load manifests and modules from the SP2 proxy path
   (`/api/plugins/{id}/proxy/ui-manifest.json`, `/api/plugins/{id}/proxy/{module}`).
   The loader was still pointing at the pre-SP2 settings path after the route migration,
