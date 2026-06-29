@@ -1,7 +1,6 @@
 package usage
 
 import (
-	"encoding/json"
 	"log/slog"
 	"math"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pricing"
 )
@@ -163,67 +161,23 @@ func scanConfigDir(configDir string, now, cutoff7d, cutoff5h time.Time, w5h, w7d
 	return nil
 }
 
-// usageEntry is the JSONL line shape we care about.
-type usageEntry struct {
-	Timestamp string `json:"timestamp"`
-	Message   struct {
-		Role  string     `json:"role"`
-		Model string     `json:"model"`
-		Usage *usageCnts `json:"usage"`
-	} `json:"message"`
-}
-
-type usageCnts struct {
-	Input       int `json:"input_tokens"`
-	Output      int `json:"output_tokens"`
-	CacheCreate int `json:"cache_creation_input_tokens"`
-	CacheRead   int `json:"cache_read_input_tokens"`
-}
-
 func scanJSONLFile(path string, now, cutoff7d, cutoff5h time.Time, w5h, w7d *WindowUsage) error {
-	rc, err := parser.OpenJSONLReader(path, 0) // 0 = read whole file
-	if err != nil {
-		return err
-	}
-	defer rc.Close() //nolint:errcheck
-
-	return parser.ScanJSONLLines(rc, func(line []byte) error {
-		var e usageEntry
-		if err := json.Unmarshal(line, &e); err != nil {
-			return nil // malformed line: skip without aborting the scan
-		}
-		if e.Message.Role != "assistant" || e.Message.Usage == nil {
+	return parser.ScanMessages(path, 0, func(m parser.Message) error {
+		if m.Role != "assistant" || m.Usage == nil {
 			return nil
 		}
-
-		var ts time.Time
-		if e.Timestamp != "" {
-			if parsed, err := time.Parse(time.RFC3339Nano, e.Timestamp); err == nil {
-				ts = parsed
-			}
+		if m.Timestamp.IsZero() || m.Timestamp.After(now) {
+			return nil
 		}
-		if ts.IsZero() {
-			return nil // no timestamp: cannot place in window
-		}
-		if ts.After(now) {
-			return nil // future timestamp (clock skew): out of range
-		}
-
-		u := e.Message.Usage
-		tokens := int64(u.Input + u.Output + u.CacheCreate + u.CacheRead)
-		costUSD := pricing.EstimateCost(sdk.TokenUsage{
-			InputTokens:         u.Input,
-			OutputTokens:        u.Output,
-			CacheCreationTokens: u.CacheCreate,
-			CacheReadTokens:     u.CacheRead,
-		}, e.Message.Model)
+		tokens := int64(m.Usage.InputTokens + m.Usage.OutputTokens +
+			m.Usage.CacheCreationTokens + m.Usage.CacheReadTokens)
+		costUSD := pricing.EstimateCost(*m.Usage, m.Model)
 		costCents := int64(math.Round(costUSD * 100))
-
-		if !ts.Before(cutoff7d) {
+		if !m.Timestamp.Before(cutoff7d) {
 			w7d.Tokens += tokens
 			w7d.CostCents += costCents
 		}
-		if !ts.Before(cutoff5h) {
+		if !m.Timestamp.Before(cutoff5h) {
 			w5h.Tokens += tokens
 			w5h.CostCents += costCents
 		}
