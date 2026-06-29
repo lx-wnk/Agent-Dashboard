@@ -280,6 +280,31 @@ func TestLifecycleTransition_IllegalTransition_409(t *testing.T) {
 	}
 }
 
+func TestLifecycleTransition_UpdateAccepted(t *testing.T) {
+	ctl := &fakeLifecycle{transition: plugins.PluginView{ID: "p1", State: "active", Capabilities: []string{}}}
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/p1/update", nil))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for update action, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if ctl.gotAction != "update" {
+		t.Errorf("controller action: got %q, want update", ctl.gotAction)
+	}
+}
+
+func TestLifecycleTransition_UpdateIllegalTransition_409(t *testing.T) {
+	ctl := &fakeLifecycle{transErr: fmt.Errorf("%w: p1 not installed", pluginlifecycle.ErrIllegalTransition)}
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/p1/update", nil))
+	rr := httptest.NewRecorder()
+	mountLifecycle(t, ctl).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for illegal update, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestLifecycleTransition_HookFailure_500(t *testing.T) {
 	ctl := &fakeLifecycle{transErr: errors.New("activate hook: connection refused")}
 	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/p1/activate", nil))

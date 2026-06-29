@@ -102,6 +102,7 @@ var lifecycleActions = map[string]bool{
 	"activate":   true,
 	"deactivate": true,
 	"uninstall":  true,
+	"update":     true,
 }
 
 // LifecycleHandler serves the SP1 lifecycle + settings endpoints under
