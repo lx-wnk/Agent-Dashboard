@@ -37,11 +37,11 @@ type Handler struct {
 
 // projectRepo is the subset of repo.ProjectRepo this handler needs.
 type projectRepo interface {
-	Create(ctx context.Context, name, slug string, description, color, defaultSpawnerID *string) (*ent.Project, error)
+	Create(ctx context.Context, name, slug string, description, color, defaultSpawnerID, setupCommand *string) (*ent.Project, error)
 	GetByID(ctx context.Context, id string) (*ent.Project, error)
 	GetWithFolders(ctx context.Context, id string) (*ent.Project, error)
 	ListWithFolderCount(ctx context.Context) ([]repo.ProjectWithCount, error)
-	Update(ctx context.Context, id string, name, slug *string, description, color, defaultSpawnerID *string, clearDescription, clearColor, clearDefaultSpawnerID bool) (*ent.Project, error)
+	Update(ctx context.Context, id string, name, slug *string, description, color, defaultSpawnerID, setupCommand *string, clearDescription, clearColor, clearDefaultSpawnerID, clearSetupCommand bool) (*ent.Project, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -135,6 +135,7 @@ type projectView struct {
 	Description      *string      `json:"description,omitempty"`
 	Color            *string      `json:"color,omitempty"`
 	DefaultSpawnerID *string      `json:"defaultSpawnerId,omitempty"`
+	SetupCommand     *string      `json:"setupCommand,omitempty"`
 	FolderCount      *int         `json:"folderCount,omitempty"`
 	Folders          []folderView `json:"folders,omitempty"`
 	CreatedAt        string       `json:"createdAt"`
@@ -162,6 +163,7 @@ func toProjectView(p *ent.Project, folderCount *int, folders []*ent.ProjectFolde
 		Description:      p.Description,
 		Color:            p.Color,
 		DefaultSpawnerID: p.DefaultSpawnerID,
+		SetupCommand:     p.SetupCommand,
 		FolderCount:      folderCount,
 		CreatedAt:        tsFmt(p.CreatedAt),
 		UpdatedAt:        tsFmt(p.UpdatedAt),
@@ -209,6 +211,7 @@ type createProjectBody struct {
 	Description      *string `json:"description"`
 	Color            *string `json:"color"`
 	DefaultSpawnerID *string `json:"defaultSpawnerId"`
+	SetupCommand     *string `json:"setupCommand"`
 }
 
 // Create creates a new project.
@@ -227,7 +230,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 	if body.Color != nil && *body.Color != "" && !ValidateColor(*body.Color) {
 		return apierr.NewAppError(http.StatusBadRequest, "color must be #rgb or #rrggbb hex")
 	}
-	p, err := h.projects.Create(r.Context(), body.Name, body.Slug, body.Description, body.Color, body.DefaultSpawnerID)
+	p, err := h.projects.Create(r.Context(), body.Name, body.Slug, body.Description, body.Color, body.DefaultSpawnerID, body.SetupCommand)
 	if err != nil {
 		if ent.IsConstraintError(err) {
 			return apierr.NewAppError(http.StatusConflict, "slug already exists")
@@ -263,6 +266,7 @@ type updateProjectBody struct {
 	Description      json.RawMessage `json:"description"`
 	Color            json.RawMessage `json:"color"`
 	DefaultSpawnerID json.RawMessage `json:"defaultSpawnerId"`
+	SetupCommand     json.RawMessage `json:"setupCommand"`
 }
 
 // Update partially updates a project. JSON `null` clears the field; absent
@@ -293,11 +297,15 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "defaultSpawnerId must be a string or null")
 	}
+	setupCommand, clearSetupCommand, err := parseNullableString(body.SetupCommand)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "setupCommand must be a string or null")
+	}
 
 	p, err := h.projects.Update(r.Context(), id,
 		body.Name, body.Slug,
-		description, color, defaultSpawnerID,
-		clearDescription, clearColor, clearDefaultSpawner,
+		description, color, defaultSpawnerID, setupCommand,
+		clearDescription, clearColor, clearDefaultSpawner, clearSetupCommand,
 	)
 	if err != nil {
 		if ent.IsNotFound(err) {

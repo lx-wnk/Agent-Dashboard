@@ -76,18 +76,19 @@ interface ProjectFormState {
   description: string
   color: string
   defaultSpawnerId: string
+  setupCommand: string
 }
 
 const editingProject = ref<Project | null>(null)
 const isCreating = ref(false)
 const formVisible = ref(false)
 const formSaving = ref(false)
-const form = ref<ProjectFormState>({ slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '' })
+const form = ref<ProjectFormState>({ slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '', setupCommand: '' })
 const folderRows = ref<FolderRow[]>([])
 
 function openCreate() {
   editingProject.value = null
-  form.value = { slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '' }
+  form.value = { slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '', setupCommand: '' }
   formVisible.value = true
   isCreating.value = true
 }
@@ -100,6 +101,7 @@ function openEdit(project: Project) {
     description: project.description ?? '',
     color: project.color ?? '#3b82f6',
     defaultSpawnerId: project.defaultSpawnerId ?? '',
+    setupCommand: project.setupCommand ?? '',
   }
   formVisible.value = true
   isCreating.value = false
@@ -129,6 +131,7 @@ async function handleSave() {
         description: form.value.description.trim() || undefined,
         color: form.value.color || undefined,
         defaultSpawnerId: form.value.defaultSpawnerId || null,
+        setupCommand: form.value.setupCommand.trim() || null,
       })
       // Switch to edit mode so folders can be managed
       editingProject.value = project
@@ -142,6 +145,7 @@ async function handleSave() {
         description: form.value.description.trim() || undefined,
         color: form.value.color || undefined,
         defaultSpawnerId: form.value.defaultSpawnerId || null,
+        setupCommand: form.value.setupCommand.trim() || null,
       })
       await refetch()
     }
@@ -421,6 +425,19 @@ watch(folderRows, () => {}, { deep: true })
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="Short description"
           >
+        </div>
+        <div class="col-span-2">
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-setup">Setup command (optional)</label>
+          <input
+            id="proj-setup"
+            v-model="form.setupCommand"
+            type="text"
+            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
+            placeholder="pnpm install"
+          >
+          <p class="text-[11px] text-fg-faint mt-0.5">
+            Run once in the worktree after it is created. Empty = skip.
+          </p>
         </div>
         <div>
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-color">Color</label>

@@ -21,13 +21,13 @@ type ProjectWithCount struct {
 
 // ProjectRepo manages project persistence.
 type ProjectRepo interface {
-	Create(ctx context.Context, name, slug string, description, color, defaultSpawnerID *string) (*ent.Project, error)
+	Create(ctx context.Context, name, slug string, description, color, defaultSpawnerID, setupCommand *string) (*ent.Project, error)
 	GetByID(ctx context.Context, id string) (*ent.Project, error)
 	GetBySlug(ctx context.Context, slug string) (*ent.Project, error)
 	GetWithFolders(ctx context.Context, id string) (*ent.Project, error)
 	List(ctx context.Context) ([]*ent.Project, error)
 	ListWithFolderCount(ctx context.Context) ([]ProjectWithCount, error)
-	Update(ctx context.Context, id string, name, slug *string, description, color, defaultSpawnerID *string, clearDescription, clearColor, clearDefaultSpawnerID bool) (*ent.Project, error)
+	Update(ctx context.Context, id string, name, slug *string, description, color, defaultSpawnerID, setupCommand *string, clearDescription, clearColor, clearDefaultSpawnerID, clearSetupCommand bool) (*ent.Project, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -40,7 +40,7 @@ func NewProjectRepo(client *ent.Client) ProjectRepo {
 	return &entProjectRepo{client: client}
 }
 
-func (r *entProjectRepo) Create(ctx context.Context, name, slug string, description, color, defaultSpawnerID *string) (*ent.Project, error) {
+func (r *entProjectRepo) Create(ctx context.Context, name, slug string, description, color, defaultSpawnerID, setupCommand *string) (*ent.Project, error) {
 	p, err := r.client.Project.Create().
 		SetID(uuid.New().String()).
 		SetName(name).
@@ -48,6 +48,7 @@ func (r *entProjectRepo) Create(ctx context.Context, name, slug string, descript
 		SetNillableDescription(description).
 		SetNillableColor(color).
 		SetNillableDefaultSpawnerID(defaultSpawnerID).
+		SetNillableSetupCommand(setupCommand).
 		Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("project.Create: %w", err)
@@ -115,7 +116,7 @@ func (r *entProjectRepo) ListWithFolderCount(ctx context.Context) ([]ProjectWith
 	return result, nil
 }
 
-func (r *entProjectRepo) Update(ctx context.Context, id string, name, slug *string, description, color, defaultSpawnerID *string, clearDescription, clearColor, clearDefaultSpawnerID bool) (*ent.Project, error) {
+func (r *entProjectRepo) Update(ctx context.Context, id string, name, slug *string, description, color, defaultSpawnerID, setupCommand *string, clearDescription, clearColor, clearDefaultSpawnerID, clearSetupCommand bool) (*ent.Project, error) {
 	q := r.client.Project.UpdateOneID(id).SetUpdatedAt(time.Now())
 	if name != nil {
 		q = q.SetName(*name)
@@ -137,6 +138,11 @@ func (r *entProjectRepo) Update(ctx context.Context, id string, name, slug *stri
 		q = q.ClearDefaultSpawnerID()
 	} else if defaultSpawnerID != nil {
 		q = q.SetDefaultSpawnerID(*defaultSpawnerID)
+	}
+	if clearSetupCommand {
+		q = q.ClearSetupCommand()
+	} else if setupCommand != nil {
+		q = q.SetSetupCommand(*setupCommand)
 	}
 	p, err := q.Save(ctx)
 	if err != nil {

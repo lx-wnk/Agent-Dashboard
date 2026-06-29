@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os/exec"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
@@ -33,6 +35,38 @@ func resolveAdditionalDirs(folderRepo repo.ProjectFolderRepo) func(ctx context.C
 	}
 }
 
+// makeSetupWorktreeFn returns a SetupWorktreeFn that runs the project's
+// setup_command once in a freshly created worktree. It is a no-op when the task
+// has no project or the project defines no setup_command.
+func makeSetupWorktreeFn(projectRepo repo.ProjectRepo) func(ctx context.Context, projectID *string, worktreePath string) error {
+	return func(ctx context.Context, projectID *string, worktreePath string) error {
+		if projectID == nil {
+			return nil
+		}
+		proj, err := projectRepo.GetByID(ctx, *projectID)
+		if err != nil || proj.SetupCommand == nil || *proj.SetupCommand == "" {
+			return nil
+		}
+		return runSetupCommand(ctx, worktreePath, *proj.SetupCommand)
+	}
+}
+
+// runSetupCommand executes cmd in dir with a 5-minute timeout, logging combined output.
+func runSetupCommand(ctx context.Context, dir, cmd string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	c := exec.CommandContext(ctx, "sh", "-c", cmd)
+	c.Dir = dir
+	out, err := c.CombinedOutput()
+	if len(out) > 0 {
+		slog.Info("worktree setup_command output", "dir", dir, "output", string(out))
+	}
+	if err != nil {
+		return fmt.Errorf("setup_command %q: %w", cmd, err)
+	}
+	return nil
+}
+
 func provideOrchestrator(
 	cfg config.Config,
 	settingsSvc *settings.Service,
@@ -50,6 +84,7 @@ func provideOrchestrator(
 	auditRepo := repo.NewAuditEventRepo(client)
 	cfgRepo := repo.NewPipelineConfigRepo(client)
 	folderRepo := repo.NewProjectFolderRepo(client)
+	projectRepo := repo.NewProjectRepo(client)
 	worktreeManager := services.NewWorktreeManager(taskRepo)
 
 	var resolveFn pipeline.SpawnerResolverFunc
@@ -79,6 +114,7 @@ func provideOrchestrator(
 		RemoveWorktreeFn: func(ctx context.Context, task *ent.Task, force bool) error {
 			return worktreeManager.RemoveWorktree(ctx, task.ID, force)
 		},
+		SetupWorktreeFn:       makeSetupWorktreeFn(projectRepo),
 		ResolveSpawner:        resolveFn,
 		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the

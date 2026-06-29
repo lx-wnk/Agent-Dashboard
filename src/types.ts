@@ -309,6 +309,7 @@ export interface Project {
   description?: string
   color?: string
   defaultSpawnerId?: string | null
+  setupCommand?: string | null
   folderCount?: number
   folders?: ProjectFolder[]
   createdAt: string
