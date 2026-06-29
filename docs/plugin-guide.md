@@ -83,6 +83,8 @@ stored per-plugin in the database.
 
 Read/write settings: `GET /api/plugins/{id}/settings` and `PUT /api/plugins/{id}/settings`.
 
+Stored values reach the plugin process as `PLUGIN_SETTING_<KEY>` environment variables on its next (re)start (no live reload) and are injected schema-free, so a key removed from `plugin.json` but still stored in the DB keeps being injected until it is cleared.
+
 > Slot bindings for `ui_extension` plugins are declared in `ui-manifest.json` served by the plugin — not in `plugin.json`. See the `ui_extension` capability section below.
 
 ### `lifecycle` — hook paths
