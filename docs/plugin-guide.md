@@ -42,9 +42,6 @@ makes the plugin's capabilities available to the rest of the server.
   "addr":         "127.0.0.1:19010",
   "command":      ["./my-plugin"],
   "env":          ["MY_API_KEY"],
-  "slots": [
-    { "slot": "agent-modal-footer", "priority": 0, "mode": "extend" }
-  ],
   "settings": [
     { "key": "api_key", "type": "string", "label": "API Key", "secret": true },
     { "key": "mode",    "type": "enum",   "label": "Mode", "enum": ["fast", "slow"] }
@@ -52,8 +49,7 @@ makes the plugin's capabilities available to the rest of the server.
   "lifecycle": {
     "activate":   "/hooks/activate",
     "deactivate": "/hooks/deactivate"
-  },
-  "permissions": ["network:outbound"]
+  }
 }
 ```
 
@@ -72,17 +68,6 @@ assumes `plugins/<name>/plugin.json`.
 | `command`      | no       | Executable + args to launch. Omit if the process is already running. |
 | `env`          | no       | Env var names to forward from the dashboard process. Only a fixed base set (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus names listed here are forwarded. |
 
-### `slots` — UI slot bindings
-
-Declares which dashboard UI slots the plugin contributes to. Consumed by the frontend when
-`ui_extension` is active.
-
-| Field      | Description |
-|------------|-------------|
-| `slot`     | Target slot name (see the slot table under `ui_extension`). |
-| `priority` | Render order — higher renders outer/first. Default `0`. |
-| `mode`     | `"override"` (exclusive — replaces all others), `"extend"` (wraps the parent chain, receives `parent` handle), or omit for sibling (default — rendered alongside others). |
-
 ### `settings` — per-plugin settings
 
 Declared settings appear in the plugin's settings panel in the dashboard UI. Values are
@@ -98,6 +83,8 @@ stored per-plugin in the database.
 
 Read/write settings: `GET /api/plugins/{id}/settings` and `PUT /api/plugins/{id}/settings`.
 
+> Slot bindings for `ui_extension` plugins are declared in `ui-manifest.json` served by the plugin — not in `plugin.json`. See the `ui_extension` capability section below.
+
 ### `lifecycle` — hook paths
 
 Optional HTTP paths (relative to `addr`) that the dashboard calls as `POST <addr><path>`
@@ -111,10 +98,6 @@ on each state transition. Any 2xx response means success; an empty string means 
 | `deactivate`  | Plugin deactivated (disabled). |
 | `update`      | Descriptor version changed. |
 | `uninstall`   | Plugin removed from the registry. |
-
-### `permissions`
-
-Declared permission strings surfaced in the UI for user review before activation.
 
 ---
 

@@ -186,6 +186,7 @@ Preparing the first public release.
 
 - Pruned unused TS-era dependencies never imported by the shipped app: `express`,
   `nodemailer`, `web-push`, `cookie-parser`, `supertest`, and their `@types/*`.
+- Inert `permissions` and `plugin.json slots[]` manifest fields removed from the `Descriptor` Go type and `plugin.schema.json`. Both were parsed but never enforced or consumed — a security-shaped field with no enforcement is misleading. Slot bindings for UI extensions are declared in `ui-manifest.json` (authoritative since SP4a); the `plugin.json` copy was a divergeable duplicate. Old manifests carrying these fields still load correctly (`additionalProperties: true`). The unused `Registry.AllWithCapability` method is also removed.
 
 ### Fixed
 
