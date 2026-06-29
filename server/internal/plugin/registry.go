@@ -166,6 +166,16 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 		cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
 		cmd.Dir = pluginDir
 		cmd.Env = buildPluginEnv(desc.Env)
+		if r.settings != nil {
+			if vals, sErr := r.settings(serverCtx, desc.ID); sErr != nil {
+				slog.Warn("plugin: settings fetch failed — starting without settings",
+					"id", desc.ID, "err", sErr)
+			} else {
+				for k, v := range vals {
+					cmd.Env = append(cmd.Env, "PLUGIN_SETTING_"+sanitizeSettingKey(k)+"="+v)
+				}
+			}
+		}
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if err := cmd.Start(); err != nil {
