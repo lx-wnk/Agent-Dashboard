@@ -438,9 +438,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 			deps.PluginsHandler.Mount(r)
 		}
 		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.
-		// Admin-gated: install/activate/deactivate/uninstall/settings are operator
-		// actions equivalent in risk to spawner CRUD.
+		// The read-only list is needed by non-admin users for slot discovery, so it
+		// stays in the JWT group; write actions (install/activate/deactivate/
+		// uninstall/settings) are operator actions and stay admin-gated.
 		if deps.PluginLifecycleHandler != nil {
+			deps.PluginLifecycleHandler.MountList(r)
 			r.Group(func(r chi.Router) {
 				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
 				deps.PluginLifecycleHandler.Mount(r)

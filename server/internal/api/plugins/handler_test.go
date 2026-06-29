@@ -173,8 +173,33 @@ func mountLifecycle(t *testing.T, ctl *fakeLifecycle) http.Handler {
 	h := plugins.NewLifecycle(ctl)
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))
-	h.Mount(r)
+	h.MountList(r)
+	r.Group(func(r chi.Router) {
+		h.Mount(r)
+	})
 	return r
+}
+
+// TestLifecycleList_NonAdminJWTAllowed verifies GET /api/plugins is accessible to
+// any authenticated user, not only admins.
+func TestLifecycleList_NonAdminJWTAllowed(t *testing.T) {
+	h := plugins.NewLifecycle(&fakeLifecycle{views: []plugins.PluginView{}})
+	r := chi.NewRouter()
+	r.Use(auth.RequireAuth(testJWTSecret))
+	h.MountList(r)
+
+	nonAdminToken, err := auth.SignJWT(auth.JWTPayload{Sub: "u2", Login: "reader", IsAdmin: false}, testJWTSecret, 3600)
+	if err != nil {
+		t.Fatalf("sign jwt: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/plugins", nil)
+	req.AddCookie(&http.Cookie{Name: "auth_token", Value: nonAdminToken})
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for non-admin list, got %d: %s", rr.Code, rr.Body.String())
+	}
 }
 
 // TestLifecycleList_ShapeAndLeakGuard verifies the lifecycle DTO carries exactly

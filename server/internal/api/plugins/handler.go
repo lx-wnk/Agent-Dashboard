@@ -114,9 +114,16 @@ type LifecycleHandler struct {
 // NewLifecycle creates a LifecycleHandler backed by the given controller.
 func NewLifecycle(ctl controller) *LifecycleHandler { return &LifecycleHandler{ctl: ctl} }
 
-// Mount registers the lifecycle + settings routes on r.
-func (h *LifecycleHandler) Mount(r chi.Router) {
+// MountList registers GET /api/plugins for any authenticated user. The list is
+// read-only and needed by non-admin users for slot discovery. Mount the write
+// endpoints separately under an admin gate.
+func (h *LifecycleHandler) MountList(r chi.Router) {
 	r.Get("/api/plugins", apierr.ErrorMiddleware(h.list))
+}
+
+// Mount registers the lifecycle + settings write routes on r. Callers must apply
+// an admin gate before calling Mount.
+func (h *LifecycleHandler) Mount(r chi.Router) {
 	r.Post("/api/plugins/{id}/{action}", apierr.ErrorMiddleware(h.transition))
 	r.Get("/api/plugins/{id}/settings", apierr.ErrorMiddleware(h.getSettings))
 	r.Put("/api/plugins/{id}/settings", apierr.ErrorMiddleware(h.putSettings))
