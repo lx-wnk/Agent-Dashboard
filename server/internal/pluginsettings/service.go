@@ -135,6 +135,29 @@ func (s *Service) Decrypted(ctx context.Context, pluginID string, schema []plugi
 	return out, nil
 }
 
+// DecryptedAll returns all stored settings with secrets decrypted.
+// Unlike Decrypted it requires no schema — it uses the persisted Secret flag.
+// Used by the registry's SettingsProvider for env injection at spawn time.
+func (s *Service) DecryptedAll(ctx context.Context, pluginID string) (map[string]string, error) {
+	rows, err := s.repo.ListByPlugin(ctx, pluginID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(rows))
+	for _, r := range rows {
+		if r.Secret {
+			pt, derr := s.box.Decrypt(r.Value, r.Nonce)
+			if derr != nil {
+				return nil, derr
+			}
+			out[r.Key] = pt
+		} else {
+			out[r.Key] = r.Value
+		}
+	}
+	return out, nil
+}
+
 // Clear removes all settings for a plugin (called on uninstall).
 func (s *Service) Clear(ctx context.Context, pluginID string) error {
 	return s.repo.DeleteByPlugin(ctx, pluginID)
