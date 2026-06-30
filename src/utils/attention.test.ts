@@ -95,6 +95,43 @@ describe('attentionFor', () => {
     expect(att?.weight).toBe(0)
   })
 
+  it('returns question when pendingQuestion has entries', () => {
+    const agent = makeAgent({
+      status: 'active',
+      pendingQuestion: {
+        toolUseID: 'tu_q1',
+        questions: [{ header: 'Choose deploy target', question: 'Which env?', multiSelect: false, options: [{ label: 'staging', description: 'staging env' }, { label: 'prod', description: 'production' }] }],
+      },
+    })
+    const att = attentionFor(agent, ACTIVE_SECS)
+    expect(att?.kind).toBe('question')
+    expect(att?.label).toBe('Needs answer')
+    expect(att?.tone).toBe('warning')
+    expect(att?.weight).toBe(0)
+  })
+
+  it('returns null when pendingQuestion has empty questions array', () => {
+    const agent = makeAgent({
+      status: 'active',
+      pendingQuestion: { toolUseID: 'tu_q2', questions: [] },
+    })
+    expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
+  })
+
+  it('question takes priority over pendingToolUse and errorState', () => {
+    const agent = makeAgent({
+      status: 'active',
+      pendingQuestion: {
+        toolUseID: 'tu_q3',
+        questions: [{ header: 'Pick one', question: 'Which?', multiSelect: false, options: [{ label: 'A', description: '' }] }],
+      },
+      pendingToolUse: { tool: 'Bash', pattern: 'git push', id: 'tu_1' },
+      errorState: 'auth_failed',
+    })
+    const att = attentionFor(agent, ACTIVE_SECS)
+    expect(att?.kind).toBe('question')
+  })
+
   it('pendingPermissions takes precedence over pendingToolUse', () => {
     const agent = makeAgent({
       status: 'active',

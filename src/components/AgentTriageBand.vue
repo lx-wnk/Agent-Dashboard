@@ -53,13 +53,13 @@ const visibleAgentCards = computed(() =>
     const att = attentionFor(agent, secs)
     if (!att)
       return false
-    // Free agent with pendingToolUse — always show
-    if (!agent.pipelineTaskId && agent.pendingToolUse)
+    // Free agent with pendingToolUse or pendingQuestion — always show
+    if (!agent.pipelineTaskId && (agent.pendingToolUse || (agent.pendingQuestion?.questions.length ?? 0) > 0))
       return true
     // Orchestrated agent whose task is already represented in permissionItems — skip
     if (agent.pipelineTaskId && orchestratedTaskIds.value.has(agent.pipelineTaskId) && att.kind === 'permission')
       return false
-    return att.kind === 'error' || att.kind === 'stalled' || att.kind === 'permission'
+    return att.kind === 'error' || att.kind === 'stalled' || att.kind === 'permission' || att.kind === 'question'
   }),
 )
 
@@ -77,6 +77,7 @@ const breakdown = computed(() => {
   }
   const PARTS: [string, string, string][] = [
     ['permission', 'permission request', 'permission requests'],
+    ['question', 'pending question', 'pending questions'],
     ['error', 'failed run', 'failed runs'],
     ['stalled', 'stalled', 'stalled'],
   ]
@@ -95,6 +96,8 @@ function blockedDetail(agent: Agent): string {
   const att = attentionFor(agent, secs)
   if (!att)
     return ''
+  if (att.kind === 'question')
+    return agent.pendingQuestion?.questions[0]?.header || 'Needs answer'
   if (att.kind === 'permission')
     return agent.currentAction || 'Waiting for permission'
   if (att.kind === 'error')
@@ -441,6 +444,7 @@ watch(() => props.focusedSessionId, (id) => {
             toneLeftClass[attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.tone ?? 'warning'],
             agent.sessionId === focusedSessionId ? 'ring-2 ring-accent shadow-md' : '',
           ]"
+          :aria-label="attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.kind === 'question' ? `Question from ${friendlyProjectName(agent.projectName)}` : undefined"
         >
           <div class="flex items-center gap-2 min-w-0">
             <span aria-hidden="true" class="text-[15px] shrink-0">{{ getIdentity(agent.projectPath).emoji }}</span>
@@ -452,8 +456,35 @@ watch(() => props.focusedSessionId, (id) => {
             >{{ attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.label }}</span>
           </div>
 
+          <!-- Pending interactive question (read-only; answering is a later step) -->
+          <template v-if="attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.kind === 'question' && agent.pendingQuestion">
+            <div
+              v-for="(q, qi) in agent.pendingQuestion.questions"
+              :key="qi"
+              class="flex flex-col gap-1.5"
+            >
+              <span class="text-[10px] font-bold uppercase tracking-wide text-warning-text">{{ q.header }}</span>
+              <p class="text-[12px] text-fg m-0">
+                {{ q.question }}
+              </p>
+              <ul class="m-0 p-0 list-none flex flex-col gap-0.5">
+                <li
+                  v-for="(opt, oi) in q.options"
+                  :key="oi"
+                  class="text-[12px] text-fg-mute bg-app border border-line rounded px-2.5 py-1 leading-snug"
+                >
+                  <span class="font-medium text-fg">{{ opt.label }}</span>
+                  <span v-if="opt.description" class="ml-1 text-fg-faint">— {{ opt.description }}</span>
+                </li>
+              </ul>
+            </div>
+            <p v-if="!agent.liveInjectable" class="text-[11px] text-fg-faint m-0">
+              ↳ answer in your terminal
+            </p>
+          </template>
+
           <!-- Orchestrated agent with pending permissions (not covered by task items) -->
-          <template v-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
+          <template v-else-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
             <ul class="m-0 p-0 list-none flex flex-col gap-1" :aria-label="`Pending permissions for ${agent.projectName}`">
               <li
                 v-for="p in agent.pendingPermissions"

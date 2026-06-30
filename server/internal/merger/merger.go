@@ -447,6 +447,7 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		LastOutput:                strPtr(session.LastOutput),
 		LastBtw:                   session.LastBtw,
 		PendingToolUse:            session.PendingToolUse,
+		PendingQuestion:           session.PendingQuestion,
 	}
 }
 

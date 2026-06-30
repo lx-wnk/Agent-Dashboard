@@ -246,6 +246,31 @@ export interface PendingToolUse {
   pattern: string
 }
 /**
+ * QuestionOption is one selectable choice within a QuestionSpec.
+ */
+export interface QuestionOption {
+  label: string
+  description: string
+}
+/**
+ * QuestionSpec is a single question from an AskUserQuestion tool_use block.
+ */
+export interface QuestionSpec {
+  header: string
+  question: string
+  multiSelect: boolean
+  options: QuestionOption[]
+}
+/**
+ * PendingQuestion surfaces an unresolved AskUserQuestion tool_use so the
+ * dashboard can present the questions to the operator. ToolUseID is the
+ * matching tool_use id needed to build the answering tool_result.
+ */
+export interface PendingQuestion {
+  toolUseID: string
+  questions: QuestionSpec[]
+}
+/**
  * HookEvent is one lifecycle-hook event recorded for a session when the opt-in
  * hook receiver is installed (POST /api/hooks/event). It adds per-event
  * granularity on top of the process/JSONL scan. Tool and Summary are truncated,
@@ -316,6 +341,7 @@ export interface Agent {
   pipelineTaskTitle?: string
   pendingPermissions?: PendingPermission[]
   pendingToolUse?: PendingToolUse
+  pendingQuestion?: PendingQuestion
   machine?: string
   lastBtw?: BtwMessage
   /**
