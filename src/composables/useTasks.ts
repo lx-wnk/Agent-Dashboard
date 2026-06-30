@@ -1,6 +1,8 @@
 import type { PermissionRequest, PipelineStage, PipelineTask, StageRun, TaskDependency, TaskFeedback, TaskPermission } from '../types'
+import type { Checkpoint } from './useCheckpoints'
 import { computed, onUnmounted, ref, shallowRef } from 'vue'
 import { errorMessage } from '../utils/errorMessage'
+import { emitCheckpointAdded } from './useCheckpoints'
 import { runAction } from './useRunAction'
 import { createSseResource } from './useSseResource'
 
@@ -10,7 +12,7 @@ const isLoading = ref(true)
 const error = ref<string | null>(null)
 
 export interface TaskEvent {
-  type: 'task_created' | 'task_updated' | 'task_deleted' | 'stage_run_updated' | 'permission_request'
+  type: 'task_created' | 'task_updated' | 'task_deleted' | 'stage_run_updated' | 'permission_request' | 'checkpoint_added'
   taskId: string
   payload?: unknown
 }
@@ -169,6 +171,10 @@ function applyEvent(event: TaskEvent) {
       else {
         void refreshTask(event.taskId)
       }
+      break
+    }
+    case 'checkpoint_added': {
+      emitCheckpointAdded(event.payload as Checkpoint)
       break
     }
   }

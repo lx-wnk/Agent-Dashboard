@@ -3,6 +3,7 @@ import type { Agent, PipelineTask } from '../types'
 import { useIntervalFn } from '@vueuse/core'
 import { computed, provide, ref, watch } from 'vue'
 import { TaskActionsKey, TaskDetailsKey, TaskRefKey } from '../composables/taskModalContext'
+import { useCheckpoints } from '../composables/useCheckpoints'
 import { useCopyId } from '../composables/useCopyId'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { useRovingTabList } from '../composables/useRovingTabList'
@@ -13,6 +14,7 @@ import { STAGE_LABELS } from '../utils/stageLabels'
 import { stageTone } from '../utils/statusColors'
 import AuditLogTab from './AuditLogTab.vue'
 import PluginSlot from './PluginSlot.vue'
+import CheckpointTimeline from './task/CheckpointTimeline.vue'
 import CoordinationTab from './task/CoordinationTab.vue'
 import TaskCostTab from './task/TaskCostTab.vue'
 import TaskDependenciesTab from './task/TaskDependenciesTab.vue'
@@ -43,7 +45,7 @@ useIntervalFn(() => {
   modalRetrySecondsLeft.value = secondsUntil(props.task?.nextRetryAt)
 }, 1000, { immediate: true })
 
-const TABS = ['overview', 'stages', 'cost', 'permissions', 'dependencies', 'audit', 'coordination'] as const
+const TABS = ['overview', 'stages', 'cost', 'permissions', 'dependencies', 'audit', 'coordination', 'checkpoints'] as const
 const TAB_LABELS: Record<typeof TABS[number], string> = {
   overview: 'Overview',
   stages: 'Stages',
@@ -52,7 +54,10 @@ const TAB_LABELS: Record<typeof TABS[number], string> = {
   dependencies: 'Dependencies',
   audit: 'Audit',
   coordination: 'Coordination',
+  checkpoints: 'Checkpoints',
 }
+
+const { checkpoints, loading: checkpointsLoading, revert: revertCheckpoint } = useCheckpoints(computed(() => task.value?.id ?? null))
 const { activeTab, tabAttrs, panelAttrs, onKeydown, select } = useRovingTabList(TABS, { idPrefix: 'task-modal', initial: 'overview' })
 
 function tabLabel(key: typeof TABS[number]): string {
@@ -134,6 +139,13 @@ watch(() => props.task?.id, (id, prevId) => {
           <AuditLogTab :task-id="task.id" />
         </section>
         <CoordinationTab v-else-if="activeTab === 'coordination'" />
+        <CheckpointTimeline
+          v-else-if="activeTab === 'checkpoints'"
+          :task-id="task.id"
+          :checkpoints="checkpoints"
+          :loading="checkpointsLoading"
+          @revert="revertCheckpoint"
+        />
       </div>
 
       <TaskFooter />
