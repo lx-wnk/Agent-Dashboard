@@ -6,23 +6,23 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 )
 
-// QuestionDeliverFn delivers an answer message to the live session for pid and
-// returns the transport used ("tmux"/"pty"/"bridge"). It is the seam over
-// SpawnManager.SendMessageToChannel so the handler is testable without a real
-// session.
-type QuestionDeliverFn func(ctx context.Context, pid int, message string) (transport string, err error)
+// QuestionDeliverFn drives the interactive selector in the live session for pid
+// by injecting one key batch per question, returning the transport used. It is
+// the seam over SpawnManager.SendAnswerKeys so the handler is testable without a
+// real session.
+type QuestionDeliverFn func(ctx context.Context, pid int, batches [][]AnswerKey) (transport string, err error)
 
 // AnswerQuestionHandler handles POST /api/agents/{pid}/answer-question. It
-// answers an outstanding AskUserQuestion by delivering the chosen option labels
-// to the running interactive session as a normal message — we deliberately send
-// free text (which Claude accepts as an answer) rather than emulating the
-// terminal selector's keystrokes.
+// answers an outstanding AskUserQuestion by driving the terminal selector with
+// real keystrokes: a digit selects-and-submits a single-select question, while a
+// multi-select question is toggled with Space (navigating with Down) and
+// confirmed with Enter. Claude's selector does not accept free text, so the
+// chosen option labels are mapped back to their on-screen positions.
 type AnswerQuestionHandler struct {
 	getAgents GetAgentsFn
 	deliver   QuestionDeliverFn
@@ -34,11 +34,8 @@ func NewAnswerQuestionHandler(getAgents GetAgentsFn, deliver QuestionDeliverFn) 
 }
 
 type answerQuestionRequest struct {
-	ToolUseID string `json:"toolUseId"`
-	Answers   []struct {
-		Header   string   `json:"header"`
-		Selected []string `json:"selected"`
-	} `json:"answers"`
+	ToolUseID string        `json:"toolUseId"`
+	Answers   []answerInput `json:"answers"`
 }
 
 // AnswerQuestion handles POST /api/agents/{pid}/answer-question.
@@ -79,12 +76,12 @@ func (h *AnswerQuestionHandler) AnswerQuestion(w http.ResponseWriter, r *http.Re
 		return apierr.NewAppError(http.StatusConflict, "session is not live-injectable; answer in your terminal")
 	}
 
-	message := buildAnswerMessage(body.Answers)
-	if message == "" {
-		return apierr.NewAppError(http.StatusBadRequest, "no options selected")
+	batches, err := buildAnswerKeys(agent.PendingQuestion.Questions, body.Answers)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
 	}
 
-	transport, err := h.deliver(r.Context(), pid, message)
+	transport, err := h.deliver(r.Context(), pid, batches)
 	if err != nil {
 		return apierr.NewAppError(http.StatusBadGateway, err.Error())
 	}
@@ -93,18 +90,107 @@ func (h *AnswerQuestionHandler) AnswerQuestion(w http.ResponseWriter, r *http.Re
 	return json.NewEncoder(w).Encode(map[string]any{"ok": true, "transport": transport})
 }
 
-// buildAnswerMessage renders the selected option labels into a free-text answer
-// the running session can interpret, e.g. "Name-Stil: Englisch; Markt: DACH".
-func buildAnswerMessage(answers []struct {
+type answerInput struct {
 	Header   string   `json:"header"`
 	Selected []string `json:"selected"`
-}) string {
-	parts := make([]string, 0, len(answers))
-	for _, a := range answers {
-		if len(a.Selected) == 0 {
-			continue
+}
+
+// buildAnswerKeys turns the user's selections into one keystroke batch per
+// question, in the on-screen order. A single-select question is answered with
+// the option's 1-based number (which selects and submits in Claude's selector);
+// a multi-select question walks Down from the top, presses Space on each chosen
+// option, and confirms with Enter.
+func buildAnswerKeys(questions []sdk.QuestionSpec, answers []answerInput) ([][]AnswerKey, error) {
+	batches := make([][]AnswerKey, 0, len(questions))
+	for qi, q := range questions {
+		idxs, err := selectedIndices(q, answers, qi)
+		if err != nil {
+			return nil, err
 		}
-		parts = append(parts, fmt.Sprintf("%s: %s", a.Header, strings.Join(a.Selected, ", ")))
+		if len(idxs) == 0 {
+			return nil, fmt.Errorf("no option selected for question %q", q.Header)
+		}
+		if q.MultiSelect {
+			batches = append(batches, multiSelectKeys(idxs))
+		} else {
+			batches = append(batches, singleSelectKeys(idxs[0]))
+		}
 	}
-	return strings.Join(parts, "; ")
+	if len(batches) == 0 {
+		return nil, fmt.Errorf("no answers provided")
+	}
+	return batches, nil
+}
+
+// selectedIndices resolves the chosen option labels for question qi to their
+// ascending option positions. It matches the answer by header, falling back to
+// the answer at the same index when headers are absent.
+func selectedIndices(q sdk.QuestionSpec, answers []answerInput, qi int) ([]int, error) {
+	var selected []string
+	for _, a := range answers {
+		if a.Header == q.Header {
+			selected = a.Selected
+			break
+		}
+	}
+	if selected == nil && qi < len(answers) {
+		selected = answers[qi].Selected
+	}
+	pos := make(map[string]int, len(q.Options))
+	for i, o := range q.Options {
+		pos[o.Label] = i
+	}
+	idxs := make([]int, 0, len(selected))
+	for _, label := range selected {
+		i, ok := pos[label]
+		if !ok {
+			return nil, fmt.Errorf("option %q is not valid for question %q", label, q.Header)
+		}
+		idxs = append(idxs, i)
+	}
+	sortInts(idxs)
+	return idxs, nil
+}
+
+// singleSelectKeys returns the keystrokes to pick option i in a single-select
+// question. Options 1-9 use the number hotkey (selects and submits in one
+// press); a 10th-or-later option falls back to Down-navigation plus Enter.
+func singleSelectKeys(i int) []AnswerKey {
+	if i < 9 {
+		return []AnswerKey{{Char: strconv.Itoa(i + 1)}}
+	}
+	keys := make([]AnswerKey, 0, i+1)
+	for j := 0; j < i; j++ {
+		keys = append(keys, AnswerKey{Named: "Down"})
+	}
+	return append(keys, AnswerKey{Named: "Enter"})
+}
+
+// multiSelectKeys returns the keystrokes to toggle the given ascending option
+// positions in a multi-select question: walk Down from the top, Space on each
+// selected position, then Enter to confirm.
+func multiSelectKeys(idxs []int) []AnswerKey {
+	last := idxs[len(idxs)-1]
+	sel := make(map[int]bool, len(idxs))
+	for _, x := range idxs {
+		sel[x] = true
+	}
+	keys := make([]AnswerKey, 0, last+len(idxs)+1)
+	for pos := 0; pos <= last; pos++ {
+		if sel[pos] {
+			keys = append(keys, AnswerKey{Named: "Space"})
+		}
+		if pos < last {
+			keys = append(keys, AnswerKey{Named: "Down"})
+		}
+	}
+	return append(keys, AnswerKey{Named: "Enter"})
+}
+
+func sortInts(a []int) {
+	for i := 1; i < len(a); i++ {
+		for j := i; j > 0 && a[j-1] > a[j]; j-- {
+			a[j-1], a[j] = a[j], a[j-1]
+		}
+	}
 }

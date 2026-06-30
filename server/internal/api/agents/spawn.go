@@ -627,6 +627,29 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 	return "", fmt.Errorf("channel not available for PID %d", pid)
 }
 
+// SendAnswerKeys drives the interactive AskUserQuestion selector in the running
+// session identified by pid by injecting real keystrokes (digits for
+// single-select, Space/Down/Enter for multi-select). It requires a tmux-backed
+// session: the pty/bridge transports append their own Enter and cannot reproduce
+// a raw key sequence, so a non-tmux session returns an error the UI surfaces as
+// "answer in your terminal".
+func (m *SpawnManager) SendAnswerKeys(ctx context.Context, pid int, batches [][]AnswerKey) (transport string, err error) {
+	home, herr := os.UserHomeDir()
+	if herr != nil {
+		return "", fmt.Errorf("UserHomeDir: %w", herr)
+	}
+	if data, rerr := os.ReadFile(channelconfig.DiscoveryFile(home, pid)); rerr == nil {
+		var disc struct {
+			TmuxPane   string `json:"tmuxPane"`
+			TmuxSocket string `json:"tmuxSocket"`
+		}
+		if json.Unmarshal(data, &disc) == nil && disc.TmuxPane != "" {
+			return "tmux", sendAnswerKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, batches)
+		}
+	}
+	return "", fmt.Errorf("answering interactive questions requires a tmux-backed session for PID %d; answer it in your terminal", pid)
+}
+
 // sanitizeInjectMessage strips control characters that could inject premature
 // Enter/submit or produce unexpected terminal behaviour. Tab (0x09) is
 // preserved. DEL (0x7F) and all CR/LF sequences are removed.

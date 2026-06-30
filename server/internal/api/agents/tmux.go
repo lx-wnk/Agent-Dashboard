@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // tmuxPaneRE matches a tmux pane id (e.g. "%3"). The bridge records $TMUX_PANE,
@@ -60,6 +61,59 @@ func sendKeysToTmux(ctx context.Context, socket, pane, message string) error {
 	}
 	if err := tmuxRunner(ctx, enterArgs...); err != nil {
 		return fmt.Errorf("tmux send-keys (enter): %w", err)
+	}
+	return nil
+}
+
+// AnswerKey is one keystroke in an interactive-question answer. Exactly one of
+// Char (a literal character to type, e.g. "3") or Named (a logical key —
+// "Down"/"Up"/"Space"/"Enter") is set.
+type AnswerKey struct {
+	Char  string
+	Named string
+}
+
+// answerKeyStepDelay is the pause between questions so the next selector renders
+// before its keys are sent. Indirected via answerKeyStepSleep for tests.
+var answerKeyStepDelay = 250 * time.Millisecond
+
+var answerKeyStepSleep = func() { time.Sleep(answerKeyStepDelay) }
+
+// answerKeyArgs builds the tmux send-keys argv for a single AnswerKey. A literal
+// character is sent with -l (typed input); a named key is sent as a key name so
+// tmux translates it (Down/Space/Enter are real keypresses, not text).
+func answerKeyArgs(socket, pane string, k AnswerKey) []string {
+	var base []string
+	if socket != "" {
+		base = []string{"-S", socket}
+	}
+	if k.Char != "" {
+		return append(append([]string{}, base...), "send-keys", "-t", pane, "-l", "--", k.Char)
+	}
+	return append(append([]string{}, base...), "send-keys", "-t", pane, k.Named)
+}
+
+// sendAnswerKeysToTmux delivers one key batch per question into the pane, pausing
+// between questions so each selector has rendered before its keys arrive.
+func sendAnswerKeysToTmux(ctx context.Context, socket, pane string, batches [][]AnswerKey) error {
+	if !validTmuxPane(pane) {
+		return fmt.Errorf("invalid tmux pane %q", pane)
+	}
+	if strings.ContainsAny(socket, "\n\x00") {
+		return fmt.Errorf("invalid tmux socket")
+	}
+	if _, err := tmuxLookPath(); err != nil {
+		return fmt.Errorf("tmux is required to answer interactive questions but was not found on the server PATH")
+	}
+	for bi, batch := range batches {
+		for _, k := range batch {
+			if err := tmuxRunner(ctx, answerKeyArgs(socket, pane, k)...); err != nil {
+				return fmt.Errorf("tmux send-keys (answer): %w", err)
+			}
+		}
+		if bi < len(batches)-1 {
+			answerKeyStepSleep()
+		}
 	}
 	return nil
 }

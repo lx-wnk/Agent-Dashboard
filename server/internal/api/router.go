@@ -424,7 +424,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
 		r.Delete("/api/agents/{pid}/channel", spawnHandler.DismissChannel)
-		answerQuestionHandler := agents.NewAnswerQuestionHandler(getAgents, spawnMgr.SendMessageToChannel)
+		answerQuestionHandler := agents.NewAnswerQuestionHandler(getAgents, spawnMgr.SendAnswerKeys)
 		r.Post("/api/agents/{pid}/answer-question", ErrorMiddleware(answerQuestionHandler.AnswerQuestion))
 		if deps.PermissionPresetRepo != nil {
 			allowToolHandler := agents.NewAllowToolHandler(getAgents, deps.PermissionPresetRepo)
