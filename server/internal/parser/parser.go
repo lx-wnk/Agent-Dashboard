@@ -30,6 +30,32 @@ var (
 	authRE  = regexp.MustCompile(`(?i)invalid api key|authentication|unauthorized|401`)
 )
 
+// classifyAPIError maps a real API error (gated by isApiErrorMessage) to an
+// ErrorState. Status takes precedence; keyword regexes are the fallback when
+// status is absent (0). Gating on isApiErrorMessage prevents benign assistant
+// prose that mentions "authentication" or "rate limit" from being misclassified.
+func classifyAPIError(status int, text string) sdk.ErrorState {
+	switch status {
+	case 401, 403:
+		return sdk.ErrorStateAuthFailed
+	case 429:
+		if quotaRE.MatchString(text) {
+			return sdk.ErrorStateQuotaExhausted
+		}
+		return sdk.ErrorStateRateLimited
+	}
+	// status absent — keyword fallback, safe here because caller already verified isApiErrorMessage
+	switch {
+	case quotaRE.MatchString(text):
+		return sdk.ErrorStateQuotaExhausted
+	case authRE.MatchString(text):
+		return sdk.ErrorStateAuthFailed
+	case rateRE.MatchString(text):
+		return sdk.ErrorStateRateLimited
+	}
+	return ""
+}
+
 // SessionCacheTTL is the maximum age of a cached FindSessionForProject result.
 // Set to the SSE broadcast interval (default 3 s) so each tick re-uses the
 // cached parse instead of tail-reading every JSONL file again.
@@ -204,10 +230,12 @@ func TailRead(filePath string) (string, error) {
 
 // jsonlMessage is the minimal structure of a JSONL session log entry.
 type jsonlMessage struct {
-	Type      string          `json:"type"`
-	Subtype   string          `json:"subtype"`   // e.g. "compact_boundary" on type=="system" entries
-	Timestamp string          `json:"timestamp"` // ISO 8601, e.g. "2025-01-15T10:30:00.000Z"
-	Message   json.RawMessage `json:"message"`
+	Type              string          `json:"type"`
+	Subtype           string          `json:"subtype"`   // e.g. "compact_boundary" on type=="system" entries
+	Timestamp         string          `json:"timestamp"` // ISO 8601, e.g. "2025-01-15T10:30:00.000Z"
+	Message           json.RawMessage `json:"message"`
+	IsAPIErrorMessage bool            `json:"isApiErrorMessage"` // true only on real Claude API error responses
+	APIErrorStatus    int             `json:"apiErrorStatus"`    // HTTP status from the API error (401, 429, …)
 }
 
 // isCompactBoundaryType reports whether a (type, subtype) pair is the
@@ -725,13 +753,10 @@ func ParseSessionFile(path string) (*SessionData, error) {
 						if b.Text != "" {
 							btwText = scrubSecrets(b.Text)
 							data.LastOutput = btwText
-							switch {
-							case quotaRE.MatchString(b.Text):
-								data.ErrorState = sdk.ErrorStateQuotaExhausted
-							case rateRE.MatchString(b.Text):
-								data.ErrorState = sdk.ErrorStateRateLimited
-							case authRE.MatchString(b.Text):
-								data.ErrorState = sdk.ErrorStateAuthFailed
+							if entry.IsAPIErrorMessage {
+								if es := classifyAPIError(entry.APIErrorStatus, b.Text); es != "" {
+									data.ErrorState = es
+								}
 							}
 						}
 					}
