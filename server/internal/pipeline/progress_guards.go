@@ -116,6 +116,13 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		return nil, fmt.Errorf("orchestrator.updateStageRunRunning: %w", err)
 	}
 
+	// Start the per-turn checkpoint watcher once the run is confirmed running.
+	// Idempotent per stage-run while the worktree lives.
+	if handler.RequiresAgent() && o.opts.CheckpointerStartFn != nil &&
+		task.WorktreePath != nil && *task.WorktreePath != "" {
+		o.opts.CheckpointerStartFn(task.ID, *task.WorktreePath)
+	}
+
 	perms, _ := o.opts.PermissionRepo.ListTaskPermissions(ctx, task.ID)
 	allRuns, _ := o.opts.StageRunRepo.ListForTask(ctx, task.ID)
 	prevOutput := o.getPreviousStageOutput(ctx, task)

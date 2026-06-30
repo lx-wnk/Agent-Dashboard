@@ -852,6 +852,11 @@ func (o *PipelineOrchestrator) cleanupTerminalWorktree(ctx context.Context, task
 		return
 	}
 	path := *task.WorktreePath
+	// Stop the checkpoint watcher and prune its refs/rows before the worktree is
+	// removed (the refs live in the worktree's git dir).
+	if o.opts.CheckpointerStopFn != nil {
+		o.opts.CheckpointerStopFn(task.ID)
+	}
 	if err := o.opts.RemoveWorktreeFn(ctx, task, force); err != nil {
 		slog.Warn("orchestrator: terminal worktree cleanup failed", "taskID", task.ID, "path", path, "err", err)
 		return
@@ -965,6 +970,36 @@ func (o *PipelineOrchestrator) reapAwaitingUserAgent(ctx context.Context, taskID
 	}); err != nil {
 		slog.Error("reapAwaitingUserAgent.applyTransition", "taskID", taskID, "err", err)
 	}
+}
+
+// KillRunningStage kills the live agent for taskID (if any) on its current stage
+// and marks the run failed, so the checkpoint-revert path never restores the
+// worktree under a live writer. A missing/dead run is a no-op. Returns an error
+// only when the kill itself fails, so callers can abort the revert.
+func (o *PipelineOrchestrator) KillRunningStage(ctx context.Context, taskID string) error {
+	mu := o.getTaskMutex(taskID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	task, err := o.opts.TaskRepo.GetByID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("KillRunningStage: task lookup: %w", err)
+	}
+	run, err := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	if err != nil || run == nil {
+		return nil
+	}
+	if run.Status != "running" && run.Status != "awaiting_user" {
+		return nil
+	}
+	if run.Pid == nil || !IsPidAlive(*run.Pid) {
+		return nil
+	}
+	if err := syscallKill(*run.Pid); err != nil {
+		return fmt.Errorf("KillRunningStage: kill pid %d: %w", *run.Pid, err)
+	}
+	_, err = o.applyTransition(ctx, task, run, FailTransition{Reason: "killed for checkpoint revert"})
+	return err
 }
 
 func strPtr(s string) *string { return &s }
