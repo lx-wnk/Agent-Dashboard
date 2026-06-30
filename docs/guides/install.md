@@ -53,6 +53,8 @@ agent-dashboard serve
 ```sh
 docker run --rm \
   -p 127.0.0.1:13120:13120 \
+  -e DASHBOARD_HOST=0.0.0.0 \
+  -e DASHBOARD_REMOTES_ENABLED=true \
   -v ~/.claude:/home/nonroot/.claude:ro \
   ghcr.io/lx-wnk/agent-dashboard:latest
 ```
@@ -61,7 +63,14 @@ Then open **http://localhost:13120**.
 
 **Security notes:**
 - The `-p 127.0.0.1:13120:13120` binding keeps the port on loopback — never use `-p 13120:13120`
-  (which binds `0.0.0.0`) as the dashboard reads sensitive Claude session data.
+  (which binds `0.0.0.0` on the host) as the dashboard reads sensitive Claude session data.
+- `-e DASHBOARD_HOST=0.0.0.0` is required *inside the container*: the dashboard defaults to
+  `127.0.0.1`, which inside a container's isolated network namespace would listen only on the
+  container's own loopback — Docker's published port would then get connection-refused. Binding
+  `0.0.0.0` here is safe **because the host-side publish above is pinned to `127.0.0.1:`**, so the
+  dashboard remains reachable only from your machine. `DASHBOARD_REMOTES_ENABLED=true` is required
+  for the server to boot on a non-loopback host (a guard against accidental exposure). Do **not**
+  pair these flags with `-p 0.0.0.0:13120:13120` — that would expose the dashboard on your network.
 - The `~/.claude` mount is read-only (`:ro`). The dashboard never writes to your config dir.
 - The image runs as the non-root `nonroot` user (home `/home/nonroot`), so the mount target is
   `/home/nonroot/.claude`.

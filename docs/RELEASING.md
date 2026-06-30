@@ -78,11 +78,11 @@ go install github.com/goreleaser/goreleaser/v2@latest
 # Validate config (fast, no build)
 goreleaser check
 
-# Full dry-run — builds all targets and Docker images, no publish
-goreleaser release --snapshot --clean
-
-# Skip Docker if the Docker daemon is not running
+# Dry-run WITHOUT Docker (no daemon needed) — builds binaries, archives, checksums, cask
 goreleaser release --snapshot --clean --skip=docker
+
+# Full dry-run WITH Docker images (requires a running Docker daemon), no publish
+goreleaser release --snapshot --clean
 ```
 
 The snapshot artifacts land in `dist/`: four archives, `checksums.txt`, and the generated cask under
@@ -102,5 +102,8 @@ multi-arch manifest is only assembled on a real (push) release. Check that all f
 
 ## Security reminder
 
-`agent-dashboard serve` binds to `127.0.0.1` only. The Docker run command in all docs uses
-`-p 127.0.0.1:13120:13120` — never omit the host binding.
+`agent-dashboard serve` binds to `127.0.0.1` only. The Docker run command in all docs publishes
+with `-p 127.0.0.1:13120:13120` — never omit the loopback host on the published port. Inside the
+container the server is told to bind `0.0.0.0` (`-e DASHBOARD_HOST=0.0.0.0 -e DASHBOARD_REMOTES_ENABLED=true`)
+so the published loopback port can reach it; this stays private precisely because the host-side
+publish is pinned to `127.0.0.1:`. Never pair those env flags with a `-p 0.0.0.0:…` publish.
