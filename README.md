@@ -50,10 +50,32 @@ See [`docs/`](docs/README.md) for the full feature reference.
 
 ## Quickstart
 
-**Prerequisites:** macOS or Linux, [Go 1.26+](https://go.dev/), [Task](https://taskfile.dev) (`brew install go-task/tap/go-task`), [air](https://github.com/air-verse/air) (`go install github.com/air-verse/air@latest`), Node.js 22+ with [pnpm](https://pnpm.io/installation), and Claude Code itself.
+**Prerequisite:** [Claude Code](https://claude.ai/code) installed and run at least once — the dashboard reads the session data it writes to `~/.claude`. macOS and Linux only.
 
-> `go install` binaries land in `$(go env GOPATH)/bin` — make sure it's on your `PATH`:
-> `echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc && source ~/.zshrc`
+### Install (no build tools needed)
+
+**One-liner (macOS / Linux):**
+```sh
+curl -fsSL https://raw.githubusercontent.com/lx-wnk/Agent-Dashboard/main/install.sh | sh
+```
+
+Or use Homebrew (macOS):
+```sh
+brew install lx-wnk/tap/agent-dashboard
+```
+
+Then:
+```sh
+agent-dashboard serve
+```
+
+Open **http://localhost:13120** — any running Claude Code agents appear automatically. On loopback with no OAuth configured, the dashboard runs in local-trust mode (no login). See [Security](docs/guides/security.md) before exposing it anywhere.
+
+See [docs/guides/install.md](docs/guides/install.md) for Docker, manual binary download, and all options.
+
+### Develop / build from source
+
+Requires Go 1.26+, [Task](https://taskfile.dev), [air](https://github.com/air-verse/air), Node.js 22+, and [pnpm](https://pnpm.io/installation).
 
 ```bash
 git clone https://github.com/lx-wnk/Agent-Dashboard.git
@@ -62,19 +84,7 @@ pnpm install        # frontend dependencies (Go deps are fetched on first build)
 task dev            # Go backend (air hot-reload) + Vite — serves on :13120
 ```
 
-Open **http://localhost:13120** — any running Claude Code agents appear automatically. On loopback with no OAuth configured, the dashboard runs in local-trust mode (no login). See [Security](docs/guides/security.md) before exposing it anywhere.
-
-When iterating on the UI, run `pnpm dev` in a second terminal for HMR on `:5173` (it proxies `/api` → `:13120`).
-
-### Production build
-
-```bash
-pnpm build          # build the Vue SPA (embedded into the binary via go:embed)
-task build          # compile → bin/agent-dashboard
-DASHBOARD_JWT_SECRET=<32+ chars> ./bin/agent-dashboard serve
-```
-
-Build the SPA **before** the binary — `go:embed` bakes the compiled frontend into `bin/agent-dashboard`. The result is self-contained: no Node.js needed at runtime. Deploy by copying the binary.
+When iterating on the UI, run `pnpm dev` in a second terminal for HMR on `:5173` (it proxies `/api` → `:13120`). See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full dev setup, the production-build steps, and the command reference.
 
 ## Restart
 
@@ -96,6 +106,7 @@ Build the SPA **before** the binary — `go:embed` bakes the compiled frontend i
 
 | Topic | |
 |---|---|
+| [Install](docs/guides/install.md) | Download, Homebrew, Docker, build from source |
 | [Configuration](docs/guides/configuration.md) | Every environment variable |
 | [MCP endpoint](docs/guides/mcp.md) | Scopes, tools, local integration |
 | [Controlling & spawning agents](docs/guides/agent-control.md) | Channels, spawn dialog, permissions |
