@@ -28,13 +28,53 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 
 Each tool checks its required scope at call time and returns an MCP error if the token's scope is insufficient.
 
-## Local integration
+## Connect the dashboard to Claude
 
-Copy the shipped example and export a token — any Claude Code session opened in this repo then auto-connects to the dashboard MCP:
+The fastest way to wire a Claude Code session to the dashboard's task tools is the one-command
+method available in the key dialog.
 
-```bash
-cp .mcp.json.example .mcp.json
-export DASHBOARD_MCP_TOKEN=mcp_<your-token>
+### One-command setup (recommended)
+
+1. Open **Settings → API Keys** in the dashboard.
+2. Click **+ Add Key**, choose the **Developer** or **Admin** role, and click **Create Key**.
+3. In the token-reveal dialog, find the **CLI command** block — it shows a ready-to-run command
+   like:
+   ```sh
+   claude mcp add --scope user --transport http agent-dashboard \
+     http://127.0.0.1:13120/api/mcp \
+     --header "Authorization: Bearer mcp_<your-token>"
+   ```
+4. Click the copy button, then run the command in your terminal. It writes the MCP server config to
+   `~/.claude.json` at user scope — every Claude Code session you open will auto-connect to the
+   dashboard.
+
+The `--scope user` flag makes the connection global (all sessions). To scope it to one project
+only, replace `--scope user` with `--scope project` — this writes to the project's `.mcp.json`
+instead.
+
+> **Verify the exact `claude mcp add` flags for your Claude Code version** by running
+> `claude mcp add --help`. The flags above match the HTTP-transport syntax (`--transport http`,
+> `--scope <local|user|project>`, `--header`) as of Claude Code 2025. If a flag name differs, adapt
+> accordingly and update this doc.
+
+### Manual / JSON config alternative
+
+If you prefer to manage the config file directly, add an entry to your `.mcp.json` (project-scoped)
+or `~/.claude.json` (user-scoped):
+
+```json
+{
+  "mcpServers": {
+    "agent-dashboard": {
+      "type": "http",
+      "url": "http://127.0.0.1:13120/api/mcp",
+      "headers": {
+        "Authorization": "Bearer mcp_<your-token>"
+      }
+    }
+  }
+}
 ```
 
-`.mcp.json` is gitignored to prevent accidental token commits.
+`.mcp.json` is gitignored to prevent accidental token commits. The JSON block is also available in
+the key dialog's **JSON config** block for one-click copy.

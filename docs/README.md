@@ -6,8 +6,9 @@ Reference and guides for Agent Dashboard. Start with the [project README](../REA
 
 | Guide | What it covers |
 |---|---|
+| [Install](guides/install.md) | Binary, Homebrew, Docker, and source install paths |
 | [Configuration](guides/configuration.md) | Every environment variable, grouped by concern |
-| [MCP Endpoint](guides/mcp.md) | Authenticated MCP server, scopes, the 19 tools, local integration |
+| [MCP Endpoint](guides/mcp.md) | Authenticated MCP server, scopes, the tools, and connecting Claude |
 | [Controlling & Spawning Agents](guides/agent-control.md) | Channel control, the spawn dialog, slash commands, permissions |
 | [Security](guides/security.md) | Threat model, auth, hardening defaults |
 | [Shell Statusline](guides/statusline.md) | `scripts/statusline.py` PS1 integration |
@@ -23,6 +24,10 @@ Reference and guides for Agent Dashboard. Start with the [project README](../REA
 | [ADR-0001](architecture/adr/0001-sqlite-for-task-pipeline.md) | Why SQLite backs the task pipeline |
 | [ADR-0002](architecture/adr/0002-runner-slot-priority-model.md) | Runner-slot priority model |
 | [ADR-0003](architecture/adr/0003-pluggable-spawners.md) | Pluggable spawner adapters |
+
+## Releasing
+
+See [RELEASING.md](RELEASING.md) for the version scheme, one-time setup, and per-release steps.
 
 ## Contributing
 

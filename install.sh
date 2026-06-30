@@ -35,14 +35,14 @@ fi
 # --- detect platform -------------------------------------------------------
 os=$(uname -s)
 case "$os" in
-  Darwin) os=Darwin ;;
-  Linux)  os=Linux ;;
+  Darwin) os=darwin ;;
+  Linux)  os=linux ;;
   *) err "unsupported OS '$os' — only macOS and Linux have prebuilt binaries (build from source instead)" ;;
 esac
 
 arch=$(uname -m)
 case "$arch" in
-  x86_64|amd64) arch=x86_64 ;;
+  x86_64|amd64) arch=amd64 ;;
   arm64|aarch64) arch=arm64 ;;
   *) err "unsupported architecture '$arch'" ;;
 esac

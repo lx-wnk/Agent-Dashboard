@@ -31,6 +31,16 @@ task dev
 
 Starts the Go backend via `air` (hot-reload on `.go` file changes) and serves the Vue SPA, both on port 13120.
 
+## Production build
+
+```bash
+pnpm build          # build the Vue SPA (embedded into the binary via go:embed)
+task build          # compile → bin/agent-dashboard
+DASHBOARD_JWT_SECRET=<32+ chars> ./bin/agent-dashboard serve
+```
+
+Build the SPA **before** the binary — `go:embed` bakes the compiled frontend into `bin/agent-dashboard`, so the result is self-contained (no Node.js at runtime). Deploy by copying the binary. End users do not build from source; see [docs/guides/install.md](docs/guides/install.md) for binary/Homebrew/Docker installs.
+
 ## Commands
 
 ### Backend (Go)
