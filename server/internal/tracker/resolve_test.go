@@ -59,6 +59,37 @@ func TestResolve_MissingJiraConfig(t *testing.T) {
 	}
 }
 
+func TestResolve_RejectsMaliciousGitHubRefs(t *testing.T) {
+	cfg := tracker.Config{GitHubToken: "tok"}
+	bad := []string{
+		"../../other/repo#1",
+		"o/r?evil=x#1",
+		"o/../../../search/issues#1",
+		"owner/..#1",
+	}
+	for _, ref := range bad {
+		_, err := tracker.Resolve(ref, cfg, &http.Client{})
+		if !errors.Is(err, tracker.ErrBadRef) {
+			t.Errorf("ref %q: expected ErrBadRef, got %v", ref, err)
+		}
+	}
+}
+
+func TestResolve_AcceptsLegitGitHubRefs(t *testing.T) {
+	cfg := tracker.Config{GitHubToken: "tok"}
+	good := []string{
+		"owner/repo#1",
+		"owner/repo.js#1",
+		"https://github.com/owner/repo/issues/1",
+	}
+	for _, ref := range good {
+		tr, err := tracker.Resolve(ref, cfg, &http.Client{})
+		if err != nil || tr == nil {
+			t.Errorf("ref %q: err=%v tr=%v", ref, err, tr)
+		}
+	}
+}
+
 func TestResolve_UnrecognizedRef(t *testing.T) {
 	cfg := tracker.Config{GitHubToken: "tok"}
 	_, err := tracker.Resolve("not-any-tracker-ref", cfg, &http.Client{})

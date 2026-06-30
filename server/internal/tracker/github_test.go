@@ -83,6 +83,32 @@ func TestGitHubFetchIssue_BareRef_NoDefaultRepo(t *testing.T) {
 	}
 }
 
+func TestGitHubFetchIssue_RejectsMaliciousRefs(t *testing.T) {
+	bad := []string{
+		"../../other/repo#1",
+		"o/r?evil=x#1",
+		"o/../../../search/issues#1",
+		"owner/..#1",
+		"https://github.com/../../other/repo/issues/1",
+	}
+	cli := tracker.NewGitHubClientWithBase("http://must-not-be-called", "tok", "", &http.Client{})
+	for _, ref := range bad {
+		_, err := cli.FetchIssue(context.Background(), ref)
+		if !errors.Is(err, tracker.ErrBadRef) {
+			t.Errorf("ref %q: expected ErrBadRef, got %v", ref, err)
+		}
+	}
+}
+
+func TestGitHubFetchIssue_AcceptsLegitDotRef(t *testing.T) {
+	srv := ghServer(t, 200, map[string]any{"title": "Dot", "body": "", "html_url": "h", "number": 1, "labels": []any{}})
+	defer srv.Close()
+	cli := tracker.NewGitHubClientWithBase(srv.URL, "tok", "", &http.Client{})
+	if _, err := cli.FetchIssue(context.Background(), "owner/repo.js#1"); err != nil {
+		t.Errorf("legit dotted repo rejected: %v", err)
+	}
+}
+
 func TestGitHubFetchIssue_404(t *testing.T) {
 	srv := ghServer(t, 404, map[string]any{"message": "Not Found"})
 	defer srv.Close()

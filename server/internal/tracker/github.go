@@ -14,7 +14,20 @@ var (
 	ghURLRe   = regexp.MustCompile(`(?i)github\.com/([^/]+)/([^/]+)/issues/(\d+)`)
 	ghSlashRe = regexp.MustCompile(`^([^/]+)/([^#]+)#(\d+)$`)
 	ghBareRe  = regexp.MustCompile(`^#?(\d+)$`)
+	// ghNameRe is the GitHub owner/repo name charset. It deliberately excludes
+	// path/query characters (/ ? @ #) that would let a crafted ref escape the
+	// intended /repos/{owner}/{repo}/issues/{n} path.
+	ghNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 )
+
+// validGHComponent reports whether s is a safe GitHub owner/repo path segment:
+// the GitHub name charset, and never a traversal segment (. / .. / contains "..").
+func validGHComponent(s string) bool {
+	if s == "." || s == ".." || strings.Contains(s, "..") {
+		return false
+	}
+	return ghNameRe.MatchString(s)
+}
 
 // GitHubClient fetches GitHub issues. Use NewGitHubClient for production;
 // NewGitHubClientWithBase lets tests inject an httptest base URL.
@@ -38,11 +51,11 @@ func NewGitHubClientWithBase(baseURL, token, defRepo string, client *http.Client
 func (g *GitHubClient) parseRef(ref string) (owner, repo string, num int, err error) {
 	if m := ghURLRe.FindStringSubmatch(ref); m != nil {
 		n, _ := strconv.Atoi(m[3])
-		return m[1], m[2], n, nil
+		return validatedRef(m[1], m[2], n)
 	}
 	if m := ghSlashRe.FindStringSubmatch(ref); m != nil {
 		n, _ := strconv.Atoi(m[3])
-		return m[1], m[2], n, nil
+		return validatedRef(m[1], m[2], n)
 	}
 	stripped := strings.TrimPrefix(ref, "#")
 	if m := ghBareRe.FindStringSubmatch(stripped); m != nil {
@@ -54,9 +67,18 @@ func (g *GitHubClient) parseRef(ref string) (owner, repo string, num int, err er
 		if len(parts) != 2 {
 			return "", "", 0, fmt.Errorf("%w: invalid default repo %q", ErrBadRef, g.defRepo)
 		}
-		return parts[0], parts[1], n, nil
+		return validatedRef(parts[0], parts[1], n)
 	}
 	return "", "", 0, fmt.Errorf("%w: not a recognized GitHub issue ref: %q", ErrBadRef, ref)
+}
+
+// validatedRef rejects owner/repo components that fall outside the GitHub name
+// charset or attempt path traversal, so they cannot escape the issues path.
+func validatedRef(owner, repo string, num int) (string, string, int, error) {
+	if !validGHComponent(owner) || !validGHComponent(repo) {
+		return "", "", 0, fmt.Errorf("%w: invalid GitHub owner/repo in ref", ErrBadRef)
+	}
+	return owner, repo, num, nil
 }
 
 func (g *GitHubClient) apiBase() string {
