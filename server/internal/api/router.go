@@ -44,6 +44,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/prompttemplates"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	trackerapi "github.com/lx-wnk/agent-dashboard/server/internal/api/tracker"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -163,6 +164,7 @@ type RouterDeps struct {
 	AuditEventRepo         repo.AuditEventRepo
 	AdminHandler           *admin.Handler
 	UsageHandler           http.Handler
+	TrackerHandler         *trackerapi.Handler
 }
 
 // NewRouter builds the chi router with all middleware and route mounts.
@@ -386,6 +388,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// Eval metrics and drift alerts.
 		if deps.EvalHandler != nil {
 			deps.EvalHandler.Mount(r)
+		}
+
+		// Tracker issue fetch + encrypted token settings.
+		if deps.TrackerHandler != nil {
+			deps.TrackerHandler.Mount(r)
 		}
 
 		// Spawn management — rate-limited user-initiated agent spawning and channel message forwarding.
