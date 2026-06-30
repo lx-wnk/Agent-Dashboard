@@ -30,18 +30,19 @@ import (
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/prompttemplates"
 	providersapi "github.com/lx-wnk/agent-dashboard/server/internal/api/providers"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
-	"github.com/lx-wnk/agent-dashboard/server/internal/api/prompttemplates"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	apiusage "github.com/lx-wnk/agent-dashboard/server/internal/api/usage"
 	apivisualizations "github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
@@ -346,10 +347,73 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo, pipelineConfigRepo)
 	}
 
-	orch, err := provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver)
+	// Per-turn checkpoint/revert: the Service snapshots worktree turns and drives
+	// reverts; the Checkpointer runs the fsnotify watcher. orch is forward-declared
+	// so the Service's KillFn can reach KillRunningStage once the orchestrator exists.
+	var orch *pipeline.PipelineOrchestrator
+	var checkpointSvc *checkpoint.Service
+	var cpStart func(taskID, worktreePath string)
+	var cpStop func(taskID string)
+	if entClient != nil {
+		cpRepo := repo.NewCheckpointRepo(entClient)
+		cpTaskRepo := repo.NewTaskRepo(entClient)
+		cpSRRepo := repo.NewStageRunRepo(entClient)
+		checkpointSvc = checkpoint.NewService(checkpoint.ServiceOptions{
+			Repo:        cpRepo,
+			MaxPerTask:  50,
+			Broadcaster: taskBroadcaster,
+			KillFn: func(ctx context.Context, taskID string) error {
+				if orch == nil {
+					return nil
+				}
+				return orch.KillRunningStage(ctx, taskID)
+			},
+			ParkFn: func(ctx context.Context, taskID, reason string) error {
+				task, err := cpTaskRepo.GetByID(ctx, taskID)
+				if err != nil {
+					return err
+				}
+				run, err := cpSRRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+				if err != nil || run == nil {
+					return err
+				}
+				awaiting := "awaiting_user"
+				if _, err := cpSRRepo.Update(ctx, run.ID, repo.UpdateStageRunInput{
+					Status:   &awaiting,
+					PIDClear: true,
+					Output:   map[string]any{"checkpoint_revert_reason": reason},
+				}); err != nil {
+					return err
+				}
+				taskBroadcaster.Broadcast(sse.TaskEvent{Type: "task_updated", TaskID: taskID})
+				return nil
+			},
+		})
+		cpManager := checkpoint.NewCheckpointer(checkpoint.CheckpointerOptions{
+			OnSnapshot: func(taskID, worktreePath string) {
+				_ = checkpointSvc.TakeSnapshot(context.Background(), taskID, worktreePath)
+			},
+		})
+		cpStart = cpManager.Start
+		cpStop = func(taskID string) {
+			cpManager.Stop(taskID)
+			if task, err := cpTaskRepo.GetByID(context.Background(), taskID); err == nil &&
+				task != nil && task.WorktreePath != nil && *task.WorktreePath != "" {
+				if err := checkpointSvc.PruneRefs(context.Background(), taskID, *task.WorktreePath); err != nil {
+					slog.Warn("checkpoint: prune refs on stop", "taskID", taskID, "err", err)
+				}
+			}
+			if err := cpRepo.DeleteByTask(context.Background(), taskID); err != nil {
+				slog.Warn("checkpoint: delete rows on stop", "taskID", taskID, "err", err)
+			}
+		}
+	}
+
+	orch, err = provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver, cpStart, cpStop)
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, err
 	}
+	_ = checkpointSvc // consumed by provideTaskHandler below
 
 	// Construct the detached refinement runner before the task handler so the
 	// nil-safe interface value (refineReaderArg) can be threaded in. The runner
