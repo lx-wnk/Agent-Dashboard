@@ -52,7 +52,7 @@ func SnapshotWithParent(ctx context.Context, worktreePath, taskID string, seq in
 	if err != nil {
 		return SnapshotResult{}, fmt.Errorf("snapshot: create temp index: %w", err)
 	}
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	env := append(os.Environ(), "GIT_INDEX_FILE="+tmpPath)
 
@@ -124,7 +124,7 @@ func Restore(ctx context.Context, repoDir, worktreePath, treeSHA string) error {
 	if err != nil {
 		return fmt.Errorf("restore: create temp index: %w", err)
 	}
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	env := append(os.Environ(), "GIT_INDEX_FILE="+tmpPath)
 	if out, err := runGit(ctx, worktreePath, env, "read-tree", treeSHA); err != nil {
