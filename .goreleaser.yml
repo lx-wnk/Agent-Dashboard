@@ -59,7 +59,7 @@ homebrew_casks:
       email: bot@goreleaser.com
     commit_msg_template: 'chore: update agent-dashboard cask to {{ .Tag }}'
     homepage: 'https://github.com/lx-wnk/Agent-Dashboard'
-    description: 'Real-time monitoring dashboard for locally running Claude Code agents'
+    description: Real-time monitoring dashboard for locally running Claude Code agents
     skip_upload: auto
     caveats: |
       Agent Dashboard binds to 127.0.0.1:13120 and reads ~/.claude session data.
@@ -80,7 +80,7 @@ dockers_v2:
   - id: agent-dashboard
     dockerfile: Dockerfile.goreleaser
     images:
-      - 'ghcr.io/lx-wnk/agent-dashboard'
+      - ghcr.io/lx-wnk/agent-dashboard
     tags:
       - '{{ .Version }}'
       - latest
