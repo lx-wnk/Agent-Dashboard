@@ -6,6 +6,7 @@ import { useProjects } from '../composables/useProjects'
 import { useSpawners } from '../composables/useSpawners'
 import { createTask } from '../composables/useTasks'
 import { toast } from '../composables/useToast'
+import { useTrackerImport } from '../composables/useTrackerImport'
 import { errorMessage } from '../utils/errorMessage'
 import { slugify } from '../utils/validation'
 import PermissionTemplatePicker from './PermissionTemplatePicker.vue'
@@ -35,6 +36,9 @@ const selectedSpawnerId = ref<string>('')
 const autonomy = ref<'manual' | 'spec_gated' | 'full'>('spec_gated')
 const folderSuggestions = ref<ProjectFolder[]>([])
 const isSubmitting = ref(false)
+const importRef = ref('')
+const isImporting = ref(false)
+const { fetchIssue } = useTrackerImport()
 
 const fieldClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
 
@@ -83,6 +87,26 @@ function onTitleInput(e: Event): void {
 
 function onSlugInput(e: Event): void {
   slug.value = (e.target as HTMLInputElement).value
+}
+
+async function importFromIssue(): Promise<void> {
+  const ref = importRef.value.trim()
+  if (!ref || isImporting.value)
+    return
+  isImporting.value = true
+  try {
+    const iss = await fetchIssue(ref)
+    title.value = iss.title
+    slug.value = slugify(iss.title)
+    const sourceLink = `\n\nSource: ${iss.url}`
+    description.value = iss.body ? iss.body + sourceLink : iss.url
+  }
+  catch (err: unknown) {
+    toast.error(errorMessage(err, 'Failed to fetch issue'))
+  }
+  finally {
+    isImporting.value = false
+  }
 }
 
 function onProjectCreated(p: Project): void {
@@ -172,6 +196,28 @@ async function onCreateAndRefine(): Promise<void> {
         @created="onProjectCreated"
         @cancel="onQuickCreateCancel"
       />
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <AppFieldLabel>Import from issue</AppFieldLabel>
+      <div class="flex gap-2 items-stretch">
+        <AppInput
+          v-model="importRef"
+          placeholder="github.com/owner/repo/issues/1 · KEY-123 · owner/repo#1"
+          class="flex-1"
+          data-testid="import-ref-input"
+        />
+        <AppButton
+          type="button"
+          variant="secondary"
+          :disabled="!importRef.trim() || isImporting"
+          :aria-busy="isImporting"
+          data-testid="import-ref-fetch"
+          @click="importFromIssue"
+        >
+          {{ isImporting ? 'Fetching…' : 'Fetch' }}
+        </AppButton>
+      </div>
     </div>
 
     <div class="flex flex-col gap-1">

@@ -23,6 +23,7 @@ const emit = defineEmits<{ close: [] }>()
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
 const ProviderSettings = defineAsyncComponent(() => import('./ProviderSettings.vue'))
+const TrackerSettingsPanel = defineAsyncComponent(() => import('./TrackerSettingsPanel.vue'))
 const AppSettings = defineAsyncComponent(() => import('./AppSettings.vue'))
 
 const { preference: themePref, setTheme } = useTheme()
@@ -30,7 +31,7 @@ const { authEnabled } = useUser()
 const { mcpServerName, mcpEndpoint, loadServerConfig } = useServerConfig()
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'projects' | 'spawners' | 'pipelineConfig' | 'server'
+type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server'
 const activeSection = ref<Section>('appearance')
 
 // --- State ---
@@ -506,6 +507,19 @@ async function startImport() {
             <button
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
+              :class="activeSection === 'tracker'
+                ? 'bg-raised text-fg font-semibold'
+                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
+              :aria-current="activeSection === 'tracker' ? 'page' : undefined"
+              @click="activeSection = 'tracker'"
+            >
+              <span class="text-sm flex-shrink-0">🔗</span> Tracker
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
               :class="activeSection === 'projects'
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
@@ -843,6 +857,11 @@ async function startImport() {
         <!-- Providers -->
         <section v-else-if="activeSection === 'providers'">
           <ProviderSettings />
+        </section>
+
+        <!-- Tracker -->
+        <section v-else-if="activeSection === 'tracker'">
+          <TrackerSettingsPanel />
         </section>
 
         <!-- Projects -->
