@@ -14,6 +14,7 @@ Preparing the first public release.
 
 ### Added
 
+- Per-turn checkpoint / revert for pipeline-task worktrees. A gitignore-aware filesystem watcher (~2 s debounce) captures each agent turn as a hidden git ref (`refs/checkpoints/<task>/<seq>`) using a temporary index, so the agent's index and HEAD are never touched. The task modal's new **Checkpoints** tab lists snapshots (newest first) with a Revert button; reverting kills the live agent, saves the current state as a recoverable pre-revert checkpoint, restores the worktree to the chosen snapshot, and parks the task (`awaiting_user`) for manual resume. Endpoints: `GET /api/tasks/{id}/checkpoints` and `POST /api/tasks/{id}/checkpoints/{cpId}/revert`; live updates over the `checkpoint_added` SSE event. Retention prunes to 50 checkpoints per task; refs and rows are cleaned up when the worktree is removed.
 - `wait_for_port` MCP coordination tool — agents can block until a TCP service is reachable (max 300 s, returns `reached`/`timedOut`).
 - Per-project `setup_command` field — run once in the worktree after creation; failure logs and continues.
 - Prompt templates with `{{placeholder}}` fill-in — picker in the full prompt input, CRUD at `/api/prompt-templates`.
