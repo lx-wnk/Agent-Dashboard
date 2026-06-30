@@ -111,7 +111,7 @@ describe('agentTriageBand — pendingQuestion', () => {
       props: { agents: [agent], permissionItems: [] },
       global: { stubs },
     })
-    expect(w.text()).toContain('answer in your terminal')
+    expect(w.text()).toContain('Answer in your terminal')
   })
 
   it('hides terminal hint when liveInjectable is true', () => {
@@ -120,7 +120,7 @@ describe('agentTriageBand — pendingQuestion', () => {
       props: { agents: [agent], permissionItems: [] },
       global: { stubs },
     })
-    expect(w.text()).not.toContain('answer in your terminal')
+    expect(w.text()).not.toContain('Answer in your terminal')
   })
 
   it('sets aria-label on the card for accessibility', () => {

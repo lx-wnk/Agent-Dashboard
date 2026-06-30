@@ -14,6 +14,7 @@ Preparing the first public release.
 
 ### Added
 
+- Answer a Claude **AskUserQuestion** prompt from the dashboard. When a live session asks a multiple-choice question it surfaces in the **Needs you** triage band as "Needs answer" with the options rendered inline (radio for single-select, checkboxes for multi-select); **Send answer** delivers the chosen labels to the running session over the existing live channel (tmux / pty broker). Sessions that aren't live-injectable show the question read-only with a hint to answer in the terminal. New endpoint: `POST /api/agents/{pid}/answer-question {toolUseId, answers}` — validates the question is still the one the session is blocked on (409 if already answered or not injectable).
 - End-user install paths: binary (one-liner via `install.sh`), Homebrew cask on macOS (`brew install lx-wnk/tap/agent-dashboard`), and Docker (`ghcr.io/lx-wnk/agent-dashboard`) — no Go or build tools required at runtime. See [`docs/guides/install.md`](docs/guides/install.md).
 - One-command MCP connect: the API key dialog's **CLI command** block copies a `claude mcp add --scope user --transport http …` one-liner with the generated key substituted. Documented in [`docs/guides/mcp.md`](docs/guides/mcp.md#connect-the-dashboard-to-claude).
 - GoReleaser config now publishes a Homebrew cask to `lx-wnk/homebrew-tap` and a multi-arch Docker image (`linux/amd64`, `linux/arm64`) to GHCR on `v*` tag pushes. See [`docs/RELEASING.md`](docs/RELEASING.md).

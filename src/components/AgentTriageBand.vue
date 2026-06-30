@@ -9,6 +9,7 @@ import { toast } from '../composables/useToast'
 import { attentionFor } from '../utils/attention'
 import { formatErrorState, formatRelativeActivity, secondsSince, shortModel } from '../utils/format'
 import { friendlyProjectName } from '../utils/friendlyProjectName'
+import QuestionCard from './QuestionCard.vue'
 import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
@@ -456,31 +457,13 @@ watch(() => props.focusedSessionId, (id) => {
             >{{ attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.label }}</span>
           </div>
 
-          <!-- Pending interactive question (read-only; answering is a later step) -->
+          <!-- Pending interactive question — pick options and answer the live session inline. -->
           <template v-if="attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.kind === 'question' && agent.pendingQuestion">
-            <div
-              v-for="(q, qi) in agent.pendingQuestion.questions"
-              :key="qi"
-              class="flex flex-col gap-1.5"
-            >
-              <span class="text-[10px] font-bold uppercase tracking-wide text-warning-text">{{ q.header }}</span>
-              <p class="text-[12px] text-fg m-0">
-                {{ q.question }}
-              </p>
-              <ul class="m-0 p-0 list-none flex flex-col gap-0.5">
-                <li
-                  v-for="(opt, oi) in q.options"
-                  :key="oi"
-                  class="text-[12px] text-fg-mute bg-app border border-line rounded px-2.5 py-1 leading-snug"
-                >
-                  <span class="font-medium text-fg">{{ opt.label }}</span>
-                  <span v-if="opt.description" class="ml-1 text-fg-faint">— {{ opt.description }}</span>
-                </li>
-              </ul>
-            </div>
-            <p v-if="!agent.liveInjectable" class="text-[11px] text-fg-faint m-0">
-              ↳ answer in your terminal
-            </p>
+            <QuestionCard
+              :pid="agent.pid"
+              :pending-question="agent.pendingQuestion"
+              :live-injectable="agent.liveInjectable ?? false"
+            />
           </template>
 
           <!-- Orchestrated agent with pending permissions (not covered by task items) -->
