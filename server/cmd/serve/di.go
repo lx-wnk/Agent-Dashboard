@@ -413,7 +413,6 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, err
 	}
-	_ = checkpointSvc // consumed by provideTaskHandler below
 
 	// Construct the detached refinement runner before the task handler so the
 	// nil-safe interface value (refineReaderArg) can be threaded in. The runner
@@ -436,7 +435,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if bundle != nil {
 		rawDB = bundle.DB
 	}
-	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg, settingsSvc.Bool("git.allowPull"))
+	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg, settingsSvc.Bool("git.allowPull"), checkpointSvc)
 
 	// Scheduler: recurring task firing engine + its REST handler. Reuses the task
 	// handler's create core, so it must be built after taskHandler. nil when no DB.

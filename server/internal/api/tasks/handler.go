@@ -68,6 +68,7 @@ type Handler struct {
 	broadcaster       *sse.TaskBroadcaster
 	worktreeMgr       WorktreeStatusProvider
 	refineReader      RefineStatusReader
+	checkpointSvc     CheckpointServiceIface
 	allowGitPull      bool
 }
 
@@ -94,6 +95,9 @@ type Deps struct {
 	Broadcaster       *sse.TaskBroadcaster
 	WorktreeMgr       WorktreeStatusProvider
 	RefineReader      RefineStatusReader
+	// CheckpointSvc drives the per-turn checkpoint list + revert endpoints.
+	// When nil, the checkpoint routes are not mounted.
+	CheckpointSvc CheckpointServiceIface
 	// AllowGitPull permits the git "pull" action; resolved from the git.allowPull
 	// setting at startup (ApplyRestart).
 	AllowGitPull bool
@@ -118,6 +122,7 @@ func NewHandler(deps Deps) *Handler {
 		broadcaster:       deps.Broadcaster,
 		worktreeMgr:       deps.WorktreeMgr,
 		refineReader:      deps.RefineReader,
+		checkpointSvc:     deps.CheckpointSvc,
 		allowGitPull:      deps.AllowGitPull,
 	}
 }
@@ -181,6 +186,12 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/tasks/{id}/git-status", apierr.ErrorMiddleware(h.getGitStatusHandler))
 	r.Post("/api/tasks/{id}/git-action", apierr.ErrorMiddleware(h.gitActionHandler))
 	r.Post("/api/tasks/{id}/run", apierr.ErrorMiddleware(h.taskRunHandler))
+
+	// Per-turn checkpoints (list + revert). Mounted only when the service is wired.
+	if h.checkpointSvc != nil {
+		r.Get("/api/tasks/{id}/checkpoints", apierr.ErrorMiddleware(h.listCheckpoints))
+		r.Post("/api/tasks/{id}/checkpoints/{cpId}/revert", apierr.ErrorMiddleware(h.revertCheckpoint))
+	}
 
 	// Worktree status (branch, ahead/behind vs origin/<base>, dirty flag).
 	r.Get("/api/tasks/{id}/worktree", apierr.ErrorMiddleware(h.getWorktreeStatusHandler))
