@@ -116,6 +116,8 @@ func (h *Handler) fetch(w http.ResponseWriter, r *http.Request) error {
 	iss, err := t.FetchIssue(r.Context(), body.Ref)
 	if err != nil {
 		switch {
+		case errors.Is(err, tracker.ErrBadRef):
+			return apierr.NewAppError(http.StatusBadRequest, err.Error())
 		case errors.Is(err, tracker.ErrTrackerAuth):
 			return apierr.NewAppError(http.StatusUnauthorized, "tracker rejected the token")
 		case errors.Is(err, tracker.ErrIssueNotFound):

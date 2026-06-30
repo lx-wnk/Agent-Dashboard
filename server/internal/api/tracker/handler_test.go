@@ -59,12 +59,31 @@ func newTestBox(t *testing.T) *secretbox.Box {
 	return box
 }
 
-func newTestHandler(t *testing.T) (*trackerapi.Handler, *memRepo) {
+func newTestHandler(t *testing.T) (*trackerapi.Handler, *pluginsettings.Service) {
 	t.Helper()
 	repo := newMemRepo()
 	svc := pluginsettings.New(repo, newTestBox(t))
 	h := trackerapi.NewHandler(svc, &http.Client{}, tracker.Resolve)
-	return h, repo
+	return h, svc
+}
+
+// fakeTracker returns a fixed result, letting handler tests drive the
+// FetchIssue error branches without a real upstream.
+type fakeTracker struct {
+	iss tracker.Issue
+	err error
+}
+
+func (f fakeTracker) FetchIssue(context.Context, string) (tracker.Issue, error) {
+	return f.iss, f.err
+}
+
+// handlerWithTracker builds a handler whose resolver always returns tr.
+func handlerWithTracker(t *testing.T, tr tracker.Tracker) *trackerapi.Handler {
+	t.Helper()
+	svc := pluginsettings.New(newMemRepo(), newTestBox(t))
+	resolver := func(string, tracker.Config, *http.Client) (tracker.Tracker, error) { return tr, nil }
+	return trackerapi.NewHandler(svc, &http.Client{}, resolver)
 }
 
 func doRequest(t *testing.T, h *trackerapi.Handler, method, path string, body any) *httptest.ResponseRecorder {
@@ -124,20 +143,37 @@ func TestPutSettings_SecretRoundTrip(t *testing.T) {
 }
 
 func TestPutSettings_SentinelPreservesExistingSecret(t *testing.T) {
-	h, _ := newTestHandler(t)
+	h, svc := newTestHandler(t)
 	_ = doRequest(t, h, http.MethodPut, "/api/tracker/settings", map[string]any{
 		"values": map[string]string{"tracker.github.token": "initial-secret"},
 	})
 	_ = doRequest(t, h, http.MethodPut, "/api/tracker/settings", map[string]any{
 		"values": map[string]string{"tracker.github.token": pluginsettings.MaskedSentinel},
 	})
-	w := doRequest(t, h, http.MethodGet, "/api/tracker/settings", nil)
-	var resp struct {
-		Values map[string]string `json:"values"`
+	// Assert the STORED plaintext is unchanged — GET masks unconditionally, so
+	// only inspecting the decrypted value proves the secret was preserved.
+	vals, err := svc.DecryptedAll(context.Background(), "tracker")
+	if err != nil {
+		t.Fatalf("DecryptedAll: %v", err)
 	}
-	_ = json.NewDecoder(w.Body).Decode(&resp)
-	if resp.Values["tracker.github.token"] != pluginsettings.MaskedSentinel {
-		t.Errorf("expected masked sentinel, got %q", resp.Values["tracker.github.token"])
+	if got := vals["tracker.github.token"]; got != "initial-secret" {
+		t.Errorf("stored secret clobbered by sentinel write: got %q", got)
+	}
+}
+
+func TestFetch_BadRefFromTracker_Returns400(t *testing.T) {
+	h := handlerWithTracker(t, fakeTracker{err: tracker.ErrBadRef})
+	w := doRequest(t, h, http.MethodPost, "/api/tracker/fetch", map[string]string{"ref": "owner/repo#1"})
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("bad ref from tracker: got %d, want 400", w.Code)
+	}
+}
+
+func TestFetch_UpstreamError_Returns502(t *testing.T) {
+	h := handlerWithTracker(t, fakeTracker{err: tracker.ErrTrackerUpstream})
+	w := doRequest(t, h, http.MethodPost, "/api/tracker/fetch", map[string]string{"ref": "owner/repo#1"})
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("upstream error: got %d, want 502", w.Code)
 	}
 }
 
