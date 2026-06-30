@@ -76,6 +76,27 @@ func TestSnapshot_NodeModulesSkipped(t *testing.T) {
 	}
 }
 
+func TestSnapshot_NestedNodeModulesSkipped(t *testing.T) {
+	dir := initRepo(t)
+	if err := os.MkdirAll(filepath.Join(dir, "packages", "x", "node_modules", "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "packages/x/node_modules/pkg/index.js", "module.exports={}")
+	writeFile(t, dir, "packages/x/real.go", "package x")
+
+	res, err := checkpoint.Snapshot(context.Background(), dir, "task-nnm", 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := exec.Command("git", "-C", dir, "ls-tree", "-r", "--name-only", res.TreeSHA).Output()
+	if strings.Contains(string(out), "node_modules") {
+		t.Fatalf("nested node_modules must not appear in checkpoint tree:\n%s", out)
+	}
+	if !strings.Contains(string(out), "packages/x/real.go") {
+		t.Fatalf("real source under packages/x must be captured:\n%s", out)
+	}
+}
+
 func TestSnapshot_IdenticalTreeSkipped(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "a.go", "package main")

@@ -6,6 +6,7 @@ package checkpoint
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,8 +18,10 @@ import (
 const snapshotTimeout = 60 * time.Second
 
 // hardSkipPathspecs are git pathspecs that exclude heavy/irrelevant directories
-// from a snapshot regardless of the worktree's .gitignore.
-var hardSkipPathspecs = []string{".", ":!node_modules", ":!dist", ":!.git"}
+// from a snapshot regardless of the worktree's .gitignore. The glob excludes match
+// node_modules/dist at any depth (nested package dirs too), mirroring the watcher's
+// substring shouldIgnore.
+var hardSkipPathspecs = []string{".", ":(exclude,glob)**/node_modules/**", ":(exclude,glob)**/dist/**", ":!.git"}
 
 // SnapshotResult carries the output of a Snapshot call.
 type SnapshotResult struct {
@@ -154,6 +157,23 @@ func DeleteCheckpointRefs(ctx context.Context, repoDir, taskID string) error {
 		}
 	}
 	return nil
+}
+
+// DeleteCheckpointRefSeqs deletes refs/checkpoints/<taskID>/<seq> for each seq.
+// Used when pruning old checkpoint rows so the matching git refs (and their objects)
+// don't accumulate until worktree teardown.
+func DeleteCheckpointRefSeqs(ctx context.Context, repoDir, taskID string, seqs []int) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	var errs []error
+	for _, seq := range seqs {
+		ref := fmt.Sprintf("refs/checkpoints/%s/%d", taskID, seq)
+		if out, err := runGit(ctx, repoDir, os.Environ(), "update-ref", "-d", ref); err != nil {
+			errs = append(errs, fmt.Errorf("delete %s: %s: %w", ref, out, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // tempIndexFile returns a unique, non-existent path for a throwaway GIT_INDEX_FILE.

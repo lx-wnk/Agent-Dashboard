@@ -45,8 +45,18 @@ func TestCheckpointRepo_Prune(t *testing.T) {
 			TaskID: "task-2", Seq: i, CommitSHA: fmt.Sprintf("sha%d", i), TreeSHA: "tree",
 		})
 	}
-	if err := r.PruneOldest(ctx, "task-2", 50); err != nil {
+	prunedSeqs, err := r.PruneOldest(ctx, "task-2", 50)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(prunedSeqs) != 5 {
+		t.Fatalf("expected 5 pruned seqs, got %d: %v", len(prunedSeqs), prunedSeqs)
+	}
+	// The five oldest seqs (1..5) must be the ones reported pruned.
+	for i, seq := range prunedSeqs {
+		if seq != i+1 {
+			t.Fatalf("prunedSeqs[%d]=%d, want %d", i, seq, i+1)
+		}
 	}
 	list, _ := r.ListByTask(ctx, "task-2")
 	if len(list) != 50 {

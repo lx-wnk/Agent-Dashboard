@@ -16,7 +16,7 @@ type CheckpointRepo interface {
 	GetLatestByTask(ctx context.Context, taskID string) (*ent.Checkpoint, error)
 	ListByTask(ctx context.Context, taskID string) ([]*ent.Checkpoint, error)
 	CountByTask(ctx context.Context, taskID string) (int, error)
-	PruneOldest(ctx context.Context, taskID string, keep int) error
+	PruneOldest(ctx context.Context, taskID string, keep int) ([]int, error)
 	DeleteByTask(ctx context.Context, taskID string) error
 }
 
@@ -85,22 +85,27 @@ func (r *entCheckpointRepo) CountByTask(ctx context.Context, taskID string) (int
 	return r.client.Checkpoint.Query().Where(checkpoint.TaskID(taskID)).Count(ctx)
 }
 
-// PruneOldest keeps the newest `keep` checkpoints for taskID and deletes the rest.
-func (r *entCheckpointRepo) PruneOldest(ctx context.Context, taskID string, keep int) error {
+// PruneOldest keeps the newest `keep` checkpoints for taskID and deletes the rest,
+// returning the seqs of the deleted rows so the caller can drop their git refs.
+func (r *entCheckpointRepo) PruneOldest(ctx context.Context, taskID string, keep int) ([]int, error) {
 	all, err := r.client.Checkpoint.Query().
 		Where(checkpoint.TaskID(taskID)).
 		Order(ent.Asc(checkpoint.FieldSeq)).
 		All(ctx)
 	if err != nil || len(all) <= keep {
-		return err
+		return nil, err
 	}
 	toDelete := all[:len(all)-keep]
 	ids := make([]string, len(toDelete))
+	seqs := make([]int, len(toDelete))
 	for i, cp := range toDelete {
 		ids[i] = cp.ID
+		seqs[i] = cp.Seq
 	}
-	_, err = r.client.Checkpoint.Delete().Where(checkpoint.IDIn(ids...)).Exec(ctx)
-	return err
+	if _, err := r.client.Checkpoint.Delete().Where(checkpoint.IDIn(ids...)).Exec(ctx); err != nil {
+		return nil, err
+	}
+	return seqs, nil
 }
 
 func (r *entCheckpointRepo) DeleteByTask(ctx context.Context, taskID string) error {

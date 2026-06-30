@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -45,6 +46,9 @@ type taskState struct {
 	lastTree   string
 	lastSeq    int
 	lastCommit string
+	// restoring blocks debounce snapshots while a revert rewrites the worktree,
+	// so a snapshot can't capture a half-restored tree.
+	restoring bool
 }
 
 // NewService creates a Service.
@@ -85,6 +89,9 @@ func (s *Service) TakeSnapshot(ctx context.Context, taskID, worktreePath string)
 	st := s.state(taskID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	if st.restoring {
+		return nil
+	}
 	s.seedFromDB(ctx, taskID, st)
 
 	cp, err := s.snapshotLocked(ctx, taskID, worktreePath, st, false)
@@ -93,8 +100,13 @@ func (s *Service) TakeSnapshot(ctx context.Context, taskID, worktreePath string)
 	}
 
 	if n, _ := s.opts.Repo.CountByTask(ctx, taskID); n > s.opts.MaxPerTask {
-		if err := s.opts.Repo.PruneOldest(ctx, taskID, s.opts.MaxPerTask); err != nil {
+		prunedSeqs, err := s.opts.Repo.PruneOldest(ctx, taskID, s.opts.MaxPerTask)
+		if err != nil {
 			slog.Warn("checkpoint: prune failed", "taskID", taskID, "err", err)
+		} else if len(prunedSeqs) > 0 {
+			if err := DeleteCheckpointRefSeqs(ctx, worktreePath, taskID, prunedSeqs); err != nil {
+				slog.Warn("checkpoint: prune refs failed", "taskID", taskID, "err", err)
+			}
 		}
 	}
 	return nil
@@ -151,7 +163,11 @@ func (s *Service) Revert(ctx context.Context, taskID, checkpointID, worktreePath
 
 	cp, err := s.opts.Repo.GetByID(ctx, checkpointID)
 	if err != nil || cp == nil {
-		return fmt.Errorf("revert: checkpoint %s not found", checkpointID)
+		return fmt.Errorf("revert: checkpoint %s not found: %w", checkpointID, apierr.ErrNotFound)
+	}
+	// Guard against reverting task A's worktree to task B's checkpoint.
+	if cp.TaskID != taskID {
+		return fmt.Errorf("revert: checkpoint %s not found for task %s: %w", checkpointID, taskID, apierr.ErrNotFound)
 	}
 
 	if s.opts.KillFn != nil {
@@ -160,12 +176,19 @@ func (s *Service) Revert(ctx context.Context, taskID, checkpointID, worktreePath
 		}
 	}
 
-	// Pre-revert snapshot so the revert can itself be undone.
+	// Pre-revert snapshot so the revert can itself be undone, then block any
+	// debounce snapshot until the restore finishes rewriting the worktree.
 	st := s.state(taskID)
 	st.mu.Lock()
 	s.seedFromDB(ctx, taskID, st)
 	_, _ = s.snapshotLocked(ctx, taskID, worktreePath, st, true)
+	st.restoring = true
 	st.mu.Unlock()
+	defer func() {
+		st.mu.Lock()
+		st.restoring = false
+		st.mu.Unlock()
+	}()
 
 	if err := Restore(ctx, worktreePath, worktreePath, cp.TreeSha); err != nil {
 		return fmt.Errorf("revert: restore: %w", err)

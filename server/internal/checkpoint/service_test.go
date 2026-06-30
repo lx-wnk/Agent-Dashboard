@@ -2,7 +2,9 @@ package checkpoint_test
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/domainerr"
 )
 
 // fakeCheckpointRepo is an in-memory repo.CheckpointRepo backed by a slice.
@@ -83,7 +86,34 @@ func (f *fakeCheckpointRepo) CountByTask(_ context.Context, taskID string) (int,
 	return n, nil
 }
 
-func (f *fakeCheckpointRepo) PruneOldest(_ context.Context, _ string, _ int) error { return nil }
+func (f *fakeCheckpointRepo) PruneOldest(_ context.Context, taskID string, keep int) ([]int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var taskRows []*ent.Checkpoint
+	for _, r := range f.rows {
+		if r.TaskID == taskID {
+			taskRows = append(taskRows, r) // f.rows preserves insertion (seq) order
+		}
+	}
+	if len(taskRows) <= keep {
+		return nil, nil
+	}
+	pruned := taskRows[:len(taskRows)-keep]
+	prunedIDs := make(map[string]bool, len(pruned))
+	seqs := make([]int, len(pruned))
+	for i, r := range pruned {
+		prunedIDs[r.ID] = true
+		seqs[i] = r.Seq
+	}
+	remaining := f.rows[:0:0]
+	for _, r := range f.rows {
+		if !prunedIDs[r.ID] {
+			remaining = append(remaining, r)
+		}
+	}
+	f.rows = remaining
+	return seqs, nil
+}
 
 func (f *fakeCheckpointRepo) DeleteByTask(_ context.Context, _ string) error { return nil }
 
@@ -170,4 +200,104 @@ func TestService_Revert_RestoresAndParks(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "b.go")); err == nil {
 		t.Fatal("b.go added after snapshot must be removed by revert")
 	}
+}
+
+func TestService_Revert_RejectsForeignCheckpoint(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "a.go", "package a")
+	fr := &fakeCheckpointRepo{}
+	var killed bool
+	svc := checkpoint.NewService(checkpoint.ServiceOptions{
+		Repo:       fr,
+		MaxPerTask: 50,
+		KillFn:     func(_ context.Context, _ string) error { killed = true; return nil },
+		ParkFn:     func(_ context.Context, _, _ string) error { return nil },
+	})
+
+	// Checkpoint belongs to task A.
+	if err := svc.TakeSnapshot(context.Background(), "task-A", dir); err != nil {
+		t.Fatal(err)
+	}
+	cpID := fr.rows[0].ID
+
+	writeFile(t, dir, "a.go", "CORRUPTED")
+	// Revert task B using task A's checkpoint → not found, no kill, no restore.
+	err := svc.Revert(context.Background(), "task-B", cpID, dir)
+	if !errors.Is(err, domainerr.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+	if killed {
+		t.Fatal("KillFn must not run for a foreign checkpoint")
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "a.go"))
+	if string(got) != "CORRUPTED" {
+		t.Fatalf("worktree must be untouched, got %q", got)
+	}
+}
+
+func TestService_TakeSnapshot_PrunesRefsWithRows(t *testing.T) {
+	dir := initRepo(t)
+	fr := &fakeCheckpointRepo{}
+	svc := checkpoint.NewService(checkpoint.ServiceOptions{Repo: fr, MaxPerTask: 2})
+
+	// Three distinct trees → three checkpoints; cap=2 prunes the oldest (seq 1).
+	for i, content := range []string{"v1", "v2", "v3"} {
+		writeFile(t, dir, "a.go", content)
+		if err := svc.TakeSnapshot(context.Background(), "task-prune", dir); err != nil {
+			t.Fatalf("snapshot %d: %v", i, err)
+		}
+	}
+
+	if n, _ := fr.CountByTask(context.Background(), "task-prune"); n != 2 {
+		t.Fatalf("expected 2 rows after prune, got %d", n)
+	}
+	if refExists(t, dir, "task-prune", 1) {
+		t.Fatal("oldest checkpoint ref (seq 1) must be deleted on prune")
+	}
+	if !refExists(t, dir, "task-prune", 2) || !refExists(t, dir, "task-prune", 3) {
+		t.Fatal("newest checkpoint refs (seq 2,3) must remain")
+	}
+}
+
+func TestService_Revert_BlocksSnapshotDuringRestore(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "a.go", "package a")
+	fr := &fakeCheckpointRepo{}
+	var duringRestoreRows int
+	var snapshotDuringRestore func()
+	svc := checkpoint.NewService(checkpoint.ServiceOptions{
+		Repo:       fr,
+		MaxPerTask: 50,
+		KillFn:     func(_ context.Context, _ string) error { return nil },
+		ParkFn: func(_ context.Context, _, _ string) error {
+			// ParkFn runs after Restore, while restoring is still set. A snapshot
+			// of a changed tree must be skipped, capturing no new checkpoint.
+			writeFile(t, dir, "c.go", "package c")
+			snapshotDuringRestore()
+			duringRestoreRows = len(fr.rows)
+			return nil
+		},
+	})
+	snapshotDuringRestore = func() { _ = svc.TakeSnapshot(context.Background(), "task-rs", dir) }
+
+	if err := svc.TakeSnapshot(context.Background(), "task-rs", dir); err != nil {
+		t.Fatal(err)
+	}
+	cpID := fr.rows[0].ID
+	writeFile(t, dir, "a.go", "CORRUPTED")
+
+	rowsBeforeRevert := len(fr.rows)
+	if err := svc.Revert(context.Background(), "task-rs", cpID, dir); err != nil {
+		t.Fatal(err)
+	}
+	// Revert adds exactly one pre-revert row; the in-restore snapshot adds none.
+	if duringRestoreRows != rowsBeforeRevert+1 {
+		t.Fatalf("snapshot during restore must be skipped: rows %d, want %d", duringRestoreRows, rowsBeforeRevert+1)
+	}
+}
+
+func refExists(t *testing.T, dir, taskID string, seq int) bool {
+	t.Helper()
+	ref := "refs/checkpoints/" + taskID + "/" + itoa(seq)
+	return exec.Command("git", "-C", dir, "show-ref", "--verify", "--quiet", ref).Run() == nil
 }
