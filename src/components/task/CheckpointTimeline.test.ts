@@ -40,4 +40,12 @@ describe('checkpointTimeline', () => {
     await wrapper.find('[data-testid="revert-btn-cp1"]').trigger('click')
     expect(wrapper.emitted('revert')).toBeUndefined()
   })
+
+  it('disables revert buttons while reverting', () => {
+    const wrapper = mount(CheckpointTimeline, {
+      props: { taskId: 'task-1', checkpoints: sampleCheckpoints, loading: false, reverting: true },
+    })
+    const btn = wrapper.find('[data-testid="revert-btn-cp2"]')
+    expect((btn.element as HTMLButtonElement).disabled).toBe(true)
+  })
 })

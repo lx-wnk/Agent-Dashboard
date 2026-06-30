@@ -6,6 +6,7 @@ defineProps<{
   taskId: string
   checkpoints: Checkpoint[]
   loading: boolean
+  reverting?: boolean
 }>()
 const emit = defineEmits<{ revert: [cpId: string] }>()
 
@@ -47,7 +48,8 @@ function relativeTime(iso: string) {
         <button
           type="button"
           :data-testid="`revert-btn-${cp.id}`"
-          class="rounded px-2 py-1 text-xs font-medium bg-danger-subtle text-danger hover:bg-danger-muted"
+          :disabled="reverting"
+          class="rounded px-2 py-1 text-xs font-medium bg-danger-subtle text-danger hover:bg-danger-muted disabled:cursor-not-allowed disabled:opacity-50"
           @click="confirmRevert(cp.id)"
         >
           Revert

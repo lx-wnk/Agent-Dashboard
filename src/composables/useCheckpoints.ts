@@ -1,6 +1,7 @@
 import type { Ref } from 'vue'
 import { onUnmounted, ref, watch } from 'vue'
 import { errorMessage } from '../utils/errorMessage'
+import { toast } from './useToast'
 
 export interface Checkpoint {
   id: string
@@ -23,6 +24,7 @@ export function emitCheckpointAdded(cp: Checkpoint): void {
 export function useCheckpoints(taskId: Ref<string | null>) {
   const checkpoints = ref<Checkpoint[]>([])
   const loading = ref(false)
+  const reverting = ref(false)
   const error = ref<string | null>(null)
 
   async function load(id: string) {
@@ -36,6 +38,7 @@ export function useCheckpoints(taskId: Ref<string | null>) {
     }
     catch (err) {
       error.value = errorMessage(err)
+      toast.error(`Failed to load checkpoints: ${error.value}`)
     }
     finally {
       loading.value = false
@@ -60,9 +63,10 @@ export function useCheckpoints(taskId: Ref<string | null>) {
 
   async function revert(cpId: string): Promise<void> {
     const id = taskId.value
-    if (!id)
+    if (!id || reverting.value)
       return
     error.value = null
+    reverting.value = true
     try {
       const res = await fetch(`/api/tasks/${id}/checkpoints/${cpId}/revert`, {
         method: 'POST',
@@ -77,8 +81,12 @@ export function useCheckpoints(taskId: Ref<string | null>) {
     }
     catch (err) {
       error.value = errorMessage(err)
+      toast.error(`Revert failed: ${error.value}`)
+    }
+    finally {
+      reverting.value = false
     }
   }
 
-  return { checkpoints, loading, error, revert }
+  return { checkpoints, loading, reverting, error, revert }
 }

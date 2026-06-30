@@ -57,7 +57,7 @@ const TAB_LABELS: Record<typeof TABS[number], string> = {
   checkpoints: 'Checkpoints',
 }
 
-const { checkpoints, loading: checkpointsLoading, revert: revertCheckpoint } = useCheckpoints(computed(() => task.value?.id ?? null))
+const { checkpoints, loading: checkpointsLoading, reverting: checkpointReverting, revert: revertCheckpoint } = useCheckpoints(computed(() => task.value?.id ?? null))
 const { activeTab, tabAttrs, panelAttrs, onKeydown, select } = useRovingTabList(TABS, { idPrefix: 'task-modal', initial: 'overview' })
 
 function tabLabel(key: typeof TABS[number]): string {
@@ -144,6 +144,7 @@ watch(() => props.task?.id, (id, prevId) => {
           :task-id="task.id"
           :checkpoints="checkpoints"
           :loading="checkpointsLoading"
+          :reverting="checkpointReverting"
           @revert="revertCheckpoint"
         />
       </div>
