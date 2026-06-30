@@ -1,6 +1,8 @@
 import type { PendingQuestion } from '../types'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
+import { ANSWER_CONFIRM_MS } from '../utils/timing'
 import QuestionCard from './QuestionCard.vue'
 
 const sampleQuestion: PendingQuestion = {
@@ -125,5 +127,96 @@ describe('questionCard', () => {
     const allInputs = wrapper.findAll('input')
     expect(allInputs.length).toBeGreaterThan(0)
     allInputs.forEach(input => expect(input.attributes('disabled')).toBeDefined())
+  })
+
+  it('shows confirmFailed warning and re-enables submit after timeout with no resolution', async () => {
+    const wrapper = mount(QuestionCard, {
+      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
+    })
+
+    await wrapper.findAll('input[type="radio"]')[0].trigger('change')
+    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
+    await wrapper.find('[data-testid="send-answer-btn"]').trigger('click')
+    await flushPromises()
+
+    // Button enters awaiting-confirmation state
+    const btn = wrapper.find('[data-testid="send-answer-btn"]')
+    expect(btn.attributes('disabled')).toBeDefined()
+    expect(btn.text()).toBe('Waiting…')
+    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(false)
+
+    // Advance past confirmation window without the card unmounting
+    vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(true)
+    expect(btn.attributes('disabled')).toBeUndefined()
+
+    wrapper.unmount()
+  })
+
+  it('cleans up timer on unmount without throwing (simulates resolved answer)', async () => {
+    const wrapper = mount(QuestionCard, {
+      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
+    })
+
+    await wrapper.findAll('input[type="radio"]')[0].trigger('change')
+    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
+    await wrapper.find('[data-testid="send-answer-btn"]').trigger('click')
+    await flushPromises()
+
+    // Unmount before timeout fires (card unmount = confirmed resolution)
+    wrapper.unmount()
+
+    // Timer must not fire any late state mutation or throw
+    expect(() => vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)).not.toThrow()
+  })
+
+  it('resets confirmation state when pendingQuestion toolUseID changes during await', async () => {
+    const wrapper = mount(QuestionCard, {
+      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
+    })
+
+    await wrapper.findAll('input[type="radio"]')[0].trigger('change')
+    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
+    await wrapper.find('[data-testid="send-answer-btn"]').trigger('click')
+    await flushPromises()
+
+    // New question arrives (toolUseID changes) while waiting for confirmation
+    const newQuestion: PendingQuestion = { ...sampleQuestion, toolUseID: 'tu-q2' }
+    await wrapper.setProps({ pendingQuestion: newQuestion })
+
+    // Advance past original timeout
+    vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)
+    await nextTick()
+
+    // Stale timer must not surface the failure for the previous toolUseID
+    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('does not start confirmation window when submit fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'Server error' }),
+    }))
+
+    const wrapper = mount(QuestionCard, {
+      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
+    })
+
+    await wrapper.findAll('input[type="radio"]')[0].trigger('change')
+    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
+    await wrapper.find('[data-testid="send-answer-btn"]').trigger('click')
+    await flushPromises()
+
+    vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)
+    await nextTick()
+
+    // No confirmation warning — only the existing sendError path applies
+    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(false)
+
+    wrapper.unmount()
   })
 })

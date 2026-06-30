@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { PendingQuestion } from '../types'
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useAnswerQuestion } from '../composables/useAnswerQuestion'
+import { ANSWER_CONFIRM_MS } from '../utils/timing'
 import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
@@ -13,11 +14,26 @@ const props = defineProps<{
 // One entry per question: array of selected labels.
 const selections = ref<string[][]>(props.pendingQuestion.questions.map(() => []))
 
-// Reset when a new question arrives for the same agent session.
+// toolUseID of the in-flight confirmation window; null = idle or failed.
+const awaitingConfirmToolUseID = ref<string | null>(null)
+const confirmFailed = ref(false)
+const confirmTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+
+function clearConfirmTimer() {
+  if (confirmTimer.value !== null) {
+    clearTimeout(confirmTimer.value)
+    confirmTimer.value = null
+  }
+}
+
+// Reset selections and any confirmation state when a new question arrives.
 watch(
   () => props.pendingQuestion.toolUseID,
   () => {
     selections.value = props.pendingQuestion.questions.map(() => [])
+    clearConfirmTimer()
+    awaitingConfirmToolUseID.value = null
+    confirmFailed.value = false
   },
 )
 
@@ -45,8 +61,26 @@ async function handleSubmit() {
     header: q.header,
     selected: selections.value[i],
   }))
-  await submit(props.pid, props.pendingQuestion.toolUseID, answers)
+  const ok = await submit(props.pid, props.pendingQuestion.toolUseID, answers)
+  if (ok) {
+    clearConfirmTimer()
+    const toolUseID = props.pendingQuestion.toolUseID
+    awaitingConfirmToolUseID.value = toolUseID
+    confirmFailed.value = false
+    // Card unmounting (parent v-if clears on resolution) = confirmed success.
+    // If we're still mounted after ANSWER_CONFIRM_MS, the answer wasn't registered.
+    confirmTimer.value = setTimeout(() => {
+      if (awaitingConfirmToolUseID.value === toolUseID) {
+        confirmFailed.value = true
+        awaitingConfirmToolUseID.value = null
+      }
+    }, ANSWER_CONFIRM_MS)
+  }
 }
+
+onUnmounted(() => {
+  clearConfirmTimer()
+})
 </script>
 
 <template>
@@ -108,13 +142,21 @@ async function handleSubmit() {
         variant="primary"
         size="sm"
         data-testid="send-answer-btn"
-        :disabled="!allAnswered || isSending"
+        :disabled="!allAnswered || isSending || awaitingConfirmToolUseID !== null"
         @click="handleSubmit"
       >
-        {{ isSending ? 'Sending…' : 'Send answer' }}
+        {{ isSending ? 'Sending…' : awaitingConfirmToolUseID !== null ? 'Waiting…' : 'Send answer' }}
       </AppButton>
       <span v-if="sendStatus === 'sent'" class="text-[11px] text-success-text">Sent</span>
       <span v-if="sendError" class="text-[11px] text-danger-text">{{ sendError }}</span>
+      <span
+        v-if="confirmFailed"
+        role="status"
+        data-testid="confirm-failed-msg"
+        class="text-[11px] text-danger-text"
+      >
+        Answer sent, but the session hasn't registered it — check your terminal.
+      </span>
     </div>
   </div>
 </template>
