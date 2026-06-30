@@ -234,6 +234,28 @@ type PendingToolUse struct {
 	Pattern string `json:"pattern"`
 }
 
+// QuestionOption is one selectable choice within a QuestionSpec.
+type QuestionOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// QuestionSpec is a single question from an AskUserQuestion tool_use block.
+type QuestionSpec struct {
+	Header      string           `json:"header"`
+	Question    string           `json:"question"`
+	MultiSelect bool             `json:"multiSelect"`
+	Options     []QuestionOption `json:"options"`
+}
+
+// PendingQuestion surfaces an unresolved AskUserQuestion tool_use so the
+// dashboard can present the questions to the operator. ToolUseID is the
+// matching tool_use id needed to build the answering tool_result.
+type PendingQuestion struct {
+	ToolUseID string         `json:"toolUseID"`
+	Questions []QuestionSpec `json:"questions"`
+}
+
 // HookEvent is one lifecycle-hook event recorded for a session when the opt-in
 // hook receiver is installed (POST /api/hooks/event). It adds per-event
 // granularity on top of the process/JSONL scan. Tool and Summary are truncated,
@@ -296,6 +318,7 @@ type Agent struct {
 	PipelineTaskTitle   string              `json:"pipelineTaskTitle,omitempty"`
 	PendingPermissions  []PendingPermission `json:"pendingPermissions,omitempty"`
 	PendingToolUse      *PendingToolUse     `json:"pendingToolUse,omitempty"`
+	PendingQuestion     *PendingQuestion    `json:"pendingQuestion,omitempty"`
 	Machine             string              `json:"machine,omitempty"`
 	LastBtw             *BtwMessage         `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and

@@ -351,6 +351,7 @@ type SessionData struct {
 	Meta                *sdk.SessionMeta
 	LastBtw             *sdk.BtwMessage
 	PendingToolUse      *sdk.PendingToolUse
+	PendingQuestion     *sdk.PendingQuestion
 	TurnOpen            bool
 }
 
@@ -748,23 +749,62 @@ func ParseSessionFile(path string) (*SessionData, error) {
 	if n := len(toolUseOrder); n > 0 {
 		tu := toolUseOrder[n-1]
 		if !resolvedToolUseIDs[tu.id] {
-			var inp pendingToolInput
-			_ = json.Unmarshal(tu.input, &inp)
-			pattern := inp.Command
-			if pattern == "" {
-				pattern = inp.FilePath
-			}
-			data.PendingToolUse = &sdk.PendingToolUse{
-				ID:      tu.id,
-				Tool:    tu.name,
-				Pattern: pattern,
+			if tu.name == "AskUserQuestion" {
+				// Decode the structured question schema and surface it separately so
+				// the dashboard can render interactive questions rather than a raw tool badge.
+				type questionOption struct {
+					Label       string `json:"label"`
+					Description string `json:"description"`
+				}
+				type questionSpec struct {
+					Header      string           `json:"header"`
+					Question    string           `json:"question"`
+					MultiSelect bool             `json:"multiSelect"`
+					Options     []questionOption `json:"options"`
+				}
+				type askInput struct {
+					Questions []questionSpec `json:"questions"`
+				}
+				var inp askInput
+				if err := json.Unmarshal(tu.input, &inp); err == nil {
+					specs := make([]sdk.QuestionSpec, 0, len(inp.Questions))
+					for _, q := range inp.Questions {
+						opts := make([]sdk.QuestionOption, 0, len(q.Options))
+						for _, o := range q.Options {
+							opts = append(opts, sdk.QuestionOption{Label: o.Label, Description: o.Description})
+						}
+						specs = append(specs, sdk.QuestionSpec{
+							Header:      q.Header,
+							Question:    q.Question,
+							MultiSelect: q.MultiSelect,
+							Options:     opts,
+						})
+					}
+					data.PendingQuestion = &sdk.PendingQuestion{
+						ToolUseID: tu.id,
+						Questions: specs,
+					}
+				}
+			} else {
+				var inp pendingToolInput
+				_ = json.Unmarshal(tu.input, &inp)
+				pattern := inp.Command
+				if pattern == "" {
+					pattern = inp.FilePath
+				}
+				data.PendingToolUse = &sdk.PendingToolUse{
+					ID:      tu.id,
+					Tool:    tu.name,
+					Pattern: pattern,
+				}
 			}
 		}
 	}
 
 	// TurnOpen: the agent owes the next step when the trailing entry is a user
-	// message (prompt or tool_result) or a tool_use is still unresolved.
-	data.TurnOpen = lastEntryType == "user" || data.PendingToolUse != nil
+	// message (prompt or tool_result), a tool_use is still unresolved, or the
+	// agent is blocked waiting for a user's answer to a structured question.
+	data.TurnOpen = lastEntryType == "user" || data.PendingToolUse != nil || data.PendingQuestion != nil
 
 	if err := scanner.Err(); err != nil {
 		slog.Warn("parser: session scan error — partial data returned", "err", err)
