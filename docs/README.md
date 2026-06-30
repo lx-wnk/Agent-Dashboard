@@ -25,6 +25,10 @@ Reference and guides for Agent Dashboard. Start with the [project README](../REA
 | [ADR-0002](architecture/adr/0002-runner-slot-priority-model.md) | Runner-slot priority model |
 | [ADR-0003](architecture/adr/0003-pluggable-spawners.md) | Pluggable spawner adapters |
 
+## Releasing
+
+See [RELEASING.md](RELEASING.md) for the version scheme, one-time setup, and per-release steps.
+
 ## Contributing
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for setup, commands, PR process, and code guidelines.
