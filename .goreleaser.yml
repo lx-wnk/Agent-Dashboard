@@ -44,6 +44,54 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# Homebrew Cask (macOS only — Homebrew Cask is not supported on Linux;
+# Linux users install via the binary one-liner or Docker).
+homebrew_casks:
+  - name: agent-dashboard
+    binaries:
+      - agent-dashboard
+    repository:
+      owner: lx-wnk
+      name: homebrew-tap
+      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: 'chore: update agent-dashboard cask to {{ .Tag }}'
+    homepage: 'https://github.com/lx-wnk/Agent-Dashboard'
+    description: 'Real-time monitoring dashboard for locally running Claude Code agents'
+    skip_upload: auto
+    caveats: |
+      Agent Dashboard binds to 127.0.0.1:13120 and reads ~/.claude session data.
+      Never expose the dashboard port to non-loopback networks.
+
+      Start the dashboard:
+        agent-dashboard serve
+      Then open http://localhost:13120
+    # Strip the Gatekeeper quarantine attribute so the downloaded binary runs.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/agent-dashboard"]
+          end
+
+dockers_v2:
+  - id: agent-dashboard
+    dockerfile: Dockerfile.goreleaser
+    images:
+      - 'ghcr.io/lx-wnk/agent-dashboard'
+    tags:
+      - '{{ .Version }}'
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.version: '{{ .Version }}'
+      org.opencontainers.image.source: 'https://github.com/lx-wnk/Agent-Dashboard'
+    sbom: false
+
 snapshot:
   version_template: '{{ incpatch .Version }}-snapshot'
 
