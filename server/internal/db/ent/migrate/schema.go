@@ -116,6 +116,36 @@ var (
 			},
 		},
 	}
+	// CheckpointsColumns holds the columns for the "checkpoints" table.
+	CheckpointsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "task_id", Type: field.TypeString},
+		{Name: "stage_run_id", Type: field.TypeString, Nullable: true},
+		{Name: "seq", Type: field.TypeInt},
+		{Name: "commit_sha", Type: field.TypeString},
+		{Name: "tree_sha", Type: field.TypeString},
+		{Name: "files_changed", Type: field.TypeInt, Default: 0},
+		{Name: "pre_revert", Type: field.TypeBool, Default: false},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// CheckpointsTable holds the schema information for the "checkpoints" table.
+	CheckpointsTable = &schema.Table{
+		Name:       "checkpoints",
+		Columns:    CheckpointsColumns,
+		PrimaryKey: []*schema.Column{CheckpointsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "checkpoint_task_id",
+				Unique:  false,
+				Columns: []*schema.Column{CheckpointsColumns[1]},
+			},
+			{
+				Name:    "checkpoint_task_id_seq",
+				Unique:  true,
+				Columns: []*schema.Column{CheckpointsColumns[1], CheckpointsColumns[3]},
+			},
+		},
+	}
 	// CoordLocksColumns holds the columns for the "coord_locks" table.
 	CoordLocksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -827,6 +857,7 @@ var (
 		APIKeysTable,
 		AppSettingsTable,
 		AuditEventsTable,
+		CheckpointsTable,
 		CoordLocksTable,
 		DriftAlertsTable,
 		EvalMetricSnapshotsTable,

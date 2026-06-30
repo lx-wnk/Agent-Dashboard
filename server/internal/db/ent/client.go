@@ -19,6 +19,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
@@ -57,6 +58,8 @@ type Client struct {
 	AppSetting *AppSettingClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
+	// Checkpoint is the client for interacting with the Checkpoint builders.
+	Checkpoint *CheckpointClient
 	// CoordLock is the client for interacting with the CoordLock builders.
 	CoordLock *CoordLockClient
 	// DriftAlert is the client for interacting with the DriftAlert builders.
@@ -118,6 +121,7 @@ func (c *Client) init() {
 	c.ApiKey = NewApiKeyClient(c.config)
 	c.AppSetting = NewAppSettingClient(c.config)
 	c.AuditEvent = NewAuditEventClient(c.config)
+	c.Checkpoint = NewCheckpointClient(c.config)
 	c.CoordLock = NewCoordLockClient(c.config)
 	c.DriftAlert = NewDriftAlertClient(c.config)
 	c.EvalMetricSnapshot = NewEvalMetricSnapshotClient(c.config)
@@ -237,6 +241,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ApiKey:             NewApiKeyClient(cfg),
 		AppSetting:         NewAppSettingClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
+		Checkpoint:         NewCheckpointClient(cfg),
 		CoordLock:          NewCoordLockClient(cfg),
 		DriftAlert:         NewDriftAlertClient(cfg),
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
@@ -283,6 +288,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ApiKey:             NewApiKeyClient(cfg),
 		AppSetting:         NewAppSettingClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
+		Checkpoint:         NewCheckpointClient(cfg),
 		CoordLock:          NewCoordLockClient(cfg),
 		DriftAlert:         NewDriftAlertClient(cfg),
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
@@ -335,12 +341,12 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.CoordLock,
-		c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset, c.PermissionRequest,
-		c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder,
-		c.PromptTemplate, c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration,
-		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
-		c.TaskPermission, c.TaskSchedule, c.User,
+		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Checkpoint,
+		c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset,
+		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
+		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
+		c.RemoteRegistration, c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt,
+		c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -350,12 +356,12 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.CoordLock,
-		c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset, c.PermissionRequest,
-		c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder,
-		c.PromptTemplate, c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration,
-		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
-		c.TaskPermission, c.TaskSchedule, c.User,
+		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Checkpoint,
+		c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset,
+		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
+		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
+		c.RemoteRegistration, c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt,
+		c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -372,6 +378,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.AppSetting.mutate(ctx, m)
 	case *AuditEventMutation:
 		return c.AuditEvent.mutate(ctx, m)
+	case *CheckpointMutation:
+		return c.Checkpoint.mutate(ctx, m)
 	case *CoordLockMutation:
 		return c.CoordLock.mutate(ctx, m)
 	case *DriftAlertMutation:
@@ -952,6 +960,139 @@ func (c *AuditEventClient) mutate(ctx context.Context, m *AuditEventMutation) (V
 		return (&AuditEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AuditEvent mutation op: %q", m.Op())
+	}
+}
+
+// CheckpointClient is a client for the Checkpoint schema.
+type CheckpointClient struct {
+	config
+}
+
+// NewCheckpointClient returns a client for the Checkpoint from the given config.
+func NewCheckpointClient(c config) *CheckpointClient {
+	return &CheckpointClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `checkpoint.Hooks(f(g(h())))`.
+func (c *CheckpointClient) Use(hooks ...Hook) {
+	c.hooks.Checkpoint = append(c.hooks.Checkpoint, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `checkpoint.Intercept(f(g(h())))`.
+func (c *CheckpointClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Checkpoint = append(c.inters.Checkpoint, interceptors...)
+}
+
+// Create returns a builder for creating a Checkpoint entity.
+func (c *CheckpointClient) Create() *CheckpointCreate {
+	mutation := newCheckpointMutation(c.config, OpCreate)
+	return &CheckpointCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Checkpoint entities.
+func (c *CheckpointClient) CreateBulk(builders ...*CheckpointCreate) *CheckpointCreateBulk {
+	return &CheckpointCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CheckpointClient) MapCreateBulk(slice any, setFunc func(*CheckpointCreate, int)) *CheckpointCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CheckpointCreateBulk{err: fmt.Errorf("calling to CheckpointClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CheckpointCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CheckpointCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Checkpoint.
+func (c *CheckpointClient) Update() *CheckpointUpdate {
+	mutation := newCheckpointMutation(c.config, OpUpdate)
+	return &CheckpointUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CheckpointClient) UpdateOne(_m *Checkpoint) *CheckpointUpdateOne {
+	mutation := newCheckpointMutation(c.config, OpUpdateOne, withCheckpoint(_m))
+	return &CheckpointUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CheckpointClient) UpdateOneID(id string) *CheckpointUpdateOne {
+	mutation := newCheckpointMutation(c.config, OpUpdateOne, withCheckpointID(id))
+	return &CheckpointUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Checkpoint.
+func (c *CheckpointClient) Delete() *CheckpointDelete {
+	mutation := newCheckpointMutation(c.config, OpDelete)
+	return &CheckpointDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CheckpointClient) DeleteOne(_m *Checkpoint) *CheckpointDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CheckpointClient) DeleteOneID(id string) *CheckpointDeleteOne {
+	builder := c.Delete().Where(checkpoint.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CheckpointDeleteOne{builder}
+}
+
+// Query returns a query builder for Checkpoint.
+func (c *CheckpointClient) Query() *CheckpointQuery {
+	return &CheckpointQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCheckpoint},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Checkpoint entity by its id.
+func (c *CheckpointClient) Get(ctx context.Context, id string) (*Checkpoint, error) {
+	return c.Query().Where(checkpoint.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CheckpointClient) GetX(ctx context.Context, id string) *Checkpoint {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *CheckpointClient) Hooks() []Hook {
+	return c.hooks.Checkpoint
+}
+
+// Interceptors returns the client interceptors.
+func (c *CheckpointClient) Interceptors() []Interceptor {
+	return c.inters.Checkpoint
+}
+
+func (c *CheckpointClient) mutate(ctx context.Context, m *CheckpointMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CheckpointCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CheckpointUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CheckpointUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CheckpointDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Checkpoint mutation op: %q", m.Op())
 	}
 }
 
@@ -4209,19 +4350,19 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AgentCostTrend, ApiKey, AppSetting, AuditEvent, CoordLock, DriftAlert,
-		EvalMetricSnapshot, PermissionPreset, PermissionRequest, PipelineConfig,
-		Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate, ProviderSetting,
-		RefinementTurn, RemoteRegistration, Scratchpad, Spawner, StageRun,
-		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
+		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Checkpoint, CoordLock,
+		DriftAlert, EvalMetricSnapshot, PermissionPreset, PermissionRequest,
+		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
+		ProviderSetting, RefinementTurn, RemoteRegistration, Scratchpad, Spawner,
+		StageRun, SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
 		User []ent.Hook
 	}
 	inters struct {
-		AgentCostTrend, ApiKey, AppSetting, AuditEvent, CoordLock, DriftAlert,
-		EvalMetricSnapshot, PermissionPreset, PermissionRequest, PipelineConfig,
-		Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate, ProviderSetting,
-		RefinementTurn, RemoteRegistration, Scratchpad, Spawner, StageRun,
-		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
+		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Checkpoint, CoordLock,
+		DriftAlert, EvalMetricSnapshot, PermissionPreset, PermissionRequest,
+		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
+		ProviderSetting, RefinementTurn, RemoteRegistration, Scratchpad, Spawner,
+		StageRun, SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
 		User []ent.Interceptor
 	}
 )

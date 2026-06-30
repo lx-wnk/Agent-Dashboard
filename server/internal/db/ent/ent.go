@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
@@ -103,6 +104,7 @@ func checkColumn(t, c string) error {
 			apikey.Table:             apikey.ValidColumn,
 			appsetting.Table:         appsetting.ValidColumn,
 			auditevent.Table:         auditevent.ValidColumn,
+			checkpoint.Table:         checkpoint.ValidColumn,
 			coordlock.Table:          coordlock.ValidColumn,
 			driftalert.Table:         driftalert.ValidColumn,
 			evalmetricsnapshot.Table: evalmetricsnapshot.ValidColumn,
