@@ -9,6 +9,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
@@ -92,6 +93,20 @@ func init() {
 	auditeventDescTs := auditeventFields[1].Descriptor()
 	// auditevent.DefaultTs holds the default value on creation for the ts field.
 	auditevent.DefaultTs = auditeventDescTs.Default.(func() time.Time)
+	checkpointFields := schema.Checkpoint{}.Fields()
+	_ = checkpointFields
+	// checkpointDescFilesChanged is the schema descriptor for files_changed field.
+	checkpointDescFilesChanged := checkpointFields[6].Descriptor()
+	// checkpoint.DefaultFilesChanged holds the default value on creation for the files_changed field.
+	checkpoint.DefaultFilesChanged = checkpointDescFilesChanged.Default.(int)
+	// checkpointDescPreRevert is the schema descriptor for pre_revert field.
+	checkpointDescPreRevert := checkpointFields[7].Descriptor()
+	// checkpoint.DefaultPreRevert holds the default value on creation for the pre_revert field.
+	checkpoint.DefaultPreRevert = checkpointDescPreRevert.Default.(bool)
+	// checkpointDescCreatedAt is the schema descriptor for created_at field.
+	checkpointDescCreatedAt := checkpointFields[8].Descriptor()
+	// checkpoint.DefaultCreatedAt holds the default value on creation for the created_at field.
+	checkpoint.DefaultCreatedAt = checkpointDescCreatedAt.Default.(func() time.Time)
 	coordlockFields := schema.CoordLock{}.Fields()
 	_ = coordlockFields
 	// coordlockDescAcquiredAt is the schema descriptor for acquired_at field.

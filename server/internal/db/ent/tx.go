@@ -20,6 +20,8 @@ type Tx struct {
 	AppSetting *AppSettingClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
+	// Checkpoint is the client for interacting with the Checkpoint builders.
+	Checkpoint *CheckpointClient
 	// CoordLock is the client for interacting with the CoordLock builders.
 	CoordLock *CoordLockClient
 	// DriftAlert is the client for interacting with the DriftAlert builders.
@@ -201,6 +203,7 @@ func (tx *Tx) init() {
 	tx.ApiKey = NewApiKeyClient(tx.config)
 	tx.AppSetting = NewAppSettingClient(tx.config)
 	tx.AuditEvent = NewAuditEventClient(tx.config)
+	tx.Checkpoint = NewCheckpointClient(tx.config)
 	tx.CoordLock = NewCoordLockClient(tx.config)
 	tx.DriftAlert = NewDriftAlertClient(tx.config)
 	tx.EvalMetricSnapshot = NewEvalMetricSnapshotClient(tx.config)

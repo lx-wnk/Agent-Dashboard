@@ -57,6 +57,18 @@ func (f AuditEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuditEventMutation", m)
 }
 
+// The CheckpointFunc type is an adapter to allow the use of ordinary
+// function as Checkpoint mutator.
+type CheckpointFunc func(context.Context, *ent.CheckpointMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f CheckpointFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.CheckpointMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CheckpointMutation", m)
+}
+
 // The CoordLockFunc type is an adapter to allow the use of ordinary
 // function as CoordLock mutator.
 type CoordLockFunc func(context.Context, *ent.CoordLockMutation) (ent.Value, error)

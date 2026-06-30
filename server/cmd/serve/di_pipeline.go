@@ -78,6 +78,8 @@ func provideOrchestrator(
 	tb *sse.TaskBroadcaster,
 	systemPromptRepo repo.SystemPromptRepo,
 	spawnerResolver services.SpawnerResolver,
+	checkpointerStart func(taskID, worktreePath string),
+	checkpointerStop func(taskID string),
 ) (*pipeline.PipelineOrchestrator, error) {
 	if client == nil {
 		return nil, nil
@@ -119,6 +121,8 @@ func provideOrchestrator(
 			return worktreeManager.RemoveWorktree(ctx, task.ID, force)
 		},
 		SetupWorktreeFn:       makeSetupWorktreeFn(projectRepo),
+		CheckpointerStartFn:   checkpointerStart,
+		CheckpointerStopFn:    checkpointerStop,
 		ResolveSpawner:        resolveFn,
 		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -12,11 +13,17 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
-func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster, refineReader tasks.RefineStatusReader, allowGitPull bool) *tasks.Handler {
+func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster, refineReader tasks.RefineStatusReader, allowGitPull bool, checkpointSvc *checkpoint.Service) *tasks.Handler {
 	if client == nil || orch == nil {
 		return nil
 	}
 	taskRepo := repo.NewTaskRepo(client)
+	// Nil-interface guard: a typed-nil *checkpoint.Service would make the Mount
+	// guard see a non-nil interface and mount routes that panic. Keep it true-nil.
+	var cpIface tasks.CheckpointServiceIface
+	if checkpointSvc != nil {
+		cpIface = checkpointSvc
+	}
 	return tasks.NewHandler(tasks.Deps{
 		Client:            client,
 		TaskRepo:          taskRepo,
@@ -35,6 +42,7 @@ func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineO
 		Broadcaster:       tb,
 		WorktreeMgr:       services.NewWorktreeManager(taskRepo),
 		RefineReader:      refineReader,
+		CheckpointSvc:     cpIface,
 		AllowGitPull:      allowGitPull,
 	})
 }

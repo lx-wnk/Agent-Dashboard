@@ -231,6 +231,16 @@ type OrchestratorOptions struct {
 	// they do NOT fail the task (soft-failure policy).
 	SetupWorktreeFn func(ctx context.Context, projectID *string, worktreePath string) error
 
+	// CheckpointerStartFn, when non-nil, starts the per-turn checkpoint watcher
+	// once a task's worktree becomes active (stage run promoted to "running").
+	// Nil-safe — no-op when absent (e.g. the no-DB/test path).
+	CheckpointerStartFn func(taskID, worktreePath string)
+
+	// CheckpointerStopFn, when non-nil, stops the checkpoint watcher and prunes
+	// checkpoint refs/rows just before a terminal task's worktree is removed.
+	// Nil-safe — no-op when absent.
+	CheckpointerStopFn func(taskID string)
+
 	// ResolveSpawner returns the effective DB spawner row for a task right
 	// before the native Claude path is taken. When nil, stage handlers spawn
 	// with the legacy `claude` CLI (current behaviour).
