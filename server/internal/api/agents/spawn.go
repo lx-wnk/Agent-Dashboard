@@ -628,26 +628,109 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 }
 
 // SendAnswerKeys drives the interactive AskUserQuestion selector in the running
-// session identified by pid by injecting real keystrokes (digits for
-// single-select, Space/Down/Enter for multi-select). It requires a tmux-backed
-// session: the pty/bridge transports append their own Enter and cannot reproduce
-// a raw key sequence, so a non-tmux session returns an error the UI surfaces as
-// "answer in your terminal".
+// session identified by pid by injecting real keystrokes. It applies the same
+// transport precedence as SendMessageToChannel:
+//
+//  1. Bridge file ({pid}.json) with a non-empty tmuxPane → tmux send-keys.
+//  2. Pty file ({pid}.pty.json) with a non-zero port → POST batches to the
+//     pty-broker's /keys endpoint.
+//  3. Bridge file ({pid}.json) with a non-zero port → POST batches to the
+//     channel-bridge's /keys endpoint.
+//
+// Returns the chosen transport ("tmux", "pty", or "bridge") and any error.
 func (m *SpawnManager) SendAnswerKeys(ctx context.Context, pid int, batches [][]AnswerKey) (transport string, err error) {
 	home, herr := os.UserHomeDir()
 	if herr != nil {
 		return "", fmt.Errorf("UserHomeDir: %w", herr)
 	}
+
+	var bridgePort int
+	var bridgeToken string
 	if data, rerr := os.ReadFile(channelconfig.DiscoveryFile(home, pid)); rerr == nil {
 		var disc struct {
+			Port       int    `json:"port"`
+			Token      string `json:"token"`
 			TmuxPane   string `json:"tmuxPane"`
 			TmuxSocket string `json:"tmuxSocket"`
 		}
-		if json.Unmarshal(data, &disc) == nil && disc.TmuxPane != "" {
-			return "tmux", sendAnswerKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, batches)
+		if json.Unmarshal(data, &disc) == nil {
+			if disc.TmuxPane != "" {
+				return "tmux", sendAnswerKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, batches)
+			}
+			bridgePort = disc.Port
+			bridgeToken = disc.Token
 		}
 	}
-	return "", fmt.Errorf("answering interactive questions requires a tmux-backed session for PID %d; answer it in your terminal", pid)
+
+	if data, rerr := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid)); rerr == nil {
+		var disc struct {
+			Port  int    `json:"port"`
+			Token string `json:"token"`
+		}
+		if json.Unmarshal(data, &disc) == nil && disc.Port != 0 {
+			return "pty", sendAnswerKeysHTTP(ctx, disc.Port, disc.Token, batches)
+		}
+	}
+
+	if bridgePort != 0 {
+		return "bridge", sendAnswerKeysHTTP(ctx, bridgePort, bridgeToken, batches)
+	}
+
+	return "", fmt.Errorf("answering interactive questions requires a live-injectable session for PID %d; answer it in your terminal", pid)
+}
+
+// answerKeyWire mirrors AnswerKey's JSON wire shape for the pty/bridge /keys
+// endpoint. The channel package keeps its own independent copy to avoid an
+// import cycle.
+type answerKeyWire struct {
+	Char  string `json:"char,omitempty"`
+	Named string `json:"named,omitempty"`
+	Text  string `json:"text,omitempty"`
+}
+
+func toAnswerKeyWire(batches [][]AnswerKey) [][]answerKeyWire {
+	out := make([][]answerKeyWire, len(batches))
+	for i, batch := range batches {
+		wireBatch := make([]answerKeyWire, len(batch))
+		for j, k := range batch {
+			wireBatch[j] = answerKeyWire{Char: k.Char, Named: k.Named, Text: k.Text}
+		}
+		out[i] = wireBatch
+	}
+	return out
+}
+
+// sendAnswerKeysHTTP POSTs batches as JSON to http://127.0.0.1:{port}/keys,
+// authenticated with token as a Bearer credential. Shared by the pty-inject and
+// bridge-HTTP transports for SendAnswerKeys.
+func sendAnswerKeysHTTP(ctx context.Context, port int, token string, batches [][]AnswerKey) error {
+	body, err := json.Marshal(toAnswerKeyWire(batches))
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(
+		ctx,
+		"POST",
+		fmt.Sprintf("http://127.0.0.1:%d/keys", port),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: channelMsgTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("channel unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	if !httputil.Is2xx(resp.StatusCode) {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("channel error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	return nil
 }
 
 // sanitizeInjectMessage strips control characters that could inject premature

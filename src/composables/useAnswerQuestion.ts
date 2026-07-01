@@ -10,7 +10,8 @@ export function useAnswerQuestion() {
   async function submit(
     pid: number,
     toolUseId: string,
-    answers: { header: string, selected: string[] }[],
+    answers: { header: string, selected: string[], customText?: string }[],
+    chatText?: string,
   ): Promise<boolean> {
     isSending.value = true
     sendStatus.value = null
@@ -20,7 +21,7 @@ export function useAnswerQuestion() {
       const res = await fetch(`/api/agents/${pid}/answer-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toolUseId, answers }),
+        body: JSON.stringify({ toolUseId, answers, ...(chatText ? { chatText } : {}) }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok)

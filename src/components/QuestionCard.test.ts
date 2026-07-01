@@ -112,6 +112,83 @@ describe('questionCard', () => {
     )
   })
 
+  it('typing a custom answer for a question enables submit and POSTs customText with empty selected', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(QuestionCard, {
+      props: { pid: 42, pendingQuestion: sampleQuestion, liveInjectable: true },
+    })
+
+    await wrapper.find('[data-testid="custom-toggle-0"]').trigger('click')
+    await wrapper.find('[data-testid="custom-textarea-0"]').setValue('My own answer')
+    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
+
+    const btn = wrapper.find('[data-testid="send-answer-btn"]')
+    expect(btn.attributes('disabled')).toBeUndefined()
+
+    await btn.trigger('click')
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/agents/42/answer-question',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          toolUseId: 'tu-q1',
+          answers: [
+            { header: 'Choose framework', selected: [], customText: 'My own answer' },
+            { header: 'Select features', selected: ['TypeScript'] },
+          ],
+        }),
+      }),
+    )
+  })
+
+  it('sending a chat message POSTs top-level chatText with empty answers and runs the confirm timer', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mount(QuestionCard, {
+      props: { pid: 42, pendingQuestion: sampleQuestion, liveInjectable: true },
+    })
+
+    await wrapper.find('[data-testid="chat-toggle"]').trigger('click')
+    const chatBtn = wrapper.find('[data-testid="chat-send-btn"]')
+    expect(chatBtn.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="chat-textarea"]').setValue('Actually, let me explain more')
+    expect(chatBtn.attributes('disabled')).toBeUndefined()
+
+    await chatBtn.trigger('click')
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/agents/42/answer-question',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          toolUseId: 'tu-q1',
+          answers: [],
+          chatText: 'Actually, let me explain more',
+        }),
+      }),
+    )
+
+    vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
+
   it('shows terminal note and no Send button when liveInjectable is false', () => {
     const wrapper = mount(QuestionCard, {
       props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: false },

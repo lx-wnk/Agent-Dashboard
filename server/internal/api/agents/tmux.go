@@ -66,11 +66,13 @@ func sendKeysToTmux(ctx context.Context, socket, pane, message string) error {
 }
 
 // AnswerKey is one keystroke in an interactive-question answer. Exactly one of
-// Char (a literal character to type, e.g. "3") or Named (a logical key —
-// "Down"/"Up"/"Space"/"Enter") is set.
+// Char (a single literal character, e.g. "3"), Text (a literal string typed
+// into a "Type something" / "Chat about this" row), or Named (a logical key —
+// "Tab"/"Enter"/"Space"/"Up"/"Down") is set.
 type AnswerKey struct {
 	Char  string
 	Named string
+	Text  string
 }
 
 // answerKeyStepDelay is the pause between questions so the next selector renders
@@ -80,17 +82,22 @@ var answerKeyStepDelay = 250 * time.Millisecond
 var answerKeyStepSleep = func() { time.Sleep(answerKeyStepDelay) }
 
 // answerKeyArgs builds the tmux send-keys argv for a single AnswerKey. A literal
-// character is sent with -l (typed input); a named key is sent as a key name so
-// tmux translates it (Down/Space/Enter are real keypresses, not text).
+// character or text string is sent with -l (typed input); a named key is sent
+// as a key name so tmux translates it (Tab/Down/Space/Enter are real
+// keypresses, not text).
 func answerKeyArgs(socket, pane string, k AnswerKey) []string {
 	var base []string
 	if socket != "" {
 		base = []string{"-S", socket}
 	}
-	if k.Char != "" {
+	switch {
+	case k.Text != "":
+		return append(append([]string{}, base...), "send-keys", "-t", pane, "-l", "--", k.Text)
+	case k.Char != "":
 		return append(append([]string{}, base...), "send-keys", "-t", pane, "-l", "--", k.Char)
+	default:
+		return append(append([]string{}, base...), "send-keys", "-t", pane, k.Named)
 	}
-	return append(append([]string{}, base...), "send-keys", "-t", pane, k.Named)
 }
 
 // sendAnswerKeysToTmux delivers one key batch per question into the pane, pausing

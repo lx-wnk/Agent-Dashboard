@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -70,10 +71,10 @@ func TestAnswerQuestion_HappyPath_DeliversKeyBatches(t *testing.T) {
 	require.NoError(t, postAnswer(t, h, "100", body))
 
 	require.Equal(t, 100, gotPID)
-	// German is option index 1 → number "2"; multi-select both → Space,Down,Space,Enter.
+	// German is option index 1 → number "2"; multi-select both → digit,digit,Tab,Enter.
 	require.Equal(t, [][]AnswerKey{
 		{{Char: "2"}},
-		{{Named: "Space"}, {Named: "Down"}, {Named: "Space"}, {Named: "Enter"}},
+		{{Char: "1"}, {Char: "2"}, {Named: "Tab"}, {Named: "Enter"}},
 	}, gotBatches)
 }
 
@@ -121,18 +122,87 @@ func TestAnswerQuestion_DeliveryError_BadGateway(t *testing.T) {
 }
 
 func TestSingleSelectKeys(t *testing.T) {
-	require.Equal(t, []AnswerKey{{Char: "1"}}, singleSelectKeys(0))
-	require.Equal(t, []AnswerKey{{Char: "9"}}, singleSelectKeys(8))
-	// 10th option (index 9) has no number hotkey → Down×9 + Enter.
-	got := singleSelectKeys(9)
-	require.Len(t, got, 10)
-	require.Equal(t, AnswerKey{Named: "Down"}, got[0])
-	require.Equal(t, AnswerKey{Named: "Enter"}, got[9])
+	got, err := singleSelectKeys(0)
+	require.NoError(t, err)
+	require.Equal(t, []AnswerKey{{Char: "1"}}, got)
+
+	got, err = singleSelectKeys(2)
+	require.NoError(t, err)
+	require.Equal(t, []AnswerKey{{Char: "3"}}, got)
+
+	// 10th option (index 9) has no number hotkey — out of scope, must error.
+	_, err = singleSelectKeys(9)
+	require.Error(t, err)
 }
 
 func TestMultiSelectKeys(t *testing.T) {
-	// select positions 0 and 2 of a list: Space, Down, Down, Space, Enter.
+	// select positions 0 and 2: digit "1", digit "3", Tab, Enter.
+	got, err := multiSelectKeys([]int{0, 2})
+	require.NoError(t, err)
 	require.Equal(t, []AnswerKey{
-		{Named: "Space"}, {Named: "Down"}, {Named: "Down"}, {Named: "Space"}, {Named: "Enter"},
-	}, multiSelectKeys([]int{0, 2}))
+		{Char: "1"}, {Char: "3"}, {Named: "Tab"}, {Named: "Enter"},
+	}, got)
+
+	_, err = multiSelectKeys([]int{0, 9})
+	require.Error(t, err)
+}
+
+func TestCustomInputKeys(t *testing.T) {
+	q := sdk.QuestionSpec{Header: "Fruit", Options: []sdk.QuestionOption{{Label: "Apple"}, {Label: "Banana"}}}
+	got, err := customInputKeys(q, "Cherry")
+	require.NoError(t, err)
+	require.Equal(t, []AnswerKey{{Char: "3"}, {Text: "Cherry"}, {Named: "Enter"}}, got)
+}
+
+func TestChatKeys(t *testing.T) {
+	q := sdk.QuestionSpec{Header: "Fruit", Options: []sdk.QuestionOption{{Label: "Apple"}, {Label: "Banana"}}}
+	got, err := chatKeys(q, "why?")
+	require.NoError(t, err)
+	require.Equal(t, []AnswerKey{{Char: "4"}, {Text: "why?"}, {Named: "Enter"}}, got)
+}
+
+func TestBuildAnswerKeys_TableDriven(t *testing.T) {
+	single := sdk.QuestionSpec{Header: "Name-Style", Options: []sdk.QuestionOption{{Label: "English"}, {Label: "German"}, {Label: "French"}}}
+	fruit := sdk.QuestionSpec{Header: "Fruit", Options: []sdk.QuestionOption{{Label: "Apple"}, {Label: "Banana"}}}
+
+	t.Run("single-select idx 0", func(t *testing.T) {
+		got, err := buildAnswerKeys([]sdk.QuestionSpec{single}, []answerInput{{Header: "Name-Style", Selected: []string{"English"}}}, "")
+		require.NoError(t, err)
+		require.Equal(t, [][]AnswerKey{{{Char: "1"}}}, got)
+	})
+
+	t.Run("single-select idx 2", func(t *testing.T) {
+		got, err := buildAnswerKeys([]sdk.QuestionSpec{single}, []answerInput{{Header: "Name-Style", Selected: []string{"French"}}}, "")
+		require.NoError(t, err)
+		require.Equal(t, [][]AnswerKey{{{Char: "3"}}}, got)
+	})
+
+	t.Run("multi-select idxs 0,2", func(t *testing.T) {
+		threeOpt := sdk.QuestionSpec{Header: "Constraints", MultiSelect: true, Options: []sdk.QuestionOption{{Label: "Trademark"}, {Label: "Domain"}, {Label: "Slogan"}}}
+		got, err := buildAnswerKeys([]sdk.QuestionSpec{threeOpt}, []answerInput{{Header: "Constraints", Selected: []string{"Trademark", "Slogan"}}}, "")
+		require.NoError(t, err)
+		require.Equal(t, [][]AnswerKey{{{Char: "1"}, {Char: "3"}, {Named: "Tab"}, {Named: "Enter"}}}, got)
+	})
+
+	t.Run("custom input", func(t *testing.T) {
+		got, err := buildAnswerKeys([]sdk.QuestionSpec{fruit}, []answerInput{{Header: "Fruit", CustomText: "Cherry"}}, "")
+		require.NoError(t, err)
+		require.Equal(t, [][]AnswerKey{{{Char: "3"}, {Text: "Cherry"}, {Named: "Enter"}}}, got)
+	})
+
+	t.Run("chat", func(t *testing.T) {
+		got, err := buildAnswerKeys([]sdk.QuestionSpec{fruit}, nil, "why?")
+		require.NoError(t, err)
+		require.Equal(t, [][]AnswerKey{{{Char: "4"}, {Text: "why?"}, {Named: "Enter"}}}, got)
+	})
+
+	t.Run("idx >= 9 errors", func(t *testing.T) {
+		tenOpts := make([]sdk.QuestionOption, 10)
+		for i := range tenOpts {
+			tenOpts[i] = sdk.QuestionOption{Label: strconv.Itoa(i)}
+		}
+		q := sdk.QuestionSpec{Header: "Big", Options: tenOpts}
+		_, err := buildAnswerKeys([]sdk.QuestionSpec{q}, []answerInput{{Header: "Big", Selected: []string{"9"}}}, "")
+		require.Error(t, err)
+	})
 }

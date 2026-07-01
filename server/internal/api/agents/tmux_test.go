@@ -73,8 +73,11 @@ func TestSendKeysToTmux_RejectsBadPane(t *testing.T) {
 func TestAnswerKeyArgs(t *testing.T) {
 	// literal char → -l typed input
 	require.Equal(t, []string{"send-keys", "-t", "%1", "-l", "--", "2"}, answerKeyArgs("", "%1", AnswerKey{Char: "2"}))
+	// literal text → -l typed input, same as Char
+	require.Equal(t, []string{"send-keys", "-t", "%1", "-l", "--", "Cherry"}, answerKeyArgs("", "%1", AnswerKey{Text: "Cherry"}))
 	// named key → key name, no -l
 	require.Equal(t, []string{"send-keys", "-t", "%1", "Space"}, answerKeyArgs("", "%1", AnswerKey{Named: "Space"}))
+	require.Equal(t, []string{"send-keys", "-t", "%1", "Tab"}, answerKeyArgs("", "%1", AnswerKey{Named: "Tab"}))
 	// socket prefixes -S
 	require.Equal(t, []string{"-S", "/s", "send-keys", "-t", "%1", "Enter"}, answerKeyArgs("/s", "%1", AnswerKey{Named: "Enter"}))
 }
