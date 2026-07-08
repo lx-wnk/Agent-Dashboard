@@ -35,7 +35,7 @@ func (s *syncBuf) String() string {
 
 func TestPtyHTTPServer_InjectsMessageWithCR(t *testing.T) {
 	w := &syncBuf{}
-	srv, port, err := startPtyHTTPServer(w, newRotatingToken("secret-token"))
+	srv, port, err := startPtyHTTPServer(w, newPtyHub(1024), newRotatingToken("secret-token"))
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestPtyHTTPServer_KeysEndpoint_WritesRawBytesNoTrailingCR(t *testing.T) {
 	answerKeyStepSleep = func() { sleeps++ }
 	t.Cleanup(func() { answerKeyStepSleep = origSleep })
 
-	srv, port, err := startPtyHTTPServer(w, newRotatingToken("secret-token"))
+	srv, port, err := startPtyHTTPServer(w, newPtyHub(1024), newRotatingToken("secret-token"))
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
