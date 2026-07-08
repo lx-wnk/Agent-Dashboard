@@ -9,7 +9,6 @@ import { toast } from '../composables/useToast'
 import { attentionFor } from '../utils/attention'
 import { formatErrorState, formatRelativeActivity, secondsSince, shortModel } from '../utils/format'
 import { friendlyProjectName } from '../utils/friendlyProjectName'
-import QuestionCard from './QuestionCard.vue'
 import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
@@ -54,13 +53,13 @@ const visibleAgentCards = computed(() =>
     const att = attentionFor(agent, secs)
     if (!att)
       return false
-    // Free agent with pendingToolUse or pendingQuestion — always show
-    if (!agent.pipelineTaskId && (agent.pendingToolUse || (agent.pendingQuestion?.questions.length ?? 0) > 0))
+    // Free agent with pendingToolUse — always show
+    if (!agent.pipelineTaskId && agent.pendingToolUse)
       return true
     // Orchestrated agent whose task is already represented in permissionItems — skip
     if (agent.pipelineTaskId && orchestratedTaskIds.value.has(agent.pipelineTaskId) && att.kind === 'permission')
       return false
-    return att.kind === 'error' || att.kind === 'stalled' || att.kind === 'permission' || att.kind === 'question'
+    return att.kind === 'error' || att.kind === 'stalled' || att.kind === 'permission'
   }),
 )
 
@@ -78,7 +77,6 @@ const breakdown = computed(() => {
   }
   const PARTS: [string, string, string][] = [
     ['permission', 'permission request', 'permission requests'],
-    ['question', 'pending question', 'pending questions'],
     ['error', 'failed run', 'failed runs'],
     ['stalled', 'stalled', 'stalled'],
   ]
@@ -97,8 +95,6 @@ function blockedDetail(agent: Agent): string {
   const att = attentionFor(agent, secs)
   if (!att)
     return ''
-  if (att.kind === 'question')
-    return agent.pendingQuestion?.questions[0]?.header || 'Needs answer'
   if (att.kind === 'permission')
     return agent.currentAction || 'Waiting for permission'
   if (att.kind === 'error')
@@ -445,7 +441,6 @@ watch(() => props.focusedSessionId, (id) => {
             toneLeftClass[attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.tone ?? 'warning'],
             agent.sessionId === focusedSessionId ? 'ring-2 ring-accent shadow-md' : '',
           ]"
-          :aria-label="attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.kind === 'question' ? `Question from ${friendlyProjectName(agent.projectName)}` : undefined"
         >
           <div class="flex items-center gap-2 min-w-0">
             <span aria-hidden="true" class="text-[15px] shrink-0">{{ getIdentity(agent.projectPath).emoji }}</span>
@@ -457,17 +452,8 @@ watch(() => props.focusedSessionId, (id) => {
             >{{ attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.label }}</span>
           </div>
 
-          <!-- Pending interactive question — pick options and answer the live session inline. -->
-          <template v-if="attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.kind === 'question' && agent.pendingQuestion">
-            <QuestionCard
-              :pid="agent.pid"
-              :pending-question="agent.pendingQuestion"
-              :live-injectable="agent.liveInjectable ?? false"
-            />
-          </template>
-
           <!-- Orchestrated agent with pending permissions (not covered by task items) -->
-          <template v-else-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
+          <template v-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
             <ul class="m-0 p-0 list-none flex flex-col gap-1" :aria-label="`Pending permissions for ${agent.projectName}`">
               <li
                 v-for="p in agent.pendingPermissions"

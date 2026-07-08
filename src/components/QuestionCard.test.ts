@@ -1,299 +1,110 @@
-import type { PendingQuestion } from '../types'
-import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { nextTick } from 'vue'
-import { ANSWER_CONFIRM_MS } from '../utils/timing'
+import type { DetectedQuestion } from '../utils/askQuestionScreen'
+import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
 import QuestionCard from './QuestionCard.vue'
 
-const sampleQuestion: PendingQuestion = {
-  toolUseID: 'tu-q1',
-  questions: [
-    {
-      header: 'Choose framework',
-      question: 'Which frontend framework do you prefer?',
-      multiSelect: false,
-      options: [
-        { label: 'Vue', description: 'Progressive framework' },
-        { label: 'React', description: 'UI library' },
-      ],
-    },
-    {
-      header: 'Select features',
-      question: 'Which features do you want?',
-      multiSelect: true,
-      options: [
-        { label: 'TypeScript', description: 'Type safety' },
-        { label: 'ESLint', description: 'Linting' },
-      ],
-    },
+const singleQuestion: DetectedQuestion = {
+  header: 'Choose framework',
+  question: 'Which frontend framework do you prefer?',
+  multiSelect: false,
+  options: [
+    { index: 1, label: 'Vue', description: 'Progressive framework' },
+    { index: 2, label: 'React', description: 'UI library' },
   ],
+  typeSomethingIndex: 3,
+  chatAboutIndex: 4,
 }
 
-beforeEach(() => {
-  vi.useFakeTimers()
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ ok: true, transport: 'tmux' }),
-  }))
-})
-
-afterEach(() => {
-  vi.useRealTimers()
-  vi.unstubAllGlobals()
-})
+const multiQuestion: DetectedQuestion = {
+  header: 'Select features',
+  question: 'Which features do you want?',
+  multiSelect: true,
+  options: [
+    { index: 1, label: 'TypeScript', description: 'Type safety' },
+    { index: 2, label: 'ESLint', description: 'Linting' },
+  ],
+  typeSomethingIndex: 3,
+  chatAboutIndex: 4,
+}
 
 describe('questionCard', () => {
-  it('renders all question headers, prompts, and option labels', () => {
+  it('renders the question header, prompt, and option labels', () => {
     const wrapper = mount(QuestionCard, {
-      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
+      props: { detectedQuestion: singleQuestion },
     })
     expect(wrapper.text()).toContain('Choose framework')
     expect(wrapper.text()).toContain('Which frontend framework do you prefer?')
     expect(wrapper.text()).toContain('Vue')
     expect(wrapper.text()).toContain('Progressive framework')
     expect(wrapper.text()).toContain('React')
-    expect(wrapper.text()).toContain('Select features')
-    expect(wrapper.text()).toContain('TypeScript')
-    expect(wrapper.text()).toContain('ESLint')
   })
 
   it('renders radio inputs for single-select and checkboxes for multi-select', () => {
-    const wrapper = mount(QuestionCard, {
-      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
-    })
-    expect(wrapper.findAll('input[type="radio"]').length).toBe(2)
-    expect(wrapper.findAll('input[type="checkbox"]').length).toBe(2)
+    const single = mount(QuestionCard, { props: { detectedQuestion: singleQuestion } })
+    expect(single.findAll('input[type="radio"]').length).toBe(2)
+    expect(single.findAll('input[type="checkbox"]').length).toBe(0)
+
+    const multi = mount(QuestionCard, { props: { detectedQuestion: multiQuestion } })
+    expect(multi.findAll('input[type="checkbox"]').length).toBe(2)
+    expect(multi.findAll('input[type="radio"]').length).toBe(0)
   })
 
-  it('send button is disabled until every question has a selection', async () => {
+  it('send button is disabled until an option is selected', async () => {
     const wrapper = mount(QuestionCard, {
-      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
+      props: { detectedQuestion: singleQuestion },
     })
-    const btn = wrapper.find('[data-testid="send-answer-btn"]')
+    const btn = wrapper.find('[data-testid="detected-send-btn"]')
     expect(btn.attributes('disabled')).toBeDefined()
 
-    // Answer first question (radio — single select)
     await wrapper.findAll('input[type="radio"]')[0].trigger('change')
-    expect(btn.attributes('disabled')).toBeDefined()
-
-    // Answer second question (checkbox — multi select)
-    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
     expect(btn.attributes('disabled')).toBeUndefined()
   })
 
-  it('clicking Send when all selections are made POSTs the correct body to fetch', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ ok: true }),
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
+  it('emits an answer intent with a 0-based index when Send is clicked', async () => {
     const wrapper = mount(QuestionCard, {
-      props: { pid: 42, pendingQuestion: sampleQuestion, liveInjectable: true },
+      props: { detectedQuestion: singleQuestion },
     })
+    await wrapper.findAll('input[type="radio"]')[1].trigger('change')
+    await wrapper.find('[data-testid="detected-send-btn"]').trigger('click')
 
+    expect(wrapper.emitted('answer')).toEqual([[{ mode: 'single', index: 1 }]])
+  })
+
+  it('typing a custom answer clears any selection and emits a custom intent', async () => {
+    const wrapper = mount(QuestionCard, {
+      props: { detectedQuestion: singleQuestion },
+    })
     await wrapper.findAll('input[type="radio"]')[0].trigger('change')
-    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
-    await wrapper.find('[data-testid="send-answer-btn"]').trigger('click')
-    await flushPromises()
+    await wrapper.find('[data-testid="detected-custom-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="detected-custom-textarea"]').setValue('My own answer')
+    await wrapper.find('[data-testid="detected-send-btn"]').trigger('click')
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/agents/42/answer-question',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          toolUseId: 'tu-q1',
-          answers: [
-            { header: 'Choose framework', selected: ['Vue'] },
-            { header: 'Select features', selected: ['TypeScript'] },
-          ],
-        }),
-      }),
-    )
+    expect(wrapper.emitted('answer')).toEqual([[{ mode: 'custom', optionCount: 2, text: 'My own answer' }]])
   })
 
-  it('typing a custom answer for a question enables submit and POSTs customText with empty selected', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ ok: true }),
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
+  it('sending a chat message emits a chat intent', async () => {
     const wrapper = mount(QuestionCard, {
-      props: { pid: 42, pendingQuestion: sampleQuestion, liveInjectable: true },
+      props: { detectedQuestion: singleQuestion },
     })
-
-    await wrapper.find('[data-testid="custom-toggle-0"]').trigger('click')
-    await wrapper.find('[data-testid="custom-textarea-0"]').setValue('My own answer')
-    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
-
-    const btn = wrapper.find('[data-testid="send-answer-btn"]')
-    expect(btn.attributes('disabled')).toBeUndefined()
-
-    await btn.trigger('click')
-    await flushPromises()
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/agents/42/answer-question',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          toolUseId: 'tu-q1',
-          answers: [
-            { header: 'Choose framework', selected: [], customText: 'My own answer' },
-            { header: 'Select features', selected: ['TypeScript'] },
-          ],
-        }),
-      }),
-    )
-  })
-
-  it('sending a chat message POSTs top-level chatText with empty answers and runs the confirm timer', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ ok: true }),
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    const wrapper = mount(QuestionCard, {
-      props: { pid: 42, pendingQuestion: sampleQuestion, liveInjectable: true },
-    })
-
-    await wrapper.find('[data-testid="chat-toggle"]').trigger('click')
-    const chatBtn = wrapper.find('[data-testid="chat-send-btn"]')
+    await wrapper.find('[data-testid="detected-chat-toggle"]').trigger('click')
+    const chatBtn = wrapper.find('[data-testid="detected-chat-send-btn"]')
     expect(chatBtn.attributes('disabled')).toBeDefined()
 
-    await wrapper.find('[data-testid="chat-textarea"]').setValue('Actually, let me explain more')
+    await wrapper.find('[data-testid="detected-chat-textarea"]').setValue('Actually, let me explain more')
     expect(chatBtn.attributes('disabled')).toBeUndefined()
 
     await chatBtn.trigger('click')
-    await flushPromises()
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/agents/42/answer-question',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          toolUseId: 'tu-q1',
-          answers: [],
-          chatText: 'Actually, let me explain more',
-        }),
-      }),
-    )
-
-    vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)
-    await nextTick()
-
-    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(true)
-
-    wrapper.unmount()
+    expect(wrapper.emitted('answer')).toEqual([[{ mode: 'chat', optionCount: 2, text: 'Actually, let me explain more' }]])
   })
 
-  it('shows terminal note and no Send button when liveInjectable is false', () => {
+  it('resets local selection state when a new detected question arrives', async () => {
     const wrapper = mount(QuestionCard, {
-      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: false },
+      props: { detectedQuestion: singleQuestion },
     })
-    expect(wrapper.find('[data-testid="terminal-note"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="send-answer-btn"]').exists()).toBe(false)
-  })
-
-  it('inputs are disabled when liveInjectable is false', () => {
-    const wrapper = mount(QuestionCard, {
-      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: false },
-    })
-    const allInputs = wrapper.findAll('input')
-    expect(allInputs.length).toBeGreaterThan(0)
-    allInputs.forEach(input => expect(input.attributes('disabled')).toBeDefined())
-  })
-
-  it('shows confirmFailed warning and re-enables submit after timeout with no resolution', async () => {
-    const wrapper = mount(QuestionCard, {
-      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
-    })
-
     await wrapper.findAll('input[type="radio"]')[0].trigger('change')
-    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
-    await wrapper.find('[data-testid="send-answer-btn"]').trigger('click')
-    await flushPromises()
+    expect(wrapper.find('[data-testid="detected-send-btn"]').attributes('disabled')).toBeUndefined()
 
-    // Button enters awaiting-confirmation state
-    const btn = wrapper.find('[data-testid="send-answer-btn"]')
-    expect(btn.attributes('disabled')).toBeDefined()
-    expect(btn.text()).toBe('Waiting…')
-    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(false)
-
-    // Advance past confirmation window without the card unmounting
-    vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)
-    await nextTick()
-
-    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(true)
-    expect(btn.attributes('disabled')).toBeUndefined()
-
-    wrapper.unmount()
-  })
-
-  it('cleans up timer on unmount without throwing (simulates resolved answer)', async () => {
-    const wrapper = mount(QuestionCard, {
-      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
-    })
-
-    await wrapper.findAll('input[type="radio"]')[0].trigger('change')
-    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
-    await wrapper.find('[data-testid="send-answer-btn"]').trigger('click')
-    await flushPromises()
-
-    // Unmount before timeout fires (card unmount = confirmed resolution)
-    wrapper.unmount()
-
-    // Timer must not fire any late state mutation or throw
-    expect(() => vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)).not.toThrow()
-  })
-
-  it('resets confirmation state when pendingQuestion toolUseID changes during await', async () => {
-    const wrapper = mount(QuestionCard, {
-      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
-    })
-
-    await wrapper.findAll('input[type="radio"]')[0].trigger('change')
-    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
-    await wrapper.find('[data-testid="send-answer-btn"]').trigger('click')
-    await flushPromises()
-
-    // New question arrives (toolUseID changes) while waiting for confirmation
-    const newQuestion: PendingQuestion = { ...sampleQuestion, toolUseID: 'tu-q2' }
-    await wrapper.setProps({ pendingQuestion: newQuestion })
-
-    // Advance past original timeout
-    vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)
-    await nextTick()
-
-    // Stale timer must not surface the failure for the previous toolUseID
-    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(false)
-
-    wrapper.unmount()
-  })
-
-  it('does not start confirmation window when submit fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: 'Server error' }),
-    }))
-
-    const wrapper = mount(QuestionCard, {
-      props: { pid: 1, pendingQuestion: sampleQuestion, liveInjectable: true },
-    })
-
-    await wrapper.findAll('input[type="radio"]')[0].trigger('change')
-    await wrapper.findAll('input[type="checkbox"]')[0].trigger('change')
-    await wrapper.find('[data-testid="send-answer-btn"]').trigger('click')
-    await flushPromises()
-
-    vi.advanceTimersByTime(ANSWER_CONFIRM_MS + 1)
-    await nextTick()
-
-    // No confirmation warning — only the existing sendError path applies
-    expect(wrapper.find('[data-testid="confirm-failed-msg"]').exists()).toBe(false)
-
-    wrapper.unmount()
+    await wrapper.setProps({ detectedQuestion: multiQuestion })
+    expect(wrapper.find('[data-testid="detected-send-btn"]').attributes('disabled')).toBeDefined()
   })
 })

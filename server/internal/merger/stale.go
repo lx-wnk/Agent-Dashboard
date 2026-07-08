@@ -143,6 +143,5 @@ func buildFinishedAgent(pid int, snap liveSnapshot, session *parser.SessionData,
 		LastOutput:                strPtr(session.LastOutput),
 		LastBtw:                   session.LastBtw,
 		PendingToolUse:            session.PendingToolUse,
-		PendingQuestion:           session.PendingQuestion,
 	}
 }

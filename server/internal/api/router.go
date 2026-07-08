@@ -430,8 +430,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// stream.
 		terminalHandler := agents.NewTerminalHandler(getAgents, spawnMgr.TerminalTarget)
 		r.Get("/api/agents/{pid}/terminal", terminalHandler.Terminal)
-		answerQuestionHandler := agents.NewAnswerQuestionHandler(getAgents, spawnMgr.SendAnswerKeys)
-		r.Post("/api/agents/{pid}/answer-question", ErrorMiddleware(answerQuestionHandler.AnswerQuestion))
 		if deps.PermissionPresetRepo != nil {
 			allowToolHandler := agents.NewAllowToolHandler(getAgents, deps.PermissionPresetRepo)
 			r.Post("/api/agents/{pid}/allow-tool", ErrorMiddleware(allowToolHandler.AllowTool))
