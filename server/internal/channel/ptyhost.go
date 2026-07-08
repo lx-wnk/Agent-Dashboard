@@ -183,6 +183,10 @@ func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
 
+	// Frame-type contract (enforced by the browser client): a TEXT frame is a
+	// control message — currently only {"resize":{cols,rows}} — while a BINARY
+	// frame is raw pty input. Raw keystrokes must never be sent as TEXT, else a
+	// literal {"resize":...} typed by the user would be swallowed as control.
 	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
 		if !token.authorize(r) {
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)

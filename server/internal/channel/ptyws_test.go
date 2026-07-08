@@ -102,6 +102,55 @@ func TestBrokerWS_ReplayAndInput(t *testing.T) {
 	}
 }
 
+func TestBrokerWS_LiveBroadcast(t *testing.T) {
+	fp := newFakePtmx()
+	hub := newPtyHub(1024)
+	tok := newRotatingToken("secret")
+	srv := httptest.NewServer(ptyMux(fp, hub, tok))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	url := "ws" + srv.URL[len("http"):] + "/ws"
+	c, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{
+		HTTPHeader: bearer("secret"),
+	})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close(websocket.StatusNormalClosure, "")
+
+	// Empty scrollback → the received frame must be a live write, proving the
+	// broadcast branch (case b, ok := <-frames) forwards post-subscribe output.
+	// The handler subscribes after the WS handshake completes, so retry the
+	// write until one lands after the subscription is registered.
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			hub.Write([]byte("LIVE"))
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
+	typ, data, err := c.Read(ctx)
+	if err != nil {
+		t.Fatalf("read live: %v", err)
+	}
+	if typ != websocket.MessageBinary {
+		t.Fatalf("live frame type = %v, want binary", typ)
+	}
+	if string(data) != "LIVE" {
+		t.Fatalf("live = %q, want LIVE", data)
+	}
+}
+
 func TestBrokerWS_UnauthorizedRejected(t *testing.T) {
 	fp := newFakePtmx()
 	hub := newPtyHub(1024)
