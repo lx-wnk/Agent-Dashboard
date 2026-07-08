@@ -20,6 +20,10 @@ const QUESTION_POLL_MS = 200
 
 const containerRef = ref<HTMLElement | null>(null)
 const detectedQuestion = ref<DetectedQuestion | null>(null)
+// Signature of the currently-shown modal. The poll replaces detectedQuestion
+// only when this changes, so an unchanged screen never re-creates the object
+// and QuestionCard's local answer state (selections, typed text) survives.
+let currentSig: string | null = null
 let term: Terminal | null = null
 let socket: UseTerminalSocket | null = null
 let resizeObserver: ResizeObserver | null = null
@@ -35,10 +39,23 @@ function readVisibleRows(t: Terminal): string[] {
   return rows
 }
 
+// detectQuestion is stateless w.r.t. user input, so its output changes only
+// when the SCREEN changes. Identify "the same modal" by structure alone.
+function questionSignature(q: DetectedQuestion | null): string | null {
+  return q === null
+    ? null
+    : JSON.stringify([q.header, q.question, q.multiSelect, q.options.map(o => [o.index, o.label])])
+}
+
 function pollForQuestion() {
   if (!term)
     return
-  detectedQuestion.value = detectQuestion(readVisibleRows(term))
+  const detected = detectQuestion(readVisibleRows(term))
+  const sig = questionSignature(detected)
+  if (sig === currentSig)
+    return
+  currentSig = sig
+  detectedQuestion.value = detected
 }
 
 function sendToTerminal(bytes: Uint8Array) {

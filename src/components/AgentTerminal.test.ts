@@ -175,5 +175,105 @@ describe('agentTerminal', () => {
 
       expect(() => vi.advanceTimersByTime(1000)).not.toThrow()
     })
+
+    it('preserves a selected option across an unchanged-screen poll', async () => {
+      mocks.screenRows.current = modalRows
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      await wrapper.findAll('input[type="radio"]')[1].trigger('change')
+      expect((wrapper.findAll('input[type="radio"]')[1].element as HTMLInputElement).checked).toBe(true)
+
+      // Another poll tick fires WITHOUT the screen changing.
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      // Selection must survive the poll (compare-before-assign keeps the ref stable).
+      expect((wrapper.findAll('input[type="radio"]')[1].element as HTMLInputElement).checked).toBe(true)
+      // Answered → send button stays enabled.
+      expect(wrapper.find('[data-testid="detected-send-btn"]').attributes('disabled')).toBeUndefined()
+
+      wrapper.unmount()
+    })
+
+    it('preserves in-progress custom text across an unchanged-screen poll', async () => {
+      mocks.screenRows.current = modalRows
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      await wrapper.find('[data-testid="detected-custom-toggle"]').trigger('click')
+      await wrapper.find('[data-testid="detected-custom-textarea"]').setValue('My typed answer')
+
+      // Another poll tick fires WITHOUT the screen changing.
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      // Typed text must survive the poll.
+      expect(
+        (wrapper.find('[data-testid="detected-custom-textarea"]').element as HTMLTextAreaElement).value,
+      ).toBe('My typed answer')
+
+      wrapper.unmount()
+    })
+
+    it('resets the answer when the screen changes to a different modal', async () => {
+      mocks.screenRows.current = modalRows
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      await wrapper.find('[data-testid="detected-custom-toggle"]').trigger('click')
+      await wrapper.find('[data-testid="detected-custom-textarea"]').setValue('Stale answer')
+
+      // A different modal appears on screen.
+      mocks.screenRows.current = [
+        'Pick fruits',
+        'Which fruits?',
+        '1. Apples',
+        '2. Bananas',
+        '3. Type something',
+        '4. Chat about this',
+      ]
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.text()).toContain('Apples')
+      // Stale custom text from the previous modal is gone.
+      expect(wrapper.find('[data-testid="detected-custom-textarea"]').exists()).toBe(false)
+
+      wrapper.unmount()
+    })
+
+    it('multi-select: toggling two options and submitting sends digits + Tab + Enter', async () => {
+      mocks.screenRows.current = [
+        'Pick fruits',
+        'Which fruits?',
+        '1. [ ] Apples',
+        '2. [ ] Bananas',
+        '3. [ ] Cherries',
+        '4. Type something',
+        '5. Chat about this',
+      ]
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      const checkboxes = wrapper.findAll('input[type="checkbox"]')
+      await checkboxes[0].trigger('change')
+      await checkboxes[2].trigger('change')
+      await wrapper.find('[data-testid="detected-send-btn"]').trigger('click')
+
+      const decoder = new TextDecoder()
+      const sent = mocks.sendMock.mock.calls.map(([bytes]) => decoder.decode(bytes as Uint8Array))
+      expect(sent).toEqual(['1', '3', '\t', '\r'])
+
+      wrapper.unmount()
+    })
   })
 })
