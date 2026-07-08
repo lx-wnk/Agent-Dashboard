@@ -33,11 +33,15 @@ func NewTerminalHandler(getAgents GetAgentsFn, target TerminalTargetFn) *Termina
 	return &TerminalHandler{getAgents: getAgents, target: target}
 }
 
-// Terminal handles GET /api/agents/{pid}/terminal. It sits behind the same
-// JWT/Origin middleware as the other /api/agents/{pid}/* mutations, so no
-// additional auth check happens here. Not wrapped in apierr.ErrorMiddleware:
-// once websocket.Accept hijacks the connection, there is no response left for
-// that middleware to write.
+// Terminal handles GET /api/agents/{pid}/terminal. Unlike the other
+// /api/agents/{pid}/* mutations, this route is NOT covered by
+// RequireSameOriginForMutations (that middleware only guards non-GET
+// requests) and may run with auth fully bypassed (auth.mode=none), so the
+// same-origin check performed at websocket.Accept below is this handler's
+// only defense against a malicious page hijacking the pty over WebSocket
+// (CSWSH). Not wrapped in apierr.ErrorMiddleware: once websocket.Accept
+// hijacks the connection, there is no response left for that middleware to
+// write.
 func (h *TerminalHandler) Terminal(w http.ResponseWriter, r *http.Request) {
 	pid, err := strconv.Atoi(r.PathValue("pid"))
 	if err != nil || pid <= 0 {
@@ -73,10 +77,20 @@ func (h *TerminalHandler) Terminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// OriginPatterns is "*" here because this route already sits behind the
-	// router's Origin/JWT middleware (RequireSameOriginForMutations, RequireAuth) —
-	// mirrors the broker's own /ws handler (internal/channel/ptyhost.go).
-	browserConn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
+	// This handler enforces same-origin itself and unconditionally — it cannot
+	// rely on the router's mutation-origin middleware (RequireSameOriginForMutations
+	// skips GET, and this is a GET handshake) or on auth (RequireAuth is a no-op
+	// when the install runs with auth.mode=none). Without an origin check here, any
+	// page open in the user's browser could open a cross-origin WebSocket to this
+	// route — WebSocket upgrades are not subject to CORS — and get a live pty with
+	// full read/write access to the spawned agent, i.e. remote code execution.
+	//
+	// Passing no OriginPatterns leaves websocket.Accept's default same-origin
+	// check active: a request with an Origin header is only accepted if that
+	// origin's host matches r.Host; a request with no Origin header (a
+	// non-browser client — browsers always set Origin on WebSocket handshakes)
+	// is allowed through since there is no browser to defend against.
+	browserConn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
 	}

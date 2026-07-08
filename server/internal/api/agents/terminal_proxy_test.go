@@ -172,6 +172,116 @@ func TestTerminalProxy_UnknownAgent_Returns409(t *testing.T) {
 	require.Equal(t, http.StatusConflict, resp.StatusCode)
 }
 
+// TestTerminalProxy_CrossOriginRejected simulates the CSWSH attack: a browser
+// tab on an attacker-controlled origin opens a WebSocket straight at this
+// route. WebSocket upgrades are exempt from CORS, so without the same-origin
+// check this would succeed and hand the attacker a live pty. It must be
+// rejected before the handler ever dials the broker.
+func TestTerminalProxy_CrossOriginRejected(t *testing.T) {
+	broker, auth := fakeBroker(t)
+	defer broker.Close()
+	port := brokerPort(t, broker)
+
+	getAgents := func(context.Context) ([]sdk.Agent, error) {
+		return []sdk.Agent{{PID: 4245, LiveInjectable: true}}, nil
+	}
+	target := func(pid int) (int, string, error) { return port, "tok", nil }
+
+	h := NewTerminalHandler(getAgents, target)
+	srv := mountTerminalHandler(h)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agents/4245/terminal"
+	_, resp, err := websocket.Dial(ctx, url, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Origin": {"http://evil.example"}},
+	})
+	require.Error(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+
+	select {
+	case <-auth:
+		t.Fatal("broker must not be dialed when the browser origin is rejected")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// TestTerminalProxy_SameOriginAccepted mirrors a real browser tab served from
+// this app's own origin: Origin equals the request Host, so the handshake
+// must succeed and bridge frames as before.
+func TestTerminalProxy_SameOriginAccepted(t *testing.T) {
+	broker, auth := fakeBroker(t)
+	defer broker.Close()
+	port := brokerPort(t, broker)
+
+	getAgents := func(context.Context) ([]sdk.Agent, error) {
+		return []sdk.Agent{{PID: 4246, LiveInjectable: true}}, nil
+	}
+	target := func(pid int) (int, string, error) { return port, "tok", nil }
+
+	h := NewTerminalHandler(getAgents, target)
+	srv := mountTerminalHandler(h)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agents/4246/terminal"
+	c, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Origin": {srv.URL}},
+	})
+	require.NoError(t, err)
+	defer c.Close(websocket.StatusNormalClosure, "")
+
+	select {
+	case got := <-auth:
+		require.Equal(t, "Bearer tok", got)
+	case <-ctx.Done():
+		t.Fatal("broker never received a request")
+	}
+
+	typ, data, err := c.Read(ctx)
+	require.NoError(t, err)
+	require.Equal(t, websocket.MessageBinary, typ)
+	require.Equal(t, "HELLO", string(data))
+}
+
+// TestTerminalProxy_NoOriginAccepted covers non-browser clients (CLI tools,
+// server-to-server callers) that never send an Origin header at all — there
+// is no browser to defend against, so these must still be allowed through.
+func TestTerminalProxy_NoOriginAccepted(t *testing.T) {
+	broker, auth := fakeBroker(t)
+	defer broker.Close()
+	port := brokerPort(t, broker)
+
+	getAgents := func(context.Context) ([]sdk.Agent, error) {
+		return []sdk.Agent{{PID: 4247, LiveInjectable: true}}, nil
+	}
+	target := func(pid int) (int, string, error) { return port, "tok", nil }
+
+	h := NewTerminalHandler(getAgents, target)
+	srv := mountTerminalHandler(h)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agents/4247/terminal"
+	c, _, err := websocket.Dial(ctx, url, nil)
+	require.NoError(t, err)
+	defer c.Close(websocket.StatusNormalClosure, "")
+
+	select {
+	case got := <-auth:
+		require.Equal(t, "Bearer tok", got)
+	case <-ctx.Done():
+		t.Fatal("broker never received a request")
+	}
+}
+
 func TestTerminalProxy_InvalidPID_Returns400(t *testing.T) {
 	getAgents := func(context.Context) ([]sdk.Agent, error) { return nil, nil }
 	target := func(pid int) (int, string, error) {
