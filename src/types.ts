@@ -6,6 +6,9 @@ import type {
   AgentStatus,
   HookEvent,
   PendingPermission,
+  PendingQuestion,
+  QuestionOption,
+  QuestionSpec,
   TokenUsage,
 } from './sdk.generated'
 import type { MetricKey } from './utils/evalMetrics'
@@ -18,7 +21,7 @@ import {
   AgentStatusWaiting,
 } from './sdk.generated'
 
-export type { AgentStatus, HookEvent, PendingPermission, TokenUsage }
+export type { AgentStatus, HookEvent, PendingPermission, PendingQuestion, QuestionOption, QuestionSpec, TokenUsage }
 
 export interface SessionMeta extends Omit<_SessionMetaBase, 'firstPrompt'> {
   firstPrompt: string | null

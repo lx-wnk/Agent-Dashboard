@@ -32,6 +32,7 @@ import (
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/projects"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/prompttemplates"
 	providersapi "github.com/lx-wnk/agent-dashboard/server/internal/api/providers"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
@@ -41,7 +42,6 @@ import (
 	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
-	"github.com/lx-wnk/agent-dashboard/server/internal/api/prompttemplates"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	trackerapi "github.com/lx-wnk/agent-dashboard/server/internal/api/tracker"
@@ -424,6 +424,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
 		r.Delete("/api/agents/{pid}/channel", spawnHandler.DismissChannel)
+		answerQuestionHandler := agents.NewAnswerQuestionHandler(getAgents, spawnMgr.SendAnswerKeys)
+		r.Post("/api/agents/{pid}/answer-question", ErrorMiddleware(answerQuestionHandler.AnswerQuestion))
 		if deps.PermissionPresetRepo != nil {
 			allowToolHandler := agents.NewAllowToolHandler(getAgents, deps.PermissionPresetRepo)
 			r.Post("/api/agents/{pid}/allow-tool", ErrorMiddleware(allowToolHandler.AllowTool))
