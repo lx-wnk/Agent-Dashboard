@@ -8,6 +8,7 @@ import { useRovingTabList } from '../composables/useRovingTabList'
 import { toast } from '../composables/useToast'
 import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, secondsSince, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
+import AgentTerminal from './AgentTerminal.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
 import HookEventList from './HookEventList.vue'
 import MachineBadge from './MachineBadge.vue'
@@ -27,8 +28,11 @@ const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
 const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
 
 const localMessages = ref<OutputMessage[]>([])
+const detailsTabs = computed(() =>
+  props.agent?.liveInjectable ? ['details', 'waterfall', 'terminal'] : ['details', 'waterfall'],
+)
 const { activeTab: activeDetailsTab, tabAttrs, panelAttrs, onKeydown, select } = useRovingTabList(
-  ['details', 'waterfall'],
+  detailsTabs,
   { idPrefix: 'agent-details' },
 )
 const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
@@ -99,7 +103,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
         :local-messages="localMessages"
         class="flex-1 min-h-0 overflow-y-auto p-4"
       />
-      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0 || (agent.recentHookEvents?.length ?? 0) > 0" class="border-t border-line flex-shrink-0">
+      <div v-if="agent.tasks.length > 0 || agent.subagents.length > 0 || agent.lastTools.length > 0 || (agent.recentHookEvents?.length ?? 0) > 0 || agent.liveInjectable" class="border-t border-line flex-shrink-0">
         <details>
           <summary class="px-4 py-2 text-xs text-fg-soft cursor-pointer select-none hover:text-fg dark:hover:text-fg">
             Agent Details (Tasks, Tools, Subagents)
@@ -126,6 +130,18 @@ watch(() => props.agent?.sessionId, (sessionId) => {
               @click="select('waterfall')"
             >
               Waterfall
+            </button>
+            <button
+              v-if="agent.liveInjectable"
+              v-bind="tabAttrs('terminal')"
+              type="button"
+              class="px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors"
+              :class="activeDetailsTab === 'terminal'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-fg-mute hover:text-fg-soft'"
+              @click="select('terminal')"
+            >
+              Terminal
             </button>
           </div>
           <div v-if="activeDetailsTab === 'details'" v-bind="panelAttrs('details')" class="px-4 pb-3 pt-2 flex flex-col gap-3 max-h-[200px] overflow-y-auto">
@@ -190,6 +206,9 @@ watch(() => props.agent?.sessionId, (sessionId) => {
           </div>
           <div v-if="activeDetailsTab === 'waterfall'" v-bind="panelAttrs('waterfall')" class="max-h-[300px] overflow-y-auto">
             <ExecutionWaterfall :session-id="agent.sessionId" />
+          </div>
+          <div v-if="activeDetailsTab === 'terminal'" v-bind="panelAttrs('terminal')" class="h-[320px]">
+            <AgentTerminal :pid="agent.pid" />
           </div>
         </details>
       </div>

@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import AgentModal from './AgentModal.vue'
+import AgentTerminal from './AgentTerminal.vue'
 
 vi.mock('../composables/useAgentIdentity', () => ({
   useAgentIdentity: () => ({ getIdentity: () => ({ emoji: '🤖' }) }),
@@ -46,10 +47,11 @@ const stubs = {
   ToolTimeline: true,
   ExecutionWaterfall: true,
   AppBadge: true,
+  AgentTerminal: true,
 }
 
-function mountModal() {
-  return mount(AgentModal, { props: { agent: baseAgent }, global: { stubs } })
+function mountModal(agent: Agent = baseAgent) {
+  return mount(AgentModal, { props: { agent }, global: { stubs } })
 }
 
 describe('agentModal details tablist a11y', () => {
@@ -82,5 +84,42 @@ describe('agentModal details tablist a11y', () => {
     await wrapper.find('[role="tablist"]').trigger('keydown', { key: 'ArrowRight' })
     const tabs = wrapper.findAll('[role="tab"]')
     expect(tabs[1].attributes('aria-selected')).toBe('true')
+  })
+})
+
+describe('agentModal terminal tab', () => {
+  it('shows a Terminal tab for a live-injectable agent, mounting AgentTerminal with its pid once selected', async () => {
+    const wrapper = mountModal({ ...baseAgent, pid: 4321, liveInjectable: true })
+
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.length).toBe(3)
+    expect(tabs[2].text()).toBe('Terminal')
+    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(false)
+
+    await tabs[2].trigger('click')
+
+    expect(tabs[2].attributes('aria-selected')).toBe('true')
+    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(true)
+    expect(wrapper.findComponent(AgentTerminal).props('pid')).toBe(4321)
+  })
+
+  it('unmounts AgentTerminal when switching away from the Terminal tab', async () => {
+    const wrapper = mountModal({ ...baseAgent, pid: 4321, liveInjectable: true })
+    const tabs = wrapper.findAll('[role="tab"]')
+
+    await tabs[2].trigger('click')
+    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(true)
+
+    await tabs[0].trigger('click')
+    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(false)
+  })
+
+  it('does not show a Terminal tab for a non-live-injectable agent', () => {
+    const wrapper = mountModal({ ...baseAgent, liveInjectable: false })
+
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.length).toBe(2)
+    expect(tabs.some(tab => tab.text() === 'Terminal')).toBe(false)
+    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(false)
   })
 })
