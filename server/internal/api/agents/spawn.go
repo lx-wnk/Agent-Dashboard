@@ -627,6 +627,42 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 	return "", fmt.Errorf("channel not available for PID %d", pid)
 }
 
+// ErrNoTerminal indicates the session identified by pid has no pty-broker
+// discovery file, meaning there is no live terminal to attach to.
+var ErrNoTerminal = errors.New("session has no pty terminal")
+
+// TerminalTarget resolves the pty-broker port and auth token for the running
+// session identified by pid, reading the same discovery file SendAnswerKeys
+// uses for its pty transport. Returns ErrNoTerminal when the session has no
+// pty-broker discovery file (e.g. it never enabled the web terminal).
+func (m *SpawnManager) TerminalTarget(pid int) (port int, token string, err error) {
+	home, herr := os.UserHomeDir()
+	if herr != nil {
+		return 0, "", fmt.Errorf("UserHomeDir: %w", herr)
+	}
+
+	data, rerr := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid))
+	if rerr != nil {
+		if errors.Is(rerr, os.ErrNotExist) {
+			return 0, "", ErrNoTerminal
+		}
+		return 0, "", fmt.Errorf("read pty discovery file: %w", rerr)
+	}
+
+	var disc struct {
+		Port  int    `json:"port"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(data, &disc); err != nil {
+		return 0, "", fmt.Errorf("parse pty discovery file: %w", err)
+	}
+	if disc.Port == 0 {
+		return 0, "", ErrNoTerminal
+	}
+
+	return disc.Port, disc.Token, nil
+}
+
 // SendAnswerKeys drives the interactive AskUserQuestion selector in the running
 // session identified by pid by injecting real keystrokes. It applies the same
 // transport precedence as SendMessageToChannel:
