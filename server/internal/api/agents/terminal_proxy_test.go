@@ -17,11 +17,16 @@ import (
 )
 
 // fakeBroker stands in for the pty-broker's /ws endpoint: it sends a hello
-// frame on connect, then echoes every subsequent frame it receives.
-func fakeBroker(t *testing.T) *httptest.Server {
+// frame on connect, then echoes every subsequent frame it receives. The
+// incoming Authorization header is published on the returned buffered channel
+// so tests can assert the server-side bearer token was attached without racing
+// on a shared variable.
+func fakeBroker(t *testing.T) (*httptest.Server, <-chan string) {
 	t.Helper()
+	auth := make(chan string, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
+		auth <- r.Header.Get("Authorization")
 		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 		if err != nil {
 			return
@@ -42,7 +47,7 @@ func fakeBroker(t *testing.T) *httptest.Server {
 			}
 		}
 	})
-	return httptest.NewServer(mux)
+	return httptest.NewServer(mux), auth
 }
 
 func brokerPort(t *testing.T, srv *httptest.Server) int {
@@ -61,7 +66,7 @@ func mountTerminalHandler(h *TerminalHandler) *httptest.Server {
 }
 
 func TestTerminalProxy_BridgesFramesBothWays(t *testing.T) {
-	broker := fakeBroker(t)
+	broker, auth := fakeBroker(t)
 	defer broker.Close()
 	port := brokerPort(t, broker)
 
@@ -81,6 +86,15 @@ func TestTerminalProxy_BridgesFramesBothWays(t *testing.T) {
 	c, _, err := websocket.Dial(ctx, url, nil)
 	require.NoError(t, err)
 	defer c.Close(websocket.StatusNormalClosure, "")
+
+	// The server must attach the broker token — and only that token — to its own
+	// broker dial; the browser never supplied credentials of its own.
+	select {
+	case got := <-auth:
+		require.Equal(t, "Bearer tok", got)
+	case <-ctx.Done():
+		t.Fatal("broker never received a request")
+	}
 
 	typ, data, err := c.Read(ctx)
 	require.NoError(t, err)

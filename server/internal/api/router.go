@@ -424,10 +424,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
 		r.Delete("/api/agents/{pid}/channel", spawnHandler.DismissChannel)
-		// WebSocket proxy — NOT wrapped in ErrorMiddleware. Once websocket.Accept
-		// hijacks the connection there is no HTTP response left for that
-		// middleware to write; a raw handler (like Message/DismissChannel above)
-		// is required here.
+		// WebSocket proxy — registered raw specifically because the upgrade
+		// hijacks the connection: an ErrorMiddleware wrapper that buffers or
+		// writes a response after the handler returns would break the hijacked
+		// stream.
 		terminalHandler := agents.NewTerminalHandler(getAgents, spawnMgr.TerminalTarget)
 		r.Get("/api/agents/{pid}/terminal", terminalHandler.Terminal)
 		answerQuestionHandler := agents.NewAnswerQuestionHandler(getAgents, spawnMgr.SendAnswerKeys)

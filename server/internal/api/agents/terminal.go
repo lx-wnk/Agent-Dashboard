@@ -10,6 +10,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 )
 
 // TerminalTargetFn resolves the pty-broker port and auth token for the running
@@ -40,13 +41,13 @@ func NewTerminalHandler(getAgents GetAgentsFn, target TerminalTargetFn) *Termina
 func (h *TerminalHandler) Terminal(w http.ResponseWriter, r *http.Request) {
 	pid, err := strconv.Atoi(r.PathValue("pid"))
 	if err != nil || pid <= 0 {
-		http.Error(w, `{"error":"invalid pid"}`, http.StatusBadRequest)
+		apierr.JSONError(w, http.StatusBadRequest, "invalid pid")
 		return
 	}
 
 	agentList, err := h.getAgents(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"failed to look up agent"}`, http.StatusInternalServerError)
+		apierr.JSONError(w, http.StatusInternalServerError, "failed to look up agent")
 		return
 	}
 	var agent *sdk.Agent
