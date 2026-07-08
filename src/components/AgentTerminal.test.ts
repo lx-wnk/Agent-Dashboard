@@ -1,6 +1,6 @@
 import type { UseTerminalSocket, UseTerminalSocketOptions } from '../composables/useTerminalSocket'
 import { mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentTerminal from './AgentTerminal.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   useTerminalSocketMock: vi.fn(),
   termOnData: { current: null as ((data: string) => void) | null },
   socketOnData: { current: null as ((bytes: Uint8Array) => void) | null },
+  screenRows: { current: [] as string[] },
 }))
 
 vi.mock('@xterm/xterm', () => {
@@ -24,6 +25,16 @@ vi.mock('@xterm/xterm', () => {
     write = mocks.writeMock
     loadAddon = mocks.loadAddonMock
     dispose = mocks.disposeMock
+    buffer = {
+      active: {
+        viewportY: 0,
+        getLine: (i: number) => {
+          const text = mocks.screenRows.current[i]
+          return text === undefined ? null : { translateToString: () => text }
+        },
+      },
+    }
+
     onData(cb: (data: string) => void): void {
       mocks.termOnData.current = cb
     }
@@ -56,6 +67,7 @@ describe('agentTerminal', () => {
     vi.clearAllMocks()
     mocks.termOnData.current = null
     mocks.socketOnData.current = null
+    mocks.screenRows.current = []
   })
 
   it('creates a terminal and opens it in the container', () => {
@@ -92,5 +104,76 @@ describe('agentTerminal', () => {
 
     expect(mocks.disposeMock).toHaveBeenCalledTimes(1)
     expect(mocks.closeMock).toHaveBeenCalledTimes(1)
+  })
+
+  describe('question overlay', () => {
+    const modalRows = [
+      'Pick a colour',
+      'What is your favourite colour?',
+      '1. Red',
+      '2. Green',
+      '3. Type something',
+      '4. Chat about this',
+    ]
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('polls the terminal screen and shows the overlay when a question is detected', async () => {
+      mocks.screenRows.current = modalRows
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('[data-testid="question-overlay"]').exists()).toBe(true)
+      expect(wrapper.text()).toContain('Red')
+
+      wrapper.unmount()
+    })
+
+    it('hides the overlay again once the question leaves the screen', async () => {
+      mocks.screenRows.current = modalRows
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-testid="question-overlay"]').exists()).toBe(true)
+
+      mocks.screenRows.current = ['$ ']
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('[data-testid="question-overlay"]').exists()).toBe(false)
+
+      wrapper.unmount()
+    })
+
+    it('sends encoded answer tokens through the socket when the overlay answer is submitted', async () => {
+      mocks.screenRows.current = modalRows
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      await wrapper.findAll('input[type="radio"]')[0].trigger('change')
+      await wrapper.find('[data-testid="detected-send-btn"]').trigger('click')
+
+      expect(mocks.sendMock).toHaveBeenCalledWith(new TextEncoder().encode('1'))
+
+      wrapper.unmount()
+    })
+
+    it('stops polling after unmount', () => {
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      wrapper.unmount()
+
+      mocks.screenRows.current = modalRows
+
+      expect(() => vi.advanceTimersByTime(1000)).not.toThrow()
+    })
   })
 })
