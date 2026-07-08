@@ -1,5 +1,5 @@
 import type { Agent } from '../types'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import AgentModal from './AgentModal.vue'
@@ -97,10 +97,14 @@ describe('agentModal terminal tab', () => {
     expect(wrapper.findComponent(AgentTerminal).exists()).toBe(false)
 
     await tabs[2].trigger('click')
+    await flushPromises()
 
     expect(tabs[2].attributes('aria-selected')).toBe('true')
     expect(wrapper.findComponent(AgentTerminal).exists()).toBe(true)
-    expect(wrapper.findComponent(AgentTerminal).props('pid')).toBe(4321)
+    // AgentTerminal is now lazy-loaded (defineAsyncComponent) — the auto-stub
+    // matched against the resolved async component only forwards `pid` as a
+    // fallthrough DOM attribute, not a declared prop.
+    expect(wrapper.findComponent(AgentTerminal).attributes('pid')).toBe('4321')
   })
 
   it('unmounts AgentTerminal when switching away from the Terminal tab', async () => {
@@ -108,6 +112,7 @@ describe('agentModal terminal tab', () => {
     const tabs = wrapper.findAll('[role="tab"]')
 
     await tabs[2].trigger('click')
+    await flushPromises()
     expect(wrapper.findComponent(AgentTerminal).exists()).toBe(true)
 
     await tabs[0].trigger('click')
@@ -121,5 +126,28 @@ describe('agentModal terminal tab', () => {
     expect(tabs.length).toBe(2)
     expect(tabs.some(tab => tab.text() === 'Terminal')).toBe(false)
     expect(wrapper.findComponent(AgentTerminal).exists()).toBe(false)
+  })
+
+  it('remounts AgentTerminal bound to the new pid when the modal switches to a different agent without closing', async () => {
+    // Same sessionId — isolates the pid-remount behavior from the unrelated
+    // sessionId-driven prompt-focus watcher.
+    const agentA = { ...baseAgent, pid: 4321, liveInjectable: true }
+    const agentB = { ...baseAgent, pid: 9999, liveInjectable: true }
+    const wrapper = mountModal(agentA)
+    const tabs = wrapper.findAll('[role="tab"]')
+
+    await tabs[2].trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(AgentTerminal).attributes('pid')).toBe('4321')
+    const elementBeforeSwitch = wrapper.find('[pid]').element
+
+    // Modal navigates to a different agent in place — no close/reopen.
+    await wrapper.setProps({ agent: agentB })
+    await flushPromises()
+
+    expect(wrapper.findComponent(AgentTerminal).attributes('pid')).toBe('9999')
+    // :key="agent.pid" forces a fresh DOM node (full teardown + rebuild),
+    // so the old WebSocket wired to pid 4321 is torn down rather than reused.
+    expect(wrapper.find('[pid]').element).not.toBe(elementBeforeSwitch)
   })
 })

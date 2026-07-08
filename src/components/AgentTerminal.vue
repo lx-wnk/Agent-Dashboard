@@ -3,7 +3,7 @@ import type { UseTerminalSocket } from '../composables/useTerminalSocket'
 import type { DetectedQuestion } from '../utils/askQuestionScreen'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTerminalSocket } from '../composables/useTerminalSocket'
 import { detectQuestion } from '../utils/askQuestionScreen'
 import QuestionOverlay from './QuestionOverlay.vue'
@@ -62,6 +62,15 @@ function sendToTerminal(bytes: Uint8Array) {
   socket?.send(bytes)
 }
 
+// Keep keyboard focus out of the xterm textarea while the overlay owns
+// input, and return it once the overlay clears.
+watch(detectedQuestion, (question) => {
+  if (question)
+    term?.blur()
+  else
+    term?.focus()
+})
+
 onMounted(() => {
   const container = containerRef.value
   if (!container)
@@ -82,6 +91,11 @@ onMounted(() => {
   })
 
   term.onData((data) => {
+    // While a question overlay is showing, the user answers through the
+    // overlay's controls — raw keystrokes must not race those encoded bytes
+    // onto the same pty.
+    if (detectedQuestion.value)
+      return
     socket?.send(new TextEncoder().encode(data))
   })
 

@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import { getCurrentScope, onScopeDispose, ref } from 'vue'
+import { ref } from 'vue'
 import { SSE_RETRY_DELAY_MS } from '../utils/sse'
 
 export type TerminalSocketStatus = 'connecting' | 'open' | 'closed'
@@ -76,8 +76,8 @@ export function useTerminalSocket(pid: number, opts: UseTerminalSocketOptions): 
     ws?.close()
   }
 
-  if (getCurrentScope())
-    onScopeDispose(close)
-
+  // No effect-scope teardown hook: this is constructed inside AgentTerminal's
+  // onMounted callback (no active scope there), so the caller owns lifecycle
+  // and must call close() explicitly on unmount.
   return { send, resize, status, close }
 }

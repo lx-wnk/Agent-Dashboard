@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   fitMock: vi.fn(),
   sendMock: vi.fn(),
   closeMock: vi.fn(),
+  blurMock: vi.fn(),
+  focusMock: vi.fn(),
   useTerminalSocketMock: vi.fn(),
   termOnData: { current: null as ((data: string) => void) | null },
   socketOnData: { current: null as ((bytes: Uint8Array) => void) | null },
@@ -25,6 +27,8 @@ vi.mock('@xterm/xterm', () => {
     write = mocks.writeMock
     loadAddon = mocks.loadAddonMock
     dispose = mocks.disposeMock
+    blur = mocks.blurMock
+    focus = mocks.focusMock
     buffer = {
       active: {
         viewportY: 0,
@@ -162,6 +166,58 @@ describe('agentTerminal', () => {
       await wrapper.find('[data-testid="detected-send-btn"]').trigger('click')
 
       expect(mocks.sendMock).toHaveBeenCalledWith(new TextEncoder().encode('1'))
+
+      wrapper.unmount()
+    })
+
+    it('does not forward raw terminal keystrokes to the socket while the overlay is showing', async () => {
+      mocks.screenRows.current = modalRows
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-testid="question-overlay"]').exists()).toBe(true)
+
+      mocks.termOnData.current?.('x')
+
+      expect(mocks.sendMock).not.toHaveBeenCalled()
+
+      wrapper.unmount()
+    })
+
+    it('resumes forwarding raw terminal keystrokes once the overlay clears', async () => {
+      mocks.screenRows.current = modalRows
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      mocks.screenRows.current = ['$ ']
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-testid="question-overlay"]').exists()).toBe(false)
+
+      mocks.termOnData.current?.('x')
+
+      expect(mocks.sendMock).toHaveBeenCalledWith(new TextEncoder().encode('x'))
+
+      wrapper.unmount()
+    })
+
+    it('blurs the terminal when the overlay appears and refocuses it once it clears', async () => {
+      mocks.screenRows.current = modalRows
+      vi.useFakeTimers()
+      const wrapper = mount(AgentTerminal, { props: { pid: 1234 } })
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      expect(mocks.blurMock).toHaveBeenCalledTimes(1)
+
+      mocks.screenRows.current = ['$ ']
+      await vi.advanceTimersByTimeAsync(200)
+      await wrapper.vm.$nextTick()
+
+      expect(mocks.focusMock).toHaveBeenCalledTimes(1)
 
       wrapper.unmount()
     })

@@ -55,6 +55,32 @@ describe('questionOverlay', () => {
     expect(wrapper.find('[data-testid="question-overlay"]').exists()).toBe(false)
   })
 
+  it('marks the overlay container as an accessible modal dialog', () => {
+    const wrapper = mount(QuestionOverlay, {
+      props: { question: singleQuestion, send: vi.fn() },
+    })
+
+    const dialog = wrapper.find('[data-testid="question-overlay"]')
+    expect(dialog.attributes('role')).toBe('dialog')
+    expect(dialog.attributes('aria-modal')).toBe('true')
+    expect(dialog.attributes('aria-label')).toBe(singleQuestion.header)
+  })
+
+  it('moves focus into the overlay (first control) once a question appears', async () => {
+    const wrapper = mount(QuestionOverlay, {
+      attachTo: document.body,
+      props: { question: null, send: vi.fn() },
+    })
+
+    await wrapper.setProps({ question: singleQuestion })
+    await wrapper.vm.$nextTick()
+
+    const firstRadio = wrapper.findAll('input[type="radio"]')[0].element
+    expect(document.activeElement).toBe(firstRadio)
+
+    wrapper.unmount()
+  })
+
   it('hides once the bound question becomes null (success confirmation)', async () => {
     const wrapper = mount(QuestionOverlay, {
       props: { question: singleQuestion, send: vi.fn() },

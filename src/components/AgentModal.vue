@@ -8,7 +8,6 @@ import { useRovingTabList } from '../composables/useRovingTabList'
 import { toast } from '../composables/useToast'
 import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, secondsSince, shortModel, totalTokenCount } from '../utils/format'
 import AgentChatStream from './AgentChatStream.vue'
-import AgentTerminal from './AgentTerminal.vue'
 import CrossLinkBanner from './CrossLinkBanner.vue'
 import HookEventList from './HookEventList.vue'
 import MachineBadge from './MachineBadge.vue'
@@ -26,6 +25,8 @@ const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
 
 // Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
 const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
+// Terminal pulls in xterm.js (~490KB) — split into its own chunk, loaded when the tab is first opened.
+const AgentTerminal = defineAsyncComponent(() => import('./AgentTerminal.vue'))
 
 const localMessages = ref<OutputMessage[]>([])
 const detailsTabs = computed(() =>
@@ -208,7 +209,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
             <ExecutionWaterfall :session-id="agent.sessionId" />
           </div>
           <div v-if="activeDetailsTab === 'terminal'" v-bind="panelAttrs('terminal')" class="h-[320px]">
-            <AgentTerminal :pid="agent.pid" />
+            <AgentTerminal :key="agent.pid" :pid="agent.pid" />
           </div>
         </details>
       </div>
