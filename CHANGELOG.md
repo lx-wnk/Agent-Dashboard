@@ -14,7 +14,8 @@ Preparing the first public release.
 
 ### Added
 
-- Answer a Claude **AskUserQuestion** prompt from the dashboard. When a live session asks a multiple-choice question it surfaces in the **Needs you** triage band as "Needs answer" with the options rendered inline (radio for single-select, checkboxes for multi-select); **Send answer** drives the session's terminal selector with real keystrokes — the option's number hotkey for single-select, and Space/Down/Enter to toggle and confirm for multi-select (Claude's selector takes keypresses, not free text). Requires a tmux-backed live session; non-tmux or non-injectable sessions show the question read-only with a hint to answer in the terminal. New endpoint: `POST /api/agents/{pid}/answer-question {toolUseId, answers}` — validates the question is still the one the session is blocked on (409 if already answered or not injectable; 502 if delivery fails).
+- Live **Terminal** tab in the agent detail modal for spawned/live-injectable sessions — a real `xterm.js` terminal streamed over a WebSocket, so you can watch and interact with the session's actual pty output instead of a parsed transcript. New endpoint: `GET /api/agents/{pid}/terminal` — an authenticated WebSocket proxy that bridges the browser to the session's pty broker.
+- Answer a Claude **AskUserQuestion** prompt directly from the Terminal tab: an overlay detects the question from the live terminal screen and renders the options inline (radio for single-select, checkboxes for multi-select); **Send answer** drives the session's selector with real keystrokes over the same WebSocket — the option's number hotkey for single-select, and Space/Down/Enter to toggle and confirm for multi-select (Claude's selector takes keypresses, not free text). Because it drives the pty directly, it works over any transport (tmux or the built-in pty broker), not just tmux.
 - End-user install paths: binary (one-liner via `install.sh`), Homebrew cask on macOS (`brew install lx-wnk/tap/agent-dashboard`), and Docker (`ghcr.io/lx-wnk/agent-dashboard`) — no Go or build tools required at runtime. See [`docs/guides/install.md`](docs/guides/install.md).
 - One-command MCP connect: the API key dialog's **CLI command** block copies a `claude mcp add --scope user --transport http …` one-liner with the generated key substituted. Documented in [`docs/guides/mcp.md`](docs/guides/mcp.md#connect-the-dashboard-to-claude).
 - GoReleaser config now publishes a Homebrew cask to `lx-wnk/homebrew-tap` and a multi-arch Docker image (`linux/amd64`, `linux/arm64`) to GHCR on `v*` tag pushes. See [`docs/RELEASING.md`](docs/RELEASING.md).
@@ -149,6 +150,14 @@ Preparing the first public release.
   slot exclusively, `extend` to wrap the lower-priority chain). An `extend` addon's
   `mount(el, ctx, parent)` receives a `parent` handle it may invoke to compose the addons
   below it. Addons with no mode remain independent siblings and are unaffected.
+
+### Changed
+
+- Interactive question answering moved from the JSONL-derived "Needs answer" card in the **Needs you** triage band to the Terminal tab's live overlay (see Added, above). The old flow only worked for tmux-backed sessions and left non-tmux sessions read-only; the new one works for any live-injectable session, driven over the terminal WebSocket instead of parsed JSONL.
+
+### Removed
+
+- The triage-band "Needs answer" question card and its `POST /api/agents/{pid}/answer-question` endpoint — superseded by the Terminal tab's question overlay.
 
 ### Fixed
 
