@@ -41,6 +41,8 @@ func RunPTY(ctx context.Context, command []string) error {
 	}
 	defer func() { _ = ptmx.Close() }()
 
+	hub := newPtyHub(256 * 1024)
+
 	// Keep the pty sized to the real terminal (initial + on resize).
 	winch := make(chan os.Signal, 1)
 	signal.Notify(winch, syscall.SIGWINCH)
@@ -94,7 +96,7 @@ func RunPTY(ctx context.Context, command []string) error {
 
 	// Proxy: terminal stdin → child, child output → terminal.
 	go func() { _, _ = io.Copy(ptmx, os.Stdin) }()
-	_, _ = io.Copy(os.Stdout, ptmx) // returns when the child exits / pty closes
+	_, _ = io.Copy(io.MultiWriter(os.Stdout, hub), ptmx) // returns when the child exits / pty closes
 
 	return cmd.Wait()
 }
