@@ -193,6 +193,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		merger.WithScanFn(func(ctx context.Context) ([]scanner.ProcessInfo, error) {
 			return scanner.ScanProcessesWithDetector(ctx, providerRegistry)
 		}),
+		merger.WithQuestionProbe(merger.RealQuestionProbe),
 	)
 
 	taskBase := sse.NewBroadcaster()

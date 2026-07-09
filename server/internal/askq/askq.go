@@ -13,30 +13,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/lx-wnk/agent-dashboard/sdk"
 )
 
-// DetectedOption is a single numbered option row of a parsed modal.
-type DetectedOption struct {
-	Index       int    `json:"index"`
-	Label       string `json:"label"`
-	Description string `json:"description,omitempty"`
-}
-
-// DetectedQuestion is a parsed AskUserQuestion modal.
-//
-// Invariant (ENFORCED, not merely typical): the real option rows are numbered
-// contiguously 1..n, and the two UI-injected meta-rows follow immediately, so
-// TypeSomethingIndex == len(Options)+1 and ChatAboutIndex == TypeSomethingIndex+1.
-// Any frame that violates this yields nil from DetectQuestion rather than a
-// desynced result.
-type DetectedQuestion struct {
-	Header             string           `json:"header"`
-	Question           string           `json:"question"`
-	MultiSelect        bool             `json:"multiSelect"`
-	Options            []DetectedOption `json:"options"`
-	TypeSomethingIndex int              `json:"typeSomethingIndex"`
-	ChatAboutIndex     int              `json:"chatAboutIndex"`
-}
+// DetectedOption and DetectedQuestion are the public wire types for a parsed
+// AskUserQuestion modal, defined in sdk since they cross the server/client
+// boundary. Aliased here so existing callers within this package keep working
+// unqualified.
+type (
+	DetectedOption   = sdk.DetectedOption
+	DetectedQuestion = sdk.DetectedQuestion
+)
 
 const (
 	typeSomethingLabel = "type something"
@@ -165,7 +153,7 @@ func decideMultiSelect(optionEntries []numberedEntry, contentLines []parsedRow) 
 // BOTH UI-injected meta-rows. Requiring both meta-rows - adjacent and
 // index-continuous - is what separates a real modal from an ordinary
 // numbered list in terminal output.
-func DetectQuestion(rows []string) *DetectedQuestion {
+func DetectQuestion(rows []string) *sdk.DetectedQuestion {
 	contentLines := make([]parsedRow, 0, len(rows))
 	for _, raw := range rows {
 		line, ok := toContentLine(raw)
@@ -225,9 +213,9 @@ func DetectQuestion(rows []string) *DetectedQuestion {
 		return nil
 	}
 
-	options := make([]DetectedOption, 0, len(optionEntries))
+	options := make([]sdk.DetectedOption, 0, len(optionEntries))
 	for _, e := range optionEntries {
-		option := DetectedOption{Index: e.row.num, Label: e.row.label}
+		option := sdk.DetectedOption{Index: e.row.num, Label: e.row.label}
 		if next := e.idx + 1; next < len(contentLines) && !contentLines[next].hasNum {
 			option.Description = contentLines[next].text
 		}
@@ -256,7 +244,7 @@ func DetectQuestion(rows []string) *DetectedQuestion {
 		}
 	}
 
-	return &DetectedQuestion{
+	return &sdk.DetectedQuestion{
 		Header:             header,
 		Question:           question,
 		MultiSelect:        decideMultiSelect(optionEntries, contentLines),
