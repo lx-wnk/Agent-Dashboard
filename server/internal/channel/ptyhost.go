@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/creack/pty"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"golang.org/x/term"
@@ -41,6 +42,8 @@ func RunPTY(ctx context.Context, command []string) error {
 	}
 	defer func() { _ = ptmx.Close() }()
 
+	hub := newPtyHub(256 * 1024)
+
 	// Keep the pty sized to the real terminal (initial + on resize).
 	winch := make(chan os.Signal, 1)
 	signal.Notify(winch, syscall.SIGWINCH)
@@ -66,7 +69,7 @@ func RunPTY(ctx context.Context, command []string) error {
 		return fmt.Errorf("ptyhost: token: %w", err)
 	}
 	token := newRotatingToken(initialToken)
-	srv, port, err := startPtyHTTPServer(ptmx, token)
+	srv, port, err := startPtyHTTPServer(ptmx, hub, token)
 	if err != nil {
 		return fmt.Errorf("ptyhost: http: %w", err)
 	}
@@ -94,20 +97,31 @@ func RunPTY(ctx context.Context, command []string) error {
 
 	// Proxy: terminal stdin → child, child output → terminal.
 	go func() { _, _ = io.Copy(ptmx, os.Stdin) }()
-	_, _ = io.Copy(os.Stdout, ptmx) // returns when the child exits / pty closes
+	_, _ = io.Copy(io.MultiWriter(os.Stdout, hub), ptmx) // returns when the child exits / pty closes
 
 	return cmd.Wait()
 }
 
 // startPtyHTTPServer serves POST /message: the body's `message` is written to
 // the pty followed by a carriage return, i.e. injected as if typed + Enter.
-func startPtyHTTPServer(ptmx io.Writer, token *rotatingToken) (*http.Server, int, error) {
+func startPtyHTTPServer(ptmx io.Writer, hub *ptyHub, token *rotatingToken) (*http.Server, int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, 0, err
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 
+	srv := &http.Server{Handler: ptyMux(ptmx, hub, token), ReadHeaderTimeout: 5 * time.Second}
+	go func() { _ = srv.Serve(ln) }()
+	return srv, port, nil
+}
+
+// ptyMux builds the broker's loopback HTTP handler: POST /message injects
+// text into the pty, GET /health is a liveness probe, and GET /ws upgrades to
+// a WebSocket that replays scrollback then streams pty output to the client
+// while pumping client input (and resize control messages) back into the
+// pty. All routes require the rotating bearer token.
+func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
@@ -139,81 +153,99 @@ func startPtyHTTPServer(ptmx io.Writer, token *rotatingToken) (*http.Server, int
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
 
-	mux.HandleFunc("POST /keys", func(w http.ResponseWriter, r *http.Request) {
+	// Frame-type contract (enforced by the browser client): a TEXT frame is a
+	// control message — currently only {"resize":{cols,rows}} — while a BINARY
+	// frame is raw pty input. Raw keystrokes must never be sent as TEXT, else a
+	// literal {"resize":...} typed by the user would be swallowed as control.
+	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
 		if !token.authorize(r) {
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
-		body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 		if err != nil {
-			http.Error(w, "read error", http.StatusBadRequest)
 			return
 		}
-		var batches [][]answerKeyWire
-		if err := json.Unmarshal(body, &batches); err != nil {
-			http.Error(w, `{"error":"invalid batches"}`, http.StatusBadRequest)
-			return
+		defer c.Close(websocket.StatusInternalError, "")
+		// Forwarded client input (e.g. a large paste) can exceed the 32 KiB
+		// default read limit; this listener is loopback + token-gated.
+		c.SetReadLimit(-1)
+		ctx := r.Context()
+
+		replay, frames, cancel := hub.Subscribe()
+		defer cancel()
+		if len(replay) > 0 {
+			if err := c.Write(ctx, websocket.MessageBinary, replay); err != nil {
+				return
+			}
 		}
-		for bi, batch := range batches {
-			for _, k := range batch {
-				if _, err := io.WriteString(ptmx, answerKeyBytes(k)); err != nil {
-					http.Error(w, `{"error":"write failed"}`, http.StatusInternalServerError)
+
+		go func() {
+			for {
+				typ, data, err := c.Read(ctx)
+				if err != nil {
+					return
+				}
+				if typ == websocket.MessageText && looksLikeResize(data) {
+					applyResize(ptmx, data)
+					continue
+				}
+				if _, err := ptmx.Write(data); err != nil {
 					return
 				}
 			}
-			if bi < len(batches)-1 {
-				answerKeyStepSleep()
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case b, ok := <-frames:
+				if !ok {
+					return
+				}
+				if err := c.Write(ctx, websocket.MessageBinary, b); err != nil {
+					return
+				}
 			}
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
 
-	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-	go func() { _ = srv.Serve(ln) }()
-	return srv, port, nil
+	return mux
 }
 
-// answerKeyWire mirrors the JSON shape the agents package encodes AnswerKey
-// batches as for the /keys endpoint. It is a local, independent copy — the
-// channel package must not import the agents package.
-type answerKeyWire struct {
-	Char  string `json:"char"`
-	Named string `json:"named"`
-	Text  string `json:"text"`
+// resizeMessage is the client→broker control message shape for adjusting the
+// pty's terminal size, sent as a text WebSocket frame.
+type resizeMessage struct {
+	Resize *struct {
+		Cols uint16 `json:"cols"`
+		Rows uint16 `json:"rows"`
+	} `json:"resize"`
 }
 
-// answerKeyBytes returns the raw bytes to write to the pty for a single
-// interactive-question keystroke. Unlike /message, no trailing \r is added —
-// the caller's batch already includes an explicit Enter where one is needed.
-func answerKeyBytes(k answerKeyWire) string {
-	switch {
-	case k.Text != "":
-		return k.Text
-	case k.Char != "":
-		return k.Char
+// looksLikeResize reports whether data is a JSON resize control message
+// rather than raw keystrokes to inject into the pty.
+func looksLikeResize(data []byte) bool {
+	var msg resizeMessage
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return false
 	}
-	switch k.Named {
-	case "Enter":
-		return "\r"
-	case "Tab":
-		return "\t"
-	case "Space":
-		return " "
-	case "Up":
-		return "\x1b[A"
-	case "Down":
-		return "\x1b[B"
-	default:
-		return ""
-	}
+	return msg.Resize != nil
 }
 
-// answerKeyStepDelay is the pause between key batches so the next selector
-// renders before its keys are sent. Indirected via answerKeyStepSleep for tests.
-var answerKeyStepDelay = 250 * time.Millisecond
-
-var answerKeyStepSleep = func() { time.Sleep(answerKeyStepDelay) }
+// applyResize resizes the pty to the dimensions in a resize control message.
+// A no-op when ptmx is not a real *os.File (e.g. a test double).
+func applyResize(ptmx io.Writer, data []byte) {
+	var msg resizeMessage
+	if err := json.Unmarshal(data, &msg); err != nil || msg.Resize == nil {
+		return
+	}
+	f, ok := ptmx.(*os.File)
+	if !ok {
+		return
+	}
+	_ = pty.Setsize(f, &pty.Winsize{Cols: msg.Resize.Cols, Rows: msg.Resize.Rows})
+}
 
 // writePtyDiscovery writes the pty-broker discovery file for a pty-hosted
 // session. It writes to {childPid}.pty.json (not {childPid}.json) so it never

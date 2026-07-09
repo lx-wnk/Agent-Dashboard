@@ -424,8 +424,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
 		r.Delete("/api/agents/{pid}/channel", spawnHandler.DismissChannel)
-		answerQuestionHandler := agents.NewAnswerQuestionHandler(getAgents, spawnMgr.SendAnswerKeys)
-		r.Post("/api/agents/{pid}/answer-question", ErrorMiddleware(answerQuestionHandler.AnswerQuestion))
+		// WebSocket proxy — registered raw specifically because the upgrade
+		// hijacks the connection: an ErrorMiddleware wrapper that buffers or
+		// writes a response after the handler returns would break the hijacked
+		// stream.
+		terminalHandler := agents.NewTerminalHandler(getAgents, spawnMgr.TerminalTarget)
+		r.Get("/api/agents/{pid}/terminal", terminalHandler.Terminal)
 		if deps.PermissionPresetRepo != nil {
 			allowToolHandler := agents.NewAllowToolHandler(getAgents, deps.PermissionPresetRepo)
 			r.Post("/api/agents/{pid}/allow-tool", ErrorMiddleware(allowToolHandler.AllowTool))

@@ -37,34 +37,26 @@ func askUserQuestionEntry(t *testing.T, toolUseID string) string {
 	})
 }
 
-// TestParseSessionFile_PendingQuestion_Unresolved verifies that an unresolved
-// AskUserQuestion tool_use sets PendingQuestion (not PendingToolUse) and forces TurnOpen.
-func TestParseSessionFile_PendingQuestion_Unresolved(t *testing.T) {
+// TestParseSessionFile_AskUserQuestion_FallsBackToPendingToolUse verifies an
+// unresolved AskUserQuestion tool_use gets no special-casing: it surfaces as a
+// normal PendingToolUse (the live terminal overlay, not the JSONL parser, is
+// responsible for presenting the question) and still forces TurnOpen.
+func TestParseSessionFile_AskUserQuestion_FallsBackToPendingToolUse(t *testing.T) {
 	const id = "toolu_ask_01"
 	path := writeSessionLines(t, []string{askUserQuestionEntry(t, id)})
 
 	data, err := parser.ParseSessionFile(path)
 	require.NoError(t, err)
 
-	require.NotNil(t, data.PendingQuestion, "PendingQuestion must be set for unresolved AskUserQuestion")
-	require.Equal(t, id, data.PendingQuestion.ToolUseID)
-	require.Nil(t, data.PendingToolUse, "PendingToolUse must be nil — question takes precedence")
-	require.True(t, data.TurnOpen, "TurnOpen must be true while a question awaits an answer")
-
-	require.Len(t, data.PendingQuestion.Questions, 1)
-	q := data.PendingQuestion.Questions[0]
-	require.Equal(t, "Choose strategy", q.Header)
-	require.Equal(t, "Which deployment strategy?", q.Question)
-	require.False(t, q.MultiSelect)
-	require.Len(t, q.Options, 2)
-	require.Equal(t, "Blue/Green", q.Options[0].Label)
-	require.Equal(t, "Zero-downtime swap", q.Options[0].Description)
-	require.Equal(t, "Rolling", q.Options[1].Label)
+	require.NotNil(t, data.PendingToolUse, "AskUserQuestion must fall back to normal PendingToolUse handling")
+	require.Equal(t, id, data.PendingToolUse.ID)
+	require.Equal(t, "AskUserQuestion", data.PendingToolUse.Tool)
+	require.True(t, data.TurnOpen, "TurnOpen must be true while the tool_use awaits a result")
 }
 
-// TestParseSessionFile_PendingQuestion_Resolved verifies that a matching
-// tool_result clears PendingQuestion entirely.
-func TestParseSessionFile_PendingQuestion_Resolved(t *testing.T) {
+// TestParseSessionFile_AskUserQuestion_Resolved verifies that a matching
+// tool_result clears PendingToolUse like any other resolved tool_use.
+func TestParseSessionFile_AskUserQuestion_Resolved(t *testing.T) {
 	const id = "toolu_ask_01"
 	path := writeSessionLines(t, []string{
 		askUserQuestionEntry(t, id),
@@ -74,6 +66,5 @@ func TestParseSessionFile_PendingQuestion_Resolved(t *testing.T) {
 	data, err := parser.ParseSessionFile(path)
 	require.NoError(t, err)
 
-	require.Nil(t, data.PendingQuestion, "PendingQuestion must be nil once the tool_result arrives")
 	require.Nil(t, data.PendingToolUse)
 }

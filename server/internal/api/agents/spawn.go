@@ -627,110 +627,40 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 	return "", fmt.Errorf("channel not available for PID %d", pid)
 }
 
-// SendAnswerKeys drives the interactive AskUserQuestion selector in the running
-// session identified by pid by injecting real keystrokes. It applies the same
-// transport precedence as SendMessageToChannel:
-//
-//  1. Bridge file ({pid}.json) with a non-empty tmuxPane → tmux send-keys.
-//  2. Pty file ({pid}.pty.json) with a non-zero port → POST batches to the
-//     pty-broker's /keys endpoint.
-//  3. Bridge file ({pid}.json) with a non-zero port → POST batches to the
-//     channel-bridge's /keys endpoint.
-//
-// Returns the chosen transport ("tmux", "pty", or "bridge") and any error.
-func (m *SpawnManager) SendAnswerKeys(ctx context.Context, pid int, batches [][]AnswerKey) (transport string, err error) {
+// ErrNoTerminal indicates the session identified by pid has no pty-broker
+// discovery file, meaning there is no live terminal to attach to.
+var ErrNoTerminal = errors.New("session has no pty terminal")
+
+// TerminalTarget resolves the pty-broker port and auth token for the running
+// session identified by pid, reading the pty discovery file written by the
+// pty broker for its /ws transport. Returns ErrNoTerminal when the session
+// has no pty-broker discovery file (e.g. it never enabled the web terminal).
+func (m *SpawnManager) TerminalTarget(pid int) (port int, token string, err error) {
 	home, herr := os.UserHomeDir()
 	if herr != nil {
-		return "", fmt.Errorf("UserHomeDir: %w", herr)
+		return 0, "", fmt.Errorf("UserHomeDir: %w", herr)
 	}
 
-	var bridgePort int
-	var bridgeToken string
-	if data, rerr := os.ReadFile(channelconfig.DiscoveryFile(home, pid)); rerr == nil {
-		var disc struct {
-			Port       int    `json:"port"`
-			Token      string `json:"token"`
-			TmuxPane   string `json:"tmuxPane"`
-			TmuxSocket string `json:"tmuxSocket"`
+	data, rerr := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid))
+	if rerr != nil {
+		if errors.Is(rerr, os.ErrNotExist) {
+			return 0, "", ErrNoTerminal
 		}
-		if json.Unmarshal(data, &disc) == nil {
-			if disc.TmuxPane != "" {
-				return "tmux", sendAnswerKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, batches)
-			}
-			bridgePort = disc.Port
-			bridgeToken = disc.Token
-		}
+		return 0, "", fmt.Errorf("read pty discovery file: %w", rerr)
 	}
 
-	if data, rerr := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid)); rerr == nil {
-		var disc struct {
-			Port  int    `json:"port"`
-			Token string `json:"token"`
-		}
-		if json.Unmarshal(data, &disc) == nil && disc.Port != 0 {
-			return "pty", sendAnswerKeysHTTP(ctx, disc.Port, disc.Token, batches)
-		}
+	var disc struct {
+		Port  int    `json:"port"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(data, &disc); err != nil {
+		return 0, "", fmt.Errorf("parse pty discovery file: %w", err)
+	}
+	if disc.Port == 0 {
+		return 0, "", ErrNoTerminal
 	}
 
-	if bridgePort != 0 {
-		return "bridge", sendAnswerKeysHTTP(ctx, bridgePort, bridgeToken, batches)
-	}
-
-	return "", fmt.Errorf("answering interactive questions requires a live-injectable session for PID %d; answer it in your terminal", pid)
-}
-
-// answerKeyWire mirrors AnswerKey's JSON wire shape for the pty/bridge /keys
-// endpoint. The channel package keeps its own independent copy to avoid an
-// import cycle.
-type answerKeyWire struct {
-	Char  string `json:"char,omitempty"`
-	Named string `json:"named,omitempty"`
-	Text  string `json:"text,omitempty"`
-}
-
-func toAnswerKeyWire(batches [][]AnswerKey) [][]answerKeyWire {
-	out := make([][]answerKeyWire, len(batches))
-	for i, batch := range batches {
-		wireBatch := make([]answerKeyWire, len(batch))
-		for j, k := range batch {
-			wireBatch[j] = answerKeyWire{Char: k.Char, Named: k.Named, Text: k.Text}
-		}
-		out[i] = wireBatch
-	}
-	return out
-}
-
-// sendAnswerKeysHTTP POSTs batches as JSON to http://127.0.0.1:{port}/keys,
-// authenticated with token as a Bearer credential. Shared by the pty-inject and
-// bridge-HTTP transports for SendAnswerKeys.
-func sendAnswerKeysHTTP(ctx context.Context, port int, token string, batches [][]AnswerKey) error {
-	body, err := json.Marshal(toAnswerKeyWire(batches))
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(
-		ctx,
-		"POST",
-		fmt.Sprintf("http://127.0.0.1:%d/keys", port),
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: channelMsgTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("channel unreachable: %w", err)
-	}
-	defer resp.Body.Close()
-	if !httputil.Is2xx(resp.StatusCode) {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("channel error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
-	}
-	return nil
+	return disc.Port, disc.Token, nil
 }
 
 // sanitizeInjectMessage strips control characters that could inject premature

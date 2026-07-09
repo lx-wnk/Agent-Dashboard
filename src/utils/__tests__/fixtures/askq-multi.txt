@@ -1,0 +1,14 @@
+╭──────────────────────────────────────────╮
+│ Pick fruits                                │
+│                                            │
+│ Which fruits do you like?                  │
+│                                            │
+│ ❯ 1. [ ] Apples                            │
+│      Crisp and sweet                       │
+│   2. [✔] Bananas                           │
+│   3. [ ] Cherries                          │
+│   4. Type something                        │
+│   5. Chat about this                       │
+│                                            │
+│ Space to toggle · Enter to confirm         │
+╰──────────────────────────────────────────╯
