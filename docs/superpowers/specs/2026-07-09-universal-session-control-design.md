@@ -1,7 +1,16 @@
 # Universal Session Control — Design Spec
 
-> Date: 2026-07-09 · Status: Draft (awaiting user review) · Branch: `feat/universal-session-control` (off `upcoming`)
+> Date: 2026-07-09 · Status: Approved · Branch: `feat/universal-session-control` (off `upcoming`)
 > User initiative: **every** Claude session that carries the dashboard MCP must be fully controllable from the dashboard — answer questions, inject prompts, drive the agent — with the strongest guarantee for sessions the user spawns *from* the dashboard. "Wie" is open; the requirement is a 100% control path.
+
+## Decisions (user-approved 2026-07-09)
+
+| # | Decision | Rationale |
+|---|---|---|
+| D1 | Question detection runs **server-side in Go** (a hand-maintained parity port of `detectQuestion`), gated by a shared fixture set | The needs-you band must show the question without an open terminal; only the server can read every injectable session's rendered screen. |
+| D2 | Detection polls **injectable sessions on the existing scan tick** (not on-demand) | Bounded cost, simple; reuses the scan cadence already running. |
+| D3 | A **dedicated typed answer endpoint** (`POST /api/agents/{pid}/answer-question`, resurrected) derives keystrokes server-side | Typed to the question; keeps the key model in one server place; overlay keeps its direct-`/ws` path. |
+| D4 | Slice 3 is **docs + connect-dialog one-liner only** — no `live` code change | `agent-dashboard live` already auto-wires the channel MCP (`--mcp-config`) and selects tmux/pty-broker transport; it is already a turnkey injectable on-ramp. |
 
 ## Why
 
@@ -48,10 +57,9 @@ The client keystroke encoder (`src/utils/answerKeys.ts`) is the TS SSOT; the Go 
 
 **Goal:** a user's own session becomes a pty-broker (injectable) session with one obvious action, so "every MCP session" is actually controllable — not just dashboard-spawned ones.
 
-`agent-dashboard live -- claude …` already delivers exactly this (pty broker + real-terminal proxy + `/ws` + MCP). The work is ergonomics + discoverability:
-- The MCP-connect / onboarding flow (`docs/guides/mcp.md`, #253) recommends and documents launching via `agent-dashboard live` (composing the `--mcp-config` for `dashboard-channel`), so a connected session is an injectable one by construction.
-- Optionally: a copyable one-liner / shell alias (`ad-claude`) surfaced in the same key/connect dialog that starts `live` with the MCP wired.
-- Verify `live` + the channel MCP compose cleanly (MCP config passed through to the wrapped `claude`; `{pid}.json` and `{pid}.pty.json` coexist per the two-file model).
+`agent-dashboard live` already delivers exactly this and is **already turnkey** (verified `server/cmd/serve/live.go`): it always injects the channel MCP (`--mcp-config <json>` from `channelconfig.ConfigJSON`), auto-selects transport (inside-tmux → new-tmux → pty broker), forwards all other flags to `claude`, and supports `--yolo`. So a `live` session is injectable + MCP-connected by construction — **no `live` code change needed**. The work is ergonomics + discoverability only:
+- The MCP-connect / onboarding flow (`docs/guides/mcp.md`, #253) leads with `agent-dashboard live` as the way to start a controllable session (rather than bare `claude`).
+- A copyable one-liner / shell alias (`ad-claude` → `agent-dashboard live`) surfaced in the key/connect dialog.
 - Document the boundary: already-running bare sessions stay uncontrollable; relaunch via `live` to gain control.
 
 ## Scope
@@ -66,9 +74,6 @@ The client keystroke encoder (`src/utils/answerKeys.ts`) is the TS SSOT; the Go 
 - TS: existing `askQuestionScreen` + `answerKeys` + `QuestionOverlay` suites, plus a needs-you-band question-card render/answer test.
 - E2E/live smoke: relaunch a session via `live`, trigger an AskUserQuestion, confirm it surfaces in BOTH the band and the terminal overlay, and that answering from the band drives the pty (the manual leg that surfaced #260).
 
-## Open questions (for review)
+## Resolved (see Decisions D1–D4)
 
-1. **Go↔TS `detectQuestion` parity** — accept the hand-maintained duplication (SSOT precedent) with a shared fixture set as the parity gate? Or keep detection client-only and have the band consume a client-pushed detection (weaker — needs a live client)? *Recommendation: server-side Go port, fixture-gated — it's the only way the band works without an open terminal.*
-2. **Detection cadence/cost** — poll every injectable session's scrollback on the existing scan tick, or only on-demand when the band is visible? *Recommendation: on the scan tick, bounded to injectable sessions.*
-3. **Answer endpoint shape** — resurrect `POST /api/agents/{pid}/answer-question` verbatim, or fold into a more general keystroke-inject endpoint? *Recommendation: dedicated answer endpoint (typed to the question), keystrokes derived server-side.*
-4. **Slice independence / order** — #260 (slice 1) merges first; slice 2 (surfacing) and slice 3 (on-ramp) are largely file-disjoint and can land in either order. Confirm slice 3 stays docs+ergonomics (no `live` code change) or whether `live` needs a flag to auto-wire the MCP config.
+All four review forks are resolved above. Slice order: #260 (slice 1) is already built and merges as part of the bundle; slice 2 (surfacing) and slice 3 (docs on-ramp) are largely file-disjoint and can land in either order.
