@@ -133,11 +133,9 @@ func TestParseSessionFile_NoConvergenceWithMixedTools(t *testing.T) {
 	require.False(t, data.ConvergenceAlert)
 }
 
-// TestParseSessionFile_ErrorStateQuota verifies that quota-exceeded text sets the error state.
+// TestParseSessionFile_ErrorStateQuota verifies that quota-exceeded API errors set the error state.
 func TestParseSessionFile_ErrorStateQuota(t *testing.T) {
-	line := buildAssistantEntry(t, "claude-sonnet-4-6", 10, 5, []map[string]any{
-		{"type": "text", "text": "Error: quota exceeded for this month"},
-	})
+	line := buildAPIErrorEntry(t, "Error: quota exceeded for this month", true, 429)
 	path := writeSessionLines(t, []string{line})
 
 	data, err := parser.ParseSessionFile(path)
@@ -145,11 +143,9 @@ func TestParseSessionFile_ErrorStateQuota(t *testing.T) {
 	require.Equal(t, sdk.ErrorStateQuotaExhausted, data.ErrorState)
 }
 
-// TestParseSessionFile_ErrorStateRateLimit verifies that rate-limit text sets the error state.
+// TestParseSessionFile_ErrorStateRateLimit verifies that rate-limit API errors set the error state.
 func TestParseSessionFile_ErrorStateRateLimit(t *testing.T) {
-	line := buildAssistantEntry(t, "claude-sonnet-4-6", 10, 5, []map[string]any{
-		{"type": "text", "text": "429 Too Many Requests — rate limit reached"},
-	})
+	line := buildAPIErrorEntry(t, "Too Many Requests — rate limit reached", true, 429)
 	path := writeSessionLines(t, []string{line})
 
 	data, err := parser.ParseSessionFile(path)
@@ -157,11 +153,9 @@ func TestParseSessionFile_ErrorStateRateLimit(t *testing.T) {
 	require.Equal(t, sdk.ErrorStateRateLimited, data.ErrorState)
 }
 
-// TestParseSessionFile_ErrorStateAuth verifies that auth-failure text sets the error state.
+// TestParseSessionFile_ErrorStateAuth verifies that auth-failure API errors set the error state.
 func TestParseSessionFile_ErrorStateAuth(t *testing.T) {
-	line := buildAssistantEntry(t, "claude-sonnet-4-6", 10, 5, []map[string]any{
-		{"type": "text", "text": "401 Unauthorized — invalid api key provided"},
-	})
+	line := buildAPIErrorEntry(t, "Unauthorized — invalid api key provided", true, 401)
 	path := writeSessionLines(t, []string{line})
 
 	data, err := parser.ParseSessionFile(path)
