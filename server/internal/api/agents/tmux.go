@@ -63,3 +63,52 @@ func sendKeysToTmux(ctx context.Context, socket, pane, message string) error {
 	}
 	return nil
 }
+
+// tmuxKeyName maps a raw answer-keystroke token to the tmux send-keys named
+// key it represents, or "" if the token is literal text to send with -l.
+func tmuxKeyName(token string) string {
+	switch token {
+	case "\t":
+		return "Tab"
+	case "\r":
+		return "Enter"
+	default:
+		return ""
+	}
+}
+
+// tmuxSendRawArgs builds the tmux send-keys arg vector for a single raw
+// answer-keystroke token: a named key (Tab/Enter) or literal text (digits,
+// free-form text) sent via -l after "--" so it is never parsed as an option.
+func tmuxSendRawArgs(socket, pane, token string) []string {
+	var base []string
+	if socket != "" {
+		base = []string{"-S", socket}
+	}
+	if name := tmuxKeyName(token); name != "" {
+		return append(append([]string{}, base...), "send-keys", "-t", pane, name)
+	}
+	return append(append([]string{}, base...), "send-keys", "-t", pane, "-l", "--", token)
+}
+
+// sendAnswerKeysToTmux delivers a sequence of raw answer-keystroke tokens
+// (digits, literal text, "\t", "\r" — the output of EncodeAnswer) to a tmux
+// pane as separate send-keys invocations, one per token, translating "\t" and
+// "\r" to the named tmux keys Tab and Enter.
+func sendAnswerKeysToTmux(ctx context.Context, socket, pane string, tokens []string) error {
+	if !validTmuxPane(pane) {
+		return fmt.Errorf("invalid tmux pane %q", pane)
+	}
+	if strings.ContainsAny(socket, "\n\x00") {
+		return fmt.Errorf("invalid tmux socket")
+	}
+	if _, err := tmuxLookPath(); err != nil {
+		return fmt.Errorf("tmux is required for answer delivery but was not found on the server PATH")
+	}
+	for _, tok := range tokens {
+		if err := tmuxRunner(ctx, tmuxSendRawArgs(socket, pane, tok)...); err != nil {
+			return fmt.Errorf("tmux send-keys: %w", err)
+		}
+	}
+	return nil
+}

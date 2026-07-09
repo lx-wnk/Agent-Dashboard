@@ -79,6 +79,52 @@ func TestPtyHTTPServer_InjectsMessageWithCR(t *testing.T) {
 	}
 }
 
+// TestPtyHTTPServer_KeysWritesRawBytesNoCR asserts that POST /keys writes the
+// request body to the pty verbatim — unlike /message, no CR is appended.
+func TestPtyHTTPServer_KeysWritesRawBytesNoCR(t *testing.T) {
+	w := &syncBuf{}
+	srv, port, err := startPtyHTTPServer(w, newPtyHub(1024), newRotatingToken("secret-token"))
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/keys", port)
+
+	// No bearer token → 401, nothing written.
+	req, _ := http.NewRequest("POST", url, strings.NewReader("1"))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("req: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", resp.StatusCode)
+	}
+
+	// Correct token → raw bytes written verbatim, no CR appended.
+	req2, _ := http.NewRequest("POST", url, strings.NewReader("1\t\r"))
+	req2.Header.Set("Authorization", "Bearer secret-token")
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("req2: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, resp2.Body)
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp2.StatusCode)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && w.String() == "" {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := w.String(); got != "1\t\r" {
+		t.Fatalf("pty got %q, want %q", got, "1\t\r")
+	}
+}
+
 // TestWritePtyDiscovery_WritesPtyJsonFile asserts that writePtyDiscovery writes
 // a path ending in ".pty.json" (not ".json") so it never collides with the
 // channel bridge's {pid}.json file.

@@ -118,11 +118,14 @@ func startPtyHTTPServer(ptmx io.Writer, hub *ptyHub, token *rotatingToken) (*htt
 }
 
 // ptyMux builds the broker's loopback HTTP handler: POST /message injects
-// text into the pty, GET /health is a liveness probe, GET /question detects
-// an open AskUserQuestion modal in the current scrollback, and GET /ws
-// upgrades to a WebSocket that replays scrollback then streams pty output to
-// the client while pumping client input (and resize control messages) back
-// into the pty. All routes except /health require the rotating bearer token.
+// text into the pty, POST /keys writes raw bytes to the pty verbatim (used to
+// answer an AskUserQuestion modal with an exact keystroke sequence — no
+// appended CR, no sanitization), GET /health is a liveness probe, GET
+// /question detects an open AskUserQuestion modal in the current scrollback,
+// and GET /ws upgrades to a WebSocket that replays scrollback then streams
+// pty output to the client while pumping client input (and resize control
+// messages) back into the pty. All routes except /health require the
+// rotating bearer token.
 func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
@@ -148,6 +151,26 @@ func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 		// Inject the text, then a carriage return to submit it. CR (\r) is what a
 		// real Enter sends on a pty.
 		if _, err := io.WriteString(ptmx, payload.Message+"\r"); err != nil {
+			http.Error(w, `{"error":"write failed"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	})
+
+	mux.HandleFunc("POST /keys", func(w http.ResponseWriter, r *http.Request) {
+		if !token.authorize(r) {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
+		if err != nil {
+			http.Error(w, "read error", http.StatusBadRequest)
+			return
+		}
+		// Written verbatim: no appended CR, no sanitization — the caller
+		// (SendAnswerKeys) has already encoded the exact submit sequence.
+		if _, err := ptmx.Write(body); err != nil {
 			http.Error(w, `{"error":"write failed"}`, http.StatusInternalServerError)
 			return
 		}
