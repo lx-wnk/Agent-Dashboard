@@ -282,6 +282,62 @@ func TestTerminalProxy_NoOriginAccepted(t *testing.T) {
 	}
 }
 
+// largeFrameBroker sends a single binary frame of the given size on connect.
+// It exercises the pty broker's scrollback replay, which is emitted as one
+// frame up to 256 KiB — well past coder/websocket's 32 KiB default read limit.
+func largeFrameBroker(t *testing.T, size int) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
+		if err != nil {
+			return
+		}
+		defer c.Close(websocket.StatusInternalError, "")
+		payload := make([]byte, size)
+		for i := range payload {
+			payload[i] = byte('a' + i%26)
+		}
+		_ = c.Write(r.Context(), websocket.MessageBinary, payload)
+	})
+	return httptest.NewServer(mux)
+}
+
+// A scrollback replay larger than the 32 KiB default read limit must survive
+// the proxy hop. Without lifting the read limit, the proxy's broker-side read
+// aborts with ErrMessageTooBig and tears the terminal connection down.
+func TestTerminalProxy_LargeReplayFrameSurvives(t *testing.T) {
+	const size = 64 * 1024
+	broker := largeFrameBroker(t, size)
+	defer broker.Close()
+	port := brokerPort(t, broker)
+
+	getAgents := func(context.Context) ([]sdk.Agent, error) {
+		return []sdk.Agent{{PID: 4242, LiveInjectable: true}}, nil
+	}
+	target := func(pid int) (int, string, error) { return port, "tok", nil }
+
+	h := NewTerminalHandler(getAgents, target)
+	srv := mountTerminalHandler(h)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agents/4242/terminal"
+	c, _, err := websocket.Dial(ctx, url, nil)
+	require.NoError(t, err)
+	defer c.Close(websocket.StatusNormalClosure, "")
+	// The real browser client (JS WebSocket) has no such limit; lift it here so
+	// the test asserts the proxy relayed the whole frame, not the client cap.
+	c.SetReadLimit(-1)
+
+	typ, data, err := c.Read(ctx)
+	require.NoError(t, err)
+	require.Equal(t, websocket.MessageBinary, typ)
+	require.Len(t, data, size)
+}
+
 func TestTerminalProxy_InvalidPID_Returns400(t *testing.T) {
 	getAgents := func(context.Context) ([]sdk.Agent, error) { return nil, nil }
 	target := func(pid int) (int, string, error) {

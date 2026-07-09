@@ -95,6 +95,11 @@ func (h *TerminalHandler) Terminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer browserConn.Close(websocket.StatusInternalError, "")
+	// coder/websocket defaults to a 32 KiB read limit; the pty broker replays up
+	// to a 256 KiB scrollback snapshot in one frame and large client pastes can
+	// exceed 32 KiB too. This is a trusted loopback pty passthrough, so lift the
+	// limit rather than tear the connection down on the first oversized frame.
+	browserConn.SetReadLimit(-1)
 
 	pipeCtx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -107,6 +112,7 @@ func (h *TerminalHandler) Terminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer brokerConn.Close(websocket.StatusInternalError, "")
+	brokerConn.SetReadLimit(-1)
 
 	go func() {
 		defer cancel()
