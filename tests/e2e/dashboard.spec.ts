@@ -63,16 +63,40 @@ test.describe('dashboard view', () => {
   })
 
   // -------------------------------------------------------------------------
-  // Claude-only filter
+  // Spawner filter
   // -------------------------------------------------------------------------
-  test('claude-only filter toggles aria-pressed', async ({ page }) => {
-    const filter = page.getByTestId('claude-only')
-    await expect(filter).toHaveAttribute('aria-pressed', 'false')
-    await filter.click()
-    await expect(filter).toHaveAttribute('aria-pressed', 'true')
-    // Toggle back off
-    await filter.click()
-    await expect(filter).toHaveAttribute('aria-pressed', 'false')
+  // The boolean "Claude only" toggle was replaced by a general "Filter by
+  // spawner" select (see DashboardToolbar.vue) when multi-provider support
+  // landed — it now lists every configured spawner, not just Claude.
+  test('spawner filter select lists spawners and updates its value', async ({ page }) => {
+    await page.route('/api/spawners', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: 'claude-code',
+          name: 'Claude Code',
+          slug: 'claude-code',
+          command: 'claude',
+          args: [],
+          env: {},
+          adapterType: 'claude',
+          adapterConfig: {},
+          builtIn: true,
+          isDefault: true,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ]),
+    }))
+    await page.reload()
+    await page.waitForSelector('[aria-label="Primary"]', { timeout: 10000 })
+
+    const select = page.getByTestId('select-spawner')
+    await expect(select).toHaveValue('all')
+    await expect(select.locator('option')).toHaveCount(2)
+    await select.selectOption('claude-code')
+    await expect(select).toHaveValue('claude-code')
   })
 
   // -------------------------------------------------------------------------
