@@ -161,6 +161,7 @@ Preparing the first public release.
 
 ### Fixed
 
+- The AskUserQuestion terminal overlay now traps keyboard focus: Tab and Shift+Tab cycle within the modal instead of leaking back to the inert terminal underneath, matching the ARIA modal-dialog pattern.
 - Non-Claude provider agents (Codex, Gemini, Junie, pi) no longer always show as `idle`: the provider parser now reads each session's activity timestamp, so their status reflects real activity.
 - Plugin UI slots now correctly load manifests and modules from the SP2 proxy path
   (`/api/plugins/{id}/proxy/ui-manifest.json`, `/api/plugins/{id}/proxy/{module}`).

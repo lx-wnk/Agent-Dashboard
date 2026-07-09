@@ -81,6 +81,46 @@ describe('questionOverlay', () => {
     wrapper.unmount()
   })
 
+  it('traps Tab at the last control, wrapping focus back to the first', async () => {
+    const wrapper = mount(QuestionOverlay, {
+      attachTo: document.body,
+      props: { question: singleQuestion, send: vi.fn() },
+    })
+    await wrapper.vm.$nextTick()
+
+    const dialog = wrapper.find('[data-testid="question-overlay"]')
+    const focusables = dialog.element.querySelectorAll<HTMLElement>('input, textarea, button')
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+
+    last.focus()
+    expect(document.activeElement).toBe(last)
+    await dialog.trigger('keydown', { key: 'Tab' })
+
+    expect(document.activeElement).toBe(first)
+    wrapper.unmount()
+  })
+
+  it('traps Shift+Tab at the first control, wrapping focus to the last', async () => {
+    const wrapper = mount(QuestionOverlay, {
+      attachTo: document.body,
+      props: { question: singleQuestion, send: vi.fn() },
+    })
+    await wrapper.vm.$nextTick()
+
+    const dialog = wrapper.find('[data-testid="question-overlay"]')
+    const focusables = dialog.element.querySelectorAll<HTMLElement>('input, textarea, button')
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+
+    first.focus()
+    expect(document.activeElement).toBe(first)
+    await dialog.trigger('keydown', { key: 'Tab', shiftKey: true })
+
+    expect(document.activeElement).toBe(last)
+    wrapper.unmount()
+  })
+
   it('hides once the bound question becomes null (success confirmation)', async () => {
     const wrapper = mount(QuestionOverlay, {
       props: { question: singleQuestion, send: vi.fn() },
