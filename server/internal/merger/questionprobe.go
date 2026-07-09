@@ -7,9 +7,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/askq"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 )
 
@@ -17,17 +20,41 @@ import (
 // pty broker never stalls a scan tick.
 const questionProbeTimeout = 250 * time.Millisecond
 
-// RealQuestionProbe is the production QuestionProbeFn: it reads the pty
-// broker's discovery file for pid and, if present, queries the broker's
-// GET /question endpoint. Fail-soft by design — a missing discovery file, an
-// unreachable broker, or any decode error all yield nil rather than an error,
+// captureTmuxPane is a seam so tests can supply rendered pane rows without a
+// real tmux. It returns the visible pane content (already rendered by tmux, so
+// no VT emulation is needed) split into rows.
+var captureTmuxPane = func(socket, pane string) ([]string, error) {
+	args := []string{}
+	if socket != "" {
+		args = append(args, "-S", socket)
+	}
+	args = append(args, "capture-pane", "-p", "-t", pane)
+	out, err := exec.Command("tmux", args...).Output()
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(string(out), "\n"), nil
+}
+
+// RealQuestionProbe is the production QuestionProbeFn. It detects a pending
+// AskUserQuestion for pid over whichever injection path the session uses: the
+// pty broker's GET /question, or — for tmux sessions — a `tmux capture-pane`
+// snapshot run through the same detector. Fail-soft by design: any missing
+// file, unreachable broker, or decode error yields nil rather than an error,
 // since this runs on the hot scan path and must never fail agent building.
 func RealQuestionProbe(pid int) *sdk.DetectedQuestion {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
 	}
+	if q := probePtyQuestion(home, pid); q != nil {
+		return q
+	}
+	return probeTmuxQuestion(home, pid)
+}
 
+// probePtyQuestion queries the pty broker's GET /question for pid, or nil.
+func probePtyQuestion(home string, pid int) *sdk.DetectedQuestion {
 	data, err := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid))
 	if err != nil {
 		return nil
@@ -64,4 +91,26 @@ func RealQuestionProbe(pid int) *sdk.DetectedQuestion {
 		return nil
 	}
 	return &q
+}
+
+// probeTmuxQuestion detects a question from a tmux session's rendered pane, or
+// nil. tmux already renders the pane, so the rows go straight to the detector
+// without VT emulation.
+func probeTmuxQuestion(home string, pid int) *sdk.DetectedQuestion {
+	data, err := os.ReadFile(channelconfig.DiscoveryFile(home, pid))
+	if err != nil {
+		return nil
+	}
+	var disc struct {
+		TmuxPane   string `json:"tmuxPane"`
+		TmuxSocket string `json:"tmuxSocket"`
+	}
+	if json.Unmarshal(data, &disc) != nil || disc.TmuxPane == "" {
+		return nil
+	}
+	rows, err := captureTmuxPane(disc.TmuxSocket, disc.TmuxPane)
+	if err != nil {
+		return nil
+	}
+	return askq.DetectQuestion(rows)
 }

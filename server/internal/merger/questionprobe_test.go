@@ -97,3 +97,55 @@ func TestRealQuestionProbe_NoDiscoveryFileReturnsNil(t *testing.T) {
 	got := RealQuestionProbe(9999)
 	assert.Nil(t, got)
 }
+
+func TestRealQuestionProbe_TmuxCapturePaneDetectsQuestion(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, channelconfig.DiscoveryDir)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	pid := 55201
+	data, err := json.Marshal(map[string]any{"tmuxPane": "%3", "tmuxSocket": "/tmp/sock"})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(channelconfig.DiscoveryFile(home, pid), data, 0o600))
+
+	var gotSocket, gotPane string
+	orig := captureTmuxPane
+	captureTmuxPane = func(socket, pane string) ([]string, error) {
+		gotSocket, gotPane = socket, pane
+		return []string{
+			"Pick a colour",
+			"What is your favourite colour?",
+			"1. Red",
+			"2. Green",
+			"3. Blue",
+			"4. Type something",
+			"5. Chat about this",
+		}, nil
+	}
+	defer func() { captureTmuxPane = orig }()
+
+	q := RealQuestionProbe(pid)
+	require.NotNil(t, q)
+	assert.False(t, q.MultiSelect)
+	assert.Equal(t, "/tmp/sock", gotSocket)
+	assert.Equal(t, "%3", gotPane)
+	labels := []string{q.Options[0].Label, q.Options[1].Label, q.Options[2].Label}
+	assert.Equal(t, []string{"Red", "Green", "Blue"}, labels)
+	assert.Equal(t, 4, q.TypeSomethingIndex)
+	assert.Equal(t, 5, q.ChatAboutIndex)
+}
+
+func TestRealQuestionProbe_NoTmuxPaneReturnsNil(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, channelconfig.DiscoveryDir)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	pid := 55202
+	data, err := json.Marshal(map[string]any{"tmuxPane": ""})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(channelconfig.DiscoveryFile(home, pid), data, 0o600))
+
+	assert.Nil(t, RealQuestionProbe(pid))
+}
