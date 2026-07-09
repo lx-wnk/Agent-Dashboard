@@ -98,6 +98,8 @@ The following third-party packages are used as transitive dependencies.
 | @vueuse/integrations | 14.3.0 | MIT |
 | @vueuse/metadata | 14.3.0 | MIT |
 | @vueuse/shared | 14.3.0 | MIT |
+| @xterm/addon-fit | 0.11.0 | MIT |
+| @xterm/xterm | 6.0.0 | MIT |
 | accepts | 2.0.0 | MIT |
 | ajv | 8.18.0 | MIT |
 | ajv-formats | 3.0.1 | MIT |
