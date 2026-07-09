@@ -17,6 +17,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/creack/pty"
+	"github.com/lx-wnk/agent-dashboard/server/internal/askq"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"golang.org/x/term"
 )
@@ -117,10 +118,11 @@ func startPtyHTTPServer(ptmx io.Writer, hub *ptyHub, token *rotatingToken) (*htt
 }
 
 // ptyMux builds the broker's loopback HTTP handler: POST /message injects
-// text into the pty, GET /health is a liveness probe, and GET /ws upgrades to
-// a WebSocket that replays scrollback then streams pty output to the client
-// while pumping client input (and resize control messages) back into the
-// pty. All routes require the rotating bearer token.
+// text into the pty, GET /health is a liveness probe, GET /question detects
+// an open AskUserQuestion modal in the current scrollback, and GET /ws
+// upgrades to a WebSocket that replays scrollback then streams pty output to
+// the client while pumping client input (and resize control messages) back
+// into the pty. All routes except /health require the rotating bearer token.
 func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
@@ -151,6 +153,23 @@ func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	})
+
+	// GET /question renders the hub's current scrollback through the screen
+	// emulator and runs askq.DetectQuestion, so a client can poll for an open
+	// AskUserQuestion modal without parsing raw pty bytes itself.
+	mux.HandleFunc("GET /question", func(w http.ResponseWriter, r *http.Request) {
+		if !token.authorize(r) {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		q := askq.DetectQuestion(renderRows(hub.Snapshot()))
+		if q == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(q)
 	})
 
 	// Frame-type contract (enforced by the browser client): a TEXT frame is a

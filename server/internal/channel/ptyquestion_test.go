@@ -1,0 +1,114 @@
+package channel
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/askq"
+)
+
+func TestGetQuestion_DetectsModalFromScrollback(t *testing.T) {
+	fixture, err := os.ReadFile(filepath.Join("testdata", "askq_raw_v2_1_205.bin"))
+	if err != nil {
+		t.Fatalf("reading fixture: %v", err)
+	}
+
+	hub := newPtyHub(256 * 1024)
+	hub.Write(fixture)
+	tok := newRotatingToken("secret")
+	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	defer srv.Close()
+
+	req, _ := http.NewRequest("GET", srv.URL+"/question", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+
+	var q askq.DetectedQuestion
+	if err := json.NewDecoder(resp.Body).Decode(&q); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if q.MultiSelect {
+		t.Error("expected MultiSelect=false")
+	}
+	if len(q.Options) != 3 {
+		t.Fatalf("expected 3 options, got %d", len(q.Options))
+	}
+	labels := []string{q.Options[0].Label, q.Options[1].Label, q.Options[2].Label}
+	want := []string{"Red", "Green", "Blue"}
+	for i := range want {
+		if labels[i] != want[i] {
+			t.Errorf("labels = %v, want %v", labels, want)
+			break
+		}
+	}
+	if q.TypeSomethingIndex != 4 {
+		t.Errorf("TypeSomethingIndex = %d, want 4", q.TypeSomethingIndex)
+	}
+	if q.ChatAboutIndex != 5 {
+		t.Errorf("ChatAboutIndex = %d, want 5", q.ChatAboutIndex)
+	}
+}
+
+func TestGetQuestion_NoModalReturns204(t *testing.T) {
+	hub := newPtyHub(1024)
+	tok := newRotatingToken("secret")
+	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	defer srv.Close()
+
+	req, _ := http.NewRequest("GET", srv.URL+"/question", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("want 204, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetQuestion_UnauthorizedRejected(t *testing.T) {
+	hub := newPtyHub(1024)
+	tok := newRotatingToken("secret")
+	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	defer srv.Close()
+
+	// No bearer token at all.
+	resp, err := http.Get(srv.URL + "/question")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("want 401 for missing bearer, got %d", resp.StatusCode)
+	}
+
+	// Wrong bearer token.
+	req, _ := http.NewRequest("GET", srv.URL+"/question", nil)
+	req.Header.Set("Authorization", "Bearer wrong")
+	resp2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, resp2.Body)
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("want 401 for wrong bearer, got %d", resp2.StatusCode)
+	}
+}

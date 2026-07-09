@@ -32,6 +32,12 @@ func (h *ptyHub) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Snapshot returns the current scrollback bytes, so callers (e.g. the
+// /question handler) don't need to reach into the hub's internal scrollback.
+func (h *ptyHub) Snapshot() []byte {
+	return h.sb.Snapshot()
+}
+
 // Subscribe returns the current scrollback plus a channel of subsequent frames.
 func (h *ptyHub) Subscribe() (replay []byte, frames chan []byte, cancel func()) {
 	ch := make(chan []byte, 256)

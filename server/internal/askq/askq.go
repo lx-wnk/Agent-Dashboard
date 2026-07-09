@@ -17,9 +17,9 @@ import (
 
 // DetectedOption is a single numbered option row of a parsed modal.
 type DetectedOption struct {
-	Index       int
-	Label       string
-	Description string
+	Index       int    `json:"index"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
 }
 
 // DetectedQuestion is a parsed AskUserQuestion modal.
@@ -30,12 +30,12 @@ type DetectedOption struct {
 // Any frame that violates this yields nil from DetectQuestion rather than a
 // desynced result.
 type DetectedQuestion struct {
-	Header             string
-	Question           string
-	MultiSelect        bool
-	Options            []DetectedOption
-	TypeSomethingIndex int
-	ChatAboutIndex     int
+	Header             string           `json:"header"`
+	Question           string           `json:"question"`
+	MultiSelect        bool             `json:"multiSelect"`
+	Options            []DetectedOption `json:"options"`
+	TypeSomethingIndex int              `json:"typeSomethingIndex"`
+	ChatAboutIndex     int              `json:"chatAboutIndex"`
 }
 
 const (
