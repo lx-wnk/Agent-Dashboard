@@ -1,0 +1,13 @@
+ ☐ Colour
+
+Which colour do you prefer?
+❯ 1. Red
+     Warm, high-energy hue.
+  2. Green
+Calm, natural hue.
+ 3. Blue
+Cool, steady hue.
+  4. Type something.
+────────────────────────────────────
+  5. Chat about this
+Enter to select · ↑/↓ to navigate · Esc to cancel

@@ -1,0 +1,15 @@
+$ git log --oneline -8
+a1b2c3d feat: add web terminal streaming
+d4e5f6a fix: guard against nil pid in scanner
+7g8h9i0 refactor: extract cost calculation helper
+1j2k3l4 docs: update README with new endpoints
+5m6n7o8 test: cover multi-select keystroke path
+9p0q1r2 chore: bump xterm to 6.0.0
+
+$ cat SETUP.md
+Setup steps:
+1. Install dependencies with pnpm install
+2. Type something into the config file
+3. Run the dev server on port 13120
+
+$
