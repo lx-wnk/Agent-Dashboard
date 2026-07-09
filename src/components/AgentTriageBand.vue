@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PermissionItem } from '../composables/usePendingPermissions'
 import type { Agent, PendingPermission, PermissionRequest } from '../types'
+import type { AnswerIntent } from '../utils/answerKeys'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useAgentIdentity } from '../composables/useAgentIdentity'
 import { useNow } from '../composables/useNow'
@@ -9,6 +10,7 @@ import { toast } from '../composables/useToast'
 import { attentionFor } from '../utils/attention'
 import { formatErrorState, formatRelativeActivity, secondsSince, shortModel } from '../utils/format'
 import { friendlyProjectName } from '../utils/friendlyProjectName'
+import QuestionCard from './QuestionCard.vue'
 import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
@@ -53,6 +55,9 @@ const visibleAgentCards = computed(() =>
     const att = attentionFor(agent, secs)
     if (!att)
       return false
+    // A pending, answerable question always surfaces — regardless of orchestration.
+    if (att.kind === 'question')
+      return true
     // Free agent with pendingToolUse — always show
     if (!agent.pipelineTaskId && agent.pendingToolUse)
       return true
@@ -76,6 +81,7 @@ const breakdown = computed(() => {
       counts[att.kind] = (counts[att.kind] ?? 0) + 1
   }
   const PARTS: [string, string, string][] = [
+    ['question', 'question', 'questions'],
     ['permission', 'permission request', 'permission requests'],
     ['error', 'failed run', 'failed runs'],
     ['stalled', 'stalled', 'stalled'],
@@ -233,6 +239,27 @@ async function allowTool(agent: Agent) {
   }
   finally {
     allowing.value[agent.sessionId] = false
+  }
+}
+
+const answeringQuestion = ref<Record<string, boolean>>({})
+
+async function answerQuestion(agent: Agent, intent: AnswerIntent) {
+  answeringQuestion.value[agent.sessionId] = true
+  try {
+    const res = await fetch(`/api/agents/${agent.pid}/answer-question`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': window.location.origin },
+      body: JSON.stringify(intent),
+    })
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+  }
+  catch (err) {
+    toast.error(`Couldn't send answer: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  finally {
+    answeringQuestion.value[agent.sessionId] = false
   }
 }
 
@@ -452,8 +479,18 @@ watch(() => props.focusedSessionId, (id) => {
             >{{ attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.label }}</span>
           </div>
 
+          <!-- Answerable question, detected directly in the session's terminal buffer -->
+          <template v-if="agent.pendingQuestion">
+            <div :class="answeringQuestion[agent.sessionId] ? 'opacity-60 pointer-events-none' : ''">
+              <QuestionCard
+                :detected-question="agent.pendingQuestion"
+                @answer="(intent) => answerQuestion(agent, intent)"
+              />
+            </div>
+          </template>
+
           <!-- Orchestrated agent with pending permissions (not covered by task items) -->
-          <template v-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
+          <template v-else-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
             <ul class="m-0 p-0 list-none flex flex-col gap-1" :aria-label="`Pending permissions for ${agent.projectName}`">
               <li
                 v-for="p in agent.pendingPermissions"

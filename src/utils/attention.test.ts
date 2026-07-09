@@ -43,6 +43,41 @@ describe('attentionFor', () => {
     expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
   })
 
+  it('returns question with top priority when pendingQuestion is set', () => {
+    const agent = makeAgent({
+      status: 'active',
+      pendingQuestion: {
+        header: 'Choose',
+        question: 'Which one?',
+        multiSelect: false,
+        options: [{ index: 1, label: 'A' }],
+        typeSomethingIndex: 2,
+        chatAboutIndex: 3,
+      },
+    })
+    const att = attentionFor(agent, ACTIVE_SECS)
+    expect(att?.kind).toBe('question')
+    expect(att?.weight).toBeLessThan(0)
+  })
+
+  it('pendingQuestion takes precedence over pendingPermissions/pendingToolUse', () => {
+    const agent = makeAgent({
+      status: 'active',
+      pendingQuestion: {
+        header: 'Choose',
+        question: 'Which one?',
+        multiSelect: false,
+        options: [{ index: 1, label: 'A' }],
+        typeSomethingIndex: 2,
+        chatAboutIndex: 3,
+      },
+      pendingPermissions: [{ id: 'r1', tool: 'Bash', pattern: 'ls', requestedAt: new Date().toISOString() }],
+      pendingToolUse: { tool: 'Bash', pattern: 'ls', id: 'tu_1' },
+    })
+    const att = attentionFor(agent, ACTIVE_SECS)
+    expect(att?.kind).toBe('question')
+  })
+
   it('returns permission when pendingToolUse is set', () => {
     const agent = makeAgent({
       status: 'active',
@@ -113,6 +148,20 @@ describe('attentionFor', () => {
 })
 
 describe('needsAttention', () => {
+  it('returns true for agent with pendingQuestion', () => {
+    const agent = makeAgent({
+      pendingQuestion: {
+        header: 'Choose',
+        question: 'Which one?',
+        multiSelect: false,
+        options: [{ index: 1, label: 'A' }],
+        typeSomethingIndex: 2,
+        chatAboutIndex: 3,
+      },
+    })
+    expect(needsAttention(agent, ACTIVE_SECS)).toBe(true)
+  })
+
   it('returns true for agent with pendingToolUse', () => {
     const agent = makeAgent({
       pendingToolUse: { tool: 'Bash', pattern: 'rm -rf', id: 'tu_3' },
