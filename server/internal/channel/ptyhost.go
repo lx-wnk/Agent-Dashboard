@@ -116,11 +116,11 @@ func startPtyHTTPServer(ptmx io.Writer, hub *ptyHub, token *rotatingToken) (*htt
 	return srv, port, nil
 }
 
-// ptyMux builds the broker's loopback HTTP handler: POST /message and /keys
-// inject text/keystrokes into the pty, GET /health is a liveness probe, and
-// GET /ws upgrades to a WebSocket that replays scrollback then streams pty
-// output to the client while pumping client input (and resize control
-// messages) back into the pty. All routes require the rotating bearer token.
+// ptyMux builds the broker's loopback HTTP handler: POST /message injects
+// text into the pty, GET /health is a liveness probe, and GET /ws upgrades to
+// a WebSocket that replays scrollback then streams pty output to the client
+// while pumping client input (and resize control messages) back into the
+// pty. All routes require the rotating bearer token.
 func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
@@ -148,36 +148,6 @@ func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 		if _, err := io.WriteString(ptmx, payload.Message+"\r"); err != nil {
 			http.Error(w, `{"error":"write failed"}`, http.StatusInternalServerError)
 			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
-	})
-
-	mux.HandleFunc("POST /keys", func(w http.ResponseWriter, r *http.Request) {
-		if !token.authorize(r) {
-			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-			return
-		}
-		body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
-		if err != nil {
-			http.Error(w, "read error", http.StatusBadRequest)
-			return
-		}
-		var batches [][]answerKeyWire
-		if err := json.Unmarshal(body, &batches); err != nil {
-			http.Error(w, `{"error":"invalid batches"}`, http.StatusBadRequest)
-			return
-		}
-		for bi, batch := range batches {
-			for _, k := range batch {
-				if _, err := io.WriteString(ptmx, answerKeyBytes(k)); err != nil {
-					http.Error(w, `{"error":"write failed"}`, http.StatusInternalServerError)
-					return
-				}
-			}
-			if bi < len(batches)-1 {
-				answerKeyStepSleep()
-			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
@@ -273,47 +243,6 @@ func applyResize(ptmx io.Writer, data []byte) {
 	}
 	_ = pty.Setsize(f, &pty.Winsize{Cols: msg.Resize.Cols, Rows: msg.Resize.Rows})
 }
-
-// answerKeyWire mirrors the JSON shape the agents package encodes AnswerKey
-// batches as for the /keys endpoint. It is a local, independent copy — the
-// channel package must not import the agents package.
-type answerKeyWire struct {
-	Char  string `json:"char"`
-	Named string `json:"named"`
-	Text  string `json:"text"`
-}
-
-// answerKeyBytes returns the raw bytes to write to the pty for a single
-// interactive-question keystroke. Unlike /message, no trailing \r is added —
-// the caller's batch already includes an explicit Enter where one is needed.
-func answerKeyBytes(k answerKeyWire) string {
-	switch {
-	case k.Text != "":
-		return k.Text
-	case k.Char != "":
-		return k.Char
-	}
-	switch k.Named {
-	case "Enter":
-		return "\r"
-	case "Tab":
-		return "\t"
-	case "Space":
-		return " "
-	case "Up":
-		return "\x1b[A"
-	case "Down":
-		return "\x1b[B"
-	default:
-		return ""
-	}
-}
-
-// answerKeyStepDelay is the pause between key batches so the next selector
-// renders before its keys are sent. Indirected via answerKeyStepSleep for tests.
-var answerKeyStepDelay = 250 * time.Millisecond
-
-var answerKeyStepSleep = func() { time.Sleep(answerKeyStepDelay) }
 
 // writePtyDiscovery writes the pty-broker discovery file for a pty-hosted
 // session. It writes to {childPid}.pty.json (not {childPid}.json) so it never

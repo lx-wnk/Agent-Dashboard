@@ -69,37 +69,3 @@ func TestSendKeysToTmux_RejectsBadPane(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, called, "must not exec tmux for an invalid pane")
 }
-
-func TestAnswerKeyArgs(t *testing.T) {
-	// literal char → -l typed input
-	require.Equal(t, []string{"send-keys", "-t", "%1", "-l", "--", "2"}, answerKeyArgs("", "%1", AnswerKey{Char: "2"}))
-	// literal text → -l typed input, same as Char
-	require.Equal(t, []string{"send-keys", "-t", "%1", "-l", "--", "Cherry"}, answerKeyArgs("", "%1", AnswerKey{Text: "Cherry"}))
-	// named key → key name, no -l
-	require.Equal(t, []string{"send-keys", "-t", "%1", "Space"}, answerKeyArgs("", "%1", AnswerKey{Named: "Space"}))
-	require.Equal(t, []string{"send-keys", "-t", "%1", "Tab"}, answerKeyArgs("", "%1", AnswerKey{Named: "Tab"}))
-	// socket prefixes -S
-	require.Equal(t, []string{"-S", "/s", "send-keys", "-t", "%1", "Enter"}, answerKeyArgs("/s", "%1", AnswerKey{Named: "Enter"}))
-}
-
-func TestSendAnswerKeysToTmux_SendsInOrderWithStepBetweenQuestions(t *testing.T) {
-	var calls [][]string
-	sleeps := 0
-	origRun, origLook, origSleep := tmuxRunner, tmuxLookPath, answerKeyStepSleep
-	t.Cleanup(func() { tmuxRunner = origRun; tmuxLookPath = origLook; answerKeyStepSleep = origSleep })
-	tmuxLookPath = func() (string, error) { return "/usr/bin/tmux", nil }
-	tmuxRunner = func(_ context.Context, args ...string) error { calls = append(calls, args); return nil }
-	answerKeyStepSleep = func() { sleeps++ }
-
-	batches := [][]AnswerKey{
-		{{Char: "1"}},
-		{{Named: "Space"}, {Named: "Enter"}},
-	}
-	require.NoError(t, sendAnswerKeysToTmux(context.Background(), "", "%5", batches))
-
-	require.Len(t, calls, 3) // "1", then Space, Enter
-	require.Equal(t, "1", calls[0][len(calls[0])-1])
-	require.Equal(t, "Space", calls[1][len(calls[1])-1])
-	require.Equal(t, "Enter", calls[2][len(calls[2])-1])
-	require.Equal(t, 1, sleeps, "one inter-question pause between two questions")
-}
