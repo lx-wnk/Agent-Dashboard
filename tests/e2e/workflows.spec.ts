@@ -27,8 +27,9 @@ test('workflows view toggle opens the four chart tabs', async ({ page }) => {
   // Switch to Workflows via the main view-mode toggle.
   await page.getByRole('button', { name: 'Workflows' }).click()
 
-  // The four tab buttons must be present.
-  for (const label of ['Sankey', 'Session DAG', 'Spawn Tree', 'Co-occurrence']) {
+  // The three session-independent tab buttons must be present (Session DAG
+  // only renders once a session id is selected — asserted absent below).
+  for (const label of ['Sankey', 'Spawn Tree', 'Co-occurrence']) {
     await expect(page.getByRole('tab', { name: label })).toBeVisible()
   }
 
