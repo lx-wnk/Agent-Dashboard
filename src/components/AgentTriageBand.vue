@@ -249,7 +249,7 @@ async function answerQuestion(agent: Agent, intent: AnswerIntent) {
   try {
     const res = await fetch(`/api/agents/${agent.pid}/answer-question`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Origin': window.location.origin },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(intent),
     })
     if (!res.ok)

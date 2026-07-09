@@ -108,12 +108,11 @@ function decideMultiSelect(optionEntries: NumberedEntry[], contentLines: ParsedR
 /**
  * Detects an AskUserQuestion modal from the visible rows of a terminal buffer.
  *
- * Keys off structural signals present in the real TUI render (see memory:
- * lesson_askuserquestion_tui_keys) rather than exact spacing/border glyphs:
- * a contiguous numbered option block followed by BOTH UI-injected meta-rows.
- * Requiring both meta-rows — adjacent and index-continuous — is what separates a
- * real modal from an ordinary numbered list in terminal output. End-to-end
- * validation against a real pty render happens in Task 15.
+ * Keys off structural signals in the real TUI render rather than exact
+ * spacing/border glyphs: a contiguous numbered option block followed by BOTH
+ * UI-injected meta-rows. Requiring both meta-rows — adjacent and
+ * index-continuous — is what separates a real modal from an ordinary numbered
+ * list in terminal output.
  */
 export function detectQuestion(rows: string[]): DetectedQuestion | null {
   const contentLines = rows

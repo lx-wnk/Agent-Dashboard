@@ -22,14 +22,17 @@ const questionProbeTimeout = 250 * time.Millisecond
 
 // captureTmuxPane is a seam so tests can supply rendered pane rows without a
 // real tmux. It returns the visible pane content (already rendered by tmux, so
-// no VT emulation is needed) split into rows.
+// no VT emulation is needed) split into rows. The exec is bounded by
+// questionProbeTimeout so a wedged tmux never stalls the scan hot path.
 var captureTmuxPane = func(socket, pane string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), questionProbeTimeout)
+	defer cancel()
 	args := []string{}
 	if socket != "" {
 		args = append(args, "-S", socket)
 	}
 	args = append(args, "capture-pane", "-p", "-t", pane)
-	out, err := exec.Command("tmux", args...).Output()
+	out, err := exec.CommandContext(ctx, "tmux", args...).Output()
 	if err != nil {
 		return nil, err
 	}
@@ -47,10 +50,13 @@ func RealQuestionProbe(pid int) *sdk.DetectedQuestion {
 	if err != nil {
 		return nil
 	}
-	if q := probePtyQuestion(home, pid); q != nil {
+	// Match SendAnswerKeys' transport precedence (tmux before pty) so, in the
+	// rare case a session exposes both discovery files, detection and delivery
+	// target the same channel.
+	if q := probeTmuxQuestion(home, pid); q != nil {
 		return q
 	}
-	return probeTmuxQuestion(home, pid)
+	return probePtyQuestion(home, pid)
 }
 
 // probePtyQuestion queries the pty broker's GET /question for pid, or nil.

@@ -2,11 +2,11 @@
 // terminal buffer.
 //
 // This is a hand-maintained parity port of src/utils/askQuestionScreen.ts.
-// The TS and Go implementations are the single source of truth for each
-// other's behavior and are kept in parity by hand (no shared module across
-// the TS/Go language boundary) plus shared fixture files under testdata/.
-// When changing detection logic here, mirror the change in
-// src/utils/askQuestionScreen.ts, and vice versa.
+// The TS and Go implementations are kept in parity by hand (no shared module
+// across the TS/Go language boundary). The fixtures under testdata/ are copies
+// of src/utils/__tests__/fixtures/*.txt kept byte-identical by hand; when
+// changing detection logic or a fixture here, mirror the change in
+// src/utils/askQuestionScreen.ts (and its test fixtures), and vice versa.
 package askq
 
 import (
