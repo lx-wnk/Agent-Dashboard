@@ -60,8 +60,8 @@ func main() {
 		},
 		Mac: &mac.Options{},
 		OnShutdown: func(_ context.Context) {
-			cancel()     // ask the in-process server to drain
-			<-serverErr  // wait for graceful shutdown before the process exits
+			cancel()    // ask the in-process server to drain
+			<-serverErr // wait for graceful shutdown before the process exits
 		},
 	})
 	if err != nil {

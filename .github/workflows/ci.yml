@@ -246,6 +246,19 @@ jobs:
             exit 1
           }
 
+  desktop-build:
+    name: Desktop Shell Build (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: go.work.sum
+      - name: Build desktop shell
+        working-directory: desktop
+        run: CGO_ENABLED=1 go build ./...
+
   pr-checks:
     name: PR Validation
     runs-on: ubuntu-latest

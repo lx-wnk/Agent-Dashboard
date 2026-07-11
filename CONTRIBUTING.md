@@ -13,6 +13,8 @@ Real-time monitoring dashboard for locally running Claude Code agents. Go 1.26 b
 
 **Platform:** macOS and Linux. Windows is unsupported.
 
+Building the macOS desktop shell (`desktop/`) additionally requires Xcode command-line tools (`xcode-select --install`). The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is only needed later for `.app`/`.dmg` bundling — not for a dev build. See [Desktop shell (macOS)](#desktop-shell-macos) below.
+
 ## Setup
 
 ```bash
@@ -88,6 +90,16 @@ Frontend path alias: `@/*` maps to `./src/*`.
 For a CLI that writes file-per-session JSONL, add a descriptor YAML under `server/internal/provider/providers/` (or ship one via `DASHBOARD_PROVIDER_DIR`) — no Go code is needed. The descriptor declares the exe names, config dir, session glob, token/model/cost field-paths, and the token aggregation mode (`cumulative` or `perMessage`).
 
 IDE-embedded tools (Cursor, Copilot-in-VSCode, Windsurf) don't write file-per-session JSONL, so they need a Go `Adapter` (source `custom:<id>`) instead — not yet implemented.
+
+### Desktop shell (macOS)
+
+`desktop/` is its own Go module (wails v2) that wraps the dashboard server in a native WKWebView window. It is `//go:build darwin`-gated — the module does not build on other platforms; a `main_other.go` stub keeps `go build ./...` and CI green off macOS. Build and run it for a dev smoke (requires Go 1.26 + Xcode command-line tools, no `wails` CLI needed):
+
+```bash
+cd desktop && CGO_ENABLED=1 go build -o agent-dashboard-desktop . && ./agent-dashboard-desktop
+```
+
+The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is only needed later, for producing a signed `.app`/`.dmg` bundle — not for this dev build.
 
 ## Pull Request Process
 
