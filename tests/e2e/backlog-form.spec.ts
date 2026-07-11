@@ -1,5 +1,6 @@
-import process from 'node:process'
+import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+import { stubAuthDisabled, stubEmptyStream, stubJson } from './helpers'
 
 // ---------------------------------------------------------------------------
 // Backlog / "New Task" create form — single-screen flow.
@@ -12,70 +13,105 @@ import { expect, test } from '@playwright/test'
 // active, so each test pre-sets the persisted view via localStorage
 // (addInitScript runs before any app script reads it).
 //
-// These tests hit the real Go backend (createTask → POST /api/tasks). The dev
-// server runs with `cfg.Auth == "none"`, so unauthenticated requests are
-// accepted. The server's CSRF guard rejects unsafe-method API calls without an
-// Origin header, so APIRequestContext calls set it explicitly.
+// The first test below stubs every /api endpoint the create-and-refine flow
+// touches instead of hitting the real Go backend — the shared dev server has
+// no seeded data (and accumulates state across runs), so relying on it for
+// "the first real project" was non-deterministic. Endpoints and shapes are
+// sourced from src/composables/useProjects.ts, useProjectFolders.ts,
+// useTasks.ts (createTask), and useRefinementChat.ts (loadHistory/syncStatus).
 // ---------------------------------------------------------------------------
 
-const overrideBaseUrl = process.env.DASHBOARD_E2E_BASE_URL
-if (overrideBaseUrl) {
-  test.use({ baseURL: overrideBaseUrl })
-}
-
 /** Persist the pipeline view so the "+ New Task" topbar CTA renders on load. */
-async function selectPipelineView(page: import('@playwright/test').Page) {
+async function selectPipelineView(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('agent-active-view', 'pipeline')
   })
 }
 
-test('create & refine with a project auto-fills cwd and opens the refinement chat', async ({ page, request, baseURL }) => {
+const PROJECT_ID = 'e2e-project-1'
+const TASK_ID = 'e2e-task-1'
+
+function project() {
+  return {
+    id: PROJECT_ID,
+    slug: 'e2e-project',
+    name: 'E2E Project',
+    folderCount: 1,
+    defaultSpawnerId: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  }
+}
+
+function task(title: string, slug: string) {
+  return {
+    id: TASK_ID,
+    slug,
+    title,
+    description: null,
+    cwd: '/tmp',
+    worktreePath: null,
+    sourceBranch: null,
+    targetBranch: null,
+    currentStage: 'concept',
+    parentTaskId: null,
+    maxIterations: 10,
+    tokenBudget: null,
+    costBudgetCents: null,
+    stageTimeoutSeconds: 3600,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    metadata: null,
+    silverBullet: false,
+    planMode: false,
+    priority: 'medium',
+    userId: null,
+  }
+}
+
+async function stubCreateAndRefineFlow(page: Page, title: string, slug: string) {
+  await stubAuthDisabled(page)
+  await stubJson(page, '/api/projects', [project()])
+  await stubEmptyStream(page, '/api/projects/stream')
+  await stubJson(page, '/api/spawners', [])
+  await stubEmptyStream(page, '/api/spawners/stream')
+  await stubJson(page, `/api/projects/${PROJECT_ID}/folders/suggest`, [
+    { id: 'e2e-folder-1', projectId: PROJECT_ID, path: '/tmp', label: undefined, isDefault: true, createdAt: '2026-01-01T00:00:00Z' },
+  ])
+  await page.route('/api/tasks', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(task(title, slug)),
+  }))
+  await stubJson(page, `/api/refine/${TASK_ID}/turns`, [])
+  await stubJson(page, `/api/refine/${TASK_ID}/status`, { status: 'none' })
+}
+
+test('create & refine with a project auto-fills cwd and opens the refinement chat', async ({ page }) => {
   const slug = `e2e-create-${Date.now()}`
-  const csrfHeaders = { Origin: baseURL ?? 'http://localhost:13120' }
+  const title = `E2E create task ${slug}`
+  await stubCreateAndRefineFlow(page, title, slug)
 
-  // 1. Pre-seed a project so "the first real project" is deterministic.
-  const projectRes = await request.post('/api/projects', {
-    headers: csrfHeaders,
-    data: { name: `E2E ${slug}`, slug },
-  })
-  await expect(projectRes).toBeOK()
-  const project = await projectRes.json() as { id: string }
+  await selectPipelineView(page)
+  await page.goto('/')
 
-  // 2. Pre-seed a default folder so selecting the project hydrates cwd.
-  //    /tmp exists on every dev box and satisfies the absolute-path validator.
-  const folderRes = await request.post(`/api/projects/${project.id}/folders`, {
-    headers: csrfHeaders,
-    data: { path: '/tmp', isDefault: true },
-  })
-  await expect(folderRes).toBeOK()
+  // 1. Open the create modal.
+  await page.getByRole('button', { name: '+ New Task' }).click()
+  await expect(page.getByRole('heading', { name: 'New Task' })).toBeVisible()
 
-  try {
-    await selectPipelineView(page)
-    await page.goto('/')
+  // 2. Select the stubbed project — the watch() handler fetches the suggested
+  //    folder and fills cwd asynchronously (Playwright auto-retries assertions).
+  await page.getByTestId('backlog-project-select').selectOption(PROJECT_ID)
 
-    // 3. Open the create modal.
-    await page.getByRole('button', { name: '+ New Task' }).click()
-    await expect(page.getByRole('heading', { name: 'New Task' })).toBeVisible()
+  // 3. Fill a unique title (slug auto-derives).
+  await page.getByTestId('details-title').fill(title)
 
-    // 4. Select the pre-seeded project — the watch() handler fetches folders
-    //    and fills cwd asynchronously (Playwright auto-retries assertions).
-    await page.getByTestId('backlog-project-select').selectOption(project.id)
+  // 4. Submit via the single primary action "Create & Refine".
+  await page.getByTestId('details-submit-refine').click()
 
-    // 5. Fill a unique title (slug auto-derives).
-    const title = `E2E create task ${slug}`
-    await page.getByTestId('details-title').fill(title)
-
-    // 6. Submit via the single primary action "Create & Refine".
-    await page.getByTestId('details-submit-refine').click()
-
-    // 7. After "Create & Refine" the backlog form closes and the refinement
-    //    chat opens — assert the empty-state copy from RefinementChat.vue.
-    await expect(page.getByText('What would you like to build?')).toBeVisible()
-  }
-  finally {
-    await request.delete(`/api/projects/${project.id}`, { headers: csrfHeaders })
-  }
+  // 5. After "Create & Refine" the backlog form closes and the refinement
+  //    chat opens — assert the empty-state copy from RefinementChat.vue.
+  await expect(page.getByText('What would you like to build?')).toBeVisible()
 })
 
 test('no "No project" option — project select starts empty and must be chosen', async ({ page }) => {
