@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
+import type { PipelineTask } from '../../src/types'
 import { stubAuthDisabled, stubEmptyStream, stubJson } from './helpers'
 
-const TASK = {
+const TASK: PipelineTask = {
   id: 't1',
   slug: 'my-task',
   title: 'My Task',
@@ -21,7 +22,7 @@ const TASK = {
   metadata: {},
   silverBullet: false,
   planMode: false,
-  priority: 0,
+  priority: 'medium',
   userId: '',
   rank: 0,
   needsUser: false,

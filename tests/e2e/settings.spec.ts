@@ -73,8 +73,6 @@ test.describe('Settings modal', () => {
   })
 
   test('create API key flow reveals the token and the claude mcp add CLI command', async ({ page }) => {
-    await stubJson(page, '/api/settings/api-keys', [])
-
     let posted: unknown = null
     await page.route('/api/settings/api-keys', async (route) => {
       if (route.request().method() !== 'POST') {
