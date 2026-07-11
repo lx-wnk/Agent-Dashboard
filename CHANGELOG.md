@@ -165,6 +165,7 @@ Preparing the first public release.
 
 ### Fixed
 
+- Task export (CSV/JSON) in the pipeline board now downloads via a hidden `<a download>` link instead of `window.open`, which silently opened no window (and thus downloaded nothing) in the desktop shell's WKWebView. The worktree panel's copy-path button and the API-key/onboarding copy-to-clipboard buttons now route through the shared `useClipboard({ legacy: true })` fallback instead of a bare `navigator.clipboard.writeText`, so they degrade to `execCommand('copy')` instead of failing silently under WKWebView's stricter clipboard permissions.
 - `formatCost`/`formatTokens` no longer throw on `undefined`/`null`/`NaN` input — a partial `Agent` (missing cost or token fields) silently aborted the agent detail modal's rendering; both now degrade to the existing "no data" (`—`) display.
 - The AskUserQuestion terminal overlay again appears on current Claude Code releases: detection matched the meta-row copy exactly, but v2.1.205 renders `Type something.` with a trailing period, which silently disabled the overlay. Detection now normalizes the meta-row copy (trailing punctuation, prefix) so cosmetic wording tweaks no longer break it.
 - The AskUserQuestion terminal overlay now traps keyboard focus: Tab and Shift+Tab cycle within the modal instead of leaking back to the inert terminal underneath, matching the ARIA modal-dialog pattern.

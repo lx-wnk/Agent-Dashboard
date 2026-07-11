@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ApiKey, McpScope } from '../types'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useClipboardCopy } from '../composables/useCopyId'
 import { useOnboarding } from '../composables/useOnboarding'
 import { usePermissionPresets } from '../composables/usePermissionPresets'
 import { useServerConfig } from '../composables/useServerConfig'
@@ -297,11 +298,13 @@ async function handleCreate() {
 }
 
 // --- Copy helpers ---
+const { copy: copyToClipboard } = useClipboardCopy()
+
 async function copyValue(target: 'token' | 'cli' | 'json', value: string) {
   if (!value)
     return
   try {
-    await navigator.clipboard.writeText(value)
+    await copyToClipboard(value)
     copiedTarget.value = target
     errorTarget.value = null
   }

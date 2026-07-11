@@ -3,6 +3,7 @@ import type { Agent, PipelineStage, PipelineTask } from '../types'
 import { computed, ref } from 'vue'
 import { useProjects } from '../composables/useProjects'
 import { byActivityDesc, byRank, useTasks } from '../composables/useTasks'
+import { triggerDownload } from '../utils/download'
 import { STAGE_LABELS } from '../utils/stageLabels'
 import SortableTaskList from './SortableTaskList.vue'
 import TaskCard from './TaskCard.vue'
@@ -92,7 +93,7 @@ function toggleEpic(id: string) {
 }
 
 function exportTasks(format: 'json' | 'csv') {
-  window.open(`/api/tasks/export?format=${format}`, '_blank')
+  triggerDownload(`/api/tasks/export?format=${format}`, `tasks.${format}`)
 }
 
 interface ColumnDef {

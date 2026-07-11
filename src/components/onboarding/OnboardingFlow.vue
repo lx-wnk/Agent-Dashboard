@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SessionInfo } from '../../composables/useSessions'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useClipboardCopy } from '../../composables/useCopyId'
 import { useOnboarding } from '../../composables/useOnboarding'
 import { useServerConfig } from '../../composables/useServerConfig'
 import { useSessions } from '../../composables/useSessions'
@@ -73,9 +74,11 @@ async function onConnectMcp() {
     connectError.value = 'Could not connect automatically — run the command below manually.'
 }
 
+const { copy: copyToClipboard } = useClipboardCopy()
+
 async function copyText(key: NonNullable<typeof copiedKey.value>, value: string) {
   try {
-    await navigator.clipboard.writeText(value)
+    await copyToClipboard(value)
     copiedKey.value = key
     setTimeout(() => {
       if (copiedKey.value === key)
