@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+import { slugify } from '../../src/utils/validation'
 import { stubAuthDisabled, stubEmptyStream, stubJson } from './helpers'
 
 // ---------------------------------------------------------------------------
@@ -69,7 +70,10 @@ function task(title: string, slug: string) {
   }
 }
 
-async function stubCreateAndRefineFlow(page: Page, title: string, slug: string) {
+/** Mutable box for the POST /api/tasks body, so tests can assert on it after the click resolves. */
+interface CapturedPayload { value: Record<string, unknown> | null }
+
+async function stubCreateAndRefineFlow(page: Page, title: string, slug: string, capturedTaskPayload: CapturedPayload) {
   await stubAuthDisabled(page)
   await stubJson(page, '/api/projects', [project()])
   await stubEmptyStream(page, '/api/projects/stream')
@@ -78,11 +82,14 @@ async function stubCreateAndRefineFlow(page: Page, title: string, slug: string) 
   await stubJson(page, `/api/projects/${PROJECT_ID}/folders/suggest`, [
     { id: 'e2e-folder-1', projectId: PROJECT_ID, path: '/tmp', label: undefined, isDefault: true, createdAt: '2026-01-01T00:00:00Z' },
   ])
-  await page.route('/api/tasks', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify(task(title, slug)),
-  }))
+  await page.route('/api/tasks', async (route) => {
+    capturedTaskPayload.value = route.request().postDataJSON()
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(task(title, slug)),
+    })
+  })
   await stubJson(page, `/api/refine/${TASK_ID}/turns`, [])
   await stubJson(page, `/api/refine/${TASK_ID}/status`, { status: 'none' })
 }
@@ -90,7 +97,8 @@ async function stubCreateAndRefineFlow(page: Page, title: string, slug: string) 
 test('create & refine with a project auto-fills cwd and opens the refinement chat', async ({ page }) => {
   const slug = `e2e-create-${Date.now()}`
   const title = `E2E create task ${slug}`
-  await stubCreateAndRefineFlow(page, title, slug)
+  const capturedTaskPayload: CapturedPayload = { value: null }
+  await stubCreateAndRefineFlow(page, title, slug, capturedTaskPayload)
 
   await selectPipelineView(page)
   await page.goto('/')
@@ -112,6 +120,19 @@ test('create & refine with a project auto-fills cwd and opens the refinement cha
   // 5. After "Create & Refine" the backlog form closes and the refinement
   //    chat opens — assert the empty-state copy from RefinementChat.vue.
   await expect(page.getByText('What would you like to build?')).toBeVisible()
+
+  // 6. Assert the POST /api/tasks body actually carries what the form drove:
+  //    cwd auto-filled from the stubbed folders/suggest default ('/tmp'),
+  //    and the typed title with its auto-derived slug (see onTitleInput()
+  //    in BacklogForm.vue — the slug field itself was never touched, so it
+  //    tracks slugify(title), not the raw `slug` local var used as a title
+  //    suffix above).
+  await expect.poll(() => capturedTaskPayload.value).not.toBeNull()
+  const payload = capturedTaskPayload.value as Record<string, unknown>
+  expect(payload.cwd).toBe('/tmp')
+  expect(payload.title).toBe(title)
+  expect(payload.slug).toBe(slugify(title))
+  expect(payload.projectId).toBe(PROJECT_ID)
 })
 
 test('no "No project" option — project select starts empty and must be chosen', async ({ page }) => {

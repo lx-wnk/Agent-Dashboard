@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Agent Dashboard</title>
+    <script>
+      // The Wails webview boots on the wails://wails origin. Redirect to the
+      // in-process server so the page adopts the http://127.0.0.1:13120 origin,
+      // which the server's same-origin mutation guard accepts unchanged.
+      window.location.replace('http://127.0.0.1:13120')
+    </script>
+  </head>
+  <body></body>
+</html>

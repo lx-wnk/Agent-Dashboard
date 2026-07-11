@@ -246,6 +246,22 @@ jobs:
             exit 1
           }
 
+  desktop-build:
+    name: Desktop Shell Build (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: go.work.sum
+      - name: Build desktop shell (real wails link path)
+        working-directory: desktop
+        # -tags production selects the real wails app; the extldflags links
+        # UniformTypeIdentifiers, which wails needs on the macOS 15 SDK but a
+        # plain build omits. This is the same incantation as `task desktop:build`.
+        run: CGO_ENABLED=1 go build -tags production -ldflags "-extldflags '-framework UniformTypeIdentifiers'" -o /dev/null .
+
   pr-checks:
     name: PR Validation
     runs-on: ubuntu-latest

@@ -92,6 +92,26 @@ task dev            # Go backend (air hot-reload) + Vite — serves on :13120
 
 When iterating on the UI, run `pnpm dev` in a second terminal for HMR on `:5173` (it proxies `/api` → `:13120`). See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full dev setup, the production-build steps, and the command reference.
 
+## Desktop app (macOS)
+
+A native macOS shell (`desktop/`, [wails](https://wails.io) v2) wraps the same dashboard as one binary — no separate server process, no sidecar. It starts the dashboard HTTP server in-process on `127.0.0.1:13120` and opens a native WKWebView window pointed at it, so it's the identical Vue SPA you get in a browser tab, just packaged as an app. Other platforms keep running `agent-dashboard serve` in a browser; the desktop shell is macOS-only.
+
+Build and run it for a smoke test (requires macOS + Xcode command-line tools; no `wails` CLI needed for this):
+
+```bash
+task desktop:run
+```
+
+That builds the SPA, embeds it, and links the shell with the wails production tag and the `UniformTypeIdentifiers` framework (a plain `go build` omits both — see [CONTRIBUTING.md](./CONTRIBUTING.md#desktop-shell-macos)), then launches the window.
+
+Signed `.app`/`.dmg` distribution via the `wails` CLI is a later step — see [CONTRIBUTING.md](./CONTRIBUTING.md#desktop-shell-macos).
+
+**Manual smoke checklist** (real Mac):
+
+1. The webview loads the dashboard (not a blank page) — it fetches the SPA and `/api/*` from `http://127.0.0.1:13120`, so the redirect landed on the loopback origin.
+2. A mutating action (spawn an agent, create a task, answer a question) succeeds with no `403`.
+3. No App Transport Security block appears in Console.app.
+
 ## Restart
 
 `POST /api/admin/restart` triggers a validated, graceful restart. The endpoint refuses with **409** if an active `auth_provider` plugin is currently unhealthy — restarting in that state would cause an auth lockout on the next boot.

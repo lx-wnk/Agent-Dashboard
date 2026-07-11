@@ -1,4 +1,4 @@
-package main
+package serverapp
 
 import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"

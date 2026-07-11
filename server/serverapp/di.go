@@ -8,7 +8,7 @@
 //
 // This file is the thin coordinator that assembles all domains into the final Server.
 
-package main
+package serverapp
 
 import (
 	"context"

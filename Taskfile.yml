@@ -54,6 +54,25 @@ tasks:
     dir: server
     cmd: go build -o ../bin/dashboard ./cmd/cli/...
 
+  desktop:build:
+    desc: Build the macOS desktop shell (embeds the SPA; requires macOS + Xcode CLT)
+    platforms: [darwin]
+    cmds:
+      # The frontend must be embedded before the Go build, else the shell serves
+      # an empty dist and the webview hits a redirect loop.
+      - task: build:frontend
+      # -tags production selects the real wails app (the untagged build errors at
+      # runtime); the extldflags links UniformTypeIdentifiers, which wails needs
+      # on the macOS 15 SDK but a plain `go build` omits.
+      - cd desktop && CGO_ENABLED=1 go build -tags production -ldflags "-extldflags '-framework UniformTypeIdentifiers'" -o ../bin/agent-dashboard-desktop .
+
+  desktop:run:
+    desc: Build and launch the macOS desktop shell for a smoke test
+    platforms: [darwin]
+    cmds:
+      - task: desktop:build
+      - ./bin/agent-dashboard-desktop
+
   test:
     desc: Run all tests (all modules)
     cmds:
