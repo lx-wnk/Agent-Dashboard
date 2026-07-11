@@ -104,7 +104,8 @@ task desktop:run
 
 That builds the SPA, embeds it, and links the shell with the wails production tag and the `UniformTypeIdentifiers` framework (a plain `go build` omits both — see [CONTRIBUTING.md](./CONTRIBUTING.md#desktop-shell-macos)), then launches the window.
 
-Signed `.app`/`.dmg` distribution via the `wails` CLI is a later step — see [CONTRIBUTING.md](./CONTRIBUTING.md#desktop-shell-macos).
+An unsigned `.app`/`.dmg` build (`task desktop:dist` / `task desktop:dmg`) plus the full signing and
+notarization steps are documented in [docs/desktop-distribution.md](docs/desktop-distribution.md).
 
 **Manual smoke checklist** (real Mac):
 

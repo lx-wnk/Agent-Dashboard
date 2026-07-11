@@ -107,7 +107,7 @@ Three non-obvious build requirements the `desktop:*` tasks encapsulate — a bar
 - **`-ldflags "-extldflags '-framework UniformTypeIdentifiers'"`** — wails v2 references `UTType` on the macOS 15 SDK; a plain `go build` fails to link it (`Undefined symbols: _OBJC_CLASS_$_UTType`).
 - **the SPA must be built first** (`task build:frontend`) — the shell starts the dashboard server in-process, and that server (not the shell) embeds and serves `server/frontend/dist` via `go:embed`; an empty dist makes the webview hit a `/` → `./` redirect loop instead of the app.
 
-The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is only needed later, for producing a signed `.app`/`.dmg` bundle — not for this dev build.
+The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is only needed later, for producing a `.app`/`.dmg` bundle (`task desktop:dist` / `task desktop:dmg`) — not for this dev build. See [docs/desktop-distribution.md](docs/desktop-distribution.md) for packaging plus the full signing and notarization steps.
 
 ## Pull Request Process
 
