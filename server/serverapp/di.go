@@ -27,6 +27,7 @@ import (
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/onboarding"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
@@ -601,6 +602,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 
 	usageHandler := apiusage.NewHandler(settingsSvc, nil) // nil agg = uses default scanner
 
+	var onboardingHandler *onboarding.Handler
+	if apiKeyRepo != nil {
+		onboardingHandler = onboarding.NewHandler(settingsSvc, apiKeyRepo)
+	}
+
 	var trackerHandler *trackerapi.Handler
 	if pluginSettingsSvc != nil {
 		trackerHandler = trackerapi.NewHandler(pluginSettingsSvc, nil, nil)
@@ -631,6 +637,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		SystemPromptsHandler:   systemPromptsHandler,
 		PromptTemplatesHandler: promptTemplatesHandler,
 		AdapterHandler:         adapterHandler,
+		OnboardingHandler:      onboardingHandler,
 		ProvidersHandler:       providersHandler,
 		SettingsHandler:        settingsHandler,
 		SearchHandler:          searchHandler,

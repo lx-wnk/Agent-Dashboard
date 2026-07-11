@@ -28,6 +28,7 @@ import (
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/onboarding"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
@@ -155,6 +156,7 @@ type RouterDeps struct {
 	AdapterHandler         *adapters.Handler
 	ProvidersHandler       *providersapi.Handler
 	SettingsHandler        *settingsapi.Handler
+	OnboardingHandler      *onboarding.Handler
 	MCPHandler             http.Handler
 	ChannelReply           *agents.ChannelReplyHandler
 	ChannelStageOutput     *agents.ChannelStageOutputHandler
@@ -293,6 +295,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.SettingsHandler != nil {
 			deps.SettingsHandler.Mount(r)
+		}
+
+		if deps.OnboardingHandler != nil {
+			deps.OnboardingHandler.Mount(r)
 		}
 
 		// Projects + ProjectFolders — JWT-protected. No whole-route admin gate

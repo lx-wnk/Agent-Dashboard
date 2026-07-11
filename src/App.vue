@@ -10,6 +10,7 @@ import AutoApprovingStrip from './components/AutoApprovingStrip.vue'
 import BacklogForm from './components/BacklogForm.vue'
 import EmptyAgentState from './components/EmptyAgentState.vue'
 import LoginPage from './components/LoginPage.vue'
+import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import ServerReconnectOverlay from './components/ServerReconnectOverlay.vue'
 import SessionList from './components/SessionList.vue'
 import AppShell from './components/shell/AppShell.vue'
@@ -27,6 +28,7 @@ import AppModalHeader from './components/ui/AppModalHeader.vue'
 import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { useNow } from './composables/useNow'
+import { useOnboarding } from './composables/useOnboarding'
 import { usePendingPermissions } from './composables/usePendingPermissions'
 import { usePermissionResolve } from './composables/usePermissionResolve'
 import { usePWA } from './composables/usePWA'
@@ -61,6 +63,8 @@ const EditGateModal = defineAsyncComponent(() => import('./components/EditGateMo
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const { homedir, loadServerConfig } = useServerConfig()
+const { status: onboardingStatus, fetchStatus: fetchOnboardingStatus } = useOnboarding()
+const showOnboarding = ref(false)
 const showLogin = computed(() => authEnabled.value && !user.value)
 const loginPageRef = ref<InstanceType<typeof LoginPage> | null>(null)
 // Move focus to the login control when the auth gate appears (SC 2.4.3)
@@ -89,12 +93,18 @@ const combinedAttentionCount = computed(() => attentionCount.value + permissionI
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
 const { todayUsd, start: startTodayCost } = useTodayCost()
 
-// Start data streams only after auth is confirmed — avoids 401 flood while login page is shown
+// Start data streams and fetch onboarding status only after auth is confirmed —
+// avoids 401 flood while login page is shown (onboarding status is behind the
+// same JWT-protected route group).
 watch(loaded, (isLoaded) => {
   if (isLoaded && !showLogin.value) {
     startAgents()
     startTasks()
     startTodayCost()
+    fetchOnboardingStatus().then(() => {
+      if (onboardingStatus.value && !onboardingStatus.value.completed)
+        showOnboarding.value = true
+    })
   }
 }, { immediate: true })
 
@@ -467,6 +477,7 @@ onMounted(() => usageComposable.start())
     </AppModal>
     <SessionList :open="showSessions" :home-dir="homedir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
+    <OnboardingFlow :open="showOnboarding" @close="showOnboarding = false" @spawned="selectAgentWhenAvailable" />
     <EditGateModal />
     <ServerReconnectOverlay />
     <SpotlightSearch
