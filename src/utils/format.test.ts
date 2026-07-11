@@ -71,6 +71,12 @@ describe('formatTokens', () => {
     expect(formatTokens(999)).toBe('999')
     expect(formatTokens(1000)).toBe('1.0k')
   })
+
+  it('degrades to the em-dash sentinel for missing or non-finite input', () => {
+    expect(formatTokens(undefined)).toBe('—')
+    expect(formatTokens(null)).toBe('—')
+    expect(formatTokens(Number.NaN)).toBe('—')
+  })
 })
 
 describe('formatCost', () => {
@@ -93,6 +99,21 @@ describe('formatCost', () => {
 
   it('formats large costs correctly', () => {
     expect(formatCost(100)).toBe('$100.00')
+  })
+
+  it('degrades to the em-dash sentinel for missing or non-finite input', () => {
+    expect(formatCost(undefined)).toBe('—')
+    expect(formatCost(null)).toBe('—')
+    expect(formatCost(Number.NaN)).toBe('—')
+  })
+
+  it('formats a small fractional cost below the cent threshold', () => {
+    expect(formatCost(0.005)).toBe('<$0.01')
+  })
+
+  it('formats typical costs', () => {
+    expect(formatCost(1.5)).toBe('$1.50')
+    expect(formatCost(1234)).toBe('$1234.00')
   })
 })
 

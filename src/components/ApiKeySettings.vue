@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ApiKey, McpScope } from '../types'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useOnboarding } from '../composables/useOnboarding'
 import { usePermissionPresets } from '../composables/usePermissionPresets'
 import { useServerConfig } from '../composables/useServerConfig'
 import { useTheme } from '../composables/useTheme'
@@ -29,6 +30,12 @@ const AppSettings = defineAsyncComponent(() => import('./AppSettings.vue'))
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
 const { mcpServerName, mcpEndpoint, loadServerConfig } = useServerConfig()
+const { show: showOnboarding } = useOnboarding()
+
+function reopenOnboarding() {
+  showOnboarding()
+  emit('close')
+}
 
 // --- Nav ---
 type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server'
@@ -664,6 +671,18 @@ async function startImport() {
                 {{ opt.label }}
               </div>
             </button>
+          </div>
+
+          <div class="mt-8 pt-6 border-t border-line">
+            <h3 class="text-[17px] font-bold text-fg mb-1">
+              First-run setup
+            </h3>
+            <p class="text-xs text-fg-mute mb-3">
+              Re-run the guided setup for the Claude CLI, dashboard connection, and session control.
+            </p>
+            <AppButton size="sm" variant="secondary" @click="reopenOnboarding">
+              Re-run first-run setup
+            </AppButton>
           </div>
         </section>
 

@@ -51,8 +51,8 @@ export function totalTokenCount(usage: TokenUsage): number {
   return usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheCreationTokens
 }
 
-export function formatTokens(n: number): string {
-  if (n === 0)
+export function formatTokens(n: number | undefined | null): string {
+  if (n == null || !Number.isFinite(n) || n === 0)
     return '—'
   if (n < 1000)
     return String(n)
@@ -61,8 +61,8 @@ export function formatTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(2)}M`
 }
 
-export function formatCost(cost: number): string {
-  if (cost === 0)
+export function formatCost(cost: number | undefined | null): string {
+  if (cost == null || !Number.isFinite(cost) || cost === 0)
     return '—'
   if (cost < 0.01)
     return '<$0.01'

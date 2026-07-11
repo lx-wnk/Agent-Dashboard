@@ -63,8 +63,7 @@ const EditGateModal = defineAsyncComponent(() => import('./components/EditGateMo
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const { homedir, loadServerConfig } = useServerConfig()
-const { status: onboardingStatus, fetchStatus: fetchOnboardingStatus } = useOnboarding()
-const showOnboarding = ref(false)
+const { status: onboardingStatus, fetchStatus: fetchOnboardingStatus, visible: showOnboarding, show: showOnboardingFlow, hide: hideOnboardingFlow } = useOnboarding()
 const showLogin = computed(() => authEnabled.value && !user.value)
 const loginPageRef = ref<InstanceType<typeof LoginPage> | null>(null)
 // Move focus to the login control when the auth gate appears (SC 2.4.3)
@@ -103,7 +102,7 @@ watch(loaded, (isLoaded) => {
     startTodayCost()
     fetchOnboardingStatus().then(() => {
       if (onboardingStatus.value && !onboardingStatus.value.completed)
-        showOnboarding.value = true
+        showOnboardingFlow()
     })
   }
 }, { immediate: true })
@@ -477,7 +476,7 @@ onMounted(() => usageComposable.start())
     </AppModal>
     <SessionList :open="showSessions" :home-dir="homedir" @close="showSessions = false" />
     <ApiKeySettings :open="showSettings" @close="showSettings = false" />
-    <OnboardingFlow :open="showOnboarding" @close="showOnboarding = false" @spawned="selectAgentWhenAvailable" />
+    <OnboardingFlow :open="showOnboarding" @close="hideOnboardingFlow" @spawned="selectAgentWhenAvailable" />
     <EditGateModal />
     <ServerReconnectOverlay />
     <SpotlightSearch
