@@ -1,0 +1,21 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Agent Dashboard",
+  "outputfilename": "agent-dashboard-desktop",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dir": "./bootstrap",
+  "wailsjsdir": "./build/wailsjs",
+  "build:tags": "production",
+  "author": {
+    "name": "lx-wnk",
+    "email": ""
+  },
+  "info": {
+    "companyName": "lx-wnk",
+    "productName": "Agent Dashboard",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright lx-wnk",
+    "comments": "Real-time monitoring dashboard for locally running Claude Code agents"
+  }
+}

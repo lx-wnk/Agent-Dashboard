@@ -67,3 +67,9 @@ test-results/
 # desktop shell build output
 /desktop/desktop
 /desktop/build/bin/
+# wails-generated TS runtime bindings (no bound Go methods, but the CLI still
+# writes a stub) and the fallback app icon it writes on first `wails build`
+# if desktop/build/appicon.png isn't already present.
+/desktop/build/wailsjs/
+/desktop/build/appicon.png
+/desktop/build/darwin/Info.dev.plist
