@@ -124,8 +124,8 @@ func (h *Handler) registerMCP(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("onboarding.registerMCP: %w", err)
 	}
-	if _, err := h.apiKeyRepo.Create(r.Context(), onboardingKey, hash, onboardingScopes); err != nil {
-		return fmt.Errorf("onboarding.registerMCP: create key: %w", err)
+	if err := h.upsertOnboardingKey(r.Context(), hash); err != nil {
+		return fmt.Errorf("onboarding.registerMCP: %w", err)
 	}
 
 	url := requestOrigin(r) + mcp.EndpointPath
@@ -136,6 +136,28 @@ func (h *Handler) registerMCP(w http.ResponseWriter, r *http.Request) error {
 	ok := h.run(r.Context(), "claude", args...) == nil
 
 	apierr.WriteJSON(w, http.StatusOK, map[string]any{"ok": ok, "command": command})
+	return nil
+}
+
+// upsertOnboardingKey rotates the existing "onboarding" API key if one already
+// exists, or creates it otherwise — repeated register-mcp calls (retries,
+// re-clicks) must not accumulate live task-scoped credentials.
+func (h *Handler) upsertOnboardingKey(ctx context.Context, hash string) error {
+	keys, err := h.apiKeyRepo.List(ctx)
+	if err != nil {
+		return fmt.Errorf("list keys: %w", err)
+	}
+	for _, k := range keys {
+		if k.Name == onboardingKey {
+			if _, err := h.apiKeyRepo.Rotate(ctx, k.ID, hash); err != nil {
+				return fmt.Errorf("rotate key: %w", err)
+			}
+			return nil
+		}
+	}
+	if _, err := h.apiKeyRepo.Create(ctx, onboardingKey, hash, onboardingScopes); err != nil {
+		return fmt.Errorf("create key: %w", err)
+	}
 	return nil
 }
 

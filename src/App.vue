@@ -83,10 +83,6 @@ const { resolveAgent, approveAll } = usePermissionResolve()
 onMounted(() => {
   loadUser()
   void loadServerConfig()
-  fetchOnboardingStatus().then(() => {
-    if (onboardingStatus.value && !onboardingStatus.value.completed)
-      showOnboarding.value = true
-  })
 })
 
 const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, dismissAgent, selectAgentWhenAvailable, startStream: startAgents } = useAgents({ autoStart: false })
@@ -97,12 +93,18 @@ const combinedAttentionCount = computed(() => attentionCount.value + permissionI
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
 const { todayUsd, start: startTodayCost } = useTodayCost()
 
-// Start data streams only after auth is confirmed — avoids 401 flood while login page is shown
+// Start data streams and fetch onboarding status only after auth is confirmed —
+// avoids 401 flood while login page is shown (onboarding status is behind the
+// same JWT-protected route group).
 watch(loaded, (isLoaded) => {
   if (isLoaded && !showLogin.value) {
     startAgents()
     startTasks()
     startTodayCost()
+    fetchOnboardingStatus().then(() => {
+      if (onboardingStatus.value && !onboardingStatus.value.completed)
+        showOnboarding.value = true
+    })
   }
 }, { immediate: true })
 

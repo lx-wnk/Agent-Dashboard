@@ -116,8 +116,9 @@ async function connectSession(session: SessionInfo) {
   }
 }
 
-async function skip() {
-  await complete()
+// Dismisses the overlay for this session without persisting completion — the
+// flow reappears on next launch since onboarding.completed stays false server-side.
+function skip() {
   emit('close')
 }
 

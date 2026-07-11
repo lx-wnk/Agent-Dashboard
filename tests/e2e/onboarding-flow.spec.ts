@@ -119,7 +119,7 @@ test.describe('onboarding flow', () => {
     await expect(flow).toBeHidden()
   })
 
-  test('skip completes onboarding without connecting anything', async ({ page }) => {
+  test('skip hides the flow for this session without persisting completion', async ({ page }) => {
     await stubAppShell(page)
     const patched: unknown[] = []
     await stubOnboardingStatus(page, patched)
@@ -132,7 +132,7 @@ test.describe('onboarding flow', () => {
 
     await page.getByTestId('onboarding-skip').click()
 
-    await expect.poll(() => patched).toEqual([{ completed: true }])
     await expect(flow).toBeHidden()
+    expect(patched).toEqual([])
   })
 })

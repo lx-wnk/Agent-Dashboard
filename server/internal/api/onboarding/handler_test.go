@@ -134,6 +134,25 @@ func TestRegisterMCP_BuildsArgvMintsKeyAndReturnsCommand(t *testing.T) {
 	require.ElementsMatch(t, []string{"tasks:read", "tasks:write", "pipeline:control"}, keys[0].Scopes)
 }
 
+func TestRegisterMCP_RepeatedCallsReuseTheSameOnboardingKey(t *testing.T) {
+	withNoMCPConfig(t)
+	h, mux, apiKeyRepo := setupHandler(t)
+
+	onboarding.SetRunnerForTest(h, func(_ context.Context, _ string, _ ...string) error { return nil })
+
+	for i := 0; i < 3; i++ {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/onboarding/register-mcp", nil))
+		require.Equal(t, http.StatusOK, w.Code)
+	}
+
+	keys, err := apiKeyRepo.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, keys, 1)
+	require.Equal(t, "onboarding", keys[0].Name)
+	require.ElementsMatch(t, []string{"tasks:read", "tasks:write", "pipeline:control"}, keys[0].Scopes)
+}
+
 func TestRegisterMCP_ExecFailureReturnsOkFalseWithFallbackCommand(t *testing.T) {
 	withNoMCPConfig(t)
 	h, mux, _ := setupHandler(t)
