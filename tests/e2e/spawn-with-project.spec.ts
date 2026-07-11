@@ -95,3 +95,77 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
     await request.delete(`/api/projects/${project.id}`, { headers: csrfHeaders })
   }
 })
+
+// ---------------------------------------------------------------------------
+// Spawn dialog: submitted payload
+//
+// Same project/folder pre-seed as above, but this time we intercept the real
+// spawn POST (SpawnDialog.vue's handleSpawn -> POST /api/agents/spawn) before
+// clicking "Spawn Agent", so no Claude process actually launches — the route
+// is fulfilled with the { pid } shape the client reads (`data.pid`). Asserts
+// the captured request body carries the values the form drove: cwd from the
+// selected project's default folder, the chosen permission mode, and the
+// typed prompt. spawnerId is asserted absent because no spawner override was
+// picked and the project has no defaultSpawnerId (see useSpawnDialog.ts
+// selectProject()).
+// ---------------------------------------------------------------------------
+
+test('spawn dialog submits payload with project cwd, permission mode, and prompt', async ({ page, request, baseURL }) => {
+  const slug = `e2e-${Date.now()}`
+  const csrfHeaders = { Origin: baseURL ?? 'http://localhost:13120' }
+
+  const projectRes = await request.post('/api/projects', {
+    headers: csrfHeaders,
+    data: { name: `E2E ${slug}`, slug },
+  })
+  await expect(projectRes).toBeOK()
+  const project = await projectRes.json() as { id: string }
+
+  const folderRes = await request.post(`/api/projects/${project.id}/folders`, {
+    headers: csrfHeaders,
+    data: { path: '/tmp', isDefault: true },
+  })
+  await expect(folderRes).toBeOK()
+
+  try {
+    await page.goto('/')
+
+    await page.getByRole('button', { name: '+ New Agent' }).click()
+    await expect(page.locator('#spawn-project')).toBeVisible()
+    await page.locator('#spawn-project').selectOption(project.id)
+    await expect(page.locator('[data-testid="spawn-spawner"]')).toBeVisible()
+
+    await page.locator('#spawn-prompt').fill('Do the thing')
+    await page.locator('[data-testid="spawn-permission-mode"]').selectOption('acceptEdits')
+
+    // Register the interception BEFORE the submit click so the real request
+    // never leaves the browser — route.fulfill answers with the { pid }
+    // shape handleSpawn() expects, so the client believes the spawn succeeded
+    // without a process ever having been created.
+    let capturedPayload: Record<string, unknown> | null = null
+    await page.route('/api/agents/spawn', async (route) => {
+      capturedPayload = route.request().postDataJSON()
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ pid: 9999 }),
+      })
+    })
+
+    await page.getByTestId('spawn-btn').click()
+
+    await expect.poll(() => capturedPayload).not.toBeNull()
+    const payload = capturedPayload as unknown as Record<string, unknown>
+    expect(payload.prompt).toBe('Do the thing')
+    expect(payload.cwd).toBe('/tmp')
+    expect(payload.projectId).toBe(project.id)
+    expect(payload.permissionMode).toBe('acceptEdits')
+    expect(payload.enableChannel).toBe(true)
+    // No spawner override was picked and the project has no defaultSpawnerId,
+    // so handleSpawn() omits spawnerId entirely rather than sending it empty.
+    expect(payload.spawnerId).toBeUndefined()
+  }
+  finally {
+    await request.delete(`/api/projects/${project.id}`, { headers: csrfHeaders })
+  }
+})
