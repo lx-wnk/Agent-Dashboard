@@ -30,6 +30,18 @@ func Wrap(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
 	return apierr.ErrorMiddleware(apierr.HandlerFunc(fn))
 }
 
+// GenerateToken creates a new random MCP API token and its SHA-256 hash.
+// Shared by Create, Regenerate, and the onboarding one-click connect flow.
+func GenerateToken() (token, hash string, err error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", fmt.Errorf("apikeys.GenerateToken: %w", err)
+	}
+	token = "mcp_" + base64.RawURLEncoding.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(token))
+	return token, hex.EncodeToString(sum[:]), nil
+}
+
 // keyView is the JSON shape returned for both List and Create.
 // Field names match the ApiKey TypeScript interface (camelCase).
 type keyView struct {
@@ -84,14 +96,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("%w: name is required", apierr.ErrBadRequest)
 	}
 
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return fmt.Errorf("apikeys.Create: generate token: %w", err)
+	token, hash, err := GenerateToken()
+	if err != nil {
+		return fmt.Errorf("apikeys.Create: %w", err)
 	}
-	token := "mcp_" + base64.RawURLEncoding.EncodeToString(raw)
-
-	sum := sha256.Sum256([]byte(token))
-	hash := hex.EncodeToString(sum[:])
 
 	key, err := h.repo.Create(r.Context(), body.Name, hash, body.Scopes)
 	if err != nil {
@@ -137,13 +145,10 @@ func (h *Handler) Regenerate(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("%w: id is required", apierr.ErrBadRequest)
 	}
 
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return fmt.Errorf("apikeys.Regenerate: generate token: %w", err)
+	token, hash, err := GenerateToken()
+	if err != nil {
+		return fmt.Errorf("apikeys.Regenerate: %w", err)
 	}
-	token := "mcp_" + base64.RawURLEncoding.EncodeToString(raw)
-	sum := sha256.Sum256([]byte(token))
-	hash := hex.EncodeToString(sum[:])
 
 	key, err := h.repo.Rotate(r.Context(), id, hash)
 	if err != nil {
