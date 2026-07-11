@@ -6,15 +6,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channel"
-	"github.com/lx-wnk/agent-dashboard/server/internal/config"
-	"github.com/lx-wnk/agent-dashboard/server/internal/restart"
+	"github.com/lx-wnk/agent-dashboard/server/serverapp"
 )
 
 // version is the dashboard version. It defaults to "dev" for local builds and is
@@ -38,78 +34,9 @@ func main() {
 		Use:   "serve",
 		Short: "Start the HTTP server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(cfgFile)
-			if err != nil {
-				return err
-			}
-
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-
-			restartCtl := restart.NewController(cfg.RestartMode)
-			srv, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, enricher, evalService, settingsSvc, cleanup, err := initializeServer(ctx, cfg, cfgFile, restartCtl)
-			if err != nil {
-				if cleanup != nil {
-					cleanup()
-				}
-				return err
-			}
-
-			g, ctx := errgroup.WithContext(ctx)
-
-			interval := time.Duration(settingsSvc.Int("sse.intervalMs")) * time.Millisecond
-			g.Go(func() error {
-				agentbroadcast.Run(ctx, agentMerger, broadcaster, interval, baselineProvider, enricher)
-				return nil
-			})
-
-			g.Go(func() error {
-				return srv.Run(ctx)
-			})
-
-			g.Go(func() error {
-				return orch.Run(ctx)
-			})
-
-			if sched != nil {
-				g.Go(func() error {
-					return sched.Run(ctx)
-				})
-			}
-
-			if histImporter != nil {
-				g.Go(func() error {
-					histImporter.RunScheduled(ctx, time.Duration(settingsSvc.Int("cost.scanIntervalMs"))*time.Millisecond)
-					return nil
-				})
-			}
-
-			if evalService != nil {
-				g.Go(func() error {
-					evalService.RunLoop(ctx, time.Duration(settingsSvc.Int("eval.scanIntervalMs"))*time.Millisecond)
-					return nil
-				})
-			}
-
-			restarting := false
-			g.Go(func() error {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-restartCtl.C():
-					restarting = true
-					stop() // cancel the signal context → graceful shutdown of all g.Go members
-					return nil
-				}
-			})
-
-			err = g.Wait()
-			cleanup() // stop plugins etc. BEFORE any re-exec (deferred funcs won't run after Exec)
-			if restarting {
-				slog.Info("restart: relaunching", "mode", restartCtl.Mode())
-				restart.Execute(restartCtl.Mode(), restart.OSRestarter{})
-			}
-			return err
+			return serverapp.Serve(ctx, cfgFile)
 		},
 	}
 	serve.Flags().StringVar(&cfgFile, "config", "", "path to JSON config file")

@@ -5,7 +5,7 @@
 //
 //lint:file-ignore SA1019 Boot-migration code intentionally consumes deprecated config shapes.
 
-package main
+package serverapp
 
 import (
 	"context"
