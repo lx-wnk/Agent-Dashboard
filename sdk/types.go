@@ -313,8 +313,8 @@ type Agent struct {
 	LiveInjectable bool `json:"liveInjectable,omitempty"`
 	// PendingQuestion is the AskUserQuestion modal currently detected on this
 	// session's live terminal (render-sourced, via the pty broker's /question
-	// endpoint), or nil when no modal is open. Only ever set on injectable
-	// sessions.
+	// endpoint or a tmux capture-pane snapshot), or nil when no modal is open.
+	// Only ever set on injectable sessions.
 	PendingQuestion     *DetectedQuestion   `json:"pendingQuestion,omitempty"`
 	LastOutput          *string             `json:"lastOutput"`
 	ConvergenceAlert    bool                `json:"convergenceAlert"`

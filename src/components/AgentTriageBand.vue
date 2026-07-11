@@ -512,7 +512,7 @@ watch(() => props.focusedSessionId, (id) => {
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-[11px] text-fg-faint">{{ formatRelativeActivity(secondsSince(agent.lastActivity, nowMs)) }}</span>
 
-            <template v-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
+            <template v-if="!agent.pendingQuestion && agent.pipelineTaskId && agent.pendingPermissions?.length">
               <AppButton
                 variant="success"
                 size="sm"
